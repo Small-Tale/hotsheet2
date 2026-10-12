@@ -8,13 +8,16 @@ import { readDemoDisplayPreferences, writeDemoDisplayPreferences } from '../disp
 export const DEFAULT_DEMO = 'tag-chip';
 export const URL_PARAM = 'component';
 
-const requestedDemo = findDemo(new URL(location.href).searchParams.get(URL_PARAM) ?? '');
+// Unit tests import the demo modules without a page, so the URL is optional here.
+const requestedDemo = findDemo(
+  typeof location === 'undefined' ? '' : (new URL(location.href).searchParams.get(URL_PARAM) ?? ''),
+);
 export const selectedId = signal(requestedDemo?.id ?? DEFAULT_DEMO);
 export const settingsOpen = signal(false);
 
 let displayStorage: Storage | null = null;
 try {
-  displayStorage = window.localStorage;
+  displayStorage = globalThis.localStorage;
 } catch {
   // Blocked storage only loses persistence.
 }

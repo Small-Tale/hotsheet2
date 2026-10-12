@@ -1,13 +1,15 @@
-/** Ticket-source setup and settings surfaces over the demo connection fixtures (HS2-HMVBZW). */
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { KeyboardSettings } from '../components/keyboard-settings';
 import { ProviderSetupForm } from '../components/provider-setup-form';
+import { type SettingsCategory } from '../components/settings-navigation';
 import { SettingsWorkspace } from '../components/settings-workspace';
 import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialog';
 import { AccountsSettings, TicketSourcesSettings } from '../components/ticket-sources-settings';
 import { TrashSettings } from '../components/trash-settings';
-import type { DemoModule } from './demo-module';
+import { type PermissionAutomationAction } from '../permission-notifications';
+import type { DemoModule, FormControl } from './demo-module';
 import { DEMO_ACCOUNTS, DEMO_PROJECT_SOURCES } from './fixtures';
 import {
   resetSettingsWorkspaceDemo,
@@ -151,7 +153,35 @@ export function TrashSettingsDemo() {
   return <TrashSettings days={14} />;
 }
 
-/** The catalog entries this file renders (HS2-HMVBZW). */
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireSetupSettingsDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  demoListeners.add(
+    delegate(root, 'change', '[data-demo-ticket-source-scenario] [name="scenario"]', (_event, target) => {
+      ticketSourceScenario.value = (target as FormControl).value as TicketSourceScenario;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="settings-workspace"] [name="workspace-category"]', (_event, target) => {
+      settingsWorkspaceSettings.category.value = (target as FormControl).value as SettingsCategory;
+    }),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'change',
+      '[data-settings="settings-workspace"] [name="workspace-permission-action"]',
+      (_event, target) => {
+        settingsWorkspaceSettings.permissionAction.value = (target as FormControl).value as PermissionAutomationAction;
+      },
+    ),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
+/** The catalog entries this file renders: ticket-source setup and settings surfaces over the demo connection fixtures (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
     'keyboard-settings': { Demo: KeyboardSettingsDemo },
@@ -166,4 +196,5 @@ export const demoModule: DemoModule = {
     },
     'trash-settings': { Demo: TrashSettingsDemo },
   },
+  wire: wireSetupSettingsDemo,
 };

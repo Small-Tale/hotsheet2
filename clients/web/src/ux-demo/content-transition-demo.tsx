@@ -1,5 +1,6 @@
 import { Select } from '@kerfjs/ui/select';
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import {
   ContentTransition,
@@ -7,7 +8,8 @@ import {
   type ContentTransitionSide,
   type ContentTransitionStyle,
 } from '../components/content-transition';
-import type { DemoModule } from './demo-module';
+import { DEMO_ACTIONS } from './demo-actions';
+import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 export const transitionSide = signal<ContentTransitionSide>('a'),
@@ -108,6 +110,38 @@ export function ContentTransitionSettings() {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireContentTransitionDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.transitionForward.selector, () => {
+      transitionDirection.value = 'forward';
+      transitionSide.value = 'b';
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.transitionBack.selector, () => {
+      transitionDirection.value = 'backward';
+      transitionSide.value = 'a';
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="content-transition"] [name="transition-style"]', (_event, target) => {
+      transitionStyle.value = (target as FormControl).value as typeof transitionStyle.value;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="content-transition"] [name="transition-side"]', (_event, target) => {
+      const side = (target as FormControl).value as typeof transitionSide.value;
+      transitionDirection.value = side === 'b' ? 'forward' : 'backward';
+      transitionSide.value = side;
+    }),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
@@ -117,4 +151,5 @@ export const demoModule: DemoModule = {
       reset: resetContentTransitionDemo,
     },
   },
+  wire: wireContentTransitionDemo,
 };

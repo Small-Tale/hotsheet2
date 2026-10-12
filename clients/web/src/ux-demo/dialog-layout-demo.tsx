@@ -7,11 +7,13 @@ import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 import { AppWindow, ServerCog } from 'lucide';
 
 import { Hs1CleanupBanner, Hs1JobBanner, Hs1MigrationBanner, Hs1MigrationDialog } from '../components/hs1-migration';
 import { NotificationsPausedBanner } from '../components/notifications-paused-banner';
+import { DEMO_ACTIONS, DEMO_COMPONENTS } from './demo-actions';
 import type { DemoModule } from './demo-module';
 
 export function DialogHeaderDemo() {
@@ -148,6 +150,19 @@ export function Hs1MigrationBannerDemo() {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireDialogLayoutDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  demoListeners.add(delegate(root, 'click', DEMO_ACTIONS.openHs1MigrationDemo.selector, openHs1MigrationDialogDemo));
+  demoListeners.add(delegate(root, 'click', DEMO_ACTIONS.dismissHs1Migration.selector, closeHs1MigrationDialogDemo));
+  demoListeners.add(
+    delegate(root, 'wa-hide', DEMO_COMPONENTS.hs1MigrationDialog.selector, closeHs1MigrationDialogDemo),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
@@ -157,4 +172,5 @@ export const demoModule: DemoModule = {
     'hs1-migration-banner': { Demo: Hs1MigrationBannerDemo },
     'notifications-paused-banner': { Demo: NotificationsPausedBannerDemo },
   },
+  wire: wireDialogLayoutDemo,
 };

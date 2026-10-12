@@ -7,7 +7,8 @@ import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { SegmentedControl } from '@kerfjs/ui/segmented-control';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 import {
   ArrowDownAZ,
   ChevronLeft,
@@ -22,6 +23,7 @@ import {
   Star,
 } from 'lucide';
 
+import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule } from './demo-module';
 
 export const toolbarGroupDemoMode = signal<'list' | 'board' | 'settings'>('list');
@@ -151,9 +153,23 @@ export function ToolbarControlGroupDemo() {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireToolbarControlGroupDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.setToolbarGroupDemoMode.selector, (_event, target) => {
+      toolbarGroupDemoMode.value = (target as HTMLElement).dataset.segmentValue as typeof toolbarGroupDemoMode.value;
+    }),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
     'toolbar-control-group': { Demo: ToolbarControlGroupDemo },
   },
+  wire: wireToolbarControlGroupDemo,
 };

@@ -1,10 +1,13 @@
 import { Select } from '@kerfjs/ui/select';
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import type { CommandDefinition, CommandRun } from '../api';
 import { CommandRunDialog } from '../components/command-run-dialog';
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { onDemoSelected, selectedId } from './components/demo-state';
 import { DEMO_ACTIONS } from './demo-actions';
-import type { DemoModule } from './demo-module';
+import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 /** The two public presentations of CommandRunDialog: run output, or the `confirmStop` confirmation. */
@@ -119,6 +122,52 @@ export function CommandRunDialogSettings() {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireCommandRunDialogDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  demoListeners.add(
+    onDemoSelected((id) => {
+      if (id === 'command-run-dialog') showCommandRunDialogDemo(root);
+    }),
+  );
+  if (selectedId.value === 'command-run-dialog') showCommandRunDialogDemo(root);
+  // CommandRunDialog demo: swap between its run-output and stop-confirmation presentations and stand in
+  // for the app's dismiss/stop side effects (HS2-CWWX7S).
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="command-run-dialog"] [name="presentation"]', (_event, target) => {
+      setCommandRunDialogPresentation(root, (target as FormControl).value as CommandRunDialogPresentation);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.openCommandRunDialogDemo.selector, () => {
+      showCommandRunDialogDemo(root);
+    }),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `dialog.command-run-dialog ${COMMANDS_AND_AI_ACTIONS.dismissCommandDialog.selector}`,
+      () => {
+        dismissCommandRunDialogDemo(root);
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `dialog.command-run-dialog ${COMMANDS_AND_AI_ACTIONS.confirmStopCommand.selector}`,
+      (_event, target) => {
+        confirmStopCommandRunDemo(root, (target as HTMLElement).dataset.runId);
+      },
+    ),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
@@ -128,4 +177,5 @@ export const demoModule: DemoModule = {
       reset: resetCommandRunDialogDemo,
     },
   },
+  wire: wireCommandRunDialogDemo,
 };

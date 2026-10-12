@@ -1,4 +1,5 @@
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import type { BulkUpdateProgress } from '../bulk-update-progress';
 import { AppLoadingIndicator } from '../components/app-loading-indicator';
@@ -27,6 +28,27 @@ export function AppLoadingIndicatorDemo() {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireAppLoadingIndicatorDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  demoListeners.add(
+    delegate(root, 'click', '[data-app-loading-demo]', (_event, target) => {
+      const state = (target as HTMLElement).dataset.appLoadingDemo;
+      appLoadingDemoProgress.value =
+        state === 'start'
+          ? { completed: 0, total: 2 }
+          : state === 'progress'
+            ? { completed: 1, total: 2 }
+            : state === 'complete'
+              ? { completed: 2, total: 2 }
+              : undefined;
+    }),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
@@ -37,4 +59,5 @@ export const demoModule: DemoModule = {
       },
     },
   },
+  wire: wireAppLoadingIndicatorDemo,
 };

@@ -1,16 +1,26 @@
 import { Select } from '@kerfjs/ui/select';
-import { signal } from 'kerfjs';
+import { delegate, delegateCapture, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { AIContentLabel } from '../components/ai-content-label';
 import { MarkdownEditor, type MarkdownEditorMode } from '../components/markdown-editor';
 import { MarkdownPreview, type MarkdownPreviewProps } from '../components/markdown-preview';
 import { NoteCard, type NoteCardProps, type NoteKind } from '../components/note-card';
 import { NoteComposer } from '../components/note-composer';
+import { TAG_CHIP_REMOVE_ACTION } from '../components/tag-chip';
 import type { InspectorTab } from '../components/ticket-inspector';
-import { TicketReader } from '../components/ticket-reader';
-import { DEMO_ACTIONS } from './demo-actions';
-import type { DemoModule } from './demo-module';
+import { showTicketReaderDialog, TicketReader } from '../components/ticket-reader';
+import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
+import { createDebouncedAutosave } from '../debounced-autosave';
+import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
+import { clickBeginsMarkdownEdit, keyBeginsMarkdownEdit, repeatPressWouldLeaveNewEditor } from '../markdown-click-edit';
+import { normalizeTicketTitleField, ticketTitleKeyFinishesEdit } from '../ticket-title-editing';
+import { selectDemo, selectedId } from './components/demo-state';
+import { DEMO_ACTIONS, DEMO_COMPONENTS, DEMO_FIELDS, DEMO_MARKERS } from './demo-actions';
+import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
+import { collectionTickets, recordCollectionEvent, toggleCollectionTicketUpNext } from './ticket-collections-demo';
+import { inspectorTags, inspectorTitle, inspectorTitleDraft, inspectorTitleEditing } from './workspace-components-demo';
 
 export const NOTE_DEMO_KINDS: readonly NoteKind[] = [
   'regular',
@@ -415,6 +425,355 @@ export function AIContentLabelDemo() {
   );
 }
 
+export function openDemoTicketReader(root: HTMLElement): void {
+  readerDialogOpen.value = false;
+  selectDemo('ticket-reader');
+  requestAnimationFrame(() => {
+    showTicketReaderDialog(root, 'ux-demo-ticket-reader');
+    readerDialogOpen.value = true;
+  });
+}
+
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireContentComponentsDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  const markdownAutosave = createDebouncedAutosave((value: string) => {
+    markdownSavedValue.value = value;
+    markdownEvent.value = 'Markdown autosaved.';
+    return Promise.resolve(true);
+  });
+  const blockedReasonAutosave = createDebouncedAutosave((value: string) => {
+    inspectorBlockedReason.value = value.trim();
+    return Promise.resolve(true);
+  });
+  const noteAutosave = createDebouncedAutosave(({ id, value }: { id: string; value: string }) => {
+    readerNotes.value = readerNotes.value.map((note) => (note.id === id ? { ...note, body: value } : note));
+    noteDemoNotes.value = noteDemoNotes.value.map((note) => (note.id === id ? { ...note, body: value } : note));
+    return Promise.resolve(true);
+  });
+  const titleAutosave = createDebouncedAutosave((value: string) => {
+    inspectorTitle.value = value.trim();
+    return Promise.resolve(true);
+  });
+  const readerTitleAutosave = createDebouncedAutosave((value: string) => {
+    readerTitle.value = value.trim();
+    return Promise.resolve(true);
+  });
+  const tagsAutosave = createDebouncedAutosave((value: string[]) => {
+    inspectorTags.value = value;
+    return Promise.resolve(true);
+  });
+  if (selectedId.value === 'ticket-reader') queueMicrotask(() => showTicketReaderDialog(root, 'ux-demo-ticket-reader'));
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="markdown-editor"] [name="markdown-appearance"]', (_event, target) => {
+      markdownAppearance.value = (target as FormControl).value as MarkdownEditorAppearanceDemo;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="markdown-editor"] [name="markdown-inset"]', (_event, target) => {
+      markdownInset.value = (target as FormControl).value as MarkdownEditorInsetDemo;
+    }),
+  );
+  // The reader demo edits its own ticket's title; every other surface edits the inspector demo ticket's
+  // (HS2-0VFPD5). Each surface projects its own title, draft, and editing signals.
+  const titleSurface = (target: Element) =>
+    target.closest('[data-component="ticket-reader"]')
+      ? { title: readerTitle, draft: readerTitleDraft, editing: readerTitleEditing, autosave: readerTitleAutosave }
+      : {
+          title: inspectorTitle,
+          draft: inspectorTitleDraft,
+          editing: inspectorTitleEditing,
+          autosave: titleAutosave,
+        };
+  const beginTitleEdit = (target: Element) => {
+    const surface = titleSurface(target),
+      host = target.closest('[data-component="ticket-reader"], [data-component="ticket-inspector-header"]') ?? root;
+    surface.draft.value = surface.title.value;
+    surface.editing.value = true;
+    queueMicrotask(() => host.querySelector<HTMLElement>('[name="ticket-title"]')?.focus());
+  };
+  demoListeners.add(
+    delegate(root, 'dblclick', DEMO_ACTIONS.editTicketTitle.selector, (_event, target) => {
+      beginTitleEdit(target);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'keydown', DEMO_ACTIONS.editTicketTitle.selector, (event, target) => {
+      if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
+      event.preventDefault();
+      beginTitleEdit(target);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'input', DEMO_FIELDS.ticketTitle.selector, (_event, target) => {
+      const surface = titleSurface(target);
+      // The wrapping title editor keeps a title on one line: pasted breaks collapse (HS2-98ZVPE).
+      surface.draft.value = normalizeTicketTitleField(target as HTMLTextAreaElement);
+      if (surface.draft.value.trim()) surface.autosave.schedule(surface.draft.value);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'keydown', DEMO_FIELDS.ticketTitle.selector, (event, target) => {
+      if (!ticketTitleKeyFinishesEdit(event as KeyboardEvent)) return;
+      event.preventDefault();
+      (target as HTMLTextAreaElement).blur();
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'focusout', DEMO_FIELDS.ticketTitle.selector, (_event, target) => {
+      const surface = titleSurface(target);
+      if (!surface.draft.value.trim()) return;
+      void surface.autosave.flush().then(() => {
+        surface.editing.value = false;
+      });
+    }),
+  );
+  const addInspectorTag = (target: HTMLInputElement) => {
+    inspectorTags.value = addTicketTag(inspectorTags.value, target.value);
+    target.value = '';
+    tagsAutosave.schedule(inspectorTags.value);
+  };
+  demoListeners.add(
+    delegate(root, 'keydown', DEMO_FIELDS.ticketTagInput.selector, (event, target) => {
+      if (!['Enter', ','].includes((event as KeyboardEvent).key)) return;
+      event.preventDefault();
+      addInspectorTag(target as HTMLInputElement);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'focusout', DEMO_FIELDS.ticketTagInput.selector, (_event, target) => {
+      if ((target as HTMLInputElement).value.trim()) addInspectorTag(target as HTMLInputElement);
+      void tagsAutosave.flush();
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', `[data-action="${TAG_CHIP_REMOVE_ACTION}"]`, (_event, target) => {
+      const tag = target.closest<HTMLElement>('[data-component="tag-chip"]')?.dataset.tagId;
+      if (!tag) return;
+      inspectorTags.value = removeTicketTag(inspectorTags.value, tag);
+      tagsAutosave.schedule(inspectorTags.value);
+    }),
+  );
+  const beginBlockedReasonEdit = () => {
+    inspectorBlockedReasonDraft.value = inspectorBlockedReason.value;
+    inspectorBlockedReasonEditing.value = true;
+    queueMicrotask(() => root.querySelector<HTMLElement>('[name="blocked-reason"]')?.focus());
+  };
+  demoListeners.add(delegate(root, 'click', DEMO_ACTIONS.editBlockedReason.selector, beginBlockedReasonEdit));
+  demoListeners.add(delegate(root, 'dblclick', DEMO_MARKERS.editBlockedReason.selector, beginBlockedReasonEdit));
+  demoListeners.add(
+    delegate(root, 'keydown', DEMO_MARKERS.editBlockedReason.selector, (event) => {
+      if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
+      event.preventDefault();
+      beginBlockedReasonEdit();
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'input', DEMO_FIELDS.blockedReason.selector, (_event, target) => {
+      inspectorBlockedReasonDraft.value = (target as FormControl).value;
+      blockedReasonAutosave.schedule(inspectorBlockedReasonDraft.value);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'focusout', DEMO_FIELDS.blockedReason.selector, () => {
+      void blockedReasonAutosave.flush().then(() => {
+        inspectorBlockedReasonEditing.value = false;
+        recordCollectionEvent('Blocked reason autosaved');
+      });
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleInspectorUpNext.selector, () => {
+      const ticket = collectionTickets.value.find((item) => item.selected) ?? collectionTickets.value[0];
+      toggleCollectionTicketUpNext(ticket.slug);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.addTicketNote.selector, () => {
+      recordCollectionEvent('Note composer requested');
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'input', DEMO_FIELDS.newNoteBody.selector, (_event, target) => {
+      noteComposerValue.value = (target as FormControl).value;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.cancelNewNote.selector, () => {
+      noteComposerValue.value = '';
+      recordCollectionEvent('New note cancelled');
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'submit', DEMO_ACTIONS.createNoteForm.selector, (event) => {
+      event.preventDefault();
+      if (noteComposerValue.value.trim()) recordCollectionEvent('New note submitted');
+    }),
+  );
+  const beginNoteEdit = (id: string) => {
+    editingNoteId.value = id;
+    noteDraft.value =
+      readerNotes.value.find((note) => note.id === id)?.body ??
+      noteDemoNotes.value.find((note) => note.id === id)?.body ??
+      '';
+    queueMicrotask(() => root.querySelector<HTMLElement>(`[name="note-body"][data-note-id="${id}"]`)?.focus());
+  };
+  demoListeners.add(
+    delegate(root, 'click', DEMO_MARKERS.editOnClick.selector, (event, target) => {
+      if (!clickBeginsMarkdownEdit(event as MouseEvent, target)) return;
+      beginNoteEdit((target as HTMLElement).closest<HTMLElement>('[data-note-id]')!.dataset.noteId!);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'keydown', DEMO_MARKERS.editOnClick.selector, (event, target) => {
+      if (!keyBeginsMarkdownEdit(event as KeyboardEvent, target)) return;
+      event.preventDefault();
+      beginNoteEdit((target as HTMLElement).closest<HTMLElement>('[data-note-id]')!.dataset.noteId!);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'input', DEMO_FIELDS.noteBody.selector, (_event, target) => {
+      editingNoteId.value = (target as HTMLElement).dataset.noteId;
+      noteDraft.value = (target as FormControl).value;
+      if ((target as HTMLElement).dataset.noteResponse !== 'true' && editingNoteId.value)
+        noteAutosave.schedule({ id: editingNoteId.value, value: noteDraft.value });
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'focusout', DEMO_FIELDS.noteBody.selector, (_event, target) => {
+      if ((target as HTMLElement).dataset.noteResponse === 'true') return;
+      void noteAutosave.flush().then(() => {
+        editingNoteId.value = undefined;
+        noteDraft.value = '';
+        recordCollectionEvent('Note autosaved');
+      });
+    }),
+  );
+  let demoFeedbackChoiceAnchor: string | undefined = 'choice-1';
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleFeedbackChoice.selector, (event, target) => {
+      if ((event.target as Element).closest('a,[data-action="open-attachment-gallery"]')) return;
+      const noteId = (target as HTMLElement).dataset.noteId!,
+        choiceId = (target as HTMLElement).dataset.choiceId!;
+      const note = readerNotes.value.find((item) => item.id === noteId),
+        group = note && parseFeedbackChoices(note.body);
+      if (!group) return;
+      const pointer = event as MouseEvent,
+        next = updateFeedbackChoiceSelection(
+          group.choices.map((choice) => choice.id),
+          readerFeedbackChoiceSelections.value[noteId] ?? [],
+          choiceId,
+          demoFeedbackChoiceAnchor,
+          { additive: pointer.metaKey || pointer.ctrlKey, range: pointer.shiftKey },
+        );
+      readerFeedbackChoiceSelections.value = { ...readerFeedbackChoiceSelections.value, [noteId]: next.selected };
+      demoFeedbackChoiceAnchor = next.anchor;
+      recordCollectionEvent(`${next.selected.length} feedback choice${next.selected.length === 1 ? '' : 's'} selected`);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.saveNoteEdit.selector, (_event, target) => {
+      const id = editingNoteId.value ?? (target as HTMLElement).dataset.noteId;
+      if (id) {
+        const original = readerNotes.value.find((note) => note.id === id);
+        if ((target as HTMLElement).dataset.noteResponse === 'true')
+          readerNotes.value = [
+            ...readerNotes.value,
+            {
+              id: `${id}-response`,
+              kind: 'regular',
+              author: 'You',
+              time: 'Now',
+              body: noteDraft.value,
+            },
+          ];
+        else
+          readerNotes.value = readerNotes.value.map((note) =>
+            note.id === id
+              ? {
+                  ...note,
+                  kind: original?.kind === 'feedback_draft' ? ('regular' as const) : note.kind,
+                  body: noteDraft.value,
+                }
+              : note,
+          );
+        noteDemoNotes.value = noteDemoNotes.value.map((note) =>
+          note.id === id ? { ...note, body: noteDraft.value } : note,
+        );
+      }
+      editingNoteId.value = undefined;
+      noteDraft.value = '';
+      recordCollectionEvent('Note edit saved');
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', '[data-action="open-ticket-reader"], [data-action="respond-to-feedback"]', () => {
+      recordCollectionEvent('Ticket reader requested');
+      openDemoTicketReader(root);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'input', DEMO_FIELDS.markdownSource.selector, (_event, target) => {
+      markdownValue.value = (target as FormControl).value;
+      markdownEvent.value = 'Saving changes…';
+      markdownAutosave.schedule(markdownValue.value);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'focusout', DEMO_FIELDS.markdownSource.selector, (event, target) => {
+      const next = (event as FocusEvent).relatedTarget;
+      if (next instanceof Node && target.closest('[data-component="markdown-editor"]')?.contains(next)) return;
+      setTimeout(
+        () =>
+          void markdownAutosave.flush().then(() => {
+            markdownMode.value = 'preview';
+          }),
+        0,
+      );
+    }),
+  );
+  demoListeners.add(
+    delegateCapture(root, 'mousedown', '*', (event) => {
+      if (repeatPressWouldLeaveNewEditor(event as MouseEvent, document.activeElement)) event.preventDefault();
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.editMarkdown.selector, (event, target) => {
+      if (!clickBeginsMarkdownEdit(event as MouseEvent, target)) return;
+      markdownMode.value = 'write';
+      queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus());
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'keydown', DEMO_ACTIONS.editMarkdown.selector, (event, target) => {
+      if (!keyBeginsMarkdownEdit(event as KeyboardEvent, target)) return;
+      event.preventDefault();
+      markdownMode.value = 'write';
+      queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus());
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleMarkdownExpanded.selector, () => {
+      markdownExpanded.value = !markdownExpanded.value;
+      markdownEvent.value = markdownExpanded.value ? 'Expanded editor opened.' : 'Inline editor restored.';
+    }),
+  );
+  demoListeners.add(
+    delegateCapture(root, 'wa-after-hide', DEMO_COMPONENTS.ticketReader.selector, () => {
+      readerDialogOpen.value = false;
+      selectDemo('ticket-info-panel');
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleReaderTextSize.selector, () => {
+      readerLargeText.value = !readerLargeText.value;
+    }),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
@@ -425,4 +784,5 @@ export const demoModule: DemoModule = {
     'markdown-preview': { Demo: MarkdownPreviewDemo },
     'ai-content-label': { Demo: AIContentLabelDemo },
   },
+  wire: wireContentComponentsDemo,
 };

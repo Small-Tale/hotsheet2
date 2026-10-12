@@ -1,10 +1,10 @@
-/** Small application chrome and feedback surfaces (HS2-HMVBZW). */
 import { AppTab } from '@kerfjs/ui/app-tab';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 import { Activity, FolderGit2, Minus, Plus, Terminal } from 'lucide';
 
 import { AppEmptyState, AppMessageState, ProjectRestoreState } from '../components/app-empty-state';
@@ -105,7 +105,25 @@ export function AppErrorDemo() {
   );
 }
 
-/** The catalog entries this file renders (HS2-HMVBZW). */
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireAppChromeDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  demoListeners.add(
+    delegate(root, 'click', '[data-app-error-demo-show]', () => {
+      appErrorDemoVisible.value = true;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', '[data-component="app-error"] [data-action="dismiss-app-error"]', () => {
+      appErrorDemoVisible.value = false;
+    }),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
+/** The catalog entries this file renders: small application chrome and feedback surfaces (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
     'floating-toolbar': { Demo: FloatingToolbarDemo },
@@ -116,4 +134,5 @@ export const demoModule: DemoModule = {
     'app-empty-state': { Demo: AppEmptyStateDemo },
     'app-error': { Demo: AppErrorDemo },
   },
+  wire: wireAppChromeDemo,
 };

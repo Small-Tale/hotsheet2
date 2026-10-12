@@ -1,12 +1,13 @@
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import type { ClaimEtaPresentation } from '../active-ticket-work';
 import type { StartedPhase } from '../api';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../components/category-presentation';
 import type { TicketStatus } from '../components/status-badge';
 import { type TicketPriority, TicketRow } from '../components/ticket-row';
-import type { DemoModule } from './demo-module';
+import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 /** Claim ETA states the demo exposes (HS2-XQMDQB). */
@@ -236,9 +237,79 @@ export function TicketRowSettings() {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireTicketRowDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  demoListeners.add(
+    delegate(root, 'input', '[data-settings="ticket-list-row"] wa-input', (_event, target) => {
+      const control = target as FormControl;
+      if (control.getAttribute('name') === 'title') ticketRowSettings.title.value = control.value;
+      if (control.getAttribute('name') === 'category') ticketRowSettings.category.value = control.value;
+      if (control.getAttribute('name') === 'tags') ticketRowSettings.tags.value = control.value;
+      if (control.getAttribute('name') === 'agent') ticketRowSettings.agentName.value = control.value;
+      if (control.getAttribute('name') === 'updated') ticketRowSettings.updatedLabel.value = control.value;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="ticket-list-row"] [name]', (_event, target) => {
+      const control = target as FormControl;
+      switch (control.getAttribute('name')) {
+        case 'status':
+          ticketRowSettings.status.value = control.value as typeof ticketRowSettings.status.value;
+          break;
+        case 'started-phase':
+          ticketRowSettings.startedPhase.value = control.value as typeof ticketRowSettings.startedPhase.value;
+          break;
+        case 'priority':
+          ticketRowSettings.priority.value = control.value as typeof ticketRowSettings.priority.value;
+          break;
+        case 'category-icon':
+          ticketRowSettings.categoryIcon.value = control.value;
+          break;
+        case 'category-color':
+          ticketRowSettings.categoryColor.value = control.value;
+          break;
+        case 'up-next':
+          ticketRowSettings.upNext.value = control.checked;
+          break;
+        case 'blocked':
+          ticketRowSettings.blocked.value = control.checked;
+          break;
+        case 'needs-review':
+          ticketRowSettings.needsReview.value = control.checked;
+          break;
+        case 'feedback-needed':
+          ticketRowSettings.feedbackNeeded.value = control.checked;
+          break;
+        case 'selected':
+          ticketRowSettings.selected.value = control.checked;
+          break;
+        case 'busy':
+          ticketRowSettings.busy.value = control.checked;
+          break;
+        case 'show-source-icon':
+          ticketRowSettings.showSourceIcon.value = control.checked;
+          break;
+        case 'claim-eta':
+          ticketRowSettings.claimEta.value = control.value as typeof ticketRowSettings.claimEta.value;
+          break;
+        case 'confidence':
+          ticketRowSettings.confidence.value = control.value;
+          break;
+        case null:
+          break;
+      }
+    }),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
     'ticket-row': { Demo: TicketRowDemo, Settings: TicketRowSettings, reset: resetTicketRowDemo },
   },
+  wire: wireTicketRowDemo,
 };

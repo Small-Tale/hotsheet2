@@ -1,4 +1,5 @@
-import { signal } from 'kerfjs';
+import { delegate, delegateCapture, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import type { MediaAnnotation, StartedPhase } from '../api';
 import {
@@ -10,7 +11,11 @@ import {
 } from '../attachment-label-editing';
 import { browserRandomId } from '../browser-id';
 import { AttachmentContextMenu } from '../components/attachment-context-menu';
-import { AttachmentGallery, attachmentGalleryZoomModel } from '../components/attachment-gallery';
+import {
+  AttachmentGallery,
+  attachmentGalleryKeyboardAction,
+  attachmentGalleryZoomModel,
+} from '../components/attachment-gallery';
 import { type TicketAttachmentItem, TicketAttachments } from '../components/ticket-attachments';
 import { TicketCategorySelect } from '../components/ticket-category-select';
 import { TicketCodeReview } from '../components/ticket-code-review';
@@ -19,7 +24,12 @@ import { TicketPrioritySelect } from '../components/ticket-priority-select';
 import { TicketStatusMenu } from '../components/ticket-status-menu';
 import { TicketTimeline } from '../components/ticket-timeline';
 import { ticketDraftKey } from '../ticket-draft-store';
+import { selectedId } from './components/demo-state';
+import { readerAttachments } from './content-components-demo';
+import { DEMO_ACTIONS, DEMO_COMPONENTS, DEMO_FIELDS, DEMO_MARKERS } from './demo-actions';
 import type { DemoModule } from './demo-module';
+import { listen } from './demo-module';
+import { recordCollectionEvent } from './ticket-collections-demo';
 
 export function TicketCategorySelectDemo() {
   return (
@@ -469,6 +479,343 @@ export function TicketCodeReviewDemo() {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireTicketMetadataDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  demoListeners.add(
+    delegate(root, 'wa-hide', '[data-context-menu]', (event, target) => {
+      if (event.target !== target || (target as HTMLElement).dataset.contextMenu !== 'attachment') return;
+      window.setTimeout(closeAttachmentDemoMenu, 0);
+    }),
+  );
+  demoListeners.add(
+    listen(
+      window,
+      'pointerdown',
+      (event) => {
+        if (
+          attachmentDemoMenu.value &&
+          !(event.target as Element).closest(
+            '[data-component="attachment-context-menu"], [data-action="open-attachment-menu"]',
+          )
+        )
+          closeAttachmentDemoMenu();
+      },
+      { capture: true },
+    ),
+  );
+  demoListeners.add(
+    listen(window, 'keydown', (event) => {
+      if (event.key === 'Escape') closeAttachmentDemoMenu();
+    }),
+  );
+  const addMockAttachments = (files: FileList | File[], target: HTMLElement) => {
+    const added = Array.from(files).map((file, index) => ({
+      id: `added-${Date.now()}-${index}`,
+      name: file.name,
+    }));
+    if (selectedId.value === 'ticket-reader' || target.closest('[data-component="ticket-attachments"]'))
+      readerAttachments.value = [...readerAttachments.value, ...added];
+    recordCollectionEvent(
+      `${added.length} attachment${added.length === 1 ? '' : 's'} added to ${target.closest<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug ?? 'ticket'}`,
+    );
+  };
+  demoListeners.add(
+    delegate(root, 'change', 'input[name="ticket-attachments"]', (_event, target) => {
+      const input = target as HTMLInputElement;
+      if (input.files?.length) addMockAttachments(input.files, input);
+      input.value = '';
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'dragover', DEMO_MARKERS.attachmentDropTarget.selector, (event, target) => {
+      event.preventDefault();
+      (target as HTMLElement).dataset.draggingAttachment = 'true';
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'dragleave', DEMO_MARKERS.attachmentDropTarget.selector, (_event, target) => {
+      delete (target as HTMLElement).dataset.draggingAttachment;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'drop', DEMO_MARKERS.attachmentDropTarget.selector, (event, target) => {
+      event.preventDefault();
+      const element = target as HTMLElement;
+      delete element.dataset.draggingAttachment;
+      const files = (event as DragEvent).dataTransfer?.files;
+      if (files?.length) addMockAttachments(files, element);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.openGalleryDemo.selector, () => {
+      setGalleryDemo(true);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.closeAttachmentGallery.selector, () => {
+      setGalleryDemo(false);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.previousGalleryImage.selector, () => {
+      shiftGalleryDemo(-1);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.nextGalleryImage.selector, () => {
+      shiftGalleryDemo(1);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.zoomGalleryImage.selector, (_event, target) => {
+      zoomGalleryDemo(target.getAttribute('data-zoom-direction') === 'out' ? 'out' : 'in');
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleGalleryMarkup.selector, () => {
+      galleryDemoMarkup.value = !galleryDemoMarkup.value;
+      galleryDemoDrawMode.value = false;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleGalleryDraw.selector, () => {
+      galleryDemoDrawMode.value = !galleryDemoDrawMode.value;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleGalleryPlayback.selector, () => {
+      galleryDemoPlaying.value = !galleryDemoPlaying.value;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'keydown', DEMO_COMPONENTS.attachmentGallery.selector, (event) => {
+      const keyboard = event as KeyboardEvent,
+        origin = event.target as Element,
+        playheadControl = origin.matches('input[name="gallery-playhead"]');
+      if (
+        !root.querySelector('.attachment-gallery video') ||
+        (!playheadControl && origin.closest('button,input,textarea,select,[contenteditable="true"]'))
+      )
+        return;
+      const action = attachmentGalleryKeyboardAction(keyboard.key, galleryDemoPlayhead.value, 6000, keyboard.shiftKey);
+      if (!action) return;
+      event.preventDefault();
+      if (action.kind === 'toggle-playback') galleryDemoPlaying.value = !galleryDemoPlaying.value;
+      else {
+        galleryDemoPlaying.value = false;
+        galleryDemoPlayhead.value = action.playheadMs;
+      }
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'input', 'input[name="gallery-playhead"]', (_event, target) => {
+      galleryDemoPlayhead.value = Number((target as HTMLInputElement).value);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.seekGalleryAnnotation.selector, (_event, target) => {
+      const element = target as HTMLElement;
+      galleryDemoPlayhead.value = Number(element.dataset.annotationTime ?? 0);
+      if (galleryDemoMarkup.value && element.dataset.annotationId)
+        galleryDemoSelectedAnnotation.value = element.dataset.annotationId;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'input', 'input[name="gallery-volume"]', (_event, target) => {
+      galleryDemoVolume.value = Number((target as HTMLInputElement).value);
+      galleryDemoMuted.value = false;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleGalleryVolume.selector, () => {
+      galleryDemoVolumeOpen.value = !galleryDemoVolumeOpen.value;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleGalleryMuted.selector, () => {
+      galleryDemoMuted.value = !galleryDemoMuted.value;
+    }),
+  );
+  demoListeners.add(
+    listen(root, 'click', (event) => {
+      if (galleryDemoVolumeOpen.value && !(event.target as Element).closest('.attachment-gallery__volume'))
+        galleryDemoVolumeOpen.value = false;
+    }),
+  );
+  demoListeners.add(
+    delegateCapture(root, 'pointerdown', DEMO_MARKERS.galleryAnnotationSurface.selector, (event) => {
+      if (!galleryDemoMarkup.value || (event.target as Element).closest('[data-annotation-id]')) return;
+      galleryDemoSelectedAnnotation.value = undefined;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'keydown', '[data-gallery-range-handle]', (event, target) => {
+      const keyboard = event as KeyboardEvent;
+      if (keyboard.key !== 'ArrowLeft' && keyboard.key !== 'ArrowRight') return;
+      event.preventDefault();
+      const endpoint = (target as HTMLElement).dataset.galleryRangeHandle;
+      const annotation = galleryDemoVideoAnnotations.value[0];
+      if (endpoint !== 'start' && endpoint !== 'end') return;
+      setGalleryDemoAnnotationEndpoint(
+        endpoint,
+        (endpoint === 'start' ? annotation.start_ms : annotation.end_ms) + (keyboard.key === 'ArrowLeft' ? -100 : 100),
+      );
+    }),
+  );
+  let galleryDemoRangeGesture: { pointerId: number; endpoint: 'start' | 'end'; track: DOMRect } | undefined;
+  demoListeners.add(
+    delegateCapture(root, 'pointerdown', '[data-gallery-range-handle]', (event, target) => {
+      const pointer = event as PointerEvent,
+        element = target as HTMLElement,
+        endpoint = element.dataset.galleryRangeHandle,
+        track = element.closest<HTMLElement>('.attachment-gallery__timeline-track')?.getBoundingClientRect();
+      if ((endpoint !== 'start' && endpoint !== 'end') || !track) return;
+      event.preventDefault();
+      galleryDemoRangeGesture = { pointerId: pointer.pointerId, endpoint, track };
+    }),
+  );
+  demoListeners.add(
+    listen(document, 'pointermove', (event) => {
+      const gesture = galleryDemoRangeGesture;
+      if (!gesture || event.pointerId !== gesture.pointerId) return;
+      event.preventDefault();
+      setGalleryDemoAnnotationEndpoint(
+        gesture.endpoint,
+        ((event.clientX - gesture.track.left) * 6000) / gesture.track.width,
+      );
+    }),
+  );
+  demoListeners.add(
+    listen(document, 'pointerup', (event) => {
+      if (!galleryDemoRangeGesture || event.pointerId !== galleryDemoRangeGesture.pointerId) return;
+      galleryDemoRangeGesture = undefined;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.openAttachmentMenu.selector, (event, target) => {
+      event.stopPropagation();
+      const rect = target.getBoundingClientRect();
+      showAttachmentDemoMenu(rect.right, rect.bottom);
+    }),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'contextmenu',
+      '[data-component="ticket-attachment-item"][data-attachment-menu-kind="item"]',
+      (event) => {
+        event.preventDefault();
+        const pointer = event as MouseEvent;
+        showAttachmentDemoMenu(pointer.clientX, pointer.clientY);
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(root, 'dblclick', DEMO_ACTIONS.editAttachmentBatchLabel.selector, (_event, target) => {
+      const input = attachmentDemoLabelEditor.begin(target);
+      if (!input) return;
+      queueMicrotask(() => {
+        input.focus();
+        input.select();
+      });
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'keydown', DEMO_FIELDS.attachmentBatchLabel.selector, (event, target) => {
+      const input = target as HTMLInputElement;
+      const key = (event as KeyboardEvent).key;
+      if (key !== 'Escape' && key !== 'Enter') return;
+      const ids = input.closest<HTMLElement>('[data-attachment-ids]')?.dataset.attachmentIds;
+      if (key === 'Escape') attachmentDemoLabelEditor.escape(input);
+      input.blur();
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          if (ids)
+            root
+              .querySelector<HTMLElement>(
+                `[data-component="ticket-attachments"] [data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`,
+              )
+              ?.focus();
+        }),
+      );
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'input', DEMO_FIELDS.attachmentBatchLabel.selector, (_event, target) => {
+      attachmentDemoLabelEditor.input(target as HTMLInputElement);
+    }),
+  );
+  demoListeners.add(
+    delegateCapture(root, 'blur', DEMO_FIELDS.attachmentBatchLabel.selector, (_event, target) => {
+      void attachmentDemoLabelEditor.finish(target);
+    }),
+  );
+  const flushDemoLabelOnHide = () => {
+    void attachmentDemoLabelEditor.flush();
+  };
+  demoListeners.add(listen(window, 'pagehide', flushDemoLabelOnHide));
+  demoListeners.add(() => {
+    window.removeEventListener('pagehide', flushDemoLabelOnHide);
+  });
+  let draggedDemoAttachment: string | undefined;
+  const clearDemoAttachmentDrag = () => {
+    draggedDemoAttachment = undefined;
+    const surface = root.querySelector<HTMLElement>('[data-component="ticket-attachments"]');
+    if (surface) delete surface.dataset.draggingGroupAttachment;
+    for (const target of root.querySelectorAll<HTMLElement>('[data-drag-over]')) delete target.dataset.dragOver;
+  };
+  demoListeners.add(
+    delegate(root, 'dragstart', '[data-drag-attachment-id]', (event, target) => {
+      draggedDemoAttachment = (target as HTMLElement).dataset.dragAttachmentId;
+      const surface = target.closest<HTMLElement>('[data-component="ticket-attachments"]');
+      if (surface) surface.dataset.draggingGroupAttachment = 'true';
+      const transfer = (event as DragEvent).dataTransfer;
+      if (transfer && draggedDemoAttachment)
+        transfer.setData('application/x-hotsheet-attachment', draggedDemoAttachment);
+    }),
+  );
+  demoListeners.add(delegate(root, 'dragend', '[data-drag-attachment-id]', clearDemoAttachmentDrag));
+  demoListeners.add(
+    delegate(
+      root,
+      'dragover',
+      '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]',
+      (event, target) => {
+        if (!draggedDemoAttachment) return;
+        event.preventDefault();
+        (target as HTMLElement).dataset.dragOver = 'true';
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'drop',
+      '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]',
+      (event, target) => {
+        if (!draggedDemoAttachment) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const id = draggedDemoAttachment;
+        const newGroup = target.matches('[data-attachment-new-group-drop-target]');
+        const batch = target.closest<HTMLElement>('[data-attachment-group-drop-target]')?.dataset.attachmentBatch;
+        clearDemoAttachmentDrag();
+        regroupAttachmentDemo(id, newGroup ? undefined : batch);
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.attachmentMenuAction.selector, (_event, target) => {
+      recordCollectionEvent(`${target.textContent.trim() || 'Attachment action'} selected`);
+      closeAttachmentDemoMenu();
+    }),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
@@ -481,4 +828,5 @@ export const demoModule: DemoModule = {
     'ticket-attachments': { Demo: TicketAttachmentsDemo },
     'attachment-gallery': { Demo: AttachmentGalleryDemo },
   },
+  wire: wireTicketMetadataDemo,
 };

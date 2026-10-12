@@ -1,9 +1,13 @@
 import '../components/heading.css';
 
+import { openPopupMenuAt, type PopupMenuElement } from '@kerfjs/ui/popup-menu';
 import { Select } from '@kerfjs/ui/select';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { effect, signal } from 'kerfjs';
+import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
+import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
+import { delegate, delegateCapture, effect, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import type { CodeReview } from '../api';
 import type { LiveClaimNoticeProps } from '../components/active-claim';
@@ -11,6 +15,7 @@ import { NotificationCenter } from '../components/notification-center';
 import {
   QuickTicketComposer,
   QuickTicketLauncher,
+  showQuickTicketComposer,
   strandedNewTicketAttachments,
 } from '../components/quick-ticket-composer';
 import { TerminalTicketRail } from '../components/terminal-ticket-rail';
@@ -25,6 +30,8 @@ import {
 } from '../components/ticket-inspector';
 import { TicketList } from '../components/ticket-list';
 import type { TicketRowProps } from '../components/ticket-row';
+import { statusMenuAnchorY } from '../components/ticket-status-menu';
+import { nextWorkspaceSort, wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
 import {
   applyWorkspaceSortDirection,
   defaultWorkspaceSortDirection,
@@ -35,10 +42,16 @@ import {
   workspaceUpNextState,
   type WorkspaceViewMode,
 } from '../components/workspace-header';
+import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { orderedSearchText } from '../inline-search';
+import { restoreInlineSearchCaret } from '../inline-search-caret';
+import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
+import { wireTicketSearchFields } from '../interactions/ticket-search-field';
 import { type PermissionDecision, PermissionInbox, type PermissionScope } from '../permission-notifications';
+import { keepSearchOpenForShadowTarget } from '../search-collapse';
 import { createTicketSearchModel, inlineSearchTokens } from '../ticket-search-model';
 import { compareWorkspaceTickets } from '../workspace-ticket-sort';
+import { contextMenu, selectedId } from './components/demo-state';
 import {
   editingNoteId,
   inspectorBlockedReason,
@@ -50,11 +63,22 @@ import {
   markdownValue,
   noteDraft,
   readerNotes,
+  readerTab,
 } from './content-components-demo';
-import type { DemoModule } from './demo-module';
+import { DEMO_ACTIONS, DEMO_COMPONENTS, DEMO_FIELDS } from './demo-actions';
+import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
-import { collectionEvent, collectionTickets } from './ticket-collections-demo';
+import { collectionEvent, collectionTickets, recordCollectionEvent } from './ticket-collections-demo';
+import { statusMenuDemoStartedPhase, statusMenuDemoStatus } from './ticket-metadata-demo';
 import { TICKET_ROW_CLAIM_ETA } from './ticket-row-demo';
+import {
+  ticketSearchDemoCollapsibleOpen,
+  ticketSearchDemoGrowOpen,
+  ticketSearchDemoModel,
+  ticketSearchDemoModels,
+  ticketSearchDemoRowOpen,
+  toggleDemoHelp,
+} from './ticket-search-field-demo';
 
 export const workspaceMode = signal<WorkspaceViewMode>('list');
 function workspaceHeadingTitle(mode: WorkspaceViewMode): string {
@@ -623,6 +647,353 @@ export function TicketInspectorSkeletonDemo() {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  // The same shared TicketSearchField wiring the application uses, routed to demo state (HS2-N5G6JS);
+  // it is wired before Kerf's so its focus handlers see a chip before Kerf removes or expands it.
+  const demoSearchModel = (id: string) =>
+    id === 'workspace-search' ? workspaceSearchModel : ticketSearchDemoModel(id);
+  demoListeners.add(
+    wireTicketSearchFields(root, {
+      applyDate: (id, _prefix, value) => {
+        demoSearchModel(id)?.commit(value);
+      },
+      toggleHelp: (id) => {
+        if (id === 'workspace-search') workspaceSearchHelpOpen.value = !workspaceSearchHelpOpen.value;
+        else toggleDemoHelp(id);
+      },
+      clear: (id) => {
+        if (id === 'workspace-search') {
+          workspaceSearchHelpOpen.value = false;
+          queueMicrotask(() => {
+            focusWorkspaceSearch(root);
+          });
+        }
+      },
+      removeToken: () => undefined,
+      editToken: () => undefined,
+    }),
+  );
+  // Kerf owns editor chrome, collapsible behavior, and, through the registered models, parsing,
+  // chips, suggestions, chip edit/removal, and clear (HS2-5JXBQY).
+  demoListeners.add(
+    wireTokenSearchFields(root, {
+      models: { 'workspace-search': workspaceSearchModel, ...ticketSearchDemoModels },
+      // Enter commits a trailing filter through the model; the rebuilt editor gets its caret back at the end.
+      onSubmit: ({ id }) => {
+        restoreInlineSearchCaret(root, `[data-token-search-editor="${id}"]`);
+      },
+      collapsible: {
+        keepOpenOn: keepSearchOpenForShadowTarget,
+        signals: {
+          'workspace-search': workspaceSearchOpen,
+          'ticket-search-demo-collapsible': ticketSearchDemoCollapsibleOpen,
+          'ticket-search-demo-grow': ticketSearchDemoGrowOpen,
+          'ticket-search-demo-row': ticketSearchDemoRowOpen,
+        },
+      },
+    }),
+  );
+  // The TerminalTicketRail demo's NavStack animates push/pop and reports Back through `wireNavStack`
+  // (HS2-FY06N4), rewired whenever the demo mounts a new stack.
+  let demoRailNavStack: { section: Element; dispose: () => void } | undefined;
+  function syncDemoRailNavStack() {
+    const section = root.querySelector('.terminal-ticket-rail-demo [data-component="nav-stack"]');
+    if (section === (demoRailNavStack?.section ?? null)) return;
+    demoRailNavStack?.dispose();
+    demoRailNavStack = section
+      ? {
+          section,
+          dispose: wireNavStack(section, {
+            onBack: () => {
+              terminalRailDemoTicket.value = undefined;
+              recordCollectionEvent('Back to the ticket list');
+            },
+          }),
+        }
+      : undefined;
+  }
+  new MutationObserver(syncDemoRailNavStack).observe(root, { childList: true, subtree: true });
+  queueMicrotask(syncDemoRailNavStack);
+  demoListeners.add(
+    delegate(root, 'click', '.workspace-component-demo [data-action="resolve-permission"]', (_event, target) => {
+      const { requestKey, decision, scope } = (target as HTMLElement).dataset;
+      if (!requestKey || (decision !== 'allow' && decision !== 'deny') || (scope !== 'once' && scope !== 'always'))
+        return;
+      resolveWorkspaceDemoPermission(requestKey, decision, scope);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', '.workspace-component-demo [data-action="ignore-permission"]', (_event, target) => {
+      const key = (target as HTMLElement).dataset.requestKey;
+      if (key) ignoreWorkspaceDemoPermission(key);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.resetWorkspaceNotifications.selector, () => {
+      resetWorkspaceDemoNotifications();
+    }),
+  );
+  demoListeners.add(wireWorkspaceOverflowKeyboard(root));
+  function openSelectedDemoTicketActions(target: Element): void {
+    const selected = collectionTickets.value.find((ticket) => ticket.selected);
+    if (!selected) return;
+    const rect = target.getBoundingClientRect();
+    contextMenu.value = {
+      ...viewportSafeContextMenuPosition(rect.right - 232, rect.bottom, innerWidth, innerHeight, {
+        width: 232,
+        height: 382,
+      }),
+      ticketSlug: selected.slug,
+    };
+  }
+  demoListeners.add(delegate(root, 'click', DEMO_ACTIONS.toggleSelectedUpNext.selector, toggleWorkspaceDemoUpNext));
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.openSelectedTicketActions.selector, (_event, target) => {
+      openSelectedDemoTicketActions(target);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.setViewMode.selector, (_event, target) => {
+      const metadata = (target as HTMLElement).dataset;
+      workspaceMode.value = (metadata.segmentValue ?? metadata.viewMode) as typeof workspaceMode.value;
+      if (workspaceMode.value === 'settings') {
+        workspaceSearchOpen.value = false;
+        workspaceSearchHelpOpen.value = false;
+        workspaceSearchModel.clear();
+      }
+      recordCollectionEvent(
+        `${workspaceMode.value === 'list' ? 'List' : workspaceMode.value === 'board' ? 'Columns' : workspaceMode.value === 'notifications' ? 'Notifications' : 'Settings'} view selected`,
+      );
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, target) => {
+      const next = nextWorkspaceSort(
+        workspaceSort.value,
+        workspaceSortDirection.value,
+        (target as FormControl).value as typeof workspaceSort.value,
+      );
+      workspaceSort.value = next.sort;
+      workspaceSortDirection.value = next.direction;
+      recordCollectionEvent(`Sorted by ${workspaceSort.value}, ${workspaceSortDirection.value}`);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'wa-select', '[data-workspace-overflow]', (event) => {
+      const item = (event as CustomEvent<{ item: HTMLElement }>).detail.item;
+      const action = item.dataset.workspaceOverflowAction;
+      if (action === 'toggle-selected-up-next') {
+        toggleWorkspaceDemoUpNext();
+        return;
+      }
+      if (action === 'open-selected-ticket-actions') {
+        openSelectedDemoTicketActions(item);
+        return;
+      }
+      if (action === 'open-workspace-search') {
+        workspaceSearchOpen.value = true;
+        queueMicrotask(() => focusWorkspaceSearch(root));
+        return;
+      }
+      if (action === 'set-view-mode') {
+        workspaceMode.value = item.dataset.viewMode as typeof workspaceMode.value;
+        if (workspaceMode.value === 'settings') {
+          workspaceSearchOpen.value = false;
+          workspaceSearchHelpOpen.value = false;
+          workspaceSearchModel.clear();
+        }
+        recordCollectionEvent(
+          `${workspaceMode.value === 'list' ? 'List' : workspaceMode.value === 'board' ? 'Columns' : workspaceMode.value === 'notifications' ? 'Notifications' : 'Settings'} view selected`,
+        );
+        return;
+      }
+      if (action !== 'set-workspace-sort') return;
+      const selected = item.dataset.workspaceSort as typeof workspaceSort.value | undefined;
+      if (!selected) return;
+      const next = nextWorkspaceSort(workspaceSort.value, workspaceSortDirection.value, selected);
+      workspaceSort.value = next.sort;
+      workspaceSortDirection.value = next.direction;
+      recordCollectionEvent(`Sorted by ${workspaceSort.value}, ${workspaceSortDirection.value}`);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleFavorite.selector, () => {
+      recordCollectionEvent('View favorite toggled');
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.moreWorkspaceActions.selector, () => {
+      recordCollectionEvent('Workspace actions requested');
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.expandTicketComposer.selector, (_event, target) => {
+      if (document.activeElement !== target) (target as HTMLElement).focus({ preventScroll: true });
+      composerExpanded.value = true;
+      requestAnimationFrame(() => requestAnimationFrame(() => showQuickTicketComposer(root)));
+    }),
+  );
+  demoListeners.add(
+    delegateCapture(root, 'wa-after-hide', DEMO_COMPONENTS.quickTicketComposer.selector, (event, target) => {
+      if (event.target !== target || !composerExpanded.value) return;
+      composerExpanded.value = false;
+      composerTitle.value = '';
+      composerDetails.value = '';
+      composerUpNext.value = false;
+      composerSourcePick.value = undefined;
+      composerAttachments.value = [];
+      recordCollectionEvent('Ticket creation cancelled');
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'input', DEMO_FIELDS.newTicketTitle.selector, (_event, target) => {
+      composerTitle.value = (target as FormControl).value;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'input', DEMO_FIELDS.newTicketDetails.selector, (_event, target) => {
+      composerDetails.value = (target as HTMLTextAreaElement).value;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', DEMO_FIELDS.newTicketCategory.selector, (_event, target) => {
+      composerCategory.value = (target as FormControl).value;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', DEMO_FIELDS.newTicketSource.selector, (_event, target) => {
+      composerSourcePick.value = (target as FormControl).value;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="ticket-inspector"] [name="inspector-live-claim"]', (_event, target) => {
+      inspectorLiveClaim.value = (target as FormControl).value as InspectorLiveClaimDemo;
+    }),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'change',
+      '[data-settings="quick-ticket-composer"] [name="composer-source-count"]',
+      (_event, target) => {
+        composerMultipleSources.value = (target as FormControl).value === 'several';
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleNewTicketUpNext.selector, () => {
+      composerUpNext.value = !composerUpNext.value;
+    }),
+  );
+  let demoAttachmentSequence = 0;
+  demoListeners.add(
+    delegate(root, 'change', 'input[name="new-ticket-attachments"]', (_event, target) => {
+      const input = target as HTMLInputElement;
+      composerAttachments.value = [
+        ...composerAttachments.value,
+        ...Array.from(input.files ?? [], (file) => ({ id: `demo-${demoAttachmentSequence++}`, name: file.name })),
+      ];
+      input.value = '';
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.removeNewTicketAttachment.selector, (_event, target) => {
+      const id = (target as HTMLElement).dataset.pendingAttachmentId;
+      composerAttachments.value = composerAttachments.value.filter((item) => item.id !== id);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.clearNewTicketAttachments.selector, () => {
+      composerAttachments.value = [];
+      recordCollectionEvent('Staged attachments removed');
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'submit', DEMO_ACTIONS.createTicketForm.selector, (event) => {
+      event.preventDefault();
+      if (!createDemoTicket())
+        recordCollectionEvent(
+          composerTitle.value.trim()
+            ? 'Remove the staged attachments or choose another source'
+            : 'Enter a ticket title',
+        );
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.setInspectorTab.selector, (_event, target) => {
+      const tab = (target as HTMLElement).dataset.tabId as typeof inspectorTab.value;
+      if (selectedId.value === 'ticket-reader') readerTab.value = tab;
+      else inspectorTab.value = tab;
+    }),
+  );
+  // The right rail's standard toggle (HS2-QQW6CT) both hides and shows the inspector.
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleTicketInspector.selector, () => {
+      inspectorOpen.value = !inspectorOpen.value;
+      recordCollectionEvent(inspectorOpen.value ? 'Inspector opened' : 'Inspector closed');
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.openCodeReview.selector, (_event, target) => {
+      const item = target as HTMLElement;
+      recordCollectionEvent(
+        item.dataset.reviewMode === 'range' ? 'Commit range opened in Glassbox' : 'Commit opened in Glassbox',
+      );
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', DEMO_FIELDS.inspectorCategory.selector, (_event, target) => {
+      inspectorCategory.value = (target as FormControl).value;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', DEMO_FIELDS.inspectorPriority.selector, (_event, target) => {
+      inspectorPriority.value = (target as FormControl).value as typeof inspectorPriority.value;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.openInspectorStatusMenu.selector, (_event, target) => {
+      const menu = target
+        .closest('.ticket-status-menu')
+        ?.querySelector<PopupMenuElement>('[data-inspector-status-menu]');
+      if (!menu) return;
+      const rect = target.getBoundingClientRect();
+      openPopupMenuAt(menu, rect.left, statusMenuAnchorY(rect.bottom, window.innerWidth, window.innerHeight));
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.setInspectorStatus.selector, (_event, target) => {
+      const value = (target as HTMLElement).dataset.ticketStatus;
+      if (!value) return;
+      if (target.closest('.metadata-control-demo')) {
+        statusMenuDemoStatus.value = value as typeof statusMenuDemoStatus.value;
+        statusMenuDemoStartedPhase.value = '';
+      } else {
+        inspectorStatus.value = value as typeof inspectorStatus.value;
+        inspectorStartedPhase.value = undefined;
+      }
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.setInspectorStartedPhase.selector, (_event, target) => {
+      const phase = (target as HTMLElement).dataset.startedPhase;
+      if (phase === undefined) return;
+      if (target.closest('.metadata-control-demo')) {
+        statusMenuDemoStatus.value = 'started';
+        statusMenuDemoStartedPhase.value = phase as typeof statusMenuDemoStartedPhase.value;
+      } else {
+        inspectorStatus.value = 'started';
+        inspectorStartedPhase.value = (phase || undefined) as typeof inspectorStartedPhase.value;
+      }
+    }),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
@@ -641,4 +1012,5 @@ export const demoModule: DemoModule = {
     'ticket-inspector-skeleton': { Demo: TicketInspectorSkeletonDemo },
     'terminal-ticket-rail': { Demo: TerminalTicketRailDemo },
   },
+  wire: wireWorkspaceComponentsDemo,
 };

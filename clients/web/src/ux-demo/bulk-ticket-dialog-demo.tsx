@@ -1,9 +1,11 @@
 import { Select } from '@kerfjs/ui/select';
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { BulkTicketDialog, type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
+import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { DEMO_ACTIONS } from './demo-actions';
-import type { DemoModule } from './demo-module';
+import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 /** Every public BulkTicketDialog presentation the production selection flows render (HS2-PS9BQV). */
@@ -104,6 +106,66 @@ export function BulkTicketDialogSettings() {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireBulkTicketDialogDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="bulk-ticket-dialog"] [name="bulk-scenario"]', (_event, target) => {
+      setBulkTicketDialogScenario((target as FormControl).value as BulkTicketDialogScenario);
+    }),
+  );
+  demoListeners.add(delegate(root, 'click', DEMO_ACTIONS.openBulkTicketDialogDemo.selector, openBulkTicketDialogDemo));
+  // Fixture stand-ins for the production selection handlers (`interactions/ticket-selection.ts`): every
+  // rendered BulkTicketDialog action closes the dialog and reports what production would request.
+  demoListeners.add(
+    delegate(root, 'click', TICKET_SELECTION_ACTIONS.cancelBulkTicketAction.selector, () => {
+      closeBulkTicketDialogDemo('Cancelled; the selection is unchanged.');
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', TICKET_SELECTION_ACTIONS.chooseBulkTag.selector, (_event, target) => {
+      const input = root.querySelector<FormControl>('[name="bulk-ticket-tag"]');
+      if (!input) return;
+      input.value = (target as HTMLElement).dataset.tag ?? '';
+      input.focus();
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'submit', TICKET_SELECTION_ACTIONS.submitBulkTag.selector, (event, target) => {
+      event.preventDefault();
+      const tag = target.querySelector<FormControl>('[name="bulk-ticket-tag"]')?.value.trim() ?? '',
+        adding = (target as HTMLElement).dataset.tagMode === 'add';
+      closeBulkTicketDialogDemo(
+        `${adding ? 'Add' : 'Remove'} tag “${tag}” ${adding ? 'to' : 'from'} 5 tickets requested.`,
+      );
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', TICKET_SELECTION_ACTIONS.confirmBulkDelete.selector, () => {
+      closeBulkTicketDialogDemo('Delete 5 tickets requested.');
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', TICKET_SELECTION_ACTIONS.confirmEmptyTrash.selector, () => {
+      closeBulkTicketDialogDemo('Empty Trash requested for 5 tickets.');
+    }),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'wa-hide',
+      '[data-component="bulk-tag-dialog"], [data-component="bulk-delete-dialog"], [data-component="empty-trash-dialog"]',
+      (event, target) => {
+        if (event.target !== target) return;
+        closeBulkTicketDialogDemo('Dismissed; the selection is unchanged.');
+      },
+    ),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
@@ -113,4 +175,5 @@ export const demoModule: DemoModule = {
       reset: resetBulkTicketDialogDemo,
     },
   },
+  wire: wireBulkTicketDialogDemo,
 };

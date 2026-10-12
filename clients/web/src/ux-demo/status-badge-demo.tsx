@@ -1,5 +1,6 @@
 import { Select } from '@kerfjs/ui/select';
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import type { StartedPhase } from '../api';
 import {
@@ -8,7 +9,7 @@ import {
   type StatusBadgeWeight,
   type TicketStatus,
 } from '../components/status-badge';
-import type { DemoModule } from './demo-module';
+import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 export const statusBadgeSettings = {
@@ -116,9 +117,33 @@ export function StatusBadgeSettings() {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireStatusBadgeDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="status-badge"] [name]', (_event, target) => {
+      const control = target as FormControl;
+      if (control.getAttribute('name') === 'status')
+        statusBadgeSettings.status.value = control.value as typeof statusBadgeSettings.status.value;
+      if (control.getAttribute('name') === 'started-phase')
+        statusBadgeSettings.startedPhase.value = control.value as typeof statusBadgeSettings.startedPhase.value;
+      if (control.getAttribute('name') === 'appearance')
+        statusBadgeSettings.appearance.value = control.value as typeof statusBadgeSettings.appearance.value;
+      if (control.getAttribute('name') === 'weight')
+        statusBadgeSettings.weight.value = control.value as typeof statusBadgeSettings.weight.value;
+      if (control.getAttribute('name') === 'show-icon') statusBadgeSettings.showIcon.value = control.checked;
+      if (control.getAttribute('name') === 'compact') statusBadgeSettings.compact.value = control.checked;
+    }),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
     'status-badge': { Demo: StatusBadgeDemo, Settings: StatusBadgeSettings, reset: resetStatusBadgeDemo },
   },
+  wire: wireStatusBadgeDemo,
 };

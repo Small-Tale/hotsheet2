@@ -1,5 +1,5 @@
-/** Application dialogs rendered from deterministic production state (HS2-HMVBZW). */
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { AiFeedbackDialog } from '../components/ai-feedback-dialog';
 import { ConversationExportDialog } from '../components/conversation-export-dialog';
@@ -203,7 +203,26 @@ export function ManualModelDialogDemo() {
   return <ManualModelDialog state={{ target: 'settings', providerName: 'Codex', value: 'gpt-5.6-sol-preview' }} />;
 }
 
-/** The catalog entries this file renders (HS2-HMVBZW). */
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireAppDialogsDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      '[data-component="project-close-dialog"] [data-action="select-project-close-resource"]',
+      (_event, target) => {
+        const key = target.getAttribute('data-item-id');
+        if (key) projectCloseDemoSelection.value = key;
+      },
+    ),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
+/** The catalog entries this file renders: application dialogs rendered from deterministic production state (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
     'ticket-close-dialog': { Demo: TicketCloseDialogDemo },
@@ -214,4 +233,5 @@ export const demoModule: DemoModule = {
     'ai-feedback-dialog': { Demo: AiFeedbackDialogDemo },
     'manual-model-dialog': { Demo: ManualModelDialogDemo },
   },
+  wire: wireAppDialogsDemo,
 };

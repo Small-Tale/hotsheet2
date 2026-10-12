@@ -1,13 +1,18 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { clampRegionSize, ResizableRegion } from '@kerfjs/ui/resizable-region';
 import { Select } from '@kerfjs/ui/select';
-import { signal } from 'kerfjs';
+import { wireResizableRegions } from '@kerfjs/ui/wire-resizable-regions';
+import { reorderTabs, wireTabBars } from '@kerfjs/ui/wire-tab-bars';
+import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide';
 
 import { AppShell } from '../components/app-shell';
 import { type ConnectionState, ConnectionStateBanner } from '../components/connection-state-banner';
 import { projectSidebarPanel } from '../components/project-sidebar';
 import { ProjectTab, type ProjectTabProps } from '../components/project-tab';
+import { PROJECT_TAB_BAR_ID } from '../components/project-tab-bar';
 import { ProjectTabBar, type ProjectTabBarMode } from '../components/project-tab-bar';
 import { QuickTicketComposer } from '../components/quick-ticket-composer';
 import { terminalOperationsPanel } from '../components/terminal-operations-sidebar';
@@ -16,6 +21,7 @@ import { ticketInspectorPanel } from '../components/ticket-inspector';
 import { ticketInspectorPlaceholderPanel } from '../components/ticket-inspector-placeholder';
 import { TicketList } from '../components/ticket-list';
 import { WorkspaceControls, WorkspaceIdentity } from '../components/workspace-header';
+import { tabContextMenu } from './components/demo-state';
 import {
   editingNoteId,
   latestDemoConfidence,
@@ -25,7 +31,8 @@ import {
   noteDraft,
   readerNotes,
 } from './content-components-demo';
-import type { DemoModule } from './demo-module';
+import { DEMO_ACTIONS, DEMO_MARKERS } from './demo-actions';
+import { type DemoModule, type FormControl, listen } from './demo-module';
 import {
   collapsedCommandGroups,
   commandGroupExpanded,
@@ -33,6 +40,7 @@ import {
   runningCommandId,
   selectedViewId,
   sidebarCommands,
+  sidebarEvent,
   sidebarViews,
 } from './project-sidebar-demo';
 import { syncSettingsControls } from './settings-controls';
@@ -49,6 +57,7 @@ import {
   inspectorTab,
   workspaceColumns,
   workspaceMode,
+  workspaceSearchHelpOpen,
   workspaceSearchModel,
   workspaceSearchOpen,
   workspaceSort,
@@ -552,6 +561,169 @@ export function AppShellDemo() {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireAppShellDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  // The AppShell demo's rails resize through Kerf's Workbench wiring, as in the app (HS2-P289N2).
+  wireWorkbench(root, {
+    id: 'app',
+    panels: { leftRail: { size: shellSidebarSize }, rightRail: { size: shellInspectorSize } },
+  });
+  // Tab strips reorder, roam, and edge-autoscroll through the same Kerf wiring the application installs on
+  // its body (HS2-KB5PJQ); a reorder only rewrites the controlled demo state that owns that strip.
+  demoListeners.add(
+    wireTabBars(root, {
+      activation: 'manual',
+      onReorder: ({ barId, sourceId, targetId, position, source }) => {
+        if (barId === PROJECT_TAB_BAR_ID)
+          projectTabs.value = reorderTabs(projectTabs.value, (tab) => tab.id, sourceId, targetId, position);
+        shellEvent.value = `Moved ${sourceId} ${position} ${targetId} by ${source}.`;
+      },
+    }),
+  );
+  // ResizableRegion demos resize through Kerf's pointer and separator-keyboard wiring; the commit only
+  // mirrors the settled size into the demo signal that renders it (HS2-KB5PJQ).
+  demoListeners.add(
+    wireResizableRegions(root, {
+      onCommit: ({ id, size }) => {
+        setRegionSize(id, size);
+      },
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.selectProjectTab.selector, (_event, target) => {
+      selectProjectTab(target.closest<HTMLElement>('[data-tab-kind="project"]')!.dataset.projectId!);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', 'wa-select[name="mobile-project"]', (_event, target) => {
+      selectProjectTab((target as HTMLInputElement).value);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.closeProjectTab.selector, (event, target) => {
+      event.stopPropagation();
+      closeProjectTab(target.closest<HTMLElement>('[data-tab-kind="project"]')!.dataset.projectId!);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'contextmenu', DEMO_MARKERS.tabKindProject.selector, (event, target) => {
+      event.preventDefault();
+      const pointer = event as MouseEvent;
+      tabContextMenu.value = {
+        x: pointer.clientX,
+        y: pointer.clientY,
+        projectId: (target as HTMLElement).dataset.projectId!,
+      };
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.projectTabContextAction.selector, (_event, target) => {
+      const element = target as HTMLElement;
+      const id = element.dataset.projectId!;
+      if (element.dataset.tabAction === 'close') closeProjectTab(id);
+      if (element.dataset.tabAction === 'close-others') closeOtherProjectTabs(id);
+      if (element.dataset.tabAction === 'close-right') closeProjectTabsToRight(id);
+      if (element.dataset.tabAction === 'close-all') closeAllProjectTabs();
+      tabContextMenu.value = undefined;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', '[data-action="add-project"], [data-action="choose-project"]', () => {
+      addDemoProject();
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleProjectSidebar.selector, () => {
+      shellSidebarVisible.value = !shellSidebarVisible.value;
+      shellEvent.value = shellSidebarVisible.value ? 'Project sidebar shown.' : 'Project sidebar hidden.';
+    }),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      '[data-action="toggle-terminal-drawer"], [data-action="toggle-app-shell-demo-terminal-drawer"]',
+      () => {
+        shellTerminalDrawerVisible.value = !shellTerminalDrawerVisible.value;
+        shellEvent.value = shellTerminalDrawerVisible.value ? 'Terminal drawer shown.' : 'Terminal drawer hidden.';
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.setShellMode.selector, (_event, target) => {
+      shellStatsProjectName.value = undefined;
+      shellMode.value = (target as HTMLElement).dataset.shellMode as typeof shellMode.value;
+      workspaceSearchOpen.value = false;
+      workspaceSearchHelpOpen.value = false;
+      workspaceSearchModel.clear();
+      shellEvent.value = shellMode.value === 'terminals' ? 'Workspace grid selected.' : 'Cross-project stats selected.';
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.openProjectStats.selector, () => {
+      const name = projectTabs.value.find((tab) => tab.selected)?.name ?? 'Project';
+      shellStatsProjectName.value = name;
+      shellMode.value = 'stats';
+      workspaceSearchOpen.value = false;
+      workspaceSearchHelpOpen.value = false;
+      workspaceSearchModel.clear();
+      sidebarEvent.value = `${name} project statistics requested.`;
+      shellEvent.value = `${name} project statistics selected.`;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleResizableCollapse.selector, () => {
+      resizeDemoCollapsed.value = !resizeDemoCollapsed.value;
+      shellEvent.value = resizeDemoCollapsed.value ? 'Horizontal region collapsed.' : 'Horizontal region restored.';
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.retryConnection.selector, () => {
+      shellEvent.value = 'Connection retry requested.';
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.showConnectionDetails.selector, () => {
+      shellEvent.value = 'Connection details requested.';
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.authenticateConnection.selector, () => {
+      shellEvent.value = 'Authentication requested.';
+    }),
+  );
+  demoListeners.add(
+    listen(window, 'keydown', (event) => {
+      if (event.key === 'Escape') tabContextMenu.value = undefined;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="app-shell"] [name]', (_event, target) => {
+      const control = target as FormControl;
+      if (control.getAttribute('name') === 'presentation')
+        appShellSettings.presentation.value = control.value as typeof appShellSettings.presentation.value;
+      if (control.getAttribute('name') === 'overlay-open') appShellSettings.overlayOpen.value = control.checked;
+      if (control.getAttribute('name') === 'mobile-view-header') appShellSettings.mobileView.value = control.checked;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', '[aria-label="AppShell demo"] wa-select[name="mobile-view"]', (_event, target) => {
+      const value = (target as FormControl).value;
+      appShellSettings.mobileViewValue.value = value;
+      shellEvent.value = `${value === 'all' ? 'Queue' : value.charAt(0).toUpperCase() + value.slice(1)} view selected.`;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', '[aria-label="AppShell demo"] [data-action="open-empty-trash"]', () => {
+      shellEvent.value = 'Empty Trash confirmation requested.';
+    }),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
@@ -561,4 +733,5 @@ export const demoModule: DemoModule = {
     'connection-state-banner': { Demo: ConnectionStateBannerDemo },
     'app-shell': { Demo: AppShellDemo, Settings: AppShellSettings, reset: resetAppShellDemo },
   },
+  wire: wireAppShellDemo,
 };

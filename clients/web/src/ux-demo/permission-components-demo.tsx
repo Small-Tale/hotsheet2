@@ -1,5 +1,6 @@
 import { Select } from '@kerfjs/ui/select';
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { NotificationCenter } from '../components/notification-center';
 import {
@@ -13,7 +14,9 @@ import {
   type PermissionHistoryItem,
   type PermissionItem,
 } from '../permission-notifications';
-import type { DemoModule } from './demo-module';
+import { selectedId } from './components/demo-state';
+import { DEMO_ACTIONS } from './demo-actions';
+import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 const pending: PermissionItem = {
@@ -287,6 +290,51 @@ export function NotificationCenterDemo() {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wirePermissionComponentsDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  startPermissionRequestDemoCountdown(root, () => selectedId.value === 'permission-request');
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="permission-request"] [name]', (_event, target) => {
+      const control = target as FormControl;
+      switch (control.getAttribute('name')) {
+        case 'presentation':
+          permissionRequestSettings.presentation.value =
+            control.value as typeof permissionRequestSettings.presentation.value;
+          break;
+        case 'variant':
+          permissionRequestSettings.variant.value = control.value as typeof permissionRequestSettings.variant.value;
+          break;
+        case 'request':
+          permissionRequestSettings.request.value = control.value as typeof permissionRequestSettings.request.value;
+          break;
+        case 'automation':
+          resetPermissionRequestDemoCountdown();
+          permissionRequestSettings.automation.value =
+            control.value as typeof permissionRequestSettings.automation.value;
+          break;
+        case 'always-supported':
+          permissionRequestSettings.alwaysSupported.value = control.checked;
+          break;
+        case 'explanation':
+          permissionRequestSettings.explanation.value = control.checked;
+          break;
+        case null:
+          break;
+      }
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.cancelPermissionAutomation.selector, (event) => {
+      event.stopImmediatePropagation();
+      stopPermissionRequestDemoAutomation(root);
+    }),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
@@ -297,4 +345,5 @@ export const demoModule: DemoModule = {
     },
     'notification-center': { Demo: NotificationCenterDemo },
   },
+  wire: wirePermissionComponentsDemo,
 };

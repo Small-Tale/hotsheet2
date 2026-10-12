@@ -5,6 +5,7 @@ import { batch, signal } from 'kerfjs';
 
 import { TicketSearchField, TicketSearchFormField, TicketSearchSurfaces } from '../components/ticket-search-field';
 import { createTicketSearchModel, replaceTicketSearch } from '../ticket-search-model';
+import { onDemoSelected } from './components/demo-state';
 import type { DemoModule } from './demo-module';
 
 /** Deterministic project tags for the TicketSearchField catalog entry. */
@@ -260,9 +261,17 @@ export function TicketSearchFieldDemo() {
   );
 }
 
+/** Leaving the TicketSearchField entry restores its fixtures (HS2-HMVBZW). */
+function wireTicketSearchFieldDemo(): () => void {
+  return onDemoSelected((id) => {
+    if (id !== 'ticket-search-field') resetTicketSearchDemo();
+  });
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
     'ticket-search-field': { Demo: TicketSearchFieldDemo },
   },
+  wire: wireTicketSearchFieldDemo,
 };

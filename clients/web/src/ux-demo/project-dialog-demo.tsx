@@ -143,4 +143,5 @@ export const demoModule: DemoModule = {
   entries: {
     'project-dialog': { Demo: ProjectDialogDemo },
   },
+  wire: wireProjectDialogDemo,
 };

@@ -1,5 +1,6 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 import { Eye } from 'lucide';
 
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
@@ -21,7 +22,9 @@ import {
   terminalVisibilityItems,
   type TerminalVisibilityType,
 } from '../terminal-visibility';
-import type { DemoModule } from './demo-module';
+import { wireTerminalVisibilityTypeFilter } from '../terminal-visibility-filter';
+import { DEMO_ACTIONS } from './demo-actions';
+import type { DemoModule, FormControl } from './demo-module';
 
 export const terminalVisibilityDemoGroups: TerminalDashboardGroup[] = [
   {
@@ -164,9 +167,102 @@ export function setAllTerminalVisibilityDemo(visible: boolean) {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireTerminalVisibilityDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  demoListeners.add(
+    delegate(root, 'wa-hide', '[data-context-menu]', (event, target) => {
+      if (event.target !== target || (target as HTMLElement).dataset.contextMenu !== 'terminal-visibility-group')
+        return;
+      window.setTimeout(closeTerminalVisibilityDemoContextMenu, 0);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.showTerminalVisibilityDemo.selector, showTerminalVisibilityDemo),
+  );
+  wireTerminalVisibilityTypeFilter(root, (types) => {
+    terminalVisibilityDemoTypes.value = types;
+  });
+  demoListeners.add(
+    delegate(root, 'wa-hide', '[data-terminal-visibility-dialog]', (event, target) => {
+      if (event.target === target) closeTerminalVisibilityDemo();
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.selectTerminalVisibilityTab.selector, (_event, target) => {
+      selectTerminalVisibilityDemoGroup((target as HTMLElement).dataset.itemId ?? 'default');
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.addTerminalVisibilityGroup.selector, () => {
+      promptAddTerminalVisibilityDemoGroup();
+      requestAnimationFrame(() =>
+        root
+          .querySelector<HTMLElement>('[data-terminal-visibility-name-dialog] [name="terminal-visibility-group-name"]')
+          ?.focus(),
+      );
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'contextmenu', '[data-visibility-group-id]', (event, target) => {
+      event.preventDefault();
+      showTerminalVisibilityDemoContextMenu(
+        (target as HTMLElement).dataset.visibilityGroupId ?? '',
+        (event as MouseEvent).clientX,
+        (event as MouseEvent).clientY,
+      );
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.renameTerminalVisibilityGroup.selector, () => {
+      promptRenameTerminalVisibilityDemoGroup();
+      requestAnimationFrame(() =>
+        root
+          .querySelector<HTMLElement>('[data-terminal-visibility-name-dialog] [name="terminal-visibility-group-name"]')
+          ?.focus(),
+      );
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'submit', DEMO_ACTIONS.submitTerminalVisibilityName.selector, (event, target) => {
+      event.preventDefault();
+      submitTerminalVisibilityDemoName(
+        (target.querySelector('[name="terminal-visibility-group-name"]') as FormControl).value,
+      );
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.cancelTerminalVisibilityName.selector, cancelTerminalVisibilityDemoName),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.removeTerminalVisibilityGroup.selector, () => {
+      removeTerminalVisibilityDemoGroup();
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleTerminalVisibility.selector, (_event, target) => {
+      toggleTerminalVisibilityDemo((target as HTMLElement).dataset.itemId ?? '');
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.showAllTerminalsInGroup.selector, () => {
+      setAllTerminalVisibilityDemo(true);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.hideAllTerminalsInGroup.selector, () => {
+      setAllTerminalVisibilityDemo(false);
+    }),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
     'terminal-visibility-dialog': { Demo: TerminalVisibilityDialogDemo },
   },
+  wire: wireTerminalVisibilityDemo,
 };

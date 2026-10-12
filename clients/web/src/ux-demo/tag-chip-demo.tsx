@@ -1,8 +1,10 @@
 import { Select } from '@kerfjs/ui/select';
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
+import { TAG_CHIP_REMOVE_ACTION } from '../components/tag-chip';
 import { TagChip, type TagChipAppearance, type TagChipSize, type TagChipVariant } from '../components/tag-chip';
-import type { DemoModule } from './demo-module';
+import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 export const tagChipSettings = {
@@ -114,9 +116,62 @@ export function TagChipSettings() {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireTagChipDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  demoListeners.add(
+    delegate(root, 'input', '[data-settings="tag-chip"] [name="label"]', (_event, target) => {
+      tagChipSettings.label.value = (target as FormControl).value;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="tag-chip"] [name]', (_event, target) => {
+      const control = target as FormControl;
+      switch (control.getAttribute('name')) {
+        case 'variant':
+          tagChipSettings.variant.value = control.value as typeof tagChipSettings.variant.value;
+          break;
+        case 'appearance':
+          tagChipSettings.appearance.value = control.value as typeof tagChipSettings.appearance.value;
+          break;
+        case 'size':
+          tagChipSettings.size.value = control.value as typeof tagChipSettings.size.value;
+          break;
+        case 'removable':
+          tagChipSettings.removable.value = control.checked;
+          break;
+        case 'pill':
+          tagChipSettings.pill.value = control.checked;
+          break;
+        case 'disabled':
+          tagChipSettings.disabled.value = control.checked;
+          break;
+        case null:
+          break;
+      }
+    }),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[aria-label="TagChip demo"] [data-action="${TAG_CHIP_REMOVE_ACTION}"]`,
+      (_event, target) => {
+        const chip = target.closest<HTMLElement>('[data-component="tag-chip"]');
+        if (chip && chip.dataset.disabled !== 'true')
+          tagChipSettings.event.value = `Remove requested for ${chip.dataset.tagId}`;
+      },
+    ),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
     'tag-chip': { Demo: TagChipDemo, Settings: TagChipSettings, reset: resetTagChipDemo },
   },
+  wire: wireTagChipDemo,
 };

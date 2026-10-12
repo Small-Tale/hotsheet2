@@ -1,6 +1,6 @@
-/** Terminal drawer, dashboard, keyboard, and clipboard surfaces over deterministic sessions (HS2-HMVBZW). */
 import { Row } from '@kerfjs/ui/row';
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import {
   TerminalCopyDialog,
@@ -14,9 +14,25 @@ import { FixedAspectTerminalCard, TerminalDashboard } from '../components/termin
 import { TerminalDrawer } from '../components/terminal-drawer';
 import { TerminalKeyBar } from '../components/terminal-key-bar';
 import { TerminalRenameDialog, type TerminalRenameTarget } from '../components/terminal-rename-dialog';
-import { NO_TERMINAL_MODIFIERS, type TerminalModifiers } from '../terminal-keys';
+import { viewportSafeContextMenuPosition } from '../context-menu-position';
+import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
+import { nextMobileTerminalColumns } from '../mobile-terminal-columns';
+import { terminalCopyMessage, terminalCopySelection } from '../terminal-clipboard';
+import {
+  consumeTerminalModifiers,
+  encodeTerminalKey,
+  NO_TERMINAL_MODIFIERS,
+  type TerminalModifier,
+  type TerminalModifiers,
+  type TerminalSpecialKey,
+  toggleTerminalModifier,
+} from '../terminal-keys';
+import { onDemoSelected } from './components/demo-state';
+import { DEMO_ACTIONS, DEMO_COMPONENTS } from './demo-actions';
 import type { DemoModule } from './demo-module';
+import { listen } from './demo-module';
 import { TERMINAL_DRAWER_DEMO_PROVIDERS } from './fixtures';
+import { syncTerminalDemoViewports } from './terminal-demo';
 
 export const drawerFocusDemoColumns = signal(60);
 export const keyBarDemoModifiers = signal<TerminalModifiers>(NO_TERMINAL_MODIFIERS),
@@ -435,7 +451,239 @@ export function TerminalRenameDialogDemo() {
   );
 }
 
-/** The catalog entries this file renders (HS2-HMVBZW). */
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireTerminalComponentsDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  // Dashboard and long-press menus close with Web Awesome's own hide, an outside press, or Escape.
+  demoListeners.add(
+    delegate(root, 'wa-hide', '[data-context-menu]', (event, target) => {
+      if (event.target !== target) return;
+      const surface = (target as HTMLElement).dataset.contextMenu;
+      window.setTimeout(() => {
+        if (surface === 'terminal') terminalDashboardContextMenu.value = undefined;
+        else if (surface === 'terminal-edit') editMenuDemo.value = undefined;
+      }, 0);
+    }),
+  );
+  demoListeners.add(
+    listen(
+      window,
+      'pointerdown',
+      (event) => {
+        if (
+          terminalDashboardContextMenu.value &&
+          !(event.target as Element).closest(
+            '[data-component="terminal-context-menu"], [data-action="open-terminal-context-menu"]',
+          )
+        )
+          terminalDashboardContextMenu.value = undefined;
+      },
+      { capture: true },
+    ),
+  );
+  demoListeners.add(
+    listen(window, 'keydown', (event) => {
+      if (event.key === 'Escape') terminalDashboardContextMenu.value = undefined;
+    }),
+  );
+  demoListeners.add(
+    onDemoSelected(() => {
+      terminalDashboardContextMenu.value = undefined;
+    }),
+  );
+  const terminalDemoMounts = new Map<HTMLElement, () => void>();
+  const syncDemoTerminals = () => {
+    syncTerminalDemoViewports(root, terminalDemoMounts);
+  };
+  new MutationObserver(syncDemoTerminals).observe(root, { childList: true, subtree: true });
+  queueMicrotask(syncDemoTerminals);
+  function showTerminalDashboardContextMenu(target: HTMLElement, x: number, y: number): void {
+    terminalDashboardContextMenu.value = {
+      key: target.dataset.terminalKey ?? target.dataset.itemId ?? '',
+      ...viewportSafeContextMenuPosition(x, y, innerWidth, innerHeight, { width: 224, height: 104 }),
+    };
+  }
+  demoListeners.add(
+    delegate(root, 'contextmenu', DEMO_COMPONENTS.terminalTile.selector, (event, target) => {
+      event.preventDefault();
+      const pointer = event as MouseEvent;
+      showTerminalDashboardContextMenu(target as HTMLElement, pointer.clientX, pointer.clientY);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', TERMINALS_ACTIONS.clearTerminalHalt.selector, () => {
+      terminalDashboardHaltCleared.value = true;
+      terminalDashboardContextMenu.value = undefined;
+    }),
+  );
+  // The TerminalKeyBar demo exercises the same modifier and Fn transitions as production and shows the
+  // exact bytes each key would send (HS2-CKS78M).
+  demoListeners.add(
+    delegate(root, 'click', '.terminal-key-bar-demo [data-action="toggle-terminal-modifier"]', (_event, target) => {
+      const modifier = (target as HTMLElement).dataset.modifier as TerminalModifier | undefined;
+      if (modifier) keyBarDemoModifiers.value = toggleTerminalModifier(keyBarDemoModifiers.value, modifier);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', '.terminal-key-bar-demo [data-action="toggle-terminal-function-row"]', (_event, target) => {
+      keyBarDemoFunctionRow.value = !keyBarDemoFunctionRow.value;
+      target.closest('[data-component="terminal-key-bar"]')?.scrollTo({ left: 0 });
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', '.terminal-key-bar-demo [data-action="send-terminal-key"]', (_event, target) => {
+      const key = (target as HTMLElement).dataset.key as TerminalSpecialKey,
+        bytes = encodeTerminalKey(key, keyBarDemoModifiers.value);
+      keyBarDemoModifiers.value = consumeTerminalModifiers(keyBarDemoModifiers.value);
+      keyBarDemoOutput.value = `${key} → ${JSON.stringify(bytes).slice(1, -1)}`;
+    }),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      '.terminal-key-bar-demo [data-action="copy-terminal-text"], .terminal-key-bar-demo [data-action="paste-terminal-text"]',
+      (_event, target) => {
+        keyBarDemoOutput.value =
+          (target as HTMLElement).dataset.action === 'copy-terminal-text'
+            ? 'Copy → opens the terminal Copy sheet'
+            : 'Paste → sends the clipboard to the terminal';
+      },
+    ),
+  );
+  // The rename dialog demo reports what each production action would do (HS2-2Q7KTX).
+  demoListeners.add(
+    delegate(root, 'click', '[data-rename-demo-open]', (_event, target) => {
+      const kind = (target as HTMLElement).dataset.renameDemoOpen === 'default' ? 'default' : 'renamed';
+      renameDemoSession.value += 1;
+      renameDemoTarget.value = { ...renameDemoTargets[kind], session: renameDemoSession.value };
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', '.terminal-rename-demo [data-action="reset-terminal-rename"]', () => {
+      renameDemoOutput.value = `Reset to default → the tab shows ${renameDemoTarget.value?.defaultName ?? ''} again`;
+      renameDemoTarget.value = undefined;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', '.terminal-rename-demo [data-action="cancel-terminal-rename"]', () => {
+      renameDemoOutput.value = 'Cancel → the name is unchanged';
+      renameDemoTarget.value = undefined;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'submit', '.terminal-rename-demo [data-action="rename-terminal-form"]', (event, target) => {
+      event.preventDefault();
+      const name = target.querySelector<HTMLInputElement>('[name="terminal-name"]')?.value.trim() ?? '';
+      renameDemoOutput.value = `Rename → the tab shows ${name}`;
+      renameDemoTarget.value = undefined;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'wa-hide', '.terminal-rename-demo [data-terminal-rename-dialog]', () => {
+      renameDemoTarget.value = undefined;
+    }),
+  );
+  // The clipboard sheet demos drive the same open/close/selection behavior as production (HS2-FRB545).
+  demoListeners.add(
+    delegate(root, 'click', '[data-clipboard-demo-open]', (_event, target) => {
+      const kind = (target as HTMLElement).dataset.clipboardDemoOpen,
+        generation = (clipboardDemoGeneration.value += 1);
+      if (kind === 'copy')
+        clipboardDemoCopy.value = { open: true, title: 'Build', generation, text: CLIPBOARD_DEMO_TEXT };
+      else
+        clipboardDemoPaste.value = {
+          open: true,
+          title: 'Build',
+          generation,
+          reason: kind === 'unavailable' ? 'unavailable' : 'denied',
+        };
+    }),
+  );
+  const closeClipboardDemo = () => {
+    if (clipboardDemoCopy.value?.open) clipboardDemoCopy.value = { ...clipboardDemoCopy.value, open: false };
+    if (clipboardDemoPaste.value?.open) clipboardDemoPaste.value = { ...clipboardDemoPaste.value, open: false };
+  };
+  demoListeners.add(
+    delegate(root, 'click', '.terminal-clipboard-demo [data-action="confirm-terminal-copy"]', () => {
+      const field = root.querySelector<HTMLTextAreaElement>(
+        '.terminal-clipboard-demo textarea[name="terminal-copy-text"]',
+      );
+      if (!field) return;
+      const { text, selection } = terminalCopySelection(field.value, field.selectionStart, field.selectionEnd);
+      clipboardDemoOutput.value = terminalCopyMessage(text, selection);
+      closeClipboardDemo();
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'submit', '.terminal-clipboard-demo [data-action="submit-terminal-paste"]', (event, target) => {
+      event.preventDefault();
+      const text = target.querySelector<HTMLTextAreaElement>('textarea[name="terminal-paste-text"]')?.value ?? '';
+      clipboardDemoOutput.value = `Pasted → ${JSON.stringify(text.replace(/\r?\n/g, '\r')).slice(1, -1)}`;
+      closeClipboardDemo();
+    }),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      '.terminal-clipboard-demo [data-action="close-terminal-copy"], .terminal-clipboard-demo [data-action="cancel-terminal-paste"]',
+      closeClipboardDemo,
+    ),
+  );
+  demoListeners.add(delegate(root, 'wa-hide', '.terminal-clipboard-demo wa-dialog', closeClipboardDemo));
+  // The edit menu demo opens where the stage was pressed and reports the production action (HS2-KKP8YJ).
+  demoListeners.add(
+    delegate(root, 'click', '[data-edit-menu-demo-open]', (_event, target) => {
+      const box = target.getBoundingClientRect(),
+        // A long-press on a word leaves a selection, so the menu leads with Copy (HS2-EYR96N).
+        selection = (target as HTMLElement).dataset.editMenuDemoOpen === 'selection';
+      editMenuDemo.value = {
+        ...viewportSafeContextMenuPosition(box.left + box.width / 2, box.bottom, innerWidth, innerHeight, {
+          width: 192,
+          height: selection ? 144 : 96,
+        }),
+        selection,
+      };
+    }),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      '.terminal-edit-menu-demo [data-action="copy-terminal-selection"], .terminal-edit-menu-demo [data-action="copy-terminal-text"], .terminal-edit-menu-demo [data-action="paste-terminal-text"]',
+      (_event, target) => {
+        const action = (target as HTMLElement).dataset.action;
+        editMenuDemoOutput.value =
+          action === 'copy-terminal-selection'
+            ? 'Copy → copies the selected terminal text'
+            : action === 'copy-terminal-text'
+              ? 'Copy Text… → opens the terminal Copy sheet'
+              : 'Paste → sends the clipboard to the terminal';
+        editMenuDemo.value = undefined;
+      },
+    ),
+  );
+  // The drawer focus-mode text-size control cycles the demo's column fixture like production (HS2-01D4JP).
+  demoListeners.add(
+    delegate(root, 'click', '.terminal-drawer-focus-demo [data-action="cycle-mobile-terminal-columns"]', () => {
+      drawerFocusDemoColumns.value = nextMobileTerminalColumns(drawerFocusDemoColumns.value);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.openTerminalContextMenu.selector, (event, target) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const box = target.getBoundingClientRect();
+      showTerminalDashboardContextMenu(target as HTMLElement, box.right, box.bottom);
+    }),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
+/** The catalog entries this file renders: terminal drawer, dashboard, keyboard, and clipboard surfaces over deterministic sessions (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
     'terminal-drawer': { Demo: TerminalDrawerDemo },
@@ -447,4 +695,5 @@ export const demoModule: DemoModule = {
     'terminal-paste-dialog': { Demo: () => terminalClipboardDemo(false) },
     'terminal-rename-dialog': { Demo: TerminalRenameDialogDemo },
   },
+  wire: wireTerminalComponentsDemo,
 };

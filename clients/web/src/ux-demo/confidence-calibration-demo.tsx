@@ -1,9 +1,10 @@
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import type { CalibrationReport } from '../api';
 import { ConfidenceCalibration, type ConfidenceCalibrationState } from '../components/confidence-calibration';
-import type { DemoModule } from './demo-module';
+import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 /** A deterministic report covering every band shape: rated, unresolved, empty, and unscored. */
@@ -104,6 +105,20 @@ export function ConfidenceCalibrationSettings() {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireConfidenceCalibrationDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="confidence-calibration"] [name]', (_event, target) => {
+      const control = target as FormControl;
+      if (control.getAttribute('name') === 'state') confidenceCalibrationSettings.state.value = control.value;
+    }),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
@@ -113,4 +128,5 @@ export const demoModule: DemoModule = {
       reset: resetConfidenceCalibrationDemo,
     },
   },
+  wire: wireConfidenceCalibrationDemo,
 };

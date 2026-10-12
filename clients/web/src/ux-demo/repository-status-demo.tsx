@@ -1,6 +1,8 @@
 import { deviceClass } from '@kerfjs/ui/device-class';
 import { Select } from '@kerfjs/ui/select';
-import { computed, signal } from 'kerfjs';
+import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
+import { computed, delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import type { CodeReview, RepositoryStatus } from '../api';
 import {
@@ -11,7 +13,9 @@ import {
   type RepositoryStatusView,
 } from '../components/repository-status-popover';
 import type { CodeReviewComparison } from '../components/ticket-code-review';
-import type { DemoModule } from './demo-module';
+import { revealContextPopupMenu } from '../context-menu-position';
+import { DEMO_ACTIONS } from './demo-actions';
+import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 export type RepositoryDemoScenario = 'clean' | 'dirty' | 'ahead' | 'behind' | 'diverged' | 'conflicted' | 'error';
@@ -182,6 +186,175 @@ export function RepositoryStatusPopoverSettings() {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireRepositoryStatusDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  // The compact Repository Status drill-down pops back to its list the same way (HS2-3B8345).
+  let demoRepositoryNavStack: { section: Element; dispose: () => void } | undefined;
+  function syncDemoRepositoryNavStack() {
+    const section = root.querySelector('.repository-status-demo [data-component="nav-stack"]');
+    if (section === (demoRepositoryNavStack?.section ?? null)) return;
+    demoRepositoryNavStack?.dispose();
+    demoRepositoryNavStack = section
+      ? {
+          section,
+          dispose: wireNavStack(section, {
+            onBack: () => {
+              repositoryDemoDetailActive.value = false;
+              repositoryDemoEvent.value = 'Back to repository views.';
+            },
+          }),
+        }
+      : undefined;
+  }
+  new MutationObserver(syncDemoRepositoryNavStack).observe(root, { childList: true, subtree: true });
+  queueMicrotask(syncDemoRepositoryNavStack);
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.selectRepositoryView.selector, (_event, target) => {
+      repositoryDemoView.value = (target as HTMLElement).dataset.itemId as typeof repositoryDemoView.value;
+      repositoryDemoDetailActive.value = true;
+      repositoryDemoEvent.value = `${(target as HTMLElement).textContent.trim() || 'Repository view'} selected.`;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleRepositoryComparison.selector, () => {
+      if (repositoryDemoComparison.value.active) {
+        repositoryDemoComparison.value = { active: false, side: 'a' };
+        return;
+      }
+      repositoryDemoView.value = 'commits';
+      repositoryDemoComparison.value = { active: true, side: 'a' };
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.setRepositoryComparisonSide.selector, (_event, target) => {
+      repositoryDemoComparison.value = {
+        ...repositoryDemoComparison.value,
+        side: (target as HTMLElement).dataset.comparisonSide as 'a' | 'b',
+      };
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.selectRepositoryComparisonCommit.selector, (_event, target) => {
+      const sha = (target as HTMLElement).dataset.commitSha!,
+        current = repositoryDemoComparison.value;
+      repositoryDemoComparison.value =
+        current.side === 'a' ? { ...current, a: sha, side: 'b' } : { ...current, b: sha };
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.toggleCodeReviewCommit.selector, (_event, target) => {
+      const sha = (target as HTMLElement).dataset.commitSha!;
+      repositoryDemoExpandedCommits.value = repositoryDemoExpandedCommits.value.includes(sha)
+        ? repositoryDemoExpandedCommits.value.filter((item) => item !== sha)
+        : [...repositoryDemoExpandedCommits.value, sha];
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.refreshRepositoryStatus.selector, () => {
+      repositoryDemoEvent.value = 'Repository status refreshed.';
+    }),
+  );
+  const repositoryDemoFileSelector = '[data-action="select-repository-file"]';
+  const repositoryDemoFileMenuTrigger = '[data-action="open-repository-file-menu-trigger"]';
+  function openRepositoryDemoFileMenu(target: Element, x: number, y: number) {
+    const element = target.closest<HTMLElement>(repositoryDemoFileSelector) ?? (target as HTMLElement);
+    const path = element.dataset.itemId!;
+    const ticket =
+      (target as HTMLElement).dataset.fileMenuSource === 'ticket' ||
+      Boolean(target.closest('[data-component="change-evidence-dialog"]'));
+    const view = repositoryDemoView.value;
+    const diff = ticket
+      ? 'ticket'
+      : view === 'staged' || view === 'unstaged'
+        ? view
+        : view === 'conflicted'
+          ? 'unstaged'
+          : undefined;
+    const width = 232;
+    const height = 226;
+    const bounds = target.closest('.dialog-surface')?.getBoundingClientRect();
+    const minimumX = bounds ? bounds.left + 8 : 8;
+    const maximumX = Math.min(
+      window.innerWidth - width - 8,
+      bounds ? bounds.right - width - 8 : Number.POSITIVE_INFINITY,
+    );
+    const minimumY = bounds ? bounds.top + 8 : 8;
+    const maximumY = Math.min(
+      window.innerHeight - height - 8,
+      bounds ? bounds.bottom - height - 8 : Number.POSITIVE_INFINITY,
+    );
+    repositoryDemoFileMenu.value = {
+      path,
+      absolutePath: `/work/hotsheet2/${path}`,
+      diff,
+      x: Math.max(minimumX, Math.min(x, maximumX)),
+      y: Math.max(minimumY, Math.min(y, maximumY)),
+      source: ticket ? 'ticket' : 'repository',
+    };
+    revealContextPopupMenu('repository-file');
+  }
+  demoListeners.add(
+    delegate(root, 'dblclick', repositoryDemoFileSelector, (event, target) => {
+      if ((event.target as Element).closest(repositoryDemoFileMenuTrigger)) return;
+      repositoryDemoFileMenu.value = undefined;
+      repositoryDemoEvent.value = `Would open ${(target as HTMLElement).dataset.itemId}.`;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', repositoryDemoFileMenuTrigger, (event, target) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const box = target.getBoundingClientRect();
+      openRepositoryDemoFileMenu(target, box.right, box.bottom);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'keydown', repositoryDemoFileMenuTrigger, (event, target) => {
+      const key = (event as KeyboardEvent).key;
+      if (key !== 'Enter' && key !== ' ') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const box = target.getBoundingClientRect();
+      openRepositoryDemoFileMenu(target, box.right, box.bottom);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'contextmenu', repositoryDemoFileSelector, (event, target) => {
+      event.preventDefault();
+      const pointer = event as MouseEvent;
+      openRepositoryDemoFileMenu(target, pointer.clientX, pointer.clientY);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', '[data-repository-file-action]', (_event, target) => {
+      const action = (target as HTMLElement).dataset.repositoryFileAction;
+      const path = (target as HTMLElement).dataset.repositoryFilePath;
+      repositoryDemoFileMenu.value = undefined;
+      repositoryDemoEvent.value =
+        action === 'show-diff' ? `Would review ${path} in Glassbox.` : `Would ${action} ${path}.`;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.selectChangeEvidenceView.selector, (_event, target) => {
+      changeEvidenceDemoView.value = (target as HTMLElement).dataset.itemId as typeof changeEvidenceDemoView.value;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', DEMO_ACTIONS.openRepositoryReview.selector, (_event, target) => {
+      repositoryDemoEvent.value = `Would open ${(target as HTMLElement).dataset.reviewMode} review in Glassbox.`;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="repository-status-popover"] [name="scenario"]', (_event, target) => {
+      repositoryDemoScenario.value = (target as FormControl).value as typeof repositoryDemoScenario.value;
+    }),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
@@ -192,4 +365,5 @@ export const demoModule: DemoModule = {
     },
     'change-evidence-dialog': { Demo: ChangeEvidenceDialogDemo },
   },
+  wire: wireRepositoryStatusDemo,
 };

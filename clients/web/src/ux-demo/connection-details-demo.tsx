@@ -1,9 +1,10 @@
 import { Select } from '@kerfjs/ui/select';
-import { signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import type { CompatibilityAssessment } from '../compatibility';
 import { ConnectionDetailsDialog } from '../components/connection-details-dialog';
-import type { DemoModule } from './demo-module';
+import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 export type ConnectionDetailsScenario =
@@ -106,6 +107,19 @@ export function ConnectionDetailsDialogSettings() {
   );
 }
 
+/** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
+function wireConnectionDetailsDemo(root: HTMLElement): () => void {
+  const demoListeners = createScope();
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="connection-details-dialog"] [name="scenario"]', (_event, target) => {
+      connectionDetailsScenario.value = (target as FormControl).value as typeof connectionDetailsScenario.value;
+    }),
+  );
+  return () => {
+    demoListeners.dispose();
+  };
+}
+
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
@@ -115,4 +129,5 @@ export const demoModule: DemoModule = {
       reset: resetConnectionDetailsDemo,
     },
   },
+  wire: wireConnectionDetailsDemo,
 };
