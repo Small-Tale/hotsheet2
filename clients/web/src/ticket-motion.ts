@@ -64,16 +64,18 @@ function parentKey(container: HTMLElement) {
     ''
   );
 }
-function currentRow(container: HTMLElement): TicketMotionRow | undefined {
+/** Border radius per visual class within one measurement pass, so a pass reads computed style once
+ * per row presentation rather than once per row (HS2-4B8Q5D). */
+type RadiusCache = Map<string, string>;
+function currentRow(container: HTMLElement, radii: RadiusCache): TicketMotionRow | undefined {
   const visual = ticketVisual(container);
   if (!visual) return undefined;
-  return {
-    rect: container.getBoundingClientRect(),
-    parent: parentKey(container),
-    container,
-    visual,
-    borderRadius: container.ownerDocument.defaultView?.getComputedStyle(visual).borderRadius ?? '',
-  };
+  let borderRadius = radii.get(visual.className);
+  if (borderRadius === undefined) {
+    borderRadius = container.ownerDocument.defaultView?.getComputedStyle(visual).borderRadius ?? '';
+    radii.set(visual.className, borderRadius);
+  }
+  return { rect: container.getBoundingClientRect(), parent: parentKey(container), container, visual, borderRadius };
 }
 
 export function captureTicketMotion(root: ParentNode, collectionKey = ''): TicketMotionSnapshot {
@@ -82,8 +84,9 @@ export function captureTicketMotion(root: ParentNode, collectionKey = ''): Ticke
   // Measuring and cloning an entire populated queue can monopolize the main thread for seconds when
   // search replaces the collection. Bulk changes render directly; motion remains for ordinary ticket work.
   if (containers.length > MAX_CAPTURED_ROWS) return { scope: '', rows };
+  const radii: RadiusCache = new Map();
   for (const container of containers) {
-    const row = currentRow(container),
+    const row = currentRow(container, radii),
       slug = row?.visual.dataset.ticketSlug;
     if (row && slug) rows.set(slug, row);
   }
@@ -100,13 +103,25 @@ export function animateTicketMotion(
   const containers = motionContainers(root);
   // Count a bulk arrival from slugs alone: measuring every row first forced a style read per row
   // on warm project returns only to discard the result (HS2-KCXMAT).
-  let arriving = 0;
-  for (const container of containers)
-    if (!before.rows.has(ticketVisual(container)?.dataset.ticketSlug ?? '')) arriving += 1;
-  if (arriving > MAX_INCOMING_ANIMATIONS) return;
-  const after = new Map<string, TicketMotionRow>();
+  let arriving = 0,
+    retained = 0,
+    reparented = false;
   for (const container of containers) {
-    const row = currentRow(container),
+    const previous = before.rows.get(ticketVisual(container)?.dataset.ticketSlug ?? '');
+    if (!previous) arriving += 1;
+    else {
+      retained += 1;
+      if (!reparented && previous.parent !== parentKey(container)) reparented = true;
+    }
+  }
+  if (arriving > MAX_INCOMING_ANIMATIONS) return;
+  // Unchanged membership and columns produce no motion, so a render that only updated rows in
+  // place (selection, edits) must not measure any of them (HS2-4B8Q5D).
+  if (arriving === 0 && !reparented && retained === before.rows.size) return;
+  const after = new Map<string, TicketMotionRow>(),
+    radii: RadiusCache = new Map();
+  for (const container of containers) {
+    const row = currentRow(container, radii),
       slug = row?.visual.dataset.ticketSlug;
     if (row && slug) after.set(slug, row);
   }

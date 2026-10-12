@@ -199,6 +199,18 @@ about 131–135 ms to 79–83 ms. What remains per click is Kerf's separate
 pointer-blur collapse render pass, full-list JSX attribute serialization
 (including Lucide path data), and scroll-divider remeasurement, all tracked
 as upstream Kerf tickets.
+Those Kerf fixes (`KF-AS24QP`, `KF-JPP0Z5`, `KF-50PA0Y`) shipped in
+`@kerfjs/ui` 5.0.0-beta.95 and need no app-side adoption. On beta.95 alone,
+three repeated runs measured ticket selection at 70–75 ms desktop and 77–78 ms
+narrow, and every project change, including large-project returns, at 84–94 ms.
+`HS2-4B8Q5D` then stopped per-render layout reads in ticket scroll memory and
+motion. Once a scope's scroll destination is reached, a re-render reads no
+scroll sizes unless a `MutationObserver` saw rows added or removed inside a
+scroll owner, an attribute change on an owner or its ancestors, a replaced
+owner, or a viewport resize. Ticket motion returns before measuring when no row
+arrived, left, or changed column, and reads computed border radius once per row
+class. In three repeated runs, project changes fell to 77–84 ms desktop and
+69–72 ms narrow, and selection measured 65–73 ms desktop and 78–85 ms narrow.
 
 The app's measured project click-to-next-paint ranged roughly 52–92 ms
 before terminal and AI activity. Returning to the large project with

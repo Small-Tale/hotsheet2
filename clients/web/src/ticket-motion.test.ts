@@ -219,6 +219,44 @@ describe('ticket motion', () => {
     for (const item of moved) expect(item.animate).toHaveBeenCalled();
   });
 
+  it('reads no layout after a render that kept the same rows in the same columns (HS2-4B8Q5D)', () => {
+    const previous = Array.from({ length: 30 }, (_, index) =>
+        row(`HS2-SAME${index}`, 'started', rect(10, 20 + index * 72)),
+      ),
+      before = snapshot(previous.map((item, index) => [`HS2-SAME${index}`, item, 'started'])),
+      // Selection or an in-place edit re-rendered every row and even moved them on screen.
+      current = previous.map((_, index) => row(`HS2-SAME${index}`, 'started', rect(10, 40 + index * 80))),
+      measured = current.map((item) => vi.spyOn(item.container, 'getBoundingClientRect')),
+      styled = vi.spyOn(current[0].document.defaultView as Window, 'getComputedStyle');
+    animateTicketMotion(before, root(current), false);
+    for (const spy of measured) expect(spy).not.toHaveBeenCalled();
+    expect(styled).not.toHaveBeenCalled();
+    for (const item of current) expect(item.animate).not.toHaveBeenCalled();
+    // Reordering alone stays still too; a column move or a removal is still measured and animated.
+    animateTicketMotion(before, root([...current].reverse()), false);
+    for (const spy of measured) expect(spy).not.toHaveBeenCalled();
+    const reparented = current.map((item, index) =>
+      index === 0 ? row('HS2-SAME0', 'completed', rect(210, 20)) : item,
+    );
+    (reparented[0].container as unknown as { cloneNode: () => HTMLElement }).cloneNode = () => ghost('HS2-SAME0');
+    animateTicketMotion(before, root(reparented), false);
+    expect(measured[1]).toHaveBeenCalled();
+  });
+
+  it('reads computed border radius once per row presentation while capturing', () => {
+    const document = mockDocument(),
+      rows = Array.from({ length: 20 }, (_, index) =>
+        row(`HS2-R${index}`, 'started', rect(10, 20 + index * 72), undefined, document),
+      );
+    for (const [index, item] of rows.entries())
+      (item.visual as unknown as { className: string }).className = index % 2 ? 'ticket-list-row' : 'row selected';
+    const styled = vi.spyOn(document.defaultView as Window, 'getComputedStyle'),
+      captured = captureTicketMotion(root(rows));
+    expect(captured.rows.size).toBe(20);
+    expect(styled).toHaveBeenCalledTimes(2);
+    expect([...captured.rows.values()].every((item) => item.borderRadius === '10px')).toBe(true);
+  });
+
   it('does not clone or animate rows when the ticket collection view changes', () => {
     const previous = row('HS2-A', 'ticket-list', rect(10, 20)),
       incoming = row('HS2-B', 'ticket-list', rect(10, 20));

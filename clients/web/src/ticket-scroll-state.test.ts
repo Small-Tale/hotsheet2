@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { captureTicketScrollState, restoreTicketScrollState, TicketScrollMemory } from './ticket-scroll-state';
 
@@ -294,5 +294,150 @@ describe('ticket scroll state', () => {
     expect(owner.scrollTop).toBe(0);
     memory.afterRender(second, root, true);
     expect(owner.scrollTop).toBe(480);
+  });
+});
+
+describe('ticket scroll state layout reads (HS2-4B8Q5D)', () => {
+  // A controllable MutationObserver: tests queue structural records for the observed owners.
+  const observers: FakeObserver[] = [];
+  class FakeObserver {
+    records: unknown[] = [];
+    constructor(readonly callback: () => void) {
+      observers.push(this);
+    }
+    observe() {}
+    disconnect() {}
+    takeRecords() {
+      return this.records.splice(0);
+    }
+  }
+  const mutate = () => {
+    for (const observer of observers) observer.records.push({ type: 'childList' });
+  };
+
+  function measuredScroller(key = 'workspace') {
+    const owner = Object.assign(scroller(key), { nodeType: 1, sizeReads: 0 }),
+      sizes = { scrollHeight: 2000, clientHeight: 200, scrollWidth: 1000, clientWidth: 200 };
+    for (const name of Object.keys(sizes) as (keyof typeof sizes)[])
+      Object.defineProperty(owner, name, {
+        get() {
+          owner.sizeReads += 1;
+          return sizes[name];
+        },
+        set(value: number) {
+          sizes[name] = value;
+        },
+      });
+    return owner;
+  }
+
+  beforeEach(() => {
+    observers.length = 0;
+    vi.stubGlobal('MutationObserver', FakeObserver);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('skips clamping once a pending destination is reached until content changes structurally', () => {
+    const memory = new TicketScrollMemory(),
+      owner = measuredScroller(),
+      root = rootFor(owner),
+      a = { project: 'one', mode: 'list', view: 'queue' },
+      b = { ...a, view: 'archive' };
+    memory.afterRender(memory.beforeRender(a, root), root, true);
+    owner.scrollTop = 900;
+    memory.afterRender(memory.beforeRender(b, root), root, true);
+    // Returning while progressive rows are still arriving restores, then reaches, the destination.
+    memory.afterRender(memory.beforeRender(a, root), root, false);
+    expect(owner.scrollTop).toBe(900);
+    // Attribute-only renders (selection, edits) while unsettled read no scroll size at all.
+    owner.sizeReads = 0;
+    for (let index = 0; index < 5; index += 1) memory.afterRender(memory.beforeRender(a, root), root, false);
+    expect(owner.sizeReads).toBe(0);
+    expect(owner.scrollTop).toBe(900);
+    // A user scroll during that time becomes the destination without measurement.
+    owner.scrollTop = 640;
+    memory.afterRender(memory.beforeRender(a, root), root, false);
+    expect(owner.sizeReads).toBe(0);
+    // A structural morph that resets the viewport is restored to the user's position.
+    const generation = memory.beforeRender(a, root);
+    mutate();
+    owner.scrollTop = 0;
+    memory.afterRender(generation, root, false);
+    expect(owner.scrollTop).toBe(640);
+    expect(owner.sizeReads).toBeGreaterThan(0);
+    // Settling clears the pending restore without another measurement.
+    owner.sizeReads = 0;
+    memory.afterRender(memory.beforeRender(a, root), root, true);
+    expect(owner.sizeReads).toBe(0);
+    memory.afterRender(memory.beforeRender(a, root), root, true);
+    expect(owner.sizeReads).toBe(0);
+  });
+
+  it('keeps measuring while a destination is clamped, then after shrink, growth and refill', () => {
+    const memory = new TicketScrollMemory(),
+      owner = measuredScroller(),
+      root = rootFor(owner),
+      a = { project: 'one', mode: 'list', view: 'queue' },
+      b = { ...a, view: 'archive' };
+    memory.afterRender(memory.beforeRender(a, root), root, true);
+    owner.scrollTop = 900;
+    memory.afterRender(memory.beforeRender(b, root), root, true);
+    owner.scrollHeight = 600;
+    memory.afterRender(memory.beforeRender(a, root), root, false);
+    expect(owner.scrollTop).toBe(400);
+    // Clamped, so the destination is not reached: the next pass measures even without mutations.
+    owner.sizeReads = 0;
+    owner.scrollHeight = 2000;
+    memory.afterRender(memory.beforeRender(a, root), root, false);
+    expect(owner.sizeReads).toBeGreaterThan(0);
+    expect(owner.scrollTop).toBe(900);
+    // Empty-then-refill after reaching it: rows removed, then added back.
+    let generation = memory.beforeRender(a, root);
+    mutate();
+    owner.scrollHeight = 0;
+    owner.scrollTop = 0;
+    memory.afterRender(generation, root, false);
+    expect(owner.scrollTop).toBe(0);
+    generation = memory.beforeRender(a, root);
+    mutate();
+    owner.scrollHeight = 2000;
+    memory.afterRender(generation, root, true);
+    expect(owner.scrollTop).toBe(900);
+  });
+
+  it('does not mistake a coalesced structural reset after a reached pass for user input', () => {
+    const memory = new TicketScrollMemory(),
+      owner = measuredScroller('column:started'),
+      root = rootFor(owner),
+      scope = { project: 'one', mode: 'board', view: 'queue' };
+    memory.afterRender(memory.beforeRender(scope, root), root, true);
+    owner.scrollTop = 430;
+    // A settled re-render records the reached offset without measuring.
+    memory.afterRender(memory.beforeRender(scope, root), root, true);
+    const first = memory.beforeRender(scope, root);
+    mutate();
+    owner.scrollTop = 0; // A layout-switching morph resets the column before its restore runs.
+    const second = memory.beforeRender(scope, root);
+    memory.afterRender(first, root, true);
+    memory.afterRender(second, root, true);
+    expect(owner.scrollTop).toBe(430);
+  });
+
+  it('treats a replaced scroll owner as changed even without mutation records', () => {
+    const memory = new TicketScrollMemory(),
+      first = measuredScroller(),
+      second = measuredScroller(),
+      owners = [first],
+      root = { querySelectorAll: () => owners } as unknown as ParentNode,
+      a = { project: 'one', mode: 'list', view: 'queue' };
+    memory.afterRender(memory.beforeRender(a, root), root, false);
+    first.scrollTop = 300;
+    memory.afterRender(memory.beforeRender(a, root), root, false);
+    const generation = memory.beforeRender(a, root);
+    owners[0] = second;
+    memory.afterRender(generation, root, false);
+    expect(second.scrollTop).toBe(300);
   });
 });
