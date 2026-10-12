@@ -2886,7 +2886,7 @@ test('changes a sole project source color in settings and inspector while cards 
   await page.getByLabel('List view').click();
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
   await ticketRow.click();
-  await expect(page.locator('.ticket-inspector__source-identity [data-component="ticket-source-icon"]')).toHaveCSS(
+  await expect(page.locator('[data-source-identity] [data-component="ticket-source-icon"]')).toHaveCSS(
     'color',
     'rgb(59, 130, 246)',
   );
@@ -3062,7 +3062,7 @@ test('keeps the inspector source mark unclipped and close to the ticket number (
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
   const toolbar = page.locator('#app-right-rail [data-component="toolbar"][aria-label="Ticket inspector toolbar"]');
-  const icon = await toolbar.locator('.ticket-inspector__source-identity .ticket-source-icon').boundingBox();
+  const icon = await toolbar.locator('[data-source-identity] .ticket-source-icon').boundingBox();
   const number = await toolbar.locator('.ticket-inspector__slug').boundingBox();
   const bounds = await toolbar.boundingBox();
   expect(icon && number && bounds).toBeTruthy();
@@ -18989,7 +18989,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
     node.style.width = '250px';
   });
   await expect(
-    page.getByRole('tab', { name: /Attachments/ }).locator('.ticket-inspector__tab-count [aria-hidden="true"]'),
+    page.getByRole('tab', { name: /Attachments/ }).locator('.ticket-inspector__tab-count [data-component="badge"]'),
   ).not.toContainText('≥');
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const item = page.locator('[data-attachment-id="A1"]');

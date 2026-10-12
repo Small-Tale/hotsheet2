@@ -3,10 +3,14 @@ import '@kerfjs/ui/tab-bar.css';
 import './ticket-inspector.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
+import { Badge } from '@kerfjs/ui/badge';
 import { foregroundColorVar, pct, rem } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { Skeleton } from '@kerfjs/ui/skeleton';
+import { StateBanner } from '@kerfjs/ui/state-banner';
 import { TabBar } from '@kerfjs/ui/tab-bar';
+import { Text } from '@kerfjs/ui/text';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import {
@@ -325,31 +329,42 @@ export function ticketInspectorPanel({
       )}
       {liveClaim && <LiveClaimNotice {...liveClaim} />}
       {feedbackNeeded && (
-        <div class="ticket-inspector__feedback" role="status">
-          <span class="ticket-inspector__feedback-icon">
-            <LucideIcon icon={CircleAlert} name="circle-alert" size="s" />
-          </span>
-          <span>Needs review</span>
+        <div class="ticket-inspector__notice ticket-inspector__feedback">
+          <StateBanner
+            title="Needs review"
+            tone="warning"
+            icon={<LucideIcon icon={CircleAlert} name="circle-alert" size="s" />}
+          />
         </div>
       )}
       {(status === 'completed' || status === 'verified') && latestConfidence !== undefined && (
-        <div class="ticket-inspector__confidence" role="status" data-confidence={String(latestConfidence)}>
-          <ConfidenceBadge value={latestConfidence} appearance="labeled" />
-          <span>Reported by the completing AI</span>
+        <div
+          class="ticket-inspector__notice ticket-inspector__confidence"
+          role="status"
+          data-confidence={String(latestConfidence)}
+        >
+          <Row wrap gap="xs" vAlign="middle" controlInsets="rl">
+            <ConfidenceBadge value={latestConfidence} appearance="labeled" />
+            <Text variant="span" tone="quiet" size="compact" border="none" flush>
+              Reported by the completing AI
+            </Text>
+          </Row>
         </div>
       )}
       {closeReason && closeReason !== 'duplicate' && (
-        <div class="ticket-inspector__close-outcome" role="status" data-close-reason={closeReason}>
-          <span>Closed as {ticketCloseReasonLabel(closeReason)?.toLowerCase() ?? closeReason}</span>
+        <div class="ticket-inspector__notice" data-close-reason={closeReason}>
+          <StateBanner title={`Closed as ${ticketCloseReasonLabel(closeReason)?.toLowerCase() ?? closeReason}`} />
         </div>
       )}
       {closeReason === 'duplicate' &&
         (duplicateTarget ? (
           <TicketDuplicateTarget target={duplicateTarget} />
         ) : (
-          <div class="ticket-inspector__close-outcome" role="status" data-close-reason="duplicate">
-            <LucideIcon size="s" icon={CopyX} name="copy-x" />
-            <span>Duplicate of another ticket</span>
+          <div class="ticket-inspector__notice" data-close-reason="duplicate">
+            <StateBanner
+              title="Duplicate of another ticket"
+              icon={<LucideIcon size="s" icon={CopyX} name="copy-x" />}
+            />
           </div>
         ))}
       <TicketDuplicateBacklinks
@@ -385,8 +400,9 @@ export function ticketInspectorPanel({
               trailing={
                 tab.id === 'attachments' && attachments?.length ? (
                   <span class="ticket-inspector__tab-count">
-                    <span aria-hidden="true">{attachments.length}</span>
-                    <span class="ticket-inspector__tab-count-label">{attachments.length} attachments</span>
+                    <Badge size="compact" label={`${attachments.length} attachments`}>
+                      {attachments.length}
+                    </Badge>
                   </span>
                 ) : undefined
               }
@@ -421,26 +437,30 @@ export function ticketInspectorPanel({
                 <small>Remote values changed while this edit was pending; local fields take precedence.</small>
               )}
               {operation.state === 'needs_attention' && (
-                <button
+                <wa-button
                   type="button"
+                  size="s"
+                  appearance="outlined"
                   {...INSPECTOR_AND_EDITOR_ACTIONS.retryProviderOutbox.attrs}
                   data-connection-id={operation.connection_id}
                   data-operation-id={operation.operation_id}
                 >
                   Retry
-                </button>
+                </wa-button>
               )}
               {(operation.state === 'queued' ||
                 operation.state === 'rate_limited' ||
                 operation.state === 'needs_attention') && (
-                <button
+                <wa-button
                   type="button"
+                  size="s"
+                  appearance="outlined"
                   {...INSPECTOR_AND_EDITOR_ACTIONS.discardProviderOutbox.attrs}
                   data-connection-id={operation.connection_id}
                   data-operation-id={operation.operation_id}
                 >
                   Discard local edit
-                </button>
+                </wa-button>
               )}
             </div>
           ))}
@@ -510,10 +530,10 @@ export function ticketInspectorPanel({
       label: 'Ticket inspector toolbar',
       dividerSides: '',
       leading: source ? (
-        <span class="ticket-inspector__source-identity">
+        <Row gap="2xs" vAlign="middle" rootAttributes={{ 'data-source-identity': 'true' }}>
           <TicketSourceIcon source={source} size="compact" />
           {slugButton}
-        </span>
+        </Row>
       ) : (
         slugButton
       ),

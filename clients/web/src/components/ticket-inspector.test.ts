@@ -90,12 +90,9 @@ describe('TicketInspector', () => {
     expect(css).toMatch(
       /\.ticket-inspector__title \{[^}]*margin: var\(--kui-space-2xs\) var\(--kui-space-m\) var\(--kui-space-m\)/,
     );
-    expect(css).toMatch(
-      /\.ticket-inspector__feedback \{[^}]*gap: var\(--kui-space-xs\)[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-m\)[^}]*padding: var\(--kui-space-xs\)/,
-    );
-    expect(css).toMatch(
-      /\.ticket-inspector__close-outcome \{[^}]*gap: var\(--kui-space-2xs\)[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-m\)[^}]*padding: var\(--kui-space-xs\)/,
-    );
+    // Header notices share one slot margin; Kerf StateBanner owns their chrome (HS2-MMHS28).
+    expect(css).toMatch(/\.ticket-inspector__notice \{[^}]*margin-bottom: var\(--kui-space-m\)/);
+    expect(css).not.toMatch(/\.ticket-inspector__(feedback|close-outcome|confidence) \{/);
     const titleRule = css.match(/\.ticket-inspector__title \{([^}]*)\}/)?.[1] ?? '';
     expect(titleRule).toContain('overflow-wrap: anywhere');
     expect(titleRule).not.toContain('line-clamp');
@@ -288,7 +285,7 @@ describe('TicketInspector', () => {
 
   it('names every non-duplicate close outcome in human language (HS2-N11T22)', () => {
     const outcome = (closeReason: 'not_planned' | 'obsolete' | 'works_as_designed') =>
-      /data-close-reason="[^"]+"[^>]*>\s*<span>([^<]+)<\/span>/u.exec(
+      /data-close-reason="[^"]+"[\s\S]*?data-component="state-banner"[\s\S]*?>(Closed as [^<]+)</u.exec(
         String(TicketInspector({ ...base, closeReason })),
       )?.[1];
     expect(outcome('not_planned')).toBe('Closed as not planned');
@@ -314,7 +311,7 @@ describe('TicketInspector', () => {
     expect(working).toContain('data-claim-eta="estimate"');
     // The live-work notice leads the header notices, above Needs review.
     expect(working.indexOf('data-component="live-claim-notice"')).toBeLessThan(
-      working.indexOf('class="ticket-inspector__feedback"'),
+      working.indexOf('ticket-inspector__feedback'),
     );
     const reader = String(TicketInspector({ ...base, presentation: 'reader', liveClaim: { agentName: 'Codex' } }));
     expect(reader).toContain('data-component="live-claim-notice"');
@@ -331,7 +328,7 @@ describe('TicketInspector', () => {
 
   it('shows the derived completion confidence only on completed or verified tickets (HS2-DWTJ43)', () => {
     const row = (props: Partial<Parameters<typeof TicketInspector>[0]>) =>
-      /<div class="ticket-inspector__confidence"[^>]*>[\s\S]*?Reported by the completing AI<\/span>\s*<\/div>/u.exec(
+      /<div class="ticket-inspector__notice ticket-inspector__confidence"[^>]*>[\s\S]*?Reported by the completing AI<\/span>/u.exec(
         String(TicketInspector({ ...base, ...props })),
       )?.[0];
     expect(row({ status: 'completed' })).toBeUndefined();
@@ -470,8 +467,8 @@ describe('TicketInspector', () => {
       }),
     );
     expect(markup).toContain('ticket-inspector__tab-count');
-    expect(markup).toContain('<span aria-hidden="true">2</span>');
-    expect(markup).toContain('ticket-inspector__tab-count-label">2 attachments</span>');
+    // A compact Kerf Badge carries the count and its accessible name (HS2-MMHS28).
+    expect(markup).toMatch(/ticket-inspector__tab-count"><span class="kui-badge"[^>]*aria-label="2 attachments">2</u);
     expect(String(TicketInspector({ ...base, attachments: [] }))).not.toContain('ticket-inspector__tab-count');
   });
 

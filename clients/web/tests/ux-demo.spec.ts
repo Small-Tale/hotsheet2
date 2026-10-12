@@ -8324,7 +8324,7 @@ test('shows the source mark after the type on cards and beside the inspector num
   await page.goto('/ux-demo?component=ticket-inspector');
   const inspector = page.locator('[data-component="ticket-inspector"]');
   await expect(
-    inspector.locator('.ticket-inspector__source-identity [data-component="ticket-source-icon"]'),
+    inspector.locator('[data-source-identity] [data-component="ticket-source-icon"]'),
   ).toHaveAttribute('data-provider', 'git');
 });
 
