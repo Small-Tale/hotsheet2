@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
@@ -76,13 +75,7 @@ describe('DriveOptionsMenu', () => {
     expect(
       markup.match(/slot="submenu" data-action="select-drive-[a-z]+" value="[^"]+" type="checkbox"/g)?.length,
     ).toBeGreaterThan(0);
-    const css = readFileSync(new URL('./drive-options-menu.css', import.meta.url), 'utf8');
-    expect(css).not.toContain('--wa-space-');
-    // Kerf's PopupMenu owns the popup and row geometry; the app styles only its anchor wrapper.
-    expect(css).not.toContain('wa-dropdown-item');
-    expect(css).not.toContain('wa-divider');
-    expect(css).toContainSource('.drive-options-menu { position:fixed; z-index:80; width:1px; height:1px; }');
-    // The fixed menu needs no positioned ancestor, so it styles nothing outside its own wrapper (HS2-4APEJP).
-    expect(css).not.toContain('project-sidebar');
+    // The shared ContextMenuAnchor owns the fixed 1px wrapper; Kerf's PopupMenu owns the popup (HS2-EG31YP).
+    expect(markup).toContain('class="context-menu-anchor" data-component="drive-options-menu" role="menu"');
   });
 });

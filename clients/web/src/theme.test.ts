@@ -26,7 +26,6 @@ const kerfSpacingMigratedComponents = [
   'connection-details-dialog.css',
   'conversation-export-dialog.css',
   'corrupt-ticket-row.css',
-  'drive-options-menu.css',
   'flow-back-button.css',
   'hs1-migration.css',
   'keyboard-settings.css',

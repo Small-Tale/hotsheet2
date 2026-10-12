@@ -1,10 +1,8 @@
-import './drive-options-menu.css';
-
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { RotateCcw } from 'lucide';
 
-import { contextPopupMenuAnchor } from '../context-menu-position';
+import { ContextMenuAnchor } from './context-menu-anchor';
 import { providerModelEffortEntries } from './provider-model-effort-menu';
 
 export interface AiToolModel {
@@ -46,13 +44,7 @@ export function DriveOptionsMenu({
 }) {
   if (!tools.length)
     return (
-      <div
-        class="drive-options-menu"
-        data-component="drive-options-menu"
-        role="menu"
-        aria-label="Drive provider, model, and effort options"
-        {...contextPopupMenuAnchor(x, y)}
-      >
+      <ContextMenuAnchor x={x} y={y} component="drive-options-menu" label="Drive provider, model, and effort options">
         <PopupMenu
           context
           label="Drive provider, model, and effort options"
@@ -60,7 +52,7 @@ export function DriveOptionsMenu({
           rootAttributes={{ 'data-context-menu': 'drive-options' }}
           items={[{ label: loading ? 'Detecting AI tools…' : error || 'No AI tools detected', disabled: true }]}
         />
-      </div>
+      </ContextMenuAnchor>
     );
   const activeTool = tools.find((tool) => tool.id === (selection.tool ?? defaultSelection.tool)) ?? tools.at(0)!,
     modelId =
@@ -73,13 +65,7 @@ export function DriveOptionsMenu({
       ? (tools.find((tool) => tool.id === defaultSelection.tool)?.display_name ?? defaultSelection.tool)
       : undefined;
   return (
-    <div
-      class="drive-options-menu"
-      data-component="drive-options-menu"
-      role="menu"
-      aria-label="Drive provider, model, and effort options"
-      {...contextPopupMenuAnchor(x, y)}
-    >
+    <ContextMenuAnchor x={x} y={y} component="drive-options-menu" label="Drive provider, model, and effort options">
       <PopupMenu
         context
         label="Drive provider, model, and effort options"
@@ -116,6 +102,6 @@ export function DriveOptionsMenu({
           }),
         ]}
       />
-    </div>
+    </ContextMenuAnchor>
   );
 }
