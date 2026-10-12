@@ -427,23 +427,20 @@ describe('ProjectSidebar component slice', () => {
     // (KUI-L022), so the Workbench rail sees a Pane-only child and routes safe areas to it.
     expect(markup).toContain('class="kui-pane project-sidebar"');
     expect(markup).toContain('data-component="pane"');
-    // The Pane owns the scrolling content and footer slots; app wrappers inside them lay out the parts.
+    // The Pane owns the scrolling content and footer slots; Kerf Lists inside them lay out the parts
+    // (HS2-302C76): the content's m gap and block inset, the summary's inline inset, and the footer inset.
     expect(markup).toContain('<section class="kui-pane__content kui-content" aria-label="Project sidebar">');
-    expect(markup).toContain('<div class="project-sidebar__content">');
-    expect(markup).toContain('<footer class="kui-pane__footer"><div class="project-sidebar__footer-content">');
+    expect(markup).toMatch(
+      /aria-label="Project sidebar"><div class="kui-list" data-component="list"[^>]*data-control-insets="tb" style="--_kui-list-gap:var\(--kui-space-m\)">/,
+    );
+    expect(markup).toMatch(/<footer class="kui-pane__footer"><div class="kui-list"[^>]*data-control-insets="trbl"/);
     const css = readFileSync(new URL('./project-sidebar.css', import.meta.url), 'utf8');
-    // The pane shell owns only card chrome — no padding and no zeroed inline margin.
-    const shell = css.match(/\.project-sidebar \{([^}]*)\}/)?.[1] ?? '';
-    expect(shell).not.toMatch(/(^|;|\{)\s*padding:/);
-    expect(shell).not.toContain('--kui-layout-inline-margin');
-    expect(shell).not.toContain('--kui-layout-item-padding');
-    // Non-menu content children self-inset instead of leaning on the shell.
-    // The app-owned summary box insets the ProjectSummary; the sidebar styles no child component (HS2-4APEJP).
-    expect(markup).toContain('<div class="project-sidebar__summary"><button type="button" class="project-summary"');
-    expect(css).toMatch(/\.project-sidebar__summary \{[^}]*margin-inline: var\(--kui-space-xs\)/);
+    // The pane shell owns only card chrome; the sidebar styles no child component (HS2-4APEJP).
+    expect(markup).toMatch(/data-control-insets="rl"[^>]*><button type="button" class="project-summary"/);
     expect(css).not.toMatch(/\.(project-summary|drive-control)\b/);
     expect(css).toMatch(/\.project-sidebar__drive-row \{[^}]*grid-template-columns: minmax\(0, 1fr\) auto/);
-    expect(css).toMatch(/\.project-sidebar__footer-content \{[^}]*padding: var\(--kui-space-xs\)/);
+    // The conversation toggle stays app-owned native button chrome until Kerf ships a standalone icon toggle (KF-HBWDHE).
+    expect(css).toContain('.project-sidebar__conversation');
     // Kerf's Toolbar pins its zones to their columns, so the lone collapse control already sits at the
     // gutter; the app adds no rule on the pane header toolbar (HS2-PKPGGZ).
     expect(css).not.toContain('.kui-toolbar');

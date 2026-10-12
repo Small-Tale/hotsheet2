@@ -1,23 +1,4 @@
-/* Unpadded pane (kui-pane): the shell owns only card chrome; children own their
-   8px inline inset. kerf ListItem/ListHeader self-inset via --kui-layout-inline-margin;
-   ProjectSummary and the footer inset themselves since they are not menu rows. */
-/* Inside the Pane's scrolling content (the Pane owns scrolling and safe areas); this wrapper only
-   lays out the sidebar sections (HS2-RWGQWN). */
-.project-sidebar__content {
-  display: grid;
-  align-content: start;
-  row-gap: var(--kui-space-m);
-  padding-block: var(--kui-space-xs);
-}
-/* App-owned box that insets the ProjectSummary from the pane edge (the summary is not a menu row). */
-.project-sidebar__summary {
-  margin-inline: var(--kui-space-xs);
-}
-.project-sidebar__footer-content {
-  display: grid;
-  padding: var(--kui-space-xs);
-  row-gap: var(--kui-space-xs);
-}
+/* The footer caption is centered; Kerf Text has no alignment prop, and the paragraph keeps its data-component hook. */
 .project-sidebar__work-summary {
   margin: 0;
   color: var(--wa-color-neutral-on-quiet);
@@ -25,13 +6,15 @@
   line-height: 1.25;
   text-align: center;
 }
-/* The row's grid track sizes the DriveControl; the fixed-position options menu takes no track. */
+/* The row's grid track sizes the DriveControl beside the conversation toggle; the fixed options menu takes no track. */
 .project-sidebar__drive-row {
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--kui-space-xs);
 }
+/* App-owned native toggle beside DriveControl: Kerf's ToolbarControlGroup needs a Toolbar parent
+   (KUI-L201) and Kerf has no standalone icon toggle yet (KF-HBWDHE). */
 .project-sidebar__conversation {
   display: grid;
   width: remify(44px);

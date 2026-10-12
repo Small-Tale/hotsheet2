@@ -73,6 +73,7 @@ export const demoCatalog: DemoCategory[] = [
           'command-navigation',
           'drive-control',
           'drive-options-menu',
+          'list',
           'list-item',
           'list-header',
         ],

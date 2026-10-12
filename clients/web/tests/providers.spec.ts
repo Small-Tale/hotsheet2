@@ -13362,7 +13362,7 @@ test('switches settings categories from the project sidebar', async ({ page }) =
   await expect(navigation).toBeVisible();
   await expect(page.getByRole('region', { name: 'Ticket sources settings' })).toBeVisible();
   await expect(page.locator('.project-settings > h2')).toHaveCount(0);
-  await expect(page.locator('.project-sidebar__content')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Project sidebar' })).toHaveCount(0);
   await expect(page.locator('#app-right-rail')).toBeVisible();
   await expect(placeholder).toContainText('Select a ticket to see and edit its details');
   await expect(placeholderToolbar).not.toHaveAttribute('divider-sides');

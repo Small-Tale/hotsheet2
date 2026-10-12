@@ -1,6 +1,7 @@
 import '@kerfjs/ui/layout.css';
 import './project-sidebar.css';
 
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { MessageSquare } from 'lucide';
 
@@ -61,9 +62,9 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
     props.driveTools?.find((tool) => tool.id === props.driveTool)?.display_name ??
     `${props.driveTool.slice(0, 1).toUpperCase()}${props.driveTool.slice(1)}`;
   // Kerf's Pane owns its footer's (safe-area) edges since beta.51, so the footer's own inset lives on
-  // this inner content box rather than on the pane footer (HS2-KMDJRH).
+  // this inner List rather than on the pane footer (HS2-KMDJRH).
   const footer = (
-    <div class="project-sidebar__footer-content">
+    <List gap="xs" controlInsets="trbl">
       <p
         class="project-sidebar__work-summary"
         data-component="project-work-summary"
@@ -111,18 +112,18 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
           <LucideIcon size="s" icon={MessageSquare} name="message-square" />
         </button>
       </div>
-    </div>
+    </List>
   );
   const content = (
-    <div class="project-sidebar__content">
-      <div class="project-sidebar__summary">
+    <List gap="m" controlInsets="tb">
+      <List controlInsets="rl" flex="none">
         <ProjectSummary
           completedToday={props.completedToday}
           inProgress={props.inProgress}
           trend={props.completionTrend}
           partial={props.countsPartial}
         />
-      </div>
+      </List>
       <RepositorySummary
         branch={props.branch}
         unpushed={props.unpushed}
@@ -142,7 +143,7 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
       ) : (
         <></>
       )}
-    </div>
+    </List>
   );
   return {
     label: 'Project sidebar',

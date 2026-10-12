@@ -6851,7 +6851,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await expect(shell.getByRole('button', { name: 'Search tickets' })).toBeVisible();
   await shell.getByRole('button', { name: 'Workspace grid' }).click();
   await expect(shell).toHaveAttribute('data-mode', 'terminals');
-  await expect(shell.locator('.project-sidebar__content')).toHaveCount(0);
+  await expect(shell.getByRole('region', { name: 'Project sidebar' })).toHaveCount(0);
   await expect(shell.getByRole('region', { name: 'Terminal operations sidebar' })).toBeVisible();
   await expect(shell.getByRole('button', { name: 'Hide operations sidebar' })).toBeVisible();
   await expect(shell.locator('#app-right-rail')).toHaveAttribute('aria-label', 'Tickets rail');

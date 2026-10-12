@@ -554,6 +554,7 @@ describe('UX demo catalog', () => {
       'command-navigation',
       'drive-control',
       'drive-options-menu',
+      'list',
       'list-item',
       'list-header',
     ]);
