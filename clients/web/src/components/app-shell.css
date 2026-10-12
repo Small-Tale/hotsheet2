@@ -1,3 +1,4 @@
+/* The framed default presentation (the UX demo stage): a desktop-sized, clipped, raised app frame. */
 .app-shell {
   width: 100%;
   min-width: remify(1024px);
@@ -35,10 +36,14 @@
 .app-shell[data-terminal-focus-mode='true'] {
   --kui-workbench-popup-z: 200;
 }
+/* Themes the terminal drawer's FloatingToolbar restore control with Hot Sheet's floating surface
+   through Kerf's public color token, without an extra box (display: contents). */
 .app-shell__restore-control-theme {
   display: contents;
   --kui-color-neutral-fill-normal: var(--hs-floating-control-surface);
 }
+/* The work area is the focusable ticket region: a clipped column under the page header whose
+   focus ring fades in (the outline and the ::after border keep the ring visible above children). */
 .app-shell__work-area {
   position: relative;
   display: flex;
@@ -58,6 +63,7 @@
 .app-shell[data-mode='terminals'] .app-shell__work-area {
   border-top: 0;
 }
+/* The inner focus border, painted above scrolling children. */
 .app-shell__work-area::after {
   position: absolute;
   z-index: 20;
@@ -67,11 +73,13 @@
   inset: 0;
   transition: border-color 0.12s ease;
 }
+/* Keyboard focus anywhere in the work area shows its ring. */
 .app-shell__work-area:focus,
 .app-shell__work-area:focus-within {
   z-index: 1;
   outline: 2px solid var(--wa-color-focus);
 }
+/* The inner border follows the same focus state. */
 .app-shell__work-area:focus::after,
 .app-shell__work-area:focus-within::after {
   border-color: var(--wa-color-focus);
@@ -82,16 +90,19 @@
   outline-color: transparent;
   transition: none;
 }
+/* The inner border hides with the outline. */
 .app-shell__work-area[data-focus-ring='false']::after {
   border-color: transparent;
   transition: none;
 }
+/* The quick-ticket composer row sits above the workspace scroller's sticky content. */
 .app-shell__composer {
   position: relative;
   z-index: 3;
   padding: remify(12px) remify(16px);
   flex: none;
 }
+/* The ticket workspace scroller and its padding (a private property shared with the bottom-edge rule). */
 .app-shell__workspace {
   --app-shell-workspace-padding: remify(16px);
   /* App-wide scroll-end inset token (HS2-4A29RR): ticket scrollers inside the workspace (the list
@@ -105,10 +116,12 @@
   overflow-anchor: none;
   flex: 1;
 }
+/* Edge-to-edge presentations (the column board) own their own inline insets and scrolling. */
 .app-shell__workspace[data-presentation='edge-to-edge'] {
   padding: remify(16px) 0 0;
   overflow: hidden;
 }
+/* Narrow windows tighten the workspace and composer insets. */
 @media (max-width: remify(672px)) {
   .app-shell__workspace {
     --app-shell-workspace-padding: remify(11.2px);
@@ -117,6 +130,7 @@
     padding: remify(11.2px);
   }
 }
+/* The composer already provides the top inset. */
 .app-shell__work-area[data-has-composer='true'] > .app-shell__workspace {
   padding-top: 0;
 }
