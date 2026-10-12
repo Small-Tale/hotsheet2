@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
@@ -78,16 +78,10 @@ describe('AiToolSettings (HS2-SW5S13, HS2-EK24KF)', () => {
     expect(selectValue(markup, 'ai-provider-model-new')).toBe('new-default');
     expect(markup).not.toContain('value="old-model"');
   });
-  it('responds to the settings pane width and gives model ids the widest column', () => {
-    const css = readFileSync(new URL('./ai-tool-settings.css', import.meta.url), 'utf8');
-    expect(css).not.toContain('--wa-space-');
-    expect(css).toContainSource('container-type:inline-size');
-    expect(css).toContainSource(
-      '.ai-tool-settings { display:grid; container-type:inline-size; gap:var(--kui-space-l); }',
-    );
-    expect(css).toContainSource('minmax(remify(224px),1.6fr)');
-    expect(css).toContainSource('gap:var(--kui-space-m)');
-    expect(css).toContainSource('gap:var(--kui-space-xs)');
-    expect(css).toContain('@container (max-width:remify(416px))');
+  it('lays fields out with Kerf Grid and List instead of a component stylesheet (HS2-EKH9X7)', () => {
+    const markup = String(AiToolSettings({ tools, selection: { tool: 'codex' } }));
+    expect(markup).toContain('data-component="grid"');
+    expect(markup).toContain('data-min-column-width');
+    expect(existsSync(new URL('./ai-tool-settings.css', import.meta.url))).toBe(false);
   });
 });

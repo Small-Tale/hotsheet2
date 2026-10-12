@@ -16,7 +16,6 @@ const auxiliaryClientCss = [resolve(sourceRoot, 'ux-demo/style.css')];
 const clientCss = [...productionCss, ...auxiliaryClientCss];
 const kerfSpacingMigratedComponents = [
   'ai-content-label.css',
-  'ai-tool-settings.css',
   'app-error.css',
   'app-shell.css',
   'attachment-context-menu.css',

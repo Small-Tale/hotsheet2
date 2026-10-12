@@ -1,5 +1,7 @@
-import './ai-tool-settings.css';
-
+import { remify } from '@kerfjs/ui/css-values';
+import { EmptyState } from '@kerfjs/ui/empty-state';
+import { Grid } from '@kerfjs/ui/grid';
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
 import { Text } from '@kerfjs/ui/text';
@@ -19,6 +21,9 @@ function otherModelValue(tool: AiToolDescriptor, modelId: string) {
   while (modelId === value || tool.models.some((item) => item.id === value)) value += '_';
   return value;
 }
+
+/** Every settings field shares one responsive column track, so model and effort wrap together on narrow panes. */
+const FIELD_COLUMN = remify(224);
 
 /** One provider's default model and effort, used whenever that provider is picked. */
 function ProviderDefaults({
@@ -42,25 +47,26 @@ function ProviderDefaults({
     ];
   return (
     <section
-      class="ai-tool-settings__provider"
       data-ai-provider={tool.id}
       data-ai-provider-default={String(isDefault)}
       data-other-model-value={other}
       aria-label={`${tool.display_name} defaults`}
     >
-      <Text variant="h3" size="compact">
-        {isDefault ? `${tool.display_name} (default)` : tool.display_name}
-      </Text>
-      <div class="ai-tool-settings__grid">
-        <Select name={aiProviderModelName(tool.id)} label="Model" value={modelId} choices={modelChoices} />
-        <Select
-          name={aiProviderEffortName(tool.id)}
-          label="Effort"
-          value={selection.effort ?? efforts.at(0) ?? ''}
-          disabled={!efforts.length}
-          choices={efforts.map((value) => ({ value, label: value, icon: Gauge, iconName: 'gauge' }))}
-        />
-      </div>
+      <List gap="xs">
+        <Text variant="h3" size="compact">
+          {isDefault ? `${tool.display_name} (default)` : tool.display_name}
+        </Text>
+        <Grid minColumnWidth={FIELD_COLUMN} autoFill gap="m">
+          <Select name={aiProviderModelName(tool.id)} label="Model" value={modelId} choices={modelChoices} />
+          <Select
+            name={aiProviderEffortName(tool.id)}
+            label="Effort"
+            value={selection.effort ?? efforts.at(0) ?? ''}
+            disabled={!efforts.length}
+            choices={efforts.map((value) => ({ value, label: value, icon: Gauge, iconName: 'gauge' }))}
+          />
+        </Grid>
+      </List>
     </section>
   );
 }
@@ -82,18 +88,18 @@ export function AiToolSettings({
 }) {
   if (!loading && !tools.length)
     return (
-      <section class="ai-tool-settings" data-component="ai-tool-settings">
-        <div class="ai-tool-settings__empty">
-          <LucideIcon size="xl" icon={Bot} name="bot" />
-          <strong>No AI tools detected</strong>
-          <p>Install or enable a drivable AI-tool plugin to configure Drive, AI shells, and AI chat.</p>
-        </div>
+      <section data-component="ai-tool-settings">
+        <EmptyState
+          icon={<LucideIcon size="xl" icon={Bot} name="bot" />}
+          title="No AI tools detected"
+          detail="Install or enable a drivable AI-tool plugin to configure Drive, AI shells, and AI chat."
+        />
       </section>
     );
   if (!tools.length)
     return (
-      <section class="ai-tool-settings" data-component="ai-tool-settings" aria-busy="true">
-        <p>Loading AI tools…</p>
+      <section data-component="ai-tool-settings" aria-busy="true">
+        <Text tone="quiet">Loading AI tools…</Text>
       </section>
     );
   const active = tools.find((tool) => tool.id === selection.tool) ?? tools.at(0)!,
@@ -101,25 +107,29 @@ export function AiToolSettings({
     base: AiToolDefaults =
       active.id === selection.tool ? selection : { tool: active.id, providers: selection.providers };
   return (
-    <section class="ai-tool-settings" data-component="ai-tool-settings" aria-busy={String(loading)}>
-      <p>Choose this project's AI defaults on this machine. Each provider keeps its own model and effort.</p>
-      <div class="ai-tool-settings__default">
-        <Select
-          name="ai-default-tool"
-          label="Default AI provider"
-          hint="Used by Drive, AI shells, and AI chat unless you pick another provider."
-          value={active.id}
-          choices={tools.map((tool) => ({ value: tool.id, label: tool.display_name, icon: Bot, iconName: 'bot' }))}
-        />
-      </div>
-      {tools.map((tool) => (
-        <ProviderDefaults
-          tool={tool}
-          selection={providerSelection(base, tools, tool.id)}
-          isDefault={tool.id === active.id}
-        />
-      ))}
-      <p role="status">{message}</p>
+    <section data-component="ai-tool-settings" aria-busy={String(loading)}>
+      <List gap="l">
+        <Text tone="quiet" className="ai-tool-settings__intro">
+          Choose this project's AI defaults on this machine. Each provider keeps its own model and effort.
+        </Text>
+        <Grid minColumnWidth={FIELD_COLUMN} autoFill className="ai-tool-settings__default">
+          <Select
+            name="ai-default-tool"
+            label="Default AI provider"
+            hint="Used by Drive, AI shells, and AI chat unless you pick another provider."
+            value={active.id}
+            choices={tools.map((tool) => ({ value: tool.id, label: tool.display_name, icon: Bot, iconName: 'bot' }))}
+          />
+        </Grid>
+        {tools.map((tool) => (
+          <ProviderDefaults
+            tool={tool}
+            selection={providerSelection(base, tools, tool.id)}
+            isDefault={tool.id === active.id}
+          />
+        ))}
+        <Text tone="quiet" role="status">{message}</Text>
+      </List>
     </section>
   );
 }

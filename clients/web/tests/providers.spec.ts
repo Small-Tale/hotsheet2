@@ -16970,7 +16970,7 @@ test('configures per-provider AI defaults and exposes Claude Fable effort (HS2-E
   const geometry = await settings.evaluate((node) => {
     const box = (selector: string) => node.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
     return {
-      sectionGap: box('.ai-tool-settings__default').top - box(':scope > p').bottom,
+      sectionGap: box('.ai-tool-settings__default').top - box('.ai-tool-settings__intro').bottom,
       providerGap: box('[data-ai-provider="claude"]').top - box('[data-ai-provider="codex"]').bottom,
       sideBySide: box('[name="ai-provider-effort-codex"]').top === box('[name="ai-provider-model-codex"]').top,
     };
