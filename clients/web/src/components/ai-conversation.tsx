@@ -3,6 +3,7 @@ import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './ai-conversation.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 
+import { Badge } from '@kerfjs/ui/badge';
 import { uiColor } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -379,9 +380,14 @@ export function AIConversation({
             </span>
           )}
           {canChangeEffort && currentEffort && (
-            <span class="ai-conversation__model-effort" title="Effort">
+            <Badge
+              className="ai-conversation__model-effort"
+              tone="neutral"
+              size="compact"
+              label={`Effort ${currentEffort}`}
+            >
               {currentEffort}
-            </span>
+            </Badge>
           )}
         </span>
         <PopupMenu
@@ -410,19 +416,18 @@ export function AIConversation({
       </div>
     ) : null;
   const savedNotice = readOnly ? (
-    <p class="ai-conversation__saved-notice">
-      <strong>{previewOnly ? 'Read-only preview' : 'Saved transcript'}</strong>
-      <span>
-        {previewOnly ? (
-          <>Return to the AI chat to continue this conversation.{previewConfiguration && ` ${previewConfiguration}`}</>
-        ) : (
-          <>
-            {savedSource ? `Opened from ${savedSource}. ` : ''}This selected range is read-only; save it again or open a
-            tail export with a resumable session to continue.
-          </>
-        )}
-      </span>
-    </p>
+    <div class="ai-conversation__saved-notice">
+      <StateBanner
+        tone="neutral"
+        copyLayout="stacked"
+        title={previewOnly ? 'Read-only preview' : 'Saved transcript'}
+        detail={
+          previewOnly
+            ? `Return to the AI chat to continue this conversation.${previewConfiguration ? ` ${previewConfiguration}` : ''}`
+            : `${savedSource ? `Opened from ${savedSource}. ` : ''}This selected range is read-only; save it again or open a tail export with a resumable session to continue.`
+        }
+      />
+    </div>
   ) : null;
   const composer = readOnly ? null : (
     <form
@@ -431,7 +436,6 @@ export function AIConversation({
       {...COMMANDS_AND_AI_ACTIONS.sendConversationTurn.attrs}
     >
       <label>
-        <span class="ai-conversation__composer-label">Message {tool}</span>
         <textarea
           name="conversation-draft"
           aria-label={`Message ${tool}`}

@@ -11,7 +11,7 @@ import { sidebarEvent } from './project-sidebar-demo';
 import { syncSettingsControls } from './settings-controls';
 
 export type AIConversationScenario =
-  'empty' | 'streaming' | 'permission' | 'completed' | 'usage-unpriced' | 'failed' | 'interrupted';
+  'empty' | 'streaming' | 'permission' | 'completed' | 'usage-unpriced' | 'failed' | 'interrupted' | 'saved';
 export const aiConversationScenario = signal<AIConversationScenario>('streaming');
 export const aiConversationDemoOpen = signal(true);
 export const aiConversationPresentation = signal<'dialog' | 'embedded'>('dialog');
@@ -72,6 +72,7 @@ const permission: PermissionItem = {
 function scenarioState() {
   const scenario = aiConversationScenario.value;
   if (scenario === 'empty') return { messages: [] as ConversationMessage[], busy: false, interruptible: false };
+  if (scenario === 'saved') return { messages: completed, busy: false, interruptible: false };
   if (scenario === 'completed') return { messages: completed, busy: false, interruptible: false, activity };
   if (scenario === 'usage-unpriced')
     return {
@@ -179,6 +180,8 @@ export function AIConversationDemo() {
         efforts={['medium', 'high', 'xhigh']}
         canChangeModel
         canChangeEffort
+        readOnly={aiConversationScenario.value === 'saved'}
+        savedSource={aiConversationScenario.value === 'saved' ? 'client-review.hotsheet-chat' : undefined}
       />
     </section>
   );
@@ -219,6 +222,7 @@ export function AIConversationSettings() {
           { value: 'usage-unpriced', label: 'Completed with unpriced usage' },
           { value: 'failed', label: 'Failed' },
           { value: 'interrupted', label: 'Interrupted' },
+          { value: 'saved', label: 'Saved read-only transcript' },
         ]}
       />
       {aiConversationPresentation.value === 'dialog' && (

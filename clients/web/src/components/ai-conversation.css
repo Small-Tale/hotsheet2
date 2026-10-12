@@ -43,6 +43,8 @@
 .ai-conversation--embedded > .ai-conversation__transcript {
   flex: 1 1 0;
 }
+/* A compact 40px drawer header: Kerf Toolbar has no compact density, and its taller row pushes the
+   transcript under the floating composer (KF-0QDF0V). */
 .ai-conversation__embedded-header {
   display: flex;
   min-height: remify(40px);
@@ -60,22 +62,12 @@
 .ai-conversation__embedded-header > span {
   flex: 1 1 auto;
 }
-.ai-conversation__saved-notice {
-  display: grid;
-  padding: var(--wa-space-xs) var(--wa-space-s);
-  margin: var(--wa-space-xs) var(--wa-space-m) 0;
-  border-radius: var(--wa-border-radius-m);
-  color: var(--wa-color-neutral-on-quiet);
-  background: var(--wa-color-neutral-fill-quiet);
-  gap: var(--wa-space-3xs);
-  font-size: var(--wa-font-size-xs);
-  line-height: 1.4;
-}
-.ai-conversation__saved-notice strong {
-  color: var(--wa-color-neutral-on-normal);
-}
 /* Compact current-model label + popup trigger for changing model/effort, mirroring the drive
    button (HS2-R5F7A5). */
+/* The read-only notice is a Kerf StateBanner; this app wrapper only spaces it below the header. */
+.ai-conversation__saved-notice {
+  padding-top: var(--kui-space-xs);
+}
 .ai-conversation__model {
   display: flex;
   min-width: 0;
@@ -104,13 +96,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ai-conversation__model-effort {
-  flex: none;
-  padding: 0 remify(6.4px);
-  border-radius: var(--wa-border-radius-pill);
-  background: var(--wa-color-neutral-fill-quiet);
-  font-variant: all-small-caps;
-}
+/* Kerf ToolbarControlGroup has no disabled state for native buttons yet (KF-Y3ZZ10). */
 .ai-conversation__header-action:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -372,14 +358,6 @@
   display: grid;
   min-width: 0;
   gap: var(--wa-space-3xs);
-}
-.ai-conversation__composer-label {
-  position: absolute;
-  overflow: hidden;
-  width: 1px;
-  height: 1px;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
 }
 .ai-conversation__composer small {
   color: var(--wa-color-text-quiet);

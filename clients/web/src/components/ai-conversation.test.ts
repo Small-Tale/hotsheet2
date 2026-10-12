@@ -446,7 +446,9 @@ describe('AIConversation', () => {
     expect(markup).toContain('data-component="conversation-model-control"');
     // Current model + effort shown as a compact label.
     expect(markup).toContain('class="ai-conversation__model-name" title="legacy model">legacy model');
-    expect(markup).toContain('class="ai-conversation__model-effort" title="Effort">high');
+    expect(markup).toMatch(
+      /ai-conversation__model-effort" data-component="badge" data-tone="neutral"[^>]*aria-label="Effort high">high</,
+    );
     // Popup lets you pick a listed model, the current custom model, Other…, and an effort.
     expect(markup).toContain('data-value="gpt" slot="submenu" data-action="select-conversation-model" value="gpt"');
     expect(markup).toContain(

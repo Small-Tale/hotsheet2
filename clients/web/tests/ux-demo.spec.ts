@@ -7974,7 +7974,9 @@ test('renders the ProjectCloseDialog and ConversationExportDialog demos (HS2-QKK
   await projectClose.evaluate((node) =>
     Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)),
   );
-  await expect(projectClose.locator('[data-component="state-banner"]')).toHaveAttribute('data-tone', 'warning');
+  await expect(
+    projectClose.locator('[data-component="state-banner"]:not(.ai-conversation__saved-notice *)'),
+  ).toHaveAttribute('data-tone', 'warning');
   await expect(projectClose.locator('[slot="footer"][data-component="row"]')).toHaveAttribute('data-wrap', 'true');
   await page.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-project-close-wide.png', fullPage: true });
   await page.screenshot({ path: 'target/visual-captures/hs2-qkks05-project-close-dialog.png', fullPage: true });
