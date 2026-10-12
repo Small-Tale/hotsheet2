@@ -666,9 +666,7 @@
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific Hs1MigrationBanner behavior."
       ],
-      "publicClasses": [
-        "hs1-migration-banner"
-      ],
+      "publicClasses": [],
       "publicTokens": [],
       "source": "src/components/hs1-migration.tsx",
       "geometry": {
@@ -689,9 +687,7 @@
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific Hs1MigrationDialog behavior."
       ],
-      "publicClasses": [
-        "hs1-migration-dialog"
-      ],
+      "publicClasses": [],
       "publicTokens": [],
       "source": "src/components/hs1-migration.tsx",
       "geometry": {

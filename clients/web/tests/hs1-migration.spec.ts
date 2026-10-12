@@ -271,7 +271,7 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
   await jobBanner.getByRole('button', { name: 'Connect backup…' }).click();
   await expect(page.locator('[data-ticket-source-setup-dialog]')).toHaveJSProperty('open', true);
   expect(state.providerRequests).toBeGreaterThanOrEqual(2);
-  const banner = page.locator('.hs1-cleanup-banner > [data-component="state-banner"]');
+  const banner = page.locator('[data-component="hs1-cleanup-banner"] > [data-component="state-banner"]');
   await expect(banner).toHaveCount(0);
   await page.getByRole('textbox', { name: 'Remote URL' }).fill('git@example.com:team/legacy.hs2.git');
   await page.getByRole('button', { name: 'Connect & push' }).click();
@@ -324,7 +324,7 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
   await expect(banner).toHaveCount(0);
   releaseRemote();
   await expect(banner).toBeVisible();
-  await expect(banner.locator('.kui-state-banner__action > .hs1-cleanup-banner__actions')).toHaveCount(1);
+  await expect(banner.locator('.kui-state-banner__action > .kui-row')).toHaveCount(1);
   await page.setViewportSize({ width: 2048, height: 900 });
   await banner.screenshot({ path: testInfo.outputPath('hs1-cleanup-banner-wide.png'), animations: 'disabled' });
   await page.setViewportSize({ width: 760, height: 720 });
@@ -357,7 +357,7 @@ test('persists HS1 cleanup dismissal until the saved dismissal is cleared', asyn
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const banner = page.locator('.hs1-cleanup-banner > [data-component="state-banner"]');
+  const banner = page.locator('[data-component="hs1-cleanup-banner"] > [data-component="state-banner"]');
   await expect(banner).toBeVisible();
   await banner.getByRole('button', { name: 'Dismiss' }).click();
   await expect(banner).toHaveCount(0);
@@ -380,7 +380,7 @@ test('repairs preexisting HS1 registrations after an older cleanup, then stays r
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const banner = page.locator('.hs1-cleanup-banner > [data-component="state-banner"]');
+  const banner = page.locator('[data-component="hs1-cleanup-banner"] > [data-component="state-banner"]');
   await expect(banner).toContainText('Hot Sheet 1 may reopen this imported project');
   await expect(banner).toHaveAttribute('data-tone', 'warning');
   await banner.screenshot({ path: testInfo.outputPath('hs1-registration-repair-banner.png'), animations: 'disabled' });
@@ -460,7 +460,7 @@ test('keeps background import failure and retry owned by its project across navi
   await expect(page.locator('[data-ticket-source-setup-dialog]')).toHaveJSProperty('open', false);
   await page.locator('[data-project-id="legacy"]').click();
   await expect(banner).toContainText('27 tickets imported');
-  await expect(page.locator('.hs1-cleanup-banner > [data-component="state-banner"]')).toHaveCount(0);
+  await expect(page.locator('[data-component="hs1-cleanup-banner"] > [data-component="state-banner"]')).toHaveCount(0);
   await page.screenshot({
     path: testInfo.outputPath('hs1-background-import-success-wide.png'),
     fullPage: true,

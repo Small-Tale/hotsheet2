@@ -614,8 +614,8 @@ test('renders keyboard shortcut rows edge-to-edge without a transparent left gut
 test('uses StateBanner for the responsive HS1 migration and cleanup notices (HS2-750WSY)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=hs1-migration-banner');
-  const migration = page.locator('.hs1-migration-banner > [data-component="state-banner"]'),
-    cleanup = page.locator('.hs1-cleanup-banner > [data-component="state-banner"]');
+  const migration = page.locator('[data-component="hs1-migration-banner"] > [data-component="state-banner"]'),
+    cleanup = page.locator('[data-component="hs1-cleanup-banner"] > [data-component="state-banner"]');
   for (const [banner, tone] of [
     [migration, 'info'],
     [cleanup, 'success'],
@@ -640,7 +640,7 @@ test('uses StateBanner for the responsive HS1 migration and cleanup notices (HS2
       // The action buttons keep Kerf's own StateBanner padding; the app no longer restyles them (HS2-9ME409).
     ).toEqual({ padding: '8px 16px', gap: '16px', copyGap: '4px', buttonPadding: ['11.2px', '11.2px'] });
   }
-  await expect(cleanup.locator('.kui-state-banner__action > .hs1-cleanup-banner__actions')).toHaveCount(1);
+  await expect(cleanup.locator('.kui-state-banner__action > .kui-row')).toHaveCount(1);
   await page
     .locator('.dialog-layout-demo')
     .screenshot({ path: 'target/visual-captures/hs2-750wsy-hs1-state-banners-wide.png' });
@@ -651,24 +651,26 @@ test('uses StateBanner for the responsive HS1 migration and cleanup notices (HS2
     .screenshot({ path: 'target/visual-captures/hs2-750wsy-hs1-state-banners-narrow.png' });
 });
 
-test('uses canonical spacing in the HS1 migration dialog (HS2-4Y6SM9)', async ({ page }) => {
+test('uses canonical spacing in the HS1 migration dialog (HS2-4Y6SM9, HS2-0KZJ2S)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=hs1-migration-dialog');
   const dialog = page.locator('[data-component="hs1-migration-dialog"]'),
-    form = dialog.locator('.hs1-migration-dialog');
+    form = dialog.locator('form[data-action="import-hs1-project"]');
   await expect(dialog).toHaveJSProperty('open', true);
+  // The dialog body composes Kerf List/Row spacing rather than app layout CSS (HS2-0KZJ2S).
   expect(
     await form.evaluate((node) => {
-      const style = (selector: string) => getComputedStyle(node.querySelector(selector)!);
+      const list = node.querySelector(':scope > [data-component="list"]')!,
+        rows = [...list.children].filter((child) => child.matches('[data-component="row"]'));
       return {
-        dialogGap: getComputedStyle(node).gap,
-        introGap: style('.hs1-migration-dialog__intro').gap,
-        introCopyTop: style('.hs1-migration-dialog__intro p').marginTop,
-        destinationGap: style('.hs1-migration-dialog__destination').gap,
-        footerGap: style('footer').gap,
+        dialogGap: getComputedStyle(list).rowGap,
+        introGap: getComputedStyle(rows[0]).columnGap,
+        destinationGap: getComputedStyle(rows[1]).columnGap,
+        footerGap: getComputedStyle(rows.at(-1)!).columnGap,
+        appLayoutClasses: node.querySelectorAll('[class*="hs1-migration-dialog"]').length,
       };
     }),
-  ).toEqual({ dialogGap: '24px', introGap: '16px', introCopyTop: '4px', destinationGap: '8px', footerGap: '8px' });
+  ).toEqual({ dialogGap: '24px', introGap: '16px', destinationGap: '8px', footerGap: '8px', appLayoutClasses: 0 });
   await page.screenshot({ path: 'target/visual-captures/hs2-1yabz8-hs1-dialog-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(dialog.locator('.kui-value-table__row')).toHaveCount(4);

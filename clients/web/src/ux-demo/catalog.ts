@@ -835,6 +835,7 @@ export const demoCatalog: DemoCategory[] = [
         'Project-owned measured, unknown, retry, imported, and verified-backup states for Hot Sheet 1.',
         'feature-floor',
         true,
+        ['shell-banner'],
       ),
       demo(
         'codex-hooks-notice-banner',

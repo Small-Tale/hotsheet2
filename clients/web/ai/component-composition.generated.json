@@ -1983,13 +1983,9 @@
       },
       "boundaries": {
         "rootClass": null,
-        "publicClasses": [
-          "hs1-migration-banner"
-        ],
+        "publicClasses": [],
         "publicTokens": [],
-        "placeableClasses": [
-          "hs1-migration-banner"
-        ]
+        "placeableClasses": []
       },
       "diagnostics": [],
       "provenance": {
@@ -2051,13 +2047,9 @@
       },
       "boundaries": {
         "rootClass": null,
-        "publicClasses": [
-          "hs1-migration-dialog"
-        ],
+        "publicClasses": [],
         "publicTokens": [],
-        "placeableClasses": [
-          "hs1-migration-dialog"
-        ]
+        "placeableClasses": []
       },
       "diagnostics": [],
       "provenance": {

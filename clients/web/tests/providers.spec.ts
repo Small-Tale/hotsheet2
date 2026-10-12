@@ -3998,7 +3998,7 @@ test('identifies detected HS1 data and keeps a dismissed import modal closed acr
   await expect.poll(dialogOpacity).toBe('1');
   await page.screenshot({ path: 'target/visual-captures/hs2-k4306s-hs1-source-dialog-wide.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Not now' }).click();
-  const banner = page.locator('.hs1-migration-banner > [data-component="state-banner"]');
+  const banner = page.locator('[data-component="hs1-migration-banner"] > [data-component="state-banner"]');
   await expect(dialog).toBeHidden();
   await page.waitForTimeout(250);
   await expect(banner).toHaveAttribute('data-component', 'state-banner');

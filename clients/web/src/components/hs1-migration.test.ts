@@ -12,32 +12,28 @@ import {
 } from './hs1-migration';
 
 describe('HS1 migration presentation', () => {
-  it('uses canonical dialog spacing and StateBanner customization tokens', () => {
+  it('composes Kerf layout and the shared ShellBanner instead of app layout CSS (HS2-0KZJ2S)', () => {
     const css = readFileSync(new URL('./hs1-migration.css', import.meta.url), 'utf8');
-    expect(css).not.toContain('--wa-space-');
-    expect(css).toMatchSource(/\.hs1-migration-dialog \{[^}]*gap:var\(--kui-space-l\)/);
-    expect(css).toMatchSource(/__intro \{[^}]*gap:var\(--kui-space-m\)/);
-    expect(css).toMatchSource(/__destination \{[^}]*gap:var\(--kui-space-xs\)/);
-    expect(css).toMatchSource(
-      /\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*--kui-layout-item-gap:var\(--kui-space-m\)[^}]*--kui-layout-item-padding:var\(--kui-space-xs\) var\(--kui-space-m\)/,
+    expect(css).not.toContain('.kui-');
+    expect(css).not.toContain('.hs1-migration-dialog');
+    expect(css).not.toContain('.hs1-cleanup-banner');
+    expect(css).toMatchSource(/\.hs1-job__progress \{[^}]*--track-height/);
+    const dialog = String(
+      Hs1MigrationDialog({
+        projectName: 'Demo',
+        projectRoot: '/work/demo',
+        sourcePath: '/work/demo/.hotsheet',
+        databasePath: '/work/demo/.hotsheet/db',
+        defaultStore: '/work/demo.hs2',
+        open: true,
+        busy: false,
+        error: 'Import failed.',
+      }),
     );
-    expect(css).toMatchSource(
-      /\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*--kui-state-banner-copy-gap:var\(--kui-space-2xs\)/,
-    );
-    expect(css).not.toContain('.kui-state-banner__copy {');
-    expect(css).not.toMatch(/\.kui-state-banner__action \{/);
-    expect(css).not.toContain('.kui-state-banner {');
-    // The app strip wraps the Kerf StateBanner (KUI-L022): it owns the bottom rule and the grid
-    // that stretches the banner; the banner root carries no app class.
-    expect(css).toMatchSource(/\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*display:grid/);
-    expect(css).toMatchSource(
-      /\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*--kui-state-banner-border:transparent/,
-    );
-    expect(css).not.toMatch(/\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*border-width/);
-    // The dialog styles its own path elements, never ValueTable's anatomy (Kerf doctor KUI-L019).
-    expect(css).toMatchSource(/\.hs1-migration-dialog__path \{[^}]*font-size:var\(--wa-font-size-xs\)/);
-    expect(css).not.toContain('.kui-value-table__row');
-    expect(css).not.toContain('.kui-state-banner__');
+    expect(dialog).not.toContain('class="hs1-migration-dialog');
+    expect(dialog).toContain('<code>/work/demo/.hotsheet/db</code>');
+    expect(dialog).toContain('role="alert"');
+    expect(dialog).toContain('Import failed.');
   });
 
   it('asks only where to store tickets and describes the complete import', () => {
@@ -82,7 +78,7 @@ describe('HS1 migration presentation', () => {
   it('keeps a dismissed import available from a polite informational StateBanner', () => {
     const markup = String(Hs1MigrationBanner({ databasePath: '/work/demo/.hotsheet/db' }));
     expect(markup).toContain('data-component="state-banner"');
-    expect(markup).toContain('<div class="hs1-migration-banner"><section class="kui-state-banner"');
+    expect(markup).toContain('<div class="shell-banner" data-component="hs1-migration-banner" data-tone="info">');
     expect(markup).toContain('data-tone="info"');
     expect(markup).toContain('role="status"');
     expect(markup).toContain('aria-live="polite"');
@@ -92,12 +88,12 @@ describe('HS1 migration presentation', () => {
   it('offers cleanup or dismissal from one StateBanner action slot', () => {
     const markup = String(Hs1CleanupBanner());
     expect(markup).toContain('data-component="state-banner"');
-    expect(markup).toContain('<div class="hs1-cleanup-banner"><section class="kui-state-banner"');
+    expect(markup).toContain('<div class="shell-banner" data-component="hs1-cleanup-banner" data-tone="success">');
     expect(markup).toContain('data-tone="success"');
     expect(markup).toContain('safely backed up');
     // Kerf stacks the copy and places the actions below it (beta.60 props) instead of app grid rules.
     expect(markup).toContain('data-copy-layout="stacked" data-action-placement="below"');
-    expect(markup).toContain('class="kui-state-banner__action"><div class="hs1-cleanup-banner__actions"');
+    expect(markup).toMatch(/class="kui-state-banner__action"><div class="kui-row"/);
     expect(markup).toContain('data-action="remove-hs1-data"');
     expect(markup).toContain('data-action="dismiss-hs1-cleanup"');
   });
