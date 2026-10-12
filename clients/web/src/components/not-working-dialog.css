@@ -1,29 +1,33 @@
-.not-working-dialog::part(panel) {
-  width: min(remify(512px), calc(100vw - remify(32px)));
+/* Dialog width through Web Awesome's documented --width property. Kerf DialogSurface would name the inner
+   panel too, duplicating the host's explicit dialog role that the slotted-content tests and AT rely on. */
+.not-working-dialog {
+  --width: min(remify(512px), calc(100vw - remify(32px)));
 }
-.not-working-dialog__form {
-  display: grid;
-  gap: remify(16px);
-}
-.not-working-dialog__note {
-  display: grid;
-  gap: remify(7.2px);
-  font-size: var(--wa-font-size-s);
-  font-weight: 650;
-}
+/* Native textarea chrome: the note keeps a native textarea so touch screens auto-grow it through the shared
+   field-sizing tokens (HS2-6PC150); Kerf offers no native-textarea primitive to configure instead. */
 .not-working-dialog__note textarea {
+  box-sizing: border-box;
   width: 100%;
   min-height: remify(112px);
-  padding: remify(11.2px) remify(12px);
-  border: 1px solid var(--wa-color-neutral-border-loud);
-  border-radius: remify(8.8px);
-  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
+  padding: remify(8px);
   field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
   resize: var(--hotsheet-textarea-resize, vertical);
+  border: 1px solid var(--wa-color-neutral-border-loud);
+  border-radius: var(--wa-border-radius-m);
   color: var(--wa-color-text-normal);
   background: var(--wa-color-surface-default);
   font: inherit;
+  font-size: var(--wa-font-size-s);
   line-height: 1.45;
+}
+/* The native textarea has no Web Awesome focus ring of its own; match the themed controls. */
+.not-working-dialog__note textarea:focus {
+  outline: var(--wa-focus-ring);
+  outline-offset: 1px;
+}
+/* The alert live region stays mounted so errors announce, but takes no List gap while empty. */
+.not-working-dialog__error:empty {
+  display: none;
 }
 /* iOS zooms into a focused text field under 16px, so touch screens floor the note at the token
    (HS2-JDXSND). */
@@ -31,52 +35,4 @@
   .not-working-dialog__note textarea {
     font-size: max(var(--hs-touch-field-min-font-size), 1em);
   }
-}
-.not-working-dialog__note textarea:focus {
-  border-color: var(--wa-color-focus);
-  outline: 3px solid color-mix(in srgb, var(--wa-color-focus) 20%, transparent);
-}
-.not-working-dialog__hint,
-.not-working-dialog__error {
-  margin: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-}
-.not-working-dialog__error {
-  min-height: 1.15em;
-  color: var(--wa-color-danger-on-quiet);
-}
-.not-working-dialog__error:empty {
-  visibility: hidden;
-}
-.not-working-dialog__footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--kui-space-xs);
-}
-.not-working-dialog__button {
-  min-height: remify(37.6px);
-  padding: 0 remify(13.6px);
-  border: 0;
-  border-radius: remify(8px);
-  cursor: pointer;
-  font-weight: 650;
-}
-.not-working-dialog__button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-.not-working-dialog__cancel {
-  background: transparent;
-  color: var(--wa-color-neutral-on-quiet);
-}
-.not-working-dialog__cancel:hover {
-  background: var(--wa-color-neutral-fill-quiet);
-}
-.not-working-dialog__submit {
-  background: var(--wa-color-danger-fill-loud);
-  color: var(--wa-color-neutral-on-loud);
-}
-.not-working-dialog__submit:not(:disabled):hover {
-  background: color-mix(in srgb, var(--wa-color-danger-fill-loud) 82%, var(--wa-color-neutral-on-normal));
 }

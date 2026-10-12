@@ -1,5 +1,10 @@
+import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import './not-working-dialog.css';
+
+import { List } from '@kerfjs/ui/list';
+import { Row } from '@kerfjs/ui/row';
+import { FieldLabel, Text } from '@kerfjs/ui/text';
 
 import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
 import { type PendingAttachment, PendingAttachmentPicker } from './pending-attachment-picker';
@@ -42,49 +47,54 @@ export function NotWorkingDialog({
       open={open}
       data-controlled-open={String(Boolean(open))}
     >
-      <form {...TICKET_SELECTION_ACTIONS.submitNotWorking.attrs} class="not-working-dialog__form">
-        {notesEnabled ? (
-          <label class="not-working-dialog__note">
-            <span>{prompt}</span>
-            <textarea
-              name="not-working-note"
-              rows={5}
+      <form {...TICKET_SELECTION_ACTIONS.submitNotWorking.attrs}>
+        <List gap="m">
+          {notesEnabled ? (
+            <div class="not-working-dialog__note">
+              <FieldLabel id="not-working-note-label">{prompt}</FieldLabel>
+              <textarea
+                name="not-working-note"
+                aria-labelledby="not-working-note-label"
+                rows={5}
+                disabled={submitting}
+                placeholder="Describe what failed or what needs another attempt…"
+                autofocus
+              >
+                {note}
+              </textarea>
+            </div>
+          ) : (
+            <Text flush size="compact" tone="quiet">
+              This ticket provider does not support notes. Add an attachment to report the problem.
+            </Text>
+          )}
+          <PendingAttachmentPicker attachments={attachments} enabled={attachmentsEnabled && !submitting} />
+          {!attachmentsEnabled && (
+            <Text flush size="compact" tone="quiet">
+              This ticket provider does not support attachments.
+            </Text>
+          )}
+          <div class="not-working-dialog__error" role="alert">
+            {error && (
+              <Text flush size="compact" tone="danger">
+                {error}
+              </Text>
+            )}
+          </div>
+          <Row hAlign="right" vAlign="middle" gap="xs">
+            <wa-button
+              type="button"
+              appearance="plain"
+              {...TICKET_SELECTION_ACTIONS.cancelNotWorking.attrs}
               disabled={submitting}
-              placeholder="Describe what failed or what needs another attempt…"
-              autofocus
             >
-              {note}
-            </textarea>
-          </label>
-        ) : (
-          <p class="not-working-dialog__hint">
-            This ticket provider does not support notes. Add an attachment to report the problem.
-          </p>
-        )}
-        <PendingAttachmentPicker attachments={attachments} enabled={attachmentsEnabled && !submitting} />
-        {!attachmentsEnabled && (
-          <p class="not-working-dialog__hint">This ticket provider does not support attachments.</p>
-        )}
-        <p class="not-working-dialog__error" role="alert">
-          {error}
-        </p>
-        <footer class="not-working-dialog__footer">
-          <button
-            type="button"
-            class="not-working-dialog__button not-working-dialog__cancel"
-            {...TICKET_SELECTION_ACTIONS.cancelNotWorking.attrs}
-            disabled={submitting}
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            class="not-working-dialog__button not-working-dialog__submit"
-            disabled={submitting || empty}
-          >
-            {submitting ? 'Submitting…' : submitLabel}
-          </button>
-        </footer>
+              Cancel
+            </wa-button>
+            <wa-button type="submit" variant="danger" disabled={submitting || empty}>
+              {submitting ? 'Submitting…' : submitLabel}
+            </wa-button>
+          </Row>
+        </List>
       </form>
     </wa-dialog>
   );

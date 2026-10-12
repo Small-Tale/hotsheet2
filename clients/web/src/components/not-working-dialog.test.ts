@@ -36,7 +36,10 @@ describe('NotWorkingDialog', () => {
       NotWorkingDialog({ slug: 'HS2-DONE', note: 'Broken', attachments: [], submitting: true, error: 'Upload failed' }),
     );
     expect(submitting).toContain('Submitting…');
-    expect(submitting).toContain('role="alert">Upload failed');
+    expect(submitting).toMatch(/role="alert"><p class="kui-text"[^>]*data-tone="danger"[^>]*>Upload failed/);
+    expect(String(NotWorkingDialog({ slug: 'HS2-DONE', note: '', attachments: [] }))).toContain(
+      '<div class="not-working-dialog__error" role="alert"></div>',
+    );
   });
 
   it('relabels the shared evidence flow when reopening a verified or archived ticket', () => {
@@ -45,13 +48,17 @@ describe('NotWorkingDialog', () => {
     );
     expect(markup).toContain('Reopen Ticket — HS2-REOPEN');
     expect(markup).toContain('What needs another attempt?');
-    expect(markup).toContain('>Reopen Ticket</button>');
+    expect(markup).toContain('>Reopen Ticket</wa-button>');
   });
 
   it('keeps long filenames shrinkable and uses pointer/not-allowed cursor semantics', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'pending-attachment-picker.css'), 'utf8');
     expect(css).toContainSource('min-width: 0; overflow: hidden; flex: 1; text-overflow: ellipsis');
+    // Web Awesome buttons own their pointer/not-allowed cursors; the dialog no longer styles buttons (HS2-P6ZJDS).
     const dialogCss = readFileSync(resolve(import.meta.dirname, 'not-working-dialog.css'), 'utf8');
-    expect(dialogCss).toContainSource('button:disabled { cursor: not-allowed;');
+    expect(dialogCss).not.toMatch(/button|::part|__footer|__form|__hint/);
+    const markup = String(NotWorkingDialog({ slug: 'HS2-DONE', note: 'Broken', attachments: [] }));
+    expect(markup).toContain('<wa-button type="submit" variant="danger">Report Not Working</wa-button>');
+    expect(markup).toContain('aria-labelledby="not-working-note-label"');
   });
 });
