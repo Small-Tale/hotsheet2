@@ -8,6 +8,7 @@ import {
   type StatusBadgeWeight,
   type TicketStatus,
 } from '../components/status-badge';
+import type { DemoModule } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 export const statusBadgeSettings = {
@@ -114,3 +115,10 @@ export function StatusBadgeSettings() {
     </form>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'status-badge': { Demo: StatusBadgeDemo, Settings: StatusBadgeSettings, reset: resetStatusBadgeDemo },
+  },
+};

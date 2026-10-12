@@ -3,6 +3,7 @@ import { signal } from 'kerfjs';
 
 import type { CompatibilityAssessment } from '../compatibility';
 import { ConnectionDetailsDialog } from '../components/connection-details-dialog';
+import type { DemoModule } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 export type ConnectionDetailsScenario =
@@ -104,3 +105,14 @@ export function ConnectionDetailsDialogSettings() {
     </form>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'connection-details-dialog': {
+      Demo: ConnectionDetailsDialogDemo,
+      Settings: ConnectionDetailsDialogSettings,
+      reset: resetConnectionDetailsDemo,
+    },
+  },
+};

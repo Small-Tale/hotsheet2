@@ -10,6 +10,7 @@ import {
   type TicketSelectionState,
   updateTicketSelection,
 } from '../components/ticket-selection';
+import type { DemoModule } from './demo-module';
 
 const initialTickets: TicketRowProps[] = [
   {
@@ -382,3 +383,12 @@ export function TicketBoardColumnDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'ticket-list': { Demo: TicketListDemo },
+    'ticket-board': { Demo: TicketBoardDemo },
+    'ticket-board-column': { Demo: TicketBoardColumnDemo },
+  },
+};

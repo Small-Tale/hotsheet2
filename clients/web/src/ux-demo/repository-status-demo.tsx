@@ -11,6 +11,7 @@ import {
   type RepositoryStatusView,
 } from '../components/repository-status-popover';
 import type { CodeReviewComparison } from '../components/ticket-code-review';
+import type { DemoModule } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 export type RepositoryDemoScenario = 'clean' | 'dirty' | 'ahead' | 'behind' | 'diverged' | 'conflicted' | 'error';
@@ -180,3 +181,15 @@ export function RepositoryStatusPopoverSettings() {
     </form>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'repository-status-popover': {
+      Demo: RepositoryStatusPopoverDemo,
+      Settings: RepositoryStatusPopoverSettings,
+      reset: resetRepositoryStatusDemo,
+    },
+    'change-evidence-dialog': { Demo: ChangeEvidenceDialogDemo },
+  },
+};

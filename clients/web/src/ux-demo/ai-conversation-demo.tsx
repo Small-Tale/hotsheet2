@@ -4,6 +4,7 @@ import { signal } from 'kerfjs';
 import { type ConversationActivity, type ConversationMessage, conversationUsage } from '../ai-conversation';
 import { AIConversation } from '../components/ai-conversation';
 import type { PermissionItem } from '../permission-notifications';
+import type { DemoModule } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 export type AIConversationScenario =
@@ -228,3 +229,25 @@ export function AIConversationSettings() {
     </form>
   );
 }
+
+/** Open the conversation surface, waiting a microtask for the controlled render to mount it. */
+export function openAIConversationDemo(root: HTMLElement): void {
+  aiConversationDemoOpen.value = true;
+  queueMicrotask(() => {
+    root.querySelector<HTMLElement & { show?(): void }>('[data-component="ai-conversation"]')?.show?.();
+  });
+}
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'ai-conversation': {
+      Demo: AIConversationDemo,
+      Settings: AIConversationSettings,
+      reset: (root) => {
+        resetAIConversationDemo(root);
+        openAIConversationDemo(root);
+      },
+    },
+  },
+};

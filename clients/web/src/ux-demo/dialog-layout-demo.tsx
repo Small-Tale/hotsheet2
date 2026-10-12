@@ -12,6 +12,7 @@ import { AppWindow, ServerCog } from 'lucide';
 
 import { Hs1CleanupBanner, Hs1JobBanner, Hs1MigrationBanner, Hs1MigrationDialog } from '../components/hs1-migration';
 import { NotificationsPausedBanner } from '../components/notifications-paused-banner';
+import type { DemoModule } from './demo-module';
 
 export function DialogHeaderDemo() {
   return (
@@ -146,3 +147,14 @@ export function Hs1MigrationBannerDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'dialog-header': { Demo: DialogHeaderDemo },
+    'value-table': { Demo: ValueTableDemo },
+    'hs1-migration-dialog': { Demo: Hs1MigrationDialogDemo },
+    'hs1-migration-banner': { Demo: Hs1MigrationBannerDemo },
+    'notifications-paused-banner': { Demo: NotificationsPausedBannerDemo },
+  },
+};

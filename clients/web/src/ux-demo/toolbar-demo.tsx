@@ -4,6 +4,8 @@ import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { PanelLeftOpen, PanelRightOpen } from 'lucide';
 
+import type { DemoModule } from './demo-module';
+
 export function ToolbarDemo() {
   return (
     <section class="toolbar-demo" aria-label="Toolbar demo">
@@ -33,3 +35,10 @@ export function ToolbarDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    toolbar: { Demo: ToolbarDemo },
+  },
+};

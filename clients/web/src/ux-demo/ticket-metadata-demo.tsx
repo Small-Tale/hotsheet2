@@ -19,6 +19,7 @@ import { TicketPrioritySelect } from '../components/ticket-priority-select';
 import { TicketStatusMenu } from '../components/ticket-status-menu';
 import { TicketTimeline } from '../components/ticket-timeline';
 import { ticketDraftKey } from '../ticket-draft-store';
+import type { DemoModule } from './demo-module';
 
 export function TicketCategorySelectDemo() {
   return (
@@ -467,3 +468,17 @@ export function TicketCodeReviewDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'ticket-category-select': { Demo: TicketCategorySelectDemo },
+    'ticket-priority-select': { Demo: TicketPrioritySelectDemo },
+    'ticket-status-menu': { Demo: TicketStatusMenuDemo },
+    'ticket-info-panel': { Demo: TicketInfoPanelDemo },
+    'ticket-timeline': { Demo: TicketTimelineDemo },
+    'ticket-code-review': { Demo: TicketCodeReviewDemo },
+    'ticket-attachments': { Demo: TicketAttachmentsDemo },
+    'attachment-gallery': { Demo: AttachmentGalleryDemo },
+  },
+};

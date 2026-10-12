@@ -4,6 +4,7 @@ import { signal } from 'kerfjs';
 import type { CommandDefinition, CommandRun } from '../api';
 import { CommandRunDialog } from '../components/command-run-dialog';
 import { DEMO_ACTIONS } from './demo-actions';
+import type { DemoModule } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 /** The two public presentations of CommandRunDialog: run output, or the `confirmStop` confirmation. */
@@ -117,3 +118,14 @@ export function CommandRunDialogSettings() {
     </form>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'command-run-dialog': {
+      Demo: CommandRunDialogDemo,
+      Settings: CommandRunDialogSettings,
+      reset: resetCommandRunDialogDemo,
+    },
+  },
+};

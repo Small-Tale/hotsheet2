@@ -1,4 +1,5 @@
 import { ProviderIcon, type ProviderIconKind, type ProviderIconSize } from '../components/provider-icon';
+import type { DemoModule } from './demo-module';
 
 const PROVIDERS: readonly { kind: ProviderIconKind; label: string }[] = [
   { kind: 'github', label: 'GitHub' },
@@ -42,3 +43,10 @@ export function ProviderIconDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'provider-icon': { Demo: ProviderIconDemo },
+  },
+};

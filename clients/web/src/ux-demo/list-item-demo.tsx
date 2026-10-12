@@ -3,6 +3,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Archive, Layers3 } from 'lucide';
 
 import { ProviderIcon } from '../components/provider-icon';
+import type { DemoModule } from './demo-module';
 
 export function ListItemDemo() {
   return (
@@ -63,3 +64,10 @@ export function ListItemDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'list-item': { Demo: ListItemDemo },
+  },
+};

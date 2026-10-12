@@ -17,6 +17,7 @@ import { SettingsNavigation } from '../components/settings-navigation';
 import { TerminalOperationsSidebar } from '../components/terminal-operations-sidebar';
 import { ViewNavigation, type ViewNavigationItem } from '../components/view-navigation';
 import { loadLucideCatalog } from '../lucide-catalog';
+import type { DemoModule } from './demo-module';
 
 export const selectedViewId = signal('all');
 export const commandGroupExpanded = signal(true);
@@ -382,3 +383,21 @@ export function TerminalOperationsSidebarDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'project-summary': { Demo: ProjectSummaryDemo },
+    'project-sidebar': { Demo: ProjectSidebarDemo },
+    'repository-summary': { Demo: RepositorySummaryDemo },
+    'settings-navigation': { Demo: SettingsNavigationDemo },
+    'notification-navigation': { Demo: NotificationNavigationDemo },
+    'view-navigation': { Demo: ViewNavigationDemo },
+    'command-navigation': { Demo: CommandNavigationDemo },
+    'command-settings-editor': { Demo: CommandSettingsEditorDemo },
+    'drive-control': { Demo: DriveControlDemo },
+    'drive-options-menu': { Demo: DriveOptionsMenuDemo },
+    'ai-tool-settings': { Demo: AiToolSettingsDemo },
+    'terminal-operations-sidebar': { Demo: TerminalOperationsSidebarDemo },
+  },
+};

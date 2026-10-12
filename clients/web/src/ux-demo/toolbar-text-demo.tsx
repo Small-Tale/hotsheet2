@@ -1,5 +1,7 @@
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 
+import type { DemoModule } from './demo-module';
+
 export function ToolbarTextDemo() {
   return (
     <section class="toolbar-text-demo" aria-label="ToolbarText demo">
@@ -18,3 +20,10 @@ export function ToolbarTextDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'toolbar-text': { Demo: ToolbarTextDemo },
+  },
+};

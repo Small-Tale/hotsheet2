@@ -5,6 +5,7 @@ import { batch, signal } from 'kerfjs';
 
 import { TicketSearchField, TicketSearchFormField, TicketSearchSurfaces } from '../components/ticket-search-field';
 import { createTicketSearchModel, replaceTicketSearch } from '../ticket-search-model';
+import type { DemoModule } from './demo-module';
 
 /** Deterministic project tags for the TicketSearchField catalog entry. */
 export const TICKET_SEARCH_DEMO_TAGS = ['client', 'docs', 'needs design', 'parser', 'server', 'ui'] as const;
@@ -258,3 +259,10 @@ export function TicketSearchFieldDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'ticket-search-field': { Demo: TicketSearchFieldDemo },
+  },
+};

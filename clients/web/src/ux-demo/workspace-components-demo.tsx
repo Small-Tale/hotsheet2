@@ -51,6 +51,7 @@ import {
   noteDraft,
   readerNotes,
 } from './content-components-demo';
+import type { DemoModule } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 import { collectionEvent, collectionTickets } from './ticket-collections-demo';
 import { TICKET_ROW_CLAIM_ETA } from './ticket-row-demo';
@@ -621,3 +622,23 @@ export function TicketInspectorSkeletonDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'workspace-header': { Demo: WorkspaceHeaderDemo },
+    'page-header': { Demo: PageHeaderDemo },
+    'quick-ticket-composer': {
+      Demo: QuickTicketComposerDemo,
+      Settings: QuickTicketComposerSettings,
+      reset: resetQuickTicketComposerDemo,
+    },
+    'ticket-inspector': {
+      Demo: TicketInspectorDemo,
+      Settings: TicketInspectorSettings,
+      reset: resetTicketInspectorDemo,
+    },
+    'ticket-inspector-skeleton': { Demo: TicketInspectorSkeletonDemo },
+    'terminal-ticket-rail': { Demo: TerminalTicketRailDemo },
+  },
+};

@@ -2,6 +2,8 @@ import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ChevronDown, Plus } from 'lucide';
 
+import type { DemoModule } from './demo-module';
+
 export function ListHeaderDemo() {
   return (
     <section class="list-item-demo" aria-label="ListHeader demo">
@@ -26,3 +28,10 @@ export function ListHeaderDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'list-header': { Demo: ListHeaderDemo },
+  },
+};

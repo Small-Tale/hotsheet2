@@ -4,6 +4,7 @@ import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { ProjectDialog, RemoteProjectDialog } from '../components/project-dialog';
+import type { DemoModule } from './demo-module';
 
 const variants = {
   projects: 'Remote projects',
@@ -136,3 +137,10 @@ export function wireProjectDialogDemo(root: HTMLElement): () => void {
     listeners.dispose();
   };
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'project-dialog': { Demo: ProjectDialogDemo },
+  },
+};

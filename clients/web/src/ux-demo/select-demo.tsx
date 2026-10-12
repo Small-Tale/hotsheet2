@@ -2,6 +2,8 @@ import { foregroundColorVar } from '@kerfjs/ui/css-values';
 import { Select } from '@kerfjs/ui/select';
 import { Bug, ListChecks, Sparkles } from 'lucide';
 
+import type { DemoModule } from './demo-module';
+
 const choices = [
   {
     value: 'task',
@@ -27,3 +29,10 @@ export function SelectDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    select: { Demo: SelectDemo },
+  },
+};

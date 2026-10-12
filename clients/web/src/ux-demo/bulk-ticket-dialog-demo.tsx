@@ -3,6 +3,7 @@ import { signal } from 'kerfjs';
 
 import { BulkTicketDialog, type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
 import { DEMO_ACTIONS } from './demo-actions';
+import type { DemoModule } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 /** Every public BulkTicketDialog presentation the production selection flows render (HS2-PS9BQV). */
@@ -102,3 +103,14 @@ export function BulkTicketDialogSettings() {
     </form>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'bulk-ticket-dialog': {
+      Demo: BulkTicketDialogDemo,
+      Settings: BulkTicketDialogSettings,
+      reset: resetBulkTicketDialogDemo,
+    },
+  },
+};

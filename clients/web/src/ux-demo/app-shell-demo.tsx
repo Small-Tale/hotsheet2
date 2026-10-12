@@ -25,6 +25,7 @@ import {
   noteDraft,
   readerNotes,
 } from './content-components-demo';
+import type { DemoModule } from './demo-module';
 import {
   collapsedCommandGroups,
   commandGroupExpanded,
@@ -550,3 +551,14 @@ export function AppShellDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'project-tab': { Demo: ProjectTabDemo },
+    'project-tabs': { Demo: ProjectTabBarDemo },
+    'resizable-region': { Demo: ResizableRegionDemo },
+    'connection-state-banner': { Demo: ConnectionStateBannerDemo },
+    'app-shell': { Demo: AppShellDemo, Settings: AppShellSettings, reset: resetAppShellDemo },
+  },
+};

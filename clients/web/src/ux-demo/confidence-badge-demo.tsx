@@ -2,6 +2,7 @@ import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 
 import { ConfidenceBadge } from '../components/confidence-badge';
+import type { DemoModule } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 /** Every public ConfidenceBadge variant: both appearances across all four rubric bands. */
@@ -67,3 +68,14 @@ export function ConfidenceBadgeSettings() {
     </form>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'confidence-badge': {
+      Demo: ConfidenceBadgeDemo,
+      Settings: ConfidenceBadgeSettings,
+      reset: resetConfidenceBadgeDemo,
+    },
+  },
+};

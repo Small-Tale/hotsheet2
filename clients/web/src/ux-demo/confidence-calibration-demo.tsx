@@ -3,6 +3,7 @@ import { signal } from 'kerfjs';
 
 import type { CalibrationReport } from '../api';
 import { ConfidenceCalibration, type ConfidenceCalibrationState } from '../components/confidence-calibration';
+import type { DemoModule } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 /** A deterministic report covering every band shape: rated, unresolved, empty, and unscored. */
@@ -102,3 +103,14 @@ export function ConfidenceCalibrationSettings() {
     </form>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'confidence-calibration': {
+      Demo: ConfidenceCalibrationDemo,
+      Settings: ConfidenceCalibrationSettings,
+      reset: resetConfidenceCalibrationDemo,
+    },
+  },
+};

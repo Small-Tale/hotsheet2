@@ -21,6 +21,7 @@ import {
   terminalVisibilityItems,
   type TerminalVisibilityType,
 } from '../terminal-visibility';
+import type { DemoModule } from './demo-module';
 
 export const terminalVisibilityDemoGroups: TerminalDashboardGroup[] = [
   {
@@ -162,3 +163,10 @@ export function setAllTerminalVisibilityDemo(visible: boolean) {
     visible,
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'terminal-visibility-dialog': { Demo: TerminalVisibilityDialogDemo },
+  },
+};

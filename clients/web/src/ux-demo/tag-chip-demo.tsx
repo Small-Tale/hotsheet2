@@ -2,6 +2,7 @@ import { Select } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 
 import { TagChip, type TagChipAppearance, type TagChipSize, type TagChipVariant } from '../components/tag-chip';
+import type { DemoModule } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 export const tagChipSettings = {
@@ -112,3 +113,10 @@ export function TagChipSettings() {
     </form>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'tag-chip': { Demo: TagChipDemo, Settings: TagChipSettings, reset: resetTagChipDemo },
+  },
+};

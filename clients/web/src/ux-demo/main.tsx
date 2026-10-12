@@ -82,8 +82,10 @@ import {
   aiConversationProviderLabel,
   aiConversationSaveCount,
   aiConversationScenario,
-  resetAIConversationDemo,
+  openAIConversationDemo,
 } from './ai-conversation-demo';
+import { appErrorDemoVisible } from './app-chrome-demo';
+import { projectCloseDemoSelection } from './app-dialogs-demo';
 import { appLoadingDemoProgress } from './app-loading-indicator-demo';
 import {
   addDemoProject,
@@ -93,7 +95,6 @@ import {
   closeProjectTab,
   closeProjectTabsToRight,
   projectTabs,
-  resetAppShellDemo,
   resizeDemoCollapsed,
   selectProjectTab,
   setRegionSize,
@@ -109,41 +110,16 @@ import {
   type BulkTicketDialogScenario,
   closeBulkTicketDialogDemo,
   openBulkTicketDialogDemo,
-  resetBulkTicketDialogDemo,
   setBulkTicketDialogScenario,
 } from './bulk-ticket-dialog-demo';
 import {
   type CommandRunDialogPresentation,
   confirmStopCommandRunDemo,
   dismissCommandRunDialogDemo,
-  resetCommandRunDialogDemo,
   setCommandRunDialogPresentation,
   showCommandRunDialogDemo,
 } from './command-run-dialog-demo';
 import { DemoApp } from './components/demo-app';
-import type { FormControl, TicketSourceScenario } from './components/demo-content';
-import {
-  appErrorDemoVisible,
-  CLIPBOARD_DEMO_TEXT,
-  clipboardDemoCopy,
-  clipboardDemoGeneration,
-  clipboardDemoOutput,
-  clipboardDemoPaste,
-  drawerFocusDemoColumns,
-  editMenuDemo,
-  editMenuDemoOutput,
-  keyBarDemoFunctionRow,
-  keyBarDemoModifiers,
-  keyBarDemoOutput,
-  projectCloseDemoSelection,
-  renameDemoOutput,
-  renameDemoSession,
-  renameDemoTarget,
-  renameDemoTargets,
-  terminalDashboardContextMenu,
-  terminalDashboardHaltCleared,
-  ticketSourceScenario,
-} from './components/demo-content';
 import {
   applyDisplayPreferences,
   backgroundStyle,
@@ -160,9 +136,9 @@ import {
   theme,
   URL_PARAM,
 } from './components/demo-state';
-import { confidenceBadgeSettings, resetConfidenceBadgeDemo } from './confidence-badge-demo';
-import { confidenceCalibrationSettings, resetConfidenceCalibrationDemo } from './confidence-calibration-demo';
-import { connectionDetailsScenario, resetConnectionDetailsDemo } from './connection-details-demo';
+import { confidenceBadgeSettings } from './confidence-badge-demo';
+import { confidenceCalibrationSettings } from './confidence-calibration-demo';
+import { connectionDetailsScenario } from './connection-details-demo';
 import {
   editingNoteId,
   inspectorBlockedReason,
@@ -189,15 +165,10 @@ import {
   readerTitle,
   readerTitleDraft,
   readerTitleEditing,
-  resetMarkdownEditorDemo,
 } from './content-components-demo';
-import {
-  resetContentTransitionDemo,
-  transitionDirection,
-  transitionSide,
-  transitionStyle,
-} from './content-transition-demo';
+import { transitionDirection, transitionSide, transitionStyle } from './content-transition-demo';
 import { DEMO_ACTIONS, DEMO_COMPONENTS, DEMO_FIELDS, DEMO_MARKERS } from './demo-actions';
+import type { FormControl } from './demo-module';
 import { closeHs1MigrationDialogDemo, openHs1MigrationDialogDemo } from './dialog-layout-demo';
 import { haltedSessionDemoResult, haltedSessionDemoVisible } from './halted-session-demo';
 import {
@@ -208,7 +179,6 @@ import {
 } from './not-working-dialog-demo';
 import {
   permissionRequestSettings,
-  resetPermissionRequestDemo,
   resetPermissionRequestDemoCountdown,
   startPermissionRequestDemoCountdown,
   stopPermissionRequestDemoAutomation,
@@ -239,6 +209,7 @@ import {
   sidebarViews,
   updateCommandEditorField,
 } from './project-sidebar-demo';
+import { demoEntry } from './registry';
 import {
   changeEvidenceDemoView,
   repositoryDemoComparison,
@@ -248,11 +219,31 @@ import {
   repositoryDemoFileMenu,
   repositoryDemoScenario,
   repositoryDemoView,
-  resetRepositoryStatusDemo,
 } from './repository-status-demo';
-import { resetSettingsWorkspaceDemo, settingsWorkspaceSettings } from './settings-workspace-demo';
-import { resetStatusBadgeDemo, statusBadgeSettings } from './status-badge-demo';
-import { resetTagChipDemo, tagChipSettings } from './tag-chip-demo';
+import { settingsWorkspaceSettings } from './settings-workspace-demo';
+import type { TicketSourceScenario } from './setup-settings-demo';
+import { ticketSourceScenario } from './setup-settings-demo';
+import { statusBadgeSettings } from './status-badge-demo';
+import { tagChipSettings } from './tag-chip-demo';
+import {
+  CLIPBOARD_DEMO_TEXT,
+  clipboardDemoCopy,
+  clipboardDemoGeneration,
+  clipboardDemoOutput,
+  clipboardDemoPaste,
+  drawerFocusDemoColumns,
+  editMenuDemo,
+  editMenuDemoOutput,
+  keyBarDemoFunctionRow,
+  keyBarDemoModifiers,
+  keyBarDemoOutput,
+  renameDemoOutput,
+  renameDemoSession,
+  renameDemoTarget,
+  renameDemoTargets,
+  terminalDashboardContextMenu,
+  terminalDashboardHaltCleared,
+} from './terminal-components-demo';
 import { syncTerminalDemoViewports } from './terminal-demo';
 import {
   cancelTerminalVisibilityDemoName,
@@ -298,7 +289,7 @@ import {
   statusMenuDemoStatus,
   zoomGalleryDemo,
 } from './ticket-metadata-demo';
-import { resetTicketRowDemo, ticketRowSettings } from './ticket-row-demo';
+import { ticketRowSettings } from './ticket-row-demo';
 import {
   resetTicketSearchDemo,
   ticketSearchDemoCollapsibleOpen,
@@ -333,8 +324,6 @@ import {
   inspectorTitle,
   inspectorTitleDraft,
   inspectorTitleEditing,
-  resetQuickTicketComposerDemo,
-  resetTicketInspectorDemo,
   resetWorkspaceDemoNotifications,
   resolveWorkspaceDemoPermission,
   terminalRailDemoTicket,
@@ -1429,39 +1418,13 @@ demoListeners.add(
 );
 demoListeners.add(
   delegate(root, 'click', DEMO_ACTIONS.resetSettings.selector, () => {
-    if (selectedId.value === 'app-loading-indicator') appLoadingDemoProgress.value = undefined;
-    if (selectedId.value === 'app-shell') resetAppShellDemo(root);
-    if (selectedId.value === 'content-transition') resetContentTransitionDemo(root);
-    if (selectedId.value === 'quick-ticket-composer') resetQuickTicketComposerDemo(root);
-    if (selectedId.value === 'ticket-inspector') resetTicketInspectorDemo(root);
-    if (selectedId.value === 'ai-conversation') {
-      resetAIConversationDemo(root);
-      openAIConversationDemo();
-    }
-    if (selectedId.value === 'tag-chip') resetTagChipDemo(root);
-    if (selectedId.value === 'status-badge') resetStatusBadgeDemo(root);
-    if (selectedId.value === 'confidence-badge') resetConfidenceBadgeDemo(root);
-    if (selectedId.value === 'confidence-calibration') resetConfidenceCalibrationDemo(root);
-    if (selectedId.value === 'ticket-row') resetTicketRowDemo(root);
-    if (selectedId.value === 'repository-status-popover') resetRepositoryStatusDemo(root);
-    if (selectedId.value === 'connection-details-dialog') resetConnectionDetailsDemo(root);
-    if (selectedId.value === 'permission-request') resetPermissionRequestDemo(root);
-    if (selectedId.value === 'command-run-dialog') resetCommandRunDialogDemo(root);
-    if (selectedId.value === 'markdown-editor') resetMarkdownEditorDemo(root);
-    if (selectedId.value === 'bulk-ticket-dialog') resetBulkTicketDialogDemo(root);
-    if (selectedId.value === 'settings-workspace') resetSettingsWorkspaceDemo(root);
+    demoEntry(selectedId.value)?.reset?.(root);
   }),
 );
-const openAIConversationDemo = () => {
-  aiConversationDemoOpen.value = true;
-  queueMicrotask(() => {
-    root.querySelector<HTMLElement & { show?(): void }>('[data-component="ai-conversation"]')?.show?.();
-  });
-};
 demoListeners.add(
   delegate(root, 'change', '[data-settings="ai-conversation"] [name="presentation"]', (_event, target) => {
     aiConversationPresentation.value = (target as FormControl).value as typeof aiConversationPresentation.value;
-    openAIConversationDemo();
+    openAIConversationDemo(root);
   }),
 );
 demoListeners.add(
@@ -1472,12 +1435,12 @@ demoListeners.add(
 demoListeners.add(
   delegate(root, 'change', '[data-settings="ai-conversation"] [name="scenario"]', (_event, target) => {
     aiConversationScenario.value = (target as FormControl).value as typeof aiConversationScenario.value;
-    openAIConversationDemo();
+    openAIConversationDemo(root);
   }),
 );
 demoListeners.add(
   delegate(root, 'click', DEMO_ACTIONS.openAiConversationDemo.selector, () => {
-    openAIConversationDemo();
+    openAIConversationDemo(root);
   }),
 );
 demoListeners.add(

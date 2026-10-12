@@ -7,6 +7,7 @@ import {
   type ContentTransitionSide,
   type ContentTransitionStyle,
 } from '../components/content-transition';
+import type { DemoModule } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 export const transitionSide = signal<ContentTransitionSide>('a'),
@@ -106,3 +107,14 @@ export function ContentTransitionSettings() {
     </form>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'content-transition': {
+      Demo: ContentTransitionDemo,
+      Settings: ContentTransitionSettings,
+      reset: resetContentTransitionDemo,
+    },
+  },
+};

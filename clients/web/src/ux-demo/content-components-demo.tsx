@@ -9,6 +9,7 @@ import { NoteComposer } from '../components/note-composer';
 import type { InspectorTab } from '../components/ticket-inspector';
 import { TicketReader } from '../components/ticket-reader';
 import { DEMO_ACTIONS } from './demo-actions';
+import type { DemoModule } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 export const NOTE_DEMO_KINDS: readonly NoteKind[] = [
@@ -413,3 +414,15 @@ export function AIContentLabelDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'note-card': { Demo: NoteCardDemo },
+    'note-composer': { Demo: NoteComposerDemo },
+    'ticket-reader': { Demo: TicketReaderDemo },
+    'markdown-editor': { Demo: MarkdownEditorDemo, Settings: MarkdownEditorSettings, reset: resetMarkdownEditorDemo },
+    'markdown-preview': { Demo: MarkdownPreviewDemo },
+    'ai-content-label': { Demo: AIContentLabelDemo },
+  },
+};

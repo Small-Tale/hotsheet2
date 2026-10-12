@@ -22,6 +22,8 @@ import {
   Star,
 } from 'lucide';
 
+import type { DemoModule } from './demo-module';
+
 export const toolbarGroupDemoMode = signal<'list' | 'board' | 'settings'>('list');
 
 export function ToolbarControlGroupDemo() {
@@ -148,3 +150,10 @@ export function ToolbarControlGroupDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'toolbar-control-group': { Demo: ToolbarControlGroupDemo },
+  },
+};

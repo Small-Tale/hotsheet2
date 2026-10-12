@@ -3,6 +3,7 @@ import { Text } from '@kerfjs/ui/text';
 import { signal } from 'kerfjs';
 
 import { HaltedSessionPopup } from '../components/halted-session-popup';
+import type { DemoModule } from './demo-module';
 
 export const haltedSessionDemoVisible = signal(true),
   haltedSessionDemoResult = signal('The session remains halted after dismissing this prompt.');
@@ -30,3 +31,10 @@ export function HaltedSessionPopupDemo() {
     </List>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'halted-session-popup': { Demo: HaltedSessionPopupDemo },
+  },
+};

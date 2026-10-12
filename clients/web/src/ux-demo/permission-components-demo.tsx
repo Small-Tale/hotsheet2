@@ -13,6 +13,7 @@ import {
   type PermissionHistoryItem,
   type PermissionItem,
 } from '../permission-notifications';
+import type { DemoModule } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 const pending: PermissionItem = {
@@ -285,3 +286,15 @@ export function NotificationCenterDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'permission-request': {
+      Demo: PermissionRequestDemo,
+      Settings: PermissionRequestSettings,
+      reset: resetPermissionRequestDemo,
+    },
+    'notification-center': { Demo: NotificationCenterDemo },
+  },
+};

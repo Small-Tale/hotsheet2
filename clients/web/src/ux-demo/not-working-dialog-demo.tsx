@@ -2,6 +2,7 @@ import { signal } from 'kerfjs';
 
 import { NotWorkingDialog } from '../components/not-working-dialog';
 import { PendingAttachmentPicker } from '../components/pending-attachment-picker';
+import type { DemoModule } from './demo-module';
 
 export const notWorkingDemoOpen = signal(false),
   notWorkingDemoNote = signal('The completed change still fails when the project is reopened.'),
@@ -37,3 +38,11 @@ export function PendingAttachmentPickerDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'not-working-dialog': { Demo: NotWorkingDialogDemo },
+    'pending-attachment-picker': { Demo: PendingAttachmentPickerDemo },
+  },
+};

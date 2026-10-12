@@ -6,6 +6,7 @@ import type { StartedPhase } from '../api';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../components/category-presentation';
 import type { TicketStatus } from '../components/status-badge';
 import { type TicketPriority, TicketRow } from '../components/ticket-row';
+import type { DemoModule } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 /** Claim ETA states the demo exposes (HS2-XQMDQB). */
@@ -234,3 +235,10 @@ export function TicketRowSettings() {
     </form>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'ticket-row': { Demo: TicketRowDemo, Settings: TicketRowSettings, reset: resetTicketRowDemo },
+  },
+};

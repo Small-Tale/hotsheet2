@@ -2,6 +2,8 @@ import { flex, pct } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListInsetText } from '@kerfjs/ui/list-inset-text';
 
+import type { DemoModule } from './demo-module';
+
 /** Package-owned list geometry with passive content and an explicitly bounded scroll example. */
 export function ListDemo() {
   const rows = (count: number) =>
@@ -21,3 +23,10 @@ export function ListDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    list: { Demo: ListDemo },
+  },
+};

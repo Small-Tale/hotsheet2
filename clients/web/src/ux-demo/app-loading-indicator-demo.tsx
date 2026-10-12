@@ -2,6 +2,7 @@ import { signal } from 'kerfjs';
 
 import type { BulkUpdateProgress } from '../bulk-update-progress';
 import { AppLoadingIndicator } from '../components/app-loading-indicator';
+import type { DemoModule } from './demo-module';
 
 export const appLoadingDemoProgress = signal<BulkUpdateProgress | undefined>(undefined);
 
@@ -25,3 +26,15 @@ export function AppLoadingIndicatorDemo() {
     </section>
   );
 }
+
+/** The catalog entries this file renders (HS2-HMVBZW). */
+export const demoModule: DemoModule = {
+  entries: {
+    'app-loading-indicator': {
+      Demo: AppLoadingIndicatorDemo,
+      reset: () => {
+        appLoadingDemoProgress.value = undefined;
+      },
+    },
+  },
+};
