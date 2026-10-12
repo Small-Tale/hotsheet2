@@ -1,8 +1,14 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
+import '@awesome.me/webawesome/dist/components/textarea/textarea.js';
 import './ticket-field-conflict.css';
 
-import { uiColor } from '@kerfjs/ui/css-values';
+import { ContentItem } from '@kerfjs/ui/content-item';
+import { rem, uiColor } from '@kerfjs/ui/css-values';
+import { Grid } from '@kerfjs/ui/grid';
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
+import { Text } from '@kerfjs/ui/text';
 import { GitMerge, RotateCcw } from 'lucide';
 
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
@@ -13,49 +19,74 @@ export interface TicketFieldConflictProps {
   resolution: string;
 }
 
+function Version({ label, value }: { label: string; value: string }) {
+  return (
+    <label class="ticket-field-conflict__version">
+      <Text variant="span" size="compact" tone="quiet">
+        <strong>{label}</strong>
+      </Text>
+      <output>{value || 'Empty'}</output>
+    </label>
+  );
+}
+
+/** Concurrent-edit resolution card: both versions, an editable merge, and the two resolutions. */
 export function TicketFieldConflict({ conflict, resolution }: TicketFieldConflictProps) {
+  const field = conflict.label.toLocaleLowerCase();
   return (
     <section
       class="ticket-field-conflict"
       data-component="ticket-field-conflict"
       data-conflict-field={conflict.key}
-      aria-label={`Resolve ${conflict.label.toLocaleLowerCase()} conflict`}
+      aria-label={`Resolve ${field} conflict`}
     >
-      <header>
-        <span class="ticket-field-conflict__icon">
-          <LucideIcon icon={GitMerge} name="git-merge" size="s" color={uiColor('warning-on-quiet')} />
-        </span>
-        <span>
-          <strong>Resolve {conflict.label.toLocaleLowerCase()} conflict</strong>
-          <small>This field changed elsewhere while you were editing it.</small>
-        </span>
-      </header>
-      <div class="ticket-field-conflict__versions" aria-label="Conflicting versions">
-        <label>
-          <span>Their latest version</span>
-          <output>{conflict.theirs || 'Empty'}</output>
-        </label>
-        <label>
-          <span>Your version</span>
-          <output>{conflict.mine || 'Empty'}</output>
-        </label>
-      </div>
-      <label class="ticket-field-conflict__merge">
-        <span>Merged value</span>
-        <textarea name="ticket-conflict-resolution" aria-label={`Merged ${conflict.label.toLocaleLowerCase()}`}>
-          {resolution}
-        </textarea>
-      </label>
-      <footer>
-        <button type="button" {...INSPECTOR_AND_EDITOR_ACTIONS.acceptRemoteTicketField.attrs}>
-          <LucideIcon size={13.6} icon={RotateCcw} name="rotate-ccw" />
-          Use theirs
-        </button>
-        <button type="button" {...INSPECTOR_AND_EDITOR_ACTIONS.applyTicketFieldMerge.attrs}>
-          <LucideIcon size={13.6} icon={GitMerge} name="git-merge" />
-          Apply merged value
-        </button>
-      </footer>
+      <ContentItem appearance="warning" frame="framed">
+        <List gap="xs">
+          <Row gap="xs" vAlign="top">
+            <LucideIcon icon={GitMerge} name="git-merge" size="s" color={uiColor('warning-on-quiet')} />
+            <List gap="none">
+              <Text variant="span" lineHeight="tight">
+                <strong>Resolve {field} conflict</strong>
+              </Text>
+              <Text variant="span" size="compact" tone="quiet">
+                This field changed elsewhere while you were editing it.
+              </Text>
+            </List>
+          </Row>
+          <Grid minColumnWidth={rem(10)} gap="xs" rootAttributes={{ 'data-versions': 'true' }}>
+            <Version label="Their latest version" value={conflict.theirs} />
+            <Version label="Your version" value={conflict.mine} />
+          </Grid>
+          <wa-textarea
+            class="ticket-field-conflict__merge"
+            name="ticket-conflict-resolution"
+            label={`Merged ${field}`}
+            size="small"
+            resize="auto"
+            value={resolution}
+          />
+          <Row hAlign="right" gap="xs" wrap>
+            <wa-button
+              size="small"
+              appearance="outlined"
+              type="button"
+              {...INSPECTOR_AND_EDITOR_ACTIONS.acceptRemoteTicketField.attrs}
+            >
+              <LucideIcon slot="start" size="s" icon={RotateCcw} name="rotate-ccw" />
+              Use theirs
+            </wa-button>
+            <wa-button
+              size="small"
+              variant="brand"
+              type="button"
+              {...INSPECTOR_AND_EDITOR_ACTIONS.applyTicketFieldMerge.attrs}
+            >
+              <LucideIcon slot="start" size="s" icon={GitMerge} name="git-merge" />
+              Apply merged value
+            </wa-button>
+          </Row>
+        </List>
+      </ContentItem>
     </section>
   );
 }

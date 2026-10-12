@@ -605,13 +605,31 @@ function demoDuplicateProps(): Partial<TicketInspectorProps> {
   }
 }
 
+/** Whether the TicketInspector demo shows a concurrent-edit field conflict (HS2-4GBYYZ). */
+export const inspectorFieldConflict = signal<'none' | 'details'>('none');
+function demoFieldConflictProps(): Partial<TicketInspectorProps> {
+  return inspectorFieldConflict.value === 'details'
+    ? {
+        fieldConflict: {
+          key: 'details',
+          field: 'details',
+          label: 'Details',
+          base: 'Build the reusable metadata presentation.',
+          mine: 'Build the reusable metadata and details presentation independently from the inspector shell.',
+          theirs: 'Build the reusable metadata presentation, and cover it with browser tests.',
+        },
+      }
+    : {};
+}
+
 /** Restore the canonical inspector settings and sync the live controls (HS2-X1SM48). */
 export function resetTicketInspectorDemo(root?: ParentNode): void {
   inspectorLiveClaim.value = 'none';
   inspectorDuplicates.value = 'none';
+  inspectorFieldConflict.value = 'none';
   if (root)
     syncSettingsControls(root, 'ticket-inspector', {
-      values: { 'inspector-live-claim': 'none', 'inspector-duplicates': 'none' },
+      values: { 'inspector-live-claim': 'none', 'inspector-duplicates': 'none', 'inspector-field-conflict': 'none' },
     });
 }
 
@@ -639,6 +657,15 @@ export function TicketInspectorSettings() {
           { value: 'target', label: 'Closed as a duplicate' },
           { value: 'backlinks', label: 'Duplicated by other tickets' },
           { value: 'backlinks-partial', label: 'Duplicates with an unchecked project' },
+        ]}
+      />
+      <Select
+        name="inspector-field-conflict"
+        label="Field conflict"
+        value={inspectorFieldConflict.value}
+        choices={[
+          { value: 'none', label: 'None' },
+          { value: 'details', label: 'Details changed elsewhere' },
         ]}
       />
       <wa-button type="button" data-action="reset-settings">
@@ -686,6 +713,7 @@ function demoInspectorProps(slug?: string): TicketInspectorProps {
     liveClaim: demoLiveClaim(),
     codeReview: inspectorCodeReview,
     ...demoDuplicateProps(),
+    ...demoFieldConflictProps(),
   };
 }
 
@@ -941,6 +969,16 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
     delegate(root, 'change', '[data-settings="ticket-inspector"] [name="inspector-duplicates"]', (_event, target) => {
       inspectorDuplicates.value = (target as FormControl).value as InspectorDuplicatesDemo;
     }),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'change',
+      '[data-settings="ticket-inspector"] [name="inspector-field-conflict"]',
+      (_event, target) => {
+        inspectorFieldConflict.value = (target as FormControl).value === 'details' ? 'details' : 'none';
+      },
+    ),
   );
   demoListeners.add(
     delegate(
