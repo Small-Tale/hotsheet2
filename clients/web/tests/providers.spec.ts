@@ -22544,18 +22544,22 @@ for (const surface of ['workspace', 'rail'] as const) {
         await expect(icon.locator('svg')).toHaveCount(state === 'mixed' ? 2 : 1);
         // The stars carry the Up Next color through LucideIcon's color prop (HS2-GQ57YW), so the
         // solid fill matches each svg's own color rather than a tinting wrapper's.
+        // Compare fill and color from one computed-style read, retried until it settles, rather than
+        // snapshotting the expected color once while a re-render may still be landing (HS2-VQWZ4H).
         const outline = icon.locator('svg').first();
-        await expect(outline).toHaveCSS(
-          'fill',
-          state === 'all' ? await outline.evaluate((node) => getComputedStyle(node).color) : 'none',
-        );
+        const fillMatches = (target: typeof outline, expected: 'color' | 'none') =>
+          target.evaluate((node, want) => {
+            const style = getComputedStyle(node);
+            return style.fill === (want === 'color' ? style.color : 'none');
+          }, expected);
+        await expect.poll(() => fillMatches(outline, state === 'all' ? 'color' : 'none')).toBe(true);
         if (state === 'mixed') {
           await expect(icon.locator('.workspace-header__up-next-fill')).toHaveCSS(
             'clip-path',
             'inset(0px 50% 0px 0px)',
           );
           const fill = icon.locator('.workspace-header__up-next-fill svg');
-          await expect(fill).toHaveCSS('fill', await fill.evaluate((node) => getComputedStyle(node).color));
+          await expect.poll(() => fillMatches(fill, 'color')).toBe(true);
           await expect(fill).toHaveCSS('color', 'rgb(255, 204, 0)');
         }
         if (state !== 'none') await expect(outline).toHaveCSS('color', 'rgb(255, 204, 0)');
