@@ -156,7 +156,6 @@
   height: remify(24px);
   border-radius: var(--wa-border-radius-pill);
   background: var(--wa-color-brand-fill-normal);
-  color: var(--wa-color-brand-on-normal);
   opacity: 0;
   place-items: center;
   transition: opacity 120ms ease;

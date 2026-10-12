@@ -50,7 +50,10 @@ export function TicketBoardColumn({
             aria-label={`Select all ${title} tickets`}
           >
             <span class="ticket-board-column__title">{title}</span>
-            <span class="ticket-board-column__count" title={countPartial ? `At least ${totalCount} tickets` : undefined}>
+            <span
+              class="ticket-board-column__count"
+              title={countPartial ? `At least ${totalCount} tickets` : undefined}
+            >
               <Badge size="compact" label={`${countPartial ? 'At least ' : ''}${totalCount} tickets`}>
                 {totalCount}
               </Badge>

@@ -128,7 +128,9 @@ export function AiToolSettings({
             isDefault={tool.id === active.id}
           />
         ))}
-        <Text tone="quiet" role="status">{message}</Text>
+        <Text tone="quiet" role="status">
+          {message}
+        </Text>
       </List>
     </section>
   );

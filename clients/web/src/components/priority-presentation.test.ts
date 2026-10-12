@@ -7,7 +7,10 @@ import { getPriorityPresentation } from './ticket-row';
 describe('shared priority presentation (HS2-8MT5KG)', () => {
   it('orders priorities from most to least urgent with Lucide icons and app color tokens', () => {
     expect(TICKET_PRIORITIES.map((priority) => priority.value)).toEqual(['urgent', 'high', 'default', 'low']);
-    expect(priorityPresentation('urgent')).toMatchObject({ iconName: 'chevrons-up', colorToken: '--hs-priority-urgent' });
+    expect(priorityPresentation('urgent')).toMatchObject({
+      iconName: 'chevrons-up',
+      colorToken: '--hs-priority-urgent',
+    });
     expect(priorityPresentation('low')).toMatchObject({ label: 'Low', iconName: 'chevron-down' });
     expect(priorityPresentation('bogus' as never).value).toBe('default');
   });

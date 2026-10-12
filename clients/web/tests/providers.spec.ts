@@ -8983,9 +8983,7 @@ test('responds to feedback choices embedded in the ticket description', async ({
     details = reader.locator('[data-details-feedback="true"]'),
     choices = details.getByRole('group', { name: 'Feedback choices' }).locator('.note-card__choice');
   await expect(details.locator('[data-details-feedback-header]')).toContainText('Feedback needed');
-  await expect(
-    details.locator('[data-details-feedback-header] [data-lucide="circle-alert"]'),
-  ).toBeVisible();
+  await expect(details.locator('[data-details-feedback-header] [data-lucide="circle-alert"]')).toBeVisible();
   await expect(readerSurface).toHaveCSS('background-color', 'color(srgb 1 0.982 0.91)');
   await expect(choices).toHaveCount(2);
   await expect(details.getByRole('textbox', { name: 'Feedback response' })).toBeFocused();

@@ -274,7 +274,9 @@ describe('ProjectSidebar component slice', () => {
     expect(css).not.toContain('--kui-color-brand-border-quiet');
     expect(css).not.toMatch(/command-navigation__command:not\([^)]*\) \{[^}]*\n {2}background:/);
     // The app wrapper, not the Kerf ListItem root, carries the command class (KUI-L022).
-    expect(markup).toContain('<div class="command-navigation__command" data-command-palette="blue" style="--command-color:var(--hs-command-blue)"><button');
+    expect(markup).toContain(
+      '<div class="command-navigation__command" data-command-palette="blue" style="--command-color:var(--hs-command-blue)"><button',
+    );
     expect(markup).not.toContain('kui-list-item command-navigation__command');
   });
 

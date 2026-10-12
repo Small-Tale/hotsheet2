@@ -8346,9 +8346,10 @@ test('shows the source mark after the type on cards and beside the inspector num
   await row.screenshot({ path: 'target/visual-captures/hs2-myw20v-multiple-list-phone.png' });
   await page.goto('/ux-demo?component=ticket-inspector');
   const inspector = page.locator('[data-component="ticket-inspector"]');
-  await expect(
-    inspector.locator('[data-source-identity] [data-component="ticket-source-icon"]'),
-  ).toHaveAttribute('data-provider', 'git');
+  await expect(inspector.locator('[data-source-identity] [data-component="ticket-source-icon"]')).toHaveAttribute(
+    'data-provider',
+    'git',
+  );
 });
 
 test('ticket source connection rows hover flush with their card edge (HS2-KZP94T)', async ({ page }) => {

@@ -178,7 +178,9 @@ describe('QuickTicketComposer', () => {
         source: 'github-b',
       }),
     );
-    expect(multiple).toMatch(/class="kui-row quick-ticket-composer__source"[\s\S]*Creating in[\s\S]*name="new-ticket-source"/);
+    expect(multiple).toMatch(
+      /class="kui-row quick-ticket-composer__source"[\s\S]*Creating in[\s\S]*name="new-ticket-source"/,
+    );
     expect(multiple).toContain('aria-label="Ticket source"');
     expect(multiple).toMatch(/<wa-select[^>]*name="new-ticket-source"[^>]*value="github-b"/);
     expect(multiple).toContain('HS2 git tickets');

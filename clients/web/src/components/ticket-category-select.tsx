@@ -17,7 +17,9 @@ export interface TicketCategorySelectProps {
 }
 
 /** Built-in categories have a `--hs-category-*` token; read the set from the shared presentation (HS2-86A5CR). */
-const BUILT_IN_CATEGORY_TOKENS = new Set(DEFAULT_TICKET_CATEGORIES.map((category) => category.value.replaceAll('_', '-')));
+const BUILT_IN_CATEGORY_TOKENS = new Set(
+  DEFAULT_TICKET_CATEGORIES.map((category) => category.value.replaceAll('_', '-')),
+);
 
 /** The theme token that colors a category's choice icon; a custom category uses the fallback token. */
 export function categoryColorToken(category: string): `--hs-category-${string}` {

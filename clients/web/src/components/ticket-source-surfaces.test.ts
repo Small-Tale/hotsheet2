@@ -163,7 +163,9 @@ describe('ticket source surfaces', () => {
           ],
         }),
       );
-    expect(settings(true)).toContain('<span data-state="disabled"><span class="kui-badge" data-component="badge" data-tone="neutral" data-appearance="quiet" data-shape="pill" data-size="compact">Disabled</span></span>');
+    expect(settings(true)).toContain(
+      '<span data-state="disabled"><span class="kui-badge" data-component="badge" data-tone="neutral" data-appearance="quiet" data-shape="pill" data-size="compact">Disabled</span></span>',
+    );
     expect(settings(false)).not.toContain('data-state="disabled"');
   });
 
@@ -579,7 +581,9 @@ describe('ticket source surfaces', () => {
     expect(markup).toContain('data-component="accounts-settings"');
     expect(markup).toContain('data-account-id="github-app-01work"');
     expect(markup).toContain('acme/repo · Used by procurement, domotion');
-    expect(markup).toContain('<span data-state="disabled"><span class="kui-badge" data-component="badge" data-tone="neutral" data-appearance="quiet" data-shape="pill" data-size="compact">Disabled</span></span>');
+    expect(markup).toContain(
+      '<span data-state="disabled"><span class="kui-badge" data-component="badge" data-tone="neutral" data-appearance="quiet" data-shape="pill" data-size="compact">Disabled</span></span>',
+    );
     expect(markup).toContain('Signed in with Hot Sheet');
     expect(markup).toContain('dev@acme.test · Keychain credential jira-token');
     expect(markup).toContain('OPS · Not used by any project');

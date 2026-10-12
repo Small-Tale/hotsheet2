@@ -21,8 +21,8 @@ describe('Kerf application UI profile', () => {
       readFileSync(new URL('../.kerf-ui-profile.json', import.meta.url), 'utf8'),
     ) as KerfProfile;
     expect(profile.scope).toBe('workspace');
-    expect(profile.exceptions).toHaveLength(63);
-    for (const exception of profile.exceptions.slice(0, 19)) {
+    expect(profile.exceptions).toHaveLength(55);
+    for (const exception of profile.exceptions.slice(0, 17)) {
       expect(exception.id).toMatch(/^web-awesome-/);
       expect(exception.rules).toEqual(['KUI-L011']);
       expect(exception.target).toMatch(/^src\/(?:components|ux-demo)\/[a-z0-9-]+\.css$/);
@@ -32,7 +32,7 @@ describe('Kerf application UI profile', () => {
         expect(exception.rationale).toContain('KF-E2J9ND; adoption HS2-FXAAA6');
       } else expect(exception.rationale).toContain('Web Awesome shadow parts');
     }
-    expect(profile.exceptions.slice(19, 20)).toEqual([
+    expect(profile.exceptions.slice(17, 18)).toEqual([
       {
         id: 'mobile-side-panel-safe-area-composition',
         rules: ['KUI-L004'],
@@ -44,7 +44,7 @@ describe('Kerf application UI profile', () => {
     // HS2-M6B8AD reviewed every remaining nested-inset and dynamic-class review finding site by
     // site; each exception is exact (one file, one rule) and its rationale names the classes or
     // expressions it covers, so a new finding elsewhere still fails the gate.
-    const reviewed = profile.exceptions.slice(20);
+    const reviewed = profile.exceptions.slice(18);
     expect(reviewed.length).toBeGreaterThan(0);
     const ids = new Set<string>(),
       targets = new Set<string>(),

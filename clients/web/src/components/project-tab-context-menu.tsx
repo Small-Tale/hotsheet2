@@ -4,7 +4,6 @@ import { ArrowLeft, ArrowRight, CircleX, type IconNode, Pencil, Trash2, X } from
 
 import { ContextMenuAnchor } from './context-menu-anchor';
 
-
 export type AppTabKind = 'project' | 'terminal' | 'ai-chat';
 export function AppTabContextMenu({
   kind,

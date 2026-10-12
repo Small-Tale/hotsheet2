@@ -94,7 +94,12 @@ export function ShellBannerDemo() {
         actionPlacement="below"
         action={<button type="button">Dismiss</button>}
       />
-      <ShellBanner component="shell-banner-demo" tone="warning" title="Warning strip" detail="Warning tone, no action." />
+      <ShellBanner
+        component="shell-banner-demo"
+        tone="warning"
+        title="Warning strip"
+        detail="Warning tone, no action."
+      />
     </section>
   );
 }

@@ -49,12 +49,7 @@ const SHEET_WIDTH = remify(672);
 export function TerminalEditMenu({ state }: { state?: TerminalEditMenuState }) {
   if (!state) return null;
   return (
-    <ContextMenuAnchor
-      x={state.x}
-      y={state.y}
-      component="terminal-edit-menu"
-      label="Terminal edit actions"
-    >
+    <ContextMenuAnchor x={state.x} y={state.y} component="terminal-edit-menu" label="Terminal edit actions">
       <PopupMenu
         context
         label="Terminal edit actions"

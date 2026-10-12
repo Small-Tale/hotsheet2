@@ -156,12 +156,12 @@ describe('WorkspaceHeader', () => {
     expect(markup).not.toContain('aria-label="Search syntax"');
     const enabledWithHelp = String(WorkspaceControls({ mode: 'list', searchOpen: true, searchHelpOpen: true }));
     expect(enabledWithHelp).toContain('aria-label="Search syntax"');
-    expect(enabledWithHelp).toContain('<dt>Tags</dt>');
-    expect(enabledWithHelp).toContain('<dt>Content</dt>');
-    expect(enabledWithHelp).toContain('<dt>Workflow</dt>');
+    expect(enabledWithHelp).toContain('data-syntax-group="Tags"');
+    expect(enabledWithHelp).toContain('data-syntax-group="Content"');
+    expect(enabledWithHelp).toContain('data-syntax-group="Workflow"');
     expect(enabledWithHelp).toContain('<code>is:closed</code>');
     expect(enabledWithHelp).toContain('<code>is:duplicate</code>');
-    expect(enabledWithHelp).toContain('<dt>Dates</dt>');
+    expect(enabledWithHelp).toContain('data-syntax-group="Dates"');
     expect(enabledWithHelp).toContain('<strong>Combine filters</strong>');
     expect(enabledWithHelp).toContain('local, relative, and ISO 8601 dates work');
     expect(enabledWithHelp).toContain('updated-after:2026-09-01T11:05');

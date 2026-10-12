@@ -7,7 +7,13 @@ import { ShellBanner } from './shell-banner';
 describe('ShellBanner (HS2-BF8C76)', () => {
   it('composes a stacked status StateBanner inside a toned full-width strip', () => {
     const markup = String(
-      ShellBanner({ component: 'example-banner', tone: 'success', title: 'Done', detail: 'All set.', actionPlacement: 'below' }),
+      ShellBanner({
+        component: 'example-banner',
+        tone: 'success',
+        title: 'Done',
+        detail: 'All set.',
+        actionPlacement: 'below',
+      }),
     );
     expect(markup).toContain('class="shell-banner" data-component="example-banner" data-tone="success"');
     expect(markup).toContain('data-component="state-banner"');

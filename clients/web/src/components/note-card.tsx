@@ -103,7 +103,7 @@ function FeedbackBlocks({
             >
               <MarkdownPreview source={segment.markdown} attachmentContext={attachmentContext} />
               <span class="note-card__feedback-add" aria-hidden="true">
-                <LucideIcon size="xs" icon={Plus} name="plus" />
+                <LucideIcon size="xs" icon={Plus} name="plus" color={uiColor('brand-on-normal')} />
               </span>
             </div>
           )}
