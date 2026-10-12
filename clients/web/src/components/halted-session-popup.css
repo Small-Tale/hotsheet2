@@ -124,6 +124,8 @@
 .halted-session-popup__option small {
   color: var(--wa-color-neutral-on-quiet);
 }
+/* The Other answer stays a native text input so its accessible name and FormData value come straight
+   from the element the question form already reads. */
 .halted-session-popup__free-text {
   width: 100%;
   min-width: 0;
@@ -138,7 +140,7 @@
   margin: 0;
   color: var(--wa-color-danger-on-quiet);
 }
-.halted-session-popup__questions > button {
+.halted-session-popup__questions > wa-button {
   justify-self: end;
 }
 .halted-session-popup__footer {
@@ -153,49 +155,6 @@
   flex-wrap: wrap;
   align-items: center;
   gap: remify(16px);
-}
-.halted-session-popup button {
-  min-height: remify(32px);
-  padding: 0 remify(12.8px);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(10.4px);
-  color: var(--wa-color-neutral-on-normal);
-  background: var(--wa-color-surface-default);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--wa-font-size-xs);
-  font-weight: 600;
-}
-.halted-session-popup button:focus-visible {
-  outline: 2px solid var(--wa-color-text-link);
-  outline-offset: 2px;
-}
-.halted-session-popup__quiet-actions button {
-  padding: 0;
-  border: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  background: transparent;
-}
-.halted-session-popup__quiet-actions button:hover {
-  color: var(--wa-color-neutral-on-normal);
-  text-decoration: underline;
-}
-.halted-session-popup .halted-session-popup__primary {
-  flex: none;
-  border-color: var(--wa-color-brand-border-loud);
-  color: var(--wa-color-neutral-on-loud);
-  background: var(--wa-color-brand-fill-loud);
-}
-.halted-session-popup .halted-session-popup__primary:hover {
-  background: var(--wa-color-brand-on-quiet);
-}
-.halted-session-popup[data-kind='question'] .halted-session-popup__footer .halted-session-popup__primary {
-  border-color: var(--wa-color-neutral-border-normal);
-  color: var(--wa-color-neutral-on-normal);
-  background: var(--wa-color-surface-default);
-}
-.halted-session-popup[data-kind='question'] .halted-session-popup__footer .halted-session-popup__primary:hover {
-  background: var(--wa-color-neutral-fill-quiet);
 }
 @media (max-width: remify(672px)) {
   .halted-session-popup {

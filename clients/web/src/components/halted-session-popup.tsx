@@ -1,3 +1,4 @@
+import '@awesome.me/webawesome/dist/components/button/button.js';
 import './halted-session-popup.css';
 
 import { foregroundColorVar } from '@kerfjs/ui/css-values';
@@ -86,9 +87,15 @@ export function HaltedSessionPopup({ episode }: { episode: HaltedSessionEpisode 
               </fieldset>
             ))}
             <p class="halted-session-popup__answer-error" role="alert" hidden />
-            <button class="halted-session-popup__primary" type="submit">
+            <wa-button
+              class="halted-session-popup__send"
+              variant="brand"
+              appearance="accent"
+              size="small"
+              type="submit"
+            >
               Send answer
-            </button>
+            </wa-button>
           </form>
         ) : (
           <pre class="halted-session-popup__details">
@@ -97,28 +104,33 @@ export function HaltedSessionPopup({ episode }: { episode: HaltedSessionEpisode 
         )}
         <footer class="halted-session-popup__footer">
           <div class="halted-session-popup__quiet-actions">
-            <button
-              type="button"
+            <wa-button
+              appearance="plain"
+              size="small"
               {...NOTIFICATIONS_AND_LINKS_ACTIONS.dismissHaltedSession.attrs}
               data-halt-key={episode.key}
               {...{ [TOP_LAYER_DISMISS_ATTRIBUTE]: '' }}
             >
               Dismiss
-            </button>
-            <button type="button" {...NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.attrs}>
+            </wa-button>
+            <wa-button appearance="plain" size="small" {...NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.attrs}>
               Pause notifications
-            </button>
+            </wa-button>
           </div>
-          <button
+          <wa-button
             class="halted-session-popup__primary"
-            type="button"
+            size="small"
+            // A question is answered in the popup's form, so returning to the terminal is secondary there.
+            {...(episode.kind === 'question' && episode.question?.questions?.length
+              ? { appearance: 'outlined' }
+              : { variant: 'brand', appearance: 'accent' })}
             {...(episode.kind === 'question' && episode.question?.questions?.length
               ? NOTIFICATIONS_AND_LINKS_ACTIONS.returnTerminalQuestion.attrs
               : NOTIFICATIONS_AND_LINKS_ACTIONS.openHaltedSession.attrs)}
             data-halt-key={episode.key}
           >
             {episode.kind === 'question' && episode.question?.questions?.length ? 'Answer in terminal' : 'Open session'}
-          </button>
+          </wa-button>
         </footer>
       </article>
     </dialog>
