@@ -18401,6 +18401,7 @@ test('keeps failed gallery markup visible until retry succeeds (HS2-VXCSMZ) @ci-
   await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(1);
   await gallery.getByRole('button', { name: 'Finish markup' }).click();
   await expect(gallery.getByRole('alert')).toContainText('Markup was not saved');
+  await page.screenshot({ path: 'target/visual-captures/hs2-qz2eg3-save-banner-failed.png' });
   await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(1);
   await gallery.getByRole('button', { name: 'Retry save' }).click();
   await expect(gallery.getByRole('alert')).toHaveCount(0);

@@ -1,3 +1,4 @@
+import '@awesome.me/webawesome/dist/components/button/button.js';
 import './attachment-gallery.css';
 
 import { px } from '@kerfjs/ui/css-values';
@@ -5,6 +6,7 @@ import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
+import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -955,20 +957,34 @@ export function AttachmentGallery({
         </div>
       </footer>
       {saveState !== 'idle' && (
-        <div class="attachment-gallery__save-banner" role={saveState === 'failed' ? 'alert' : 'status'}>
-          {saveState === 'saving' ? (
-            'Saving markup…'
-          ) : (
-            <>
-              <span>Markup was not saved. Retry or discard your changes.</span>
-              <button type="button" {...ATTACHMENTS_AND_GALLERY_ACTIONS.retryGallerySave.attrs}>
-                Retry save
-              </button>
-              <button type="button" {...ATTACHMENTS_AND_GALLERY_ACTIONS.discardGallerySave.attrs}>
-                Discard changes
-              </button>
-            </>
-          )}
+        // Kerf StateBanner owns the save-state chrome; the app wrapper only floats it over the media
+        // (HS2-QZ2EG3).
+        <div class="attachment-gallery__save-banner">
+          {saveState === 'saving'
+            ? StateBanner({ tone: 'neutral', urgency: 'status', title: 'Saving markup…' })
+            : StateBanner({
+                tone: 'danger',
+                urgency: 'alert',
+                title: 'Markup was not saved. Retry or discard your changes.',
+                action: (
+                  <Row gap="xs" wrap>
+                    <wa-button
+                      size="small"
+                      variant="danger"
+                      {...ATTACHMENTS_AND_GALLERY_ACTIONS.retryGallerySave.attrs}
+                    >
+                      Retry save
+                    </wa-button>
+                    <wa-button
+                      size="small"
+                      appearance="outlined"
+                      {...ATTACHMENTS_AND_GALLERY_ACTIONS.discardGallerySave.attrs}
+                    >
+                      Discard changes
+                    </wa-button>
+                  </Row>
+                ),
+              })}
         </div>
       )}
       {overlay}
