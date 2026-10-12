@@ -19,7 +19,6 @@ export const DEMO_ACTIONS = {
   clearNewTicketAttachments: attr('data-action', 'clear-new-ticket-attachments'),
   closeAttachmentGallery: attr('data-action', 'close-attachment-gallery'),
   closeCommandEditor: attr('data-action', 'close-command-editor'),
-  closeConversation: attr('data-action', 'close-conversation'),
   closeProjectTab: attr('data-action', 'close-project-tab'),
   createNoteForm: attr('data-action', 'create-note-form'),
   createTicketForm: attr('data-action', 'create-ticket-form'),

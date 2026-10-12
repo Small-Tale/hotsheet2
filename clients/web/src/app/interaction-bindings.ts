@@ -26,10 +26,7 @@ type InteractionDependencies = Parameters<typeof wireProjectLifecycleInteraction
   Parameters<typeof wireShellAndGlobalInteractions>[0];
 
 type OwnedInteractionState =
-  | 'commandLongPressFired'
-  | 'commandLongPressTimer'
-  | 'draggedGroupedAttachmentId'
-  | 'draggedTickets';
+  'commandLongPressFired' | 'commandLongPressTimer' | 'draggedGroupedAttachmentId' | 'draggedTickets';
 
 /** Live application dependencies consumed by the interaction registration groups. */
 export type InteractionBindingsPort = Omit<InteractionDependencies, OwnedInteractionState>;

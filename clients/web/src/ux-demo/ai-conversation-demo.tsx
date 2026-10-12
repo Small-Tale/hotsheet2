@@ -1,11 +1,12 @@
 import { Select } from '@kerfjs/ui/select';
-import { delegate, delegateCapture, signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { type ConversationActivity, type ConversationMessage, conversationUsage } from '../ai-conversation';
 import { AIConversation } from '../components/ai-conversation';
+import { wireAiConversation } from '../components/ai-conversation-interactions';
 import type { PermissionItem } from '../permission-notifications';
-import { DEMO_ACTIONS, DEMO_COMPONENTS, DEMO_FIELDS } from './demo-actions';
+import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
 import { sidebarEvent } from './project-sidebar-demo';
 import { syncSettingsControls } from './settings-controls';
@@ -255,11 +256,6 @@ function wireAiConversationDemo(root: HTMLElement): () => void {
     }),
   );
   demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.saveConversation.selector, () => {
-      aiConversationSaveCount.value++;
-    }),
-  );
-  demoListeners.add(
     delegate(root, 'change', '[data-settings="ai-conversation"] [name="scenario"]', (_event, target) => {
       aiConversationScenario.value = (target as FormControl).value as typeof aiConversationScenario.value;
       openAIConversationDemo(root);
@@ -270,47 +266,47 @@ function wireAiConversationDemo(root: HTMLElement): () => void {
       openAIConversationDemo(root);
     }),
   );
+  // The production AIConversation handlers, driving the fixture scenario (HS2-RWY78R).
   demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.closeConversation.selector, () => {
-      root.querySelector<HTMLElement & { hide?(): void }>('[data-component="ai-conversation"]')?.hide?.();
-      aiConversationDemoOpen.value = false;
-    }),
-  );
-  demoListeners.add(
-    delegateCapture(root, 'wa-hide', DEMO_COMPONENTS.aiConversation.selector, () => {
-      aiConversationDemoOpen.value = false;
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'input', DEMO_FIELDS.conversationDraft.selector, (_event, target) => {
-      aiConversationDraft.value = (target as HTMLTextAreaElement).value;
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'submit', DEMO_ACTIONS.sendConversationTurn.selector, (event) => {
-      event.preventDefault();
-      aiConversationScenario.value = 'streaming';
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.stopConversation.selector, () => {
-      aiConversationScenario.value = 'interrupted';
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.selectConversationProvider.selector, (_event, target) => {
-      const id = target.closest<HTMLElement>('[data-value]')?.dataset.value;
-      if (id) {
+    wireAiConversation(root, {
+      onHidden: () => {
+        aiConversationDemoOpen.value = false;
+      },
+      save: () => {
+        aiConversationSaveCount.value++;
+      },
+      pickMessage: (_connectionId, messageId) => {
+        sidebarEvent.value = `Picked conversation message ${messageId}.`;
+      },
+      setDraft: (value) => {
+        aiConversationDraft.value = value;
+      },
+      send: () => {
+        aiConversationScenario.value = 'streaming';
+      },
+      stop: () => {
+        aiConversationScenario.value = 'interrupted';
+      },
+      selectProvider: (id) => {
+        if (!id) return;
         aiConversationProvider.value = id;
         sidebarEvent.value = `Switched conversation provider to ${aiConversationProviderLabel(id)}.`;
-      }
+      },
+      selectModel: (model) => {
+        sidebarEvent.value = `Conversation model set to ${model}.`;
+      },
+      selectEffort: (effort) => {
+        sidebarEvent.value = `Conversation effort set to ${effort}.`;
+      },
+      openManualModel: () => {
+        sidebarEvent.value = 'Manual conversation model entry requested.';
+      },
     }),
   );
   return () => {
     demoListeners.dispose();
   };
 }
-
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {

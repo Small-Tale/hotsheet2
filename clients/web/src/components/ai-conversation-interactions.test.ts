@@ -1,0 +1,78 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { wireAiConversation } from './ai-conversation-interactions';
+
+interface Registration {
+  event: string;
+  selector: string;
+  handle: (event: Event, target: Element) => unknown;
+}
+const registrations = vi.hoisted(() => [] as Registration[]);
+vi.mock('kerfjs', async (original) => {
+  const register = (_root: unknown, event: string, selector: string, handle: Registration['handle']) => {
+    registrations.push({ event, selector, handle });
+    return () => undefined;
+  };
+  return { ...(await original<typeof import('kerfjs')>()), delegate: register, delegateCapture: register };
+});
+const handler = (event: string, selector: string) =>
+  registrations.find((item) => item.event === event && item.selector === selector)!.handle;
+const bindings = () => ({
+  onHidden: vi.fn(),
+  save: vi.fn(),
+  pickMessage: vi.fn(),
+  setDraft: vi.fn(),
+  send: vi.fn(),
+  stop: vi.fn(),
+  selectProvider: vi.fn(),
+  selectModel: vi.fn(),
+  selectEffort: vi.fn(),
+  openManualModel: vi.fn(),
+});
+
+beforeEach(() => {
+  registrations.length = 0;
+  vi.stubGlobal('window', { getSelection: () => ({ toString: () => '' }) });
+});
+afterEach(() => vi.unstubAllGlobals());
+
+describe('wireAiConversation (HS2-RWY78R)', () => {
+  it('submits the composer on Enter but not Shift+Enter or during IME composition', () => {
+    wireAiConversation({} as HTMLElement, bindings());
+    const requestSubmit = vi.fn(),
+      field = { closest: () => ({ requestSubmit }) } as unknown as Element,
+      keydown = handler('keydown', '[name="conversation-draft"]'),
+      key = (init: Record<string, unknown>) => ({ key: 'Enter', preventDefault: vi.fn(), ...init }) as unknown as Event;
+    keydown(key({ shiftKey: true }), field);
+    keydown(key({ isComposing: true }), field);
+    keydown(key({ key: 'a' }), field);
+    expect(requestSubmit).not.toHaveBeenCalled();
+    keydown(key({}), field);
+    expect(requestSubmit).toHaveBeenCalledOnce();
+  });
+
+  it('picks a message unless the click landed on a nested control', () => {
+    const state = bindings();
+    wireAiConversation({} as HTMLElement, state);
+    const pick = handler('click', '[data-action="pick-conversation-message"]'),
+      message = {
+        dataset: { messageId: 'm1' },
+        closest: () => ({ dataset: { selectionId: 'c1' } }),
+      } as unknown as Element;
+    pick({ target: { closest: () => ({}) } } as unknown as Event, message);
+    pick({ target: { closest: () => null } } as unknown as Event, message);
+    expect(state.pickMessage.mock.calls).toEqual([['c1', 'm1']]);
+  });
+
+  it('routes the provider, model, and effort menus with their values', () => {
+    const state = bindings();
+    wireAiConversation({} as HTMLElement, state);
+    const item = (value: string) => ({ dataset: { value } }) as unknown as Element;
+    handler('click', '[data-action="select-conversation-provider"]')(new Event('click'), item('codex'));
+    handler('click', '[data-action="select-conversation-model"]')(new Event('click'), item('gpt-5.6'));
+    handler('click', '[data-action="select-conversation-effort"]')(new Event('click'), item('high'));
+    expect(state.selectProvider).toHaveBeenCalledWith('codex');
+    expect(state.selectModel).toHaveBeenCalledWith('gpt-5.6');
+    expect(state.selectEffort).toHaveBeenCalledWith('high');
+  });
+});

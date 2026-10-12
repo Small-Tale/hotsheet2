@@ -11,7 +11,7 @@ import {
   type ProviderConnection,
 } from '../api';
 import { type CommandDropTarget } from '../command-order';
-import { isConversationSurfaceLifecycleEvent } from '../components/ai-conversation';
+import { wireAiConversation } from '../components/ai-conversation-interactions';
 import { type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { wireCommandSettingsEditor } from '../components/command-settings-editor-interactions';
@@ -22,10 +22,7 @@ import { type SettingsCategory } from '../components/settings-navigation';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
 import { type ConversationExportDraft } from '../conversation-export';
-import {
-  COMMANDS_AND_AI_ACTIONS,
-  COMMANDS_AND_AI_TARGETS,
-} from '../interaction-attrs/commands-and-ai';
+import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { beginInteractionTiming } from '../interaction-performance';
 import { chordFromEvent, saveShortcutOverrides, type ShortcutChord, shortcutDef } from '../keyboard-shortcuts';
@@ -389,22 +386,30 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'wa-hide', COMMANDS_AND_AI_TARGETS.aiConversation.selector, (event, target) => {
-      if (isConversationSurfaceLifecycleEvent(event, target)) conversationOpen.value = false;
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.saveConversation.selector, () => {
-      openConversationExport();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.pickConversationMessage.selector, (event, target) => {
-      if ((event.target as Element).closest('a,button,input,select,textarea') || window.getSelection()?.toString())
-        return;
-      const connectionId = target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId,
-        messageId = data(target).messageId;
-      if (connectionId && messageId) pickConversationMessage(connectionId, messageId);
+    wireAiConversation(document.body, {
+      onHidden: () => {
+        conversationOpen.value = false;
+      },
+      save: openConversationExport,
+      pickMessage: pickConversationMessage,
+      setDraft: (value) => {
+        const id = conversationConnectionId.value;
+        if (id) conversationDrafts.value = { ...conversationDrafts.value, [id]: value };
+      },
+      send: () => {
+        void sendConversationTurn();
+      },
+      stop: () => {
+        void stopConversation();
+      },
+      selectProvider: (id) => {
+        void selectConversationProvider(id);
+      },
+      selectModel: selectConversationModel,
+      selectEffort: selectConversationEffort,
+      openManualModel: () => {
+        openManualModel('conversation');
+      },
     }),
   );
   lifetime.add(
@@ -514,51 +519,6 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
         conversationExportDialog.value = undefined;
       },
     ),
-  );
-  lifetime.add(
-    delegate(document.body, 'input', COMMANDS_AND_AI_TARGETS.conversationDraftField.selector, (_event, target) => {
-      const id = conversationConnectionId.value;
-      if (id) conversationDrafts.value = { ...conversationDrafts.value, [id]: (target as HTMLTextAreaElement).value };
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'keydown', COMMANDS_AND_AI_TARGETS.conversationDraftField.selector, (event, target) => {
-      const keyboard = event as KeyboardEvent;
-      if (keyboard.key !== 'Enter' || keyboard.shiftKey || keyboard.isComposing) return;
-      keyboard.preventDefault();
-      target.closest<HTMLFormElement>('form')?.requestSubmit();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'submit', COMMANDS_AND_AI_ACTIONS.sendConversationTurn.selector, (event) => {
-      event.preventDefault();
-      void sendConversationTurn();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.stopConversation.selector, () => {
-      void stopConversation();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectConversationProvider.selector, (_event, target) => {
-      void selectConversationProvider(data(target).value ?? '');
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectConversationModel.selector, (_event, target) => {
-      selectConversationModel(data(target).value ?? '');
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectConversationEffort.selector, (_event, target) => {
-      selectConversationEffort(data(target).value ?? '');
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.openConversationManualModel.selector, () => {
-      openManualModel('conversation');
-    }),
   );
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.rateAiContent.selector, (_event, target) => {
