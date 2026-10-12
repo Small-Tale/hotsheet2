@@ -331,7 +331,7 @@ describe('TicketInspector', () => {
 
   it('shows the derived completion confidence only on completed or verified tickets (HS2-DWTJ43)', () => {
     const row = (props: Partial<Parameters<typeof TicketInspector>[0]>) =>
-      /<div class="ticket-inspector__confidence"[^>]*>[\s\S]*?<\/div>/u.exec(
+      /<div class="ticket-inspector__confidence"[^>]*>[\s\S]*?Reported by the completing AI<\/span>\s*<\/div>/u.exec(
         String(TicketInspector({ ...base, ...props })),
       )?.[0];
     expect(row({ status: 'completed' })).toBeUndefined();

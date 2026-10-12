@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -63,10 +63,19 @@ describe('NoteCard', () => {
       // The badge sits in the header beside the timestamp, not in the body.
       expect(markup).toMatch(/note-card__header-end">[\s\S]*confidence-badge[\s\S]*<time class="note-card__time">/u);
     }
-    const css = readFileSync(resolve(import.meta.dirname, 'confidence-badge.css'), 'utf8');
-    for (const band of ['verified', 'assumed', 'partial', 'unverified']) {
-      expect(css).toContain(`.confidence-badge[data-band='${band}']`);
+    // Kerf's Badge tints each band through its semantic tone; there is no stylesheet (HS2-MBFKJF).
+    expect(existsSync(resolve(import.meta.dirname, 'confidence-badge.css'))).toBe(false);
+    for (const [value, tone] of [
+      [95, 'success'],
+      [75, 'info'],
+      [50, 'warning'],
+      [10, 'danger'],
+    ] as const) {
+      expect(String(ConfidenceBadge({ value }))).toMatch(
+        new RegExp(`data-component="badge" data-tone="${tone}"[^>]*data-size="compact"`, 'u'),
+      );
     }
+    expect(String(ConfidenceBadge({ value: 82, appearance: 'labeled' }))).toContain('data-size="default"');
     expect(String(ConfidenceBadge({ value: 82, appearance: 'labeled' }))).toContain('Confidence 82%');
   });
 
