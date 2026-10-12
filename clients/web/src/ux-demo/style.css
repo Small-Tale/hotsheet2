@@ -151,10 +151,11 @@ body[data-resizing-project-sidebar='true'] {
 .planned-demo p {
   max-width: remify(512px);
 }
+/* The form is the content of Kerf's Catalog settings pane, which leaves its content inset to the app. */
 .settings-form {
   display: grid;
   gap: remify(16px);
-  min-width: min(remify(368px), 80vw);
+  padding: 0 remify(16px) remify(16px);
 }
 .component-stage--row {
   justify-items: stretch;
