@@ -20484,7 +20484,7 @@ test('searches only the current view before updating scoped sidebar counts', asy
   const searchBadgeGeometry = await searchBadge.evaluate((node) => {
     const badge = node.getBoundingClientRect(),
       icon = node.querySelector('[data-lucide="search"]')!.getBoundingClientRect(),
-      number = node.querySelector('.view-navigation__search-count > span')!.getBoundingClientRect();
+      number = node.querySelector('[data-component="row"] > span')!.getBoundingClientRect();
     return {
       badgeLeft: badge.left,
       badgeRight: badge.right,

@@ -8,6 +8,7 @@ import { ListItem } from '@kerfjs/ui/list-item';
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
+import { Row } from '@kerfjs/ui/row';
 import {
   Archive,
   Clock3,
@@ -22,7 +23,7 @@ import {
   Trash2,
 } from 'lucide';
 
-import { contextPopupMenuAnchor } from '../context-menu-position';
+import { ContextMenuAnchor } from './context-menu-anchor';
 
 export interface ViewNavigationItem {
   id: string;
@@ -91,10 +92,10 @@ export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
                           }
                         >
                           {item.searchCount ? (
-                            <span class="view-navigation__search-count">
+                            <Row gap="2xs" vAlign="middle">
                               <LucideIcon size={9.92} icon={Search} name="search" />
                               <span>{String(item.count)}</span>
-                            </span>
+                            </Row>
                           ) : (
                             String(item.count)
                           )}
@@ -159,14 +160,7 @@ export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
 
 export function SavedViewContextMenu({ id, label, x, y }: SavedViewContextMenuState) {
   return (
-    <div
-      class="saved-view-context-menu"
-      data-component="saved-view-context-menu"
-      role="menu"
-      aria-label={`${label} view actions`}
-      data-saved-view-id={id}
-      {...contextPopupMenuAnchor(x, y)}
-    >
+    <ContextMenuAnchor x={x} y={y} component="saved-view-context-menu" label={`${label} view actions`}>
       <PopupMenu
         context
         label={`${label} view actions`}
@@ -187,6 +181,6 @@ export function SavedViewContextMenu({ id, label, x, y }: SavedViewContextMenuSt
           },
         ]}
       />
-    </div>
+    </ContextMenuAnchor>
   );
 }

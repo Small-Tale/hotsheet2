@@ -192,7 +192,7 @@ describe('ProjectSidebar component slice', () => {
     expect(searching).toContain('data-component="loading-spinner"');
     expect(searching).toContain('aria-label="3 search results"');
     expect(searching).toContain('data-lucide="search"');
-    expect(searching).toMatch(/aria-label="3 search results"[^>]*>\s*<span class="view-navigation__search-count">/);
+    expect(searching).toMatch(/aria-label="3 search results"[^>]*>\s*<div class="kui-row" data-component="row"/);
     const custom = String(
       ViewNavigation({
         selectedId: 'custom:docs',
