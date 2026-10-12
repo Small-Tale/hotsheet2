@@ -230,7 +230,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/lucide-icon-picker.tsx # Reusable searchable icon picker (popular defaults + lazy full-catalog search); host-controlled query/selection via delegation (HS2-5VSNV3)
     src/components/provider-model-effort-menu.tsx # Reusable Provider/Model/Effort/Other wa-dropdown submenu group shared by the Drive options popup and the in-conversation model/effort popup; host-controlled via delegated data-action clicks (HS2-59DWHN)
     scripts/production-bundle-policy.mjs # production entry-asset/request budget used by build verification
-    scripts/sync-component-catalog-extension.mjs # Deterministically derives/checks the app-owned Kerf consumer catalog extension from the implemented UX inventory
+    kerf.components.json     # Kerf author metadata; `npm run catalog:generate|check` (kerf-component-catalog) generates ai/component-catalog-extension.json and ai/component-composition.generated.json
     scripts/repository-env.mjs # withoutGitRepositoryEnv(env): strips the same repo-locating GIT_* list as hotsheet_ticketing::git for test helpers that spawn Hot Sheet binaries or git (real-ticket-server.ts, scale-stress.mjs; HS2-RRD417); tested by scripts/repository-env.test.mjs
     scripts/vitest-build-binaries.mjs # vitest globalSetup: builds the real hotsheet-cli/-server/-migrate once before any worker runs, so no test file relinks them mid-suite (HS2-A0M8CM)
     scripts/playwright-workers.mjs # Load-aware local Playwright worker count used by playwright.config.ts (HS2-MHPHZB); tested by scripts/playwright-workers.test.mjs

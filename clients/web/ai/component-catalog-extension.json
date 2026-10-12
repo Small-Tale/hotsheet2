@@ -1,2037 +1,12 @@
 {
-  "$schema": "../node_modules/@kerfjs/ui/ai/component-catalog-extension.schema.json",
+  "$schema": "https://raw.githubusercontent.com/brianwestphal/kerf/main/ui/ai/component-catalog-extension.schema.json",
   "schemaVersion": 1,
   "package": "hotsheet-web",
   "description": "Hot Sheet application-owned visual components and compositions used with Kerf UI.",
   "entries": [
     {
-      "id": "app-shell",
-      "name": "AppShell",
-      "source": "src/components/app-shell.tsx",
-      "kind": "composition",
-      "purpose": "Responsive application regions with a stationary clipped shell, independent child scrolling, and a main-column-relative terminal restore action.",
-      "useWhen": [
-        "Hot Sheet needs responsive application regions with a stationary clipped shell, independent child scrolling, and a main-column-relative terminal restore action."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific AppShell behavior."
-      ],
-      "publicClasses": [
-        "app-shell"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "parent",
-        "border": "child",
-        "padding": "child",
-        "notes": [
-          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
-        ]
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "app-loading-indicator",
-      "name": "AppLoadingIndicator",
-      "source": "src/components/app-loading-indicator.tsx",
-      "kind": "component",
-      "purpose": "Fixed app-level project loading and sequential ticket-update progress.",
-      "useWhen": [
-        "Hot Sheet needs fixed app-level project loading and sequential ticket-update progress."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific AppLoadingIndicator behavior."
-      ],
-      "publicClasses": [
-        "app-loading-indicator"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "project-sidebar",
-      "name": "ProjectSidebar",
-      "source": "src/components/project-sidebar.tsx",
-      "kind": "composition",
-      "purpose": "Project summary, repository state, views, commands, and drive controls.",
-      "useWhen": [
-        "Hot Sheet needs project summary, repository state, views, commands, and drive controls."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ProjectSidebar behavior."
-      ],
-      "publicClasses": [
-        "project-sidebar"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "parent",
-        "border": "child",
-        "padding": "child",
-        "notes": [
-          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
-        ]
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "project-summary",
-      "name": "ProjectSummary",
-      "source": "src/components/project-summary.tsx",
-      "kind": "component",
-      "purpose": "Seven-day completion history and current ticket counts.",
-      "useWhen": [
-        "Hot Sheet needs seven-day completion history and current ticket counts."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ProjectSummary behavior."
-      ],
-      "publicClasses": [
-        "project-summary"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "self",
-        "padding": "self"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "repository-summary",
-      "name": "RepositorySummary",
-      "source": "src/components/repository-summary.tsx",
-      "kind": "component",
-      "purpose": "Branch and working-copy status action with Kerf metrics.",
-      "useWhen": [
-        "Hot Sheet needs branch and working-copy status action with Kerf metrics."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific RepositorySummary behavior."
-      ],
-      "publicClasses": [
-        "repository-summary"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "self",
-        "padding": "self"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "repository-status-popover",
-      "name": "RepositoryStatusPopover",
-      "source": "src/components/repository-status-popover.tsx",
-      "kind": "composition",
-      "purpose": "Master/detail repository files, commits, and host actions.",
-      "useWhen": [
-        "Hot Sheet needs master/detail repository files, commits, and host actions."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific RepositoryStatusPopover behavior."
-      ],
-      "publicClasses": [
-        "repository-status-popover"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "parent",
-        "border": "child",
-        "padding": "child",
-        "notes": [
-          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
-        ]
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "change-evidence-dialog",
-      "name": "ChangeEvidenceDialog",
-      "source": "src/components/repository-status-popover.tsx",
-      "kind": "component",
-      "purpose": "Ticket commit-range files grouped by evidence type.",
-      "useWhen": [
-        "Hot Sheet needs ticket commit-range files grouped by evidence type."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ChangeEvidenceDialog behavior."
-      ],
-      "publicClasses": [
-        "change-evidence-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "view-navigation",
-      "name": "ViewNavigation",
-      "source": "src/components/view-navigation.tsx",
-      "kind": "component",
-      "purpose": "Selectable built-in and custom ticket views with paired saved-view actions.",
-      "useWhen": [
-        "Hot Sheet needs selectable built-in and custom ticket views with paired saved-view actions."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ViewNavigation behavior."
-      ],
-      "publicClasses": [
-        "view-navigation"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "command-navigation",
-      "name": "CommandNavigation",
-      "source": "src/components/command-navigation.tsx",
-      "kind": "component",
-      "purpose": "Grouped colored project command actions arranged by Kerf List.",
-      "useWhen": [
-        "Hot Sheet needs grouped colored project command actions arranged by Kerf List."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific CommandNavigation behavior."
-      ],
-      "publicClasses": [
-        "command-navigation"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "command-settings-editor",
-      "name": "CommandSettingsEditor",
-      "source": "src/components/command-settings-editor.tsx",
-      "kind": "composition",
-      "purpose": "Master-detail editor for custom command buttons, incl. color and icon pickers.",
-      "useWhen": [
-        "Hot Sheet needs master-detail editor for custom command buttons, incl. color and icon pickers."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific CommandSettingsEditor behavior."
-      ],
-      "publicClasses": [
-        "command-settings-editor"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "parent",
-        "border": "child",
-        "padding": "child",
-        "notes": [
-          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
-        ]
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "drive-control",
-      "name": "DriveControl",
-      "source": "src/components/drive-control.tsx",
-      "kind": "component",
-      "purpose": "Split AI workflow action and provider override trigger.",
-      "useWhen": [
-        "Hot Sheet needs split AI workflow action and provider override trigger."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific DriveControl behavior."
-      ],
-      "publicClasses": [
-        "drive-control"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "drive-options-menu",
-      "name": "DriveOptionsMenu",
-      "source": "src/components/drive-options-menu.tsx",
-      "kind": "component",
-      "purpose": "Provider, model, and effort overrides for a driven session.",
-      "useWhen": [
-        "Hot Sheet needs provider, model, and effort overrides for a driven session."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific DriveOptionsMenu behavior."
-      ],
-      "publicClasses": [
-        "drive-options-menu"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "workspace-header",
-      "name": "WorkspaceHeader",
-      "source": "src/components/workspace-header.tsx",
-      "kind": "composition",
-      "purpose": "Project identity, canonical toolbar view segments, native selection actions with none/mixed/all Up Next stars, sorting, settings, search, and a connected notification inbox with live counts and local request decisions.",
-      "useWhen": [
-        "Hot Sheet needs project identity, canonical toolbar view segments, native selection actions with none/mixed/all Up Next stars, sorting, settings, search, and a connected notification inbox with live counts and local request decisions."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific WorkspaceHeader behavior."
-      ],
-      "publicClasses": [
-        "workspace-header"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "parent",
-        "border": "child",
-        "padding": "child",
-        "notes": [
-          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
-        ]
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "project-tab",
-      "name": "ProjectTab",
-      "source": "src/components/project-tab.tsx",
-      "kind": "component",
-      "purpose": "One local or remote project connection tab.",
-      "useWhen": [
-        "Hot Sheet needs one local or remote project connection tab."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ProjectTab behavior."
-      ],
-      "publicClasses": [
-        "project-tab"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "self",
-        "padding": "self"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "project-tabs",
-      "name": "ProjectTabBar",
-      "source": "src/components/project-tab-bar.tsx",
-      "kind": "component",
-      "purpose": "Local and remote project tabs and the phone picker with project attention.",
-      "useWhen": [
-        "Hot Sheet needs local and remote project tabs and the phone picker with project attention."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ProjectTabBar behavior."
-      ],
-      "publicClasses": [
-        "project-tab-bar"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "connection-state-banner",
-      "name": "ConnectionStateBanner",
-      "source": "src/components/connection-state-banner.tsx",
-      "kind": "component",
-      "purpose": "Connection progress, interruption, compatibility, and authentication states.",
-      "useWhen": [
-        "Hot Sheet needs connection progress, interruption, compatibility, and authentication states."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ConnectionStateBanner behavior."
-      ],
-      "publicClasses": [
-        "connection-state-banner"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "self",
-        "padding": "self"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "connection-details-dialog",
-      "name": "ConnectionDetailsDialog",
-      "source": "src/components/connection-details-dialog.tsx",
-      "kind": "component",
-      "purpose": "Dismissible client/server compatibility metadata and recovery guidance.",
-      "useWhen": [
-        "Hot Sheet needs dismissible client/server compatibility metadata and recovery guidance."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ConnectionDetailsDialog behavior."
-      ],
-      "publicClasses": [
-        "connection-details-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "settings-navigation",
-      "name": "SettingsNavigation",
-      "source": "src/components/settings-navigation.tsx",
-      "kind": "component",
-      "purpose": "Grouped settings categories arranged by Kerf List in an unpadded sidebar pane.",
-      "useWhen": [
-        "Hot Sheet needs grouped settings categories arranged by Kerf List in an unpadded sidebar pane."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific SettingsNavigation behavior."
-      ],
-      "publicClasses": [
-        "settings-navigation"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "notification-navigation",
-      "name": "NotificationNavigation",
-      "source": "src/components/notification-navigation.tsx",
-      "kind": "component",
-      "purpose": "Notification views with attention counts and a pause footer composed from Kerf List and Text in an unpadded sidebar pane.",
-      "useWhen": [
-        "Hot Sheet needs notification views with attention counts and a pause footer composed from Kerf List and Text in an unpadded sidebar pane."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific NotificationNavigation behavior."
-      ],
-      "publicClasses": [
-        "settings-navigation"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "quick-ticket-composer",
-      "name": "QuickTicketComposer",
-      "source": "src/components/quick-ticket-composer.tsx",
-      "kind": "component",
-      "purpose": "Compact ticket creation with a clear warning when the destination differs from the project default.",
-      "useWhen": [
-        "Hot Sheet needs compact ticket creation with a clear warning when the destination differs from the project default."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific QuickTicketComposer behavior."
-      ],
-      "publicClasses": [
-        "quick-ticket-composer"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "self",
-        "padding": "self"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-list",
-      "name": "TicketList",
-      "source": "src/components/ticket-list.tsx",
-      "kind": "composition",
-      "purpose": "Responsive, keyboard-navigable ticket collection.",
-      "useWhen": [
-        "Hot Sheet needs responsive, keyboard-navigable ticket collection."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketList behavior."
-      ],
-      "publicClasses": [
-        "ticket-list"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "parent",
-        "border": "child",
-        "padding": "child",
-        "notes": [
-          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
-        ]
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-page-more",
-      "name": "TicketPageMore",
-      "source": "src/components/ticket-page-more.tsx",
-      "kind": "component",
-      "purpose": "Load-more continuation below a paged ticket list or board column, idle and loading.",
-      "useWhen": [
-        "Hot Sheet needs load-more continuation below a paged ticket list or board column, idle and loading."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketPageMore behavior."
-      ],
-      "publicClasses": [
-        "ticket-page-more"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "self",
-        "border": "self",
-        "padding": "self",
-        "notes": [
-          "Centers itself below the list or column rows with its own block margin (HS2-WP69TD)."
-        ]
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-row",
-      "name": "TicketRow",
-      "source": "src/components/ticket-row.tsx",
-      "kind": "component",
-      "purpose": "Dense ticket summary and selection target, with a compact completion-confidence pill on completed/verified tickets.",
-      "useWhen": [
-        "Hot Sheet needs dense ticket summary and selection target, with a compact completion-confidence pill on completed/verified tickets."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketRow behavior."
-      ],
-      "publicClasses": [
-        "ticket-list-row"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "self",
-        "padding": "self"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-board",
-      "name": "TicketBoard",
-      "source": "src/components/ticket-board.tsx",
-      "kind": "composition",
-      "purpose": "Status/category column workspace.",
-      "useWhen": [
-        "Hot Sheet needs status/category column workspace."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketBoard behavior."
-      ],
-      "publicClasses": [
-        "ticket-board"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "parent",
-        "border": "child",
-        "padding": "child",
-        "notes": [
-          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
-        ]
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-board-column",
-      "name": "TicketBoardColumn",
-      "source": "src/components/ticket-board-column.tsx",
-      "kind": "component",
-      "purpose": "One titled, independently scrollable ticket column.",
-      "useWhen": [
-        "Hot Sheet needs one titled, independently scrollable ticket column."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketBoardColumn behavior."
-      ],
-      "publicClasses": [
-        "ticket-board-column"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-inspector",
-      "name": "TicketInspector",
-      "source": "src/components/ticket-inspector.tsx",
-      "kind": "composition",
-      "purpose": "Trailing ticket detail and editing surface with contained, centered section tabs.",
-      "useWhen": [
-        "Hot Sheet needs trailing ticket detail and editing surface with contained, centered section tabs."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketInspector behavior."
-      ],
-      "publicClasses": [
-        "ticket-inspector"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "parent",
-        "border": "child",
-        "padding": "child",
-        "notes": [
-          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
-        ]
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-inspector-skeleton",
-      "name": "TicketInspectorSkeleton",
-      "source": "src/components/ticket-inspector.tsx",
-      "kind": "component",
-      "purpose": "Shape-preserving loading placeholder shown while the next ticket loads.",
-      "useWhen": [
-        "Hot Sheet needs shape-preserving loading placeholder shown while the next ticket loads."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketInspectorSkeleton behavior."
-      ],
-      "publicClasses": [
-        "ticket-inspector"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-info-panel",
-      "name": "TicketInfoPanel",
-      "source": "src/components/ticket-info-panel.tsx",
-      "kind": "composition",
-      "purpose": "Ticket metadata and details with compact headings, inset status controls and empty notes, tags, and provenance.",
-      "useWhen": [
-        "Hot Sheet needs ticket metadata and details with compact headings, inset status controls and empty notes, tags, and provenance."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketInfoPanel behavior."
-      ],
-      "publicClasses": [
-        "ticket-info-panel"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "parent",
-        "border": "child",
-        "padding": "child",
-        "notes": [
-          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
-        ]
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-timeline",
-      "name": "TicketTimeline",
-      "source": "src/components/ticket-timeline.tsx",
-      "kind": "component",
-      "purpose": "Chronological ticket activity inspector section.",
-      "useWhen": [
-        "Hot Sheet needs chronological ticket activity inspector section."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketTimeline behavior."
-      ],
-      "publicClasses": [
-        "ticket-timeline"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-code-review",
-      "name": "TicketCodeReview",
-      "source": "src/components/ticket-code-review.tsx",
-      "kind": "component",
-      "purpose": "Ticket-associated commits and configured diff-tool actions.",
-      "useWhen": [
-        "Hot Sheet needs ticket-associated commits and configured diff-tool actions."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketCodeReview behavior."
-      ],
-      "publicClasses": [
-        "ticket-code-review"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-attachments",
-      "name": "TicketAttachments",
-      "source": "src/components/ticket-attachments.tsx",
-      "kind": "component",
-      "purpose": "Ticket attachment inspector section, including editable, append-only, unsupported, and linked-reader states.",
-      "useWhen": [
-        "Hot Sheet needs ticket attachment inspector section, including editable, append-only, unsupported, and linked-reader states."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketAttachments behavior."
-      ],
-      "publicClasses": [
-        "ticket-attachments"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-category-select",
-      "name": "TicketCategorySelect",
-      "source": "src/components/ticket-category-select.tsx",
-      "kind": "component",
-      "purpose": "Category chooser with configured icons and colors.",
-      "useWhen": [
-        "Hot Sheet needs category chooser with configured icons and colors."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketCategorySelect behavior."
-      ],
-      "publicClasses": [
-        "ticket-category-select"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-priority-select",
-      "name": "TicketPrioritySelect",
-      "source": "src/components/ticket-priority-select.tsx",
-      "kind": "component",
-      "purpose": "Priority chooser with semantic icons.",
-      "useWhen": [
-        "Hot Sheet needs priority chooser with semantic icons."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketPrioritySelect behavior."
-      ],
-      "publicClasses": [
-        "ticket-priority-select"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-status-menu",
-      "name": "TicketStatusMenu",
-      "source": "src/components/ticket-status-menu.tsx",
-      "kind": "component",
-      "purpose": "Badge-triggered status chooser with semantic icons.",
-      "useWhen": [
-        "Hot Sheet needs badge-triggered status chooser with semantic icons."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketStatusMenu behavior."
-      ],
-      "publicClasses": [
-        "ticket-status-menu"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "status-badge",
-      "name": "StatusBadge",
-      "source": "src/components/status-badge.tsx",
-      "kind": "component",
-      "purpose": "Readable ticket state with reinforcing iconography.",
-      "useWhen": [
-        "Hot Sheet needs readable ticket state with reinforcing iconography."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific StatusBadge behavior."
-      ],
-      "publicClasses": [
-        "status-badge"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "self",
-        "padding": "self"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "confidence-badge",
-      "name": "ConfidenceBadge",
-      "source": "src/components/confidence-badge.tsx",
-      "kind": "component",
-      "purpose": "Banded AI completion confidence: compact pill for notes and ticket summaries, labeled for the inspector header.",
-      "useWhen": [
-        "Hot Sheet needs banded AI completion confidence: compact pill for notes and ticket summaries, labeled for the inspector header."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ConfidenceBadge behavior."
-      ],
-      "publicClasses": [
-        "confidence-badge"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "confidence-calibration",
-      "name": "ConfidenceCalibration",
-      "source": "src/components/confidence-calibration.tsx",
-      "kind": "component",
-      "purpose": "A project's completion-confidence calibration: per-band reopen versus verified outcomes and recent completions.",
-      "useWhen": [
-        "Hot Sheet needs a project's completion-confidence calibration: per-band reopen versus verified outcomes and recent completions."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ConfidenceCalibration behavior."
-      ],
-      "publicClasses": [
-        "confidence-calibration"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "tag-chip",
-      "name": "TagChip",
-      "source": "src/components/tag-chip.tsx",
-      "kind": "component",
-      "purpose": "Compact tag label with optional removal behavior.",
-      "useWhen": [
-        "Hot Sheet needs compact tag label with optional removal behavior."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TagChip behavior."
-      ],
-      "publicClasses": [],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-reader",
-      "name": "TicketReader",
-      "source": "src/components/ticket-reader.tsx",
-      "kind": "composition",
-      "purpose": "Large dialog presentation of the complete ticket inspector.",
-      "useWhen": [
-        "Hot Sheet needs large dialog presentation of the complete ticket inspector."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketReader behavior."
-      ],
-      "publicClasses": [
-        "ticket-reader"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "parent",
-        "border": "child",
-        "padding": "child",
-        "notes": [
-          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
-        ]
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "markdown-editor",
-      "name": "MarkdownEditor",
-      "source": "src/components/markdown-editor.tsx",
-      "kind": "component",
-      "purpose": "Inline and expanded Markdown editing.",
-      "useWhen": [
-        "Hot Sheet needs inline and expanded Markdown editing."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific MarkdownEditor behavior."
-      ],
-      "publicClasses": [
-        "markdown-editor"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "self",
-        "padding": "self"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "markdown-preview",
-      "name": "MarkdownPreview",
-      "source": "src/components/markdown-preview.tsx",
-      "kind": "component",
-      "purpose": "Sanitized Markdown rendering with tone, size, density, and attachment-media presentation variants.",
-      "useWhen": [
-        "Hot Sheet needs sanitized Markdown rendering with tone, size, density, and attachment-media presentation variants."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific MarkdownPreview behavior."
-      ],
-      "publicClasses": [
-        "markdown-preview"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "attachment-gallery",
-      "name": "AttachmentGallery",
-      "source": "src/components/attachment-gallery.tsx",
-      "kind": "component",
-      "purpose": "Always-dark full-screen media viewer with keyboard, arrow, and swipe navigation; unchanged by device or app theme.",
-      "useWhen": [
-        "Hot Sheet needs always-dark full-screen media viewer with keyboard, arrow, and swipe navigation; unchanged by device or app theme."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific AttachmentGallery behavior."
-      ],
-      "publicClasses": [
-        "attachment-gallery"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-close-dialog",
-      "name": "TicketCloseDialog",
-      "source": "src/components/ticket-close-dialog.tsx",
-      "kind": "component",
-      "purpose": "Structured close outcomes with duplicate-target search and validation.",
-      "useWhen": [
-        "Hot Sheet needs structured close outcomes with duplicate-target search and validation."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketCloseDialog behavior."
-      ],
-      "publicClasses": [
-        "ticket-close-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "not-working-dialog",
-      "name": "NotWorkingDialog",
-      "source": "src/components/not-working-dialog.tsx",
-      "kind": "component",
-      "purpose": "Completed-ticket verification failure report with notes and evidence.",
-      "useWhen": [
-        "Hot Sheet needs completed-ticket verification failure report with notes and evidence."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific NotWorkingDialog behavior."
-      ],
-      "publicClasses": [
-        "not-working-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "bulk-ticket-dialog",
-      "name": "BulkTicketDialog",
-      "source": "src/components/bulk-ticket-dialog.tsx",
-      "kind": "component",
-      "purpose": "Confirm bulk tag, delete, and empty-trash actions through public dialog, text, and action compositions.",
-      "useWhen": [
-        "Hot Sheet needs confirm bulk tag, delete, and empty-trash actions through public dialog, text, and action compositions."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific BulkTicketDialog behavior."
-      ],
-      "publicClasses": [
-        "bulk-ticket-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "saved-view-dialog",
-      "name": "SavedViewDialog",
-      "source": "src/components/saved-view-dialog.tsx",
-      "kind": "component",
-      "purpose": "Create or edit a saved ticket view with a full-width responsive query editor.",
-      "useWhen": [
-        "Hot Sheet needs create or edit a saved ticket view with a full-width responsive query editor."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific SavedViewDialog behavior."
-      ],
-      "publicClasses": [
-        "saved-view-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-link-choice-dialog",
-      "name": "TicketLinkChoiceDialog",
-      "source": "src/components/ticket-link-choice-dialog.tsx",
-      "kind": "component",
-      "purpose": "Disambiguate exact ticket references with wrapping public navigation rows and source metadata.",
-      "useWhen": [
-        "Hot Sheet needs disambiguate exact ticket references with wrapping public navigation rows and source metadata."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketLinkChoiceDialog behavior."
-      ],
-      "publicClasses": [
-        "ticket-link-choice-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "project-dialog",
-      "name": "ProjectDialog",
-      "source": "src/components/project-dialog.tsx",
-      "kind": "component",
-      "purpose": "Open a local checkout or choose a checkout already known to a remote server.",
-      "useWhen": [
-        "Hot Sheet needs open a local checkout or choose a checkout already known to a remote server."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ProjectDialog behavior."
-      ],
-      "publicClasses": [
-        "project-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "project-close-dialog",
-      "name": "ProjectCloseDialog",
-      "source": "src/components/project-close-dialog.tsx",
-      "kind": "component",
-      "purpose": "Warn about running terminals and AI chats before closing a project, with a live resource preview.",
-      "useWhen": [
-        "Hot Sheet needs warn about running terminals and AI chats before closing a project, with a live resource preview."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ProjectCloseDialog behavior."
-      ],
-      "publicClasses": [
-        "project-close-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "conversation-export-dialog",
-      "name": "ConversationExportDialog",
-      "source": "src/components/conversation-export-dialog.tsx",
-      "kind": "component",
-      "purpose": "Two-step wizard to choose a message scope then a destination, format, and bundle options.",
-      "useWhen": [
-        "Hot Sheet needs two-step wizard to choose a message scope then a destination, format, and bundle options."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ConversationExportDialog behavior."
-      ],
-      "publicClasses": [
-        "conversation-export-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "command-run-dialog",
-      "name": "CommandRunDialog",
-      "source": "src/components/command-run-dialog.tsx",
-      "kind": "component",
-      "purpose": "Native modal dialog presenting the latest run state and output for a configured command, or the stop confirmation for a running one.",
-      "useWhen": [
-        "Hot Sheet needs native modal dialog presenting the latest run state and output for a configured command, or the stop confirmation for a running one."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific CommandRunDialog behavior."
-      ],
-      "publicClasses": [
-        "command-run-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "note-composer",
-      "name": "NoteComposer",
-      "source": "src/components/note-composer.tsx",
-      "kind": "component",
-      "purpose": "Create or cancel a provider-backed ticket note.",
-      "useWhen": [
-        "Hot Sheet needs create or cancel a provider-backed ticket note."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific NoteComposer behavior."
-      ],
-      "publicClasses": [
-        "note-composer"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "note-card",
-      "name": "NoteCard",
-      "source": "src/components/note-card.tsx",
-      "kind": "component",
-      "purpose": "Kind-specific note presentation with an optional banded AI completion confidence badge.",
-      "useWhen": [
-        "Hot Sheet needs kind-specific note presentation with an optional banded AI completion confidence badge."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific NoteCard behavior."
-      ],
-      "publicClasses": [
-        "note-card"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ai-conversation",
-      "name": "AIConversation",
-      "source": "src/components/ai-conversation.tsx",
-      "kind": "component",
-      "purpose": "Dialog and embedded AI conversation with native Save/Stop toolbar controls, inline permissions, and interruption.",
-      "useWhen": [
-        "Hot Sheet needs dialog and embedded AI conversation with native Save/Stop toolbar controls, inline permissions, and interruption."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific AIConversation behavior."
-      ],
-      "publicClasses": [
-        "ai-conversation"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ai-content-label",
-      "name": "AIContentLabel",
-      "source": "src/components/ai-content-label.tsx",
-      "kind": "component",
-      "purpose": "Persistent AI attribution with the limitations cue, optional feedback, and quiet or inherited tone.",
-      "useWhen": [
-        "Hot Sheet needs persistent AI attribution with the limitations cue, optional feedback, and quiet or inherited tone."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific AIContentLabel behavior."
-      ],
-      "publicClasses": [
-        "ai-content-label"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ai-feedback-dialog",
-      "name": "AiFeedbackDialog",
-      "source": "src/components/ai-feedback-dialog.tsx",
-      "kind": "component",
-      "purpose": "App-owned multiline Markdown explanation for structured AI ratings.",
-      "useWhen": [
-        "Hot Sheet needs app-owned multiline Markdown explanation for structured AI ratings."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific AiFeedbackDialog behavior."
-      ],
-      "publicClasses": [
-        "ai-feedback-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ai-tool-settings",
-      "name": "AiToolSettings",
-      "source": "src/components/ai-tool-settings.tsx",
-      "kind": "component",
-      "purpose": "Machine-local default AI provider, model, and effort discovered from plugins.",
-      "useWhen": [
-        "Hot Sheet needs machine-local default AI provider, model, and effort discovered from plugins."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific AiToolSettings behavior."
-      ],
-      "publicClasses": [
-        "ai-tool-settings"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "manual-model-dialog",
-      "name": "ManualModelDialog",
-      "source": "src/components/manual-model-dialog.tsx",
-      "kind": "component",
-      "purpose": "Enter an exact model identifier a provider accepts.",
-      "useWhen": [
-        "Hot Sheet needs enter an exact model identifier a provider accepts."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ManualModelDialog behavior."
-      ],
-      "publicClasses": [
-        "manual-model-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "halted-session-popup",
-      "name": "HaltedSessionPopup",
-      "source": "src/components/halted-session-popup.tsx",
-      "kind": "component",
-      "purpose": "Acknowledged halted AI session prompt with Open session, Dismiss, and app-wide Pause notifications.",
-      "useWhen": [
-        "Hot Sheet needs acknowledged halted AI session prompt with Open session, Dismiss, and app-wide Pause notifications."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific HaltedSessionPopup behavior."
-      ],
-      "publicClasses": [
-        "halted-session-popup"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "self",
-        "border": "self",
-        "padding": "child",
-        "notes": [
-          "Owns native top-layer viewport placement and framing; public List, Row, and Text own content geometry (HS2-E6KAWY)."
-        ]
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "permission-request",
-      "name": "PermissionRequestCard",
-      "source": "src/components/permission-request-card.tsx",
-      "kind": "component",
-      "purpose": "Human approval with timeout, project identity, and supported decision scopes.",
-      "useWhen": [
-        "Hot Sheet needs human approval with timeout, project identity, and supported decision scopes."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific PermissionRequestCard behavior."
-      ],
-      "publicClasses": [
-        "permission-request-card"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "self",
-        "padding": "self"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "notification-center",
-      "name": "NotificationCenter",
-      "source": "src/components/notification-center.tsx",
-      "kind": "component",
-      "purpose": "Pending permission requests and newest-first decision history with consistent 12px card spacing across both groups.",
-      "useWhen": [
-        "Hot Sheet needs pending permission requests and newest-first decision history with consistent 12px card spacing across both groups."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific NotificationCenter behavior."
-      ],
-      "publicClasses": [
-        "notification-center"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "terminal-drawer",
-      "name": "TerminalDrawer",
-      "source": "src/components/terminal-drawer.tsx",
-      "kind": "composition",
-      "purpose": "Project grid, terminal, and embedded AI-chat tabs with a typed creation menu, and tab states for busy, halted terminals, failed or recovered driven chats, and Hot Sheet-connected or unconnected AI sessions.",
-      "useWhen": [
-        "Hot Sheet needs project grid, terminal, and embedded AI-chat tabs with a typed creation menu, and tab states for busy, halted terminals, failed or recovered driven chats, and Hot Sheet-connected or unconnected AI sessions."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TerminalDrawer behavior."
-      ],
-      "publicClasses": [
-        "terminal-drawer"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "parent",
-        "border": "child",
-        "padding": "child",
-        "notes": [
-          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
-        ]
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "terminal-dashboard",
-      "name": "TerminalDashboard",
-      "source": "src/components/terminal-dashboard.tsx",
-      "kind": "composition",
-      "purpose": "Responsive workspace grid for terminals and AI chats, including connected, missing-hook, and halted session states with manual clearing.",
-      "useWhen": [
-        "Hot Sheet needs responsive workspace grid for terminals and AI chats, including connected, missing-hook, and halted session states with manual clearing."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TerminalDashboard behavior."
-      ],
-      "publicClasses": [
-        "terminal-dashboard"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "parent",
-        "border": "child",
-        "padding": "child",
-        "notes": [
-          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
-        ]
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "terminal-operations-sidebar",
-      "name": "TerminalOperationsSidebar",
-      "source": "src/components/terminal-operations-sidebar.tsx",
-      "kind": "composition",
-      "purpose": "Per-project and aggregate completion and in-progress summaries beside the workspace grid.",
-      "useWhen": [
-        "Hot Sheet needs per-project and aggregate completion and in-progress summaries beside the workspace grid."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TerminalOperationsSidebar behavior."
-      ],
-      "publicClasses": [
-        "terminal-operations-sidebar"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "parent",
-        "border": "child",
-        "padding": "child",
-        "notes": [
-          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
-        ]
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "terminal-ticket-rail",
-      "name": "TerminalTicketRail",
-      "source": "src/components/terminal-ticket-rail.tsx",
-      "kind": "composition",
-      "purpose": "Compact navigation rail (a Kerf NavStack) with equal-width List/Notifications segments, bordered collapsible search, a sunken scrolling list, ticket launcher, and push navigation into ticket detail on one toolbar row.",
-      "useWhen": [
-        "Hot Sheet needs compact navigation rail (a Kerf NavStack) with equal-width List/Notifications segments, bordered collapsible search, a sunken scrolling list, ticket launcher, and push navigation into ticket detail on one toolbar row."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TerminalTicketRail behavior."
-      ],
-      "publicClasses": [
-        "terminal-ticket-rail"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "parent",
-        "border": "child",
-        "padding": "child",
-        "notes": [
-          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
-        ]
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "fixed-aspect-terminal-card",
-      "name": "FixedAspectTerminalCard",
-      "source": "src/components/terminal-dashboard.tsx",
-      "kind": "component",
-      "purpose": "Shared 5:3 terminal viewport card in preview, magnified, and phone magnified (toolbar / keyboard) variants.",
-      "useWhen": [
-        "Hot Sheet needs shared 5:3 terminal viewport card in preview, magnified, and phone magnified (toolbar / keyboard) variants."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific FixedAspectTerminalCard behavior."
-      ],
-      "publicClasses": [
-        "terminal-tile"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "self",
-        "padding": "self"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "terminal-key-bar",
-      "name": "TerminalKeyBar",
-      "source": "src/components/terminal-key-bar.tsx",
-      "kind": "component",
-      "purpose": "Phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn.",
-      "useWhen": [
-        "Hot Sheet needs phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TerminalKeyBar behavior."
-      ],
-      "publicClasses": [
-        "terminal-key-bar"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "terminal-visibility-dialog",
-      "name": "TerminalVisibilityDialog",
-      "source": "src/components/terminal-visibility-dialog.tsx",
-      "kind": "component",
-      "purpose": "Named visibility groups, persistent shell/AI/chat visibility, and a Kerf multiple-Select type filter.",
-      "useWhen": [
-        "Hot Sheet needs named visibility groups, persistent shell/AI/chat visibility, and a Kerf multiple-Select type filter."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TerminalVisibilityDialog behavior."
-      ],
-      "publicClasses": [
-        "terminal-visibility-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "terminal-copy-dialog",
-      "name": "TerminalCopyDialog",
-      "source": "src/components/terminal-clipboard-dialogs.tsx",
-      "kind": "component",
-      "purpose": "Phone terminal Copy sheet: the buffer as native, long-press-selectable text; Copy takes the selection or everything.",
-      "useWhen": [
-        "Hot Sheet needs phone terminal Copy sheet: the buffer as native, long-press-selectable text; Copy takes the selection or everything."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TerminalCopyDialog behavior."
-      ],
-      "publicClasses": [
-        "terminal-copy-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "terminal-paste-dialog",
-      "name": "TerminalPasteDialog",
-      "source": "src/components/terminal-clipboard-dialogs.tsx",
-      "kind": "component",
-      "purpose": "Phone terminal Paste fallback when the clipboard cannot be read (denied or unavailable): paste natively, then send.",
-      "useWhen": [
-        "Hot Sheet needs phone terminal Paste fallback when the clipboard cannot be read (denied or unavailable): paste natively, then send."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TerminalPasteDialog behavior."
-      ],
-      "publicClasses": [
-        "terminal-paste-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "terminal-edit-menu",
-      "name": "TerminalEditMenu",
-      "source": "src/components/terminal-clipboard-dialogs.tsx",
-      "kind": "component",
-      "purpose": "Touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text… opens the Copy sheet, and Paste sends the clipboard.",
-      "useWhen": [
-        "Hot Sheet needs touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text… opens the Copy sheet, and Paste sends the clipboard."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TerminalEditMenu behavior."
-      ],
-      "publicClasses": [
-        "terminal-edit-menu"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "terminal-rename-dialog",
-      "name": "TerminalRenameDialog",
-      "source": "src/components/terminal-rename-dialog.tsx",
-      "kind": "component",
-      "purpose": "Rename a terminal while retaining its stable identity; a renamed terminal also offers Reset to default, naming the default it restores.",
-      "useWhen": [
-        "Hot Sheet needs rename a terminal while retaining its stable identity; a renamed terminal also offers Reset to default, naming the default it restores."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TerminalRenameDialog behavior."
-      ],
-      "publicClasses": [
-        "terminal-rename"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "app-empty-state",
-      "name": "AppEmptyState",
-      "source": "src/components/app-empty-state.tsx",
-      "kind": "component",
-      "purpose": "Initial project-opening, busy restoration, and action-free messages composed from Kerf EmptyState and List.",
-      "useWhen": [
-        "Hot Sheet needs initial project-opening, busy restoration, and action-free messages composed from Kerf EmptyState and List."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific AppEmptyState behavior."
-      ],
-      "publicClasses": [
-        "app-empty"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "self",
-        "padding": "self"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "app-error",
-      "name": "AppError",
-      "source": "src/components/app-error.tsx",
-      "kind": "component",
-      "purpose": "Dismissible application failure with Kerf danger feedback at the screen edge.",
-      "useWhen": [
-        "Hot Sheet needs dismissible application failure with Kerf danger feedback at the screen edge."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific AppError behavior."
-      ],
-      "publicClasses": [
-        "app-error"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "content-transition",
-      "name": "ContentTransition",
-      "source": "src/components/content-transition.tsx",
-      "kind": "component",
-      "purpose": "Reusable A/B push and crossfade transitions with block or end-aligned action-row side layouts.",
-      "useWhen": [
-        "Hot Sheet needs reusable A/B push and crossfade transitions with block or end-aligned action-row side layouts."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ContentTransition behavior."
-      ],
-      "publicClasses": [
-        "content-transition"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-search-field",
-      "name": "TicketSearchField",
-      "source": "src/components/ticket-search-field.tsx",
-      "kind": "component",
-      "purpose": "Ticket search query editor with inline filter chips, in-place tag completion, a lifecycle date helper, and syntax help.",
-      "useWhen": [
-        "Hot Sheet needs ticket search query editor with inline filter chips, in-place tag completion, a lifecycle date helper, and syntax help."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketSearchField behavior."
-      ],
-      "publicClasses": [
-        "ticket-search-field"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "pending-attachment-picker",
-      "name": "PendingAttachmentPicker",
-      "source": "src/components/pending-attachment-picker.tsx",
-      "kind": "component",
-      "purpose": "Drop, browse, review, and remove evidence before submission.",
-      "useWhen": [
-        "Hot Sheet needs drop, browse, review, and remove evidence before submission."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific PendingAttachmentPicker behavior."
-      ],
-      "publicClasses": [
-        "pending-attachment-picker"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "self",
-        "padding": "self"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "hs1-migration-dialog",
-      "name": "Hs1MigrationDialog",
-      "source": "src/components/hs1-migration.tsx",
-      "kind": "component",
-      "purpose": "Detected Hot Sheet 1 source details and destination-only import flow.",
-      "useWhen": [
-        "Hot Sheet needs detected Hot Sheet 1 source details and destination-only import flow."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific Hs1MigrationDialog behavior."
-      ],
-      "publicClasses": [
-        "hs1-migration-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "hs1-migration-banner",
-      "name": "Hs1MigrationBanner",
-      "source": "src/components/hs1-migration.tsx",
-      "kind": "component",
-      "purpose": "Project-owned measured, unknown, retry, imported, and verified-backup states for Hot Sheet 1.",
-      "useWhen": [
-        "Hot Sheet needs project-owned measured, unknown, retry, imported, and verified-backup states for Hot Sheet 1."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific Hs1MigrationBanner behavior."
-      ],
-      "publicClasses": [
-        "hs1-migration-banner"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "self",
-        "padding": "self"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "codex-hooks-notice-banner",
-      "name": "CodexHooksNoticeBanner",
-      "source": "src/components/codex-hooks-notice-banner.tsx",
-      "kind": "component",
-      "purpose": "Successful setup changed Codex hooks; review their trust with /hooks for this checkout, or dismiss the notice.",
-      "useWhen": [
-        "Hot Sheet needs successful setup changed Codex hooks; review their trust with /hooks for this checkout, or dismiss the notice."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific CodexHooksNoticeBanner behavior."
-      ],
-      "publicClasses": [
-        "codex-hooks-notice-banner"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "project-setup-warning-banner",
-      "name": "ProjectSetupWarningBanner",
-      "source": "src/components/project-setup-warning-banner.tsx",
-      "kind": "component",
-      "purpose": "Dismissible warning that a project opened but skipped its setup refresh, with the reason and fix.",
-      "useWhen": [
-        "Hot Sheet needs dismissible warning that a project opened but skipped its setup refresh, with the reason and fix."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ProjectSetupWarningBanner behavior."
-      ],
-      "publicClasses": [
-        "project-setup-warning-banner"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "notifications-paused-banner",
-      "name": "NotificationsPausedBanner",
-      "source": "src/components/notifications-paused-banner.tsx",
-      "kind": "component",
-      "purpose": "App-wide status that notifications are paused, with the waiting request count and Resume.",
-      "useWhen": [
-        "Hot Sheet needs app-wide status that notifications are paused, with the waiting request count and Resume."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific NotificationsPausedBanner behavior."
-      ],
-      "publicClasses": [
-        "notifications-paused-banner"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "provider-icon",
-      "name": "ProviderIcon",
-      "source": "src/components/provider-icon.tsx",
-      "kind": "component",
-      "purpose": "Provider brand marks for GitHub, GitLab, and Jira at the inline (m) and identity (l) sizes.",
-      "useWhen": [
-        "Hot Sheet needs provider brand marks for GitHub, GitLab, and Jira at the inline (m) and identity (l) sizes."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ProviderIcon behavior."
-      ],
-      "publicClasses": [
-        "provider-icon"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "none",
-        "padding": "none"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-source-setup-dialog",
-      "name": "TicketSourceSetupDialog",
-      "source": "src/components/ticket-source-setup-dialog.tsx",
-      "kind": "component",
-      "purpose": "Choose and configure a git or external ticket source, including first-source and existing-default choices.",
-      "useWhen": [
-        "Hot Sheet needs choose and configure a git or external ticket source, including first-source and existing-default choices."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketSourceSetupDialog behavior."
-      ],
-      "publicClasses": [
-        "ticket-source-setup-dialog"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "provider-setup-form",
-      "name": "ProviderSetupForm",
-      "source": "src/components/provider-setup-form.tsx",
-      "kind": "component",
-      "purpose": "Provider credentials, repository locator, and default-source settings.",
-      "useWhen": [
-        "Hot Sheet needs provider credentials, repository locator, and default-source settings."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ProviderSetupForm behavior."
-      ],
-      "publicClasses": [
-        "provider-setup-form"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
-      "id": "ticket-sources-settings",
-      "name": "TicketSourcesSettings",
-      "source": "src/components/ticket-sources-settings.tsx",
-      "kind": "component",
-      "purpose": "One project's own ticket sources: default-source choice, editable rows with a remove-from-this-project action, and a note for a source another project shares.",
-      "useWhen": [
-        "Hot Sheet needs one project's own ticket sources: default-source choice, editable rows with a remove-from-this-project action, and a note for a source another project shares."
-      ],
-      "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific TicketSourcesSettings behavior."
-      ],
-      "publicClasses": [
-        "ticket-sources-settings"
-      ],
-      "publicTokens": [],
-      "geometry": {
-        "margin": "none",
-        "border": "child",
-        "padding": "child"
-      },
-      "documentation": "docs/ux-components.md"
-    },
-    {
       "id": "accounts-settings",
       "name": "AccountsSettings",
-      "source": "src/components/ticket-sources-settings.tsx",
       "kind": "component",
       "purpose": "Machine-wide provider sign-ins with their sources and the projects using each; Sign out for an unused account, plus the empty and error states (App Settings → Accounts).",
       "useWhen": [
@@ -2044,40 +19,691 @@
         "accounts-settings"
       ],
       "publicTokens": [],
+      "source": "src/components/ticket-sources-settings.tsx",
       "geometry": {
         "margin": "none",
         "border": "child",
         "padding": "child"
       },
-      "documentation": "docs/ux-components.md"
+      "documentation": "../../docs/ux-components.md"
     },
     {
-      "id": "settings-workspace",
-      "name": "SettingsWorkspace",
-      "source": "src/components/settings-workspace.tsx",
+      "id": "add-project-action",
+      "name": "AddProjectAction",
       "kind": "component",
-      "purpose": "One category-selected project or app settings surface.",
+      "purpose": "The project strip's Add-project action: one native icon button in a single borderless compact ToolbarControlGroup.",
       "useWhen": [
-        "Hot Sheet needs one category-selected project or app settings surface."
+        "Hot Sheet needs the project strip's Add-project action: one native icon button in a single borderless compact ToolbarControlGroup."
       ],
       "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific SettingsWorkspace behavior."
+        "The interaction does not need Hot Sheet's domain-specific AddProjectAction behavior."
       ],
-      "publicClasses": [
-        "settings-workspace"
-      ],
+      "publicClasses": [],
       "publicTokens": [],
+      "source": "src/components/project-strip-actions.tsx",
       "geometry": {
         "margin": "none",
         "border": "child",
         "padding": "child"
       },
-      "documentation": "docs/ux-components.md"
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ai-content-label",
+      "name": "AIContentLabel",
+      "kind": "component",
+      "purpose": "Persistent AI attribution with the limitations cue, optional feedback, and quiet or inherited tone.",
+      "useWhen": [
+        "Hot Sheet needs persistent AI attribution with the limitations cue, optional feedback, and quiet or inherited tone."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific AIContentLabel behavior."
+      ],
+      "publicClasses": [
+        "ai-content-label"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ai-content-label.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ai-conversation",
+      "name": "AIConversation",
+      "kind": "component",
+      "purpose": "Dialog and embedded AI conversation with native Save/Stop toolbar controls, inline permissions, and interruption.",
+      "useWhen": [
+        "Hot Sheet needs dialog and embedded AI conversation with native Save/Stop toolbar controls, inline permissions, and interruption."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific AIConversation behavior."
+      ],
+      "publicClasses": [
+        "ai-conversation"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ai-conversation.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ai-feedback-dialog",
+      "name": "AiFeedbackDialog",
+      "kind": "component",
+      "purpose": "App-owned multiline Markdown explanation for structured AI ratings.",
+      "useWhen": [
+        "Hot Sheet needs app-owned multiline Markdown explanation for structured AI ratings."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific AiFeedbackDialog behavior."
+      ],
+      "publicClasses": [
+        "ai-feedback-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ai-feedback-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ai-tool-settings",
+      "name": "AiToolSettings",
+      "kind": "component",
+      "purpose": "Machine-local default AI provider, model, and effort discovered from plugins.",
+      "useWhen": [
+        "Hot Sheet needs machine-local default AI provider, model, and effort discovered from plugins."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific AiToolSettings behavior."
+      ],
+      "publicClasses": [
+        "ai-tool-settings"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ai-tool-settings.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "app-empty-state",
+      "name": "AppEmptyState",
+      "kind": "component",
+      "purpose": "Initial project-opening, busy restoration, and action-free messages composed from Kerf EmptyState and List.",
+      "useWhen": [
+        "Hot Sheet needs initial project-opening, busy restoration, and action-free messages composed from Kerf EmptyState and List."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific AppEmptyState behavior."
+      ],
+      "publicClasses": [
+        "app-empty"
+      ],
+      "publicTokens": [],
+      "source": "src/components/app-empty-state.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "app-error",
+      "name": "AppError",
+      "kind": "component",
+      "purpose": "Dismissible application failure with Kerf danger feedback at the screen edge.",
+      "useWhen": [
+        "Hot Sheet needs dismissible application failure with Kerf danger feedback at the screen edge."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific AppError behavior."
+      ],
+      "publicClasses": [
+        "app-error"
+      ],
+      "publicTokens": [],
+      "source": "src/components/app-error.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "app-loading-indicator",
+      "name": "AppLoadingIndicator",
+      "kind": "component",
+      "purpose": "Fixed app-level project loading and sequential ticket-update progress.",
+      "useWhen": [
+        "Hot Sheet needs fixed app-level project loading and sequential ticket-update progress."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific AppLoadingIndicator behavior."
+      ],
+      "publicClasses": [
+        "app-loading-indicator"
+      ],
+      "publicTokens": [],
+      "source": "src/components/app-loading-indicator.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "app-shell",
+      "name": "AppShell",
+      "kind": "composition",
+      "purpose": "Responsive application regions with a stationary clipped shell, independent child scrolling, and a main-column-relative terminal restore action.",
+      "useWhen": [
+        "Hot Sheet needs responsive application regions with a stationary clipped shell, independent child scrolling, and a main-column-relative terminal restore action."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific AppShell behavior."
+      ],
+      "publicClasses": [
+        "app-shell"
+      ],
+      "publicTokens": [],
+      "source": "src/components/app-shell.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "attachment-gallery",
+      "name": "AttachmentGallery",
+      "kind": "component",
+      "purpose": "Always-dark full-screen media viewer with keyboard, arrow, and swipe navigation; unchanged by device or app theme.",
+      "useWhen": [
+        "Hot Sheet needs always-dark full-screen media viewer with keyboard, arrow, and swipe navigation; unchanged by device or app theme."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific AttachmentGallery behavior."
+      ],
+      "publicClasses": [
+        "attachment-gallery"
+      ],
+      "publicTokens": [],
+      "source": "src/components/attachment-gallery.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "bulk-ticket-dialog",
+      "name": "BulkTicketDialog",
+      "kind": "component",
+      "purpose": "Confirm bulk tag, delete, and empty-trash actions through public dialog, text, and action compositions.",
+      "useWhen": [
+        "Hot Sheet needs confirm bulk tag, delete, and empty-trash actions through public dialog, text, and action compositions."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific BulkTicketDialog behavior."
+      ],
+      "publicClasses": [
+        "bulk-ticket-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/bulk-ticket-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "change-evidence-dialog",
+      "name": "ChangeEvidenceDialog",
+      "kind": "component",
+      "purpose": "Ticket commit-range files grouped by evidence type.",
+      "useWhen": [
+        "Hot Sheet needs ticket commit-range files grouped by evidence type."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ChangeEvidenceDialog behavior."
+      ],
+      "publicClasses": [
+        "change-evidence-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/repository-status-popover.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "codex-hooks-notice-banner",
+      "name": "CodexHooksNoticeBanner",
+      "kind": "component",
+      "purpose": "Successful setup changed Codex hooks; review their trust with /hooks for this checkout, or dismiss the notice.",
+      "useWhen": [
+        "Hot Sheet needs successful setup changed Codex hooks; review their trust with /hooks for this checkout, or dismiss the notice."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific CodexHooksNoticeBanner behavior."
+      ],
+      "publicClasses": [
+        "codex-hooks-notice-banner"
+      ],
+      "publicTokens": [],
+      "source": "src/components/codex-hooks-notice-banner.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "command-navigation",
+      "name": "CommandNavigation",
+      "kind": "component",
+      "purpose": "Grouped colored project command actions arranged by Kerf List.",
+      "useWhen": [
+        "Hot Sheet needs grouped colored project command actions arranged by Kerf List."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific CommandNavigation behavior."
+      ],
+      "publicClasses": [
+        "command-navigation"
+      ],
+      "publicTokens": [],
+      "source": "src/components/command-navigation.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "command-run-dialog",
+      "name": "CommandRunDialog",
+      "kind": "component",
+      "purpose": "Native modal dialog presenting the latest run state and output for a configured command, or the stop confirmation for a running one.",
+      "useWhen": [
+        "Hot Sheet needs native modal dialog presenting the latest run state and output for a configured command, or the stop confirmation for a running one."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific CommandRunDialog behavior."
+      ],
+      "publicClasses": [
+        "command-run-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/command-run-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "command-settings-editor",
+      "name": "CommandSettingsEditor",
+      "kind": "composition",
+      "purpose": "Master-detail editor for custom command buttons, incl. color and icon pickers.",
+      "useWhen": [
+        "Hot Sheet needs master-detail editor for custom command buttons, incl. color and icon pickers."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific CommandSettingsEditor behavior."
+      ],
+      "publicClasses": [
+        "command-settings-editor"
+      ],
+      "publicTokens": [],
+      "source": "src/components/command-settings-editor.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "confidence-badge",
+      "name": "ConfidenceBadge",
+      "kind": "component",
+      "purpose": "Banded AI completion confidence: compact pill for notes and ticket summaries, labeled for the inspector header.",
+      "useWhen": [
+        "Hot Sheet needs banded AI completion confidence: compact pill for notes and ticket summaries, labeled for the inspector header."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ConfidenceBadge behavior."
+      ],
+      "publicClasses": [
+        "confidence-badge"
+      ],
+      "publicTokens": [],
+      "source": "src/components/confidence-badge.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "confidence-calibration",
+      "name": "ConfidenceCalibration",
+      "kind": "component",
+      "purpose": "A project's completion-confidence calibration: per-band reopen versus verified outcomes and recent completions.",
+      "useWhen": [
+        "Hot Sheet needs a project's completion-confidence calibration: per-band reopen versus verified outcomes and recent completions."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ConfidenceCalibration behavior."
+      ],
+      "publicClasses": [
+        "confidence-calibration"
+      ],
+      "publicTokens": [],
+      "source": "src/components/confidence-calibration.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "connection-details-dialog",
+      "name": "ConnectionDetailsDialog",
+      "kind": "component",
+      "purpose": "Dismissible client/server compatibility metadata and recovery guidance.",
+      "useWhen": [
+        "Hot Sheet needs dismissible client/server compatibility metadata and recovery guidance."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ConnectionDetailsDialog behavior."
+      ],
+      "publicClasses": [
+        "connection-details-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/connection-details-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "connection-state-banner",
+      "name": "ConnectionStateBanner",
+      "kind": "component",
+      "purpose": "Connection progress, interruption, compatibility, and authentication states.",
+      "useWhen": [
+        "Hot Sheet needs connection progress, interruption, compatibility, and authentication states."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ConnectionStateBanner behavior."
+      ],
+      "publicClasses": [
+        "connection-state-banner"
+      ],
+      "publicTokens": [],
+      "source": "src/components/connection-state-banner.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "content-transition",
+      "name": "ContentTransition",
+      "kind": "component",
+      "purpose": "Reusable A/B push and crossfade transitions with block or end-aligned action-row side layouts.",
+      "useWhen": [
+        "Hot Sheet needs reusable A/B push and crossfade transitions with block or end-aligned action-row side layouts."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ContentTransition behavior."
+      ],
+      "publicClasses": [
+        "content-transition"
+      ],
+      "publicTokens": [],
+      "source": "src/components/content-transition.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "conversation-export-dialog",
+      "name": "ConversationExportDialog",
+      "kind": "component",
+      "purpose": "Two-step wizard to choose a message scope then a destination, format, and bundle options.",
+      "useWhen": [
+        "Hot Sheet needs two-step wizard to choose a message scope then a destination, format, and bundle options."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ConversationExportDialog behavior."
+      ],
+      "publicClasses": [
+        "conversation-export-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/conversation-export-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "drive-control",
+      "name": "DriveControl",
+      "kind": "component",
+      "purpose": "Split AI workflow action and provider override trigger.",
+      "useWhen": [
+        "Hot Sheet needs split AI workflow action and provider override trigger."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific DriveControl behavior."
+      ],
+      "publicClasses": [
+        "drive-control"
+      ],
+      "publicTokens": [],
+      "source": "src/components/drive-control.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "drive-options-menu",
+      "name": "DriveOptionsMenu",
+      "kind": "component",
+      "purpose": "Provider, model, and effort overrides for a driven session.",
+      "useWhen": [
+        "Hot Sheet needs provider, model, and effort overrides for a driven session."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific DriveOptionsMenu behavior."
+      ],
+      "publicClasses": [
+        "drive-options-menu"
+      ],
+      "publicTokens": [],
+      "source": "src/components/drive-options-menu.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "empty-trash-action",
+      "name": "EmptyTrashAction",
+      "kind": "component",
+      "purpose": "The Trash view's standalone outlined danger Empty Trash button.",
+      "useWhen": [
+        "Hot Sheet needs the Trash view's standalone outlined danger Empty Trash button."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific EmptyTrashAction behavior."
+      ],
+      "publicClasses": [
+        "workspace-header__text-action"
+      ],
+      "publicTokens": [],
+      "source": "src/components/workspace-controls.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "fixed-aspect-terminal-card",
+      "name": "FixedAspectTerminalCard",
+      "kind": "component",
+      "purpose": "Shared 5:3 terminal viewport card in preview, magnified, and phone magnified (toolbar / keyboard) variants.",
+      "useWhen": [
+        "Hot Sheet needs shared 5:3 terminal viewport card in preview, magnified, and phone magnified (toolbar / keyboard) variants."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific FixedAspectTerminalCard behavior."
+      ],
+      "publicClasses": [
+        "terminal-tile"
+      ],
+      "publicTokens": [],
+      "source": "src/components/terminal-dashboard.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "halted-session-popup",
+      "name": "HaltedSessionPopup",
+      "kind": "component",
+      "purpose": "Acknowledged halted AI session prompt with Open session, Dismiss, and app-wide Pause notifications.",
+      "useWhen": [
+        "Hot Sheet needs acknowledged halted AI session prompt with Open session, Dismiss, and app-wide Pause notifications."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific HaltedSessionPopup behavior."
+      ],
+      "publicClasses": [
+        "halted-session-popup"
+      ],
+      "publicTokens": [],
+      "source": "src/components/halted-session-popup.tsx",
+      "geometry": {
+        "margin": "self",
+        "border": "self",
+        "padding": "child",
+        "notes": [
+          "Owns native top-layer viewport placement and framing; public List, Row, and Text own content geometry (HS2-E6KAWY)."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "hs1-migration-banner",
+      "name": "Hs1MigrationBanner",
+      "kind": "component",
+      "purpose": "Project-owned measured, unknown, retry, imported, and verified-backup states for Hot Sheet 1.",
+      "useWhen": [
+        "Hot Sheet needs project-owned measured, unknown, retry, imported, and verified-backup states for Hot Sheet 1."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific Hs1MigrationBanner behavior."
+      ],
+      "publicClasses": [
+        "hs1-migration-banner"
+      ],
+      "publicTokens": [],
+      "source": "src/components/hs1-migration.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "hs1-migration-dialog",
+      "name": "Hs1MigrationDialog",
+      "kind": "component",
+      "purpose": "Detected Hot Sheet 1 source details and destination-only import flow.",
+      "useWhen": [
+        "Hot Sheet needs detected Hot Sheet 1 source details and destination-only import flow."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific Hs1MigrationDialog behavior."
+      ],
+      "publicClasses": [
+        "hs1-migration-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/hs1-migration.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
     },
     {
       "id": "keyboard-settings",
       "name": "KeyboardSettings",
-      "source": "src/components/keyboard-settings.tsx",
       "kind": "component",
       "purpose": "Grouped reference and rebinding of documented keyboard shortcuts.",
       "useWhen": [
@@ -2090,17 +716,1471 @@
         "keyboard-settings"
       ],
       "publicTokens": [],
+      "source": "src/components/keyboard-settings.tsx",
       "geometry": {
         "margin": "none",
         "border": "child",
         "padding": "child"
       },
-      "documentation": "docs/ux-components.md"
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "main-shell",
+      "name": "MainShell",
+      "kind": "composition",
+      "purpose": "Viewport application shell with header actions forwarded to a Toolbar trailing zone.",
+      "useWhen": [
+        "Hot Sheet needs viewport application shell with header actions forwarded to a Toolbar trailing zone."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific MainShell behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/main-shell.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "manual-model-dialog",
+      "name": "ManualModelDialog",
+      "kind": "component",
+      "purpose": "Enter an exact model identifier a provider accepts.",
+      "useWhen": [
+        "Hot Sheet needs enter an exact model identifier a provider accepts."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ManualModelDialog behavior."
+      ],
+      "publicClasses": [
+        "manual-model-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/manual-model-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "markdown-editor",
+      "name": "MarkdownEditor",
+      "kind": "component",
+      "purpose": "Inline and expanded Markdown editing.",
+      "useWhen": [
+        "Hot Sheet needs inline and expanded Markdown editing."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific MarkdownEditor behavior."
+      ],
+      "publicClasses": [
+        "markdown-editor"
+      ],
+      "publicTokens": [],
+      "source": "src/components/markdown-editor.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "markdown-preview",
+      "name": "MarkdownPreview",
+      "kind": "component",
+      "purpose": "Sanitized Markdown rendering with tone, size, density, and attachment-media presentation variants.",
+      "useWhen": [
+        "Hot Sheet needs sanitized Markdown rendering with tone, size, density, and attachment-media presentation variants."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific MarkdownPreview behavior."
+      ],
+      "publicClasses": [
+        "markdown-preview"
+      ],
+      "publicTokens": [],
+      "source": "src/components/markdown-preview.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "not-working-dialog",
+      "name": "NotWorkingDialog",
+      "kind": "component",
+      "purpose": "Completed-ticket verification failure report with notes and evidence.",
+      "useWhen": [
+        "Hot Sheet needs completed-ticket verification failure report with notes and evidence."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific NotWorkingDialog behavior."
+      ],
+      "publicClasses": [
+        "not-working-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/not-working-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "note-card",
+      "name": "NoteCard",
+      "kind": "component",
+      "purpose": "Kind-specific note presentation with an optional banded AI completion confidence badge.",
+      "useWhen": [
+        "Hot Sheet needs kind-specific note presentation with an optional banded AI completion confidence badge."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific NoteCard behavior."
+      ],
+      "publicClasses": [
+        "note-card"
+      ],
+      "publicTokens": [],
+      "source": "src/components/note-card.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "note-composer",
+      "name": "NoteComposer",
+      "kind": "component",
+      "purpose": "Create or cancel a provider-backed ticket note.",
+      "useWhen": [
+        "Hot Sheet needs create or cancel a provider-backed ticket note."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific NoteComposer behavior."
+      ],
+      "publicClasses": [
+        "note-composer"
+      ],
+      "publicTokens": [],
+      "source": "src/components/note-composer.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "notification-center",
+      "name": "NotificationCenter",
+      "kind": "component",
+      "purpose": "Pending permission requests and newest-first decision history with consistent 12px card spacing across both groups.",
+      "useWhen": [
+        "Hot Sheet needs pending permission requests and newest-first decision history with consistent 12px card spacing across both groups."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific NotificationCenter behavior."
+      ],
+      "publicClasses": [
+        "notification-center"
+      ],
+      "publicTokens": [],
+      "source": "src/components/notification-center.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "notification-navigation",
+      "name": "NotificationNavigation",
+      "kind": "component",
+      "purpose": "Notification views with attention counts and a pause footer composed from Kerf List and Text in an unpadded sidebar pane.",
+      "useWhen": [
+        "Hot Sheet needs notification views with attention counts and a pause footer composed from Kerf List and Text in an unpadded sidebar pane."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific NotificationNavigation behavior."
+      ],
+      "publicClasses": [
+        "settings-navigation"
+      ],
+      "publicTokens": [],
+      "source": "src/components/notification-navigation.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "notifications-paused-banner",
+      "name": "NotificationsPausedBanner",
+      "kind": "component",
+      "purpose": "App-wide status that notifications are paused, with the waiting request count and Resume.",
+      "useWhen": [
+        "Hot Sheet needs app-wide status that notifications are paused, with the waiting request count and Resume."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific NotificationsPausedBanner behavior."
+      ],
+      "publicClasses": [
+        "notifications-paused-banner"
+      ],
+      "publicTokens": [],
+      "source": "src/components/notifications-paused-banner.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "pending-attachment-picker",
+      "name": "PendingAttachmentPicker",
+      "kind": "component",
+      "purpose": "Drop, browse, review, and remove evidence before submission.",
+      "useWhen": [
+        "Hot Sheet needs drop, browse, review, and remove evidence before submission."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific PendingAttachmentPicker behavior."
+      ],
+      "publicClasses": [
+        "pending-attachment-picker"
+      ],
+      "publicTokens": [],
+      "source": "src/components/pending-attachment-picker.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "permission-request",
+      "name": "PermissionRequestCard",
+      "kind": "component",
+      "purpose": "Human approval with timeout, project identity, and supported decision scopes.",
+      "useWhen": [
+        "Hot Sheet needs human approval with timeout, project identity, and supported decision scopes."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific PermissionRequestCard behavior."
+      ],
+      "publicClasses": [
+        "permission-request-card"
+      ],
+      "publicTokens": [],
+      "source": "src/components/permission-request-card.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "project-close-dialog",
+      "name": "ProjectCloseDialog",
+      "kind": "component",
+      "purpose": "Warn about running terminals and AI chats before closing a project, with a live resource preview.",
+      "useWhen": [
+        "Hot Sheet needs warn about running terminals and AI chats before closing a project, with a live resource preview."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ProjectCloseDialog behavior."
+      ],
+      "publicClasses": [
+        "project-close-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/project-close-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "project-dashboard-modes",
+      "name": "ProjectDashboardModes",
+      "kind": "component",
+      "purpose": "The project strip's global dashboard switcher: a borderless compact ToolbarControlGroup of native pressed buttons.",
+      "useWhen": [
+        "Hot Sheet needs the project strip's global dashboard switcher: a borderless compact ToolbarControlGroup of native pressed buttons."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ProjectDashboardModes behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/project-strip-actions.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "project-dialog",
+      "name": "ProjectDialog",
+      "kind": "component",
+      "purpose": "Open a local checkout or choose a checkout already known to a remote server.",
+      "useWhen": [
+        "Hot Sheet needs open a local checkout or choose a checkout already known to a remote server."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ProjectDialog behavior."
+      ],
+      "publicClasses": [
+        "project-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/project-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "project-setup-warning-banner",
+      "name": "ProjectSetupWarningBanner",
+      "kind": "component",
+      "purpose": "Dismissible warning that a project opened but skipped its setup refresh, with the reason and fix.",
+      "useWhen": [
+        "Hot Sheet needs dismissible warning that a project opened but skipped its setup refresh, with the reason and fix."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ProjectSetupWarningBanner behavior."
+      ],
+      "publicClasses": [
+        "project-setup-warning-banner"
+      ],
+      "publicTokens": [],
+      "source": "src/components/project-setup-warning-banner.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "project-sidebar",
+      "name": "ProjectSidebar",
+      "kind": "composition",
+      "purpose": "Project summary, repository state, views, commands, and drive controls.",
+      "useWhen": [
+        "Hot Sheet needs project summary, repository state, views, commands, and drive controls."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ProjectSidebar behavior."
+      ],
+      "publicClasses": [
+        "project-sidebar"
+      ],
+      "publicTokens": [],
+      "source": "src/components/project-sidebar.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "project-summary",
+      "name": "ProjectSummary",
+      "kind": "component",
+      "purpose": "Seven-day completion history and current ticket counts.",
+      "useWhen": [
+        "Hot Sheet needs seven-day completion history and current ticket counts."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ProjectSummary behavior."
+      ],
+      "publicClasses": [
+        "project-summary"
+      ],
+      "publicTokens": [],
+      "source": "src/components/project-summary.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "project-tab",
+      "name": "ProjectTab",
+      "kind": "component",
+      "purpose": "One local or remote project connection tab.",
+      "useWhen": [
+        "Hot Sheet needs one local or remote project connection tab."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ProjectTab behavior."
+      ],
+      "publicClasses": [
+        "project-tab"
+      ],
+      "publicTokens": [],
+      "source": "src/components/project-tab.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "project-tabs",
+      "name": "ProjectTabBar",
+      "kind": "component",
+      "purpose": "Local and remote project tabs and the phone picker with project attention.",
+      "useWhen": [
+        "Hot Sheet needs local and remote project tabs and the phone picker with project attention."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ProjectTabBar behavior."
+      ],
+      "publicClasses": [
+        "project-tab-bar"
+      ],
+      "publicTokens": [],
+      "source": "src/components/project-tab-bar.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "provider-icon",
+      "name": "ProviderIcon",
+      "kind": "component",
+      "purpose": "Provider brand marks for GitHub, GitLab, and Jira at the inline (m) and identity (l) sizes.",
+      "useWhen": [
+        "Hot Sheet needs provider brand marks for GitHub, GitLab, and Jira at the inline (m) and identity (l) sizes."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ProviderIcon behavior."
+      ],
+      "publicClasses": [
+        "provider-icon"
+      ],
+      "publicTokens": [],
+      "source": "src/components/provider-icon.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "none",
+        "padding": "none"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "provider-setup-form",
+      "name": "ProviderSetupForm",
+      "kind": "component",
+      "purpose": "Provider credentials, repository locator, and default-source settings.",
+      "useWhen": [
+        "Hot Sheet needs provider credentials, repository locator, and default-source settings."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ProviderSetupForm behavior."
+      ],
+      "publicClasses": [
+        "provider-setup-form"
+      ],
+      "publicTokens": [],
+      "source": "src/components/provider-setup-form.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "quick-ticket-composer",
+      "name": "QuickTicketComposer",
+      "kind": "component",
+      "purpose": "Compact ticket creation with a clear warning when the destination differs from the project default.",
+      "useWhen": [
+        "Hot Sheet needs compact ticket creation with a clear warning when the destination differs from the project default."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific QuickTicketComposer behavior."
+      ],
+      "publicClasses": [
+        "quick-ticket-composer"
+      ],
+      "publicTokens": [],
+      "source": "src/components/quick-ticket-composer.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "quick-ticket-launcher",
+      "name": "QuickTicketLauncher",
+      "kind": "component",
+      "purpose": "The brand pill wa-button that opens the quick ticket composer and accepts dropped tickets and files.",
+      "useWhen": [
+        "Hot Sheet needs the brand pill wa-button that opens the quick ticket composer and accepts dropped tickets and files."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific QuickTicketLauncher behavior."
+      ],
+      "publicClasses": [
+        "quick-ticket-composer__launcher"
+      ],
+      "publicTokens": [],
+      "source": "src/components/quick-ticket-composer.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "repository-status-popover",
+      "name": "RepositoryStatusPopover",
+      "kind": "composition",
+      "purpose": "Master/detail repository files, commits, and host actions.",
+      "useWhen": [
+        "Hot Sheet needs master/detail repository files, commits, and host actions."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific RepositoryStatusPopover behavior."
+      ],
+      "publicClasses": [
+        "repository-status-popover"
+      ],
+      "publicTokens": [],
+      "source": "src/components/repository-status-popover.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "repository-summary",
+      "name": "RepositorySummary",
+      "kind": "component",
+      "purpose": "Branch and working-copy status action with Kerf metrics.",
+      "useWhen": [
+        "Hot Sheet needs branch and working-copy status action with Kerf metrics."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific RepositorySummary behavior."
+      ],
+      "publicClasses": [
+        "repository-summary"
+      ],
+      "publicTokens": [],
+      "source": "src/components/repository-summary.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "saved-view-dialog",
+      "name": "SavedViewDialog",
+      "kind": "component",
+      "purpose": "Create or edit a saved ticket view with a full-width responsive query editor.",
+      "useWhen": [
+        "Hot Sheet needs create or edit a saved ticket view with a full-width responsive query editor."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific SavedViewDialog behavior."
+      ],
+      "publicClasses": [
+        "saved-view-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/saved-view-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "settings-navigation",
+      "name": "SettingsNavigation",
+      "kind": "component",
+      "purpose": "Grouped settings categories arranged by Kerf List in an unpadded sidebar pane.",
+      "useWhen": [
+        "Hot Sheet needs grouped settings categories arranged by Kerf List in an unpadded sidebar pane."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific SettingsNavigation behavior."
+      ],
+      "publicClasses": [
+        "settings-navigation"
+      ],
+      "publicTokens": [],
+      "source": "src/components/settings-navigation.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "settings-workspace",
+      "name": "SettingsWorkspace",
+      "kind": "component",
+      "purpose": "One category-selected project or app settings surface.",
+      "useWhen": [
+        "Hot Sheet needs one category-selected project or app settings surface."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific SettingsWorkspace behavior."
+      ],
+      "publicClasses": [
+        "settings-workspace"
+      ],
+      "publicTokens": [],
+      "source": "src/components/settings-workspace.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "status-badge",
+      "name": "StatusBadge",
+      "kind": "component",
+      "purpose": "Readable ticket state with reinforcing iconography.",
+      "useWhen": [
+        "Hot Sheet needs readable ticket state with reinforcing iconography."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific StatusBadge behavior."
+      ],
+      "publicClasses": [
+        "status-badge"
+      ],
+      "publicTokens": [],
+      "source": "src/components/status-badge.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "tag-chip",
+      "name": "TagChip",
+      "kind": "component",
+      "purpose": "Compact tag label with optional removal behavior.",
+      "useWhen": [
+        "Hot Sheet needs compact tag label with optional removal behavior."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TagChip behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/tag-chip.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "terminal-copy-dialog",
+      "name": "TerminalCopyDialog",
+      "kind": "component",
+      "purpose": "Phone terminal Copy sheet: the buffer as native, long-press-selectable text; Copy takes the selection or everything.",
+      "useWhen": [
+        "Hot Sheet needs phone terminal Copy sheet: the buffer as native, long-press-selectable text; Copy takes the selection or everything."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TerminalCopyDialog behavior."
+      ],
+      "publicClasses": [
+        "terminal-copy-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/terminal-clipboard-dialogs.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "terminal-dashboard",
+      "name": "TerminalDashboard",
+      "kind": "composition",
+      "purpose": "Responsive workspace grid for terminals and AI chats, including connected, missing-hook, and halted session states with manual clearing.",
+      "useWhen": [
+        "Hot Sheet needs responsive workspace grid for terminals and AI chats, including connected, missing-hook, and halted session states with manual clearing."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TerminalDashboard behavior."
+      ],
+      "publicClasses": [
+        "terminal-dashboard"
+      ],
+      "publicTokens": [],
+      "source": "src/components/terminal-dashboard.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "terminal-drawer",
+      "name": "TerminalDrawer",
+      "kind": "composition",
+      "purpose": "Project grid, terminal, and embedded AI-chat tabs with a typed creation menu, and tab states for busy, halted terminals, failed or recovered driven chats, and Hot Sheet-connected or unconnected AI sessions.",
+      "useWhen": [
+        "Hot Sheet needs project grid, terminal, and embedded AI-chat tabs with a typed creation menu, and tab states for busy, halted terminals, failed or recovered driven chats, and Hot Sheet-connected or unconnected AI sessions."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TerminalDrawer behavior."
+      ],
+      "publicClasses": [
+        "terminal-drawer"
+      ],
+      "publicTokens": [],
+      "source": "src/components/terminal-drawer.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "terminal-edit-menu",
+      "name": "TerminalEditMenu",
+      "kind": "component",
+      "purpose": "Touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text… opens the Copy sheet, and Paste sends the clipboard.",
+      "useWhen": [
+        "Hot Sheet needs touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text… opens the Copy sheet, and Paste sends the clipboard."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TerminalEditMenu behavior."
+      ],
+      "publicClasses": [
+        "terminal-edit-menu"
+      ],
+      "publicTokens": [],
+      "source": "src/components/terminal-clipboard-dialogs.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "terminal-key-bar",
+      "name": "TerminalKeyBar",
+      "kind": "component",
+      "purpose": "Phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn.",
+      "useWhen": [
+        "Hot Sheet needs phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TerminalKeyBar behavior."
+      ],
+      "publicClasses": [
+        "terminal-key-bar"
+      ],
+      "publicTokens": [],
+      "source": "src/components/terminal-key-bar.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "terminal-operations-sidebar",
+      "name": "TerminalOperationsSidebar",
+      "kind": "composition",
+      "purpose": "Per-project and aggregate completion and in-progress summaries beside the workspace grid.",
+      "useWhen": [
+        "Hot Sheet needs per-project and aggregate completion and in-progress summaries beside the workspace grid."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TerminalOperationsSidebar behavior."
+      ],
+      "publicClasses": [
+        "terminal-operations-sidebar"
+      ],
+      "publicTokens": [],
+      "source": "src/components/terminal-operations-sidebar.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "terminal-paste-dialog",
+      "name": "TerminalPasteDialog",
+      "kind": "component",
+      "purpose": "Phone terminal Paste fallback when the clipboard cannot be read (denied or unavailable): paste natively, then send.",
+      "useWhen": [
+        "Hot Sheet needs phone terminal Paste fallback when the clipboard cannot be read (denied or unavailable): paste natively, then send."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TerminalPasteDialog behavior."
+      ],
+      "publicClasses": [
+        "terminal-paste-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/terminal-clipboard-dialogs.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "terminal-rename-dialog",
+      "name": "TerminalRenameDialog",
+      "kind": "component",
+      "purpose": "Rename a terminal while retaining its stable identity; a renamed terminal also offers Reset to default, naming the default it restores.",
+      "useWhen": [
+        "Hot Sheet needs rename a terminal while retaining its stable identity; a renamed terminal also offers Reset to default, naming the default it restores."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TerminalRenameDialog behavior."
+      ],
+      "publicClasses": [
+        "terminal-rename"
+      ],
+      "publicTokens": [],
+      "source": "src/components/terminal-rename-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "terminal-ticket-rail",
+      "name": "TerminalTicketRail",
+      "kind": "composition",
+      "purpose": "Compact navigation rail (a Kerf NavStack) with equal-width List/Notifications segments, bordered collapsible search, a sunken scrolling list, ticket launcher, and push navigation into ticket detail on one toolbar row.",
+      "useWhen": [
+        "Hot Sheet needs compact navigation rail (a Kerf NavStack) with equal-width List/Notifications segments, bordered collapsible search, a sunken scrolling list, ticket launcher, and push navigation into ticket detail on one toolbar row."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TerminalTicketRail behavior."
+      ],
+      "publicClasses": [
+        "terminal-ticket-rail"
+      ],
+      "publicTokens": [],
+      "source": "src/components/terminal-ticket-rail.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "terminal-visibility-dialog",
+      "name": "TerminalVisibilityDialog",
+      "kind": "component",
+      "purpose": "Named visibility groups, persistent shell/AI/chat visibility, and a Kerf multiple-Select type filter.",
+      "useWhen": [
+        "Hot Sheet needs named visibility groups, persistent shell/AI/chat visibility, and a Kerf multiple-Select type filter."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TerminalVisibilityDialog behavior."
+      ],
+      "publicClasses": [
+        "terminal-visibility-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/terminal-visibility-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-attachments",
+      "name": "TicketAttachments",
+      "kind": "component",
+      "purpose": "Ticket attachment inspector section, including editable, append-only, unsupported, and linked-reader states.",
+      "useWhen": [
+        "Hot Sheet needs ticket attachment inspector section, including editable, append-only, unsupported, and linked-reader states."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketAttachments behavior."
+      ],
+      "publicClasses": [
+        "ticket-attachments"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-attachments.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-board",
+      "name": "TicketBoard",
+      "kind": "composition",
+      "purpose": "Status/category column workspace.",
+      "useWhen": [
+        "Hot Sheet needs status/category column workspace."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketBoard behavior."
+      ],
+      "publicClasses": [
+        "ticket-board"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-board.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-board-column",
+      "name": "TicketBoardColumn",
+      "kind": "component",
+      "purpose": "One titled, independently scrollable ticket column.",
+      "useWhen": [
+        "Hot Sheet needs one titled, independently scrollable ticket column."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketBoardColumn behavior."
+      ],
+      "publicClasses": [
+        "ticket-board-column"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-board-column.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-category-select",
+      "name": "TicketCategorySelect",
+      "kind": "component",
+      "purpose": "Category chooser with configured icons and colors.",
+      "useWhen": [
+        "Hot Sheet needs category chooser with configured icons and colors."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketCategorySelect behavior."
+      ],
+      "publicClasses": [
+        "ticket-category-select"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-category-select.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-close-dialog",
+      "name": "TicketCloseDialog",
+      "kind": "component",
+      "purpose": "Structured close outcomes with duplicate-target search and validation.",
+      "useWhen": [
+        "Hot Sheet needs structured close outcomes with duplicate-target search and validation."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketCloseDialog behavior."
+      ],
+      "publicClasses": [
+        "ticket-close-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-close-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-code-review",
+      "name": "TicketCodeReview",
+      "kind": "component",
+      "purpose": "Ticket-associated commits and configured diff-tool actions.",
+      "useWhen": [
+        "Hot Sheet needs ticket-associated commits and configured diff-tool actions."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketCodeReview behavior."
+      ],
+      "publicClasses": [
+        "ticket-code-review"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-code-review.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-info-panel",
+      "name": "TicketInfoPanel",
+      "kind": "composition",
+      "purpose": "Ticket metadata and details with compact headings, inset status controls and empty notes, tags, and provenance.",
+      "useWhen": [
+        "Hot Sheet needs ticket metadata and details with compact headings, inset status controls and empty notes, tags, and provenance."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketInfoPanel behavior."
+      ],
+      "publicClasses": [
+        "ticket-info-panel"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-info-panel.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-inspector",
+      "name": "TicketInspector",
+      "kind": "composition",
+      "purpose": "Trailing ticket detail and editing surface with contained, centered section tabs.",
+      "useWhen": [
+        "Hot Sheet needs trailing ticket detail and editing surface with contained, centered section tabs."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketInspector behavior."
+      ],
+      "publicClasses": [
+        "ticket-inspector"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-inspector.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-inspector-skeleton",
+      "name": "TicketInspectorSkeleton",
+      "kind": "component",
+      "purpose": "Shape-preserving loading placeholder shown while the next ticket loads.",
+      "useWhen": [
+        "Hot Sheet needs shape-preserving loading placeholder shown while the next ticket loads."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketInspectorSkeleton behavior."
+      ],
+      "publicClasses": [
+        "ticket-inspector"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-inspector.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-link-choice-dialog",
+      "name": "TicketLinkChoiceDialog",
+      "kind": "component",
+      "purpose": "Disambiguate exact ticket references with wrapping public navigation rows and source metadata.",
+      "useWhen": [
+        "Hot Sheet needs disambiguate exact ticket references with wrapping public navigation rows and source metadata."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketLinkChoiceDialog behavior."
+      ],
+      "publicClasses": [
+        "ticket-link-choice-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-link-choice-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-list",
+      "name": "TicketList",
+      "kind": "composition",
+      "purpose": "Responsive, keyboard-navigable ticket collection.",
+      "useWhen": [
+        "Hot Sheet needs responsive, keyboard-navigable ticket collection."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketList behavior."
+      ],
+      "publicClasses": [
+        "ticket-list"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-list.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-page-more",
+      "name": "TicketPageMore",
+      "kind": "component",
+      "purpose": "Load-more continuation below a paged ticket list or board column, idle and loading.",
+      "useWhen": [
+        "Hot Sheet needs load-more continuation below a paged ticket list or board column, idle and loading."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketPageMore behavior."
+      ],
+      "publicClasses": [
+        "ticket-page-more"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-page-more.tsx",
+      "geometry": {
+        "margin": "self",
+        "border": "self",
+        "padding": "self",
+        "notes": [
+          "Centers itself below the list or column rows with its own block margin (HS2-WP69TD)."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-priority-select",
+      "name": "TicketPrioritySelect",
+      "kind": "component",
+      "purpose": "Priority chooser with semantic icons.",
+      "useWhen": [
+        "Hot Sheet needs priority chooser with semantic icons."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketPrioritySelect behavior."
+      ],
+      "publicClasses": [
+        "ticket-priority-select"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-priority-select.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-reader",
+      "name": "TicketReader",
+      "kind": "composition",
+      "purpose": "Large dialog presentation of the complete ticket inspector.",
+      "useWhen": [
+        "Hot Sheet needs large dialog presentation of the complete ticket inspector."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketReader behavior."
+      ],
+      "publicClasses": [
+        "ticket-reader"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-reader.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-row",
+      "name": "TicketRow",
+      "kind": "component",
+      "purpose": "Dense ticket summary and selection target, with a compact completion-confidence pill on completed/verified tickets.",
+      "useWhen": [
+        "Hot Sheet needs dense ticket summary and selection target, with a compact completion-confidence pill on completed/verified tickets."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketRow behavior."
+      ],
+      "publicClasses": [
+        "ticket-list-row"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-row.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-search-field",
+      "name": "TicketSearchField",
+      "kind": "component",
+      "purpose": "Ticket search query editor with inline filter chips, in-place tag completion, a lifecycle date helper, and syntax help.",
+      "useWhen": [
+        "Hot Sheet needs ticket search query editor with inline filter chips, in-place tag completion, a lifecycle date helper, and syntax help."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketSearchField behavior."
+      ],
+      "publicClasses": [
+        "ticket-search-field"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-search-field.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-source-setup-dialog",
+      "name": "TicketSourceSetupDialog",
+      "kind": "component",
+      "purpose": "Choose and configure a git or external ticket source, including first-source and existing-default choices.",
+      "useWhen": [
+        "Hot Sheet needs choose and configure a git or external ticket source, including first-source and existing-default choices."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketSourceSetupDialog behavior."
+      ],
+      "publicClasses": [
+        "ticket-source-setup-dialog"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-source-setup-dialog.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-sources-settings",
+      "name": "TicketSourcesSettings",
+      "kind": "component",
+      "purpose": "One project's own ticket sources: default-source choice, editable rows with a remove-from-this-project action, and a note for a source another project shares.",
+      "useWhen": [
+        "Hot Sheet needs one project's own ticket sources: default-source choice, editable rows with a remove-from-this-project action, and a note for a source another project shares."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketSourcesSettings behavior."
+      ],
+      "publicClasses": [
+        "ticket-sources-settings"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-sources-settings.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-status-menu",
+      "name": "TicketStatusMenu",
+      "kind": "component",
+      "purpose": "Badge-triggered status chooser with semantic icons.",
+      "useWhen": [
+        "Hot Sheet needs badge-triggered status chooser with semantic icons."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketStatusMenu behavior."
+      ],
+      "publicClasses": [
+        "ticket-status-menu"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-status-menu.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-timeline",
+      "name": "TicketTimeline",
+      "kind": "component",
+      "purpose": "Chronological ticket activity inspector section.",
+      "useWhen": [
+        "Hot Sheet needs chronological ticket activity inspector section."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketTimeline behavior."
+      ],
+      "publicClasses": [
+        "ticket-timeline"
+      ],
+      "publicTokens": [],
+      "source": "src/components/ticket-timeline.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "ticket-view-action",
+      "name": "TicketViewAction",
+      "kind": "component",
+      "purpose": "Renders the current ticket view's primary action spec as QuickTicketLauncher or EmptyTrashAction.",
+      "useWhen": [
+        "Hot Sheet needs renders the current ticket view's primary action spec as QuickTicketLauncher or EmptyTrashAction."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketViewAction behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/workspace-controls.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
     },
     {
       "id": "trash-settings",
       "name": "TrashSettings",
-      "source": "src/components/trash-settings.tsx",
       "kind": "component",
       "purpose": "Trash retention window and empty-trash entry point.",
       "useWhen": [
@@ -2113,12 +2193,111 @@
         "trash-settings"
       ],
       "publicTokens": [],
+      "source": "src/components/trash-settings.tsx",
       "geometry": {
         "margin": "none",
         "border": "child",
         "padding": "child"
       },
-      "documentation": "docs/ux-components.md"
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "view-navigation",
+      "name": "ViewNavigation",
+      "kind": "component",
+      "purpose": "Selectable built-in and custom ticket views with paired saved-view actions.",
+      "useWhen": [
+        "Hot Sheet needs selectable built-in and custom ticket views with paired saved-view actions."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ViewNavigation behavior."
+      ],
+      "publicClasses": [
+        "view-navigation"
+      ],
+      "publicTokens": [],
+      "source": "src/components/view-navigation.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "workspace-controls",
+      "name": "WorkspaceControls",
+      "kind": "composition",
+      "purpose": "Workspace view-mode, sort, selection, ticket search, and overflow control groups rendered as Toolbar zone content with no wrapper element.",
+      "useWhen": [
+        "Hot Sheet needs workspace view-mode, sort, selection, ticket search, and overflow control groups rendered as Toolbar zone content with no wrapper element."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific WorkspaceControls behavior."
+      ],
+      "publicClasses": [
+        "view-mode-switcher",
+        "workspace-header__sort-group",
+        "workspace-header__utility-group",
+        "workspace-header__overflow-group"
+      ],
+      "publicTokens": [],
+      "source": "src/components/workspace-controls.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "workspace-header",
+      "name": "WorkspaceHeader",
+      "kind": "composition",
+      "purpose": "Project identity, canonical toolbar view segments, native selection actions with none/mixed/all Up Next stars, sorting, settings, search, and a connected notification inbox with live counts and local request decisions.",
+      "useWhen": [
+        "Hot Sheet needs project identity, canonical toolbar view segments, native selection actions with none/mixed/all Up Next stars, sorting, settings, search, and a connected notification inbox with live counts and local request decisions."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific WorkspaceHeader behavior."
+      ],
+      "publicClasses": [
+        "workspace-header"
+      ],
+      "publicTokens": [],
+      "source": "src/components/workspace-header.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "workspace-identity",
+      "name": "WorkspaceIdentity",
+      "kind": "component",
+      "purpose": "The project name as Toolbar leading text, hidden at the narrowest toolbar widths.",
+      "useWhen": [
+        "Hot Sheet needs the project name as Toolbar leading text, hidden at the narrowest toolbar widths."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific WorkspaceIdentity behavior."
+      ],
+      "publicClasses": [
+        "workspace-header__identity"
+      ],
+      "publicTokens": [],
+      "source": "src/components/workspace-controls.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
     }
   ]
 }

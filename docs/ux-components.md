@@ -2125,11 +2125,16 @@ sidebars reveal both the initial deep link and later controlled selection withou
 focus; compact layouts retain Kerf's default no-forced-scroll guard.
 
 Hot Sheet publishes its package-qualified consumer metadata in
-`clients/web/ai/component-catalog-extension.json`. Its generated entries record every
-implemented app-owned component or composition's purpose, appropriate and inappropriate
-uses, public CSS/token hooks, documentation, and explicit margin/border/padding owner.
-`clients/web/scripts/sync-component-catalog-extension.mjs` derives that extension from
-the catalog inventory, and `npm run catalog:check` prevents drift. AI and human consumers
+`clients/web/ai/component-catalog-extension.json`. Its entries record every app-owned
+component or composition's purpose, appropriate and inappropriate uses, public CSS/token
+hooks, documentation, and explicit margin/border/padding owner. Since Kerf beta.94
+(KF-K1SY5X, HS2-HMVBZW) the selection catalog is generated from the author metadata in
+`clients/web/kerf.components.json` (`package.json#kerfComponentCatalog`):
+`npm run catalog:generate` runs `kerf-component-catalog --write` and `npm run catalog:check`
+prevents drift. The generator also writes `ai/component-composition.generated.json`, but the
+doctor profile still reads the hand-kept `ai/component-composition-extension.json`, because the
+author schema cannot yet express its `wiring.sources` helper locations or JSX-prop zones; adopting
+the generated composition output would add KUI-L401 warnings. AI and human consumers
 must search this extension before the installed Kerf component catalog, retain the source
 package identity, and use the ownership fields to avoid duplicate wrappers or insets.
 
@@ -2528,7 +2533,7 @@ context or inside `:has()` fails the doctor too.
 
 Since Kerf 5.0.0-beta.72 (HS2-R9GQJE) the doctor runs strict:
 
-- `scripts/sync-component-catalog-extension.mjs` emits `source` on every selection entry, and
+- `kerf-component-catalog` emits `source` on every selection entry, and
   `src/ux-demo/catalog.test.ts` requires it to name an existing module.
 - `"implicitComponentOwnership": true` judges uncataloged modules that import CSS, such as
   `LoadingSpinner`'s `active-claim.tsx`.

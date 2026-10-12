@@ -15,8 +15,7 @@
     "format": "node scripts/format-sources.mjs --write && cargo fmt --all --manifest-path ../../Cargo.toml",
     "format:check": "node scripts/format-sources.mjs --check && cargo fmt --all --check --manifest-path ../../Cargo.toml",
     "lint": "npm run format:check && eslint . --max-warnings 0 && npm run catalog:check && npm run ui:doctor",
-    "catalog:sync": "node scripts/sync-component-catalog-extension.mjs",
-    "catalog:check": "node scripts/sync-component-catalog-extension.mjs --check",
+    "catalog:check": "kerf-component-catalog --check",
     "ui:doctor": "kerf-ui-doctor --full",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:unit && npm run test:e2e",
@@ -30,7 +29,8 @@
     "profile:pty": "HOTSHEET_UI_PROFILE=1 HOTSHEET_PTY_PROFILE=1 playwright test tests/providers.spec.ts --workers=1 -g 'profiles mixed project'",
     "profile:pty:real": "cargo build --manifest-path ../../Cargo.toml -p hotsheet-cli -p hotsheet-server --bins && HOTSHEET_REAL_PTY_PROFILE=1 playwright test tests/real-pty-profile.spec.ts --workers=1",
     "profile:pty:firefox": "cargo build --manifest-path ../../Cargo.toml -p hotsheet-cli -p hotsheet-server --bins && HOTSHEET_FIREFOX_PTY_PROFILE=1 playwright test tests/firefox-pty-profile.spec.ts --workers=1",
-    "stress:scale": "node scripts/scale-stress.mjs"
+    "stress:scale": "node scripts/scale-stress.mjs",
+    "catalog:generate": "kerf-component-catalog --write"
   },
   "dependencies": {
     "@awesome.me/webawesome": "3.12.0",
@@ -52,6 +52,7 @@
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/node": "22.17.2",
     "@types/ws": "^8.18.1",
+    "create-kerf-component": "5.0.0-beta.94",
     "domotion-svg": "^0.24.0",
     "eslint": "^10.9.1",
     "eslint-plugin-import-x": "^4.17.1",
@@ -63,5 +64,10 @@
     "typescript-eslint": "^8.68.0",
     "vite": "7.3.6",
     "vitest": "^4.1.11"
+  },
+  "kerfComponentCatalog": {
+    "source": "./kerf.components.json",
+    "output": "./ai/component-composition.generated.json",
+    "selectionOutput": "./ai/component-catalog-extension.json"
   }
 }

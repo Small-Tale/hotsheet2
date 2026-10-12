@@ -156,8 +156,9 @@ Before selecting or wrapping a visual component, read Hot Sheet's consumer catal
 declared `geometry` ownership (`self`, `parent`, `child`, `none`, or documented
 `conditional`) instead of inferring margin, border, or padding from a screenshot. When
 an app-owned reusable visual component or composition changes, update its UX-demo entry
-and run `npm run catalog:sync` from `clients/web`; CI/lint checks that the generated
-extension remains current.
+and its record in `clients/web/kerf.components.json`, then run `npm run catalog:generate`
+from `clients/web` (Kerf's `kerf-component-catalog --write`); CI/lint runs
+`npm run catalog:check` so the generated extension remains current.
 
 Use native `<button type="button">` controls for ordinary actions inside Kerf
 `ToolbarControlGroup`. The group owns their sizing, border, padding, and hover/focus

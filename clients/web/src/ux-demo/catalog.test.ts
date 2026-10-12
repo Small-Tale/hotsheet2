@@ -327,14 +327,27 @@ describe('UX demo catalog', () => {
           .filter((entry) => entry.implemented)
           .map((entry) => [entry.id, entry]),
       );
+    // kerf-component-catalog (KF-K1SY5X) also publishes the composition-only toolbar wrappers, which have
+    // no catalog demo of their own (HS2-HMVBZW).
+    const wrappers = new Set(
+      (
+        JSON.parse(readFileSync(new URL('../../ai/component-composition-extension.json', import.meta.url), 'utf8')) as {
+          entries: { id: string }[];
+        }
+      ).entries.map((entry) => entry.id),
+    );
     for (const entry of extension.entries) {
+      if (!implemented.has(entry.id)) {
+        expect(wrappers.has(entry.id), entry.id).toBe(true);
+        continue;
+      }
       expect(implemented.get(entry.id)?.name).toBe(entry.name);
       expect(entry.purpose).toBe(implemented.get(entry.id)?.description);
       expect(entry.useWhen.length).toBeGreaterThan(0);
       expect(entry.avoidWhen.length).toBeGreaterThan(0);
       expect(Array.isArray(entry.publicClasses)).toBe(true);
       expect(Array.isArray(entry.publicTokens)).toBe(true);
-      expect(entry.documentation).toBe('docs/ux-components.md');
+      expect(entry.documentation).toBe('../../docs/ux-components.md');
       for (const owner of [entry.geometry.margin, entry.geometry.border, entry.geometry.padding])
         expect(owners.has(owner)).toBe(true);
       if (Object.values(entry.geometry).includes('conditional'))

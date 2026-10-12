@@ -1,0 +1,6848 @@
+{
+  "$schema": "https://raw.githubusercontent.com/brianwestphal/kerf/main/ui/ai/component-composition-extension.schema.json",
+  "schemaVersion": 1,
+  "package": "hotsheet-web",
+  "compatibility": {
+    "componentCatalog": "./component-catalog-extension.json",
+    "identity": "package:id"
+  },
+  "entries": [
+    {
+      "key": "hotsheet-web:accounts-settings",
+      "package": "hotsheet-web",
+      "id": "accounts-settings",
+      "name": "AccountsSettings",
+      "kind": "component",
+      "purpose": "Machine-wide provider sign-ins with their sources and the projects using each; Sign out for an unused account, plus the empty and error states (App Settings → Accounts).",
+      "publicExports": [
+        {
+          "name": "AccountsSettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-sources-settings.tsx"
+      ],
+      "source": "src/components/ticket-sources-settings.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "accounts-settings"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "accounts-settings"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-sources-settings.tsx",
+        "composition": "src/components/ticket-sources-settings.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:add-project-action",
+      "package": "hotsheet-web",
+      "id": "add-project-action",
+      "name": "AddProjectAction",
+      "kind": "component",
+      "purpose": "The project strip's Add-project action: one native icon button in a single borderless compact ToolbarControlGroup.",
+      "publicExports": [
+        {
+          "name": "AddProjectAction"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/project-strip-actions.tsx"
+      ],
+      "source": "src/components/project-strip-actions.tsx",
+      "rendersAs": [
+        "@kerfjs/ui:toolbar-control-group"
+      ],
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "toolbar-zone"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": [
+          "Handle the choose-project action once at the application root."
+        ]
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "actions"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": [
+          "The icon-only button is named \"Add project\" with aria-label."
+        ]
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/project-strip-actions.tsx",
+        "composition": "src/components/project-strip-actions.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ai-content-label",
+      "package": "hotsheet-web",
+      "id": "ai-content-label",
+      "name": "AIContentLabel",
+      "kind": "component",
+      "purpose": "Persistent AI attribution with the limitations cue, optional feedback, and quiet or inherited tone.",
+      "publicExports": [
+        {
+          "name": "AIContentLabel"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ai-content-label.tsx"
+      ],
+      "source": "src/components/ai-content-label.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ai-content-label"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ai-content-label"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ai-content-label.tsx",
+        "composition": "src/components/ai-content-label.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ai-conversation",
+      "package": "hotsheet-web",
+      "id": "ai-conversation",
+      "name": "AIConversation",
+      "kind": "component",
+      "purpose": "Dialog and embedded AI conversation with native Save/Stop toolbar controls, inline permissions, and interruption.",
+      "publicExports": [
+        {
+          "name": "AIConversation"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ai-conversation.tsx"
+      ],
+      "source": "src/components/ai-conversation.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ai-conversation"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ai-conversation"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ai-conversation.tsx",
+        "composition": "src/components/ai-conversation.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ai-feedback-dialog",
+      "package": "hotsheet-web",
+      "id": "ai-feedback-dialog",
+      "name": "AiFeedbackDialog",
+      "kind": "component",
+      "purpose": "App-owned multiline Markdown explanation for structured AI ratings.",
+      "publicExports": [
+        {
+          "name": "AiFeedbackDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ai-feedback-dialog.tsx"
+      ],
+      "source": "src/components/ai-feedback-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ai-feedback-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ai-feedback-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ai-feedback-dialog.tsx",
+        "composition": "src/components/ai-feedback-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ai-tool-settings",
+      "package": "hotsheet-web",
+      "id": "ai-tool-settings",
+      "name": "AiToolSettings",
+      "kind": "component",
+      "purpose": "Machine-local default AI provider, model, and effort discovered from plugins.",
+      "publicExports": [
+        {
+          "name": "AiToolSettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ai-tool-settings.tsx"
+      ],
+      "source": "src/components/ai-tool-settings.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ai-tool-settings"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ai-tool-settings"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ai-tool-settings.tsx",
+        "composition": "src/components/ai-tool-settings.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:app-empty-state",
+      "package": "hotsheet-web",
+      "id": "app-empty-state",
+      "name": "AppEmptyState",
+      "kind": "component",
+      "purpose": "Initial project-opening, busy restoration, and action-free messages composed from Kerf EmptyState and List.",
+      "publicExports": [
+        {
+          "name": "AppEmptyState"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/app-empty-state.tsx"
+      ],
+      "source": "src/components/app-empty-state.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "app-empty"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "app-empty"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/app-empty-state.tsx",
+        "composition": "src/components/app-empty-state.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:app-error",
+      "package": "hotsheet-web",
+      "id": "app-error",
+      "name": "AppError",
+      "kind": "component",
+      "purpose": "Dismissible application failure with Kerf danger feedback at the screen edge.",
+      "publicExports": [
+        {
+          "name": "AppError"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/app-error.tsx"
+      ],
+      "source": "src/components/app-error.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "app-error"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "app-error"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/app-error.tsx",
+        "composition": "src/components/app-error.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:app-loading-indicator",
+      "package": "hotsheet-web",
+      "id": "app-loading-indicator",
+      "name": "AppLoadingIndicator",
+      "kind": "component",
+      "purpose": "Fixed app-level project loading and sequential ticket-update progress.",
+      "publicExports": [
+        {
+          "name": "AppLoadingIndicator"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/app-loading-indicator.tsx"
+      ],
+      "source": "src/components/app-loading-indicator.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "app-loading-indicator"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "app-loading-indicator"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/app-loading-indicator.tsx",
+        "composition": "src/components/app-loading-indicator.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:app-shell",
+      "package": "hotsheet-web",
+      "id": "app-shell",
+      "name": "AppShell",
+      "kind": "composition",
+      "purpose": "Responsive application regions with a stationary clipped shell, independent child scrolling, and a main-column-relative terminal restore action.",
+      "publicExports": [
+        {
+          "name": "AppShell"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/app-shell.tsx"
+      ],
+      "source": "src/components/app-shell.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "app-shell"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "app-shell"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/app-shell.tsx",
+        "composition": "src/components/app-shell.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:attachment-gallery",
+      "package": "hotsheet-web",
+      "id": "attachment-gallery",
+      "name": "AttachmentGallery",
+      "kind": "component",
+      "purpose": "Always-dark full-screen media viewer with keyboard, arrow, and swipe navigation; unchanged by device or app theme.",
+      "publicExports": [
+        {
+          "name": "AttachmentGallery"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/attachment-gallery.tsx"
+      ],
+      "source": "src/components/attachment-gallery.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "attachment-gallery"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "attachment-gallery"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/attachment-gallery.tsx",
+        "composition": "src/components/attachment-gallery.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:bulk-ticket-dialog",
+      "package": "hotsheet-web",
+      "id": "bulk-ticket-dialog",
+      "name": "BulkTicketDialog",
+      "kind": "component",
+      "purpose": "Confirm bulk tag, delete, and empty-trash actions through public dialog, text, and action compositions.",
+      "publicExports": [
+        {
+          "name": "BulkTicketDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/bulk-ticket-dialog.tsx"
+      ],
+      "source": "src/components/bulk-ticket-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "bulk-ticket-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "bulk-ticket-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/bulk-ticket-dialog.tsx",
+        "composition": "src/components/bulk-ticket-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:change-evidence-dialog",
+      "package": "hotsheet-web",
+      "id": "change-evidence-dialog",
+      "name": "ChangeEvidenceDialog",
+      "kind": "component",
+      "purpose": "Ticket commit-range files grouped by evidence type.",
+      "publicExports": [
+        {
+          "name": "ChangeEvidenceDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/repository-status-popover.tsx"
+      ],
+      "source": "src/components/repository-status-popover.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "change-evidence-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "change-evidence-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/repository-status-popover.tsx",
+        "composition": "src/components/repository-status-popover.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:codex-hooks-notice-banner",
+      "package": "hotsheet-web",
+      "id": "codex-hooks-notice-banner",
+      "name": "CodexHooksNoticeBanner",
+      "kind": "component",
+      "purpose": "Successful setup changed Codex hooks; review their trust with /hooks for this checkout, or dismiss the notice.",
+      "publicExports": [
+        {
+          "name": "CodexHooksNoticeBanner"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/codex-hooks-notice-banner.tsx"
+      ],
+      "source": "src/components/codex-hooks-notice-banner.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "codex-hooks-notice-banner"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "codex-hooks-notice-banner"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/codex-hooks-notice-banner.tsx",
+        "composition": "src/components/codex-hooks-notice-banner.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:command-navigation",
+      "package": "hotsheet-web",
+      "id": "command-navigation",
+      "name": "CommandNavigation",
+      "kind": "component",
+      "purpose": "Grouped colored project command actions arranged by Kerf List.",
+      "publicExports": [
+        {
+          "name": "CommandNavigation"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/command-navigation.tsx"
+      ],
+      "source": "src/components/command-navigation.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "command-navigation"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "command-navigation"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/command-navigation.tsx",
+        "composition": "src/components/command-navigation.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:command-run-dialog",
+      "package": "hotsheet-web",
+      "id": "command-run-dialog",
+      "name": "CommandRunDialog",
+      "kind": "component",
+      "purpose": "Native modal dialog presenting the latest run state and output for a configured command, or the stop confirmation for a running one.",
+      "publicExports": [
+        {
+          "name": "CommandRunDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/command-run-dialog.tsx"
+      ],
+      "source": "src/components/command-run-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "command-run-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "command-run-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/command-run-dialog.tsx",
+        "composition": "src/components/command-run-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:command-settings-editor",
+      "package": "hotsheet-web",
+      "id": "command-settings-editor",
+      "name": "CommandSettingsEditor",
+      "kind": "composition",
+      "purpose": "Master-detail editor for custom command buttons, incl. color and icon pickers.",
+      "publicExports": [
+        {
+          "name": "CommandSettingsEditor"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/command-settings-editor.tsx"
+      ],
+      "source": "src/components/command-settings-editor.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "command-settings-editor"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "command-settings-editor"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/command-settings-editor.tsx",
+        "composition": "src/components/command-settings-editor.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:confidence-badge",
+      "package": "hotsheet-web",
+      "id": "confidence-badge",
+      "name": "ConfidenceBadge",
+      "kind": "component",
+      "purpose": "Banded AI completion confidence: compact pill for notes and ticket summaries, labeled for the inspector header.",
+      "publicExports": [
+        {
+          "name": "ConfidenceBadge"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/confidence-badge.tsx"
+      ],
+      "source": "src/components/confidence-badge.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "confidence-badge"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "confidence-badge"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/confidence-badge.tsx",
+        "composition": "src/components/confidence-badge.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:confidence-calibration",
+      "package": "hotsheet-web",
+      "id": "confidence-calibration",
+      "name": "ConfidenceCalibration",
+      "kind": "component",
+      "purpose": "A project's completion-confidence calibration: per-band reopen versus verified outcomes and recent completions.",
+      "publicExports": [
+        {
+          "name": "ConfidenceCalibration"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/confidence-calibration.tsx"
+      ],
+      "source": "src/components/confidence-calibration.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "confidence-calibration"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "confidence-calibration"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/confidence-calibration.tsx",
+        "composition": "src/components/confidence-calibration.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:connection-details-dialog",
+      "package": "hotsheet-web",
+      "id": "connection-details-dialog",
+      "name": "ConnectionDetailsDialog",
+      "kind": "component",
+      "purpose": "Dismissible client/server compatibility metadata and recovery guidance.",
+      "publicExports": [
+        {
+          "name": "ConnectionDetailsDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/connection-details-dialog.tsx"
+      ],
+      "source": "src/components/connection-details-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "connection-details-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "connection-details-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/connection-details-dialog.tsx",
+        "composition": "src/components/connection-details-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:connection-state-banner",
+      "package": "hotsheet-web",
+      "id": "connection-state-banner",
+      "name": "ConnectionStateBanner",
+      "kind": "component",
+      "purpose": "Connection progress, interruption, compatibility, and authentication states.",
+      "publicExports": [
+        {
+          "name": "ConnectionStateBanner"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/connection-state-banner.tsx"
+      ],
+      "source": "src/components/connection-state-banner.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "connection-state-banner"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "connection-state-banner"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/connection-state-banner.tsx",
+        "composition": "src/components/connection-state-banner.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:content-transition",
+      "package": "hotsheet-web",
+      "id": "content-transition",
+      "name": "ContentTransition",
+      "kind": "component",
+      "purpose": "Reusable A/B push and crossfade transitions with block or end-aligned action-row side layouts.",
+      "publicExports": [
+        {
+          "name": "ContentTransition"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/content-transition.tsx"
+      ],
+      "source": "src/components/content-transition.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "content-transition"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "content-transition"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/content-transition.tsx",
+        "composition": "src/components/content-transition.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:conversation-export-dialog",
+      "package": "hotsheet-web",
+      "id": "conversation-export-dialog",
+      "name": "ConversationExportDialog",
+      "kind": "component",
+      "purpose": "Two-step wizard to choose a message scope then a destination, format, and bundle options.",
+      "publicExports": [
+        {
+          "name": "ConversationExportDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/conversation-export-dialog.tsx"
+      ],
+      "source": "src/components/conversation-export-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "conversation-export-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "conversation-export-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/conversation-export-dialog.tsx",
+        "composition": "src/components/conversation-export-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:drive-control",
+      "package": "hotsheet-web",
+      "id": "drive-control",
+      "name": "DriveControl",
+      "kind": "component",
+      "purpose": "Split AI workflow action and provider override trigger.",
+      "publicExports": [
+        {
+          "name": "DriveControl"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/drive-control.tsx"
+      ],
+      "source": "src/components/drive-control.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "drive-control"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "drive-control"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/drive-control.tsx",
+        "composition": "src/components/drive-control.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:drive-options-menu",
+      "package": "hotsheet-web",
+      "id": "drive-options-menu",
+      "name": "DriveOptionsMenu",
+      "kind": "component",
+      "purpose": "Provider, model, and effort overrides for a driven session.",
+      "publicExports": [
+        {
+          "name": "DriveOptionsMenu"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/drive-options-menu.tsx"
+      ],
+      "source": "src/components/drive-options-menu.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "drive-options-menu"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "drive-options-menu"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/drive-options-menu.tsx",
+        "composition": "src/components/drive-options-menu.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:empty-trash-action",
+      "package": "hotsheet-web",
+      "id": "empty-trash-action",
+      "name": "EmptyTrashAction",
+      "kind": "component",
+      "purpose": "The Trash view's standalone outlined danger Empty Trash button.",
+      "publicExports": [
+        {
+          "name": "EmptyTrashAction"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/workspace-controls.tsx"
+      ],
+      "source": "src/components/workspace-controls.tsx",
+      "rendersAs": [
+        "@kerfjs/ui:wa-button"
+      ],
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": [
+          "Handle the open-empty-trash action once at the application root."
+        ]
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "actions"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": [
+          "The visible \"Empty Trash\" label names the button."
+        ]
+      },
+      "boundaries": {
+        "rootClass": "workspace-header__text-action",
+        "publicClasses": [
+          "workspace-header__text-action"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "workspace-header__text-action"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/workspace-controls.tsx",
+        "composition": "src/components/workspace-controls.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:fixed-aspect-terminal-card",
+      "package": "hotsheet-web",
+      "id": "fixed-aspect-terminal-card",
+      "name": "FixedAspectTerminalCard",
+      "kind": "component",
+      "purpose": "Shared 5:3 terminal viewport card in preview, magnified, and phone magnified (toolbar / keyboard) variants.",
+      "publicExports": [
+        {
+          "name": "FixedAspectTerminalCard"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/terminal-dashboard.tsx"
+      ],
+      "source": "src/components/terminal-dashboard.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "terminal-tile"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "terminal-tile"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/terminal-dashboard.tsx",
+        "composition": "src/components/terminal-dashboard.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:halted-session-popup",
+      "package": "hotsheet-web",
+      "id": "halted-session-popup",
+      "name": "HaltedSessionPopup",
+      "kind": "component",
+      "purpose": "Acknowledged halted AI session prompt with Open session, Dismiss, and app-wide Pause notifications.",
+      "publicExports": [
+        {
+          "name": "HaltedSessionPopup"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/halted-session-popup.tsx"
+      ],
+      "source": "src/components/halted-session-popup.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "self",
+          "border": "self",
+          "padding": "child",
+          "notes": [
+            "Owns native top-layer viewport placement and framing; public List, Row, and Text own content geometry (HS2-E6KAWY)."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "halted-session-popup"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "halted-session-popup"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/halted-session-popup.tsx",
+        "composition": "src/components/halted-session-popup.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:hs1-migration-banner",
+      "package": "hotsheet-web",
+      "id": "hs1-migration-banner",
+      "name": "Hs1MigrationBanner",
+      "kind": "component",
+      "purpose": "Project-owned measured, unknown, retry, imported, and verified-backup states for Hot Sheet 1.",
+      "publicExports": [
+        {
+          "name": "Hs1MigrationBanner"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/hs1-migration.tsx"
+      ],
+      "source": "src/components/hs1-migration.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "hs1-migration-banner"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "hs1-migration-banner"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/hs1-migration.tsx",
+        "composition": "src/components/hs1-migration.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:hs1-migration-dialog",
+      "package": "hotsheet-web",
+      "id": "hs1-migration-dialog",
+      "name": "Hs1MigrationDialog",
+      "kind": "component",
+      "purpose": "Detected Hot Sheet 1 source details and destination-only import flow.",
+      "publicExports": [
+        {
+          "name": "Hs1MigrationDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/hs1-migration.tsx"
+      ],
+      "source": "src/components/hs1-migration.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "hs1-migration-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "hs1-migration-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/hs1-migration.tsx",
+        "composition": "src/components/hs1-migration.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:keyboard-settings",
+      "package": "hotsheet-web",
+      "id": "keyboard-settings",
+      "name": "KeyboardSettings",
+      "kind": "component",
+      "purpose": "Grouped reference and rebinding of documented keyboard shortcuts.",
+      "publicExports": [
+        {
+          "name": "KeyboardSettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/keyboard-settings.tsx"
+      ],
+      "source": "src/components/keyboard-settings.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "keyboard-settings"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "keyboard-settings"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/keyboard-settings.tsx",
+        "composition": "src/components/keyboard-settings.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:main-shell",
+      "package": "hotsheet-web",
+      "id": "main-shell",
+      "name": "MainShell",
+      "kind": "composition",
+      "purpose": "Viewport application shell with header actions forwarded to a Toolbar trailing zone.",
+      "publicExports": [
+        {
+          "name": "MainShell"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/main-shell.tsx"
+      ],
+      "source": "src/components/main-shell.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [
+        {
+          "id": "headerActions",
+          "accepts": [
+            "KerfUiContent"
+          ],
+          "cardinality": {
+            "min": 0,
+            "max": "unbounded"
+          },
+          "exclusiveWith": []
+        }
+      ],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "application",
+        "behaviors": [
+          "AppShell owns shell layout."
+        ]
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/main-shell.tsx",
+        "composition": "src/components/main-shell.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:manual-model-dialog",
+      "package": "hotsheet-web",
+      "id": "manual-model-dialog",
+      "name": "ManualModelDialog",
+      "kind": "component",
+      "purpose": "Enter an exact model identifier a provider accepts.",
+      "publicExports": [
+        {
+          "name": "ManualModelDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/manual-model-dialog.tsx"
+      ],
+      "source": "src/components/manual-model-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "manual-model-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "manual-model-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/manual-model-dialog.tsx",
+        "composition": "src/components/manual-model-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:markdown-editor",
+      "package": "hotsheet-web",
+      "id": "markdown-editor",
+      "name": "MarkdownEditor",
+      "kind": "component",
+      "purpose": "Inline and expanded Markdown editing.",
+      "publicExports": [
+        {
+          "name": "MarkdownEditor"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/markdown-editor.tsx"
+      ],
+      "source": "src/components/markdown-editor.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "markdown-editor"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "markdown-editor"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/markdown-editor.tsx",
+        "composition": "src/components/markdown-editor.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:markdown-preview",
+      "package": "hotsheet-web",
+      "id": "markdown-preview",
+      "name": "MarkdownPreview",
+      "kind": "component",
+      "purpose": "Sanitized Markdown rendering with tone, size, density, and attachment-media presentation variants.",
+      "publicExports": [
+        {
+          "name": "MarkdownPreview"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/markdown-preview.tsx"
+      ],
+      "source": "src/components/markdown-preview.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "markdown-preview"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "markdown-preview"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/markdown-preview.tsx",
+        "composition": "src/components/markdown-preview.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:not-working-dialog",
+      "package": "hotsheet-web",
+      "id": "not-working-dialog",
+      "name": "NotWorkingDialog",
+      "kind": "component",
+      "purpose": "Completed-ticket verification failure report with notes and evidence.",
+      "publicExports": [
+        {
+          "name": "NotWorkingDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/not-working-dialog.tsx"
+      ],
+      "source": "src/components/not-working-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "not-working-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "not-working-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/not-working-dialog.tsx",
+        "composition": "src/components/not-working-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:note-card",
+      "package": "hotsheet-web",
+      "id": "note-card",
+      "name": "NoteCard",
+      "kind": "component",
+      "purpose": "Kind-specific note presentation with an optional banded AI completion confidence badge.",
+      "publicExports": [
+        {
+          "name": "NoteCard"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/note-card.tsx"
+      ],
+      "source": "src/components/note-card.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "note-card"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "note-card"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/note-card.tsx",
+        "composition": "src/components/note-card.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:note-composer",
+      "package": "hotsheet-web",
+      "id": "note-composer",
+      "name": "NoteComposer",
+      "kind": "component",
+      "purpose": "Create or cancel a provider-backed ticket note.",
+      "publicExports": [
+        {
+          "name": "NoteComposer"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/note-composer.tsx"
+      ],
+      "source": "src/components/note-composer.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "note-composer"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "note-composer"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/note-composer.tsx",
+        "composition": "src/components/note-composer.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:notification-center",
+      "package": "hotsheet-web",
+      "id": "notification-center",
+      "name": "NotificationCenter",
+      "kind": "component",
+      "purpose": "Pending permission requests and newest-first decision history with consistent 12px card spacing across both groups.",
+      "publicExports": [
+        {
+          "name": "NotificationCenter"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/notification-center.tsx"
+      ],
+      "source": "src/components/notification-center.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "notification-center"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "notification-center"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/notification-center.tsx",
+        "composition": "src/components/notification-center.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:notification-navigation",
+      "package": "hotsheet-web",
+      "id": "notification-navigation",
+      "name": "NotificationNavigation",
+      "kind": "component",
+      "purpose": "Notification views with attention counts and a pause footer composed from Kerf List and Text in an unpadded sidebar pane.",
+      "publicExports": [
+        {
+          "name": "NotificationNavigation"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/notification-navigation.tsx"
+      ],
+      "source": "src/components/notification-navigation.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "settings-navigation"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "settings-navigation"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/notification-navigation.tsx",
+        "composition": "src/components/notification-navigation.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:notifications-paused-banner",
+      "package": "hotsheet-web",
+      "id": "notifications-paused-banner",
+      "name": "NotificationsPausedBanner",
+      "kind": "component",
+      "purpose": "App-wide status that notifications are paused, with the waiting request count and Resume.",
+      "publicExports": [
+        {
+          "name": "NotificationsPausedBanner"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/notifications-paused-banner.tsx"
+      ],
+      "source": "src/components/notifications-paused-banner.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "notifications-paused-banner"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "notifications-paused-banner"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/notifications-paused-banner.tsx",
+        "composition": "src/components/notifications-paused-banner.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:pending-attachment-picker",
+      "package": "hotsheet-web",
+      "id": "pending-attachment-picker",
+      "name": "PendingAttachmentPicker",
+      "kind": "component",
+      "purpose": "Drop, browse, review, and remove evidence before submission.",
+      "publicExports": [
+        {
+          "name": "PendingAttachmentPicker"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/pending-attachment-picker.tsx"
+      ],
+      "source": "src/components/pending-attachment-picker.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "pending-attachment-picker"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "pending-attachment-picker"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/pending-attachment-picker.tsx",
+        "composition": "src/components/pending-attachment-picker.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:permission-request",
+      "package": "hotsheet-web",
+      "id": "permission-request",
+      "name": "PermissionRequestCard",
+      "kind": "component",
+      "purpose": "Human approval with timeout, project identity, and supported decision scopes.",
+      "publicExports": [
+        {
+          "name": "PermissionRequestCard"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/permission-request-card.tsx"
+      ],
+      "source": "src/components/permission-request-card.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "permission-request-card"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "permission-request-card"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/permission-request-card.tsx",
+        "composition": "src/components/permission-request-card.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:project-close-dialog",
+      "package": "hotsheet-web",
+      "id": "project-close-dialog",
+      "name": "ProjectCloseDialog",
+      "kind": "component",
+      "purpose": "Warn about running terminals and AI chats before closing a project, with a live resource preview.",
+      "publicExports": [
+        {
+          "name": "ProjectCloseDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/project-close-dialog.tsx"
+      ],
+      "source": "src/components/project-close-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "project-close-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "project-close-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/project-close-dialog.tsx",
+        "composition": "src/components/project-close-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:project-dashboard-modes",
+      "package": "hotsheet-web",
+      "id": "project-dashboard-modes",
+      "name": "ProjectDashboardModes",
+      "kind": "component",
+      "purpose": "The project strip's global dashboard switcher: a borderless compact ToolbarControlGroup of native pressed buttons.",
+      "publicExports": [
+        {
+          "name": "ProjectDashboardModes"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/project-strip-actions.tsx"
+      ],
+      "source": "src/components/project-strip-actions.tsx",
+      "rendersAs": [
+        "@kerfjs/ui:toolbar-control-group"
+      ],
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "toolbar-zone"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [
+        {
+          "id": "shell mode",
+          "owner": "application",
+          "required": true
+        }
+      ],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": [
+          "Handle the set-shell-mode action once at the application root."
+        ]
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "actions"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": [
+          "The group is named \"Global dashboards\"; each icon-only button carries aria-label and aria-pressed."
+        ]
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/project-strip-actions.tsx",
+        "composition": "src/components/project-strip-actions.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:project-dialog",
+      "package": "hotsheet-web",
+      "id": "project-dialog",
+      "name": "ProjectDialog",
+      "kind": "component",
+      "purpose": "Open a local checkout or choose a checkout already known to a remote server.",
+      "publicExports": [
+        {
+          "name": "ProjectDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/project-dialog.tsx"
+      ],
+      "source": "src/components/project-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "project-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "project-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/project-dialog.tsx",
+        "composition": "src/components/project-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:project-setup-warning-banner",
+      "package": "hotsheet-web",
+      "id": "project-setup-warning-banner",
+      "name": "ProjectSetupWarningBanner",
+      "kind": "component",
+      "purpose": "Dismissible warning that a project opened but skipped its setup refresh, with the reason and fix.",
+      "publicExports": [
+        {
+          "name": "ProjectSetupWarningBanner"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/project-setup-warning-banner.tsx"
+      ],
+      "source": "src/components/project-setup-warning-banner.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "project-setup-warning-banner"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "project-setup-warning-banner"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/project-setup-warning-banner.tsx",
+        "composition": "src/components/project-setup-warning-banner.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:project-sidebar",
+      "package": "hotsheet-web",
+      "id": "project-sidebar",
+      "name": "ProjectSidebar",
+      "kind": "composition",
+      "purpose": "Project summary, repository state, views, commands, and drive controls.",
+      "publicExports": [
+        {
+          "name": "ProjectSidebar"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/project-sidebar.tsx"
+      ],
+      "source": "src/components/project-sidebar.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "project-sidebar"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "project-sidebar"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/project-sidebar.tsx",
+        "composition": "src/components/project-sidebar.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:project-summary",
+      "package": "hotsheet-web",
+      "id": "project-summary",
+      "name": "ProjectSummary",
+      "kind": "component",
+      "purpose": "Seven-day completion history and current ticket counts.",
+      "publicExports": [
+        {
+          "name": "ProjectSummary"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/project-summary.tsx"
+      ],
+      "source": "src/components/project-summary.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "project-summary"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "project-summary"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/project-summary.tsx",
+        "composition": "src/components/project-summary.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:project-tab",
+      "package": "hotsheet-web",
+      "id": "project-tab",
+      "name": "ProjectTab",
+      "kind": "component",
+      "purpose": "One local or remote project connection tab.",
+      "publicExports": [
+        {
+          "name": "ProjectTab"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/project-tab.tsx"
+      ],
+      "source": "src/components/project-tab.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "project-tab"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "project-tab"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/project-tab.tsx",
+        "composition": "src/components/project-tab.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:project-tabs",
+      "package": "hotsheet-web",
+      "id": "project-tabs",
+      "name": "ProjectTabBar",
+      "kind": "component",
+      "purpose": "Local and remote project tabs and the phone picker with project attention.",
+      "publicExports": [
+        {
+          "name": "ProjectTabBar"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/project-tab-bar.tsx"
+      ],
+      "source": "src/components/project-tab-bar.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "project-tab-bar"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "project-tab-bar"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/project-tab-bar.tsx",
+        "composition": "src/components/project-tab-bar.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:provider-icon",
+      "package": "hotsheet-web",
+      "id": "provider-icon",
+      "name": "ProviderIcon",
+      "kind": "component",
+      "purpose": "Provider brand marks for GitHub, GitLab, and Jira at the inline (m) and identity (l) sizes.",
+      "publicExports": [
+        {
+          "name": "ProviderIcon"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/provider-icon.tsx"
+      ],
+      "source": "src/components/provider-icon.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "none",
+          "padding": "none"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "provider-icon"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "provider-icon"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/provider-icon.tsx",
+        "composition": "src/components/provider-icon.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:provider-setup-form",
+      "package": "hotsheet-web",
+      "id": "provider-setup-form",
+      "name": "ProviderSetupForm",
+      "kind": "component",
+      "purpose": "Provider credentials, repository locator, and default-source settings.",
+      "publicExports": [
+        {
+          "name": "ProviderSetupForm"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/provider-setup-form.tsx"
+      ],
+      "source": "src/components/provider-setup-form.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "provider-setup-form"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "provider-setup-form"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/provider-setup-form.tsx",
+        "composition": "src/components/provider-setup-form.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:quick-ticket-composer",
+      "package": "hotsheet-web",
+      "id": "quick-ticket-composer",
+      "name": "QuickTicketComposer",
+      "kind": "component",
+      "purpose": "Compact ticket creation with a clear warning when the destination differs from the project default.",
+      "publicExports": [
+        {
+          "name": "QuickTicketComposer"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/quick-ticket-composer.tsx"
+      ],
+      "source": "src/components/quick-ticket-composer.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "quick-ticket-composer"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "quick-ticket-composer"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/quick-ticket-composer.tsx",
+        "composition": "src/components/quick-ticket-composer.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:quick-ticket-launcher",
+      "package": "hotsheet-web",
+      "id": "quick-ticket-launcher",
+      "name": "QuickTicketLauncher",
+      "kind": "component",
+      "purpose": "The brand pill wa-button that opens the quick ticket composer and accepts dropped tickets and files.",
+      "publicExports": [
+        {
+          "name": "QuickTicketLauncher"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/quick-ticket-composer.tsx"
+      ],
+      "source": "src/components/quick-ticket-composer.tsx",
+      "rendersAs": [
+        "@kerfjs/ui:wa-button"
+      ],
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [
+        {
+          "id": "attachments enabled",
+          "owner": "application",
+          "required": false
+        }
+      ],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": [
+          "Handle expand-ticket-composer clicks and the new-ticket and duplicate-ticket drop targets once at the application root."
+        ]
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "actions"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": [
+          "The visible label names the button; the title describes the drop target."
+        ]
+      },
+      "boundaries": {
+        "rootClass": "quick-ticket-composer__launcher",
+        "publicClasses": [
+          "quick-ticket-composer__launcher"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "quick-ticket-composer__launcher"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/quick-ticket-composer.tsx",
+        "composition": "src/components/quick-ticket-composer.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:repository-status-popover",
+      "package": "hotsheet-web",
+      "id": "repository-status-popover",
+      "name": "RepositoryStatusPopover",
+      "kind": "composition",
+      "purpose": "Master/detail repository files, commits, and host actions.",
+      "publicExports": [
+        {
+          "name": "RepositoryStatusPopover"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/repository-status-popover.tsx"
+      ],
+      "source": "src/components/repository-status-popover.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "repository-status-popover"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "repository-status-popover"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/repository-status-popover.tsx",
+        "composition": "src/components/repository-status-popover.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:repository-summary",
+      "package": "hotsheet-web",
+      "id": "repository-summary",
+      "name": "RepositorySummary",
+      "kind": "component",
+      "purpose": "Branch and working-copy status action with Kerf metrics.",
+      "publicExports": [
+        {
+          "name": "RepositorySummary"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/repository-summary.tsx"
+      ],
+      "source": "src/components/repository-summary.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "repository-summary"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "repository-summary"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/repository-summary.tsx",
+        "composition": "src/components/repository-summary.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:saved-view-dialog",
+      "package": "hotsheet-web",
+      "id": "saved-view-dialog",
+      "name": "SavedViewDialog",
+      "kind": "component",
+      "purpose": "Create or edit a saved ticket view with a full-width responsive query editor.",
+      "publicExports": [
+        {
+          "name": "SavedViewDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/saved-view-dialog.tsx"
+      ],
+      "source": "src/components/saved-view-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "saved-view-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "saved-view-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/saved-view-dialog.tsx",
+        "composition": "src/components/saved-view-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:settings-navigation",
+      "package": "hotsheet-web",
+      "id": "settings-navigation",
+      "name": "SettingsNavigation",
+      "kind": "component",
+      "purpose": "Grouped settings categories arranged by Kerf List in an unpadded sidebar pane.",
+      "publicExports": [
+        {
+          "name": "SettingsNavigation"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/settings-navigation.tsx"
+      ],
+      "source": "src/components/settings-navigation.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "settings-navigation"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "settings-navigation"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/settings-navigation.tsx",
+        "composition": "src/components/settings-navigation.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:settings-workspace",
+      "package": "hotsheet-web",
+      "id": "settings-workspace",
+      "name": "SettingsWorkspace",
+      "kind": "component",
+      "purpose": "One category-selected project or app settings surface.",
+      "publicExports": [
+        {
+          "name": "SettingsWorkspace"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/settings-workspace.tsx"
+      ],
+      "source": "src/components/settings-workspace.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "settings-workspace"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "settings-workspace"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/settings-workspace.tsx",
+        "composition": "src/components/settings-workspace.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:status-badge",
+      "package": "hotsheet-web",
+      "id": "status-badge",
+      "name": "StatusBadge",
+      "kind": "component",
+      "purpose": "Readable ticket state with reinforcing iconography.",
+      "publicExports": [
+        {
+          "name": "StatusBadge"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/status-badge.tsx"
+      ],
+      "source": "src/components/status-badge.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "status-badge"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "status-badge"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/status-badge.tsx",
+        "composition": "src/components/status-badge.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:tag-chip",
+      "package": "hotsheet-web",
+      "id": "tag-chip",
+      "name": "TagChip",
+      "kind": "component",
+      "purpose": "Compact tag label with optional removal behavior.",
+      "publicExports": [
+        {
+          "name": "TagChip"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/tag-chip.tsx"
+      ],
+      "source": "src/components/tag-chip.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/tag-chip.tsx",
+        "composition": "src/components/tag-chip.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:terminal-copy-dialog",
+      "package": "hotsheet-web",
+      "id": "terminal-copy-dialog",
+      "name": "TerminalCopyDialog",
+      "kind": "component",
+      "purpose": "Phone terminal Copy sheet: the buffer as native, long-press-selectable text; Copy takes the selection or everything.",
+      "publicExports": [
+        {
+          "name": "TerminalCopyDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/terminal-clipboard-dialogs.tsx"
+      ],
+      "source": "src/components/terminal-clipboard-dialogs.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "terminal-copy-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "terminal-copy-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/terminal-clipboard-dialogs.tsx",
+        "composition": "src/components/terminal-clipboard-dialogs.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:terminal-dashboard",
+      "package": "hotsheet-web",
+      "id": "terminal-dashboard",
+      "name": "TerminalDashboard",
+      "kind": "composition",
+      "purpose": "Responsive workspace grid for terminals and AI chats, including connected, missing-hook, and halted session states with manual clearing.",
+      "publicExports": [
+        {
+          "name": "TerminalDashboard"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/terminal-dashboard.tsx"
+      ],
+      "source": "src/components/terminal-dashboard.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "terminal-dashboard"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "terminal-dashboard"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/terminal-dashboard.tsx",
+        "composition": "src/components/terminal-dashboard.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:terminal-drawer",
+      "package": "hotsheet-web",
+      "id": "terminal-drawer",
+      "name": "TerminalDrawer",
+      "kind": "composition",
+      "purpose": "Project grid, terminal, and embedded AI-chat tabs with a typed creation menu, and tab states for busy, halted terminals, failed or recovered driven chats, and Hot Sheet-connected or unconnected AI sessions.",
+      "publicExports": [
+        {
+          "name": "TerminalDrawer"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/terminal-drawer.tsx"
+      ],
+      "source": "src/components/terminal-drawer.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "terminal-drawer"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "terminal-drawer"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/terminal-drawer.tsx",
+        "composition": "src/components/terminal-drawer.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:terminal-edit-menu",
+      "package": "hotsheet-web",
+      "id": "terminal-edit-menu",
+      "name": "TerminalEditMenu",
+      "kind": "component",
+      "purpose": "Touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text… opens the Copy sheet, and Paste sends the clipboard.",
+      "publicExports": [
+        {
+          "name": "TerminalEditMenu"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/terminal-clipboard-dialogs.tsx"
+      ],
+      "source": "src/components/terminal-clipboard-dialogs.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "terminal-edit-menu"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "terminal-edit-menu"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/terminal-clipboard-dialogs.tsx",
+        "composition": "src/components/terminal-clipboard-dialogs.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:terminal-key-bar",
+      "package": "hotsheet-web",
+      "id": "terminal-key-bar",
+      "name": "TerminalKeyBar",
+      "kind": "component",
+      "purpose": "Phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn.",
+      "publicExports": [
+        {
+          "name": "TerminalKeyBar"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/terminal-key-bar.tsx"
+      ],
+      "source": "src/components/terminal-key-bar.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "terminal-key-bar"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "terminal-key-bar"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/terminal-key-bar.tsx",
+        "composition": "src/components/terminal-key-bar.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:terminal-operations-sidebar",
+      "package": "hotsheet-web",
+      "id": "terminal-operations-sidebar",
+      "name": "TerminalOperationsSidebar",
+      "kind": "composition",
+      "purpose": "Per-project and aggregate completion and in-progress summaries beside the workspace grid.",
+      "publicExports": [
+        {
+          "name": "TerminalOperationsSidebar"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/terminal-operations-sidebar.tsx"
+      ],
+      "source": "src/components/terminal-operations-sidebar.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "terminal-operations-sidebar"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "terminal-operations-sidebar"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/terminal-operations-sidebar.tsx",
+        "composition": "src/components/terminal-operations-sidebar.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:terminal-paste-dialog",
+      "package": "hotsheet-web",
+      "id": "terminal-paste-dialog",
+      "name": "TerminalPasteDialog",
+      "kind": "component",
+      "purpose": "Phone terminal Paste fallback when the clipboard cannot be read (denied or unavailable): paste natively, then send.",
+      "publicExports": [
+        {
+          "name": "TerminalPasteDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/terminal-clipboard-dialogs.tsx"
+      ],
+      "source": "src/components/terminal-clipboard-dialogs.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "terminal-paste-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "terminal-paste-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/terminal-clipboard-dialogs.tsx",
+        "composition": "src/components/terminal-clipboard-dialogs.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:terminal-rename-dialog",
+      "package": "hotsheet-web",
+      "id": "terminal-rename-dialog",
+      "name": "TerminalRenameDialog",
+      "kind": "component",
+      "purpose": "Rename a terminal while retaining its stable identity; a renamed terminal also offers Reset to default, naming the default it restores.",
+      "publicExports": [
+        {
+          "name": "TerminalRenameDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/terminal-rename-dialog.tsx"
+      ],
+      "source": "src/components/terminal-rename-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "terminal-rename"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "terminal-rename"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/terminal-rename-dialog.tsx",
+        "composition": "src/components/terminal-rename-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:terminal-ticket-rail",
+      "package": "hotsheet-web",
+      "id": "terminal-ticket-rail",
+      "name": "TerminalTicketRail",
+      "kind": "composition",
+      "purpose": "Compact navigation rail (a Kerf NavStack) with equal-width List/Notifications segments, bordered collapsible search, a sunken scrolling list, ticket launcher, and push navigation into ticket detail on one toolbar row.",
+      "publicExports": [
+        {
+          "name": "TerminalTicketRail"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/terminal-ticket-rail.tsx"
+      ],
+      "source": "src/components/terminal-ticket-rail.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [
+        {
+          "id": "controls",
+          "accepts": [
+            "KerfUiContent"
+          ],
+          "cardinality": {
+            "min": 0,
+            "max": "unbounded"
+          },
+          "exclusiveWith": []
+        }
+      ],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "application",
+        "behaviors": [
+          "The rail owns its toolbar layout."
+        ]
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": "terminal-ticket-rail",
+        "publicClasses": [
+          "terminal-ticket-rail"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "terminal-ticket-rail"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/terminal-ticket-rail.tsx",
+        "composition": "src/components/terminal-ticket-rail.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:terminal-visibility-dialog",
+      "package": "hotsheet-web",
+      "id": "terminal-visibility-dialog",
+      "name": "TerminalVisibilityDialog",
+      "kind": "component",
+      "purpose": "Named visibility groups, persistent shell/AI/chat visibility, and a Kerf multiple-Select type filter.",
+      "publicExports": [
+        {
+          "name": "TerminalVisibilityDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/terminal-visibility-dialog.tsx"
+      ],
+      "source": "src/components/terminal-visibility-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "terminal-visibility-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "terminal-visibility-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/terminal-visibility-dialog.tsx",
+        "composition": "src/components/terminal-visibility-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-attachments",
+      "package": "hotsheet-web",
+      "id": "ticket-attachments",
+      "name": "TicketAttachments",
+      "kind": "component",
+      "purpose": "Ticket attachment inspector section, including editable, append-only, unsupported, and linked-reader states.",
+      "publicExports": [
+        {
+          "name": "TicketAttachments"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-attachments.tsx"
+      ],
+      "source": "src/components/ticket-attachments.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-attachments"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-attachments"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-attachments.tsx",
+        "composition": "src/components/ticket-attachments.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-board",
+      "package": "hotsheet-web",
+      "id": "ticket-board",
+      "name": "TicketBoard",
+      "kind": "composition",
+      "purpose": "Status/category column workspace.",
+      "publicExports": [
+        {
+          "name": "TicketBoard"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-board.tsx"
+      ],
+      "source": "src/components/ticket-board.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-board"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-board"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-board.tsx",
+        "composition": "src/components/ticket-board.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-board-column",
+      "package": "hotsheet-web",
+      "id": "ticket-board-column",
+      "name": "TicketBoardColumn",
+      "kind": "component",
+      "purpose": "One titled, independently scrollable ticket column.",
+      "publicExports": [
+        {
+          "name": "TicketBoardColumn"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-board-column.tsx"
+      ],
+      "source": "src/components/ticket-board-column.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-board-column"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-board-column"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-board-column.tsx",
+        "composition": "src/components/ticket-board-column.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-category-select",
+      "package": "hotsheet-web",
+      "id": "ticket-category-select",
+      "name": "TicketCategorySelect",
+      "kind": "component",
+      "purpose": "Category chooser with configured icons and colors.",
+      "publicExports": [
+        {
+          "name": "TicketCategorySelect"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-category-select.tsx"
+      ],
+      "source": "src/components/ticket-category-select.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-category-select"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-category-select"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-category-select.tsx",
+        "composition": "src/components/ticket-category-select.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-close-dialog",
+      "package": "hotsheet-web",
+      "id": "ticket-close-dialog",
+      "name": "TicketCloseDialog",
+      "kind": "component",
+      "purpose": "Structured close outcomes with duplicate-target search and validation.",
+      "publicExports": [
+        {
+          "name": "TicketCloseDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-close-dialog.tsx"
+      ],
+      "source": "src/components/ticket-close-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-close-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-close-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-close-dialog.tsx",
+        "composition": "src/components/ticket-close-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-code-review",
+      "package": "hotsheet-web",
+      "id": "ticket-code-review",
+      "name": "TicketCodeReview",
+      "kind": "component",
+      "purpose": "Ticket-associated commits and configured diff-tool actions.",
+      "publicExports": [
+        {
+          "name": "TicketCodeReview"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-code-review.tsx"
+      ],
+      "source": "src/components/ticket-code-review.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-code-review"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-code-review"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-code-review.tsx",
+        "composition": "src/components/ticket-code-review.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-info-panel",
+      "package": "hotsheet-web",
+      "id": "ticket-info-panel",
+      "name": "TicketInfoPanel",
+      "kind": "composition",
+      "purpose": "Ticket metadata and details with compact headings, inset status controls and empty notes, tags, and provenance.",
+      "publicExports": [
+        {
+          "name": "TicketInfoPanel"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-info-panel.tsx"
+      ],
+      "source": "src/components/ticket-info-panel.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-info-panel"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-info-panel"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-info-panel.tsx",
+        "composition": "src/components/ticket-info-panel.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-inspector",
+      "package": "hotsheet-web",
+      "id": "ticket-inspector",
+      "name": "TicketInspector",
+      "kind": "composition",
+      "purpose": "Trailing ticket detail and editing surface with contained, centered section tabs.",
+      "publicExports": [
+        {
+          "name": "TicketInspector"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-inspector.tsx"
+      ],
+      "source": "src/components/ticket-inspector.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-inspector"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-inspector"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-inspector.tsx",
+        "composition": "src/components/ticket-inspector.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-inspector-skeleton",
+      "package": "hotsheet-web",
+      "id": "ticket-inspector-skeleton",
+      "name": "TicketInspectorSkeleton",
+      "kind": "component",
+      "purpose": "Shape-preserving loading placeholder shown while the next ticket loads.",
+      "publicExports": [
+        {
+          "name": "TicketInspectorSkeleton"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-inspector.tsx"
+      ],
+      "source": "src/components/ticket-inspector.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-inspector"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-inspector"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-inspector.tsx",
+        "composition": "src/components/ticket-inspector.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-link-choice-dialog",
+      "package": "hotsheet-web",
+      "id": "ticket-link-choice-dialog",
+      "name": "TicketLinkChoiceDialog",
+      "kind": "component",
+      "purpose": "Disambiguate exact ticket references with wrapping public navigation rows and source metadata.",
+      "publicExports": [
+        {
+          "name": "TicketLinkChoiceDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-link-choice-dialog.tsx"
+      ],
+      "source": "src/components/ticket-link-choice-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-link-choice-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-link-choice-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-link-choice-dialog.tsx",
+        "composition": "src/components/ticket-link-choice-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-list",
+      "package": "hotsheet-web",
+      "id": "ticket-list",
+      "name": "TicketList",
+      "kind": "composition",
+      "purpose": "Responsive, keyboard-navigable ticket collection.",
+      "publicExports": [
+        {
+          "name": "TicketList"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-list.tsx"
+      ],
+      "source": "src/components/ticket-list.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-list"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-list"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-list.tsx",
+        "composition": "src/components/ticket-list.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-page-more",
+      "package": "hotsheet-web",
+      "id": "ticket-page-more",
+      "name": "TicketPageMore",
+      "kind": "component",
+      "purpose": "Load-more continuation below a paged ticket list or board column, idle and loading.",
+      "publicExports": [
+        {
+          "name": "TicketPageMore"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-page-more.tsx"
+      ],
+      "source": "src/components/ticket-page-more.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "self",
+          "border": "self",
+          "padding": "self",
+          "notes": [
+            "Centers itself below the list or column rows with its own block margin (HS2-WP69TD)."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-page-more"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-page-more"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-page-more.tsx",
+        "composition": "src/components/ticket-page-more.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-priority-select",
+      "package": "hotsheet-web",
+      "id": "ticket-priority-select",
+      "name": "TicketPrioritySelect",
+      "kind": "component",
+      "purpose": "Priority chooser with semantic icons.",
+      "publicExports": [
+        {
+          "name": "TicketPrioritySelect"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-priority-select.tsx"
+      ],
+      "source": "src/components/ticket-priority-select.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-priority-select"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-priority-select"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-priority-select.tsx",
+        "composition": "src/components/ticket-priority-select.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-reader",
+      "package": "hotsheet-web",
+      "id": "ticket-reader",
+      "name": "TicketReader",
+      "kind": "composition",
+      "purpose": "Large dialog presentation of the complete ticket inspector.",
+      "publicExports": [
+        {
+          "name": "TicketReader"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-reader.tsx"
+      ],
+      "source": "src/components/ticket-reader.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-reader"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-reader"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-reader.tsx",
+        "composition": "src/components/ticket-reader.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-row",
+      "package": "hotsheet-web",
+      "id": "ticket-row",
+      "name": "TicketRow",
+      "kind": "component",
+      "purpose": "Dense ticket summary and selection target, with a compact completion-confidence pill on completed/verified tickets.",
+      "publicExports": [
+        {
+          "name": "TicketRow"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-row.tsx"
+      ],
+      "source": "src/components/ticket-row.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-list-row"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-list-row"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-row.tsx",
+        "composition": "src/components/ticket-row.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-search-field",
+      "package": "hotsheet-web",
+      "id": "ticket-search-field",
+      "name": "TicketSearchField",
+      "kind": "component",
+      "purpose": "Ticket search query editor with inline filter chips, in-place tag completion, a lifecycle date helper, and syntax help.",
+      "publicExports": [
+        {
+          "name": "TicketSearchField"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-search-field.tsx"
+      ],
+      "source": "src/components/ticket-search-field.tsx",
+      "rendersAs": [
+        "@kerfjs/ui:toolbar-control-group"
+      ],
+      "parents": {
+        "mode": "listed",
+        "entries": [
+          "@kerfjs/ui:toolbar"
+        ]
+      },
+      "contexts": [
+        "toolbar-zone"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [
+        {
+          "id": "query text and committed tokens",
+          "owner": "application",
+          "required": true
+        },
+        {
+          "id": "expanded state (collapsible only)",
+          "owner": "application",
+          "required": false
+        },
+        {
+          "id": "syntax help open",
+          "owner": "application",
+          "required": false
+        },
+        {
+          "id": "available project tags",
+          "owner": "application",
+          "required": false
+        }
+      ],
+      "wiring": {
+        "required": true,
+        "helpers": [
+          "wireTokenSearchFields",
+          "wireTicketSearchFields"
+        ],
+        "obligations": [
+          "Wire Kerf's wireTokenSearchFields for editor chrome, submit, and collapsible behavior.",
+          "Wire wireTicketSearchFields once per root and route every callback by the field id it receives."
+        ]
+      },
+      "responsive": {
+        "owner": "application",
+        "behaviors": [
+          "The consumer sizes and places the rendered group by context selector; helper popovers hang below it."
+        ]
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": [
+          "The label names the searchbox.",
+          "The help button, tag listbox, date group, and syntax dialog carry their own accessible names."
+        ]
+      },
+      "boundaries": {
+        "rootClass": "ticket-search-field",
+        "publicClasses": [
+          "ticket-search-field"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-search-field"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-search-field.tsx",
+        "composition": "src/components/ticket-search-field.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-source-setup-dialog",
+      "package": "hotsheet-web",
+      "id": "ticket-source-setup-dialog",
+      "name": "TicketSourceSetupDialog",
+      "kind": "component",
+      "purpose": "Choose and configure a git or external ticket source, including first-source and existing-default choices.",
+      "publicExports": [
+        {
+          "name": "TicketSourceSetupDialog"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-source-setup-dialog.tsx"
+      ],
+      "source": "src/components/ticket-source-setup-dialog.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-source-setup-dialog"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-source-setup-dialog"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-source-setup-dialog.tsx",
+        "composition": "src/components/ticket-source-setup-dialog.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-sources-settings",
+      "package": "hotsheet-web",
+      "id": "ticket-sources-settings",
+      "name": "TicketSourcesSettings",
+      "kind": "component",
+      "purpose": "One project's own ticket sources: default-source choice, editable rows with a remove-from-this-project action, and a note for a source another project shares.",
+      "publicExports": [
+        {
+          "name": "TicketSourcesSettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-sources-settings.tsx"
+      ],
+      "source": "src/components/ticket-sources-settings.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-sources-settings"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-sources-settings"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-sources-settings.tsx",
+        "composition": "src/components/ticket-sources-settings.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-status-menu",
+      "package": "hotsheet-web",
+      "id": "ticket-status-menu",
+      "name": "TicketStatusMenu",
+      "kind": "component",
+      "purpose": "Badge-triggered status chooser with semantic icons.",
+      "publicExports": [
+        {
+          "name": "TicketStatusMenu"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-status-menu.tsx"
+      ],
+      "source": "src/components/ticket-status-menu.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-status-menu"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-status-menu"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-status-menu.tsx",
+        "composition": "src/components/ticket-status-menu.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-timeline",
+      "package": "hotsheet-web",
+      "id": "ticket-timeline",
+      "name": "TicketTimeline",
+      "kind": "component",
+      "purpose": "Chronological ticket activity inspector section.",
+      "publicExports": [
+        {
+          "name": "TicketTimeline"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/ticket-timeline.tsx"
+      ],
+      "source": "src/components/ticket-timeline.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "ticket-timeline"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "ticket-timeline"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/ticket-timeline.tsx",
+        "composition": "src/components/ticket-timeline.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-view-action",
+      "package": "hotsheet-web",
+      "id": "ticket-view-action",
+      "name": "TicketViewAction",
+      "kind": "component",
+      "purpose": "Renders the current ticket view's primary action spec as QuickTicketLauncher or EmptyTrashAction.",
+      "publicExports": [
+        {
+          "name": "TicketViewAction"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/workspace-controls.tsx"
+      ],
+      "source": "src/components/workspace-controls.tsx",
+      "rendersAs": [
+        "@kerfjs/ui:wa-button"
+      ],
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [
+        {
+          "id": "ticket view action spec",
+          "owner": "application",
+          "required": true
+        }
+      ],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": [
+          "The rendered launcher or Empty Trash button carries its own root-wired actions."
+        ]
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "actions"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": [
+          "Inherits the rendered button’s visible label."
+        ]
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/workspace-controls.tsx",
+        "composition": "src/components/workspace-controls.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:trash-settings",
+      "package": "hotsheet-web",
+      "id": "trash-settings",
+      "name": "TrashSettings",
+      "kind": "component",
+      "purpose": "Trash retention window and empty-trash entry point.",
+      "publicExports": [
+        {
+          "name": "TrashSettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/trash-settings.tsx"
+      ],
+      "source": "src/components/trash-settings.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "trash-settings"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "trash-settings"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/trash-settings.tsx",
+        "composition": "src/components/trash-settings.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:view-navigation",
+      "package": "hotsheet-web",
+      "id": "view-navigation",
+      "name": "ViewNavigation",
+      "kind": "component",
+      "purpose": "Selectable built-in and custom ticket views with paired saved-view actions.",
+      "publicExports": [
+        {
+          "name": "ViewNavigation"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/view-navigation.tsx"
+      ],
+      "source": "src/components/view-navigation.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "view-navigation"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "view-navigation"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/view-navigation.tsx",
+        "composition": "src/components/view-navigation.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:workspace-controls",
+      "package": "hotsheet-web",
+      "id": "workspace-controls",
+      "name": "WorkspaceControls",
+      "kind": "composition",
+      "purpose": "Workspace view-mode, sort, selection, ticket search, and overflow control groups rendered as Toolbar zone content with no wrapper element.",
+      "publicExports": [
+        {
+          "name": "WorkspaceControls"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/workspace-controls.tsx"
+      ],
+      "source": "src/components/workspace-controls.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "toolbar-zone"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [
+        {
+          "id": "view mode, sort, selection, and search state",
+          "owner": "application",
+          "required": true
+        }
+      ],
+      "wiring": {
+        "required": true,
+        "helpers": [
+          "wireTokenSearchFields",
+          "wireTicketSearchFields",
+          "wireWorkspaceOverflowKeyboard"
+        ],
+        "obligations": [
+          "Wire the workspace search, sort, overflow, and selection actions once at the application root."
+        ]
+      },
+      "responsive": {
+        "owner": "application",
+        "behaviors": [
+          "Sort, selection, and view-mode groups yield to the overflow group at narrow toolbar container widths; an expanded search takes the row."
+        ]
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": [
+          "Each group names its controls; the overflow trigger is named and keyboard-openable."
+        ]
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "view-mode-switcher",
+          "workspace-header__sort-group",
+          "workspace-header__utility-group",
+          "workspace-header__overflow-group"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "view-mode-switcher",
+          "workspace-header__sort-group",
+          "workspace-header__utility-group",
+          "workspace-header__overflow-group"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/workspace-controls.tsx",
+        "composition": "src/components/workspace-controls.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:workspace-header",
+      "package": "hotsheet-web",
+      "id": "workspace-header",
+      "name": "WorkspaceHeader",
+      "kind": "composition",
+      "purpose": "Project identity, canonical toolbar view segments, native selection actions with none/mixed/all Up Next stars, sorting, settings, search, and a connected notification inbox with live counts and local request decisions.",
+      "publicExports": [
+        {
+          "name": "WorkspaceHeader"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/workspace-header.tsx"
+      ],
+      "source": "src/components/workspace-header.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "parent",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "The embedding layout positions this composition; its contained Kerf and Hot Sheet surfaces retain their own border and padding."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "workspace-header"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "workspace-header"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/workspace-header.tsx",
+        "composition": "src/components/workspace-header.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:workspace-identity",
+      "package": "hotsheet-web",
+      "id": "workspace-identity",
+      "name": "WorkspaceIdentity",
+      "kind": "component",
+      "purpose": "The project name as Toolbar leading text, hidden at the narrowest toolbar widths.",
+      "publicExports": [
+        {
+          "name": "WorkspaceIdentity"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/workspace-controls.tsx"
+      ],
+      "source": "src/components/workspace-controls.tsx",
+      "rendersAs": [
+        "@kerfjs/ui:toolbar-text"
+      ],
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "toolbar-zone"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [
+        {
+          "id": "project name",
+          "owner": "application",
+          "required": true
+        }
+      ],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "application",
+        "behaviors": [
+          "Hidden below the 224px toolbar container width so an expanded search keeps the row."
+        ]
+      },
+      "layout": {
+        "roles": [
+          "structure"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": [
+          "May carry the page heading level and id when it is the page title."
+        ]
+      },
+      "boundaries": {
+        "rootClass": "workspace-header__identity",
+        "publicClasses": [
+          "workspace-header__identity"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "workspace-header__identity"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/workspace-controls.tsx",
+        "composition": "src/components/workspace-controls.tsx"
+      }
+    }
+  ]
+}
