@@ -21028,7 +21028,7 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
     );
   await page.getByRole('button', { name: 'Search syntax help' }).click();
   const help = page.getByRole('dialog', { name: 'Search syntax' });
-  await expect(help.locator('dt')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
+  await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
   await expect(help).toContainText('has:media-annotation');
   await expect(help).toContainText('updated-after:4h ago');
   await expect(help).toContainText('started, verified, archived, and updated');
