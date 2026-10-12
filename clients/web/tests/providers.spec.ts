@@ -15755,8 +15755,9 @@ test('aligns the right inspector on shared menu primitives and its shared conten
       ],
     };
   });
-  expect(geometry.leftGutter).toBe('0px');
-  expect(geometry.rightGutter).toBe('0px');
+  // The panel column owns the 8px inset as inline padding (HS2-KZ646H).
+  expect(geometry.leftGutter).toBe('8px');
+  expect(geometry.rightGutter).toBe('8px');
   expect(Math.max(...geometry.lefts) - Math.min(...geometry.lefts)).toBeLessThanOrEqual(1);
   await page.screenshot({ path: 'target/visual-captures/hs2-h5cx3g-right-sidebar-wide-after.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 700 });
