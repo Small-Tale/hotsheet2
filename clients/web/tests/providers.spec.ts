@@ -591,8 +591,8 @@ test('opens a halted session in its originating project and follows another wind
   await expect.poll(fixture.socketCount).toBe(2);
   await fixture.halt('origin-project');
   const popup = page.getByRole('dialog', { name: 'AI session halted' });
-  await expect(popup.locator('.halted-session-popup__identity')).toContainText('Claude worker');
-  await expect(popup.locator('.halted-session-popup__project')).toContainText('demo');
+  await expect(popup.locator('.notification-card__identity')).toContainText('Claude worker');
+  await expect(popup.locator('.notification-card__project')).toContainText('demo');
   await expect.poll(() => fixture.terminalGets().length).toBe(4);
   await popup.getByRole('button', { name: 'Open session' }).click();
   await expect(page.getByRole('tab', { name: /^demo/ })).toHaveAttribute('aria-selected', 'true');
@@ -13445,7 +13445,7 @@ test('renders exactly once when the long poll announces a permission request', a
   });
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toBeVisible();
-  await expect(popup.locator('.permission-request-card__identity')).toHaveText('Codex');
+  await expect(popup.locator('.notification-card__identity')).toHaveText('Codex');
   const metrics = await renderMetrics(page);
   expect(metrics?.passes).toBe(1);
   expect(metrics?.mutations).toBeGreaterThan(0);
@@ -13489,7 +13489,7 @@ test('renders exactly once when the long poll announces a permission request', a
   await page.getByRole('button', { name: 'Show project sidebar' }).click();
   await expect(page.locator('#app-left-rail')).toBeVisible();
   expect(
-    await popup.locator('.permission-request-card__identity').evaluate((element) => {
+    await popup.locator('.notification-card__identity').evaluate((element) => {
       const rect = element.getBoundingClientRect();
       return element.contains(document.elementFromPoint(rect.left + 8, rect.top + rect.height / 2));
     }),
@@ -13737,7 +13737,7 @@ test('records externally resolved empty-action permissions in notification histo
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toContainText('Wants permission to use ToolSearch');
-  await expect(popup.locator('.permission-request-card__details')).toHaveCount(0);
+  await expect(popup.locator('.notification-card__details')).toHaveCount(0);
   pending = [];
   await expect.poll(() => polls.length).toBeGreaterThan(0);
   cursor += 1;
@@ -13752,16 +13752,18 @@ test('records externally resolved empty-action permissions in notification histo
   await page.getByRole('button', { name: /Notifications view/ }).click();
   await page.getByRole('button', { name: /Last 24 Hours/ }).click();
   const previous = page
-    .locator('[data-component="notification-center"] .permission-request-card--list')
+    .locator(
+      '[data-component="notification-center"] [data-component="permission-request-card"][data-presentation="list"]',
+    )
     .filter({ hasText: 'ToolSearch' });
   await expect(previous).toContainText('allowed permission');
-  await expect(previous.locator('.permission-request-card__details')).toHaveCount(0);
-  await expect(previous.locator('.permission-request-card__footer')).toHaveCount(0);
-  await expect(previous).toHaveCSS('padding-bottom', '16px');
+  await expect(previous.locator('.notification-card__details')).toHaveCount(0);
+  await expect(previous.locator('.notification-card__footer')).toHaveCount(0);
+  await expect(previous.locator('.notification-card__summary')).toHaveCSS('margin-bottom', '16px');
   expect(
     await previous.evaluate((node) => {
       const card = node.getBoundingClientRect(),
-        summary = node.querySelector('.permission-request-card__summary')!.getBoundingClientRect(),
+        summary = node.querySelector('.notification-card__summary')!.getBoundingClientRect(),
         border = Number.parseFloat(getComputedStyle(node).borderBottomWidth);
       return Math.round(card.bottom - summary.bottom - border);
     }),
@@ -13770,7 +13772,7 @@ test('records externally resolved empty-action permissions in notification histo
   await page.getByRole('button', { name: 'Hide notification inspector' }).click();
   await page.setViewportSize({ width: 760, height: 844 });
   await expect(previous).toBeInViewport();
-  await expect(previous).toHaveCSS('padding-bottom', '16px');
+  await expect(previous.locator('.notification-card__summary')).toHaveCSS('margin-bottom', '16px');
   await page.screenshot({
     path: 'target/visual-captures/hs2-f058ae-responded-notification-narrow.png',
     fullPage: true,
@@ -23661,7 +23663,7 @@ test('scopes the notification center, navigation counts, and header badge to the
       return bounds ? bounds.x + bounds.width : Number.POSITIVE_INFINITY;
     })
     .toBeLessThanOrEqual(0);
-  const pendingCard = center.locator('.permission-request-card--list').first();
+  const pendingCard = center.locator('[data-component="permission-request-card"][data-presentation="list"]').first();
   await expect(pendingCard).toBeInViewport({ ratio: 1 });
   await expect(pendingCard.getByRole('button', { name: 'Always Allow' })).toBeInViewport({ ratio: 1 });
   await expect(pendingCard.getByRole('button', { name: 'Allow Once' })).toBeInViewport({ ratio: 1 });

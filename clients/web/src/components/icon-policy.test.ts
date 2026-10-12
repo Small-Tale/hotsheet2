@@ -47,8 +47,8 @@ function singleIconWrapperClasses(sources: readonly string[]): Map<string, strin
 
 describe('LucideIcon color ownership (HS2-GQ57YW)', () => {
   it('finds the single-icon wrapper shape it guards', () => {
-    const fixture = resolve(import.meta.dirname, 'permission-request-card.tsx');
-    expect(singleIconWrapperClasses([fixture]).has('permission-request-card__summary-icon')).toBe(true);
+    const fixture = resolve(import.meta.dirname, 'notification-card.tsx');
+    expect(singleIconWrapperClasses([fixture]).has('notification-card__summary-icon')).toBe(true);
   });
 
   it('colors single-icon wrappers through the LucideIcon color prop, not wrapper CSS', () => {

@@ -1,81 +1,4 @@
-.permission-request-card {
-  --permission-accent: var(--wa-color-brand-fill-loud);
-  overflow: hidden;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(16px);
-  color: var(--wa-color-neutral-on-normal);
-  background: var(--wa-color-surface-default);
-  box-shadow: var(--wa-shadow-s);
-  container-type: inline-size;
-}
-.permission-request-card__header {
-  display: grid;
-  min-width: 0;
-  padding: remify(12.8px) remify(16px) remify(4.8px);
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: remify(10.4px);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-}
-.permission-request-card__identity {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: remify(4.8px);
-  color: var(--wa-color-neutral-on-quiet);
-}
-.permission-request-card__identity strong {
-  overflow: hidden;
-  color: var(--wa-color-neutral-on-normal);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.permission-request-card__identity-icon {
-  display: flex;
-}
-.permission-request-card__project {
-  overflow: hidden;
-  max-width: remify(224px);
-  padding: remify(2.88px) remify(8.8px);
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-neutral-on-quiet);
-  background: var(--wa-color-neutral-fill-quiet);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.permission-request-card__summary {
-  display: grid;
-  padding: remify(12px) remify(16px) remify(8.8px);
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: remify(8.8px);
-}
-.permission-request-card__summary strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.permission-request-card__summary-icon {
-  display: flex;
-}
-.permission-request-card__details {
-  overflow: auto;
-  max-height: remify(192px);
-  margin: 0 remify(16px);
-  padding: remify(11.2px) remify(12.8px);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(10.4px);
-  color: var(--wa-color-neutral-on-normal);
-  background: var(--wa-color-surface-lowered);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font:
-    var(--wa-font-size-xs)/1.45 ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Consolas,
-    monospace;
-}
+/* Permission-specific parts inside the shared NotificationCard frame (HS2-XS71FB). */
 .permission-request-card__explanation,
 .permission-request-card__error {
   margin: remify(10.4px) remify(16px) 0;
@@ -87,19 +10,6 @@
 }
 .permission-request-card__error {
   color: var(--wa-color-danger-on-quiet);
-}
-.permission-request-card__footer {
-  display: flex;
-  padding: remify(12.8px) remify(16px) remify(16px);
-  align-items: center;
-  justify-content: space-between;
-  gap: remify(16px);
-}
-.permission-request-card__quiet-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: remify(16px);
 }
 .permission-request-card__decision-area {
   display: flex;
@@ -136,13 +46,6 @@
 }
 .permission-request-card__timer strong {
   margin-left: 0.3em;
-}
-.permission-request-card--list[data-resolved='true'] {
-  padding-bottom: remify(16px);
-  box-shadow: none;
-}
-.permission-request-card--list[data-state='allow'] {
-  --permission-accent: var(--wa-color-success-fill-loud);
 }
 .permission-request-popup {
   position: absolute;
@@ -206,32 +109,12 @@
     width: min(remify(704px), calc(anchor-size(width, 100vw) - remify(32px)));
   }
 }
-.permission-request-popup .permission-request-card {
-  border-color: var(--wa-color-neutral-border-loud);
-  box-shadow: var(--wa-shadow-l);
-}
 @container (max-width: remify(544px)) {
-  .permission-request-card__header {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .permission-request-card__project {
-    grid-row: 2;
-    max-width: 100%;
-    justify-self: start;
-  }
-  .permission-request-card__header time {
-    grid-column: 2;
-    grid-row: 1;
-  }
-  .permission-request-card__footer,
   .permission-request-card__decision-area {
     align-items: stretch;
     flex-direction: column;
   }
-  .permission-request-card__quiet-actions {
-    align-self: flex-start;
-  }
-  .permission-request-card .permission-request-card__quiet-action {
+  .permission-request-card__quiet-action {
     width: fit-content;
   }
   .permission-request-card__buttons {

@@ -7101,7 +7101,7 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
   await page.setViewportSize({ width: 1280, height: 900 });
 
   await page.goto('/ux-demo?component=permission-request');
-  const details = page.locator('.permission-request-card__details');
+  const details = page.locator('.notification-card__details');
   await expect(details).toBeVisible();
   await expect(details).toHaveCSS(
     'background-color',
@@ -7219,7 +7219,7 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
 
   await choose(presentation, 'list');
   await expect(page.locator('[data-component="permission-request-popup"]')).toHaveCount(0);
-  await expect(card).toHaveClass(/permission-request-card--list/);
+  await expect(card).toHaveAttribute('data-presentation', 'list');
   await choose(variant, 'resolving');
   await expect(card).toHaveAttribute('data-state', 'resolving');
   await expect(card.getByRole('button', { name: 'Deny' })).toBeDisabled();
@@ -7232,9 +7232,18 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await expect(card).toContainText('allowed this kind of request');
   await expect(card.getByRole('button', { name: 'Deny' })).toHaveCount(0);
   await choose(request, 'tool-without-details');
-  await expect(card.locator('.permission-request-card__details')).toHaveCount(0);
-  await expect(card.locator('.permission-request-card__footer')).toHaveCount(0);
-  await expect(card).toHaveCSS('padding-bottom', '16px');
+  await expect(card.locator('.notification-card__details')).toHaveCount(0);
+  await expect(card.locator('.notification-card__footer')).toHaveCount(0);
+  // Without a footer, the shared NotificationCard keeps the footer's 16px bottom inset (HS2-XS71FB).
+  await expect
+    .poll(() =>
+      card.evaluate((node) => {
+        const last = node.lastElementChild!.getBoundingClientRect(),
+          border = Number.parseFloat(getComputedStyle(node).borderBottomWidth);
+        return Math.round(node.getBoundingClientRect().bottom - last.bottom - border);
+      }),
+    )
+    .toBe(16);
   await choose(variant, 'denied');
   await expect(card).toHaveAttribute('data-state', 'deny');
   await choose(variant, 'external');
@@ -7243,12 +7252,12 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await choose(variant, 'pending');
   await choose(request, 'command');
   await expect(card).toContainText('Wants permission to run a command');
-  await expect(card.locator('.permission-request-card__details')).toContainText('npm run test:unit');
+  await expect(card.locator('.notification-card__details')).toContainText('npm run test:unit');
   await choose(request, 'read');
   await expect(card).toContainText('Wants permission to read');
   await choose(request, 'tool-without-details');
   await expect(card).toContainText('Wants permission to use ToolSearch');
-  await expect(card.locator('.permission-request-card__details')).toHaveCount(0);
+  await expect(card.locator('.notification-card__details')).toHaveCount(0);
   await choose(automation, 'deny');
   await expect(card).toContainText('Auto-deny in');
   await choose(automation, 'none');

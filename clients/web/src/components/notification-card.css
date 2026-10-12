@@ -1,0 +1,139 @@
+/* Shared notification frame for permission requests and halted AI sessions (HS2-XS71FB). The card is
+   its own inline-size container so its narrow layout follows the space it is given, not the viewport. */
+.notification-card {
+  overflow: hidden;
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: remify(16px);
+  color: var(--wa-color-neutral-on-normal);
+  background: var(--wa-color-surface-default);
+  box-shadow: var(--wa-shadow-s);
+  container-type: inline-size;
+}
+.notification-card[data-elevation='popup'] {
+  border-color: var(--wa-color-neutral-border-loud);
+  box-shadow: var(--wa-shadow-l);
+}
+.notification-card[data-elevation='flat'] {
+  box-shadow: none;
+}
+/* A card without a footer still keeps the footer's bottom inset, as room after its last part. */
+.notification-card > :last-child:not(.notification-card__footer) {
+  margin-bottom: remify(16px);
+}
+.notification-card__header {
+  display: grid;
+  min-width: 0;
+  padding: remify(12.8px) remify(16px) remify(4.8px);
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-columns: auto;
+  grid-auto-flow: column;
+  align-items: center;
+  gap: remify(10.4px);
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+}
+.notification-card__identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: remify(4.8px);
+}
+.notification-card__identity-icon,
+.notification-card__summary-icon {
+  display: flex;
+}
+/* The project pill truncates long names with a tooltip; Kerf Badge has no truncation (KF-0WKZY2). */
+.notification-card__project {
+  overflow: hidden;
+  max-width: remify(224px);
+  padding: remify(2.88px) remify(8.8px);
+  border-radius: var(--wa-border-radius-pill);
+  background: var(--wa-color-neutral-fill-quiet);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notification-card__summary {
+  display: grid;
+  padding: remify(12px) remify(16px) remify(8.8px);
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: remify(8.8px);
+}
+.notification-card__summary strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.notification-card__details {
+  margin: 0 remify(16px);
+  padding: remify(11.2px) remify(12.8px);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: remify(10.4px);
+  color: var(--wa-color-neutral-on-normal);
+  background: var(--wa-color-surface-lowered);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font:
+    var(--wa-font-size-xs)/1.45 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+}
+.notification-card__details[data-bounded='true'] {
+  overflow: auto;
+  max-height: remify(192px);
+}
+.notification-card__details[data-appearance='prose'] {
+  font: 400 var(--wa-font-size-s)/1.45 var(--wa-font-family-body);
+}
+.notification-card__details[data-appearance='prose'] code {
+  font: inherit;
+}
+.notification-card__footer {
+  display: flex;
+  padding: remify(12.8px) remify(16px) remify(16px);
+  align-items: center;
+  justify-content: space-between;
+  gap: remify(16px);
+}
+.notification-card__quiet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: remify(16px);
+}
+.notification-card__end-actions {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  justify-content: flex-end;
+}
+@container (max-width: remify(544px)) {
+  .notification-card__header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-auto-flow: row;
+  }
+  .notification-card__project {
+    grid-row: 2;
+    max-width: 100%;
+    justify-self: start;
+  }
+  .notification-card__time {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .notification-card[data-footer-layout='wrap'] .notification-card__footer {
+    flex-wrap: wrap;
+  }
+  .notification-card[data-footer-layout='stack'] .notification-card__footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .notification-card[data-footer-layout='stack'] .notification-card__quiet-actions {
+    align-self: flex-start;
+  }
+  .notification-card[data-footer-layout='stack'] .notification-card__end-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

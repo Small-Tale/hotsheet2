@@ -3,9 +3,9 @@ import { expect, test } from '@playwright/test';
 test('catalog halt prompt wires all actions and fits a phone viewport (HS2-E6KAWY)', async ({ page }) => {
   await page.goto('/ux-demo?component=halted-session-popup');
   const popup = page.getByRole('dialog', { name: 'AI session halted' });
-  await expect(popup.locator('.halted-session-popup__identity')).toContainText('Claude main worker');
-  await expect(popup.locator('.halted-session-popup__project')).toContainText('Hot Sheet demo');
-  await expect(popup.locator('.halted-session-popup__details')).toContainText('Selected model is at capacity');
+  await expect(popup.locator('.notification-card__identity')).toContainText('Claude main worker');
+  await expect(popup.locator('.notification-card__project')).toContainText('Hot Sheet demo');
+  await expect(popup.locator('.notification-card__details')).toContainText('Selected model is at capacity');
   await page.screenshot({ path: test.info().outputPath('halted-session-card-wide.png') });
   for (const action of ['Open session', 'Dismiss', 'Pause notifications']) {
     await expect(popup).toBeVisible();

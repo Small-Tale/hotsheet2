@@ -1,4 +1,5 @@
-/* Native top-layer placement mirrors the permission popup; the card owns its visible frame. */
+/* Native top-layer placement mirrors the permission popup; the shared NotificationCard owns the visible
+   frame and its narrow layout (HS2-XS71FB). */
 .halted-session-popup {
   position: fixed;
   inset: auto remify(16px) auto auto;
@@ -25,74 +26,6 @@
 }
 .halted-session-popup::backdrop {
   background: transparent;
-}
-.halted-session-popup__card {
-  overflow: hidden;
-  border: 1px solid var(--wa-color-neutral-border-loud);
-  border-radius: remify(16px);
-  color: var(--wa-color-neutral-on-normal);
-  background: var(--wa-color-surface-default);
-  box-shadow: var(--wa-shadow-l);
-}
-.halted-session-popup__header {
-  display: grid;
-  min-width: 0;
-  margin: remify(12.8px) remify(16px) remify(4.8px);
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: remify(10.4px);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-}
-.halted-session-popup__identity {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: remify(4.8px);
-}
-.halted-session-popup__identity strong {
-  overflow: hidden;
-  color: var(--wa-color-neutral-on-normal);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.halted-session-popup__project {
-  overflow: hidden;
-  max-width: remify(224px);
-  padding: remify(2.88px) remify(8.8px);
-  border-radius: var(--wa-border-radius-pill);
-  background: var(--wa-color-neutral-fill-quiet);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.halted-session-popup__summary {
-  display: grid;
-  padding: remify(12px) remify(16px) remify(8.8px);
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: remify(8.8px);
-}
-.halted-session-popup__details {
-  overflow: visible;
-  margin: 0 remify(16px);
-  padding: remify(11.2px) remify(12.8px);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(10.4px);
-  background: var(--wa-color-surface-lowered);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font:
-    var(--wa-font-size-xs)/1.45 ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Consolas,
-    monospace;
-}
-.halted-session-popup[data-kind='question'] .halted-session-popup__details {
-  font: 400 var(--wa-font-size-s)/1.45 var(--wa-font-family-body);
-}
-.halted-session-popup[data-kind='question'] .halted-session-popup__details code {
-  font: inherit;
 }
 .halted-session-popup__questions {
   display: grid;
@@ -140,38 +73,10 @@
   margin: 0;
   color: var(--wa-color-danger-on-quiet);
 }
-.halted-session-popup__footer {
-  display: flex;
-  padding: remify(12.8px) remify(16px) remify(16px);
-  align-items: center;
-  justify-content: space-between;
-  gap: remify(16px);
-}
-.halted-session-popup__quiet-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: remify(16px);
-}
 @media (max-width: remify(672px)) {
   .halted-session-popup {
     right: remify(8px);
     left: remify(8px);
     width: auto;
-  }
-}
-@media (max-width: remify(440px)) {
-  .halted-session-popup__header {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .halted-session-popup__project {
-    max-width: 100%;
-    justify-self: start;
-  }
-  .halted-session-popup__footer {
-    flex-wrap: wrap;
-  }
-  .halted-session-popup__primary {
-    margin-left: auto;
   }
 }

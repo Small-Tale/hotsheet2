@@ -68,7 +68,7 @@ describe('permission presentation components', () => {
   it('omits the details box when the permission action is empty', () => {
     const markup = String(PermissionRequestCard({ item: { ...pending, tool: 'ToolSearch', action: '  \n ' } }));
     expect(markup).toContain('Wants permission to use ToolSearch');
-    expect(markup).not.toContain('permission-request-card__details');
+    expect(markup).not.toContain('notification-card__details');
   });
 
   it('labels automatic denial explicitly', () => {
@@ -173,13 +173,15 @@ describe('permission presentation components', () => {
   it('marks responded list items for footer-equivalent bottom padding even without details or actions', () => {
     const resolvedWithoutAction: PermissionHistoryItem = { ...history, tool: 'ToolSearch', action: '' };
     const markup = String(PermissionRequestCard({ item: resolvedWithoutAction }));
-    const css = readFileSync(resolve(import.meta.dirname, 'permission-request-card.css'), 'utf8');
+    const css = readFileSync(resolve(import.meta.dirname, 'notification-card.css'), 'utf8');
     expect(markup).toContain('data-resolved="true"');
+    expect(markup).toContain('data-elevation="flat"');
     expect(markup).toContain('ToolSearch: Decision made outside Hot Sheet');
-    expect(markup).not.toContain('permission-request-card__details');
-    expect(markup).not.toContain('permission-request-card__footer');
+    expect(markup).not.toContain('notification-card__details');
+    expect(markup).not.toContain('notification-card__footer');
+    // The shared NotificationCard keeps the footer's bottom inset on a card without a footer (HS2-XS71FB).
     expect(css).toMatchSource(
-      /permission-request-card--list\[data-resolved="true"\][^{]*\{[^}]*padding-bottom: remify\(16px\)/,
+      /\.notification-card > :last-child:not\(\.notification-card__footer\)[^{]*\{[^}]*margin-bottom: remify\(16px\)/,
     );
   });
 

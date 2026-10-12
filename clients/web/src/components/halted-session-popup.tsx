@@ -2,9 +2,8 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import './halted-session-popup.css';
 
 import { foregroundColorVar } from '@kerfjs/ui/css-values';
-import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
-import { Bot, CircleAlert, CircleHelp } from 'lucide';
+import { CircleAlert, CircleHelp } from 'lucide';
 
 import type { HaltedSessionEpisode } from '../halted-sessions';
 import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
@@ -13,9 +12,13 @@ import {
   TOP_LAYER_OVERLAY_ATTRIBUTE,
   TOP_LAYER_PRESENTATION_KEY_ATTRIBUTE,
 } from '../top-layer-overlay';
+import { NotificationCard } from './notification-card';
 
 /** A native top-layer shell around the same compact card pattern as permission popups. */
 export function HaltedSessionPopup({ episode }: { episode: HaltedSessionEpisode }) {
+  const question = episode.kind === 'question',
+    questions = (question && episode.question?.questions) || [],
+    answerable = questions.length > 0;
   return (
     <dialog
       class="halted-session-popup"
@@ -28,34 +31,55 @@ export function HaltedSessionPopup({ episode }: { episode: HaltedSessionEpisode 
       tabindex={-1}
       aria-label={episode.kind === 'question' ? 'AI waiting for your answer' : 'AI session halted'}
     >
-      <article class="halted-session-popup__card">
-        <header class="halted-session-popup__header">
-          <span class="halted-session-popup__identity">
-            <LucideIcon icon={Bot} name="bot" size="s" color={foregroundColorVar('--wa-color-success-fill-loud')} />
-            <strong>{episode.sessionName}</strong>
-          </span>
-          <span class="halted-session-popup__project" title={episode.projectName}>
-            {episode.projectName}
-          </span>
-        </header>
-        <div class="halted-session-popup__summary">
-          <LucideIcon
-            icon={episode.kind === 'question' ? CircleHelp : CircleAlert}
-            name={episode.kind === 'question' ? 'circle-help' : 'circle-alert'}
-            size={17.6}
-            color={foregroundColorVar(
-              episode.kind === 'question' ? '--wa-color-brand-fill-loud' : '--wa-color-danger-fill-loud',
-            )}
-          />
-          <strong>{episode.kind === 'question' ? 'AI waiting for your answer' : 'AI session halted'}</strong>
-        </div>
-        {episode.kind === 'question' && episode.question?.questions?.length ? (
+      <NotificationCard
+        elevation="popup"
+        identity={episode.sessionName}
+        projectName={episode.projectName}
+        summary={{
+          icon: question ? CircleHelp : CircleAlert,
+          iconName: question ? 'circle-help' : 'circle-alert',
+          label: question ? 'AI waiting for your answer' : 'AI session halted',
+          color: foregroundColorVar(question ? '--wa-color-brand-fill-loud' : '--wa-color-danger-fill-loud'),
+        }}
+        details={answerable ? undefined : { text: episode.message, appearance: question ? 'prose' : 'code' }}
+        quietActions={
+          <>
+            <wa-button
+              appearance="plain"
+              size="small"
+              {...NOTIFICATIONS_AND_LINKS_ACTIONS.dismissHaltedSession.attrs}
+              data-halt-key={episode.key}
+              {...{ [TOP_LAYER_DISMISS_ATTRIBUTE]: '' }}
+            >
+              Dismiss
+            </wa-button>
+            <wa-button appearance="plain" size="small" {...NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.attrs}>
+              Pause notifications
+            </wa-button>
+          </>
+        }
+        endActions={
+          <wa-button
+            class="halted-session-popup__primary"
+            size="small"
+            // A question is answered in the popup's form, so returning to the terminal is secondary there.
+            {...(answerable ? { appearance: 'outlined' } : { variant: 'brand', appearance: 'accent' })}
+            {...(answerable
+              ? NOTIFICATIONS_AND_LINKS_ACTIONS.returnTerminalQuestion.attrs
+              : NOTIFICATIONS_AND_LINKS_ACTIONS.openHaltedSession.attrs)}
+            data-halt-key={episode.key}
+          >
+            {answerable ? 'Answer in terminal' : 'Open session'}
+          </wa-button>
+        }
+      >
+        {answerable ? (
           <form
             class="halted-session-popup__questions"
             {...NOTIFICATIONS_AND_LINKS_ACTIONS.answerTerminalQuestion.attrs}
             data-halt-key={episode.key}
           >
-            {episode.question.questions.map((question, index) => (
+            {questions.map((question, index) => (
               <fieldset class="halted-session-popup__question">
                 <legend>{question.question}</legend>
                 {(question.options ?? []).map((option, optionIndex) => (
@@ -100,42 +124,8 @@ export function HaltedSessionPopup({ episode }: { episode: HaltedSessionEpisode 
               </wa-button>
             </Row>
           </form>
-        ) : (
-          <pre class="halted-session-popup__details">
-            <code>{episode.message}</code>
-          </pre>
-        )}
-        <footer class="halted-session-popup__footer">
-          <div class="halted-session-popup__quiet-actions">
-            <wa-button
-              appearance="plain"
-              size="small"
-              {...NOTIFICATIONS_AND_LINKS_ACTIONS.dismissHaltedSession.attrs}
-              data-halt-key={episode.key}
-              {...{ [TOP_LAYER_DISMISS_ATTRIBUTE]: '' }}
-            >
-              Dismiss
-            </wa-button>
-            <wa-button appearance="plain" size="small" {...NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.attrs}>
-              Pause notifications
-            </wa-button>
-          </div>
-          <wa-button
-            class="halted-session-popup__primary"
-            size="small"
-            // A question is answered in the popup's form, so returning to the terminal is secondary there.
-            {...(episode.kind === 'question' && episode.question?.questions?.length
-              ? { appearance: 'outlined' }
-              : { variant: 'brand', appearance: 'accent' })}
-            {...(episode.kind === 'question' && episode.question?.questions?.length
-              ? NOTIFICATIONS_AND_LINKS_ACTIONS.returnTerminalQuestion.attrs
-              : NOTIFICATIONS_AND_LINKS_ACTIONS.openHaltedSession.attrs)}
-            data-halt-key={episode.key}
-          >
-            {episode.kind === 'question' && episode.question?.questions?.length ? 'Answer in terminal' : 'Open session'}
-          </wa-button>
-        </footer>
-      </article>
+        ) : undefined}
+      </NotificationCard>
     </dialog>
   );
 }

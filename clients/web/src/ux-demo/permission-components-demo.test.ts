@@ -45,7 +45,7 @@ describe('PermissionRequestCard demo settings', () => {
     permissionRequestSettings.request.value = 'command';
     permissionRequestSettings.automation.value = 'deny';
     let markup = String(PermissionRequestDemo());
-    expect(markup).toContain('permission-request-card--list');
+    expect(markup).toContain('data-presentation="list"');
     expect(markup).toContain('Wants permission to run a command');
     expect(markup).toContain('Auto-deny in');
 
@@ -53,7 +53,7 @@ describe('PermissionRequestCard demo settings', () => {
     permissionRequestSettings.alwaysSupported.value = false;
     permissionRequestSettings.explanation.value = false;
     markup = String(PermissionRequestDemo());
-    expect(markup).not.toContain('permission-request-card__details');
+    expect(markup).not.toContain('notification-card__details');
     expect(markup).not.toContain('Always Allow');
     expect(markup).not.toContain('permission-request-card__explanation');
   });

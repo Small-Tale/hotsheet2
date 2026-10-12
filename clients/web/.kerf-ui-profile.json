@@ -194,10 +194,10 @@
       "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: pending-attachment-picker__drop."
     },
     {
-      "id": "intentional-nested-inset-permission-request-card",
+      "id": "intentional-nested-inset-notification-card",
       "rules": ["KUI-L004"],
-      "target": "src/components/permission-request-card.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: permission-request-card__project."
+      "target": "src/components/notification-card.tsx",
+      "rationale": "Reviewed HS2-XS71FB: moved from the permission card (HS2-M6B8AD); these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: notification-card__project."
     },
     {
       "id": "intentional-nested-inset-project-tab-bar",
@@ -300,12 +300,6 @@
       "rules": ["KUI-L008"],
       "target": "src/components/note-card.tsx",
       "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`note-card${editorOpen ? ' note-card--editing' : ''}`}"
-    },
-    {
-      "id": "state-modifier-classes-permission-request-card",
-      "rules": ["KUI-L008"],
-      "target": "src/components/permission-request-card.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`permission-request-card permission-request-card--${presentation}`}"
     },
     {
       "id": "state-modifier-classes-terminal-dashboard",
