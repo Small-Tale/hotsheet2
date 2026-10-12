@@ -492,6 +492,7 @@ export function AIConversation({
     );
   return (
     <wa-dialog
+      data-key="ai-conversation"
       class="ai-conversation"
       {...COMMANDS_AND_AI_TARGETS.aiConversation.attrs}
       data-presentation="dialog"

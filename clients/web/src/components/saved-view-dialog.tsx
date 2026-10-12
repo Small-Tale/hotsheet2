@@ -47,6 +47,7 @@ export function SavedViewDialog({
   return (
     <DialogSurface preferredWidth={remify(512)} viewportGutter={remify(16)}>
       <wa-dialog
+        data-key="saved-view-dialog"
         {...VIEWS_AND_SAVED_VIEWS_TARGETS.savedViewDialog.attrs}
         data-mode={mode}
         label={title}
@@ -123,6 +124,7 @@ export function SavedViewDeleteDialog({
   return (
     <DialogSurface preferredWidth={remify(512)} viewportGutter={remify(16)}>
       <wa-dialog
+        data-key="saved-view-dialog-2"
         {...VIEWS_AND_SAVED_VIEWS_TARGETS.savedViewDeleteDialog.attrs}
         label="Delete View?"
         aria-label="Delete View?"

@@ -522,6 +522,7 @@ export function TicketSourceSetupDialog({
     );
   return (
     <wa-dialog
+      data-key="ticket-source-setup-dialog"
       class="ticket-source-setup-dialog"
       data-component="ticket-source-setup-dialog"
       data-ticket-source-setup-dialog

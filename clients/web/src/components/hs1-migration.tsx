@@ -48,6 +48,7 @@ export function Hs1MigrationDialog({
 }: Hs1MigrationDialogProps) {
   return (
     <wa-dialog
+      data-key="hs1-migration"
       {...PROJECT_LIFECYCLE_TARGETS.hs1MigrationDialog.attrs}
       label="Import Hot Sheet 1 project"
       open={open}

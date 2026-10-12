@@ -19,7 +19,7 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
   if (state.kind === 'empty-trash')
     return (
       <DialogSurface size="small" bodyInset="comfortable" footerInset="comfortable">
-        <wa-dialog open data-component="empty-trash-dialog" label="Empty Trash?">
+        <wa-dialog data-key="bulk-ticket-dialog" open data-component="empty-trash-dialog" label="Empty Trash?">
           <List gap="m">
             <Text flush>
               Permanently remove {state.count} ticket{state.count === 1 ? '' : 's'} from this project’s active store.
@@ -50,6 +50,7 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
     return (
       <DialogSurface size="small" bodyInset="comfortable" footerInset="comfortable">
         <wa-dialog
+          data-key="bulk-ticket-dialog-2"
           open
           data-component="bulk-delete-dialog"
           label={`Delete ${state.count} ticket${state.count === 1 ? '' : 's'}?`}
@@ -72,6 +73,7 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
   return (
     <DialogSurface size="small" bodyInset="comfortable" footerInset="comfortable">
       <wa-dialog
+        data-key="bulk-ticket-dialog-3"
         open
         data-component="bulk-tag-dialog"
         label={`${adding ? 'Add' : 'Remove'} tag — ${state.count} selected`}

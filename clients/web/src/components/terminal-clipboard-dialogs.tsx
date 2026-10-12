@@ -90,6 +90,7 @@ export function TerminalCopyDialog({ state }: { state?: TerminalCopyState }) {
   return (
     <DialogSurface preferredWidth={SHEET_WIDTH} viewportGutter={remify(16)}>
       <wa-dialog
+        data-key="terminal-clipboard-dialogs"
         {...TERMINALS_TARGETS.terminalCopyDialog.attrs}
         class="terminal-clipboard-dialog"
         label="Copy terminal text"
@@ -138,6 +139,7 @@ export function TerminalPasteDialog({ state }: { state?: TerminalPasteState }) {
   return (
     <DialogSurface preferredWidth={SHEET_WIDTH} viewportGutter={remify(16)}>
       <wa-dialog
+        data-key="terminal-clipboard-dialogs-2"
         {...TERMINALS_TARGETS.terminalPasteDialog.attrs}
         class="terminal-clipboard-dialog"
         label="Paste into terminal"

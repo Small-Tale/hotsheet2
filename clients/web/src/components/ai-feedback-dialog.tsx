@@ -27,6 +27,7 @@ export function AiFeedbackDialog({ state }: { state?: AiFeedbackDialogState }) {
   return (
     <DialogSurface size="medium" viewportGutter={remify(16)}>
       <wa-dialog
+        data-key="ai-feedback-dialog"
         class="ai-feedback-dialog"
         {...COMMANDS_AND_AI_TARGETS.aiFeedbackDialog.attrs}
         label={helpful ? 'Helpful feedback' : 'Not helpful feedback'}

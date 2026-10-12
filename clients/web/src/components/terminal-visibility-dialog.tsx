@@ -63,6 +63,7 @@ export function TerminalVisibilityNameDialog({ prompt }: { prompt?: TerminalVisi
   return (
     <DialogSurface preferredWidth={remify(448)} viewportGutter={remify(16)}>
       <wa-dialog
+        data-key="terminal-visibility-dialog"
         data-terminal-visibility-name-dialog
         label={adding ? 'Add Visibility Group' : 'Rename Visibility Group'}
         open={Boolean(prompt)}
@@ -108,6 +109,7 @@ export function TerminalVisibilityDialog({
   return (
     <DialogSurface preferredWidth={remify(672)} viewportGutter={remify(16)} maxHeight={remify(704)} bodyInset="none">
       <wa-dialog
+        data-key="terminal-visibility-dialog-2"
         data-terminal-visibility-dialog
         label="Manage Workspace Visibility"
         aria-label="Manage Workspace Visibility"

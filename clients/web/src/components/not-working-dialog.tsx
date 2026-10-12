@@ -39,6 +39,7 @@ export function NotWorkingDialog({
     submitLabel = reopening ? 'Reopen Ticket' : 'Report Not Working';
   return (
     <wa-dialog
+      data-key="not-working-dialog"
       class="not-working-dialog"
       {...TICKET_SELECTION_TARGETS.notWorkingDialog.attrs}
       role="dialog"

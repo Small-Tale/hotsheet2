@@ -23,6 +23,7 @@ export function TicketLinkChoiceDialog({ choice }: { choice?: TicketLinkChoice }
   return (
     <DialogSurface bodyInset="comfortable" footerInset="comfortable">
       <wa-dialog
+        data-key="ticket-link-choice-dialog"
         {...NOTIFICATIONS_AND_LINKS_TARGETS.ticketLinkChoiceDialog.attrs}
         label={`Choose ${choice.reference.slug}`}
         open

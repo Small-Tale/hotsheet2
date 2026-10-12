@@ -26,6 +26,7 @@ export function ManualModelDialog({ state }: { state?: ManualModelDialogState })
   return (
     <DialogSurface preferredWidth={remify(448)} viewportGutter={remify(16)}>
       <wa-dialog
+        data-key="manual-model-dialog"
         class="manual-model-dialog"
         {...COMMANDS_AND_AI_TARGETS.manualModelDialog.attrs}
         label="Other model"

@@ -234,6 +234,7 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
   return (
     <DialogSurface preferredWidth={remify(624)} viewportGutter={remify(16)} maxHeight={remify(704)}>
       <wa-dialog
+        data-key="conversation-export-dialog"
         class="conversation-export-dialog"
         {...COMMANDS_AND_AI_TARGETS.conversationExportDialog.attrs}
         data-step={step}

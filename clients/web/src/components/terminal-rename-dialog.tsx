@@ -25,6 +25,7 @@ export interface TerminalRenameTarget {
 export function TerminalRenameDialog({ target }: { target?: TerminalRenameTarget }) {
   return (
     <wa-dialog
+      data-key="terminal-rename-dialog"
       data-terminal-rename-dialog
       label="Rename terminal"
       open={Boolean(target)}

@@ -44,6 +44,7 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
   return (
     <DialogSurface preferredWidth={remify(544)} viewportGutter={remify(16)}>
       <wa-dialog
+        data-key="ticket-close-dialog"
         class="ticket-close-dialog"
         open
         {...TICKET_SELECTION_TARGETS.ticketCloseDialog.attrs}

@@ -135,7 +135,13 @@ export function RemoteProjectDialog({
   error?: string;
 }) {
   return (
-    <wa-dialog data-remote-project-dialog label="Open a project" open={open} data-controlled-open={String(open)}>
+    <wa-dialog
+      data-key="remote-project-dialog"
+      data-remote-project-dialog
+      label="Open a project"
+      open={open}
+      data-controlled-open={String(open)}
+    >
       <div class="remote-project-dialog">
         <List gap="m">
           <Text tone="quiet">
