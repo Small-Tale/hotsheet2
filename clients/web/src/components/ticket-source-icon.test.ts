@@ -24,8 +24,11 @@ describe('TicketSourceIcon', () => {
       const markup = String(TicketSourceIcon({ source: { provider: 'git', name: 'Local', color } }));
       expect(markup).toContain('style="color: #6b7280"');
     }
+    // Kerf LucideIcon owns the mark geometry; the wrapper keeps one layout rule and no color rule.
     const css = readFileSync(new URL('./ticket-source-icon.css', import.meta.url), 'utf8');
-    expect(css).toContain('color: var(--hs-ticket-source-default)');
-    expect(css).not.toContain('border-radius');
+    expect(css.match(/^\.[^{]*\{/gm)).toEqual(['.ticket-source-icon {']);
+    expect(css).not.toContain('color:');
+    for (const provider of ['git', 'github', 'gitlab', 'jira', 'linear'])
+      expect(String(TicketSourceIcon({ source: { provider, name: provider } }))).toContain(`data-lucide="${provider}"`);
   });
 });

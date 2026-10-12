@@ -127,7 +127,9 @@ describe('shared client theme', () => {
         !token.startsWith('--hs-priority-') &&
         !token.startsWith('--hs-ticket-row-') &&
         !inlineCommandPalette(token) &&
-        token !== '--hs-category-fallback',
+        token !== '--hs-category-fallback' &&
+        // TicketSourceIcon resolves its default color in TypeScript; the alias awaits removal (HS2-E3HGSK).
+        token !== '--hs-ticket-source-default',
     );
 
     expect(new Set(definitions)).toEqual(new Set(required));
