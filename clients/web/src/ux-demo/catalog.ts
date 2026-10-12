@@ -404,6 +404,13 @@ export const demoCatalog: DemoCategory[] = [
             ['confidence-badge'],
           ),
           demo('tag-chip', 'TagChip', 'Compact tag label with optional removal behavior.', 'feature-floor', true),
+          demo(
+            'choice-card',
+            'ChoiceCard',
+            'Selectable option card framing a native radio or checkbox with a title, description, and checked, danger, and disabled states.',
+            'feature-floor',
+            true,
+          ),
           demo('tag-picker', 'TagPicker', 'Find, create, and attach ticket tags.'),
         ],
       },
@@ -505,7 +512,7 @@ export const demoCatalog: DemoCategory[] = [
             'Two-step wizard to choose a message scope then a destination, format, and bundle options.',
             'feature-floor',
             true,
-            ['content-transition'],
+            ['content-transition', 'choice-card'],
           ),
           demo(
             'command-run-dialog',

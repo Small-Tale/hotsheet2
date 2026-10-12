@@ -305,6 +305,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "choice-card",
+      "name": "ChoiceCard",
+      "kind": "component",
+      "purpose": "Selectable option card framing a native radio or checkbox with a title, description, and checked, danger, and disabled states.",
+      "useWhen": [
+        "A dialog offers a short list of radio or checkbox options that each need a title and an explanatory description."
+      ],
+      "avoidWhen": [
+        "A plain Web Awesome wa-radio-group or wa-checkbox without descriptions is enough."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/choice-card.tsx",
+      "geometry": {
+        "margin": "parent",
+        "border": "self",
+        "padding": "self"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "codex-hooks-notice-banner",
       "name": "CodexHooksNoticeBanner",
       "kind": "component",

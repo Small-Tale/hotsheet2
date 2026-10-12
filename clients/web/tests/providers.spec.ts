@@ -6678,7 +6678,7 @@ test('selects and copies chat messages before saving that range without choosing
   await activeBundle.locator('input[name="conversation-export-summary"]').check();
   await expect(dialog).toHaveJSProperty('open', true);
   await expect(dialog).not.toContainText('manifest.json');
-  const options = activeBundle.locator('.conversation-export-dialog__choice');
+  const options = activeBundle.locator('[data-component="choice-card"]');
   const optionBoxes = await options.evaluateAll((nodes) =>
     nodes.slice(0, 3).map((node) => node.getBoundingClientRect()),
   );

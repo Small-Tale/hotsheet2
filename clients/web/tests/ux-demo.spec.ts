@@ -8822,3 +8822,62 @@ test('composes startup and inspector feedback without app CSS (HS2-JMYRT3)', asy
     }
   }
 });
+
+test('drives every ChoiceCard presentation from its demo settings (HS2-V7PCS6)', async ({ page }) => {
+  const setSetting = (name: string, value: string) =>
+    page
+      .locator(`[data-settings="choice-card"] [name="${name}"]`)
+      .first()
+      .evaluate((node: HTMLElement & { value: string }, next) => {
+        node.value = next;
+        node.dispatchEvent(new Event('change', { bubbles: true }));
+      }, value);
+  const setChecked = (name: string, checked: boolean) =>
+    page
+      .locator(`[data-settings="choice-card"] [name="${name}"]`)
+      .first()
+      .evaluate((node: HTMLElement & { checked: boolean }, next) => {
+        node.checked = next;
+        node.dispatchEvent(new Event('change', { bubbles: true }));
+      }, checked);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/ux-demo?component=choice-card');
+    const stage = page.getByLabel('ChoiceCard demo'),
+      cards = stage.locator('[data-component="choice-card"]'),
+      event = stage.locator('.component-stage__event');
+    await expect(cards).toHaveCount(3);
+    // Radio cards: one checked, brand tone, and equal full-width cards in their column.
+    await expect(stage.getByRole('radio', { name: /Entire conversation/ })).toBeChecked();
+    await stage.getByText('Selected range').click();
+    await expect(stage.getByRole('radio', { name: /Selected range/ })).toBeChecked();
+    await expect(event).toHaveText('Checked: range');
+    const widths = await cards.evaluateAll((nodes) =>
+      nodes.map((node) => Math.round(node.getBoundingClientRect().width)),
+    );
+    expect(new Set(widths).size).toBe(1);
+    await expect(cards.nth(1)).toHaveCSS('cursor', 'pointer');
+    // The danger tone on a checked card, then applied through the Tone setting.
+    await stage.getByText('Overwrite the existing bundle').click();
+    await expect(cards.nth(2)).toHaveAttribute('data-tone', 'danger');
+    const dangerBorder = await cards.nth(2).evaluate((node) => getComputedStyle(node).borderTopColor);
+    await setSetting('tone', 'danger');
+    await stage.getByText('Entire conversation').click();
+    await expect(cards.first()).toHaveAttribute('data-tone', 'danger');
+    await expect(cards.first()).toHaveCSS('border-top-color', dangerBorder);
+    await page.screenshot({ path: `target/visual-captures/hs2-v7pcs6-choice-card-radio-${width}.png` });
+    // Checkbox cards toggle independently.
+    await setSetting('type', 'checkbox');
+    await stage.getByText('Selected range').click();
+    await expect(event).toHaveText('Checked: entire, range');
+    await stage.getByText('Entire conversation').click();
+    await expect(event).toHaveText('Checked: range');
+    // Without descriptions, then disabled.
+    await setChecked('description', false);
+    await expect(stage.locator('.choice-card__copy small')).toHaveCount(0);
+    await setChecked('disabled', true);
+    await expect(stage.getByRole('checkbox', { name: /Selected range/ })).toBeDisabled();
+    await expect(cards.first()).toHaveCSS('cursor', 'not-allowed');
+    await page.screenshot({ path: `target/visual-captures/hs2-v7pcs6-choice-card-checkbox-${width}.png` });
+  }
+});

@@ -19,6 +19,7 @@ import {
   selectedConversationMessages,
 } from '../conversation-export';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
+import { ChoiceCard } from './choice-card';
 import { ContentTransition } from './content-transition';
 import { FlowBackButton } from './flow-back-button';
 
@@ -73,22 +74,24 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
         <StepHeader step="Step 1 of 2" title="Choose scope" />
         <fieldset class="conversation-export-dialog__section">
           <legend>Messages</legend>
-          <label class="conversation-export-dialog__choice">
-            <input type="radio" name="conversation-export-scope" value="all" checked={!range} disabled={busy} />
-            <span>
-              <strong>Entire conversation</strong>
-              <small>All {messages.length} messages, in their original order.</small>
-            </span>
-          </label>
-          <label class="conversation-export-dialog__choice">
-            <input type="radio" name="conversation-export-scope" value="range" checked={range} disabled={busy} />
-            <span>
-              <strong>Selected range</strong>
-              <small>
-                {presetMessages.length} message{presetMessages.length === 1 ? '' : 's'} selected in the chat.
-              </small>
-            </span>
-          </label>
+          <ChoiceCard
+            type="radio"
+            name="conversation-export-scope"
+            value="all"
+            checked={!range}
+            disabled={busy}
+            title="Entire conversation"
+            description={`All ${messages.length} messages, in their original order.`}
+          />
+          <ChoiceCard
+            type="radio"
+            name="conversation-export-scope"
+            value="range"
+            checked={range}
+            disabled={busy}
+            title="Selected range"
+            description={`${presetMessages.length} message${presetMessages.length === 1 ? '' : 's'} selected in the chat.`}
+          />
         </fieldset>
         <ExportError message={step === 1 ? error : ''} />
       </List>
@@ -104,46 +107,34 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
         <fieldset class="conversation-export-dialog__section">
           <legend>Bundle contents</legend>
           <List gap="2xs">
-            <label class="conversation-export-dialog__choice">
-              <input
-                type="checkbox"
-                name="conversation-export-attachments"
-                checked={draft.bundle.includeAttachments}
-                disabled={busy}
-              />
-              <span>
-                <strong>Attachments</strong>
-                <small>Copy non-media files referenced by the selected messages.</small>
-              </span>
-            </label>
-            <label class="conversation-export-dialog__choice">
-              <input
-                type="checkbox"
-                name="conversation-export-media"
-                checked={draft.bundle.includeMedia}
-                disabled={busy}
-              />
-              <span>
-                <strong>Original media</strong>
-                <small>Copy referenced images, audio, and video at their original quality.</small>
-              </span>
-            </label>
-            <label class="conversation-export-dialog__choice">
-              <input
-                type="checkbox"
-                name="conversation-export-summary"
-                checked={draft.bundle.includeSummary}
-                disabled={busy || !summaryAvailable}
-              />
-              <span>
-                <strong>Concise summary</strong>
-                <small>
-                  {summaryAvailable
-                    ? 'Add a local summary.md without replacing the complete transcript.'
-                    : 'Summary export is unavailable for this conversation.'}
-                </small>
-              </span>
-            </label>
+            <ChoiceCard
+              type="checkbox"
+              name="conversation-export-attachments"
+              checked={draft.bundle.includeAttachments}
+              disabled={busy}
+              title="Attachments"
+              description="Copy non-media files referenced by the selected messages."
+            />
+            <ChoiceCard
+              type="checkbox"
+              name="conversation-export-media"
+              checked={draft.bundle.includeMedia}
+              disabled={busy}
+              title="Original media"
+              description="Copy referenced images, audio, and video at their original quality."
+            />
+            <ChoiceCard
+              type="checkbox"
+              name="conversation-export-summary"
+              checked={draft.bundle.includeSummary}
+              disabled={busy || !summaryAvailable}
+              title="Concise summary"
+              description={
+                summaryAvailable
+                  ? 'Add a local summary.md without replacing the complete transcript.'
+                  : 'Summary export is unavailable for this conversation.'
+              }
+            />
           </List>
           {existing && (
             <ContentItem appearance="warning">
@@ -157,33 +148,26 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
                     : 'This destination contains a different conversation export.'}
                 </Text>
                 {sameConversation && (
-                  <label class="conversation-export-dialog__choice">
-                    <input
-                      type="radio"
-                      name="conversation-export-write-mode"
-                      value="reexport"
-                      checked={draft.writeMode === 'reexport'}
-                      disabled={busy}
-                    />
-                    <span>
-                      <strong>Re-export as the next revision</strong>
-                      <small>Keep lineage to revision {existing.revision} in the manifest.</small>
-                    </span>
-                  </label>
-                )}
-                <label class="conversation-export-dialog__choice conversation-export-dialog__choice--danger">
-                  <input
+                  <ChoiceCard
                     type="radio"
                     name="conversation-export-write-mode"
-                    value="overwrite"
-                    checked={draft.writeMode === 'overwrite'}
+                    value="reexport"
+                    checked={draft.writeMode === 'reexport'}
                     disabled={busy}
+                    title="Re-export as the next revision"
+                    description={`Keep lineage to revision ${existing.revision} in the manifest.`}
                   />
-                  <span>
-                    <strong>Overwrite the existing bundle</strong>
-                    <small>Replace its files in this destination.</small>
-                  </span>
-                </label>
+                )}
+                <ChoiceCard
+                  type="radio"
+                  name="conversation-export-write-mode"
+                  value="overwrite"
+                  checked={draft.writeMode === 'overwrite'}
+                  disabled={busy}
+                  tone="danger"
+                  title="Overwrite the existing bundle"
+                  description="Replace its files in this destination."
+                />
               </List>
             </ContentItem>
           )}

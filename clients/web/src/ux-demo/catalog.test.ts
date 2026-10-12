@@ -99,6 +99,7 @@ describe('UX demo catalog', () => {
       'confidence-badge',
       'confidence-calibration',
       'tag-chip',
+      'choice-card',
       'ticket-reader',
       'markdown-editor',
       'markdown-preview',

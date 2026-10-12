@@ -158,12 +158,6 @@
       "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: app-heading__summary, connection-details-dialog__body, connection-details-dialog__metadata."
     },
     {
-      "id": "intentional-nested-inset-conversation-export-dialog",
-      "rules": ["KUI-L004"],
-      "target": "src/components/conversation-export-dialog.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: conversation-export-dialog__choice, conversation-export-dialog__choice--danger."
-    },
-    {
       "id": "intentional-nested-inset-drive-control",
       "rules": ["KUI-L004"],
       "target": "src/components/drive-control.tsx",

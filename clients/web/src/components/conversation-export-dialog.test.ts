@@ -17,8 +17,11 @@ describe('ConversationExportDialog', () => {
   it('uses Kerf semantic spacing for dialog regions, choices, and connected labels', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'conversation-export-dialog.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
-    expect(css).toContain('padding: var(--kui-space-xs)');
-    expect(css).toContainSource('gap:var(--kui-space-2xs)');
+    // The option cards are the shared ChoiceCard now (HS2-V7PCS6).
+    expect(css).not.toContain('__choice');
+    const choiceCss = readFileSync(resolve(import.meta.dirname, 'choice-card.css'), 'utf8');
+    expect(choiceCss).toContain('padding: var(--kui-space-xs)');
+    expect(choiceCss).toContainSource('gap:var(--kui-space-2xs)');
     // DialogSurface owns the shell and Kerf List/Text/ContentItem own the layout (HS2-3Q6FXF).
     expect(css).not.toMatch(/::part|@media|__form|__header|__options|__collision|__screen/);
     const markup = String(

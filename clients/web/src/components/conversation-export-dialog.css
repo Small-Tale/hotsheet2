@@ -13,42 +13,6 @@
   padding: 0;
   font-weight: var(--wa-font-weight-semibold);
 }
-/* Selectable option cards around native radio and checkbox inputs: no Kerf or app component frames a
-   native input with a title, description, and checked/danger/disabled states yet (HS2-V7PCS6). */
-.conversation-export-dialog__choice {
-  display: grid;
-  padding: var(--kui-space-xs);
-  border: 1px solid transparent;
-  border-radius: var(--wa-border-radius-m);
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: var(--kui-space-xs);
-  cursor: pointer;
-}
-.conversation-export-dialog__choice:has(input:checked) {
-  border-color: var(--wa-color-brand-border-normal);
-  background: var(--wa-color-brand-fill-quiet);
-}
-.conversation-export-dialog__choice--danger:has(input:checked) {
-  border-color: var(--wa-color-danger-border-normal);
-  background: var(--wa-color-danger-fill-quiet);
-}
-.conversation-export-dialog__choice:has(input:disabled) {
-  cursor: default;
-  opacity: 0.68;
-}
-.conversation-export-dialog__choice input {
-  margin: remify(3.2px) 0 0;
-}
-.conversation-export-dialog__choice span {
-  display: grid;
-  min-width: 0;
-  gap: var(--kui-space-2xs);
-}
-.conversation-export-dialog__choice small {
-  color: var(--wa-color-neutral-on-quiet);
-  line-height: 1.35;
-}
 /* Reserve one line for validation so toggling an option does not shift the dialog's actions. */
 .conversation-export-dialog__error {
   min-height: 1.2em;

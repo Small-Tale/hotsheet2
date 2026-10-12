@@ -1448,6 +1448,12 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   behavior, unit tests, and interactive `/ux-demo` coverage. Removal is Chip's delegated
   `remove-tag-chip` action; the owning feature resolves the tag from the chip's `data-item-id` and mutates
   the ticket (HS2-HJEHRW). Hot Sheet owns no chip chrome.
+- `ChoiceCard` — **built** (HS2-V7PCS6): a `label` framing a native radio or checkbox with a title,
+  an optional quiet description, and checked (`tone="brand"` default or `"danger"`) and disabled
+  states. The input stays native, so the owning feature's delegated handlers and tests read it by
+  `name`. Cards fill their column, overriding Web Awesome's native `fit-content` radio and
+  checkbox label rule. The ConversationExportDialog scope, bundle, and write-mode choices compose it.
+  `/ux-demo?component=choice-card` exposes the type, tone, description, and disabled variants.
 
 The component catalog records composition relationships. A left-aligned “Related
 components” menu in the main demo footer uses the shared `Select`. It lists `Used by`

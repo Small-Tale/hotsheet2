@@ -1,0 +1,43 @@
+/* A selectable option card around a native radio or checkbox: no Kerf or Web Awesome component
+   frames a native input with a title, description, and checked/danger/disabled states (HS2-V7PCS6). */
+.choice-card {
+  display: grid;
+  padding: var(--kui-space-xs);
+  border: 1px solid transparent;
+  border-radius: var(--wa-border-radius-m);
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--kui-space-xs);
+  cursor: pointer;
+}
+/* Web Awesome's native `label:has(input[type=radio|checkbox])` rule makes the label an inline-flex,
+   fit-content box; a card keeps its grid and fills its column so stacked cards align. */
+.choice-card:has(> input[type]) {
+  display: grid;
+  width: auto;
+}
+.choice-card:has(input:checked) {
+  border-color: var(--wa-color-brand-border-normal);
+  background: var(--wa-color-brand-fill-quiet);
+}
+.choice-card[data-tone='danger']:has(input:checked) {
+  border-color: var(--wa-color-danger-border-normal);
+  background: var(--wa-color-danger-fill-quiet);
+}
+.choice-card:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+/* Aligns the native input with the title's first line. */
+.choice-card > input {
+  margin: remify(3.2px) 0 0;
+}
+.choice-card__copy {
+  display: grid;
+  min-width: 0;
+  gap: var(--kui-space-2xs);
+}
+.choice-card__copy small {
+  color: var(--wa-color-neutral-on-quiet);
+  line-height: 1.35;
+}

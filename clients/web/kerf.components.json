@@ -2447,6 +2447,70 @@
       }
     },
     {
+      "id": "choice-card",
+      "name": "ChoiceCard",
+      "kind": "component",
+      "purpose": "Selectable option card framing a native radio or checkbox with a title, description, and checked, danger, and disabled states.",
+      "source": "src/components/choice-card.tsx",
+      "publicExports": [
+        {
+          "name": "ChoiceCard"
+        }
+      ],
+      "sourceLinks": ["src/components/choice-card.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "parent",
+            "border": "self",
+            "padding": "self"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/choice-card.tsx",
+        "composition": "src/components/choice-card.tsx"
+      },
+      "selection": {
+        "useWhen": [
+          "A dialog offers a short list of radio or checkbox options that each need a title and an explanatory description."
+        ],
+        "avoidWhen": ["A plain Web Awesome wa-radio-group or wa-checkbox without descriptions is enough."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "ticket-reader",
       "name": "TicketReader",
       "kind": "composition",
