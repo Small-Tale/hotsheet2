@@ -9,7 +9,8 @@ import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycl
 
 /**
  * Successful setup changed Codex hook hashes; review is per checkout (HS2-4AR09Z). The rounded
- * banner sits on the header surface, not the sunken pane content tint (HS2-0YPWH8).
+ * banner sits on the header surface, not the sunken pane content tint (HS2-0YPWH8). Dismiss is a native
+ * button so StateBanner's action styling matches the other shell banners (HS2-7S60S4).
  */
 export function CodexHooksNoticeBanner({ path }: { path: string }) {
   return (
@@ -24,9 +25,9 @@ export function CodexHooksNoticeBanner({ path }: { path: string }) {
           actionPlacement="below"
           icon={<LucideIcon icon={ShieldCheck} name="shield-check" />}
           action={
-            <wa-button size="small" appearance="outlined" {...PROJECT_LIFECYCLE_ACTIONS.dismissCodexHooksNotice.attrs}>
+            <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissCodexHooksNotice.attrs}>
               Dismiss
-            </wa-button>
+            </button>
           }
         />
       </List>
