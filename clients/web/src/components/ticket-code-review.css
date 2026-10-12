@@ -1,12 +1,6 @@
-/* As an inspector tab panel, the review's own paragraphs keep the panel's compact text rhythm; the
-   single-class specificity lets each paragraph's own rule below refine it. */
-.ticket-code-review--panel
-  :where(.ticket-code-review__section > p, .ticket-code-review__empty > p, .ticket-code-review__evidence p) {
-  margin: 0;
-  color: var(--wa-color-neutral-on-normal);
-  font-size: var(--wa-font-size-s);
-  line-height: 1.5;
-}
+/* TicketCodeReview: Kerf Toolbar, Text, EmptyState, and Chip own the heading, status copy, empty state,
+   and ref tags (HS2-GQXT52). These rules style the app-owned change-evidence button, compare banner,
+   commit graph list, and notice, which no Kerf component expresses. */
 /* App-owned wrapper: the heading Toolbar drops its inset through the public gap token; its texts keep
    their own inline padding (HS2-VABS08). The 1px transparent border + 8px padding aligns the heading to
    the inspector's 17px text column (HS2-EQEGGG). */
@@ -70,6 +64,7 @@
 }
 .ticket-code-review__evidence p {
   margin: var(--kui-space-xs) 0 0;
+  line-height: 1.5;
   color: var(--wa-color-success-on-quiet);
   font-size: var(--wa-font-size-xs);
 }
@@ -261,27 +256,12 @@
   background: var(--wa-color-brand-fill-quiet);
 }
 .ticket-code-review__notice {
+  margin: 0;
   padding: var(--kui-space-xs);
   border-radius: remify(8px);
   background: var(--wa-color-neutral-fill-normal);
-  color: var(--wa-color-neutral-on-quiet) !important;
-  font-size: var(--wa-font-size-xs) !important;
-}
-.ticket-code-review__empty {
-  display: grid;
-  min-height: remify(128px);
-  padding: var(--kui-space-m);
-  border: 1px dashed var(--wa-color-neutral-border-loud);
-  border-radius: remify(9.6px);
   color: var(--wa-color-neutral-on-quiet);
-  place-items: center;
-  align-content: center;
-  gap: var(--kui-space-xs);
-  text-align: center;
-}
-.ticket-code-review__message {
-  color: var(--wa-color-neutral-on-quiet) !important;
-  font-size: var(--wa-font-size-xs) !important;
+  font-size: var(--wa-font-size-xs);
 }
 @container (max-width: remify(352px)) {
   .ticket-code-review__compare-banner {
@@ -304,37 +284,4 @@
   flex-wrap: wrap;
   gap: var(--kui-space-2xs);
   margin-top: var(--kui-space-2xs);
-}
-.ticket-code-review__ref {
-  display: inline-flex;
-  max-width: 100%;
-  padding: 0 var(--kui-space-2xs);
-  border-radius: var(--wa-border-radius-pill);
-  align-items: center;
-  gap: var(--kui-space-2xs);
-  font-size: var(--wa-font-size-2xs);
-  font-weight: 650;
-  line-height: 1.5;
-}
-.ticket-code-review__ref > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ticket-code-review__ref[data-ref-kind='head'] {
-  color: var(--wa-color-success-on-quiet);
-  background: var(--wa-color-success-fill-quiet);
-}
-.ticket-code-review__ref[data-ref-kind='branch'] {
-  color: var(--wa-color-brand-on-quiet);
-  background: var(--wa-color-brand-fill-quiet);
-}
-.ticket-code-review__ref[data-ref-kind='remote'] {
-  color: var(--wa-color-neutral-on-quiet);
-  background: var(--wa-color-neutral-fill-quiet);
-}
-.ticket-code-review__ref[data-ref-kind='tag'] {
-  color: var(--wa-color-warning-on-quiet);
-  background: var(--wa-color-warning-fill-quiet);
 }

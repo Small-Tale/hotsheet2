@@ -1,7 +1,10 @@
 import './ticket-code-review.css';
 
+import { Chip } from '@kerfjs/ui/chip';
 import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
+import { EmptyState } from '@kerfjs/ui/empty-state';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -70,12 +73,16 @@ export function TicketCodeReview({
       <div class="ticket-code-review__header">
         <Toolbar dividerSides="" leading={heading} />
       </div>
-      {loading && <p role="status">{loadingMessage}</p>}
+      {loading && (
+        <Text variant="p" tone="quiet" size="compact" role="status">
+          {loadingMessage}
+        </Text>
+      )}
       {!loading && review && review.commits.length === 0 && (
-        <div class="ticket-code-review__empty">
-          <LucideIcon size={19.2} icon={GitCommitHorizontal} name="git-commit-horizontal" />
-          <p>{emptyMessage}</p>
-        </div>
+        <EmptyState
+          title={emptyMessage}
+          icon={<LucideIcon icon={GitCommitHorizontal} name="git-commit-horizontal" />}
+        />
       )}
       {!loading && review && review.commits.length > 0 && (
         <>
@@ -265,9 +272,9 @@ export function TicketCodeReview({
         </>
       )}
       {message && (
-        <p class="ticket-code-review__message" role="status">
+        <Text variant="p" tone="quiet" size="compact" role="status" className="ticket-code-review__message">
           {message}
-        </p>
+        </Text>
       )}
     </section>
   );
@@ -351,7 +358,15 @@ function commitRefKindLabel(kind: CommitRef['kind']): string {
   }
 }
 
-/** Git ref decorations (HEAD/branches/remotes/tags) for a commit, styled by kind (HS2-SFJ5TE). */
+/** Each ref kind's Kerf Chip tone (HS2-GQXT52). */
+const REF_TONES = {
+  head: 'success',
+  branch: 'info',
+  remote: 'neutral',
+  tag: 'warning',
+} as const satisfies Record<CommitRef['kind'], string>;
+
+/** Git ref decorations (HEAD/branches/remotes/tags) for a commit, toned by kind (HS2-SFJ5TE). */
 function commitRefs(refs: readonly CommitRef[] | undefined) {
   if (!refs?.length) return undefined;
   return (
@@ -362,12 +377,19 @@ function commitRefs(refs: readonly CommitRef[] | undefined) {
           data-ref-kind={ref.kind}
           title={`${commitRefKindLabel(ref.kind)}: ${ref.label}`}
         >
-          <LucideIcon
-            size={11.2}
-            icon={ref.kind === 'tag' ? Tag : GitBranch}
-            name={ref.kind === 'tag' ? 'tag' : 'git-branch'}
-          />
-          <span>{ref.label}</span>
+          <Chip
+            tone={REF_TONES[ref.kind]}
+            size="compact"
+            truncate
+            icon={
+              <LucideIcon
+                icon={ref.kind === 'tag' ? Tag : GitBranch}
+                name={ref.kind === 'tag' ? 'tag' : 'git-branch'}
+              />
+            }
+          >
+            {ref.label}
+          </Chip>
         </span>
       ))}
     </span>

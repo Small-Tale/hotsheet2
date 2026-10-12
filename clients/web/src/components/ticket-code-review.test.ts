@@ -71,8 +71,10 @@ describe('TicketCodeReview', () => {
       /__commit \{[^}]*min-height: remify\(68px\)[^}]*padding: var\(--kui-space-xs\) 0[^}]*gap: var\(--kui-space-xs\)/,
     );
     expect(css).toMatch(/__commit-summary \{[^}]*gap: var\(--kui-space-2xs\)/);
-    expect(css).toMatchSource(/__notice \{ padding: var\(--kui-space-xs\)/);
-    expect(css).toMatch(/__empty \{[^}]*padding: var\(--kui-space-m\)[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatchSource(/__notice \{ margin: 0; padding: var\(--kui-space-xs\)/);
+    // Kerf EmptyState and Chip own the empty state and ref tags (HS2-GQXT52).
+    expect(css).not.toMatch(/__(empty|ref) \{/u);
+    expect(css).not.toContain('!important');
     expect(css).toMatchSource(/__refs \{[^}]*gap: var\(--kui-space-2xs\); margin-top: var\(--kui-space-2xs\)/);
   });
 
