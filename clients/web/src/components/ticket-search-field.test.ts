@@ -286,7 +286,7 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
       '.ticket-search-field__help code { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }',
     );
     expect(css).toContainSource(
-      '.ticket-search-field__help { max-height: min(remify(448px), calc(100dvh - remify(384px))); }',
+      '.ticket-search-field__help { max-height: min(remify(448px), calc(100dvh - remify(448px))); }',
     );
     expect(css).toContainSource(
       '@media (max-height: remify(704px)) { .ticket-search-field__help { max-height: calc(100vh - remify(368px)); } }',

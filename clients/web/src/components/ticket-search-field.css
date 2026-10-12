@@ -129,7 +129,10 @@
     white-space: normal;
     overflow-wrap: anywhere;
   }
+  /* Leave room for a taller host header above the field and a pinned footer below it (the UX
+     catalog's display controls and footer pane, HS2-JEKRXN) until Kerf anchoring (KF-M8SV15)
+     can clamp the surface to its real scrollport. */
   .ticket-search-field__help {
-    max-height: min(remify(448px), calc(100dvh - remify(384px)));
+    max-height: min(remify(448px), calc(100dvh - remify(448px)));
   }
 }
