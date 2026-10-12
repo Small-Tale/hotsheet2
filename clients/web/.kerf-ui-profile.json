@@ -314,12 +314,6 @@
       "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: className={`connection-state-banner connection-state-banner--${state}`}"
     },
     {
-      "id": "state-modifier-classes-corrupt-ticket-row",
-      "rules": ["KUI-L008"],
-      "target": "src/components/corrupt-ticket-row.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`corrupt-ticket-inspector__recovery${recovery.failed ? ' corrupt-ticket-inspector__recovery--failed' : ''}`} | class={`corrupt-ticket-row__recovery${recovery.failed ? ' corrupt-ticket-row__recovery--failed' : ''}`}"
-    },
-    {
       "id": "state-modifier-classes-markdown-editor",
       "rules": ["KUI-L008"],
       "target": "src/components/markdown-editor.tsx",

@@ -1,6 +1,7 @@
 /* The row owns its list-row shell instead of borrowing TicketRow's `ticket-list-row` block (HS2-QSR1TG):
    the same surface, divider, list-edge rounding, hover, and selected presentation as a list TicketRow.
-   The warning icon sits in its own column beside the identity and message (HS2-SJVM8C). */
+   The warning icon sits in its own column beside the identity and message (HS2-SJVM8C). These row rules
+   duplicate the TicketRow shell until TicketRow gains a danger presentation (HS2-1FH8BG). */
 .corrupt-ticket-row {
   position: relative;
   display: grid;
@@ -108,7 +109,7 @@
 .corrupt-ticket-row__content .corrupt-ticket-row__recovery {
   color: var(--wa-color-success-on-quiet);
 }
-.corrupt-ticket-row__content .corrupt-ticket-row__recovery--failed {
+.corrupt-ticket-row__content .corrupt-ticket-row__recovery[data-failed='true'] {
   color: var(--wa-color-danger-on-quiet);
 }
 @media (prefers-reduced-motion: reduce) {
@@ -117,90 +118,29 @@
   }
 }
 /* The recovery surface is a right-rail panel (HS2-QQW6CT): Kerf's Pane owns the toolbar, the fixed
-   header slot, and the one scrolling content owner; these rules style only the app-owned markup. */
+   header slot, and the one scrolling content owner; Kerf Row, List, ListHeader, Text, StateBanner and
+   wa-button render the content. Three rules remain for app-owned markup. */
+/* The danger band behind the fixed header, matching the row's danger rail. */
 .corrupt-ticket-inspector__header {
-  display: grid;
-  grid-template-columns: remify(21.6px) minmax(0, 1fr);
-  align-items: start;
-  gap: var(--kui-space-xs);
   padding: var(--kui-space-m);
   border-block: 1px solid var(--wa-color-danger-border-quiet);
-  color: var(--wa-color-danger-on-normal);
   background: var(--wa-color-danger-fill-quiet);
 }
-.corrupt-ticket-inspector__header-icon {
-  display: flex;
-  width: remify(19.2px);
-  justify-content: center;
-}
-.corrupt-ticket-inspector__header span,
-.corrupt-ticket-inspector__body h2 {
-  color: var(--wa-color-danger-on-quiet);
-  font-size: var(--wa-font-size-2xs);
-  font-weight: 750;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.corrupt-ticket-inspector__header h1 {
-  margin: var(--kui-space-2xs) 0 0;
-  color: var(--wa-color-danger-on-normal);
-  font-size: var(--wa-font-size-m);
-  overflow-wrap: anywhere;
-}
+/* The recovery body's padded section stack. */
 .corrupt-ticket-inspector__body {
   display: grid;
   min-width: 0;
   padding: var(--kui-space-m);
   gap: var(--kui-space-l);
-  color: var(--wa-color-danger-on-normal);
 }
-.corrupt-ticket-inspector__body h2 {
-  margin: 0 0 var(--kui-space-xs);
-}
-.corrupt-ticket-inspector__body p {
-  margin: 0;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
+/* The unreadable file's path, shown as a wrapping danger-tinted code block. */
 .corrupt-ticket-inspector__body code {
   display: block;
   padding: var(--kui-space-xs);
   border: 1px solid var(--wa-color-danger-border-quiet);
-  border-radius: remify(7.2px);
+  border-radius: var(--wa-border-radius-s);
   background: var(--wa-color-danger-fill-quiet);
+  color: var(--wa-color-danger-on-normal);
   font-size: var(--wa-font-size-xs);
   overflow-wrap: anywhere;
-}
-.corrupt-ticket-inspector__actions {
-  display: grid;
-  gap: var(--kui-space-xs);
-}
-.corrupt-ticket-inspector__actions button {
-  display: inline-flex;
-  min-height: remify(37.6px);
-  align-items: center;
-  justify-content: center;
-  gap: var(--kui-space-xs);
-  border: 1px solid var(--wa-color-danger-border-normal);
-  border-radius: remify(7.2px);
-  background: var(--wa-color-surface-default);
-  color: var(--wa-color-danger-on-normal);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--wa-font-size-xs);
-  font-weight: 700;
-}
-.corrupt-ticket-inspector__actions button:hover {
-  border-color: var(--wa-color-danger-border-loud);
-  background: var(--wa-color-danger-fill-normal);
-}
-.corrupt-ticket-inspector__actions button:disabled {
-  opacity: 0.58;
-  cursor: wait;
-}
-.corrupt-ticket-inspector__recovery {
-  color: var(--wa-color-success-on-quiet);
-}
-.corrupt-ticket-inspector__recovery--failed {
-  color: var(--wa-color-danger-on-quiet);
 }

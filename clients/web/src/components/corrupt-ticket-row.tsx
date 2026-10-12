@@ -1,7 +1,13 @@
+import '@awesome.me/webawesome/dist/components/button/button.js';
 import './corrupt-ticket-row.css';
 
 import { uiColor } from '@kerfjs/ui/css-values';
+import { List } from '@kerfjs/ui/list';
+import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
+import { StateBanner } from '@kerfjs/ui/state-banner';
+import { Text } from '@kerfjs/ui/text';
 import { Bot, FileWarning, FolderOpen, RefreshCw } from 'lucide';
 
 import type { CorruptTicket } from '../api';
@@ -31,25 +37,31 @@ function RecoveryActions({ ticket, recovery }: { ticket: CorruptTicket; recovery
   const key = corruptTicketKey(ticket);
   return (
     <>
-      <button
+      <wa-button
+        variant="danger"
+        appearance="outlined"
+        size="small"
         type="button"
         {...NAVIGATION_AND_TABS_ACTIONS.revealCorruptTicket.attrs}
         data-corrupt-key={key}
         disabled={Boolean(recovery?.pending)}
       >
-        <LucideIcon icon={FolderOpen} name="folder-open" size="s" />
+        <LucideIcon slot="start" icon={FolderOpen} name="folder-open" size="s" />
         {recovery?.pending === 'reveal' ? 'Showing…' : revealFileLabel()}
-      </button>
+      </wa-button>
       {ticket.error_code !== 'upgrade_required' && (
-        <button
+        <wa-button
+          variant="danger"
+          appearance="outlined"
+          size="small"
           type="button"
           {...NAVIGATION_AND_TABS_ACTIONS.repairCorruptTicket.attrs}
           data-corrupt-key={key}
           disabled={Boolean(recovery?.pending)}
         >
-          <LucideIcon icon={Bot} name="bot" size="s" />
+          <LucideIcon slot="start" icon={Bot} name="bot" size="s" />
           {recovery?.pending === 'repair' ? 'Queuing…' : 'Attempt AI repair'}
-        </button>
+        </wa-button>
       )}
     </>
   );
@@ -101,7 +113,8 @@ export function CorruptTicketRow({
         </button>
         {recovery?.message && !selected && (
           <p
-            class={`corrupt-ticket-row__recovery${recovery.failed ? ' corrupt-ticket-row__recovery--failed' : ''}`}
+            class="corrupt-ticket-row__recovery"
+            data-failed={String(Boolean(recovery.failed))}
             role={recovery.failed ? 'alert' : 'status'}
           >
             {recovery.message}
@@ -131,40 +144,47 @@ export function corruptTicketInspectorPanel({
     toggle: inspectorToggle(),
     header: (
       <header class="corrupt-ticket-inspector__header" data-component="corrupt-ticket-inspector-header">
-        <span class="corrupt-ticket-inspector__header-icon">
+        <Row gap="xs" vAlign="top">
           <LucideIcon
             icon={upgradeRequired ? RefreshCw : FileWarning}
             name={upgradeRequired ? 'refresh-cw' : 'file-warning'}
             size="s"
             color={uiColor('danger-on-quiet')}
           />
-        </span>
-        <div>
-          <span>{upgradeRequired ? 'Hot Sheet 2 update required' : 'Unreadable ticket'}</span>
-          <h1>{identity}</h1>
-        </div>
+          <List gap="2xs" flex>
+            <Text variant="span" size="compact" tone="danger">
+              <strong>{upgradeRequired ? 'Hot Sheet 2 update required' : 'Unreadable ticket'}</strong>
+            </Text>
+            <Text role="heading" aria-level={1} tone="danger" flush lineHeight="tight" wrap="anywhere">
+              <strong>{identity}</strong>
+            </Text>
+          </List>
+        </Row>
       </header>
     ),
     content: (
       <div class="corrupt-ticket-inspector__body" data-component="corrupt-ticket-inspector">
         <section>
-          <h2>{upgradeRequired ? 'Update required' : 'Ticket parsing error'}</h2>
-          <p>{ticket.error}</p>
+          <ListHeader label={upgradeRequired ? 'Update required' : 'Ticket parsing error'} />
+          <Text tone="danger" controlMargins="rl" wrap="anywhere">
+            {ticket.error}
+          </Text>
         </section>
         <section>
-          <h2>Ticket file</h2>
+          <ListHeader label="Ticket file" />
           <code title={ticket.path}>{ticket.path}</code>
         </section>
         <div class="corrupt-ticket-inspector__actions">
-          <RecoveryActions ticket={ticket} recovery={recovery} />
+          <List gap="xs">
+            <RecoveryActions ticket={ticket} recovery={recovery} />
+          </List>
         </div>
         {recovery?.message && (
-          <p
-            class={`corrupt-ticket-inspector__recovery${recovery.failed ? ' corrupt-ticket-inspector__recovery--failed' : ''}`}
-            role={recovery.failed ? 'alert' : 'status'}
-          >
-            {recovery.message}
-          </p>
+          <StateBanner
+            tone={recovery.failed ? 'danger' : 'success'}
+            urgency={recovery.failed ? 'alert' : 'status'}
+            title={recovery.message}
+          />
         )}
       </div>
     ),
