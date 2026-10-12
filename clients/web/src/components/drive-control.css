@@ -1,15 +1,31 @@
+/* App-owned success-tone split action: Kerf has no primary split button (KF-KFC7C2), so this
+   component styles its own native buttons. Tone values live in private properties per state. */
 .drive-control {
+  --_drive-fill: var(--wa-color-success-fill-normal);
+  --_drive-fill-hover: var(--wa-color-success-fill-loud);
+  --_drive-options-tint: color-mix(in srgb, var(--wa-color-success-fill-loud) 32%, transparent);
   display: grid;
   width: 100%;
   min-height: remify(44px);
   overflow: hidden;
   border-radius: remify(10.4px);
   color: var(--wa-color-neutral-on-loud);
-  background: var(--wa-color-success-fill-normal);
+  background: var(--_drive-fill);
   grid-template-columns: minmax(0, 1fr) remify(40px);
   font-weight: 700;
 }
-.drive-control button {
+/* The running workflow swaps the success tone for the neutral loud tone. */
+.drive-control[data-running='true'] {
+  --_drive-fill: var(--wa-color-neutral-fill-loud);
+  --_drive-fill-hover: var(--wa-color-neutral-on-normal);
+  --_drive-options-tint: color-mix(in srgb, var(--wa-color-neutral-on-normal) 20%, transparent);
+}
+/* The whole split action brightens on hover. */
+.drive-control:hover {
+  background: var(--_drive-fill-hover);
+}
+/* Both halves are bare native buttons on the shared fill. */
+.drive-control > button {
   display: flex;
   min-width: 0;
   min-height: remify(44px);
@@ -23,31 +39,23 @@
   gap: remify(8.8px);
   font: inherit;
 }
-.drive-control__options {
-  border-left: 1px solid color-mix(in srgb, currentColor 22%, transparent) !important;
-  padding-inline: remify(8.8px) !important;
-  background: color-mix(in srgb, var(--wa-color-success-fill-loud) 32%, transparent) !important;
+/* The options half is narrower, divided, and tinted. */
+.drive-control > .drive-control__options {
+  padding-inline: remify(8.8px);
+  border-left: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  background: var(--_drive-options-tint);
 }
-.drive-control:hover {
-  background: var(--wa-color-success-fill-loud);
-}
-.drive-control button:hover {
+/* The primary half adds its own hover feedback on top of the group hover (the tinted options half keeps its tint). */
+.drive-control > .drive-control__primary:hover {
   background: color-mix(in srgb, currentColor 9%, transparent);
 }
-.drive-control[data-running='true'] {
-  background: var(--wa-color-neutral-fill-loud);
-}
-.drive-control[data-running='true'] .drive-control__options {
-  background: color-mix(in srgb, var(--wa-color-neutral-on-normal) 20%, transparent) !important;
-}
-.drive-control[data-running='true']:hover {
-  background: var(--wa-color-neutral-on-normal);
-}
-.drive-control button:disabled {
+/* Disabled halves dim and show the not-allowed cursor. */
+.drive-control > button:disabled {
   cursor: not-allowed;
   opacity: 0.62;
 }
-.drive-control button:focus-visible {
+/* An inset ring, because the rounded group clips outer outlines. */
+.drive-control > button:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--wa-color-focus) 35%, transparent);
   outline-offset: -3px;
 }
