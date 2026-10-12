@@ -1704,6 +1704,22 @@ test('resets the TicketInspector, AIConversation, QuickTicketComposer, and Conte
     await setValue(liveClaim, 'no-eta');
     await expect(notice).toContainText('Claude is working on this');
     await page.screenshot({ path: `target/visual-captures/hs2-x1sm48-ticket-inspector-settings-${width}.png` });
+    // Duplicates (HS2-21JANK): backlinks with an unchecked project → reset to none → target → open it.
+    const duplicates = settings.locator('wa-select[name="inspector-duplicates"]');
+    const backlinks = page.locator('[data-component="ticket-inspector"] [data-component="ticket-duplicate-backlinks"]');
+    const target = page.locator('[data-component="ticket-inspector"] [data-component="ticket-duplicate-target"]');
+    await setValue(duplicates, 'backlinks-partial');
+    await expect(backlinks.getByRole('status')).toContainText('Could not check Website');
+    await expect(backlinks.locator('[data-action="open-duplicate-target"]')).toHaveCount(1);
+    await setDemoSettingsOpen(page, true);
+    await settings.getByRole('button', { name: 'Reset' }).click();
+    await expect(duplicates).toHaveJSProperty('value', 'none');
+    await expect(backlinks).toHaveCount(0);
+    await setValue(duplicates, 'target');
+    await expect(target).toContainText('Hot Sheet 2 · HS2-DEMO01');
+    await expect(target.locator('[data-action="open-duplicate-target"]')).toHaveCSS('cursor', 'pointer');
+    await setDemoSettingsOpen(page, true);
+    await settings.getByRole('button', { name: 'Reset' }).click();
 
     // AIConversation: embedded + failed → reset to the dialog streaming state → edit again.
     settings = await openSettings('ai-conversation', 'AIConversation');

@@ -1,8 +1,9 @@
-import './ticket-duplicate-backlinks.css';
-
+import { uiColor } from '@kerfjs/ui/css-values';
+import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Text } from '@kerfjs/ui/text';
 import { CopyX } from 'lucide';
 
 import type { DuplicateBacklink } from '../api';
@@ -32,14 +33,8 @@ function DuplicateTicketItem({
       action="open-duplicate-target"
       itemId={id}
       icon={<LucideIcon icon={CopyX} name="copy-x" />}
-      label={
-        <span class="ticket-duplicate-backlinks__copy">
-          <strong>
-            {projectName} · {slug}
-          </strong>
-          <span>{title}</span>
-        </span>
-      }
+      label={`${projectName} · ${slug}`}
+      description={title}
       accessibleLabel={accessibleLabel}
       multiline
     />
@@ -48,9 +43,9 @@ function DuplicateTicketItem({
 
 export function TicketDuplicateTarget({ target }: { target: DuplicateTargetSummary }) {
   return (
-    <section class="ticket-duplicate-backlinks" data-component="ticket-duplicate-target" aria-label="Duplicate target">
-      <ListHeader label="Duplicate of" />
-      <div class="ticket-duplicate-backlinks__items">
+    <section data-component="ticket-duplicate-target" aria-label="Duplicate target">
+      <List gap="2xs" controlInsets="b">
+        <ListHeader label="Duplicate of" />
         <DuplicateTicketItem
           id={target.id}
           projectName={target.projectName}
@@ -58,7 +53,7 @@ export function TicketDuplicateTarget({ target }: { target: DuplicateTargetSumma
           title={target.title}
           accessibleLabel={`Open duplicate target ${target.slug} from ${target.projectName}`}
         />
-      </div>
+      </List>
     </section>
   );
 }
@@ -72,34 +67,28 @@ export function TicketDuplicateBacklinks({
 }) {
   if (backlinks.length === 0 && inaccessibleProjects.length === 0) return null;
   return (
-    <section
-      class="ticket-duplicate-backlinks"
-      data-component="ticket-duplicate-backlinks"
-      aria-label="Duplicate backlinks"
-    >
-      <ListHeader
-        label="Duplicates"
-        count={backlinks.length}
-        countLabel={`${backlinks.length} ${backlinks.length === 1 ? 'duplicate' : 'duplicates'}`}
-      />
-      {backlinks.length > 0 && (
-        <div class="ticket-duplicate-backlinks__items">
-          {backlinks.map((backlink) => (
-            <DuplicateTicketItem
-              id={backlink.reference}
-              projectName={backlink.project_name}
-              slug={backlink.slug}
-              title={backlink.title}
-              accessibleLabel={`Open duplicate ${backlink.slug} from ${backlink.project_name}`}
-            />
-          ))}
-        </div>
-      )}
-      {inaccessibleProjects.length > 0 && (
-        <p class="ticket-duplicate-backlinks__warning" role="status">
-          Could not check {inaccessibleProjects.join(', ')} for additional duplicates.
-        </p>
-      )}
+    <section data-component="ticket-duplicate-backlinks" aria-label="Duplicate backlinks">
+      <List gap="2xs" controlInsets="b">
+        <ListHeader
+          label="Duplicates"
+          count={backlinks.length}
+          countLabel={`${backlinks.length} ${backlinks.length === 1 ? 'duplicate' : 'duplicates'}`}
+        />
+        {backlinks.map((backlink) => (
+          <DuplicateTicketItem
+            id={backlink.reference}
+            projectName={backlink.project_name}
+            slug={backlink.slug}
+            title={backlink.title}
+            accessibleLabel={`Open duplicate ${backlink.slug} from ${backlink.project_name}`}
+          />
+        ))}
+        {inaccessibleProjects.length > 0 && (
+          <Text size="compact" lineHeight="tight" controlMargins="rl" color={uiColor('warning-on-quiet')} role="status">
+            {`Could not check ${inaccessibleProjects.join(', ')} for additional duplicates.`}
+          </Text>
+        )}
+      </List>
     </section>
   );
 }

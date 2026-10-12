@@ -9,7 +9,7 @@ import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
 import { delegate, delegateCapture, effect, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
-import type { CodeReview } from '../api';
+import type { CodeReview, DuplicateBacklink } from '../api';
 import type { LiveClaimNoticeProps } from '../components/active-claim';
 import { NotificationCenter } from '../components/notification-center';
 import {
@@ -556,10 +556,63 @@ function demoLiveClaim(): LiveClaimNoticeProps | undefined {
   };
 }
 
+/** Duplicate states the TicketInspector demo exposes: closed as a duplicate, or the target of others. */
+export type InspectorDuplicatesDemo = 'none' | 'target' | 'backlinks' | 'backlinks-partial';
+export const inspectorDuplicates = signal<InspectorDuplicatesDemo>('none');
+const DEMO_DUPLICATE_BACKLINKS: readonly DuplicateBacklink[] = [
+  {
+    reference: 'demo:git-local:HS2-DEMO02',
+    project_id: 'demo',
+    project_name: 'Hot Sheet 2',
+    connection_id: 'git-local',
+    native_id: 'HS2-DEMO02',
+    qualified_id: 'git-local:HS2-DEMO02',
+    slug: 'HS2-DEMO02',
+    title: 'Document empty-state behavior for saved views',
+  },
+  {
+    reference: 'kerf:git-local:KF-DEMO07',
+    project_id: 'kerf',
+    project_name: 'Kerf',
+    connection_id: 'git-local',
+    native_id: 'KF-DEMO07',
+    qualified_id: 'git-local:KF-DEMO07',
+    slug: 'KF-DEMO07',
+    title: 'List rows lose their divider after a duplicate closes',
+  },
+];
+function demoDuplicateProps(): Partial<TicketInspectorProps> {
+  switch (inspectorDuplicates.value) {
+    case 'none':
+      return {};
+    case 'target':
+      return {
+        closeReason: 'duplicate',
+        duplicateTarget: {
+          id: 'demo:git-local:HS2-DEMO01',
+          projectName: 'Hot Sheet 2',
+          slug: 'HS2-DEMO01',
+          title: 'Plan keyboard movement between board columns',
+        },
+      };
+    case 'backlinks':
+      return { duplicateBacklinks: DEMO_DUPLICATE_BACKLINKS };
+    case 'backlinks-partial':
+      return {
+        duplicateBacklinks: DEMO_DUPLICATE_BACKLINKS.slice(0, 1),
+        duplicateBacklinkInaccessibleProjects: ['Website'],
+      };
+  }
+}
+
 /** Restore the canonical inspector settings and sync the live controls (HS2-X1SM48). */
 export function resetTicketInspectorDemo(root?: ParentNode): void {
   inspectorLiveClaim.value = 'none';
-  if (root) syncSettingsControls(root, 'ticket-inspector', { values: { 'inspector-live-claim': 'none' } });
+  inspectorDuplicates.value = 'none';
+  if (root)
+    syncSettingsControls(root, 'ticket-inspector', {
+      values: { 'inspector-live-claim': 'none', 'inspector-duplicates': 'none' },
+    });
 }
 
 export function TicketInspectorSettings() {
@@ -575,6 +628,17 @@ export function TicketInspectorSettings() {
           { value: 'overrun', label: 'Past its ETA (Soon)' },
           { value: 'no-eta', label: 'Without an ETA' },
           { value: 'generated-id', label: 'Generated worker id with ETA' },
+        ]}
+      />
+      <Select
+        name="inspector-duplicates"
+        label="Duplicates"
+        value={inspectorDuplicates.value}
+        choices={[
+          { value: 'none', label: 'None' },
+          { value: 'target', label: 'Closed as a duplicate' },
+          { value: 'backlinks', label: 'Duplicated by other tickets' },
+          { value: 'backlinks-partial', label: 'Duplicates with an unchecked project' },
         ]}
       />
       <wa-button type="button" data-action="reset-settings">
@@ -621,6 +685,7 @@ function demoInspectorProps(slug?: string): TicketInspectorProps {
     latestConfidence: latestDemoConfidence(readerNotes.value),
     liveClaim: demoLiveClaim(),
     codeReview: inspectorCodeReview,
+    ...demoDuplicateProps(),
   };
 }
 
@@ -870,6 +935,11 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
   demoListeners.add(
     delegate(root, 'change', '[data-settings="ticket-inspector"] [name="inspector-live-claim"]', (_event, target) => {
       inspectorLiveClaim.value = (target as FormControl).value as InspectorLiveClaimDemo;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="ticket-inspector"] [name="inspector-duplicates"]', (_event, target) => {
+      inspectorDuplicates.value = (target as FormControl).value as InspectorDuplicatesDemo;
     }),
   );
   demoListeners.add(

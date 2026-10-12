@@ -39,7 +39,6 @@ const kerfSpacingMigratedComponents = [
   'repository-status-popover.css',
   'terminal-drawer.css',
   'terminal-ticket-rail.css',
-  'ticket-duplicate-backlinks.css',
   'ticket-board-column.css',
   'ticket-close-dialog.css',
   'ticket-field-conflict.css',
