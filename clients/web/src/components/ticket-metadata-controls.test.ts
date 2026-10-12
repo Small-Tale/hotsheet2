@@ -48,7 +48,7 @@ describe('ticket metadata controls and inspector panels', () => {
   it('uses compact Details field-label geometry in preview and editing modes (HS2-S6S709)', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-info-panel.css'), 'utf8');
     expect(css).toContainSource(
-      '.ticket-info-panel__status-field, .ticket-info-panel__details-section { --kui-list-header-min-height: 0; --kui-list-header-title-min-height: 0; --kui-list-header-title-padding-block: 0; --kui-list-header-border-width: 0; --kui-list-header-title-padding-inline: 1px; gap: calc(var(--kui-font-xs) * 0.5); }',
+      '.ticket-info-panel__status-field, .ticket-info-panel__details-section { display: grid; min-width: 0; --kui-list-header-min-height: 0; --kui-list-header-title-min-height: 0; --kui-list-header-title-padding-block: 0; --kui-list-header-border-width: 0; --kui-list-header-title-padding-inline: 1px; gap: calc(var(--kui-font-xs) * 0.5); }',
     );
     expect(css).not.toMatch(/\.kui-list-header(__title)? \{/);
     for (const detailsMode of ['preview', 'write'] as const) {
@@ -141,7 +141,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(info.match(/data-component="list-header"/g)).toHaveLength(4);
     expect(info).toContain('data-font="default" data-border="none">Status</h2>');
     expect(info).toContain('class="kui-list-inset-control"');
-    expect(info).toContain('<div class="ticket-info-panel__status-line">');
+    expect(info).toContain('data-status-line="true"');
     expect(info).toContain('name="inspector-category" label="Category"');
     expect(info).toContain('name="inspector-priority" label="Priority"');
     expect(info).toContain('data-font="default" data-border="none">Details</h2>');
@@ -162,7 +162,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(deleted).toContain('data-lucide="trash-2"');
     expect(deleted).toContain('Deleted');
     expect(deleted).toContain('class="kui-list-inset-control"');
-    expect(deleted).toContain('<div class="ticket-info-panel__status-line">');
+    expect(deleted).toContain('data-status-line="true"');
     expect(deleted).not.toContain('name="inspector-status"');
     expect(info).toContain('aria-label="Notes, 0 notes" class="kui-text" data-component="text"');
     expect(info).toMatch(/<span class="kui-badge"[^>]*aria-hidden="true">0<\/span>/);

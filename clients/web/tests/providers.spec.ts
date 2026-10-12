@@ -8982,9 +8982,9 @@ test('responds to feedback choices embedded in the ticket description', async ({
     readerSurface = reader.locator('.ticket-info-panel__details-surface[data-feedback-needed="true"]'),
     details = reader.locator('[data-details-feedback="true"]'),
     choices = details.getByRole('group', { name: 'Feedback choices' }).locator('.note-card__choice');
-  await expect(details.locator('.ticket-info-panel__details-feedback-header')).toContainText('Feedback needed');
+  await expect(details.locator('[data-details-feedback-header]')).toContainText('Feedback needed');
   await expect(
-    details.locator('.ticket-info-panel__details-feedback-header [data-lucide="circle-alert"]'),
+    details.locator('[data-details-feedback-header] [data-lucide="circle-alert"]'),
   ).toBeVisible();
   await expect(readerSurface).toHaveCSS('background-color', 'color(srgb 1 0.982 0.91)');
   await expect(choices).toHaveCount(2);
@@ -15359,7 +15359,7 @@ test('aligns Status controls without duplicating badge insets and preserves sele
   await inspector.getByRole('button', { name: 'Block ticket' }).click();
   await inspector.getByRole('textbox', { name: 'Blocked reason' }).fill('Waiting for review');
   await inspector.getByRole('textbox', { name: 'Blocked reason' }).blur();
-  await expect(inspector.locator('.ticket-info-panel__status-line [data-component="blocked-badge"]')).toBeVisible();
+  await expect(inspector.locator('[data-status-line] [data-component="blocked-badge"]')).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 700 });
   await expectStatusGeometry(inspector);
   await captureInspectorStatus(inspector, 'target/visual-captures/hs2-ahadnk-status-blocked-narrow.png');

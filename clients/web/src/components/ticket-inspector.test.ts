@@ -437,7 +437,7 @@ describe('TicketInspector', () => {
     expect(sidebar).toContain('Respond to Feedback');
     const reader = String(TicketInspector({ ...base, details, feedbackNeeded: true, presentation: 'reader' }));
     expect(reader).toContain('data-details-feedback="true"');
-    expect(reader).toContain('ticket-info-panel__details-feedback-header');
+    expect(reader).toContain('data-details-feedback-header="true"');
     expect(reader).toContain('Feedback needed');
     expect(reader).toContain('data-lucide="circle-alert"');
     expect(reader.match(/data-action="toggle-feedback-choice"/g)).toHaveLength(2);
@@ -495,7 +495,9 @@ describe('TicketInspector', () => {
     expect(inspectorCss).toMatch(/\.ticket-inspector \{[^}]*min-width: 0;[^}]*max-width: 100%/);
     expect(markup).toMatch(/ticket-inspector__tabs[^>]*data-allocation="fill"[^>]*data-presentation="inspector"/);
     expect(panelCss).toMatch(/\.ticket-inspector-panel \{[^}]*min-width: 0;[^}]*overflow-x: hidden/);
-    expect(infoCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
+    // Kerf Grid owns the two equal metadata columns (HS2-TG97NJ).
+    expect(infoCss).not.toContain('grid-template-columns');
+    expect(markup).toMatch(/data-component="grid"[^>]*data-columns="2"/u);
     // Category and Priority fill their grid cells through Kerf's trigger width prop (HS2-PKPGGZ).
     expect(infoCss).not.toContain('.kui-select');
     expect(markup).toContain('data-trigger-width="fill"');
@@ -542,7 +544,6 @@ describe('TicketInspector', () => {
     // Each tab panel owns its own header inset (HS2-MGVE50); the Timeline's Kerf ListHeader owns its
     // own (HS2-52D1JZ).
     for (const file of [
-      'ticket-info-panel.css',
       'ticket-attachments.css',
       'ticket-code-review.css',
     ]) {

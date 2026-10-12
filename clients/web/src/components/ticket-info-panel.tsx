@@ -1,12 +1,16 @@
 import '@kerfjs/ui/list-inset-control.css';
 import './ticket-info-panel.css';
 
-import { rem } from '@kerfjs/ui/css-values';
+import { foregroundColorVar, rem } from '@kerfjs/ui/css-values';
+import { Grid } from '@kerfjs/ui/grid';
+import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListInsetControl } from '@kerfjs/ui/list-inset-control';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { Skeleton } from '@kerfjs/ui/skeleton';
+import { Text } from '@kerfjs/ui/text';
 import { CircleAlert, Plus } from 'lucide';
 
 import type { StartedPhase } from '../api';
@@ -23,6 +27,9 @@ import { TicketPrioritySelect } from './ticket-priority-select';
 import type { TicketPriority } from './ticket-row';
 import { TicketStatusMenu } from './ticket-status-menu';
 import { TicketTagEditor } from './ticket-tag-editor';
+
+/** The warning foreground the Feedback needed header shares with its tinted surface. */
+const WARNING_TEXT = foregroundColorVar('--wa-color-warning-on-quiet');
 
 export interface TicketInfoPanelProps {
   status: TicketStatus;
@@ -82,25 +89,29 @@ function TicketInfoPanelPlaceholder({ readerPresentation = false }: { readerPres
       attributes={{ 'data-placeholder': 'true', 'aria-hidden': 'true', inert: '' }}
     >
       <section class="ticket-info-panel__metadata" aria-label="Ticket metadata">
-        <TicketCategorySelect name="inspector-category" value="" placeholder />
-        <TicketPrioritySelect name="inspector-priority" value="default" placeholder />
-        <div class="ticket-info-panel__status-field">
-          <ListHeader label="Status" />
-          <ListInsetControl>
-            <div class="ticket-info-panel__status-line">
-              <Skeleton width={rem(5)} height={rem(1.5)} />
-            </div>
-          </ListInsetControl>
-        </div>
+        <List gap="xs">
+          <Grid columns={2} gap="xs">
+            <TicketCategorySelect name="inspector-category" value="" placeholder />
+            <TicketPrioritySelect name="inspector-priority" value="default" placeholder />
+          </Grid>
+          <div class="ticket-info-panel__status-field">
+            <ListHeader label="Status" />
+            <ListInsetControl>
+              <Row wrap gap="xs" vAlign="middle" rootAttributes={{ 'data-status-line': 'true' }}>
+                <Skeleton width={rem(5)} height={rem(1.5)} />
+              </Row>
+            </ListInsetControl>
+          </div>
+        </List>
       </section>
-      <section class="ticket-info-panel__section ticket-info-panel__blocked-section">
+      <List gap="xs" className="ticket-info-panel__section ticket-info-panel__blocked-section">
         <ListItem
           action="edit-blocked-reason"
           icon={<LucideIcon icon={Plus} name="plus" />}
           label="Block ticket"
           tabIndex={-1}
         />
-      </section>
+      </List>
       <section class="ticket-info-panel__section ticket-info-panel__details-section">
         <ListHeader label="Details" />
         <div class="ticket-info-panel__details-surface">
@@ -109,7 +120,7 @@ function TicketInfoPanelPlaceholder({ readerPresentation = false }: { readerPres
           </div>
         </div>
       </section>
-      <section class="ticket-info-panel__section">
+      <List gap="xs" className="ticket-info-panel__section">
         <ListHeader
           label="Tags"
           actionDisabled
@@ -117,12 +128,12 @@ function TicketInfoPanelPlaceholder({ readerPresentation = false }: { readerPres
           actionLabel="Add tag"
           actionIcon={<LucideIcon icon={Plus} name="plus" />}
         />
-      </section>
+      </List>
       <TicketNotes placeholder />
-      <footer class="ticket-info-panel__provenance">
+      <Row hAlign="full" gap="2xs" textInsets="rl" rootAttributes={{ 'data-provenance': 'true' }}>
         <Skeleton width={rem(6)} height={rem(0.6875)} />
         <Skeleton width={rem(4)} height={rem(0.6875)} />
-      </footer>
+      </Row>
     </TicketInspectorPanel>
   );
 }
@@ -170,30 +181,34 @@ function LoadedTicketInfoPanel({
       presentation={readerPresentation ? 'reader' : 'sidebar'}
     >
       <section class="ticket-info-panel__metadata" aria-label="Ticket metadata">
-        <TicketCategorySelect name="inspector-category" value={category} disabled={!canUpdate} />
-        <TicketPrioritySelect name="inspector-priority" value={priority} disabled={!canUpdate} />
-        <div class="ticket-info-panel__status-field">
-          <ListHeader label="Status" />
-          <ListInsetControl>
-            <div class="ticket-info-panel__status-line">
-              <>
-                {status === 'deleted' ? (
-                  <StatusBadge status="deleted" />
-                ) : (
-                  <TicketStatusMenu
-                    value={status}
-                    startedPhase={startedPhase}
-                    disabled={!canUpdate}
-                    canEditStartedPhase={canEditStartedPhase}
-                  />
-                )}
-                {blockedReason && <BlockedBadge />}
-              </>
-            </div>
-          </ListInsetControl>
-        </div>
+        <List gap="xs">
+          <Grid columns={2} gap="xs">
+            <TicketCategorySelect name="inspector-category" value={category} disabled={!canUpdate} />
+            <TicketPrioritySelect name="inspector-priority" value={priority} disabled={!canUpdate} />
+          </Grid>
+          <div class="ticket-info-panel__status-field">
+            <ListHeader label="Status" />
+            <ListInsetControl>
+              <Row wrap gap="xs" vAlign="middle" rootAttributes={{ 'data-status-line': 'true' }}>
+                <>
+                  {status === 'deleted' ? (
+                    <StatusBadge status="deleted" />
+                  ) : (
+                    <TicketStatusMenu
+                      value={status}
+                      startedPhase={startedPhase}
+                      disabled={!canUpdate}
+                      canEditStartedPhase={canEditStartedPhase}
+                    />
+                  )}
+                  {blockedReason && <BlockedBadge />}
+                </>
+              </Row>
+            </ListInsetControl>
+          </div>
+        </List>
       </section>
-      <section class="ticket-info-panel__section ticket-info-panel__blocked-section">
+      <List gap="xs" className="ticket-info-panel__section ticket-info-panel__blocked-section">
         {blockedReasonEditing ? (
           <>
             <ListHeader label="Blocked reason" />
@@ -214,22 +229,26 @@ function LoadedTicketInfoPanel({
               aria-label={canEditText ? 'Edit blocked reason' : undefined}
               title={canEditText ? 'Double-click to edit' : undefined}
             >
-              <p>{blockedReason}</p>
+              <Text variant="p" wrap="anywhere" flush>
+                {blockedReason}
+              </Text>
             </div>
           </>
         ) : canEditText ? (
           <ListItem action="edit-blocked-reason" icon={<LucideIcon icon={Plus} name="plus" />} label="Block ticket" />
         ) : undefined}
-      </section>
+      </List>
       <section class="ticket-info-panel__section ticket-info-panel__details-section">
         <ListHeader label="Details" />
         <div class="ticket-info-panel__details-surface" data-feedback-needed={detailsFeedback ? 'true' : undefined}>
           {detailsFeedback && readerPresentation && canAddNotes ? (
-            <div class="ticket-info-panel__details-feedback" data-details-feedback="true">
-              <header class="ticket-info-panel__details-feedback-header">
-                <LucideIcon size={15.2} icon={CircleAlert} name="circle-alert" />
-                Feedback needed
-              </header>
+            <List gap="xs" rootAttributes={{ 'data-details-feedback': 'true' }}>
+              <Row gap="2xs" vAlign="middle" rootAttributes={{ 'data-details-feedback-header': 'true' }}>
+                <LucideIcon size={15.2} icon={CircleAlert} name="circle-alert" color={WARNING_TEXT} />
+                <Text variant="span" size="compact" color={WARNING_TEXT}>
+                  <strong>Feedback needed</strong>
+                </Text>
+              </Row>
               <FeedbackPrompt
                 source={details}
                 id={DETAILS_FEEDBACK_ID}
@@ -244,7 +263,7 @@ function LoadedTicketInfoPanel({
                 actions
                 placeholder="Additional response (optional)"
               />
-            </div>
+            </List>
           ) : (
             <>
               <MarkdownEditor
@@ -263,7 +282,7 @@ function LoadedTicketInfoPanel({
           )}
         </div>
       </section>
-      <section class="ticket-info-panel__section">
+      <List gap="xs" className="ticket-info-panel__section">
         {canUpdate ? (
           <ListHeader
             label="Tags"
@@ -285,7 +304,7 @@ function LoadedTicketInfoPanel({
           editable={canUpdate}
           popoverId={resolvedTagPopoverId}
         />
-      </section>
+      </List>
       <TicketNotes
         notes={notes}
         editingNoteId={editingNoteId}
@@ -300,10 +319,14 @@ function LoadedTicketInfoPanel({
         feedbackChoiceSelections={feedbackChoiceSelections}
         attachmentContext={attachmentContext}
       />
-      <footer class="ticket-info-panel__provenance">
-        <span>{providerName}</span>
-        <span>{updatedLabel}</span>
-      </footer>
+      <Row hAlign="full" gap="2xs" textInsets="rl" rootAttributes={{ 'data-provenance': 'true' }}>
+        <Text variant="span" tone="quiet" size="compact">
+          {providerName}
+        </Text>
+        <Text variant="span" tone="quiet" size="compact">
+          {updatedLabel}
+        </Text>
+      </Row>
     </TicketInspectorPanel>
   );
 }
