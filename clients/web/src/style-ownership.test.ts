@@ -24,7 +24,7 @@ describe('global stylesheet ownership', () => {
       ['ticket row context menu', 'ticket-row-context-menu.css', ['.ticket-row-context-menu', '.ticket-context-menu']],
       // TicketPageMore owns the paged list/column continuation button (HS2-WP69TD).
       ['ticket page continuation', 'ticket-page-more.css', ['.ticket-page-more']],
-      ['app loading indicator', 'app-loading-indicator.css', ['.app-loading-indicator', '.app-loading']],
+      ['app loading indicator', 'app-loading-indicator.css', ['.app-loading-indicator']],
     ] as const;
     for (const [name, file, selectors] of ownership) {
       const owned = read(`./components/${file}`);

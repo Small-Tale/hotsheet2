@@ -13419,7 +13419,7 @@ test('renders exactly once when the long poll announces a permission request', a
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
-  await expect(page.locator('.app-loading')).toHaveCount(0);
+  await expect(page.locator('[data-component="app-loading-indicator"]')).toHaveCount(0);
   await expect.poll(() => polls.length).toBeGreaterThan(0);
   await resetRenderMetrics(page);
   expect(await renderMetrics(page)).toEqual({ passes: 0, mutations: 0 });
@@ -14148,7 +14148,7 @@ test('updates the open project after external ticket additions edits and deletio
   await emit('changed', '01', 'HS2-DEMO01');
   await page.waitForTimeout(200);
   await expect(original).toContainText('Use real project tickets');
-  await expect(page.locator('.app-loading')).toBeHidden();
+  await expect(page.locator('[data-component="app-loading-indicator"]')).toBeHidden();
   await expect(openSelect).toHaveJSProperty('open', true);
   await page.keyboard.press('Escape');
   await expect(original).toContainText('Externally edited ticket');
@@ -21386,7 +21386,7 @@ test('does not announce an empty project while its initial ticket collection is 
   await page.getByLabel('Columns view').click();
   await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
   await expect(loading).toBeVisible();
-  await expect(page.locator('.app-loading')).toHaveCount(0);
+  await expect(page.locator('[data-component="app-loading-indicator"]')).toHaveCount(0);
   await expect(page.getByText('No tickets yet')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-e2az2n-loading-board-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 640 });
@@ -23182,7 +23182,7 @@ test('switches already-open projects from cache within one frame and rejects sta
   expect(await switchWithinFrame('demo')).toBeLessThan(100);
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toHaveCount(0);
-  await expect(page.locator('.app-loading')).toHaveCount(0);
+  await expect(page.locator('[data-component="app-loading-indicator"]')).toHaveCount(0);
   await expect.poll(() => pending.has('demo')).toBe(true);
   expect(
     await page.evaluate(
