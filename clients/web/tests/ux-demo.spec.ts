@@ -4521,18 +4521,17 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
     await tagDialog.evaluate((node) => {
       const editor = getComputedStyle(node.parentElement!),
         popover = getComputedStyle(node),
-        heading = getComputedStyle(node.querySelector('strong')!),
         label = getComputedStyle(node.querySelector('label')!),
-        input = getComputedStyle(node.querySelector('input')!),
-        help = getComputedStyle(node.querySelector('small')!);
+        input = getComputedStyle(node.querySelector('input')!);
+      // The field owns the title and hint spacing since Kerf Text renders both (HS2-DYNGY5).
       return {
         editorGap: editor.gap,
         popoverMargin: popover.marginTop,
         popoverPadding: popover.paddingTop,
-        headingMargin: heading.marginBottom,
+        headingMargin: label.marginTop,
         labelGap: label.gap,
         inputPadding: input.paddingLeft,
-        helpMargin: help.marginTop,
+        helpMargin: label.marginBottom,
       };
     }),
   ).toEqual({
