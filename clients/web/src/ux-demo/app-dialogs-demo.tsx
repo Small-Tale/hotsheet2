@@ -4,7 +4,7 @@ import { createScope } from 'kerfjs/scope';
 import { AiFeedbackDialog } from '../components/ai-feedback-dialog';
 import { ConversationExportDialog } from '../components/conversation-export-dialog';
 import { ManualModelDialog } from '../components/manual-model-dialog';
-import { ProjectCloseDialog } from '../components/project-close-dialog';
+import { focusProjectCloseDialogDefault, ProjectCloseDialog } from '../components/project-close-dialog';
 import { SavedViewDialog } from '../components/saved-view-dialog';
 import { TicketCloseDialog } from '../components/ticket-close-dialog';
 import { TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
@@ -206,6 +206,8 @@ export function ManualModelDialogDemo() {
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireAppDialogsDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
+  // The production presenter moves the opened dialog's focus to its safe default (HS2-9YGNMX).
+  focusProjectCloseDialogDefault(root);
   demoListeners.add(
     delegate(
       root,

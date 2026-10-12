@@ -3,6 +3,7 @@ import type { Signal } from 'kerfjs';
 import { conversationError, type ConversationState, conversationUsage, EMPTY_CONVERSATION } from '../ai-conversation';
 import { Api, type ToolConnection } from '../api';
 import {
+  focusProjectCloseDialogDefault,
   type ProjectCloseDialogState,
   type ProjectCloseResource,
   projectCloseResourceKey,
@@ -95,6 +96,7 @@ export function createProjectCloseController(dependencies: ProjectCloseDependenc
         resources,
         selectedKey: resources[0] ? projectCloseResourceKey(resources[0]) : undefined,
       };
+      focusProjectCloseDialogDefault();
       return;
     }
     projectCloseDialog.value = undefined;

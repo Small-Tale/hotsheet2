@@ -122,6 +122,24 @@ function ResourceDetail({ resource, projectId }: { resource: ProjectCloseResourc
   );
 }
 
+/**
+ * Move focus to the dialog's safe default action (Cancel) once it has rendered (HS2-9YGNMX). The dialog
+ * renders already open, so its native focusing steps run before the autofocus `wa-button` has a shadow
+ * button to delegate to, and land on the first focusable area instead: the scrollable running-items List,
+ * whose square scroller outline the aside clips. Callers run this after presenting a new dialog.
+ */
+export function focusProjectCloseDialogDefault(root: ParentNode = document): void {
+  requestAnimationFrame(() => {
+    const target = root.querySelector<HTMLElement & { updateComplete?: Promise<unknown> }>(
+      '[data-component="project-close-dialog"] [autofocus]',
+    );
+    if (!target) return;
+    void Promise.resolve(target.updateComplete).then(() => {
+      if (target.isConnected) target.focus();
+    });
+  });
+}
+
 export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState }) {
   if (!state) return <></>;
   const hasResources = state.resources.length > 0,
@@ -221,6 +239,8 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
               appearance="outlined"
               {...TERMINALS_ACTIONS.cancelProjectClose.attrs}
               disabled={busy}
+              // The safe default focus target; see focusProjectCloseDialogDefault (HS2-9YGNMX).
+              autofocus
             >
               Cancel
             </wa-button>

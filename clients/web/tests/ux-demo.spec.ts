@@ -7743,6 +7743,20 @@ test('keeps the Markdown preview focus ring inset so an overflow-hidden editor c
   });
 });
 
+test('opens the ProjectCloseDialog on its Cancel action, not the running-items scroller (HS2-9YGNMX)', async ({
+  page,
+}) => {
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/ux-demo?component=project-close-dialog');
+    const dialog = page.locator('[data-component="project-close-dialog"]');
+    await expect(dialog).toHaveJSProperty('open', true);
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    const resources = dialog.getByRole('complementary', { name: 'Running terminals and AI chats' });
+    expect(await resources.evaluate((aside) => aside.matches(':focus-within'))).toBe(false);
+  }
+});
+
 test('previews a running terminal through the shared TerminalPreview in the ProjectCloseDialog demo (HS2-148B5C)', async ({
   page,
 }) => {

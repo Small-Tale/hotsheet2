@@ -241,6 +241,8 @@ for (const [width, height] of [
     await page.getByRole('button', { name: 'Close Project B' }).click();
     const dialog = page.locator('[data-component="project-close-dialog"]');
     await expect(dialog).toHaveJSProperty('open', true);
+    // The production presenter opens the dialog on its safe Cancel action (HS2-9YGNMX).
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
     await dialog
       .getByRole('button', { name: /^(Close Project|Keep Running)$/ })
       .first()
