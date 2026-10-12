@@ -1,28 +1,15 @@
+/* The form column: two 240px columns plus the gap fit; a third never does (HS2-7XX356). */
 .provider-setup-form {
   display: grid;
-  /* Two 240px columns plus the gap fit; a third never does (HS2-7XX356). */
   max-width: remify(640px);
   gap: var(--wa-space-m);
 }
-.provider-setup-form__account-usage,
-.provider-setup-form__field-hint {
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-}
+/* Sign-in and account-reuse panels tighten SunkenPanel's public stack gap. */
 .provider-setup-form__github-auth,
 .provider-setup-form__account-reuse {
   --kui-sunken-panel-gap: var(--wa-space-s);
 }
-.provider-setup-form__auth-copy {
-  margin: 0;
-  font-size: var(--wa-font-size-s);
-}
-.provider-setup-form__auth-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--wa-space-xs);
-}
+/* The one-time GitHub device code: a large, selectable, dashed code chip. */
 .provider-setup-form__device-code {
   justify-self: start;
   padding: var(--wa-space-xs) var(--wa-space-m);
@@ -35,9 +22,8 @@
   letter-spacing: 0.08em;
   user-select: all;
 }
-.provider-setup-form__auth-waiting {
-  color: var(--wa-color-neutral-on-quiet);
-}
+/* Native repository inputs keep a browser datalist, which wa-input lacks (HS2-27T5WT); their label,
+   control, and hint match the adjacent Web Awesome field styling. */
 .provider-setup-form__field {
   display: grid;
   min-width: 0;
@@ -64,52 +50,29 @@
   letter-spacing: normal;
   text-transform: none;
 }
-/* Full-width rows inside the Kerf responsive Grid (HS2-7XX356). */
-.provider-setup-form__wide {
-  grid-column: 1 / -1;
-}
-.provider-setup-form__error {
-  color: var(--wa-color-danger-on-quiet);
-}
-.provider-setup-form__repository-access {
-  display: grid;
-  font-size: var(--wa-font-size-s);
-  gap: var(--wa-space-xs);
-  padding: var(--wa-space-s) var(--wa-space-m);
-  border-radius: var(--wa-border-radius-m);
-  color: var(--wa-color-neutral-on-quiet);
-  background: var(--wa-color-neutral-fill-quiet);
-}
-.provider-setup-form__repository-access p {
-  margin: 0;
-  line-height: 1.4;
-}
-.provider-setup-form__repository-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--wa-space-xs) var(--wa-space-m);
-}
-.provider-setup-form__repository-actions a,
-.provider-setup-form__repository-actions button {
+/* Repository access links and the refresh action read as inline links with a trailing icon. */
+.provider-setup-form__repository-link {
   display: inline-flex;
   align-items: center;
   gap: var(--wa-space-2xs);
-}
-.provider-setup-form__repository-actions button {
   padding: 0;
   border: 0;
   color: var(--wa-color-brand-on-quiet);
   background: none;
   font: inherit;
+  font-size: var(--wa-font-size-s);
   cursor: pointer;
 }
-.provider-setup-form__repository-actions button:disabled {
+.provider-setup-form__repository-link:disabled {
   color: var(--wa-color-neutral-on-quiet);
   cursor: not-allowed;
 }
+/* Full-width rows inside the Kerf responsive Grid (HS2-7XX356). */
+.provider-setup-form__wide {
+  grid-column: 1 / -1;
+}
 /* Signed-in GitHub accounts a new source can reuse (HS2-SM9PM8): a bordered card of rows, configured
-   through Kerf's public list tokens like the project's Ticket sources list. */
+   through Kerf's public list tokens like the project's Ticket sources list (framed list: KF-2HB7RT). */
 .provider-setup-form__accounts {
   --kui-layout-inline-margin: 0;
   --kui-layout-rounded-radius: 0;
@@ -122,6 +85,7 @@
   border-radius: var(--wa-border-radius-l);
   background: var(--wa-color-surface-default);
 }
+/* Account copy inside a ListItem label (phrasing content only, so a span grid, not a Kerf List). */
 .provider-setup-form__account-copy {
   display: grid;
   min-width: 0;
@@ -129,14 +93,6 @@
 }
 .provider-setup-form__account-copy strong {
   overflow-wrap: anywhere;
-}
-.provider-setup-form__source-color {
-  display: grid;
-  gap: var(--wa-space-xs);
-  margin-top: var(--wa-space-m);
-}
-.provider-setup-form__source-color > small {
-  color: var(--wa-color-neutral-on-quiet);
 }
 /* iOS zooms into a focused field under 16px (HS2-8JPRRC). */
 @media (pointer: coarse) {

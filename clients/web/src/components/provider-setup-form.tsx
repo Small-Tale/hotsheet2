@@ -7,7 +7,9 @@ import { List } from '@kerfjs/ui/list';
 import { ListActionRow } from '@kerfjs/ui/list-action-row';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
+import { Text } from '@kerfjs/ui/text';
 import type { AttrSpec } from 'kerfjs';
 import { Check, ChevronRight, Copy, ExternalLink, LogIn, RefreshCw } from 'lucide';
 
@@ -154,14 +156,14 @@ export function ProviderSetupForm({
         <SunkenPanel className="provider-setup-form__github-auth" ariaLabel="GitHub sign in">
           {auth?.state === 'waiting' ? (
             <>
-              <p class="provider-setup-form__auth-copy">
+              <Text flush>
                 Paste this one-time code in the GitHub window
                 {auth.copied ? ' — it is already on your clipboard' : ''}, then approve Hot Sheet and close that window.
-              </p>
+              </Text>
               <output class="provider-setup-form__device-code" aria-label="One-time GitHub code">
                 {auth.userCode}
               </output>
-              <div class="provider-setup-form__auth-actions">
+              <Row vAlign="middle" gap="xs" wrap>
                 <wa-button
                   appearance="accent"
                   type="button"
@@ -187,17 +189,17 @@ export function ProviderSetupForm({
                 >
                   Cancel
                 </wa-button>
-              </div>
-              <p class="provider-setup-form__auth-copy provider-setup-form__auth-waiting" role="status">
+              </Row>
+              <Text tone="quiet" flush role="status">
                 Waiting for GitHub…
-              </p>
+              </Text>
             </>
           ) : signedIn ? (
-            <p class="provider-setup-form__auth-copy" role="status">
+            <Text flush role="status">
               {auth.account ? 'Using your GitHub account on ' : 'Signed in to '}
               {auth.enterpriseUrl ? new URL(auth.enterpriseUrl).host : 'GitHub'}.{' '}
               {auth.repositories ? 'Choose a repository for this project below.' : 'Loading your repositories…'}
-            </p>
+            </Text>
           ) : auth?.enterprise ? (
             <>
               <wa-input
@@ -210,7 +212,7 @@ export function ProviderSetupForm({
               >
                 <span slot="hint">The address you use to open GitHub Enterprise in a browser.</span>
               </wa-input>
-              <div class="provider-setup-form__auth-actions">
+              <Row vAlign="middle" gap="xs" wrap>
                 <wa-button
                   appearance="accent"
                   type="button"
@@ -227,15 +229,15 @@ export function ProviderSetupForm({
                 >
                   Use GitHub.com instead
                 </wa-button>
-              </div>
+              </Row>
             </>
           ) : (
             <>
               {githubAccounts.length > 0 && (
                 <>
-                  <p class="provider-setup-form__auth-copy">
+                  <Text flush>
                     Use a GitHub account already signed in on this computer, then choose this project's repository.
-                  </p>
+                  </Text>
                   <div class="provider-setup-form__accounts">
                     <List>
                       {githubAccounts.map((account, index) => {
@@ -249,7 +251,9 @@ export function ProviderSetupForm({
                           label: (
                             <span class="provider-setup-form__account-copy">
                               <strong>{githubAccountTitle(account)}</strong>
-                              <small class="provider-setup-form__account-usage">{accountUsage(account)}</small>
+                              <Text variant="span" tone="quiet" size="compact">
+                                {accountUsage(account)}
+                              </Text>
                             </span>
                           ),
                         };
@@ -272,11 +276,11 @@ export function ProviderSetupForm({
                   </div>
                 </>
               )}
-              <p class="provider-setup-form__auth-copy">
+              <Text flush>
                 {githubAccounts.length ? 'Or sign in with another account. ' : 'Sign in to choose a repository. '}Hot
                 Sheet opens GitHub in a small window and copies your one-time code for you.
-              </p>
-              <div class="provider-setup-form__auth-actions">
+              </Text>
+              <Row vAlign="middle" gap="xs" wrap>
                 <wa-button
                   appearance="accent"
                   type="button"
@@ -293,18 +297,18 @@ export function ProviderSetupForm({
                 >
                   Use GitHub Enterprise…
                 </wa-button>
-              </div>
+              </Row>
             </>
           )}
           {auth && ['denied', 'expired', 'cancelled', 'error'].includes(auth.state) && (
-            <p class="provider-setup-form__auth-copy" role="alert">
+            <Text tone="danger" flush role="alert">
               {auth.message ?? `GitHub sign in was ${auth.state}. Try again.`}
-            </p>
+            </Text>
           )}
           {auth?.message && !['denied', 'expired', 'cancelled', 'error'].includes(auth.state) ? (
-            <p class="provider-setup-form__auth-copy" role="alert">
+            <Text tone="danger" flush role="alert">
               {auth.message}
-            </p>
+            </Text>
           ) : (
             <></>
           )}
@@ -315,11 +319,11 @@ export function ProviderSetupForm({
           className="provider-setup-form__account-reuse"
           ariaLabel={`Signed-in ${providerName(kind)} accounts`}
         >
-          <p class="provider-setup-form__auth-copy">
+          <Text flush>
             Use an account already signed in on this computer to fill in its credential
             {kind === 'jira' ? ', email, and site' : ' and server'}. This project still enters its own{' '}
             {kind === 'jira' ? 'project key' : 'project path'}.
-          </p>
+          </Text>
           <div class="provider-setup-form__accounts">
             <List>
               {reusable.map((account, index) => (
@@ -341,7 +345,9 @@ export function ProviderSetupForm({
                   label={
                     <span class="provider-setup-form__account-copy">
                       <strong>{accountTitle(account)}</strong>
-                      <small class="provider-setup-form__account-usage">{accountUsage(account)}</small>
+                      <Text variant="span" tone="quiet" size="compact">
+                        {accountUsage(account)}
+                      </Text>
                     </span>
                   }
                 />
@@ -397,59 +403,71 @@ export function ProviderSetupForm({
             />
           )}
           {choosing && (
-            <section
-              class="provider-setup-form__wide provider-setup-form__repository-access"
-              aria-label="GitHub repository access"
-            >
-              {auth.installations?.length ? (
-                <p>
-                  Missing a repository? GitHub only shows repositories the Hot Sheet app is installed on
-                  {limited.length ? (
-                    <>
-                      , and it can see only the repositories you chose on{' '}
-                      {limited.map((installation, index) => (
-                        <>
-                          {index > 0 && ', '}
-                          <strong>{installation.account}</strong>
-                        </>
-                      ))}
-                    </>
-                  ) : (
-                    ''
-                  )}
-                  .
-                </p>
-              ) : (
-                <p>
-                  The Hot Sheet GitHub App is not installed on any account yet, so no repositories are available.
-                  Install it on GitHub, then refresh this list.
-                </p>
-              )}
-              <div class="provider-setup-form__repository-actions">
-                {limited
-                  .filter((installation) => installation.settingsUrl)
-                  .map((installation) => (
-                    <a href={installation.settingsUrl} target="_blank" rel="noopener">
-                      Change access for {installation.account}{' '}
+            <section class="provider-setup-form__wide" aria-label="GitHub repository access">
+              <SunkenPanel>
+                {auth.installations?.length ? (
+                  <Text size="compact" tone="quiet" flush>
+                    Missing a repository? GitHub only shows repositories the Hot Sheet app is installed on
+                    {limited.length ? (
+                      <>
+                        , and it can see only the repositories you chose on{' '}
+                        {limited.map((installation, index) => (
+                          <>
+                            {index > 0 && ', '}
+                            <strong>{installation.account}</strong>
+                          </>
+                        ))}
+                      </>
+                    ) : (
+                      ''
+                    )}
+                    .
+                  </Text>
+                ) : (
+                  <Text size="compact" tone="quiet" flush>
+                    The Hot Sheet GitHub App is not installed on any account yet, so no repositories are available.
+                    Install it on GitHub, then refresh this list.
+                  </Text>
+                )}
+                <Row vAlign="middle" gap={{ column: 'm', row: 'xs' }} wrap>
+                  {limited
+                    .filter((installation) => installation.settingsUrl)
+                    .map((installation) => (
+                      <a
+                        class="provider-setup-form__repository-link"
+                        href={installation.settingsUrl}
+                        target="_blank"
+                        rel="noopener"
+                      >
+                        Change access for {installation.account}{' '}
+                        <LucideIcon size={14} icon={ExternalLink} name="external-link" />
+                      </a>
+                    ))}
+                  {auth.installUrl ? (
+                    <a
+                      class="provider-setup-form__repository-link"
+                      href={auth.installUrl}
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      Add another account or organization{' '}
                       <LucideIcon size={14} icon={ExternalLink} name="external-link" />
                     </a>
-                  ))}
-                {auth.installUrl && (
-                  <a href={auth.installUrl} target="_blank" rel="noopener">
-                    Add another account or organization{' '}
-                    <LucideIcon size={14} icon={ExternalLink} name="external-link" />
-                  </a>
-                )}
-                <button
-                  type="button"
-                  {...COMMANDS_AND_AI_ACTIONS.refreshGithubRepositories.attrs}
-                  data-key="refresh-github-repositories"
-                  disabled={auth.refreshing}
-                >
-                  <LucideIcon size={14} icon={RefreshCw} name="refresh-cw" />{' '}
-                  {auth.refreshing ? 'Refreshing…' : 'Refresh list'}
-                </button>
-              </div>
+                  ) : (
+                    <></>
+                  )}
+                  <button
+                    class="provider-setup-form__repository-link"
+                    type="button"
+                    {...COMMANDS_AND_AI_ACTIONS.refreshGithubRepositories.attrs}
+                    data-key="refresh-github-repositories"
+                    disabled={auth.refreshing}
+                  >
+                    <LucideIcon size={14} icon={RefreshCw} name="refresh-cw" />{' '}
+                    {auth.refreshing ? 'Refreshing…' : 'Refresh list'}
+                  </button>
+                </Row>
+              </SunkenPanel>
             </section>
           )}
           {kind === 'github' && (
@@ -547,22 +565,24 @@ export function ProviderSetupForm({
         </Grid>
       )}
       {editing && (
-        <div class="provider-setup-form__source-color">
+        <List gap="xs">
           <TicketSourceColorPicker
             source={{ provider: kind, name: connection?.name ?? providerName(kind), color: sourceColor }}
           />
-          <small>This icon color applies only to this project.</small>
-        </div>
+          <Text variant="span" tone="quiet" size="compact">
+            This icon color applies only to this project.
+          </Text>
+        </List>
       )}
       {error && (
-        <p class="provider-setup-form__error" role="alert">
+        <Text tone="danger" flush role="alert">
           {error}
-        </p>
+        </Text>
       )}
       {editing && auth?.message && (
-        <p class="provider-setup-form__error" role="alert">
+        <Text tone="danger" flush role="alert">
           Could not load GitHub repositories: {auth.message}. You can enter a repository path manually.
-        </p>
+        </Text>
       )}
     </form>
   );
