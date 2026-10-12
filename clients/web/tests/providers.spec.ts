@@ -6651,7 +6651,11 @@ test('selects and copies chat messages before saving that range without choosing
   );
   await expect(dialog).toContainText('Step 2 of 2');
   const back = dialog.getByRole('button', { name: 'Message scope' });
-  await expect(back.locator('[data-lucide="chevron-left"]')).toBeVisible();
+  await expect(back).toBeVisible();
+  // FlowBackButton is a wa-button (HS2-6XHBJT): its chevron is slotted into the host, not the inner button.
+  await expect(
+    dialog.locator('[data-action="previous-conversation-export-step"] > [data-lucide="chevron-left"]'),
+  ).toBeVisible();
   await dialog.evaluate(async (node) => {
     await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
   });
