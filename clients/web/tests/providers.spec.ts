@@ -13895,7 +13895,7 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
         () => (window as typeof window & { __corruptSelectionAnimations?: string[] }).__corruptSelectionAnimations,
       ),
     )
-    .toContain('corrupt-ticket-selected-wiggle');
+    .toContain('ticket-row-danger-selected-wiggle');
   await corrupt.evaluate(async (node) => {
     await Promise.all(node.getAnimations().map((animation) => animation.finished));
   });

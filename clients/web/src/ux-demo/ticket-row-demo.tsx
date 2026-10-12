@@ -5,8 +5,10 @@ import { createScope } from 'kerfjs/scope';
 import type { ClaimEtaPresentation } from '../active-ticket-work';
 import type { StartedPhase } from '../api';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../components/category-presentation';
+import { CorruptTicketRow } from '../components/corrupt-ticket-row';
 import type { TicketStatus } from '../components/status-badge';
 import { type TicketPriority, TicketRow } from '../components/ticket-row';
+import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
 import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
@@ -101,6 +103,16 @@ export function resetTicketRowDemo(root?: ParentNode): void {
 
 export const TICKET_ROW_DEMO_SLUG = 'Small-Tale/hotsheet2#5';
 
+/** The danger (diagnostic) presentation of the shared row shell, as CorruptTicketRow renders it. */
+const TICKET_ROW_DEMO_CORRUPT = {
+  store: 'local',
+  store_path: '/work/demo.hs2',
+  path: '/work/demo.hs2/tickets/01/01M1.md',
+  id: '01M1',
+  slug: 'HS2-BROKEN',
+  error: 'unsupported content follows the bounded Notes section',
+};
+
 export function TicketRowDemo() {
   return (
     <section class="component-stage component-stage--row" aria-label="TicketRow demo">
@@ -131,6 +143,15 @@ export function TicketRowDemo() {
           updatedLabel: ticketRowSettings.updatedLabel.value,
           latestConfidence:
             ticketRowSettings.confidence.value === 'none' ? undefined : Number(ticketRowSettings.confidence.value),
+        })}
+      </div>
+      {/* The shared row shell's danger presentation (HS2-1FH8BG): a danger rail and a selection wiggle
+          around CorruptTicketRow's diagnostic content; Selected drives both rows. */}
+      <div class="component-stage__canvas component-stage__canvas--row" data-ticket-row-demo-danger>
+        {CorruptTicketRow({
+          ticket: TICKET_ROW_DEMO_CORRUPT,
+          selected: ticketRowSettings.selected.value,
+          listEdge: 'only',
         })}
       </div>
       <p class="component-stage__event" aria-live="polite">
@@ -240,6 +261,22 @@ export function TicketRowSettings() {
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireTicketRowDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
+  // The danger row's select action toggles the shared Selected state, as the app opens its recovery.
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-ticket-row-demo-danger] ${NAVIGATION_AND_TABS_ACTIONS.selectCorruptTicket.selector}`,
+      () => {
+        ticketRowSettings.selected.value = !ticketRowSettings.selected.value;
+        ticketRowSettings.event.value = ticketRowSettings.selected.value
+          ? 'Recovery opened for HS2-BROKEN'
+          : 'Recovery closed for HS2-BROKEN';
+        const selected = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="selected"]');
+        if (selected) selected.checked = ticketRowSettings.selected.value;
+      },
+    ),
+  );
   demoListeners.add(
     delegate(root, 'input', '[data-settings="ticket-list-row"] wa-input', (_event, target) => {
       const control = target as FormControl;

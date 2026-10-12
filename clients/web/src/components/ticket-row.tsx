@@ -1,3 +1,5 @@
+// The shared row shell loads before the TicketRow block so its column presentation can override it.
+import './ticket-row-shell.css';
 import './ticket-row.css';
 
 import { Badge } from '@kerfjs/ui/badge';
@@ -30,6 +32,25 @@ export type TicketRowPresentation = 'list' | 'column';
  * row's hover and selection border follows the container's curve (HS2-4APEJP).
  */
 export type TicketRowListEdge = 'start' | 'end' | 'only';
+
+/**
+ * The shared selectable row shell (HS2-1FH8BG): surface, divider, list-edge rounding, hover, and
+ * selection. TicketRow renders it; the diagnostic CorruptTicketRow composes it with the `danger`
+ * tone (a danger rail and a selection wiggle) instead of rebuilding the shell.
+ */
+export const TICKET_ROW_SHELL_CLASS = 'ticket-row-shell';
+export type TicketRowShellTone = 'danger';
+export function ticketRowShellAttributes({
+  selected,
+  listEdge,
+  tone,
+}: {
+  selected: boolean;
+  listEdge?: TicketRowListEdge;
+  tone?: TicketRowShellTone;
+}) {
+  return { 'data-selected': String(selected), 'data-list-edge': listEdge, 'data-tone': tone };
+}
 
 export interface TicketRowProps {
   slug: string;
@@ -159,7 +180,7 @@ export function TicketRow(raw: TicketRowProps) {
   return (
     <div class="ticket-list-row-container" data-key={`ticket:${props.slug}`} data-component="ticket-list-row-container">
       <article
-        class={`ticket-list-row ticket-list-row--${props.presentation}${props.selected ? ' ticket-list-row--selected' : ''}`}
+        class={`${TICKET_ROW_SHELL_CLASS} ticket-list-row ticket-list-row--${props.presentation}${props.selected ? ' ticket-list-row--selected' : ''}`}
         data-component="ticket-list-row"
         data-presentation={props.presentation}
         data-list-edge={props.listEdge}

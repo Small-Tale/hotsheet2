@@ -307,9 +307,12 @@ describe('TicketRow', () => {
     expect(css).toMatch(
       /\.ticket-list-row--column \{[^}]*border-color: transparent;[^}]*border-radius: remify\(10\.4px\)/,
     );
-    expect(css).toMatchSource(/\.ticket-list-row:hover \{ border-color: var\(--wa-color-brand-border-normal\); \}/);
-    expect(css).not.toMatch(/\.ticket-list-row:hover \{[^}]*box-shadow:/);
-    expect(css).not.toMatch(/\.ticket-list-row:hover \{[^}]*background:/);
+    // The shared row shell owns hover (HS2-1FH8BG); it only outlines the row.
+    const shell = readFileSync(resolve(import.meta.dirname, 'ticket-row-shell.css'), 'utf8');
+    expect(shell).toMatchSource(/\.ticket-row-shell:hover \{ border-color: var\(--wa-color-brand-border-normal\); \}/);
+    expect(shell).not.toMatch(/\.ticket-row-shell:hover \{[^}]*box-shadow:/);
+    expect(shell).not.toMatch(/\.ticket-row-shell:hover \{[^}]*background:/);
+    expect(css).not.toContain('.ticket-list-row:hover');
     // Rows carry no drop shadow in any presentation (HS2-VX9E4Z); only selection/focus insets/outlines remain.
     expect(css).not.toContain('box-shadow: 0 remify(4.8px) remify(14.4px)');
   });

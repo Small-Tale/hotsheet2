@@ -1,60 +1,13 @@
-/* The row owns its list-row shell instead of borrowing TicketRow's `ticket-list-row` block (HS2-QSR1TG):
-   the same surface, divider, list-edge rounding, hover, and selected presentation as a list TicketRow.
-   The warning icon sits in its own column beside the identity and message (HS2-SJVM8C). These row rules
-   duplicate the TicketRow shell until TicketRow gains a danger presentation (HS2-1FH8BG). */
+/* The shared ticket row shell (`ticket-row-shell.css`, danger tone) owns the surface, divider,
+   list-edge rounding, hover, selection, danger rail, and selection wiggle (HS2-1FH8BG). This rule
+   lays out the row's own content: the warning icon in its own column beside the identity and
+   message (HS2-SJVM8C). */
 .corrupt-ticket-row {
-  position: relative;
   display: grid;
   grid-template-columns: remify(32px) minmax(0, 1fr);
   align-items: start;
   gap: var(--kui-space-xs);
-  width: 100%;
-  overflow: hidden;
   padding: var(--kui-space-xs) var(--kui-space-m);
-  border: 1px solid transparent;
-  border-bottom-color: var(--wa-color-surface-border);
-  border-radius: 0;
-  color: var(--wa-color-text-normal);
-  background: var(--wa-color-surface-default);
-  cursor: pointer;
-  outline: none;
-  user-select: none;
-}
-/* A list section clips to a rounded box; the rows at its edges round to match, as TicketRow does. */
-.corrupt-ticket-row[data-list-edge='start'] {
-  border-radius: remify(10.4px) remify(10.4px) 0 0;
-}
-.corrupt-ticket-row[data-list-edge='end'] {
-  border-radius: 0 0 remify(10.4px) remify(10.4px);
-}
-.corrupt-ticket-row[data-list-edge='only'] {
-  border-radius: remify(10.4px);
-}
-.corrupt-ticket-row:hover {
-  border-color: var(--wa-color-brand-border-normal);
-}
-/* The row's own selected state (its `data-selected`), not TicketRow's selected modifier (HS2-QM0C3T). */
-.corrupt-ticket-row[data-selected='true'] {
-  border-color: var(--wa-color-brand-border-normal);
-  background: var(--wa-color-brand-fill-quiet);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wa-color-brand-fill-loud) 12%, transparent);
-  animation: corrupt-ticket-selected-wiggle 150ms ease-out;
-}
-@keyframes corrupt-ticket-selected-wiggle {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  45% {
-    transform: translateX(remify(5.6px));
-  }
-}
-.corrupt-ticket-row::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: remify(4px);
-  background: var(--wa-color-danger-fill-loud);
-  content: '';
 }
 .corrupt-ticket-row__icon {
   display: inline-flex;
@@ -111,11 +64,6 @@
 }
 .corrupt-ticket-row__content .corrupt-ticket-row__recovery[data-failed='true'] {
   color: var(--wa-color-danger-on-quiet);
-}
-@media (prefers-reduced-motion: reduce) {
-  .corrupt-ticket-row[data-selected='true'] {
-    animation: none;
-  }
 }
 /* The recovery surface is a right-rail panel (HS2-QQW6CT): Kerf's Pane owns the toolbar, the fixed
    header slot, and the one scrolling content owner; Kerf Row, List, ListHeader, Text, StateBanner and

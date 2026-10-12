@@ -13,7 +13,7 @@ import { Bot, FileWarning, FolderOpen, RefreshCw } from 'lucide';
 import type { CorruptTicket } from '../api';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
 import { inspectorToggle, SidebarPane, type SidebarPanelParts } from './sidebar-panel';
-import type { TicketRowListEdge } from './ticket-row';
+import { type TicketRowListEdge, ticketRowShellAttributes } from './ticket-row';
 
 const filename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1);
 
@@ -85,10 +85,9 @@ export function CorruptTicketRow({
   const key = corruptTicketKey(ticket);
   return (
     <article
-      class="corrupt-ticket-row"
+      class="ticket-row-shell corrupt-ticket-row"
       data-component="corrupt-ticket-row"
-      data-list-edge={listEdge}
-      data-selected={String(selected)}
+      {...ticketRowShellAttributes({ selected, listEdge, tone: 'danger' })}
       role="group"
       aria-label={`Unreadable ticket ${identity}`}
     >

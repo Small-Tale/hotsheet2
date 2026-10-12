@@ -68,19 +68,21 @@ describe('TicketList', () => {
 
   it('rounds only the rows at each section edge through the row listEdge prop (HS2-4APEJP)', () => {
     const listCss = readFileSync(resolve(import.meta.dirname, 'ticket-list.css'), 'utf8');
-    const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
+    const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8'),
+      shellCss = readFileSync(resolve(import.meta.dirname, 'ticket-row-shell.css'), 'utf8');
     const narrowListRule = rowCss.match(/\.ticket-list-row--list \{([^}]*)\}/)?.[1] ?? '';
     expect(narrowListRule).not.toContain('border-radius');
     // The list styles none of its rows; each row owns its edge corners.
     expect(listCss).not.toContain('ticket-list-row');
     expect(listCss).not.toContain('corrupt-ticket-row');
-    expect(rowCss).toContainSource(
-      ".ticket-list-row[data-list-edge='start'] { border-radius: remify(10.4px) remify(10.4px) 0 0; }",
+    // The shared row shell owns the edge corners for TicketRow and CorruptTicketRow (HS2-1FH8BG).
+    expect(shellCss).toContainSource(
+      ".ticket-row-shell[data-list-edge='start'] { border-radius: remify(10.4px) remify(10.4px) 0 0; }",
     );
-    expect(rowCss).toContainSource(
-      ".ticket-list-row[data-list-edge='end'] { border-radius: 0 0 remify(10.4px) remify(10.4px); }",
+    expect(shellCss).toContainSource(
+      ".ticket-row-shell[data-list-edge='end'] { border-radius: 0 0 remify(10.4px) remify(10.4px); }",
     );
-    expect(rowCss).toContainSource(".ticket-list-row[data-list-edge='only'] { border-radius: remify(10.4px); }");
+    expect(shellCss).toContainSource(".ticket-row-shell[data-list-edge='only'] { border-radius: remify(10.4px); }");
     expect([0, 1, 2].map((index) => listEdge(index, 3))).toEqual(['start', undefined, 'end']);
     expect(listEdge(0, 1)).toBe('only');
     const markup = String(

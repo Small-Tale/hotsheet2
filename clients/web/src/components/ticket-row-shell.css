@@ -1,0 +1,63 @@
+/* The shared ticket row shell (HS2-1FH8BG): the selectable list-row surface that TicketRow and the
+   diagnostic CorruptTicketRow both render through `ticketRowShellAttributes`. Kerf has no selectable
+   summary-row component in a released version yet (KF-XCFMX8), so the shell is app-owned. It must
+   load before `ticket-row.css`, whose column presentation overrides the surface border and radius. */
+.ticket-row-shell {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-bottom-color: var(--wa-color-surface-border);
+  border-radius: 0;
+  color: var(--wa-color-text-normal);
+  background: var(--wa-color-surface-default);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+/* A list section clips to a rounded box; the rows at its edges round to match (HS2-4APEJP). */
+.ticket-row-shell[data-list-edge='start'] {
+  border-radius: remify(10.4px) remify(10.4px) 0 0;
+}
+.ticket-row-shell[data-list-edge='end'] {
+  border-radius: 0 0 remify(10.4px) remify(10.4px);
+}
+.ticket-row-shell[data-list-edge='only'] {
+  border-radius: remify(10.4px);
+}
+/* Hover outlines the row as a selection target. */
+.ticket-row-shell:hover {
+  border-color: var(--wa-color-brand-border-normal);
+}
+/* Selected rows take the brand selection fill and outline. */
+.ticket-row-shell[data-selected='true'] {
+  border-color: var(--wa-color-brand-border-normal);
+  background: var(--wa-color-brand-fill-quiet);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wa-color-brand-fill-loud) 12%, transparent);
+}
+/* The danger (diagnostic) presentation: a leading danger rail, and a short wiggle when selected so
+   the recovery flow it opens reads as the row's response. */
+.ticket-row-shell[data-tone='danger']::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: remify(4px);
+  background: var(--wa-color-danger-fill-loud);
+  content: '';
+}
+.ticket-row-shell[data-tone='danger'][data-selected='true'] {
+  animation: ticket-row-danger-selected-wiggle 150ms ease-out;
+}
+@keyframes ticket-row-danger-selected-wiggle {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  45% {
+    transform: translateX(remify(5.6px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticket-row-shell[data-tone='danger'][data-selected='true'] {
+    animation: none;
+  }
+}

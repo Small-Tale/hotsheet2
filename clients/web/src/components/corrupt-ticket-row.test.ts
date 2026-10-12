@@ -64,18 +64,23 @@ describe('CorruptTicketRow', () => {
 
   it('uses a visibly distinct actionable treatment and platform labels', () => {
     const markup = String(CorruptTicketRow({ ticket: corrupt, selected: true }));
-    const css = readFileSync(new URL('./corrupt-ticket-row.css', import.meta.url), 'utf8');
-    // The row owns its list-row shell; it never borrows TicketRow's block classes (HS2-QSR1TG).
-    expect(markup).toContain('class="corrupt-ticket-row" data-component="corrupt-ticket-row"');
+    const css = readFileSync(new URL('./corrupt-ticket-row.css', import.meta.url), 'utf8'),
+      shell = readFileSync(new URL('./ticket-row-shell.css', import.meta.url), 'utf8');
+    // The row composes the shared ticket row shell in its danger tone, never TicketRow's block
+    // classes (HS2-QSR1TG, HS2-1FH8BG).
+    expect(markup).toContain('class="ticket-row-shell corrupt-ticket-row" data-component="corrupt-ticket-row"');
     expect(markup).toContain('data-selected="true"');
+    expect(markup).toContain('data-tone="danger"');
     expect(markup).not.toContain('ticket-list-row');
     expect(css).not.toMatch(/\.ticket-list-row/);
-    expect(css).toContainSource(
-      ".corrupt-ticket-row[data-selected='true'] { border-color:var(--wa-color-brand-border-normal); background:var(--wa-color-brand-fill-quiet); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--wa-color-brand-fill-loud) 12%, transparent); animation:corrupt-ticket-selected-wiggle 150ms ease-out; }",
+    // The shell, not this stylesheet, owns the surface, selection, edges, and danger rail.
+    expect(css).not.toMatch(/data-selected|data-list-edge|::before|:hover|border-bottom-color/);
+    expect(shell).toContainSource(
+      ".ticket-row-shell[data-selected='true'] { border-color:var(--wa-color-brand-border-normal); background:var(--wa-color-brand-fill-quiet); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--wa-color-brand-fill-loud) 12%, transparent); }",
     );
-    expect(css).toContainSource(".corrupt-ticket-row[data-list-edge='only'] { border-radius:remify(10.4px); }");
-    expect(css).toMatch(
-      /corrupt-ticket-row::before[^}]*width: remify\(4px\)[^}]*background: var\(--wa-color-danger-fill-loud\)/,
+    expect(shell).toContainSource(".ticket-row-shell[data-list-edge='only'] { border-radius:remify(10.4px); }");
+    expect(shell).toMatch(
+      /ticket-row-shell\[data-tone='danger'\]::before[^}]*width: remify\(4px\)[^}]*background: var\(--wa-color-danger-fill-loud\)/,
     );
     expect(css).not.toContain('border-left-width');
     // The warning icon has its own column beside the identity and message (HS2-SJVM8C), and the select
@@ -90,14 +95,14 @@ describe('CorruptTicketRow', () => {
     expect(revealFileLabel('Linux x86_64')).toBe('Show file location');
   });
 
-  it('wiggles newly selected corrupt content and honors reduced motion', () => {
-    const css = readFileSync(new URL('./corrupt-ticket-row.css', import.meta.url), 'utf8');
-    expect(css).toMatch(
-      /\.corrupt-ticket-row\[data-selected='true'\] \{[^}]*animation: corrupt-ticket-selected-wiggle 150ms ease-out;/,
+  it('wiggles newly selected danger rows and honors reduced motion', () => {
+    const shell = readFileSync(new URL('./ticket-row-shell.css', import.meta.url), 'utf8');
+    expect(shell).toMatch(
+      /\.ticket-row-shell\[data-tone='danger'\]\[data-selected='true'\] \{[^}]*animation: ticket-row-danger-selected-wiggle 150ms ease-out;/,
     );
-    expect(css).toContainSource('45% { transform:translateX(remify(5.6px)); }');
-    expect(css).toContainSource(
-      "@media (prefers-reduced-motion: reduce) { .corrupt-ticket-row[data-selected='true'] { animation:none; } }",
+    expect(shell).toContainSource('45% { transform:translateX(remify(5.6px)); }');
+    expect(shell).toContainSource(
+      "@media (prefers-reduced-motion: reduce) { .ticket-row-shell[data-tone='danger'][data-selected='true'] { animation:none; } }",
     );
   });
 
