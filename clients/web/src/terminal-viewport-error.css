@@ -1,5 +1,6 @@
-/* The initialization-failure message the terminal runtime places inside a viewport whose runtime
-   could not load (HS2-WP69TD). The viewport (TerminalDashboard) centers it; this module owns it. */
+/* The start-failure message mountTerminalRuntime places in a terminal viewport (HS2-WP69TD). It stays
+   bespoke until Kerf Text can center wrapped copy (KF-MMAWEG, HS2-JEJTAD); the viewport
+   (TerminalDashboard) centers the block. */
 .terminal-viewport-error {
   padding: var(--wa-space-s);
   margin: 0;
