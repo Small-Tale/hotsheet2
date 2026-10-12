@@ -260,7 +260,7 @@ describe('TerminalDrawer', () => {
     const markup = render();
     expect(markup.match(/kui-app-tab__trailing/g)).toHaveLength(2);
     expect(markup).toMatch(
-      /Terminal 1<\/span><span class="kui-app-tab__trailing"><i class="terminal-drawer__busy-dot" aria-label="Busy"/,
+      /Terminal 1<\/span><span class="kui-app-tab__trailing"><svg[^>]*class="[^"]*terminal-drawer__busy-dot[^"]*"/,
     );
     expect(markup).toMatch(/Terminal 2<\/span><span class="kui-app-tab__trailing"><\/span>/);
   });
@@ -352,10 +352,12 @@ describe('TerminalDrawer', () => {
     expect(css).toMatchSource(
       ".terminal-drawer[data-focus-mode='true'] { position: fixed; z-index: 200; top: var(--terminal-focus-top); left: var(--terminal-focus-left); width: var(--terminal-focus-width); height: var(--terminal-focus-height);",
     );
-    expect(css).toContain('env(safe-area-inset-top, 0px)');
+    // The Exit pill floats in a Kerf FloatingToolbar that owns the safe-area inset (HS2-798JS4).
+    expect(markup).toContain('aria-label="Terminal focus exit"');
+    expect(css).not.toContain('__focus-exit');
     // Off phones (no focusTextSize) the drawer focus mode shows only the Exit pill.
-    expect(markup).not.toContain('terminal-drawer__focus-text-size');
-    expect(markup).not.toContain('terminal-drawer__focus-clipboard');
+    expect(markup).not.toContain('terminal-drawer__focus-controls');
+    expect(markup).not.toContain('aria-label="Clipboard"');
   });
   it('exposes the phone text-size control in drawer focus mode without an inline number (HS2-ZSFAHF)', () => {
     const base = {
@@ -379,21 +381,28 @@ describe('TerminalDrawer', () => {
       css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8');
     // Same control contract as the magnified terminal: cycles columns, keeps the accessible name and
     // data-columns, and reports the change with a toast (no inline number, HS2-89JZSN).
-    expect(markup).toContain('class="terminal-drawer__focus-text-size"');
+    expect(markup).toContain('terminal-drawer__focus-controls');
     expect(markup).toContain('data-action="cycle-mobile-terminal-columns"');
     expect(markup).toContain('data-columns="60"');
     expect(markup).toContain('aria-label="Text size: 60 columns. Change text size"');
     expect(markup).toContain('data-lucide="a-large-small"');
     expect(markup).not.toContain('aria-hidden="true">60<');
-    // Hidden while the keyboard is presented.
-    expect(markup).toContain('data-keyboard-visible="false"');
-    expect(css).toMatchSource(".terminal-drawer__focus-text-size[data-keyboard-visible='true'] { display: none; }"); // HS2-FRB545: the Copy/Paste pill sits beside it and hides with it while the keyboard is up.
-    expect(markup).toContain('class="terminal-drawer__focus-clipboard" role="group" aria-label="Clipboard"');
+    // HS2-FRB545: the Copy/Paste group sits beside it in the same Kerf FloatingToolbar.
+    expect(markup).toContain('aria-label="Clipboard"');
     expect(markup).toContain('data-action="copy-terminal-text"');
     expect(markup).toContain('data-action="paste-terminal-text"');
     expect(markup).toContain('data-lucide="copy"');
     expect(markup).toContain('data-lucide="clipboard-paste"');
-    expect(css).toMatchSource(".terminal-drawer__focus-clipboard[data-keyboard-visible='true'] { display: none; }");
+    expect(css).not.toContain('__focus-text-size');
+    // Hidden while the keyboard is presented: the key bar's Fn row carries the same actions.
+    const keyboardUp = String(
+      TerminalDrawer({
+        ...base,
+        focusTextSize: { viewport: base.focusViewport, keyboardVisible: true, columns: 60 },
+      }),
+    );
+    expect(keyboardUp).not.toContain('terminal-drawer__focus-controls');
+    expect(keyboardUp).toContain('aria-label="Exit terminal focus"');
   });
   it('keeps project-drawer visibility local and offers no grouping controls', () => {
     const markup = render();

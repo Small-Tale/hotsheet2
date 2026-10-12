@@ -1,7 +1,8 @@
 import './terminal-drawer.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
-import { uiColor } from '@kerfjs/ui/css-values';
+import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
+import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { TabBar } from '@kerfjs/ui/tab-bar';
@@ -10,6 +11,7 @@ import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import {
   ALargeSmall,
   Bot,
+  Circle,
   ClipboardPaste,
   Copy,
   FolderOpen,
@@ -123,6 +125,21 @@ export function aiShellMenuItem(
       ...providers.map((provider) => shell(provider.name, provider.id)),
     ],
   };
+}
+
+/** A busy terminal's small solid success dot, labeled for assistive technology. */
+function BusyDot() {
+  return (
+    <LucideIcon
+      className="terminal-drawer__busy-dot"
+      appearance="solid"
+      icon={Circle}
+      name="circle"
+      size={7.2}
+      label="Busy"
+      color={foregroundColorVar('--wa-color-success-fill-loud')}
+    />
+  );
 }
 
 export function TerminalDrawer({
@@ -248,10 +265,10 @@ export function TerminalDrawer({
                         <LucideIcon size="s" icon={Unplug} name="unplug" color={uiColor('warning-on-quiet')} />
                       )}
                     </span>
-                    {session.busy ? <i class="terminal-drawer__busy-dot" aria-label="Busy" /> : undefined}
+                    {session.busy ? <BusyDot /> : undefined}
                   </span>
                 ) : session.busy ? (
-                  <i class="terminal-drawer__busy-dot" aria-label="Busy" />
+                  <BusyDot />
                 ) : undefined
               }
             />
@@ -417,50 +434,55 @@ export function TerminalDrawer({
       {focusMode && focusTextSize?.keyboardVisible && focusTextSize.keyBar && (
         <TerminalKeyBar {...focusTextSize.keyBar} />
       )}
-      {focusMode && focusTextSize && (
-        <button
-          type="button"
-          class="terminal-drawer__focus-text-size"
-          {...TERMINALS_ACTIONS.cycleMobileTerminalColumns.attrs}
-          data-columns={String(focusTextSize.columns)}
-          data-keyboard-visible={String(focusTextSize.keyboardVisible)}
-          aria-label={`Text size: ${focusTextSize.columns} columns. Change text size`}
-          title="Change text size"
+      {focusMode && focusTextSize && !focusTextSize.keyboardVisible && (
+        // Phone focus-mode text-size and Copy/Paste controls (HS2-ZSFAHF, HS2-FRB545) float over the
+        // terminal in Kerf's forced-dark toolbar; with the keyboard up the key bar's Fn row carries them.
+        <FloatingToolbar
+          label="Terminal focus controls"
+          position="top-start"
+          safeAreaInsets
+          className="terminal-drawer__focus-controls"
         >
-          <LucideIcon size="s" icon={ALargeSmall} name="a-large-small" />
-        </button>
-      )}
-      {focusMode && focusTextSize && (
-        <div
-          class="terminal-drawer__focus-clipboard"
-          role="group"
-          aria-label="Clipboard"
-          data-keyboard-visible={String(focusTextSize.keyboardVisible)}
-        >
-          <button
-            type="button"
-            {...TERMINALS_ACTIONS.copyTerminalText.attrs}
-            aria-label="Copy terminal text"
-            title="Copy terminal text"
-          >
-            <LucideIcon size="s" icon={Copy} name="copy" />
-          </button>
-          <button type="button" {...TERMINALS_ACTIONS.pasteTerminalText.attrs} aria-label="Paste" title="Paste">
-            <LucideIcon size="s" icon={ClipboardPaste} name="clipboard-paste" />
-          </button>
-        </div>
+          <ToolbarControlGroup single content="icon" shape="pill">
+            <button
+              type="button"
+              {...TERMINALS_ACTIONS.cycleMobileTerminalColumns.attrs}
+              data-columns={String(focusTextSize.columns)}
+              aria-label={`Text size: ${focusTextSize.columns} columns. Change text size`}
+              title="Change text size"
+            >
+              <LucideIcon size="s" icon={ALargeSmall} name="a-large-small" />
+            </button>
+          </ToolbarControlGroup>
+          <ToolbarControlGroup content="icon" shape="pill" label="Clipboard">
+            <button
+              type="button"
+              {...TERMINALS_ACTIONS.copyTerminalText.attrs}
+              aria-label="Copy terminal text"
+              title="Copy terminal text"
+            >
+              <LucideIcon size="s" icon={Copy} name="copy" />
+            </button>
+            <button type="button" {...TERMINALS_ACTIONS.pasteTerminalText.attrs} aria-label="Paste" title="Paste">
+              <LucideIcon size="s" icon={ClipboardPaste} name="clipboard-paste" />
+            </button>
+          </ToolbarControlGroup>
+        </FloatingToolbar>
       )}
       {focusMode && (
-        <button
-          type="button"
-          class="terminal-drawer__focus-exit"
-          {...TERMINALS_ACTIONS.exitTerminalFocusMode.attrs}
-          aria-label="Exit terminal focus"
-          title="Exit terminal focus"
-        >
-          <LucideIcon size="s" icon={Minimize2} name="minimize-2" />
-          <span>Exit</span>
-        </button>
+        <FloatingToolbar label="Terminal focus exit" position="top-end" safeAreaInsets>
+          <ToolbarControlGroup single content="mixed" shape="pill">
+            <button
+              type="button"
+              {...TERMINALS_ACTIONS.exitTerminalFocusMode.attrs}
+              aria-label="Exit terminal focus"
+              title="Exit terminal focus"
+            >
+              <LucideIcon size="s" icon={Minimize2} name="minimize-2" />
+              <span>Exit</span>
+            </button>
+          </ToolbarControlGroup>
+        </FloatingToolbar>
       )}
     </section>
   );
