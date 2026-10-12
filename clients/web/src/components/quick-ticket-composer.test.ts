@@ -279,7 +279,7 @@ describe('QuickTicketComposer', () => {
     );
     expect(sourceB).not.toContain('This ticket provider does not support attachments.');
     expect(sourceB).toMatch(
-      /<button type="button" data-action="clear-new-ticket-attachments" aria-label="Remove all staged attachments">[\s\S]*data-lucide="trash-2"[\s\S]*Remove all<\/button>/,
+      /<wa-button appearance="plain" variant="danger" size="small" data-action="clear-new-ticket-attachments">[\s\S]*slot="start"[\s\S]*data-lucide="trash-2"[\s\S]*Remove all<span class="wa-visually-hidden"> staged attachments<\/span><\/wa-button>/,
     );
     expect(createDisabled(sourceB)).toBe(true);
     expect(render('github-b', 'GitHub issues', false, attachments.slice(0, 1))).toContain('Remove the staged file or');

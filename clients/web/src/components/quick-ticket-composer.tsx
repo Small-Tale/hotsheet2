@@ -2,6 +2,7 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/components/option/option.js';
+import '@awesome.me/webawesome/dist/styles/utilities/visually-hidden.css';
 import './quick-ticket-composer.css';
 
 import { foregroundColorVar } from '@kerfjs/ui/css-values';
@@ -221,15 +222,17 @@ export function QuickTicketComposer({
                 </label>
               )}
               {strandedAttachments && (
-                <button
-                  type="button"
+                <wa-button
+                  appearance="plain"
+                  variant="danger"
+                  size="small"
                   {...SEARCH_AND_COMPOSER_ACTIONS.clearNewTicketAttachments.attrs}
-                  aria-label="Remove all staged attachments"
                   disabled={submitting}
                 >
-                  <LucideIcon size={14.4} icon={Trash2} name="trash-2" />
-                  Remove all
-                </button>
+                  <LucideIcon slot="start" size={14.4} icon={Trash2} name="trash-2" />
+                  {/* wa-button names its inner button from slotted text, not the host aria-label (HS2-6TMT6Q). */}
+                  Remove all<span class="wa-visually-hidden"> staged attachments</span>
+                </wa-button>
               )}
             </header>
             {attachments.length > 0 && (
