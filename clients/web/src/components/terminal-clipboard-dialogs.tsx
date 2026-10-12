@@ -1,9 +1,13 @@
+import '@kerfjs/ui/surface-scaffold/register';
 import './terminal-clipboard-dialogs.css';
 
+import { remify } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
+import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
+import { Text } from '@kerfjs/ui/text';
 import { ClipboardPaste, Copy, TextSelect } from 'lucide';
 
 import { contextPopupMenuAnchor } from '../context-menu-position';
@@ -32,6 +36,9 @@ export interface TerminalEditMenuState {
   /** A long-press selection exists, so the menu leads with Copy (HS2-EYR96N). */
   selection?: boolean;
 }
+
+/** Copy and Paste sheets share one phone-friendly preferred width. */
+const SHEET_WIDTH = remify(672);
 
 /**
  * Terminal edit menu (HS2-KKP8YJ): a context-mode Kerf PopupMenu at the long-press point that reuses
@@ -87,42 +94,44 @@ export function TerminalEditMenu({ state }: { state?: TerminalEditMenuState }) {
 export function TerminalCopyDialog({ state }: { state?: TerminalCopyState }) {
   const open = Boolean(state?.open);
   return (
-    <wa-dialog
-      {...TERMINALS_TARGETS.terminalCopyDialog.attrs}
-      class="terminal-clipboard-dialog"
-      label="Copy terminal text"
-      open={open}
-      data-controlled-open={String(open)}
-    >
-      <List gap="m">
-        <p class="terminal-clipboard-dialog__hint">
-          Touch and hold to select part of {state?.title ?? 'the terminal'}. Copy takes the selection, or all the text
-          when nothing is selected.
-        </p>
-        <textarea
-          class="terminal-clipboard-dialog__text"
-          data-key={`terminal-copy-text:${state?.generation ?? 0}`}
-          name="terminal-copy-text"
-          aria-label="Terminal text"
-          readOnly
-          wrap="off"
-          spellcheck="false"
-          autoCapitalize="off"
-          autocomplete="off"
-        >
-          {state?.text ?? ''}
-        </textarea>
-        <Row hAlign="right" vAlign="middle" gap="xs">
-          <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.closeTerminalCopy.attrs}>
-            Done
-          </wa-button>
-          <wa-button appearance="accent" type="button" {...TERMINALS_ACTIONS.confirmTerminalCopy.attrs}>
-            <LucideIcon icon={Copy} name="copy" slot="start" />
-            Copy
-          </wa-button>
-        </Row>
-      </List>
-    </wa-dialog>
+    <DialogSurface preferredWidth={SHEET_WIDTH} viewportGutter={remify(16)}>
+      <wa-dialog
+        {...TERMINALS_TARGETS.terminalCopyDialog.attrs}
+        class="terminal-clipboard-dialog"
+        label="Copy terminal text"
+        open={open}
+        data-controlled-open={String(open)}
+      >
+        <List gap="m">
+          <Text tone="quiet" size="compact">
+            Touch and hold to select part of {state?.title ?? 'the terminal'}. Copy takes the selection, or all the text
+            when nothing is selected.
+          </Text>
+          <textarea
+            class="terminal-clipboard-dialog__text"
+            data-key={`terminal-copy-text:${state?.generation ?? 0}`}
+            name="terminal-copy-text"
+            aria-label="Terminal text"
+            readOnly
+            wrap="off"
+            spellcheck="false"
+            autoCapitalize="off"
+            autocomplete="off"
+          >
+            {state?.text ?? ''}
+          </textarea>
+          <Row hAlign="right" vAlign="middle" gap="xs">
+            <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.closeTerminalCopy.attrs}>
+              Done
+            </wa-button>
+            <wa-button appearance="accent" type="button" {...TERMINALS_ACTIONS.confirmTerminalCopy.attrs}>
+              <LucideIcon icon={Copy} name="copy" slot="start" />
+              Copy
+            </wa-button>
+          </Row>
+        </List>
+      </wa-dialog>
+    </DialogSurface>
   );
 }
 
@@ -133,43 +142,45 @@ export function TerminalCopyDialog({ state }: { state?: TerminalCopyState }) {
 export function TerminalPasteDialog({ state }: { state?: TerminalPasteState }) {
   const open = Boolean(state?.open);
   return (
-    <wa-dialog
-      {...TERMINALS_TARGETS.terminalPasteDialog.attrs}
-      class="terminal-clipboard-dialog"
-      label="Paste into terminal"
-      open={open}
-      data-controlled-open={String(open)}
-    >
-      <form {...TERMINALS_ACTIONS.submitTerminalPaste.attrs}>
-        <List gap="m">
-          <p class="terminal-clipboard-dialog__hint">
-            {state?.reason === 'unavailable'
-              ? 'This browser does not let Hot Sheet read the clipboard.'
-              : 'Clipboard access was not allowed.'}{' '}
-            Touch and hold in the box, choose Paste, then send it to {state?.title ?? 'the terminal'}.
-          </p>
-          <textarea
-            class="terminal-clipboard-dialog__text"
-            data-key={`terminal-paste-text:${state?.generation ?? 0}`}
-            name="terminal-paste-text"
-            aria-label="Text to paste"
-            wrap="off"
-            spellcheck="false"
-            autoCapitalize="off"
-            autocomplete="off"
-            autocorrect="off"
-          />
-          <Row hAlign="right" vAlign="middle" gap="xs">
-            <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.cancelTerminalPaste.attrs}>
-              Cancel
-            </wa-button>
-            <wa-button appearance="accent" type="submit">
-              <LucideIcon icon={ClipboardPaste} name="clipboard-paste" slot="start" />
-              Paste
-            </wa-button>
-          </Row>
-        </List>
-      </form>
-    </wa-dialog>
+    <DialogSurface preferredWidth={SHEET_WIDTH} viewportGutter={remify(16)}>
+      <wa-dialog
+        {...TERMINALS_TARGETS.terminalPasteDialog.attrs}
+        class="terminal-clipboard-dialog"
+        label="Paste into terminal"
+        open={open}
+        data-controlled-open={String(open)}
+      >
+        <form {...TERMINALS_ACTIONS.submitTerminalPaste.attrs}>
+          <List gap="m">
+            <Text tone="quiet" size="compact">
+              {state?.reason === 'unavailable'
+                ? 'This browser does not let Hot Sheet read the clipboard.'
+                : 'Clipboard access was not allowed.'}{' '}
+              Touch and hold in the box, choose Paste, then send it to {state?.title ?? 'the terminal'}.
+            </Text>
+            <textarea
+              class="terminal-clipboard-dialog__text"
+              data-key={`terminal-paste-text:${state?.generation ?? 0}`}
+              name="terminal-paste-text"
+              aria-label="Text to paste"
+              wrap="off"
+              spellcheck="false"
+              autoCapitalize="off"
+              autocomplete="off"
+              autocorrect="off"
+            />
+            <Row hAlign="right" vAlign="middle" gap="xs">
+              <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.cancelTerminalPaste.attrs}>
+                Cancel
+              </wa-button>
+              <wa-button appearance="accent" type="submit">
+                <LucideIcon icon={ClipboardPaste} name="clipboard-paste" slot="start" />
+                Paste
+              </wa-button>
+            </Row>
+          </List>
+        </form>
+      </wa-dialog>
+    </DialogSurface>
   );
 }

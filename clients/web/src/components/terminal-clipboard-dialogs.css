@@ -1,13 +1,6 @@
-/* Phone terminal Copy and Paste sheets (HS2-FRB545): app-owned native text fields inside raw Web
-   Awesome dialogs, sized to the phone with a 16px gutter. */
-.terminal-clipboard-dialog {
-  --width: min(remify(672px), calc(100vw - remify(32px)));
-}
-.terminal-clipboard-dialog__hint {
-  margin: 0;
-  color: var(--wa-color-text-quiet);
-  font-size: var(--wa-font-size-s);
-}
+/* Phone terminal Copy and Paste sheets (HS2-FRB545): the field is a native, long-press-selectable
+   textarea that must look like the terminal it mirrors (terminal colors, monospace, no wrapping), which
+   no Kerf or Web Awesome field expresses; Kerf DialogSurface owns the sheet width. */
 .terminal-clipboard-dialog__text {
   width: 100%;
   min-width: 0;
