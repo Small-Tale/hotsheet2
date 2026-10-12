@@ -240,7 +240,7 @@ commands-and-ai	delegate	document.body	'dragstart'	'.command-settings-editor__ro
 commands-and-ai	delegate	document.body	'dragover'	'.command-settings-editor__list'
 commands-and-ai	delegate	document.body	'drop'	'.command-settings-editor__list'
 commands-and-ai	delegate	document.body	'dragend'	'.command-settings-editor__row'
-commands-and-ai	delegate	document.body	'input'	'[data-command-field]'
+commands-and-ai	delegate	document.body	'input'	COMMAND_FIELD_SELECTOR
 commands-and-ai	delegate	document.body	'input'	'[name="command-icon-search"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="select-command-icon"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="select-command-ai-default"]'

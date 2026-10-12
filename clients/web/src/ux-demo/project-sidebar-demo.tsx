@@ -17,7 +17,7 @@ import { RepositorySummary } from '../components/repository-summary';
 import { SettingsNavigation } from '../components/settings-navigation';
 import { TerminalOperationsSidebar } from '../components/terminal-operations-sidebar';
 import { ViewNavigation, type ViewNavigationItem } from '../components/view-navigation';
-import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { COMMAND_FIELD_SELECTOR, COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { loadLucideCatalog } from '../lucide-catalog';
 import { DEMO_ACTIONS, DEMO_FIELDS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
@@ -577,7 +577,7 @@ function wireProjectSidebarDemo(root: HTMLElement): () => void {
   );
   demoListeners.add(delegate(root, 'dragend', '.command-settings-editor__row', clearCommandEditorDrag));
   demoListeners.add(
-    delegate(root, 'input', '[data-command-field]', (_event, target) => {
+    delegate(root, 'input', COMMAND_FIELD_SELECTOR, (_event, target) => {
       const input = target as HTMLInputElement;
       const id = commandEditorRowId(target);
       if (id && input.name) updateCommandEditorField(id, input.name, input.value);

@@ -1,12 +1,18 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
+import '@awesome.me/webawesome/dist/components/input/input.js';
+import '@awesome.me/webawesome/dist/components/textarea/textarea.js';
 import './heading.css';
 import './command-settings-editor.css';
 import './native-popover-dialog.css';
 
-import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
+import { foregroundColorVar, px, uiColor } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
+import { Grid } from '@kerfjs/ui/grid';
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
+import { Select } from '@kerfjs/ui/select';
+import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -147,7 +153,7 @@ function AiCommandSelection({
       ? [active?.display_name ?? toolId, model?.label ?? modelId, effort].filter(Boolean).join(' · ')
       : 'Project Default';
   return (
-    <div class="command-settings-editor__wide command-settings-editor__ai-selection">
+    <List gap="2xs" className="command-settings-editor__ai-selection">
       {/* A settings row: the field label is the toolbar's identity and the PopupMenu's group is its
           trailing control, the cataloged composition for a menu trigger (HS2-CSRJ9Y). */}
       <Toolbar
@@ -197,10 +203,10 @@ function AiCommandSelection({
           </ToolbarControlGroup>
         }
       />
-      <small class="command-settings-editor__hint">
+      <Text flush tone="quiet" size="compact">
         Project Default follows this project's AI settings; choose an override only for this command.
-      </small>
-    </div>
+      </Text>
+    </List>
   );
 }
 
@@ -216,106 +222,73 @@ function CommandDetailFields({
   aiDefaults: AiToolDefaults;
 }) {
   const type = kind(command);
+  // Web Awesome fields own their labels, hints, and control chrome; Kerf Grid pairs the label and
+  // type and collapses to one column in a narrow dialog, and List stacks the full-width fields
+  // (HS2-WNXRG3). Fields keep the `input` event autosave contract through `data-command-field`.
   return (
-    <div class="command-settings-editor__grid" data-command-id={command.id}>
-      <label class="command-settings-editor__field">
-        Button label
-        <input
-          class="command-settings-editor__control"
-          name="title"
-          data-command-field
-          required
-          value={command.title}
+    <List gap="m" rootAttributes={{ 'data-command-id': command.id }}>
+      <Grid minColumnWidth={px(224)} gap="m">
+        <wa-input label="Button label" name="title" data-command-field required value={command.title} />
+        <Select
+          name="kind"
+          label="Type"
+          value={type}
+          choices={(['program', 'shell', 'ai'] as const).map((value) => ({ value, label: TYPE_LABELS[value] }))}
         />
-      </label>
-      <label class="command-settings-editor__field">
-        Type
-        <select class="command-settings-editor__control" name="kind" data-command-field>
-          <option value="program" selected={type === 'program'}>
-            Program
-          </option>
-          <option value="shell" selected={type === 'shell'}>
-            Shell
-          </option>
-          <option value="ai" selected={type === 'ai'}>
-            AI
-          </option>
-        </select>
-      </label>
+      </Grid>
       {type === 'program' && (
         <>
-          <label class="command-settings-editor__field command-settings-editor__wide">
-            Program
-            <input
-              class="command-settings-editor__control"
-              name="program"
-              data-command-field
-              required
-              value={command.program ?? ''}
-              placeholder="npm"
-            />
-          </label>
-          <label class="command-settings-editor__field command-settings-editor__wide">
-            Arguments
-            <textarea
-              class="command-settings-editor__control"
-              name="args"
-              data-command-field
-              spellcheck="false"
-              placeholder={'run\ntest'}
-            >
-              {command.args?.join('\n') ?? ''}
-            </textarea>
-            <small class="command-settings-editor__hint">One exact argument per line.</small>
-          </label>
+          <wa-input label="Program" name="program" data-command-field required value={command.program ?? ''} placeholder="npm" />
+          <wa-textarea
+            label="Arguments"
+            name="args"
+            data-command-field
+            spellcheck="false"
+            rows={3}
+            resize="vertical"
+            placeholder={'run\ntest'}
+            hint="One exact argument per line."
+            value={command.args?.join('\n') ?? ''}
+          />
         </>
       )}
       {type === 'shell' && (
-        <label class="command-settings-editor__field command-settings-editor__wide">
-          Shell command
-          <textarea
-            class="command-settings-editor__control"
-            name="command"
-            data-command-field
-            required
-            spellcheck="false"
-            placeholder="npm run test"
-          >
-            {command.command ?? ''}
-          </textarea>
-          <small class="command-settings-editor__hint">
-            Runs in the project root; use cd within the command if needed.
-          </small>
-        </label>
+        <wa-textarea
+          label="Shell command"
+          name="command"
+          data-command-field
+          required
+          spellcheck="false"
+          rows={3}
+          resize="vertical"
+          placeholder="npm run test"
+          hint="Runs in the project root; use cd within the command if needed."
+          value={command.command ?? ''}
+        />
       )}
       {type === 'ai' && (
         <>
-          <label class="command-settings-editor__field command-settings-editor__wide">
-            Prompt
-            <textarea
-              class="command-settings-editor__control"
-              name="prompt"
-              data-command-field
-              required
-              placeholder="Review the current changes"
-            >
-              {command.prompt ?? ''}
-            </textarea>
-          </label>
+          <wa-textarea
+            label="Prompt"
+            name="prompt"
+            data-command-field
+            required
+            rows={3}
+            resize="vertical"
+            placeholder="Review the current changes"
+            value={command.prompt ?? ''}
+          />
           <AiCommandSelection command={command} tools={aiTools} defaults={aiDefaults} />
         </>
       )}
-      <label class="command-settings-editor__field command-settings-editor__wide">
-        Confirmation message
-        <input
-          class="command-settings-editor__control"
-          name="confirmation"
-          data-command-field
-          value={command.confirmation ?? ''}
-          placeholder="Optional confirmation before running"
-        />
-      </label>
-      <fieldset class="command-settings-editor__wide command-settings-editor__swatches">
+      <wa-input
+        label="Confirmation message"
+        name="confirmation"
+        data-command-field
+        value={command.confirmation ?? ''}
+        placeholder="Optional confirmation before running"
+      />
+      <fieldset class="command-settings-editor__swatches">
         <legend class="command-settings-editor__legend">Button color</legend>
         {COMMAND_CUSTOMIZATION_COLORS.map((option) => (
           <label
@@ -336,7 +309,7 @@ function CommandDetailFields({
           </label>
         ))}
       </fieldset>
-      <fieldset class="command-settings-editor__wide command-settings-editor__icons">
+      <fieldset class="command-settings-editor__icons">
         <legend class="command-settings-editor__legend">Button icon</legend>
         <LucideIconPicker
           value={command.icon}
@@ -345,7 +318,7 @@ function CommandDetailFields({
           selectAction="select-command-icon"
         />
       </fieldset>
-    </div>
+    </List>
   );
 }
 

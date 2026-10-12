@@ -187,6 +187,36 @@ describe('CommandSettingsEditor', () => {
     expect(ai).not.toContain('name="program"');
   });
 
+  it('composes the edit fields from Web Awesome inputs and Kerf Select, Grid, and List (HS2-WNXRG3)', () => {
+    const program = String(
+      CommandSettingsEditor({
+        commands: [{ id: 'p', title: 'Build', kind: 'program', program: 'npm', args: ['run', 'build'] }],
+        editingId: 'p',
+      }),
+    );
+    expect(program).toMatch(/<wa-input label="Button label" name="title" data-command-field[^>]*value="Build"/);
+    expect(program).toMatch(/<wa-input label="Program" name="program"/);
+    expect(program).toMatch(/<wa-textarea label="Arguments" name="args"[^>]*hint="One exact argument per line\."/);
+    expect(program).toContain('wa-input label="Confirmation message" name="confirmation"');
+    expect(program).toMatch(/<wa-select[^>]*name="kind"/);
+    expect(program).toContain('data-component="grid"');
+    // Every command field is a Web Awesome control; only the color swatches remain native radios.
+    const nativeFields = [...program.matchAll(/<(input|textarea|select)[\s>][^>]*/g)]
+      .map((match) => match[0])
+      .filter((field) => !field.includes('type="radio"'));
+    expect(nativeFields).toEqual([]);
+    for (const removed of ['__control', '__field', '__hint', '__grid', '__wide'])
+      expect(css).not.toContain(`.command-settings-editor${removed}`);
+    expect(css).not.toContain('@media (max-width');
+    const shell = String(
+      CommandSettingsEditor({
+        commands: [{ id: 's', title: 'Test', kind: 'shell', command: 'npm test' }],
+        editingId: 's',
+      }),
+    );
+    expect(shell).toMatch(/<wa-textarea label="Shell command" name="command"[^>]*hint="Runs in the project root/);
+  });
+
   it('only lays out the popover dialog when it is open, so the closed dialog stays UA-hidden (HS2-D9JBXT)', () => {
     // Setting `display` unconditionally on a `popover` element overrides [popover]:not(:popover-open){display:none},
     // rendering the empty closed dialog as a thin bordered strip — the stray line the maintainer reported.

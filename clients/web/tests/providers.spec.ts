@@ -12758,7 +12758,12 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   await commandDialog.getByRole('button', { name: 'Done' }).click();
   await editor.getByRole('button', { name: 'Add command' }).click();
   await commandDialog.getByLabel('Button label').fill('Review changes');
-  await commandDialog.getByLabel('Type').selectOption('ai');
+  // Type is a Kerf Select (HS2-WNXRG3): choose the AI option through its real popup.
+  const typeSelect = commandDialog.locator('wa-select[name="kind"]');
+  await expect(typeSelect).toHaveJSProperty('value', 'shell');
+  await typeSelect.click();
+  await typeSelect.locator('wa-option[value="ai"]').click();
+  await expect(typeSelect).toHaveJSProperty('value', 'ai');
   await expect(commandDialog.getByLabel('Prompt')).toBeVisible();
   await commandDialog.getByLabel('Prompt').fill('Review the current changes');
   await commandDialog.getByRole('button', { name: 'Project Default' }).click();

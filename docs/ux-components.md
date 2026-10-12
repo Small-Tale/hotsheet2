@@ -1687,7 +1687,10 @@ capability-aware sections when their underlying features and data contracts land
   delete button removes it. Editing — or adding — a command opens a native "Edit command" popover
   dialog holding the typed detail form — Button label, Type, the Program `{program,args}` /
   Shell / AI-prompt fields, an optional confirmation message, the color-swatch picker, and
-  a searchable Lucide-icon picker — with Done in the dialog toolbar. The identifier (auto-generated),
+  a searchable Lucide-icon picker — with Done in the dialog toolbar. The text fields are `wa-input` /
+  `wa-textarea` controls whose labels and hints come from their props, Type is a Kerf `Select`, and
+  Kerf `Grid` (label beside type, collapsing to one column in a narrow dialog) and `List` lay them
+  out, so the editor owns no field CSS (HS2-WNXRG3). The identifier (auto-generated),
   group (set by drag-and-drop), and working directory (always the project root; users `cd`
   within shell commands) are intentionally not shown. The color palette's neutral slot is
   "Transparent": a command with that color (or none) renders with no background fill and the

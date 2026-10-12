@@ -1,7 +1,8 @@
 /* CommandSettingsEditor still hand-styles most of its surface. Each section below is tracked for
-   recomposition from Kerf and Web Awesome components: the command list rows and groups (HS2-7BBRJT),
-   the edit dialog's form controls (HS2-WNXRG3), and the swatches, heading, and group-delete button
-   (HS2-EBY4E3). The heading actions and the empty list already use wa-button and EmptyState (HS2-F9ECMZ). */
+   recomposition from Kerf and Web Awesome components: the command list rows and groups (HS2-7BBRJT)
+   and the swatches, heading, and group-delete button (HS2-EBY4E3). The heading actions and the empty
+   list use wa-button and EmptyState (HS2-F9ECMZ), and the edit dialog's fields are Web Awesome
+   controls (HS2-WNXRG3). */
 /* The editor root stacks its sections and is the container for the narrow heading layout. */
 .command-settings-editor {
   display: grid;
@@ -197,7 +198,8 @@
   font-size: var(--wa-font-size-xs);
 }
 
-/* Edit command dialog (native popover) reusing the detail grid + pickers. */
+/* Edit command dialog (native popover); its fields are Web Awesome controls laid out by Kerf
+   List and Grid, so no field rules remain here (HS2-WNXRG3). */
 /* Keep `display` off the base rule so a CLOSED popover stays UA-hidden ([popover]:not(:popover-open){display:none});
    setting display here unconditionally rendered the empty closed dialog as a 2px bordered strip (HS2-D9JBXT). */
 .command-settings-editor__dialog {
@@ -224,52 +226,6 @@
   flex: 1 1 auto;
 }
 
-.command-settings-editor__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--kui-space-m);
-}
-.command-settings-editor__field {
-  display: grid;
-  min-width: 0;
-  color: var(--wa-color-text-normal);
-  font-size: var(--wa-font-size-s);
-  font-weight: 600;
-  gap: var(--kui-space-2xs);
-}
-.command-settings-editor__control {
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  padding: remify(8.8px) remify(10.4px);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-m);
-  color: var(--wa-color-text-normal);
-  background: var(--wa-color-surface-default);
-  font: inherit;
-  font-weight: 400;
-}
-textarea.command-settings-editor__control {
-  min-height: remify(80px);
-  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
-  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
-  resize: var(--hotsheet-textarea-resize, vertical);
-}
-.command-settings-editor__hint {
-  color: var(--wa-color-text-quiet);
-  font-weight: 400;
-}
-.command-settings-editor__wide {
-  grid-column: 1 / -1;
-}
-.command-settings-editor__ai-selection {
-  display: grid;
-  min-width: 0;
-  color: var(--wa-color-text-normal);
-  font-size: var(--wa-font-size-s);
-  font-weight: 600;
-  gap: var(--kui-space-2xs);
-}
 @container (max-width:remify(672px)) {
   .command-settings-editor__heading {
     align-items: stretch;
@@ -279,15 +235,6 @@ textarea.command-settings-editor__control {
     flex-wrap: wrap;
   }
 }
-@media (max-width: remify(560px)) {
-  .command-settings-editor__grid {
-    grid-template-columns: 1fr;
-  }
-  .command-settings-editor__wide {
-    grid-column: auto;
-  }
-}
-
 /* Color and icon pickers for custom command buttons (HS2-656XJ2). */
 .command-settings-editor__swatches {
   display: flex;
@@ -347,10 +294,4 @@ textarea.command-settings-editor__control {
 .command-settings-editor__swatch:has(input:focus-visible) {
   outline: var(--wa-focus-ring);
   outline-offset: 1px;
-}
-/* iOS zooms into a focused field set below 16px, including on a touch tablet (HS2-NYGR2Q). */
-@media (pointer: coarse) {
-  .command-settings-editor__control {
-    font-size: max(var(--hs-touch-field-min-font-size), 1em);
-  }
 }

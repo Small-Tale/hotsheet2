@@ -97,3 +97,10 @@ export const COMMANDS_AND_AI_TARGETS = {
   manualModelDialog: attr('data-component', 'manual-model-dialog'),
   aiFeedbackDialog: attr('data-component', 'ai-feedback-dialog'),
 } as const;
+
+/**
+ * The edit-command fields whose `input` events autosave: Web Awesome fields mark themselves with
+ * `data-command-field`, and the Kerf Type Select is addressed by its name (HS2-WNXRG3).
+ */
+export const COMMAND_FIELD_SELECTOR =
+  '[data-command-field], [data-component="command-editor-dialog"] wa-select[name="kind"]';

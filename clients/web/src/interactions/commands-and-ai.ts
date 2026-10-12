@@ -21,7 +21,11 @@ import { type SettingsCategory } from '../components/settings-navigation';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
 import { type ConversationExportDraft } from '../conversation-export';
-import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
+import {
+  COMMAND_FIELD_SELECTOR,
+  COMMANDS_AND_AI_ACTIONS,
+  COMMANDS_AND_AI_TARGETS,
+} from '../interaction-attrs/commands-and-ai';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { beginInteractionTiming } from '../interaction-performance';
 import { chordFromEvent, saveShortcutOverrides, type ShortcutChord, shortcutDef } from '../keyboard-shortcuts';
@@ -837,7 +841,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   );
   lifetime.add(delegate(document.body, 'dragend', '.command-settings-editor__row', clearCommandDrag));
   lifetime.add(
-    delegate(document.body, 'input', '[data-command-field]', (_event, target) => {
+    delegate(document.body, 'input', COMMAND_FIELD_SELECTOR, (_event, target) => {
       const current = project(),
         field = (target as HTMLInputElement).name,
         id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
