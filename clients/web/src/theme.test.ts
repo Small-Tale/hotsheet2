@@ -102,7 +102,6 @@ describe('shared client theme', () => {
       '--hs-command-pink',
       '--hs-command-teal',
       '--hs-command-gray',
-      '--hs-ticket-source-default',
       '--hs-annotation-blue',
       '--hs-annotation-red',
       '--hs-annotation-orange',
@@ -126,9 +125,7 @@ describe('shared client theme', () => {
         !token.startsWith('--hs-priority-') &&
         !token.startsWith('--hs-ticket-row-') &&
         !inlineCommandPalette(token) &&
-        token !== '--hs-category-fallback' &&
-        // TicketSourceIcon resolves its default color in TypeScript; the alias awaits removal (HS2-E3HGSK).
-        token !== '--hs-ticket-source-default',
+        token !== '--hs-category-fallback',
     );
 
     expect(new Set(definitions)).toEqual(new Set(required));
