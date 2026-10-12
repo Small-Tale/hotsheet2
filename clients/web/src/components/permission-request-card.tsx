@@ -1,3 +1,4 @@
+import '@awesome.me/webawesome/dist/components/button/button.js';
 import './permission-request-card.css';
 
 import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
@@ -149,8 +150,9 @@ export function PermissionRequestCard({
       {!history && (
         <footer class="permission-request-card__footer">
           <div class="permission-request-card__quiet-actions">
-            <button
-              type="button"
+            <wa-button
+              appearance="plain"
+              size="small"
               class="permission-request-card__quiet-action"
               {...NOTIFICATIONS_AND_LINKS_ACTIONS.ignorePermission.attrs}
               // Escape activates Ignore while the shell popup is lifted above a modal (HS2-S8K9BG).
@@ -158,18 +160,19 @@ export function PermissionRequestCard({
               data-request-key={item.key}
             >
               Ignore
-            </button>
+            </wa-button>
             {presentation === 'popup' && (
               // Pauses every interruptive notification in all projects; requests keep collecting in
               // Notifications until Resume (HS2-QYA9SC).
-              <button
-                type="button"
+              <wa-button
+                appearance="plain"
+                size="small"
                 class="permission-request-card__quiet-action"
                 {...NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.attrs}
                 title="Stop permission popups in every project until you resume"
               >
                 Pause notifications
-              </button>
+              </wa-button>
             )}
           </div>
           <div class="permission-request-card__decision-area">
@@ -182,8 +185,9 @@ export function PermissionRequestCard({
                 >
                   Auto-{countdownAction} in <strong data-permission-countdown-value>{countdown}</strong>
                 </span>
-                <button
-                  type="button"
+                <wa-button
+                  appearance="plain"
+                  size="small"
                   class="permission-request-card__stop-automation"
                   {...NOTIFICATIONS_AND_LINKS_ACTIONS.cancelPermissionAutomation.attrs}
                   data-request-key={item.key}
@@ -191,12 +195,13 @@ export function PermissionRequestCard({
                   title={`Stop auto-${countdownAction} countdown for this request`}
                 >
                   <LucideIcon size={14.4} icon={Pause} name="pause" />
-                </button>
+                </wa-button>
               </div>
             )}
             <div class="permission-request-card__buttons">
-              <button
-                type="button"
+              <wa-button
+                appearance="outlined"
+                size="small"
                 {...NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.attrs}
                 data-decision="deny"
                 data-scope="once"
@@ -204,10 +209,11 @@ export function PermissionRequestCard({
                 disabled={state === 'resolving'}
               >
                 Deny
-              </button>
+              </wa-button>
               {alwaysSupported && (
-                <button
-                  type="button"
+                <wa-button
+                  appearance="outlined"
+                  size="small"
                   {...NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.attrs}
                   data-decision="allow"
                   data-scope="always"
@@ -215,10 +221,12 @@ export function PermissionRequestCard({
                   disabled={state === 'resolving'}
                 >
                   Always Allow
-                </button>
+                </wa-button>
               )}
-              <button
-                type="button"
+              <wa-button
+                variant="brand"
+                appearance="accent"
+                size="small"
                 class="permission-request-card__primary"
                 {...NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.attrs}
                 data-decision="allow"
@@ -227,7 +235,7 @@ export function PermissionRequestCard({
                 disabled={state === 'resolving'}
               >
                 {alwaysSupported ? 'Allow Once' : 'Allow'}
-              </button>
+              </wa-button>
             </div>
           </div>
         </footer>

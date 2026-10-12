@@ -95,48 +95,6 @@
   justify-content: space-between;
   gap: remify(16px);
 }
-.permission-request-card button {
-  min-height: remify(32px);
-  padding: 0 remify(12.8px);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(10.4px);
-  color: var(--wa-color-neutral-on-normal);
-  background: var(--wa-color-surface-default);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--wa-font-size-xs);
-  font-weight: 600;
-}
-.permission-request-card button:hover {
-  background: var(--wa-color-neutral-fill-quiet);
-}
-.permission-request-card button:focus-visible {
-  outline: 2px solid var(--wa-color-text-link);
-  outline-offset: 2px;
-}
-.permission-request-card button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-.permission-request-card .permission-request-card__quiet-action {
-  padding: 0;
-  border: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  background: transparent;
-}
-.permission-request-card .permission-request-card__quiet-action:hover {
-  color: var(--wa-color-neutral-on-normal);
-  background: transparent;
-  text-decoration: underline;
-}
-.permission-request-card .permission-request-card__primary {
-  border-color: var(--wa-color-brand-border-loud);
-  color: var(--wa-color-neutral-on-loud);
-  background: var(--wa-color-brand-fill-loud);
-}
-.permission-request-card .permission-request-card__primary:hover {
-  background: var(--wa-color-brand-on-quiet);
-}
 .permission-request-card__quiet-actions {
   display: flex;
   flex-wrap: wrap;
@@ -173,22 +131,6 @@
 }
 .permission-request-card__timer strong {
   margin-left: 0.3em;
-}
-.permission-request-card .permission-request-card__stop-automation {
-  display: inline-grid;
-  width: remify(32px);
-  min-width: remify(32px);
-  min-height: remify(32px);
-  padding: 0;
-  border-color: transparent;
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-neutral-on-quiet);
-  background: transparent;
-  place-items: center;
-}
-.permission-request-card .permission-request-card__stop-automation:hover {
-  color: var(--wa-color-neutral-on-normal);
-  background: var(--wa-color-neutral-fill-normal);
 }
 .permission-request-card--list[data-resolved='true'] {
   padding-bottom: remify(16px);
@@ -292,7 +234,7 @@
     width: 100%;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .permission-request-card__buttons > button:last-child:nth-child(3) {
+  .permission-request-card__buttons > wa-button:last-child:nth-child(3) {
     grid-column: 1 / -1;
   }
   .permission-request-card__countdown {

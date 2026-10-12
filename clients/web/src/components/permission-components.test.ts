@@ -91,7 +91,7 @@ describe('permission presentation components', () => {
   it('removes always scope when unsupported and exposes popup semantics', () => {
     const markup = String(PermissionRequestPopup({ item: { ...pending, always_allow_supported: false } }));
     expect(markup).toContain('aria-label="Permission request"');
-    expect(markup).toContain('>Allow</button>');
+    expect(markup).toContain('>Allow</wa-button>');
     expect(markup).not.toContain('Always Allow');
   });
 
@@ -111,7 +111,7 @@ describe('permission presentation components', () => {
     expect(top).toMatch(/^<dialog [^>]*tabindex="-1"/);
     expect(inline).toMatch(/^<aside /);
     // Escape activates the popup's client-only Ignore while it is lifted above a modal (HS2-S8K9BG).
-    expect(top).toMatch(new RegExp(`<button [^>]*${TOP_LAYER_DISMISS_ATTRIBUTE}[^>]*>\\s*Ignore`));
+    expect(top).toMatch(new RegExp(`<wa-button [^>]*${TOP_LAYER_DISMISS_ATTRIBUTE}[^>]*>\\s*Ignore`));
     // The in-flow layer is how the AI conversation's foreground places its copy without restyling it (HS2-M2W2DP).
     const flow = String(PermissionRequestPopup({ item: pending, layer: 'flow' }));
     expect(flow).toContain('data-layer="flow"');

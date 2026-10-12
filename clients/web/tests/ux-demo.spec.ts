@@ -7127,8 +7127,10 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();
   const stopAutomation = card.getByRole('button', { name: 'Stop auto-allow countdown' });
   await expect(stopAutomation).toHaveAttribute('title', 'Stop auto-allow countdown for this request');
-  await expect(stopAutomation.locator('[data-lucide="pause"]')).toBeVisible();
-  expect((await stopAutomation.textContent())?.trim()).toBe('');
+  // The icon-only Web Awesome button carries its Lucide glyph in light DOM on the host (HS2-EH5HEP).
+  const stopAutomationHost = card.locator('wa-button.permission-request-card__stop-automation');
+  await expect(stopAutomationHost.locator('[data-lucide="pause"]')).toBeVisible();
+  expect((await stopAutomationHost.textContent())?.trim()).toBe('');
   await expect(card.locator('.permission-request-card__countdown')).toHaveCSS('border-top-style', 'none');
   const [timerBox, denyBox] = await Promise.all([
     card.locator('.permission-request-card__timer').boundingBox(),

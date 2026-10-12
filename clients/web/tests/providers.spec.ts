@@ -13471,7 +13471,10 @@ test('renders exactly once when the long poll announces a permission request', a
     expect(
       await button.evaluate((element) => {
         const rect = element.getBoundingClientRect();
-        return element === document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+        // A Web Awesome button's role lives in its shadow root, so the hit test reports the host.
+        const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2),
+          root = element.getRootNode();
+        return hit === element || (root instanceof ShadowRoot && hit === root.host);
       }),
     ).toBe(true);
   }
@@ -13488,7 +13491,10 @@ test('renders exactly once when the long poll announces a permission request', a
   expect(
     await popup.getByRole('button', { name: 'Always Allow' }).evaluate((element) => {
       const rect = element.getBoundingClientRect();
-      return element === document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      // A Web Awesome button's role lives in its shadow root, so the hit test reports the host.
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2),
+        root = element.getRootNode();
+      return hit === element || (root instanceof ShadowRoot && hit === root.host);
     }),
   ).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-y1hn0d-permission-popup-390.png', fullPage: true });
@@ -13553,7 +13559,10 @@ for (const viewport of [
       expect(
         await button.evaluate((element) => {
           const rect = element.getBoundingClientRect();
-          return element === document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+          // A Web Awesome button's role lives in its shadow root, so the hit test reports the host.
+          const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2),
+            root = element.getRootNode();
+          return hit === element || (root instanceof ShadowRoot && hit === root.host);
         }),
       ).toBe(true);
     }
@@ -13620,7 +13629,10 @@ for (const viewport of [
       expect(
         await button.evaluate((element) => {
           const rect = element.getBoundingClientRect();
-          return element === document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+          // A Web Awesome button's role lives in its shadow root, so the hit test reports the host.
+          const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2),
+            root = element.getRootNode();
+          return hit === element || (root instanceof ShadowRoot && hit === root.host);
         }),
       ).toBe(true);
     }
@@ -23801,13 +23813,17 @@ test('pauses and resumes notifications app-wide from the popup, sidebar, and ban
   expect(await page.evaluate(() => localStorage.getItem('hotsheet.notifications-paused'))).toBeNull();
 
   // Pause again from the sidebar, then resume from the banner.
-  await page.locator('wa-button[data-action="pause-notifications"]').click();
+  await page
+    .locator('wa-button[data-action="pause-notifications"]:not(.permission-request-card__quiet-action)')
+    .click();
   await expect(popup).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Resume notifications' })).toBeVisible();
   await banner.getByRole('button', { name: 'Resume' }).click();
   await expect(banner).toHaveCount(0);
   await expect(popup).toBeVisible();
-  await expect(page.locator('wa-button[data-action="pause-notifications"]')).toBeVisible();
+  await expect(
+    page.locator('wa-button[data-action="pause-notifications"]:not(.permission-request-card__quiet-action)'),
+  ).toBeVisible();
   expect(answers).toBe(0);
 });
 
