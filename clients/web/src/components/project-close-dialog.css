@@ -1,3 +1,5 @@
+/* List-detail grid: a bounded resource column beside a flexible preview. Kerf SplitView collapses to a
+   navigation stack and Grid only lays out equal columns, so neither expresses this asymmetric split. */
 .project-close-dialog__layout {
   display: grid;
   min-width: 0;
@@ -5,10 +7,8 @@
   max-height: min(remify(544px), calc(100vh - remify(288px)));
   grid-template-columns: minmax(remify(224px), remify(288px)) minmax(0, 1fr);
 }
-.project-close-dialog__resources {
-  min-width: 0;
-  overflow: hidden;
-}
+/* Grid items default to their min-content width; let both panes shrink and clip to their tracks. */
+.project-close-dialog__resources,
 .project-close-dialog__detail {
   min-width: 0;
   overflow: hidden;
@@ -23,6 +23,7 @@
   padding: var(--kui-space-l);
   background: var(--hs-terminal-background);
 }
+/* Phone: stack the resource list above the preview at the dialog's 672px device breakpoint. */
 @media (max-width: remify(672px)) {
   .project-close-dialog__layout {
     min-height: remify(304px);
