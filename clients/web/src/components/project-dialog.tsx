@@ -35,91 +35,89 @@ export function ProjectDialog({
   recovery?: UnhealthyServerRecoveryView;
   recoveryBusy?: boolean;
 }) {
+  // Keyed so the render morph never repurposes this dialog for a sibling DialogSurface: opening a project
+  // waits for this exact element's wa-after-hide before presenting ticket setup or HS1 import.
   return (
-    <DialogSurface preferredWidth={remify(768)} viewportGutter={remify(16)}>
-      <wa-dialog
-        data-key="project-dialog"
-        data-project-dialog
-        label="Open project"
-        open={open}
-        data-controlled-open={String(open)}
-      >
-        <form {...REPOSITORY_ACTIONS.openProjectForm.attrs}>
-          <List gap="m">
-            <Text tone="quiet">
-              Select a code checkout. Hot Sheet automatically uses a valid sibling <code>&lt;project&gt;.hs2</code>{' '}
-              ticket store. Override it when the project uses another store.
-            </Text>
-            <div class="project-dialog__path">
-              <wa-input name="project-root" label="Project folder" value={root} required />
-              <wa-button
-                appearance="outlined"
-                type="button"
-                {...PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.attrs}
-                aria-label="Browse for project folder"
-                title="Browse for project folder"
-              >
-                <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
-              </wa-button>
-            </div>
-            <div class="project-dialog__path">
-              <wa-input
-                name="ticket-store"
-                label="Ticket store (optional)"
-                placeholder="Automatically discover &lt;project&gt;.hs2"
-              />
-              <wa-button
-                appearance="outlined"
-                type="button"
-                {...PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.attrs}
-                aria-label="Browse for ticket store"
-                title="Browse for ticket store"
-              >
-                <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
-              </wa-button>
-            </div>
-            <div class="project-dialog__error" role="alert">
-              {error && (
-                <Text flush tone="danger">
-                  {error}
-                </Text>
+    <div class="project-dialog" data-key="project-dialog">
+      <DialogSurface preferredWidth={remify(768)} viewportGutter={remify(16)}>
+        <wa-dialog data-project-dialog label="Open project" open={open} data-controlled-open={String(open)}>
+          <form {...REPOSITORY_ACTIONS.openProjectForm.attrs}>
+            <List gap="m">
+              <Text tone="quiet">
+                Select a code checkout. Hot Sheet automatically uses a valid sibling <code>&lt;project&gt;.hs2</code>{' '}
+                ticket store. Override it when the project uses another store.
+              </Text>
+              <div class="project-dialog__path">
+                <wa-input name="project-root" label="Project folder" value={root} required />
+                <wa-button
+                  appearance="outlined"
+                  type="button"
+                  {...PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.attrs}
+                  aria-label="Browse for project folder"
+                  title="Browse for project folder"
+                >
+                  <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
+                </wa-button>
+              </div>
+              <div class="project-dialog__path">
+                <wa-input
+                  name="ticket-store"
+                  label="Ticket store (optional)"
+                  placeholder="Automatically discover &lt;project&gt;.hs2"
+                />
+                <wa-button
+                  appearance="outlined"
+                  type="button"
+                  {...PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.attrs}
+                  aria-label="Browse for ticket store"
+                  title="Browse for ticket store"
+                >
+                  <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
+                </wa-button>
+              </div>
+              <div class="project-dialog__error" role="alert">
+                {error && (
+                  <Text flush tone="danger">
+                    {error}
+                  </Text>
+                )}
+              </div>
+              {recovery && (
+                <StateBanner
+                  className="project-dialog__server-recovery"
+                  tone="warning"
+                  urgency="alert"
+                  copyLayout="stacked"
+                  actionPlacement="below"
+                  title="Unresponsive local server"
+                  detail={`Hot Sheet cannot verify active work. Recovery first asks process ${recovery.expected.pid} to stop, then force-stops only that exact registered instance if necessary.`}
+                  action={
+                    <wa-button
+                      appearance="outlined"
+                      type="button"
+                      {...PROJECT_LIFECYCLE_ACTIONS.recoverUnhealthyServer.attrs}
+                      disabled={recoveryBusy}
+                    >
+                      {recoveryBusy ? 'Recovering…' : 'Stop server and retry'}
+                    </wa-button>
+                  }
+                />
               )}
-            </div>
-            {recovery && (
-              <StateBanner
-                className="project-dialog__server-recovery"
-                tone="warning"
-                urgency="alert"
-                copyLayout="stacked"
-                actionPlacement="below"
-                title="Unresponsive local server"
-                detail={`Hot Sheet cannot verify active work. Recovery first asks process ${recovery.expected.pid} to stop, then force-stops only that exact registered instance if necessary.`}
-                action={
-                  <wa-button
-                    appearance="outlined"
-                    type="button"
-                    {...PROJECT_LIFECYCLE_ACTIONS.recoverUnhealthyServer.attrs}
-                    disabled={recoveryBusy}
-                  >
-                    {recoveryBusy ? 'Recovering…' : 'Stop server and retry'}
+              <footer>
+                <Row hAlign="right" vAlign="middle" gap="xs">
+                  <wa-button appearance="plain" type="button" {...PROJECT_LIFECYCLE_ACTIONS.cancelOpenProject.attrs}>
+                    Cancel
                   </wa-button>
-                }
-              />
-            )}
-            <footer>
-              <Row hAlign="right" vAlign="middle" gap="xs">
-                <wa-button appearance="plain" type="button" {...PROJECT_LIFECYCLE_ACTIONS.cancelOpenProject.attrs}>
-                  Cancel
-                </wa-button>
-                <wa-button appearance="accent" type="submit">
-                  Open project
-                </wa-button>
-              </Row>
-            </footer>
-          </List>
-        </form>
-      </wa-dialog>
-    </DialogSurface>
+                  <wa-button appearance="accent" type="submit">
+                    Open project
+                  </wa-button>
+                </Row>
+              </footer>
+            </List>
+          </form>
+        </wa-dialog>
+      </DialogSurface>
+    </div>
   );
 }
 
