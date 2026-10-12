@@ -1282,7 +1282,7 @@ test('sends special keys and sticky modifiers from the phone terminal key bar (H
   await setKeyboard(420);
   await expect(keyBar).toBeVisible();
   await expect(keyBar.locator('.terminal-key-bar__group')).toHaveCount(3);
-  await expect(keyBar.locator('[data-component="toolbar-control-group"]')).toHaveCount(0);
+  await expect(keyBar.locator('[data-component="toolbar-control-group"]')).toHaveCount(3);
   await expect(keyBar.locator('.terminal-key-bar__group').first()).toHaveAttribute('aria-label', 'Function row');
   expect(await keyBar.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
   const sent = () =>

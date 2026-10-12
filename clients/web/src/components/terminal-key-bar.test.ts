@@ -8,10 +8,11 @@ describe('TerminalKeyBar', () => {
     const markup = String(TerminalKeyBar({ modifiers: NO_TERMINAL_MODIFIERS }));
     expect(markup).toContain('role="toolbar" aria-label="Terminal keys"');
     expect(markup).toContain('class="terminal-key-bar__group" role="group" aria-label="Function row"');
+    // Each app-owned group slot holds a Kerf ToolbarControlGroup of native buttons (HS2-NQZ2EE).
+    expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(3);
     expect(markup).toContain('aria-label="Escape, tab, and modifier keys"');
     expect(markup).toContain('aria-label="Arrow keys"');
     expect(markup.indexOf('aria-label="Function row"')).toBeLessThan(markup.indexOf('aria-label="Arrow keys"'));
-    expect(markup).not.toContain('data-component="toolbar-control-group"');
     expect(markup).toContain('data-key="Escape"');
     expect(markup).toContain('data-key="ArrowRight"');
     expect(markup).not.toContain('aria-label="Clipboard"');
@@ -29,6 +30,7 @@ describe('TerminalKeyBar', () => {
     expect(markup).toContain('aria-label="Function keys"');
     expect(markup).toContain('data-key="F12"');
     expect(markup).toContain('aria-label="Alt (locked)"');
+    expect(markup).toContain('data-lucide="lock"');
     expect(markup).not.toContain('data-key="ArrowRight"');
     // HS2-FRB545: the Fn row's clipboard group follows the modifiers, before the navigation keys.
     expect(markup).toContain('aria-label="Clipboard"');

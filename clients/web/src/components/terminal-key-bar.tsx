@@ -1,7 +1,9 @@
 import './terminal-key-bar.css';
 
+import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ClipboardPaste, Copy } from 'lucide';
+import { ToolbarControlGroup, type ToolbarControlGroupProps } from '@kerfjs/ui/toolbar-control-group';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ClipboardPaste, Copy, Lock } from 'lucide';
 
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import type { TerminalModifier, TerminalModifiers, TerminalSpecialKey } from '../terminal-keys';
@@ -52,8 +54,35 @@ function ModifierButton({ modifier, modifiers }: { modifier: TerminalModifier; m
       aria-pressed={String(modifiers[modifier] !== 'off')}
       aria-label={`${MODIFIER_LABEL[modifier]}${modifiers[modifier] === 'locked' ? ' (locked)' : ''}`}
     >
+      {/* A locked modifier carries a lock glyph beyond the pressed chrome, so once and locked read differently. */}
+      {modifiers[modifier] === 'locked' && <LucideIcon size="xs" icon={Lock} name="lock" />}
       {MODIFIER_LABEL[modifier]}
     </button>
+  );
+}
+
+/**
+ * One key group: a Kerf ToolbarControlGroup in an inline (forced-dark) Kerf FloatingToolbar, inside an
+ * app-owned, non-shrinking slot of the bar's shared scroller, so the Fn slot can stay sticky while the
+ * other groups scroll beneath it.
+ */
+function KeyGroup({
+  label,
+  content = 'text',
+  children,
+}: {
+  label: string;
+  content?: 'text' | 'icon' | 'mixed';
+  children: ToolbarControlGroupProps['children'];
+}) {
+  return (
+    <span class="terminal-key-bar__group" role="group" aria-label={label}>
+      <FloatingToolbar placement="inline" label={label}>
+        <ToolbarControlGroup shape="pill" size="compact" density="tight" content={content}>
+          {children}
+        </ToolbarControlGroup>
+      </FloatingToolbar>
+    </span>
   );
 }
 
@@ -72,7 +101,7 @@ export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBa
       role="toolbar"
       aria-label="Terminal keys"
     >
-      <div class="terminal-key-bar__group" role="group" aria-label="Function row" data-active={String(functionRow)}>
+      <KeyGroup label="Function row">
         <button
           type="button"
           tabindex="-1"
@@ -82,8 +111,11 @@ export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBa
         >
           Fn
         </button>
-      </div>
-      <div class="terminal-key-bar__group" role="group" aria-label="Escape, tab, and modifier keys">
+      </KeyGroup>
+      <KeyGroup
+        label="Escape, tab, and modifier keys"
+        content={Object.values(modifiers).includes('locked') ? 'mixed' : 'text'}
+      >
         <KeyButton keyName="Escape" label="Escape">
           Esc
         </KeyButton>
@@ -93,10 +125,10 @@ export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBa
         <ModifierButton modifier="ctrl" modifiers={modifiers} />
         <ModifierButton modifier="alt" modifiers={modifiers} />
         {functionRow && <ModifierButton modifier="shift" modifiers={modifiers} />}
-      </div>
+      </KeyGroup>
       {functionRow ? (
         <>
-          <div class="terminal-key-bar__group" role="group" aria-label="Clipboard">
+          <KeyGroup label="Clipboard" content="icon">
             <button
               type="button"
               tabindex="-1"
@@ -115,30 +147,30 @@ export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBa
             >
               <LucideIcon size="s" icon={ClipboardPaste} name="clipboard-paste" />
             </button>
-          </div>
-          <div class="terminal-key-bar__group" role="group" aria-label="Navigation keys">
+          </KeyGroup>
+          <KeyGroup label="Navigation keys">
             {NAVIGATION.map((item) => (
               <KeyButton keyName={item.key} label={item.label}>
                 {item.legend}
               </KeyButton>
             ))}
-          </div>
-          <div class="terminal-key-bar__group" role="group" aria-label="Function keys">
+          </KeyGroup>
+          <KeyGroup label="Function keys">
             {FUNCTION_KEYS.map((key) => (
               <KeyButton keyName={key} label={key}>
                 {key}
               </KeyButton>
             ))}
-          </div>
+          </KeyGroup>
         </>
       ) : (
-        <div class="terminal-key-bar__group" role="group" aria-label="Arrow keys">
+        <KeyGroup label="Arrow keys" content="icon">
           {ARROWS.map((arrow) => (
             <KeyButton keyName={arrow.key} label={arrow.label}>
               <LucideIcon icon={arrow.icon} name={arrow.name} />
             </KeyButton>
           ))}
-        </div>
+        </KeyGroup>
       )}
     </div>
   );
