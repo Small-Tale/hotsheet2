@@ -14974,10 +14974,13 @@ for (const viewport of [
         return route.fulfill({ json: { items, counts: { total: items.length } } });
       }
       if (url.searchParams.has('text')) return route.fallback();
+      const rows = url.pathname.includes('/other-checkout/')
+        ? [{ ...row, id: 'other', native_id: 'other', slug: 'HS2-OTHER1', title: 'Other ticket' }]
+        : largeRows;
+      // `page_size` reads receive the page envelope (HS2-5T7QHE); the profile must feed the
+      // same paged contract the app ships with, or its large project never renders.
       return route.fulfill({
-        json: url.pathname.includes('/other-checkout/')
-          ? [{ ...row, id: 'other', native_id: 'other', slug: 'HS2-OTHER1', title: 'Other ticket' }]
-          : largeRows,
+        json: url.searchParams.has('page_size') ? { items: rows, counts: { total: rows.length } } : rows,
       });
     });
     let connectionId: string | undefined;
@@ -15019,7 +15022,8 @@ for (const viewport of [
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Tracing.start', {
       transferMode: 'ReturnAsStream',
-      categories: 'devtools.timeline,blink.user_timing,v8,loading,disabled-by-default-devtools.timeline',
+      categories:
+        'devtools.timeline,blink.user_timing,v8,loading,disabled-by-default-devtools.timeline,disabled-by-default-v8.cpu_profiler',
       options: 'sampling-frequency=10000',
     });
     const windows: Array<{ name: string; elapsed_ms: number }> = [];
