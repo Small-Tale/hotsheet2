@@ -1,8 +1,10 @@
+/* The positioning box the notification count badge anchors to inside a SegmentedControl choice. */
 .view-mode-switcher__content {
   position: relative;
   display: inline-flex;
   align-items: center;
 }
+/* App-owned notification count badge at the icon corner (HS2-X9EMBF geometry); SegmentedControl has no badge slot. */
 .view-mode-switcher__badge {
   position: absolute;
   top: remify(-12px);
@@ -19,6 +21,7 @@
   line-height: 1;
   place-items: center;
 }
+/* The app-owned half-star box that the fill clips into. */
 .workspace-header__up-next-icon {
   position: relative;
   display: inline-block;
@@ -26,7 +29,8 @@
   height: 1rem;
 }
 .workspace-header__utility-group > button.workspace-header__up-next-button[aria-pressed='true'] {
-  /* The filled star already shows its pressed state; keep Kerf's keyboard focus ring. */
+  /* The filled star already shows its pressed state; keep Kerf's keyboard focus ring. This overrides
+     Kerf-rendered button chrome until ToolbarControlGroup can opt a toggle out of selected chrome (KF-GGDABA). */
   border-color: transparent;
   background: transparent;
   box-shadow: none;
@@ -38,17 +42,13 @@
   inset: 0;
   clip-path: inset(0 50% 0 0);
 }
+/* The standalone Empty Trash wa-button sizes to its label inside TabBar's end zone. */
 wa-button.workspace-header__text-action::part(base) {
   width: auto;
   padding-inline: var(--wa-space-s);
   white-space: nowrap;
 }
-.workspace-header__text-action-label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--wa-space-2xs);
-  white-space: nowrap;
-}
+/* The sort Select's selected value takes the toolbar control color through Kerf's public token. */
 .workspace-header__sort-group {
   --kui-select-selected-color: var(--kui-toolbar-control-color);
 }

@@ -138,10 +138,8 @@ export function EmptyTrashAction() {
       variant="danger"
       {...TICKET_SELECTION_ACTIONS.openEmptyTrash.attrs}
     >
-      <span class="workspace-header__text-action-label">
-        <LucideIcon icon={Trash2} name="trash-2" />
-        <span>Empty Trash</span>
-      </span>
+      <LucideIcon slot="start" icon={Trash2} name="trash-2" />
+      Empty Trash
     </wa-button>
   );
 }

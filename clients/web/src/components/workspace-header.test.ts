@@ -204,13 +204,10 @@ describe('WorkspaceHeader', () => {
     expect(emptyTrash).toMatch(/<wa-button[^>]*class="workspace-header__text-action"/);
     expect(emptyTrash).toContain('variant="danger"');
     expect(emptyTrash).toContain('data-action="open-empty-trash"');
-    expect(emptyTrash).toContain('class="workspace-header__text-action-label"');
-    expect(emptyTrash).toContain('data-lucide="trash-2"');
-    expect(emptyTrash).toContain('<span>Empty Trash</span>');
+    // The icon uses wa-button's documented start slot, so no app label row is needed (HS2-8G5C1P).
+    expect(emptyTrash).toMatch(/<svg slot="start" data-lucide="trash-2"[^>]*>.*<\/svg>Empty Trash<\/wa-button>/);
     expect(headerCss).toContainSource('wa-button.workspace-header__text-action::part(base) { width: auto;');
-    expect(headerCss).toContainSource(
-      '.workspace-header__text-action-label { display: inline-flex; align-items: center;',
-    );
+    expect(headerCss).not.toContain('.workspace-header__text-action-label');
     expect(shellCss).not.toContain('.kui-toolbar:has(.ticket-search-field');
   });
 
