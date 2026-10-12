@@ -37,7 +37,13 @@ export function ProjectDialog({
 }) {
   return (
     <DialogSurface preferredWidth={remify(768)} viewportGutter={remify(16)}>
-      <wa-dialog data-project-dialog label="Open project" open={open} data-controlled-open={String(open)}>
+      <wa-dialog
+        data-key="project-dialog"
+        data-project-dialog
+        label="Open project"
+        open={open}
+        data-controlled-open={String(open)}
+      >
         <form {...REPOSITORY_ACTIONS.openProjectForm.attrs}>
           <List gap="m">
             <Text tone="quiet">

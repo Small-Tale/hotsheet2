@@ -518,6 +518,8 @@ test('activates a passive tab after closing the active project, then opens again
       await expect(page.locator('[data-component="quick-ticket-composer"]')).toBeHidden();
     }
   }
+  // The closed Open project dialog must not inherit the just-closed confirmation dialog's open element.
+  expect(await page.locator('wa-dialog[data-project-dialog][open]').count()).toBe(0);
   await expect(page.getByRole('button', { name: 'Open project', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Open project', exact: true }).click();
   await page.locator('[data-project-dialog]').getByRole('textbox', { name: 'Project folder' }).fill('/work/alpha');

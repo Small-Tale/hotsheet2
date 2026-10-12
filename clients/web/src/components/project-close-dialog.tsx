@@ -138,6 +138,7 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
       bodyInset="none"
     >
       <wa-dialog
+        data-key="project-close-dialog"
         class="project-close-dialog"
         {...TERMINALS_TARGETS.projectCloseDialog.attrs}
         data-project-id={state.projectId}
