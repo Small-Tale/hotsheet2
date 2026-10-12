@@ -2,7 +2,9 @@ import './attachment-gallery.css';
 
 import { px } from '@kerfjs/ui/css-values';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -657,18 +659,20 @@ export function AttachmentGallery({
         {markup && (
           <aside class="attachment-gallery__notes" aria-label="Annotation notes">
             <div class="attachment-gallery__notes-list" role="group" aria-label="Annotations">
-              {annotations.length === 0 && <p>No annotations yet. Draw a mark to add a note.</p>}
-              {annotations.map((annotation, annotationIndex) => (
-                <button
-                  type="button"
-                  {...ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryAnnotation.attrs}
-                  data-annotation-id={annotation.id}
-                  aria-pressed={String(annotation.id === selectedAnnotation)}
-                >
-                  <span>Annotation {annotationNumberOffset + annotationIndex + 1}</span>
-                  <span>{annotation.text || 'No note'}</span>
-                </button>
-              ))}
+              <List gap="2xs">
+                {annotations.length === 0 && <p>No annotations yet. Draw a mark to add a note.</p>}
+                {annotations.map((annotation, annotationIndex) => (
+                  <button
+                    type="button"
+                    {...ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryAnnotation.attrs}
+                    data-annotation-id={annotation.id}
+                    aria-pressed={String(annotation.id === selectedAnnotation)}
+                  >
+                    <span>Annotation {annotationNumberOffset + annotationIndex + 1}</span>
+                    <span>{annotation.text || 'No note'}</span>
+                  </button>
+                ))}
+              </List>
             </div>
             {!selectedEditableAnnotation && annotations.length > 0 && <p>Select an annotation to edit its note.</p>}
             {selectedEditableAnnotation && (
@@ -684,28 +688,30 @@ export function AttachmentGallery({
                   </textarea>
                 </label>
                 <div class="attachment-gallery__intent-list" role="group" aria-label="Annotation intents">
-                  {(['comment', 'bug', 'change', 'insert', 'remove', 'move', 'question'] as const).map((intent) => {
-                    const fallback = annotationDefaultIntent(selectedEditableAnnotation),
-                      chosen = selectedEditableAnnotation.intents?.length
-                        ? selectedEditableAnnotation.intents
-                        : [fallback];
-                    return (
-                      <button
-                        type="button"
-                        {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryIntent.attrs}
-                        data-intent={intent}
-                        aria-pressed={String(chosen.includes(intent))}
-                        title={
-                          intent === fallback && !selectedEditableAnnotation.intents?.length
-                            ? 'Default intent'
-                            : undefined
-                        }
-                      >
-                        {intent}
-                        {intent === fallback && !selectedEditableAnnotation.intents?.length ? ' (default)' : ''}
-                      </button>
-                    );
-                  })}
+                  <Row gap="2xs" wrap>
+                    {(['comment', 'bug', 'change', 'insert', 'remove', 'move', 'question'] as const).map((intent) => {
+                      const fallback = annotationDefaultIntent(selectedEditableAnnotation),
+                        chosen = selectedEditableAnnotation.intents?.length
+                          ? selectedEditableAnnotation.intents
+                          : [fallback];
+                      return (
+                        <button
+                          type="button"
+                          {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryIntent.attrs}
+                          data-intent={intent}
+                          aria-pressed={String(chosen.includes(intent))}
+                          title={
+                            intent === fallback && !selectedEditableAnnotation.intents?.length
+                              ? 'Default intent'
+                              : undefined
+                          }
+                        >
+                          {intent}
+                          {intent === fallback && !selectedEditableAnnotation.intents?.length ? ' (default)' : ''}
+                        </button>
+                      );
+                    })}
+                  </Row>
                 </div>
                 {selectedEditableAnnotation.shape?.type === 'freehand' && (
                   <label class="attachment-gallery__closed-toggle">

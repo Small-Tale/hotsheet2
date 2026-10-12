@@ -117,7 +117,9 @@ describe('AttachmentGallery', () => {
     const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(css).not.toMatch(/\.attachment-gallery__toolbar \{[^}]*padding:/);
-    expect(css).toMatchSource(/__toolbar \{ --kui-toolbar-trailing-gap: var\(--kui-space-m\)/);
+    expect(css).toMatchSource(/__toolbar \{[^}]*--kui-toolbar-trailing-gap: var\(--kui-space-m\)/);
+    // One toolbar block, not a duplicate selector (HS2-R30PTA).
+    expect(css.match(/^\.attachment-gallery__toolbar \{/gm)).toHaveLength(1);
     expect(css).not.toContain('.kui-toolbar__trailing');
     expect(css).toMatch(/__canvas \{[^}]*padding: var\(--kui-space-l\)/);
     expect(css).toMatchSource(
