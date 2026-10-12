@@ -866,6 +866,7 @@ export const demoCatalog: DemoCategory[] = [
         'App-wide status that notifications are paused, with the waiting request count and Resume.',
         'feature-floor',
         true,
+        ['shell-banner'],
       ),
       demo(
         'provider-icon',

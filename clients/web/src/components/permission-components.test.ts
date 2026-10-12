@@ -268,6 +268,7 @@ describe('notification pause controls (HS2-QYA9SC)', () => {
     expect(banner).toContain('Notifications paused');
     expect(banner).toContain('2 permission requests waiting.');
     expect(banner).toContain('data-action="resume-notifications"');
+    expect(banner).toContain('class="shell-banner" data-component="notifications-paused-banner" data-tone="info"');
     expect(banner).toContain('data-lucide="bell-off"');
   });
 });

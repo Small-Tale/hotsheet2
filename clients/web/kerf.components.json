@@ -5384,9 +5384,9 @@
       },
       "boundaries": {
         "rootClass": null,
-        "publicClasses": ["notifications-paused-banner"],
+        "publicClasses": [],
         "publicTokens": [],
-        "placeableClasses": ["notifications-paused-banner"]
+        "placeableClasses": []
       },
       "accessibility": {
         "obligations": []

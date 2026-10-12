@@ -940,9 +940,7 @@
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific NotificationsPausedBanner behavior."
       ],
-      "publicClasses": [
-        "notifications-paused-banner"
-      ],
+      "publicClasses": [],
       "publicTokens": [],
       "source": "src/components/notifications-paused-banner.tsx",
       "geometry": {
