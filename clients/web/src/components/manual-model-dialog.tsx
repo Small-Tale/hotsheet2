@@ -24,34 +24,36 @@ export interface ManualModelDialogState {
 export function ManualModelDialog({ state }: { state?: ManualModelDialogState }) {
   if (!state) return <></>;
   return (
-    <DialogSurface preferredWidth={remify(448)} viewportGutter={remify(16)}>
-      <wa-dialog
-        data-key="manual-model-dialog"
-        class="manual-model-dialog"
-        {...COMMANDS_AND_AI_TARGETS.manualModelDialog.attrs}
-        label="Other model"
-        aria-label="Other model"
-        open={Boolean(state) || undefined}
-        data-controlled-open={String(Boolean(state))}
-      >
-        <form {...COMMANDS_AND_AI_ACTIONS.submitManualModel.attrs}>
-          <List className="manual-model-dialog__form" gap="l">
-            <Text tone="quiet">Enter the exact model identifier accepted by {state.providerName}.</Text>
-            <wa-input name="manual-model" label="Model identifier" value={state.value} required autofocus />
-            <footer>
-              <Row vAlign="middle" gap="xs">
-                <Spacer flex />
-                <wa-button appearance="plain" type="button" {...COMMANDS_AND_AI_ACTIONS.cancelManualModel.attrs}>
-                  Cancel
-                </wa-button>
-                <wa-button appearance="accent" type="submit">
-                  Use model
-                </wa-button>
-              </Row>
-            </footer>
-          </List>
-        </form>
-      </wa-dialog>
-    </DialogSurface>
+    <div data-key="manual-model-dialog">
+      <DialogSurface preferredWidth={remify(448)} viewportGutter={remify(16)}>
+        <wa-dialog
+          data-key="manual-model-dialog"
+          class="manual-model-dialog"
+          {...COMMANDS_AND_AI_TARGETS.manualModelDialog.attrs}
+          label="Other model"
+          aria-label="Other model"
+          open={Boolean(state) || undefined}
+          data-controlled-open={String(Boolean(state))}
+        >
+          <form {...COMMANDS_AND_AI_ACTIONS.submitManualModel.attrs}>
+            <List className="manual-model-dialog__form" gap="l">
+              <Text tone="quiet">Enter the exact model identifier accepted by {state.providerName}.</Text>
+              <wa-input name="manual-model" label="Model identifier" value={state.value} required autofocus />
+              <footer>
+                <Row vAlign="middle" gap="xs">
+                  <Spacer flex />
+                  <wa-button appearance="plain" type="button" {...COMMANDS_AND_AI_ACTIONS.cancelManualModel.attrs}>
+                    Cancel
+                  </wa-button>
+                  <wa-button appearance="accent" type="submit">
+                    Use model
+                  </wa-button>
+                </Row>
+              </footer>
+            </List>
+          </form>
+        </wa-dialog>
+      </DialogSurface>
+    </div>
   );
 }

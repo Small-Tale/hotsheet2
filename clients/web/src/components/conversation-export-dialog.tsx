@@ -232,37 +232,39 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
   );
 
   return (
-    <DialogSurface preferredWidth={remify(624)} viewportGutter={remify(16)} maxHeight={remify(704)}>
-      <wa-dialog
-        data-key="conversation-export-dialog"
-        class="conversation-export-dialog"
-        {...COMMANDS_AND_AI_TARGETS.conversationExportDialog.attrs}
-        data-step={step}
-        data-navigation={navigation}
-        label="Save conversation"
-        open
-        with-footer
-      >
-        <ContentTransition
-          active={active}
-          style={transitionStyle}
-          direction={direction}
-          label="Save conversation navigation"
-          a={scopeScreen}
-          b={bundleScreen}
-        />
-        <ContentTransition
-          active={active}
-          style="crossfade"
-          direction={direction}
-          region="footer"
-          sideLayout="actions"
-          label="Save conversation actions"
-          a={scopeActions}
-          b={bundleActions}
-        />
-      </wa-dialog>
-    </DialogSurface>
+    <div data-key="conversation-export-dialog">
+      <DialogSurface preferredWidth={remify(624)} viewportGutter={remify(16)} maxHeight={remify(704)}>
+        <wa-dialog
+          data-key="conversation-export-dialog"
+          class="conversation-export-dialog"
+          {...COMMANDS_AND_AI_TARGETS.conversationExportDialog.attrs}
+          data-step={step}
+          data-navigation={navigation}
+          label="Save conversation"
+          open
+          with-footer
+        >
+          <ContentTransition
+            active={active}
+            style={transitionStyle}
+            direction={direction}
+            label="Save conversation navigation"
+            a={scopeScreen}
+            b={bundleScreen}
+          />
+          <ContentTransition
+            active={active}
+            style="crossfade"
+            direction={direction}
+            region="footer"
+            sideLayout="actions"
+            label="Save conversation actions"
+            a={scopeActions}
+            b={bundleActions}
+          />
+        </wa-dialog>
+      </DialogSurface>
+    </div>
   );
 }
 

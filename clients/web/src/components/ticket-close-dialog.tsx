@@ -42,122 +42,124 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
     (candidate) => duplicateTargetKey(candidate) !== duplicateTargetKey(state.source),
   );
   return (
-    <DialogSurface preferredWidth={remify(544)} viewportGutter={remify(16)}>
-      <wa-dialog
-        data-key="ticket-close-dialog"
-        class="ticket-close-dialog"
-        open
-        {...TICKET_SELECTION_TARGETS.ticketCloseDialog.attrs}
-        label={`Close ${state.source.slug}`}
-      >
-        <form {...TICKET_SELECTION_ACTIONS.submitTicketClose.attrs}>
-          <List gap="m">
-            <Text flush tone="quiet">
-              Record why this ticket is being closed so the outcome remains searchable and unambiguous.
-            </Text>
-            <Select
-              name="ticket-close-reason"
-              value={state.reason}
-              label="Close as"
-              choices={TICKET_CLOSE_REASON_CHOICES}
-            />
-            {duplicate && (
-              <section aria-label="Duplicate target">
-                <List gap="xs">
-                  <wa-input
-                    name="ticket-close-target-search"
-                    label="Existing ticket"
-                    placeholder="Search by ticket number or title"
-                    value={state.query}
-                  >
-                    <LucideIcon
-                      slot="start"
-                      icon={Search}
-                      name="search"
-                      size={16}
-                      color={uiColor('neutral-on-quiet')}
-                    />
-                  </wa-input>
-                  {state.selected && (
-                    <StateBanner
-                      tone="success"
-                      icon={<LucideIcon icon={CheckCircle2} name="check-circle-2" />}
-                      title={state.selected.slug}
-                      badge={state.selected.projectName}
-                      detail={state.selected.title}
-                      copyLayout="stacked"
-                      action={
-                        <wa-button
-                          type="button"
-                          appearance="plain"
-                          size="small"
-                          {...TICKET_SELECTION_ACTIONS.clearTicketCloseTarget.attrs}
-                        >
-                          Change
-                        </wa-button>
-                      }
-                    />
-                  )}
-                  {!state.selected && Boolean(state.query.trim()) && (
-                    <div
-                      class="ticket-close-dialog__results"
-                      aria-label="Matching tickets"
-                      aria-busy={String(Boolean(state.searching))}
+    <div data-key="ticket-close-dialog">
+      <DialogSurface preferredWidth={remify(544)} viewportGutter={remify(16)}>
+        <wa-dialog
+          data-key="ticket-close-dialog"
+          class="ticket-close-dialog"
+          open
+          {...TICKET_SELECTION_TARGETS.ticketCloseDialog.attrs}
+          label={`Close ${state.source.slug}`}
+        >
+          <form {...TICKET_SELECTION_ACTIONS.submitTicketClose.attrs}>
+            <List gap="m">
+              <Text flush tone="quiet">
+                Record why this ticket is being closed so the outcome remains searchable and unambiguous.
+              </Text>
+              <Select
+                name="ticket-close-reason"
+                value={state.reason}
+                label="Close as"
+                choices={TICKET_CLOSE_REASON_CHOICES}
+              />
+              {duplicate && (
+                <section aria-label="Duplicate target">
+                  <List gap="xs">
+                    <wa-input
+                      name="ticket-close-target-search"
+                      label="Existing ticket"
+                      placeholder="Search by ticket number or title"
+                      value={state.query}
                     >
-                      {candidates.map((candidate) => (
-                        <ListItem
-                          action="select-ticket-close-target"
-                          itemId={duplicateTargetKey(candidate)}
-                          icon={<LucideIcon icon={CopyX} name="copy-x" />}
-                          label={
-                            <>
-                              {candidate.slug}{' '}
-                              <Text variant="span" size="compact" tone="quiet">
-                                {candidate.projectName}
+                      <LucideIcon
+                        slot="start"
+                        icon={Search}
+                        name="search"
+                        size={16}
+                        color={uiColor('neutral-on-quiet')}
+                      />
+                    </wa-input>
+                    {state.selected && (
+                      <StateBanner
+                        tone="success"
+                        icon={<LucideIcon icon={CheckCircle2} name="check-circle-2" />}
+                        title={state.selected.slug}
+                        badge={state.selected.projectName}
+                        detail={state.selected.title}
+                        copyLayout="stacked"
+                        action={
+                          <wa-button
+                            type="button"
+                            appearance="plain"
+                            size="small"
+                            {...TICKET_SELECTION_ACTIONS.clearTicketCloseTarget.attrs}
+                          >
+                            Change
+                          </wa-button>
+                        }
+                      />
+                    )}
+                    {!state.selected && Boolean(state.query.trim()) && (
+                      <div
+                        class="ticket-close-dialog__results"
+                        aria-label="Matching tickets"
+                        aria-busy={String(Boolean(state.searching))}
+                      >
+                        {candidates.map((candidate) => (
+                          <ListItem
+                            action="select-ticket-close-target"
+                            itemId={duplicateTargetKey(candidate)}
+                            icon={<LucideIcon icon={CopyX} name="copy-x" />}
+                            label={
+                              <>
+                                {candidate.slug}{' '}
+                                <Text variant="span" size="compact" tone="quiet">
+                                  {candidate.projectName}
+                                </Text>
+                              </>
+                            }
+                            description={
+                              <Text variant="span" wrap="truncate">
+                                {candidate.title}
                               </Text>
-                            </>
-                          }
-                          description={
-                            <Text variant="span" wrap="truncate">
-                              {candidate.title}
-                            </Text>
-                          }
-                          multiline
-                        />
-                      ))}
-                      {!state.searching && candidates.length === 0 && <Text tone="quiet">No matching tickets.</Text>}
-                    </div>
-                  )}
-                  <Text flush size="compact" tone="quiet">
-                    The selected ticket becomes the canonical target. This relationship is stored as structured
-                    duplicate metadata.
-                  </Text>
-                </List>
-              </section>
-            )}
-            <div class="ticket-close-dialog__error" role="alert">
-              {(state.error || validation) && (
-                <Text flush size="compact" tone="danger">
-                  {state.error || validation}
-                </Text>
+                            }
+                            multiline
+                          />
+                        ))}
+                        {!state.searching && candidates.length === 0 && <Text tone="quiet">No matching tickets.</Text>}
+                      </div>
+                    )}
+                    <Text flush size="compact" tone="quiet">
+                      The selected ticket becomes the canonical target. This relationship is stored as structured
+                      duplicate metadata.
+                    </Text>
+                  </List>
+                </section>
               )}
-            </div>
-            <Row hAlign="right" vAlign="middle" gap="xs">
-              <wa-button
-                type="button"
-                {...TICKET_SELECTION_ACTIONS.cancelTicketClose.attrs}
-                appearance="outlined"
-                disabled={state.submitting}
-              >
-                Cancel
-              </wa-button>
-              <wa-button type="submit" variant="brand" disabled={Boolean(validation) || state.submitting}>
-                {state.submitting ? 'Closing…' : duplicate ? 'Mark as duplicate' : 'Close ticket'}
-              </wa-button>
-            </Row>
-          </List>
-        </form>
-      </wa-dialog>
-    </DialogSurface>
+              <div class="ticket-close-dialog__error" role="alert">
+                {(state.error || validation) && (
+                  <Text flush size="compact" tone="danger">
+                    {state.error || validation}
+                  </Text>
+                )}
+              </div>
+              <Row hAlign="right" vAlign="middle" gap="xs">
+                <wa-button
+                  type="button"
+                  {...TICKET_SELECTION_ACTIONS.cancelTicketClose.attrs}
+                  appearance="outlined"
+                  disabled={state.submitting}
+                >
+                  Cancel
+                </wa-button>
+                <wa-button type="submit" variant="brand" disabled={Boolean(validation) || state.submitting}>
+                  {state.submitting ? 'Closing…' : duplicate ? 'Mark as duplicate' : 'Close ticket'}
+                </wa-button>
+              </Row>
+            </List>
+          </form>
+        </wa-dialog>
+      </DialogSurface>
+    </div>
   );
 }
