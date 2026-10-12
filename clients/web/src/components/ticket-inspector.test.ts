@@ -531,13 +531,13 @@ describe('TicketInspector', () => {
     // Fill allocation centers each tab; the icon-to-name gap is the public layout token.
     expect(inspectorCss).toMatch(/\.ticket-inspector__tabs-frame \{[^}]*--kui-layout-item-gap: var\(--kui-space-2xs\)/);
     expect(inspectorCss).not.toMatch(/\.kui-app-tab__select \{/);
+    // Each direct child sits 8px from the edge through the column's own inline padding (HS2-KZ646H); headers
+    // get a 1px transparent border + 8px padding (17px text) and bordered surfaces own their border+padding
+    // at the 8px column — no negative margins and no child-margin rule (HS2-R64ETQ).
     expect(panelCss).toMatch(
-      /\.ticket-inspector-panel \{[^}]*padding: 0 0 var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-l\);/,
+      /\.ticket-inspector-panel \{[^}]*padding: 0 var\(--kui-space-xs\) var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-l\);/,
     );
-    // Each direct child sits 8px from the edge with no border/padding of its own; headers get a 1px
-    // transparent border + 8px padding (17px text) and bordered surfaces own their border+padding at the
-    // 8px column — no negative margins anywhere (HS2-R64ETQ).
-    expect(panelCss).toMatchSource(/\.ticket-inspector-panel > \* \{ margin-inline: var\(--kui-space-xs\); \}/);
+    expect(panelCss).not.toContain('> *');
     // Each tab panel owns its own header inset (HS2-MGVE50); Kerf ListHeader owns the Timeline and
     // Attachments headers (HS2-52D1JZ, HS2-QK4HES).
     for (const file of ['ticket-code-review.css']) {

@@ -1,28 +1,22 @@
 /* TicketInspectorPanel (HS2-MGVE50): the scrolling content column every inspector tab panel composes.
-   Kerf 8px-grid inset model (HS2-EQEGGG): the column owns no inline padding; each direct child sits 8px
-   from the inspector edge and owns its own border and padding (HS2-R64ETQ), so a bordered surface's
-   border is 8px from the edge and its text 17px. The composing panels style their own markup. */
+   Kerf 8px-grid inset model (HS2-EQEGGG): each child sits 8px from the inspector edge and owns its
+   own border and padding (HS2-R64ETQ). A Kerf List would express this stack, but its rootAttributes
+   cannot carry the panels' ARIA and drop-target attributes (KF-DNZJCG).
+   The panel only clips sideways overflow; the inspector's Pane content scrolls (HS2-RWGQWN). */
 .ticket-inspector-panel {
   --kui-layout-inline-margin: 0;
   display: grid;
   width: 100%;
   min-width: 0;
   min-height: 0;
-  padding: 0 0 var(--kui-space-xs);
-  /* The inspector's Pane content scrolls (HS2-RWGQWN); a panel only clips sideways overflow. */
+  padding: 0 var(--kui-space-xs) var(--kui-space-xs);
   overflow-x: hidden;
   align-content: start;
   gap: var(--kui-space-l);
 }
-.ticket-inspector-panel > * {
-  margin-inline: var(--kui-space-xs);
-}
-/* The reader modal's generous inset replaces the sidebar's 8px child margin. */
+/* The reader modal's generous inset replaces the sidebar's 8px column inset. */
 .ticket-inspector-panel--reader {
   padding: remify(20px) remify(32px) remify(32px);
-}
-.ticket-inspector-panel--reader > * {
-  margin-inline: 0;
 }
 @media (max-width: remify(768px)) {
   .ticket-inspector-panel--reader {
