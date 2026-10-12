@@ -1,5 +1,6 @@
 import './content-transition.css';
 
+import { Row } from '@kerfjs/ui/row';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
 export type ContentTransitionSide = 'a' | 'b';
@@ -27,6 +28,15 @@ export function ContentTransition({
   region?: 'content' | 'label' | 'footer';
   sideLayout?: ContentTransitionSideLayout;
 }) {
+  // Action-row sides are a Kerf Row: end-aligned buttons that wrap at narrow widths (HS2-29Q3XG, HS2-5A766Z).
+  const layout = (content: SafeHtml) =>
+    sideLayout === 'actions' ? (
+      <Row hAlign="right" vAlign="middle" gap="xs" wrap>
+        {content}
+      </Row>
+    ) : (
+      content
+    );
   return (
     <section
       class="content-transition"
@@ -46,7 +56,7 @@ export function ContentTransition({
         aria-hidden={active === 'a' ? undefined : 'true'}
         inert={active === 'a' ? undefined : true}
       >
-        {a}
+        {layout(a)}
       </div>
       <div
         class="content-transition__side"
@@ -55,7 +65,7 @@ export function ContentTransition({
         aria-hidden={active === 'b' ? undefined : 'true'}
         inert={active === 'b' ? undefined : true}
       >
-        {b}
+        {layout(b)}
       </div>
     </section>
   );

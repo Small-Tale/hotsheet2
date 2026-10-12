@@ -47,11 +47,16 @@ describe('ContentTransition', () => {
         ContentTransition({ active: 'a', region: 'footer', sideLayout: 'actions', a: 'A' as never, b: 'B' as never }),
       ),
     ).toContain('data-side-layout="actions"');
+    // The action row is a Kerf Row (end-aligned, wrapping), not app flex CSS (HS2-5A766Z).
+    const actions = String(
+      ContentTransition({ active: 'a', region: 'footer', sideLayout: 'actions', a: 'A' as never, b: 'B' as never }),
+    );
+    expect(
+      actions.match(/data-component="row"[^>]*data-h-align="right"[^>]*data-v-align="middle"[^>]*data-wrap="true"/g),
+    ).toHaveLength(2);
     const css = await readFile(new URL('./content-transition.css', import.meta.url), 'utf8');
     expect(css).toMatchSource(/data-transition-region='label'\],[^{]*data-transition-region='footer'\]\{width:100%/);
-    expect(css).toMatchSource(
-      /data-side-layout='actions'\]>\.content-transition__side\{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end/,
-    );
+    expect(css).not.toContain('data-side-layout');
   });
   it('pairs full-width incoming and outgoing animations and honors reduced motion', async () => {
     const css = await readFile(new URL('./content-transition.css', import.meta.url), 'utf8');

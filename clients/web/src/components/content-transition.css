@@ -1,3 +1,6 @@
+/* ContentTransition is a two-sided motion region. Kerf has no swap/transition primitive for arbitrary
+   content (KF-V7MZY9), so this module owns only the shared-cell stacking, the hidden side, and the
+   push/crossfade motion; the action-row side layout is a Kerf Row (HS2-5A766Z). */
 .content-transition {
   position: relative;
   display: grid;
@@ -12,14 +15,6 @@
 .content-transition[data-transition-region='label'],
 .content-transition[data-transition-region='footer'] {
   width: 100%;
-}
-/* Action-row sides: end-aligned buttons that wrap at narrow widths (HS2-29Q3XG). */
-.content-transition[data-side-layout='actions'] > .content-transition__side {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--kui-space-xs);
 }
 .content-transition__side[data-active='false'] {
   position: absolute;

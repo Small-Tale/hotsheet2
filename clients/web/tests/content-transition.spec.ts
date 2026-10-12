@@ -92,7 +92,8 @@ test('demonstrates adjacent full-width A-B push/pop with chrome crossfades and r
 test('lays out dialog footers through the ContentTransition action-row variant (HS2-29Q3XG)', async ({ page }) => {
   const right = (locator: Locator) => locator.evaluate((node) => node.getBoundingClientRect().right),
     actionRow = async (footer: Locator) => {
-      const side = footer.locator(':scope > [data-active="true"]');
+      // The active side's action row is a Kerf Row (HS2-5A766Z).
+      const side = footer.locator(':scope > [data-active="true"] > [data-component="row"]');
       await expect(footer).toHaveAttribute('data-side-layout', 'actions');
       await expect(side).toHaveCSS('display', 'flex');
       await expect(side).toHaveCSS('flex-wrap', 'wrap');
