@@ -47,8 +47,8 @@ describe('TicketCloseDialog', () => {
     expect(markup).toContain('data-action="select-ticket-close-target" data-item-id="beta::git-beta%3Atarget"');
     expect(markup).not.toContain('data-item-id="alpha::git-alpha%3Asource"');
     expect(markup).toContain('data-item-id="gamma::git-gamma%3Acollision"');
-    expect(markup).toContain('<small class="ticket-close-dialog__project">Beta</small>');
-    expect(markup).toContain('<small class="ticket-close-dialog__project">Gamma</small>');
+    expect(markup).toMatch(/HS2-TARGET <span class="kui-text"[^>]*data-tone="quiet"[^>]*>Beta<\/span>/);
+    expect(markup).toMatch(/<span class="kui-text"[^>]*data-tone="quiet"[^>]*>Gamma<\/span>/);
     expect(markup).toContain('Select the existing ticket');
     expect(markup).toContain('disabled>Mark as duplicate');
   });
@@ -60,6 +60,8 @@ describe('TicketCloseDialog', () => {
     expect(markup).toContain('HS2-TARGET');
     expect(markup).toContain('Canonical report');
     expect(markup).toContain('data-action="clear-ticket-close-target"');
+    expect(markup).toContain('data-component="state-banner"');
+    expect(markup).toContain('data-tone="success"');
     expect(markup).toContain('>Mark as duplicate</wa-button>');
     expect(markup).not.toContain('disabled>Mark as duplicate');
   });
@@ -69,6 +71,10 @@ describe('TicketCloseDialog', () => {
     expect(css).toMatch(
       /ticket-close-dialog__results \{[^}]*min-height: remify\(68px\);[^}]*max-height: remify\(224px\);[^}]*overflow-y: auto/,
     );
-    expect(css).toContain('width: min(remify(544px), calc(100vw - 2 * var(--kui-space-m)))');
+    // DialogSurface owns the width; Kerf List, Row, Text, and StateBanner own the rest (HS2-F8HT1E).
+    expect(css).not.toMatch(/::part|__form|__selected|__candidate|__actions|__hint/);
+    const markup = String(TicketCloseDialog({ state: { source, reason: 'completed', query: '', candidates: [] } }));
+    expect(markup).toContain('data-component="dialog-surface"');
+    expect(markup).toContain('data-preferred-width');
   });
 });

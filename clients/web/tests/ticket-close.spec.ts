@@ -228,7 +228,7 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
   await expect(dialog.getByRole('button', { name: /HS2-1S6DS9.*Kerf.*Different local ticket/ })).toBeVisible();
   await expect(candidate).toBeVisible();
   await expect(dialog.getByRole('alert')).toContainText('Search results may be incomplete for Hot Sheet 2');
-  await expect(dialog.locator('.ticket-close-dialog__form')).toHaveCSS('gap', '16px');
+  await expect(dialog.locator('form > [data-component="list"]')).toHaveCSS('row-gap', '16px');
   await expect(dialog.locator('.ticket-close-dialog__results')).toHaveCSS('padding', '4px');
   await page.screenshot({ path: 'target/visual-captures/hs2-sbw2xd-cross-project-duplicate-wide.png', fullPage: true });
   await page.setViewportSize({ width: 640, height: 760 });
