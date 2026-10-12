@@ -1,10 +1,5 @@
+/* A block, non-shrinking mark so an inline SVG adds no baseline gap and keeps its size in flex rows. */
 .provider-icon {
   display: block;
-  width: 1em;
-  height: 1em;
   flex: none;
-}
-.provider-icon[data-size='l'] {
-  width: remify(24px);
-  height: remify(24px);
 }
