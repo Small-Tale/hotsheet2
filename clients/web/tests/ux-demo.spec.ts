@@ -5921,6 +5921,32 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await expect(command).toHaveCSS('color', commandColors.color);
   await expect(command).toHaveCSS('background-color', commandColors.fill);
   await page.screenshot({ path: test.info().outputPath('project-sidebar-command-hover.png') });
+  // The conversation toggle exposes its pressed and disabled states through demo settings (HS2-PK67QK).
+  const conversation = sidebar.getByRole('button', { name: 'Open Codex conversation' });
+  await page.locator('[data-action="toggle-settings"]').first().click();
+  const settings = page.getByRole('complementary', { name: 'ProjectSidebar settings' });
+  await expect(settings).toBeVisible();
+  await expect(conversation).toHaveAttribute('aria-pressed', 'false');
+  await expect(conversation).toBeEnabled();
+  await settings.locator('wa-checkbox[name="conversation-open"]').click();
+  await expect(conversation).toHaveAttribute('aria-pressed', 'true');
+  await settings.locator('wa-checkbox[name="conversation-disabled"]').click();
+  await expect(conversation).toBeDisabled();
+  await expect(conversation).toHaveCSS('cursor', 'not-allowed');
+  await page.screenshot({ path: test.info().outputPath('project-sidebar-conversation-states.png') });
+  await settings.locator('wa-checkbox[name="conversation-disabled"]').click();
+  await conversation.click();
+  await expect(conversation).toHaveAttribute('aria-pressed', 'false');
+  expect(
+    await settings
+      .locator('wa-checkbox[name="conversation-open"]')
+      .evaluate((node) => (node as HTMLInputElement).checked),
+  ).toBe(false);
+  await settings.getByRole('button', { name: 'Reset' }).click();
+  await expect(conversation).toHaveAttribute('aria-pressed', 'false');
+  await expect(conversation).toBeEnabled();
+  await page.locator('[data-action="toggle-settings"]').first().click();
+  await expect(settings).toBeHidden();
   await sidebar.getByRole('button', { name: /Backlog/ }).click();
   await expect(sidebar.getByRole('button', { name: /Backlog/ })).toHaveAttribute('aria-current', 'page');
   await command.click();

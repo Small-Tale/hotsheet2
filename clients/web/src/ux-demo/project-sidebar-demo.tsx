@@ -17,10 +17,12 @@ import { RepositorySummary } from '../components/repository-summary';
 import { SettingsNavigation } from '../components/settings-navigation';
 import { TerminalOperationsSidebar } from '../components/terminal-operations-sidebar';
 import { ViewNavigation, type ViewNavigationItem } from '../components/view-navigation';
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { loadLucideCatalog } from '../lucide-catalog';
 import { DEMO_ACTIONS, DEMO_FIELDS } from './demo-actions';
-import type { DemoModule } from './demo-module';
+import type { DemoModule, FormControl } from './demo-module';
 import { listen } from './demo-module';
+import { syncSettingsControls } from './settings-controls';
 
 export const selectedViewId = signal('all');
 export const commandGroupExpanded = signal(true);
@@ -28,6 +30,39 @@ export const collapsedCommandGroups = signal<string[]>([]);
 export const runningCommandId = signal<string | undefined>(undefined);
 export const driveRunning = signal(false);
 export const sidebarEvent = signal('Choose a view or run an action.');
+/** Conversation-toggle states the ProjectSidebar demo exposes for review (HS2-PK67QK). */
+export const projectSidebarSettings = {
+  conversationOpen: signal(false),
+  conversationDisabled: signal(false),
+};
+export function syncProjectSidebarSettingsControls(root: ParentNode): void {
+  syncSettingsControls(root, 'project-sidebar', {
+    checked: {
+      'conversation-open': projectSidebarSettings.conversationOpen.value,
+      'conversation-disabled': projectSidebarSettings.conversationDisabled.value,
+    },
+  });
+}
+export function resetProjectSidebarDemo(controlRoot?: ParentNode): void {
+  projectSidebarSettings.conversationOpen.value = false;
+  projectSidebarSettings.conversationDisabled.value = false;
+  if (controlRoot) syncProjectSidebarSettingsControls(controlRoot);
+}
+export function ProjectSidebarSettings() {
+  return (
+    <form class="settings-form" data-settings="project-sidebar">
+      <wa-checkbox name="conversation-open" checked={projectSidebarSettings.conversationOpen.value}>
+        Conversation open
+      </wa-checkbox>
+      <wa-checkbox name="conversation-disabled" checked={projectSidebarSettings.conversationDisabled.value}>
+        Conversation disabled
+      </wa-checkbox>
+      <wa-button type="button" data-action="reset-settings">
+        Reset
+      </wa-button>
+    </form>
+  );
+}
 export const projectSidebarHeight = signal(640);
 export const PROJECT_SIDEBAR_MIN_HEIGHT = 288;
 export const PROJECT_SIDEBAR_MAX_HEIGHT = 768;
@@ -315,6 +350,8 @@ export function ProjectSidebarDemo() {
             openCount={17}
             upNextCount={4}
             activeCount={2}
+            conversationOpen={projectSidebarSettings.conversationOpen.value}
+            conversationDisabled={projectSidebarSettings.conversationDisabled.value}
           />
         </div>
         <div
@@ -614,6 +651,24 @@ function wireProjectSidebarDemo(root: HTMLElement): () => void {
     }),
   );
   demoListeners.add(
+    delegate(root, 'change', '[data-settings="project-sidebar"] [name]', (_event, target) => {
+      const control = target as FormControl;
+      if (control.getAttribute('name') === 'conversation-open')
+        projectSidebarSettings.conversationOpen.value = control.checked;
+      else if (control.getAttribute('name') === 'conversation-disabled')
+        projectSidebarSettings.conversationDisabled.value = control.checked;
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', `.project-sidebar ${COMMANDS_AND_AI_ACTIONS.openConversation.selector}`, () => {
+      projectSidebarSettings.conversationOpen.value = !projectSidebarSettings.conversationOpen.value;
+      syncProjectSidebarSettingsControls(root);
+      sidebarEvent.value = projectSidebarSettings.conversationOpen.value
+        ? 'Conversation opened.'
+        : 'Conversation closed.';
+    }),
+  );
+  demoListeners.add(
     delegate(root, 'click', DEMO_ACTIONS.toggleDrive.selector, () => {
       driveRunning.value = !driveRunning.value;
       sidebarEvent.value = driveRunning.value ? 'Codex drive started.' : 'Codex drive stopped.';
@@ -664,7 +719,11 @@ function wireProjectSidebarDemo(root: HTMLElement): () => void {
 export const demoModule: DemoModule = {
   entries: {
     'project-summary': { Demo: ProjectSummaryDemo },
-    'project-sidebar': { Demo: ProjectSidebarDemo },
+    'project-sidebar': {
+      Demo: ProjectSidebarDemo,
+      Settings: ProjectSidebarSettings,
+      reset: resetProjectSidebarDemo,
+    },
     'repository-summary': { Demo: RepositorySummaryDemo },
     'settings-navigation': { Demo: SettingsNavigationDemo },
     'notification-navigation': { Demo: NotificationNavigationDemo },
