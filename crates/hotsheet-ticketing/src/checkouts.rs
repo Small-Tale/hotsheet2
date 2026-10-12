@@ -2,7 +2,7 @@
 //! ticket-store identity: several checkouts may share one repository and each checkout
 //! may use several ticket stores (and vice versa).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -131,6 +131,12 @@ struct RegistryFile {
     /// always contain ids understood by the active provider registry.
     #[serde(default, rename = "sourceAliases")]
     source_aliases: BTreeMap<String, BTreeMap<String, String>>,
+    /// `(checkout id, connection id)` pairs that exist only because a sourceless entry
+    /// was read through its root's `.hotsheet2/store` link. They were never persisted as
+    /// registry links, so registering one is a new selection, not a pre-identity link
+    /// that needs review (HS2-K2YHDE). Never serialized.
+    #[serde(skip)]
+    link_derived_sources: BTreeSet<(String, String)>,
 }
 
 const CHECKOUT_REGISTRY_SCHEMA_VERSION: u64 = 4;
@@ -144,6 +150,7 @@ impl Default for RegistryFile {
             schema_version: CHECKOUT_REGISTRY_SCHEMA_VERSION,
             checkouts: Vec::new(),
             source_aliases: BTreeMap::new(),
+            link_derived_sources: BTreeSet::new(),
         }
     }
 }
@@ -601,7 +608,10 @@ impl CheckoutRegistry {
             let existing_link_without_id = previous
                 .and_then(|checkout| checkout.source(&source.connection_id))
                 .is_some()
-                && prior.is_none();
+                && prior.is_none()
+                && !file
+                    .link_derived_sources
+                    .contains(&(id.clone(), source.connection_id.clone()));
             let found = if existing_link_without_id {
                 None
             } else {
@@ -1325,7 +1335,10 @@ fn normalize_registry(mut file: RegistryFile) -> Result<RegistryFile, CheckoutEr
     }
     file.schema_version = CHECKOUT_REGISTRY_SCHEMA_VERSION;
     for checkout in &mut file.checkouts {
-        migrate_checkout(checkout);
+        if let Some(connection_id) = migrate_checkout(checkout) {
+            file.link_derived_sources
+                .insert((checkout.id.clone(), connection_id));
+        }
     }
     Ok(file)
 }
@@ -1371,12 +1384,15 @@ fn legacy_link_source(root: &Path) -> Option<TicketSource> {
     Some(TicketSource::git(path))
 }
 
-fn migrate_checkout(checkout: &mut Checkout) {
+/// Returns the connection id of a source adopted from the root's link file, if any.
+fn migrate_checkout(checkout: &mut Checkout) -> Option<String> {
+    let mut link_derived = None;
     if checkout.sources.is_empty() {
         checkout.sources = checkout.stores.iter().map(TicketSource::git).collect();
         if checkout.sources.is_empty()
             && let Some(source) = legacy_link_source(Path::new(&checkout.root))
         {
+            link_derived = Some(source.connection_id.clone());
             checkout.sources.push(source);
         }
     }
@@ -1404,12 +1420,58 @@ fn migrate_checkout(checkout: &mut Checkout) {
                 (checkout.sources.len() == 1).then(|| checkout.sources[0].connection_id.clone())
             });
     }
+    link_derived
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::provider::ProviderConnection;
+
+    /// HS2-K2YHDE: the app opens a new project folder before it creates the sibling
+    /// store, so the store is linked into an already-registered checkout. That link must
+    /// still record the store identity, or the next open reports "no recorded identity".
+    #[test]
+    fn linking_a_new_store_into_a_registered_sourceless_checkout_records_its_identity() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("project");
+        std::fs::create_dir(&project).unwrap();
+        let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
+        registry
+            .open_sources(
+                &project,
+                None,
+                None,
+                Vec::new(),
+                None,
+                OpenSourceMode::Discovered,
+            )
+            .unwrap();
+        let store_path = temp.path().join("project.hs2");
+        let store = FsStore::init(&store_path, &crate::store::StoreMetadata::new("HS2")).unwrap();
+        // Bootstrap writes the checkout's store link before it registers the source, so
+        // the sourceless entry already reads back with a link-derived source here.
+        std::fs::create_dir_all(project.join(".hotsheet2")).unwrap();
+        std::fs::write(
+            project.join(".hotsheet2/store"),
+            store_path
+                .canonicalize()
+                .unwrap()
+                .to_string_lossy()
+                .as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(registry.list().unwrap()[0].sources.len(), 1);
+        let linked = registry
+            .open_git_store(&project, None, None, &store_path)
+            .unwrap();
+        let source_id = linked.sources[0].connection_id.clone();
+        assert_eq!(
+            linked.store_instance_ids.get(&source_id),
+            store.metadata().unwrap().instance_id.as_ref()
+        );
+        registry.resolve_source(&linked.id, &source_id).unwrap();
+    }
 
     #[test]
     fn registered_project_links_require_a_live_provider_record() {

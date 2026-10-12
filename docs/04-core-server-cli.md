@@ -662,6 +662,10 @@ any shared checkout. New stores receive the id at initialization. A legacy
 checkout link with no recorded identity cannot prove continuity from the path
 alone, even while that path remains reachable; ordinary reads and relink return
 verification guidance instead of adopting a replacement (HS2-EFBAPC, HS2-RQXJQV).
+A source that a sourceless checkout only reads back through its root's
+`.hotsheet2/store` link was never a persisted registry link, so registering it (for
+example `bootstrap` into a project the app already opened before its store existed)
+is a new selection and records the store identity (HS2-K2YHDE).
 Checkout metadata remains readable when a link cannot be verified, and provider
 descriptors remain readable for identity-less legacy links in the recovery UI;
 unreviewed Git descriptors carry `identity_review_required`, and project opening

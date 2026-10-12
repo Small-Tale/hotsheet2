@@ -3425,6 +3425,50 @@ fn bootstrap_prints_exact_remote_instructions_when_origin_is_absent() {
         )));
 }
 
+/// HS2-K2YHDE: the app registers a new project folder before it creates the ticket
+/// store. Bootstrapping into that sourceless checkout must record the store identity so
+/// the project can be resolved and opened afterward.
+#[test]
+fn bootstrap_into_a_registered_sourceless_checkout_records_the_store_identity() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let project = root.path().join("lecture");
+    let store = root.path().join("lecture.hs2");
+    std::fs::create_dir(&project).unwrap();
+    let cli = || {
+        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        command.env("HOTSHEET_HOME", &home);
+        command
+    };
+    cli()
+        .args(["checkout", "register", project.to_str().unwrap()])
+        .assert()
+        .success();
+    cli()
+        .args([
+            "bootstrap",
+            "--project",
+            project.to_str().unwrap(),
+            "--store",
+            store.to_str().unwrap(),
+            "--tool",
+            "claude",
+        ])
+        .assert()
+        .success();
+    let registry: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(home.join("checkouts.json")).unwrap()).unwrap();
+    let checkout = &registry["checkouts"][0];
+    let source_id = checkout["sources"][0]["connection_id"].as_str().unwrap();
+    let metadata: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(store.join("hotsheet-store.json")).unwrap()).unwrap();
+    assert_eq!(
+        checkout["store_instance_ids"][source_id],
+        metadata["instanceId"]
+    );
+    cli().args(["ls"]).current_dir(&project).assert().success();
+}
+
 #[test]
 fn init_standalone_defaults_under_hs2_home_not_hs1_home() {
     let root = tempfile::tempdir().unwrap();
