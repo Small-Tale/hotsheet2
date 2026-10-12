@@ -1,7 +1,11 @@
 import './ticket-search-field.css';
 import '@kerfjs/ui/token-search-field.css';
 
+import { flex, rem } from '@kerfjs/ui/css-values';
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
+import { Text } from '@kerfjs/ui/text';
 import { TokenSearchField } from '@kerfjs/ui/token-search-field';
 import { createTokenSearchModel, type TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -103,68 +107,82 @@ export function ticketSearchFieldId(target: Element): string | undefined {
   );
 }
 
+/** The syntax examples, grouped; each example renders as a code chip (HS2-65XJ6C). */
+const SEARCH_SYNTAX_GROUPS: readonly { label: string; examples: readonly string[] }[] = [
+  { label: 'Tags', examples: ['tag:client', 'tag:"needs design"'] },
+  { label: 'Content', examples: ['has:attachment', 'has:media-annotation', 'has:commit', 'attachment:*.png'] },
+  {
+    label: 'Workflow',
+    examples: [
+      'is:up-next',
+      'is:active',
+      'is:open',
+      'is:closed',
+      'is:duplicate',
+      'is:not-started',
+      'is:started',
+      'is:completed',
+      'is:verified',
+      'is:backlog',
+      'is:archived',
+    ],
+  },
+  {
+    label: 'Dates',
+    examples: [
+      'updated-after:4h ago',
+      `created-after:${localSearchDateExample}`,
+      `completed-before:${localSearchDateTimeExample}`,
+      'updated-after:2026-09-01T11:05',
+    ],
+  },
+];
+
 function TicketSearchHelp() {
   return (
     <aside class="ticket-search-field__help" role="dialog" aria-label="Search syntax" data-token-search-keep-open>
-      <header>
-        <strong>Search syntax</strong>
-        <p>Type words, then add any filters you need.</p>
-      </header>
-      <dl>
-        <div>
-          <dt>Tags</dt>
-          <dd>
-            <code>tag:client</code>
-            <code>tag:&quot;needs design&quot;</code>
-          </dd>
-        </div>
-        <div>
-          <dt>Content</dt>
-          <dd>
-            <code>has:attachment</code>
-            <code>has:media-annotation</code>
-            <code>has:commit</code>
-            <code>attachment:*.png</code>
-          </dd>
-        </div>
-        <div>
-          <dt>Workflow</dt>
-          <dd>
-            <code>is:up-next</code>
-            <code>is:active</code>
-            <code>is:open</code>
-            <code>is:closed</code>
-            <code>is:duplicate</code>
-            <code>is:not-started</code>
-            <code>is:started</code>
-            <code>is:completed</code>
-            <code>is:verified</code>
-            <code>is:backlog</code>
-            <code>is:archived</code>
-          </dd>
-        </div>
-        <div>
-          <dt>Dates</dt>
-          <dd>
-            <code>updated-after:4h ago</code>
-            <code>{`created-after:${localSearchDateExample}`}</code>
-            <code>{`completed-before:${localSearchDateTimeExample}`}</code>
-            <code>updated-after:2026-09-01T11:05</code>
-          </dd>
-        </div>
-      </dl>
-      <div class="ticket-search-field__help-notes">
-        <p>
-          <strong>Combine filters</strong> with case-insensitive <code>AND</code>, <code>OR</code>, <code>NOT</code>,
-          and parentheses.
-        </p>
-        <code>(client OR server) AND NOT is:archived</code>
-        <p>NOT binds before AND, and AND before OR.</p>
-        <p>
-          <strong>Date fields:</strong> created, completed, started, verified, archived, and updated. Add{' '}
-          <code>-before</code> or <code>-after</code>; local, relative, and ISO 8601 dates work.
-        </p>
-      </div>
+      <List gap="xs">
+        <List gap="2xs">
+          <strong>Search syntax</strong>
+          <Text tone="quiet" size="compact" flush>
+            Type words, then add any filters you need.
+          </Text>
+        </List>
+        {/* Each group is a label column beside wrapping example chips; in a narrow popover the
+            examples drop under the label instead of clipping. */}
+        <List gap="xs">
+          {SEARCH_SYNTAX_GROUPS.map((group) => (
+            <Row gap="xs" vAlign="top" wrap>
+              <Row flex={flex(0, 0, rem(4.5))}>
+                <Text variant="span" tone="quiet" size="compact" data-syntax-group={group.label}>
+                  <strong>{group.label}</strong>
+                </Text>
+              </Row>
+              <Row gap="2xs" wrap flex={flex(1, 1, rem(12.5))}>
+                {group.examples.map((example) => (
+                  <code>{example}</code>
+                ))}
+              </Row>
+            </Row>
+          ))}
+        </List>
+        <List gap="2xs" dividerSides="t">
+          <Text tone="quiet" size="compact" flush>
+            <strong>Combine filters</strong> with case-insensitive <code>AND</code>, <code>OR</code>, <code>NOT</code>,
+            and parentheses.
+          </Text>
+          <Row>
+            <code>(client OR server) AND NOT is:archived</code>
+          </Row>
+          <Text tone="quiet" size="compact" flush>
+            NOT binds before AND, and AND before OR.
+          </Text>
+          <Text tone="quiet" size="compact" flush>
+            <strong>Date fields:</strong> created, completed, started, verified, archived, and updated. Add{' '}
+            <code>-before</code> or <code>-after</code>; local, relative, and ISO 8601 dates work.
+          </Text>
+        </List>
+      </List>
     </aside>
   );
 }

@@ -84,10 +84,10 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     const help = String(TicketSearchField({ id: 'f', label: 'Search', model: model(), helpOpen: true }));
     expect(help).toContain('aria-expanded="true"');
     expect(help).toContain('class="ticket-search-field__help" role="dialog" aria-label="Search syntax"');
-    expect(help).toContain('<dt>Tags</dt>');
-    expect(help).toContain('<dt>Content</dt>');
-    expect(help).toContain('<dt>Workflow</dt>');
-    expect(help).toContain('<dt>Dates</dt>');
+    expect(help).toContain('<strong>Tags</strong>');
+    expect(help).toContain('<strong>Content</strong>');
+    expect(help).toContain('<strong>Workflow</strong>');
+    expect(help).toContain('<strong>Dates</strong>');
     expect(help).toContain('<code>is:duplicate</code>');
     expect(help).toContain('<strong>Combine filters</strong>');
     expect(help).toContain('updated-after:2026-09-01T11:05');

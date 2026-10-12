@@ -3795,7 +3795,7 @@ test('organizes search syntax help in the WorkspaceHeader demo', async ({ page }
   await header.getByRole('searchbox', { name: 'Search tickets' }).fill('client');
   await header.getByRole('button', { name: 'Search syntax help' }).click();
   const help = header.getByRole('dialog', { name: 'Search syntax' });
-  await expect(help.locator('dt')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
+  await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
   await expect(help).toContainText('Combine filters');
   await page.screenshot({ path: 'target/visual-captures/hs2-7efj3e-search-help-demo-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 640 });
@@ -3828,7 +3828,8 @@ test('organizes search syntax help in the WorkspaceHeader demo', async ({ page }
   expect(
     await help.evaluate((node) => {
       const panel = node.getBoundingClientRect(),
-        finalNote = node.lastElementChild!.getBoundingClientRect();
+        // The notes are the last group inside the help body List (HS2-65XJ6C).
+        finalNote = node.lastElementChild!.lastElementChild!.getBoundingClientRect();
       // The panel ends above the catalog's fixed footer pane (HS2-HMVBZW: the header now also carries
       // Kerf's display controls, so measure the footer instead of a fixed allowance).
       const footer = document.querySelector('.kui-workbench__main > .kui-pane > .kui-pane__footer')!;
@@ -8502,7 +8503,7 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   const helpButton = demo.getByRole('button', { name: 'Search syntax help' }).first();
   await helpButton.click();
   const help = fields.first().getByRole('dialog', { name: 'Search syntax' });
-  await expect(help.locator('dt')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
+  await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
   await expect(helpButton).toHaveAttribute('aria-expanded', 'true');
   // The floating popover escapes Kerf's clipped search group and overlays the sections below.
   const overlays = await help.evaluate((node) => {

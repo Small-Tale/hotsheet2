@@ -529,7 +529,7 @@ test('offers tag completion, the date helper, and syntax help inside the saved-v
   // Syntax help opens over the dialog and closes again from the same button.
   await dialog.getByRole('button', { name: 'Search syntax help' }).click();
   const help = dialog.getByRole('dialog', { name: 'Search syntax' });
-  await expect(help.locator('dt')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
+  await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
   // The dialog places the surfaces in flow, so the help is fully inside the dialog panel, not clipped by it.
   await expect(help).toBeVisible();
   expect(

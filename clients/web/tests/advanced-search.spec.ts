@@ -391,7 +391,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await page.screenshot({ path: 'target/visual-captures/hs2-m2zxjc-0y96fm-duplicate-narrow.png', fullPage: true });
   await page.getByRole('button', { name: 'Search syntax help' }).click();
   const help = page.getByRole('dialog', { name: 'Search syntax' });
-  await expect(help.locator('dt')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
+  await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
   await expect(help).toContainText('NOT binds before AND, and AND before OR');
   await expect(help).toContainText('is:active');
   await expect(help).toContainText('is:closed');

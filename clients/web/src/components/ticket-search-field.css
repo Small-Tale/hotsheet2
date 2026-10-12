@@ -90,22 +90,9 @@
   cursor: pointer;
 }
 .ticket-search-field__help {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
   width: min(remify(480px), calc(100vw - 2 * var(--wa-space-s)));
   max-height: min(remify(512px), calc(100vh - remify(224px)));
   overflow: auto;
-  gap: var(--wa-space-xs);
-}
-.ticket-search-field__help header {
-  display: grid;
-  gap: var(--wa-space-3xs);
-}
-.ticket-search-field__help p {
-  margin: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  line-height: 1.45;
 }
 .ticket-search-field__help code {
   padding: var(--wa-space-3xs) var(--wa-space-xs);
@@ -114,47 +101,6 @@
   color: var(--wa-color-neutral-on-normal);
   background: var(--wa-color-neutral-fill-quiet);
   font-size: var(--wa-font-size-xs);
-}
-.ticket-search-field__help dl {
-  display: grid;
-  min-width: 0;
-  margin: 0;
-  gap: var(--wa-space-xs);
-}
-/* Each group is a label column beside wrapping example chips; when the popover is narrow
-   (a rail-width field) the examples drop under the label instead of clipping. */
-.ticket-search-field__help dl > div {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: var(--wa-space-xs);
-  align-items: start;
-}
-.ticket-search-field__help dt {
-  flex: 0 0 remify(72px);
-  padding-top: var(--wa-space-3xs);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  font-weight: var(--wa-font-weight-semibold);
-}
-.ticket-search-field__help dd {
-  display: flex;
-  flex: 1 1 remify(200px);
-  flex-wrap: wrap;
-  min-width: 0;
-  margin: 0;
-  gap: var(--wa-space-3xs);
-}
-.ticket-search-field__help-notes {
-  display: grid;
-  padding-top: var(--wa-space-xs);
-  border-top: 1px solid var(--wa-color-neutral-border-quiet);
-  gap: var(--wa-space-2xs);
-}
-.ticket-search-field__help-notes > code {
-  justify-self: start;
-  white-space: normal;
-  overflow-wrap: anywhere;
 }
 @media (max-height: remify(704px)) {
   .ticket-search-field__help {
