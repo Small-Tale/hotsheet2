@@ -1,6 +1,9 @@
 import './markdown-editor.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { Maximize2, Minimize2 } from 'lucide';
 
 import type { AttachmentReferenceContext } from '../attachment-references';
@@ -37,7 +40,8 @@ export function MarkdownEditor({
   editable = true,
   attachmentContext,
 }: MarkdownEditorProps) {
-  const empty = !value.trim();
+  const empty = !value.trim(),
+    embedded = appearance === 'embedded';
   return (
     <section
       class={`${expanded ? 'markdown-editor markdown-editor--expanded' : 'markdown-editor'}${appearance === 'embedded' ? ' markdown-editor--embedded' : ''}${inset === 'flush' ? ' markdown-editor--flush' : ''}`}
@@ -47,24 +51,35 @@ export function MarkdownEditor({
       data-appearance={appearance}
       data-inset={inset}
     >
-      {(appearance === 'standalone' || showExpand) && (
-        <header class="markdown-editor__toolbar">
-          <span>{mode === 'write' ? 'Editing Markdown' : 'Markdown'}</span>
-          {showExpand && (
-            <button
-              type="button"
-              class="markdown-editor__expand"
-              data-action={expandAction}
-              aria-label={expanded ? 'Use inline editor' : 'Expand editor'}
-            >
-              <LucideIcon
-                size={15.2}
-                icon={expanded ? Minimize2 : Maximize2}
-                name={expanded ? 'minimize-2' : 'maximize-2'}
-              />
-            </button>
-          )}
-        </header>
+      {(!embedded || showExpand) && (
+        <Toolbar
+          className="markdown-editor__toolbar"
+          label={`${label} toolbar`}
+          dividerSides={embedded ? '' : 'b'}
+          leading={
+            embedded ? undefined : (
+              <ToolbarText size="small" text={mode === 'write' ? 'Editing Markdown' : 'Markdown'} />
+            )
+          }
+          trailing={
+            showExpand ? (
+              <ToolbarControlGroup single appearance="borderless">
+                <button
+                  type="button"
+                  data-action={expandAction}
+                  aria-label={expanded ? 'Use inline editor' : 'Expand editor'}
+                  title={expanded ? 'Use inline editor' : 'Expand editor'}
+                >
+                  <LucideIcon
+                    size={15.2}
+                    icon={expanded ? Minimize2 : Maximize2}
+                    name={expanded ? 'minimize-2' : 'maximize-2'}
+                  />
+                </button>
+              </ToolbarControlGroup>
+            ) : undefined
+          }
+        />
       )}
       <div class="markdown-editor__surface">
         {mode === 'write' ? (

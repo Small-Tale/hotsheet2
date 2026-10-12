@@ -1,3 +1,5 @@
+/* Standalone editor frame: a bordered, clipped card that holds the Kerf toolbar above a scrolling
+   writing surface. No Kerf surface combines a fixed frame with a full-height textarea. */
 .markdown-editor {
   display: grid;
   width: min(remify(672px), 100%);
@@ -10,6 +12,7 @@
   background: var(--wa-color-surface-default);
   grid-template-rows: auto minmax(0, 1fr);
 }
+/* Expanded mode lifts the same editor into a fixed overlay over the app. */
 .markdown-editor--expanded {
   position: fixed;
   z-index: 40;
@@ -18,6 +21,7 @@
   min-height: 0;
   box-shadow: var(--wa-shadow-l);
 }
+/* `appearance="embedded"`: the host surface owns the frame, so the editor drops its own. */
 .markdown-editor--embedded {
   width: 100%;
   min-height: 0;
@@ -26,15 +30,6 @@
   background: transparent;
   grid-template-rows: minmax(0, 1fr);
   gap: 0;
-}
-.markdown-editor--embedded .markdown-editor__toolbar {
-  min-height: remify(32px);
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-.markdown-editor--embedded .markdown-editor__toolbar > span {
-  display: none;
 }
 .markdown-editor--embedded .markdown-editor__surface {
   display: grid;
@@ -64,52 +59,14 @@
 .markdown-editor--flush .markdown-editor__source {
   padding: 0;
 }
-.markdown-editor__toolbar {
-  display: flex;
-  min-height: remify(44px);
-  padding: remify(5.6px) remify(7.2px) remify(5.6px) remify(12.8px);
-  border-bottom: 1px solid var(--wa-color-neutral-border-quiet);
-  background: var(--wa-color-surface-lowered);
-  align-items: center;
-  justify-content: space-between;
-}
-.markdown-editor__toolbar > span {
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  font-weight: 650;
-}
-.markdown-editor__toolbar button {
-  display: inline-flex;
-  height: remify(32px);
-  padding: 0 remify(10.4px);
-  border: 0;
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-neutral-on-quiet);
-  background: transparent;
-  cursor: pointer;
-  align-items: center;
-  gap: remify(5.6px);
-  font: inherit;
-  font-size: var(--wa-font-size-xs);
-}
-.markdown-editor__toolbar button:hover {
-  background: var(--wa-color-neutral-border-quiet);
-}
-.markdown-editor__toolbar button:focus-visible {
-  outline: var(--wa-focus-ring);
-  outline-offset: 1px;
-}
-.markdown-editor__expand {
-  width: remify(32px);
-  padding: 0 !important;
-  justify-content: center;
-}
+/* The writing surface scrolls inside the frame. */
 .markdown-editor__surface {
   min-width: 0;
   min-height: 0;
   padding: remify(16px);
   overflow: auto;
 }
+/* Click-to-edit rendered preview: a text-cursor target with a minimum writing height. */
 .markdown-editor__preview {
   min-width: 0;
   min-height: remify(208px);
@@ -122,6 +79,7 @@
   outline: var(--wa-focus-ring);
   outline-offset: -2px;
 }
+/* Borderless native monospace source textarea; Kerf has no native-textarea primitive to configure. */
 .markdown-editor__source {
   width: 100%;
   height: 100%;
