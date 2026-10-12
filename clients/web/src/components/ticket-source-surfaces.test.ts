@@ -163,7 +163,7 @@ describe('ticket source surfaces', () => {
           ],
         }),
       );
-    expect(settings(true)).toContain('<small data-state="disabled">Disabled</small>');
+    expect(settings(true)).toContain('<span data-state="disabled"><span class="kui-badge" data-component="badge" data-tone="neutral" data-appearance="quiet" data-shape="pill" data-size="compact">Disabled</span></span>');
     expect(settings(false)).not.toContain('data-state="disabled"');
   });
 
@@ -384,7 +384,7 @@ describe('ticket source surfaces', () => {
     expect(markup).toContain('aria-label="Remove Issues from this project"');
     expect(markup).toContain('data-lucide="unlink"');
     expect(markup).not.toContain('data-action="remove-project-source" data-source-id="git-demo"');
-    expect(markup.match(/<small>Default<\/small>/g)).toHaveLength(1);
+    expect(markup.match(/data-tone="info"[^>]*>Default<\/span>/g)).toHaveLength(1);
     // A source shared with another project (attached headlessly) says so.
     expect(markup).toContain('Also used by marketing-site');
     // Never another project's sources, and no machine-wide catalog to attach from.
@@ -396,7 +396,7 @@ describe('ticket source surfaces', () => {
     expect(single).toContain('This project uses 1 ticket source.');
     expect(single).not.toContain('project-default-source');
     expect(single).not.toContain('Also used by');
-    expect(single.match(/<small>Default<\/small>/g)).toHaveLength(1);
+    expect(single.match(/data-tone="info"[^>]*>Default<\/span>/g)).toHaveLength(1);
   });
 
   it('shows a Git identity mismatch while keeping source editing available (HS2-AGC4ZT)', () => {
@@ -580,7 +580,7 @@ describe('ticket source surfaces', () => {
     expect(markup).toContain('data-component="accounts-settings"');
     expect(markup).toContain('data-account-id="github-app-01work"');
     expect(markup).toContain('acme/repo · Used by procurement, domotion');
-    expect(markup).toContain('<small data-state="disabled">Disabled</small>');
+    expect(markup).toContain('<span data-state="disabled"><span class="kui-badge" data-component="badge" data-tone="neutral" data-appearance="quiet" data-shape="pill" data-size="compact">Disabled</span></span>');
     expect(markup).toContain('Signed in with Hot Sheet');
     expect(markup).toContain('dev@acme.test · Keychain credential jira-token');
     expect(markup).toContain('OPS · Not used by any project');

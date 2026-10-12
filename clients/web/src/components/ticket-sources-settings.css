@@ -1,31 +1,5 @@
-.ticket-provider-settings,
-.ticket-sources-settings {
-  display: grid;
-  gap: var(--wa-space-xl);
-}
-.ticket-provider-settings__title {
-  margin-top: 0;
-}
-.ticket-provider-settings__intro,
-.ticket-provider-settings__empty,
-.ticket-provider-settings__footnote {
-  color: var(--wa-color-neutral-on-quiet);
-}
-.ticket-provider-settings__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--wa-space-m);
-}
-.ticket-provider-settings__header h2 {
-  margin: 0;
-}
-/* The checkout's default-source choice (HS2-3SCH1K). */
-.ticket-provider-settings__default {
-  width: 100%;
-  max-width: remify(352px);
-  margin-bottom: var(--wa-space-m);
-}
+/* Each source row is an app wrapper (source id hooks) around a Kerf ListItem/ListActionRow that must
+   fill it and wrap its copy under the icon on phones. */
 .ticket-provider-settings__source-row {
   display: flex;
   align-items: center;
@@ -43,6 +17,7 @@
   flex: 1 1 auto;
   min-width: 0;
 }
+/* An inline text link that is a button (it switches the settings category, not a URL). */
 .ticket-provider-settings__link {
   padding: 0;
   border: 0;
@@ -51,9 +26,6 @@
   font: inherit;
   text-decoration: underline;
   cursor: pointer;
-}
-.ticket-provider-settings__empty {
-  margin: 0;
 }
 .ticket-provider-settings__connections {
   /* Rows fill the bordered card edge to edge; kerf's default inline inset drew the hover
@@ -72,12 +44,14 @@
   border-radius: var(--wa-border-radius-l);
   background: var(--wa-color-surface-default);
 }
+/* A source's copy inside a ListItem label (phrasing content only, so a span grid, not a Kerf List). */
 .ticket-provider-settings__connection-copy {
   display: grid;
   min-width: 0;
   max-width: 100%;
   gap: var(--wa-space-2xs);
 }
+/* The source name line keeps its badges beside the name. */
 .ticket-provider-settings__connection-copy strong {
   display: flex;
   min-width: 0;
@@ -85,43 +59,12 @@
   gap: var(--wa-space-xs);
   line-height: 1.25;
 }
-.ticket-provider-settings__connection-copy strong small {
-  flex: none;
-  white-space: nowrap;
-  padding: remify(1.6px) remify(6.4px);
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-brand-on-quiet);
-  background: var(--wa-color-brand-fill-quiet);
-  font-size: var(--wa-font-size-2xs);
-}
-.ticket-provider-settings__connection-copy > .ticket-provider-settings__recovery-badge {
+/* Recovery badges sit at their own start edge rather than stretching across the copy grid. */
+.ticket-provider-settings__recovery-badge {
   justify-self: start;
-  padding: remify(1.6px) remify(6.4px);
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-brand-on-quiet);
-  background: var(--wa-color-brand-fill-quiet);
-  font-size: var(--wa-font-size-2xs);
-  white-space: nowrap;
-}
-.ticket-provider-settings__connection-copy strong small[data-state='disabled'] {
-  color: var(--wa-color-neutral-on-quiet);
-  background: var(--wa-color-neutral-fill-quiet);
-}
-.ticket-provider-settings__connection-copy > small {
-  min-width: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-.ticket-provider-settings__error {
-  color: var(--wa-color-danger-on-quiet);
 }
 /* App Settings → Accounts (HS2-SM9PM8): one bordered card per sign-in, its header row, then one
    row per ticket source signed in through it (app-owned markup, same row geometry as sources). */
-.ticket-provider-settings__accounts {
-  display: grid;
-  gap: var(--wa-space-m);
-}
 .ticket-provider-settings__account-header {
   display: flex;
   flex-wrap: wrap;
@@ -136,43 +79,29 @@
 .ticket-provider-settings__account-header > .ticket-provider-settings__connection-copy {
   flex: 1 1 remify(140px);
 }
+/* The header actions wrap as a group beside the identity copy. */
 .ticket-provider-settings__account-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--wa-space-s);
 }
+/* The account host trails the provider name in normal weight and may break anywhere. */
 .ticket-provider-settings__account-host {
   min-width: 0;
   color: var(--wa-color-neutral-on-quiet);
   font-weight: var(--wa-font-weight-normal);
   overflow-wrap: anywhere;
 }
+/* Account source rows and the empty note share the card header's inset; the card zeroes Kerf's
+   inline-margin token for its flush ListItems, so Kerf insets cannot provide it here. */
+.ticket-provider-settings__account-source,
 .ticket-provider-settings__account-empty {
-  margin: 0;
   padding: var(--wa-space-s);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-s);
 }
+/* Divider between consecutive account source rows. */
 .ticket-provider-settings__account-source + .ticket-provider-settings__account-source {
   border-top: 1px solid var(--wa-color-neutral-border-quiet);
 }
-.ticket-provider-settings__account-source > .ticket-provider-settings__store {
-  flex-wrap: wrap;
-}
 .ticket-provider-settings__account-source .ticket-provider-settings__connection-copy {
   flex: 1 1 remify(208px);
-}
-.ticket-provider-settings__source-confirmation {
-  display: flex;
-  padding: 0 var(--wa-space-s) var(--wa-space-s);
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--wa-space-xs);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-s);
-}
-.ticket-provider-settings__source-confirmation > div {
-  display: flex;
-  gap: var(--wa-space-xs);
 }
