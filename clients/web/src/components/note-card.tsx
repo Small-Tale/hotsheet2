@@ -3,7 +3,7 @@ import './note-card.css';
 
 import { foregroundColor, uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Activity, Check, CircleAlert, FilePenLine, MessageSquareText, RefreshCw, Trash2, X } from 'lucide';
+import { Activity, Check, CircleAlert, FilePenLine, MessageSquareText, Plus, RefreshCw, Trash2, X } from 'lucide';
 
 import type { AttachmentReferenceContext } from '../attachment-references';
 import { parseFeedbackChoices } from '../feedback-choices';
@@ -102,6 +102,9 @@ function FeedbackBlocks({
               aria-label="Add response at a character position"
             >
               <MarkdownPreview source={segment.markdown} attachmentContext={attachmentContext} />
+              <span class="note-card__feedback-add" aria-hidden="true">
+                <LucideIcon size="xs" icon={Plus} name="plus" />
+              </span>
             </div>
           )}
           {segment.reply && (
@@ -121,6 +124,7 @@ function FeedbackBlocks({
                 data-note-id={noteId}
                 data-offset={sourceStart + segment.reply.offset}
                 aria-label={`Remove response at character ${sourceStart + segment.reply.offset}`}
+                title="Remove response"
               >
                 <LucideIcon size="s" icon={X} name="x" />
               </button>
@@ -356,6 +360,7 @@ export function NoteCard({
                 {...INSPECTOR_AND_EDITOR_ACTIONS.deleteNote.attrs}
                 data-note-id={id}
                 aria-label="Delete note"
+                title="Delete note"
               >
                 <LucideIcon size={12.8} icon={Trash2} name="trash-2" />
               </button>

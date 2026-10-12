@@ -1,3 +1,5 @@
+/* Note frame and kind variants: an app-owned card whose kind (status, activity, feedback, acknowledgement)
+   and density select tone and inset; moving these onto Kerf ContentItem tones is tracked as a follow-up. */
 .note-card {
   display: grid;
   min-width: 0;
@@ -38,6 +40,7 @@
   align-items: center;
   gap: var(--kui-space-2xs);
 }
+/* Hover/focus-revealed note actions beside the timestamp. */
 .note-card__actions {
   display: inline-flex;
   opacity: 0;
@@ -49,10 +52,15 @@
 .note-card:focus-within .note-card__actions {
   opacity: 1;
 }
-.note-card__actions button {
+/* Standalone icon-only actions in the note header and beside inline replies. Kerf ToolbarControlGroup
+   requires a Toolbar parent and an icon-only wa-button lacks square geometry (KF-1315VN), so these stay
+   app-owned native buttons until Kerf offers a standalone icon button. */
+.note-card__actions button,
+.note-card__inline-reply-row button {
   display: inline-grid;
   width: remify(28px);
   height: remify(28px);
+  flex: none;
   padding: 0;
   border: 0;
   border-radius: var(--wa-border-radius-pill);
@@ -61,9 +69,17 @@
   cursor: pointer;
   place-items: center;
 }
+.note-card__inline-reply-row button {
+  width: remify(32px);
+  height: remify(32px);
+}
 .note-card__actions button:hover {
   color: var(--wa-color-brand-on-quiet);
   background: var(--wa-color-brand-fill-quiet);
+}
+.note-card__inline-reply-row button:hover {
+  color: var(--wa-color-danger-on-quiet);
+  background: var(--wa-color-danger-fill-quiet);
 }
 /* Reading scale (HS2-MGVE50): a reading surface such as the large-text reader sets the unitless
    --hotsheet-reading-scale on its own root; each reading part multiplies its own ordinary size by it
@@ -78,6 +94,7 @@
 .note-card:not(.note-card--editing) {
   cursor: text;
 }
+/* Inline note editor: native textarea (touch field-sizing tokens, HS2-6PC150) above its action row. */
 .note-card__editor {
   display: grid;
   min-width: 0;
@@ -113,6 +130,7 @@
 .note-card__respond {
   width: 100%;
 }
+/* Feedback prompts split into clickable blocks with inline response textareas (HS2 feedback flow). */
 .note-card__feedback-prompt {
   display: grid;
   gap: var(--kui-space-2xs);
@@ -128,7 +146,8 @@
   border-radius: var(--wa-border-radius-s);
   cursor: text;
 }
-.note-card__feedback-block::after {
+/* Hover/focus "add a response here" badge on a prompt block; it carries a decorative Lucide plus. */
+.note-card__feedback-add {
   position: absolute;
   right: var(--kui-space-2xs);
   bottom: calc(var(--kui-space-xs) * -1);
@@ -138,9 +157,6 @@
   border-radius: var(--wa-border-radius-pill);
   background: var(--wa-color-brand-fill-normal);
   color: var(--wa-color-brand-on-normal);
-  content: '+';
-  font-size: var(--wa-font-size-2xs);
-  line-height: 1;
   opacity: 0;
   place-items: center;
   transition: opacity 120ms ease;
@@ -150,11 +166,11 @@
   background: color-mix(in srgb, var(--wa-color-brand-fill-quiet) 55%, transparent);
   outline: none;
 }
-.note-card__feedback-block:hover::after,
-.note-card__feedback-block:focus-visible::after {
+.note-card__feedback-block:hover .note-card__feedback-add,
+.note-card__feedback-block:focus-visible .note-card__feedback-add {
   opacity: 1;
 }
-.note-card__feedback-section:has(.note-card__inline-reply-row) .note-card__feedback-block::after {
+.note-card__feedback-section:has(.note-card__inline-reply-row) .note-card__feedback-add {
   opacity: 0;
 }
 .note-card__inline-reply-row {
@@ -179,23 +195,7 @@
   font: inherit;
   line-height: 1.5;
 }
-.note-card__inline-reply-row button {
-  display: inline-grid;
-  width: remify(32px);
-  height: remify(32px);
-  flex: none;
-  padding: 0;
-  border: 0;
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-neutral-on-quiet);
-  background: transparent;
-  cursor: pointer;
-  place-items: center;
-}
-.note-card__inline-reply-row button:hover {
-  color: var(--wa-color-danger-on-quiet);
-  background: var(--wa-color-danger-fill-quiet);
-}
+/* Selectable feedback choices rendered as pressed toggle cards. */
 .note-card__choices {
   display: grid;
   gap: var(--kui-space-xs);
@@ -283,6 +283,7 @@
   padding: remify(11.2px) remify(8px);
   border-radius: remify(9.6px);
 }
+/* Nested AI feedback disclosure on a native details element with its own show/hide label. */
 .note-card__ai-feedback {
   margin-top: var(--kui-space-2xs);
   padding: 0;

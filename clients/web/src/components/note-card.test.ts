@@ -275,6 +275,8 @@ describe('NoteCard', () => {
       /\.note-card__choice \{[^}]*padding: var\(--kui-space-xs\) var\(--kui-space-m\);[^}]*grid-template-columns: remify\(24px\)[^}]*gap: var\(--kui-space-xs\)/,
     );
     expect(css).toMatchSource(/__inline-reply-row button \{[^}]*width: remify\(32px\); height: remify\(32px\)/);
+    // The response badge carries a Lucide icon, never a font glyph (HS2-MDJRCM).
+    expect(css).not.toMatch(/feedback-block::after|content: '\+'/);
     expect(css).toMatchSource(
       /\[data-kind="activity"\] \{[^}]*padding: var\(--kui-space-xs\) var\(--kui-space-m\);[^}]*gap: var\(--kui-space-2xs\)/,
     );
@@ -282,7 +284,7 @@ describe('NoteCard', () => {
 
   it('selects the compact list inset through the density prop and picks Markdown variants itself', () => {
     const base = { id: 'n', author: 'A', time: 'now', body: 'Body' };
-    expect(String(NoteCard({ ...base, kind: 'regular' }))).not.toContain('data-density');
+    expect(String(NoteCard({ ...base, kind: 'regular' }))).not.toMatch(/<article [^>]*data-density/);
     const compact = String(NoteCard({ ...base, kind: 'activity', density: 'compact' }));
     expect(compact).toContain('data-kind="activity" data-density="compact"');
     expect(compact).toContain('data-component="markdown-preview" data-size="inherit"');
