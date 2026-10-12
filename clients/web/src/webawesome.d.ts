@@ -38,7 +38,7 @@ type WaProgressBar = WaBase & {
 declare module 'kerfjs/jsx-runtime' {
   namespace JSX {
     interface IntrinsicElements {
-      'wa-button': WaBase;
+      'wa-button': WaBase & { loading?: AttrLike<boolean> };
       'wa-input': WaBase;
       'wa-textarea': WaBase & { rows?: AttrLike<number>; resize?: AttrLike };
       'wa-select': WaBase & { multiple?: AttrLike<boolean>; 'max-options-visible'?: AttrLike<number> };

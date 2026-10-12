@@ -22,10 +22,10 @@ describe('global stylesheet ownership', () => {
       ],
       ['settings workspace', 'settings-workspace.css', ['.settings-workspace', '.project-settings']],
       ['ticket row context menu', 'ticket-row-context-menu.css', ['.ticket-row-context-menu', '.ticket-context-menu']],
-      // TicketPageMore owns the paged list/column continuation button (HS2-WP69TD).
-      ['ticket page continuation', 'ticket-page-more.css', ['.ticket-page-more']],
       ['app loading indicator', 'app-loading-indicator.css', ['.app-loading-indicator']],
     ] as const;
+    // TicketPageMore composes a pill `wa-button` with no stylesheet at all (HS2-TCM7WC).
+    expect(global).not.toContain('.ticket-page-more');
     for (const [name, file, selectors] of ownership) {
       const owned = read(`./components/${file}`);
       for (const selector of selectors) {
