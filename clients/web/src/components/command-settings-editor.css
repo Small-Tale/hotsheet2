@@ -1,3 +1,8 @@
+/* CommandSettingsEditor still hand-styles most of its surface. Each section below is tracked for
+   recomposition from Kerf and Web Awesome components: the command list rows and groups (HS2-7BBRJT),
+   the edit dialog's form controls (HS2-WNXRG3), and the swatches, heading, and group-delete button
+   (HS2-EBY4E3). The heading actions and the empty list already use wa-button and EmptyState (HS2-F9ECMZ). */
+/* The editor root stacks its sections and is the container for the narrow heading layout. */
 .command-settings-editor {
   display: grid;
   container-type: inline-size;
@@ -46,16 +51,6 @@
 .command-settings-editor__button:disabled {
   opacity: 0.45;
   cursor: default;
-}
-/* The primary creation action (HS2-JSSMFY). */
-.command-settings-editor__add-command {
-  color: var(--wa-color-brand-on-loud);
-  border-color: transparent;
-  background: var(--wa-color-brand-fill-loud);
-}
-.command-settings-editor__add-command:hover {
-  background: var(--wa-color-brand-fill-loud);
-  filter: brightness(1.05);
 }
 
 /* WYSIWYG command list (HS2-656XJ2, HS2-D9JBXT) — drag-to-reorder grouped rows aligned like the sidebar. */
@@ -191,19 +186,6 @@
 }
 .command-settings-editor__row-menu {
   flex: 0 0 auto;
-}
-.command-settings-editor__blank {
-  display: grid;
-  padding: var(--kui-space-l);
-  border: 1px dashed var(--wa-color-surface-border);
-  border-radius: var(--wa-border-radius-l);
-  color: var(--wa-color-text-quiet);
-  gap: var(--kui-space-2xs);
-  place-items: center;
-  text-align: center;
-}
-.command-settings-editor__blank p {
-  margin: 0;
 }
 .command-settings-editor > footer {
   display: flex;

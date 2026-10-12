@@ -1,8 +1,10 @@
+import '@awesome.me/webawesome/dist/components/button/button.js';
 import './heading.css';
 import './command-settings-editor.css';
 import './native-popover-dialog.css';
 
 import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
+import { EmptyState } from '@kerfjs/ui/empty-state';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Toolbar } from '@kerfjs/ui/toolbar';
@@ -425,20 +427,19 @@ export function CommandSettingsEditor({
           </p>
         </div>
         <div class="command-settings-editor__heading-actions">
-          <button
-            type="button"
-            class="command-settings-editor__button"
-            {...COMMANDS_AND_AI_ACTIONS.addCommandGroup.attrs}
-          >
-            <LucideIcon size="s" icon={FolderPlus} name="folder-plus" /> Add group
-          </button>
-          <button
-            type="button"
-            class="command-settings-editor__button command-settings-editor__add-command"
+          <wa-button appearance="outlined" size="small" {...COMMANDS_AND_AI_ACTIONS.addCommandGroup.attrs}>
+            <LucideIcon slot="start" size="s" icon={FolderPlus} name="folder-plus" />
+            Add group
+          </wa-button>
+          <wa-button
+            variant="brand"
+            appearance="accent"
+            size="small"
             {...COMMANDS_AND_AI_ACTIONS.addCommandSetting.attrs}
           >
-            <LucideIcon size="s" icon={Plus} name="plus" /> Add command
-          </button>
+            <LucideIcon slot="start" size="s" icon={Plus} name="plus" />
+            Add command
+          </wa-button>
         </div>
       </header>
       {sections.length > 0 ? (
@@ -453,10 +454,7 @@ export function CommandSettingsEditor({
           ))}
         </ul>
       ) : (
-        <div class="command-settings-editor__blank">
-          <p>No custom commands yet.</p>
-          <p>Add a command to configure its label and action.</p>
-        </div>
+        <EmptyState title="No custom commands yet." detail="Add a command to configure its label and action." />
       )}
       <footer>
         <span role="status">{message}</span>
