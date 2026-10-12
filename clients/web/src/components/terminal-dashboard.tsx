@@ -2,6 +2,7 @@ import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@kerfjs/ui/floating-toolbar.css';
 import './terminal-dashboard.css';
 
+import { Badge } from '@kerfjs/ui/badge';
 import { uiColor } from '@kerfjs/ui/css-values';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -137,6 +138,20 @@ const keyFor = (session: TerminalDashboardSession) => `${session.projectId}:${se
 const chatKeyFor = (chat: WorkspaceGridChat) => `${chat.projectId}:${chat.id}`;
 export const WORKSPACE_CHAT_PREVIEW_NATURAL_WIDTH = 300;
 export const WORKSPACE_CHAT_PREVIEW_NATURAL_HEIGHT = 180;
+/** A terminal tile's liveness as a labeled Kerf status dot: busy or working (success), idle or ready (neutral), or exited (danger). */
+function TileState({ state }: { state: string }) {
+  // The app-owned wrapper keeps the state's hover explanation; Kerf's Badge carries the accessible name.
+  return (
+    <span class="terminal-tile__state" title={state}>
+      <Badge
+        size="dot"
+        tone={state === 'Busy' || state === 'Working' ? 'success' : state === 'Exited' ? 'danger' : 'neutral'}
+        label={state}
+      />
+    </span>
+  );
+}
+
 export function TerminalVisibilityControls({
   hiddenCount = 0,
   groups = [],
@@ -317,11 +332,7 @@ function TerminalCard({
           </span>
         ) : (
           <>
-            <span
-              class="terminal-tile__state"
-              aria-label={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}
-              title={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}
-            />
+            <TileState state={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'} />
             {session.aiConnection && (
               <span
                 class="terminal-tile__ai-connection"
@@ -569,7 +580,7 @@ export function WorkspaceGridChatCard({ chat, previewScale = 1 }: { chat: Worksp
         </div>
       </div>
       <footer class="terminal-tile__footer">
-        <span class="terminal-tile__state" aria-label={state} title={state} />
+        <TileState state={state} />
         <button
           type="button"
           class="terminal-tile__identity"

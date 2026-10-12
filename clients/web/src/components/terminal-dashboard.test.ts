@@ -115,7 +115,9 @@ describe('TerminalDashboard', () => {
     expect(markup).toContain('data-action="open-grid-ai-chat"');
     expect(markup).toContain('Claude AI chat');
     expect(markup).toContain('Reviewing the workspace changes');
-    expect(markup).toContain('aria-label="Working" title="Working"');
+    expect(markup).toMatch(
+      /class="terminal-tile__state" title="Working"><span class="kui-badge"[^>]*aria-label="Working"/,
+    );
     expect(markup).toContain('data-preview-scale="0.8877777777777779"');
     expect(markup).toContain(
       '--workspace-chat-preview-natural-width:300px;--workspace-chat-preview-natural-height:180px',
@@ -146,7 +148,7 @@ describe('TerminalDashboard', () => {
   it('makes the footer identity actionable, explains terminal state, and omits the snapshot working directory', () => {
     const markup = String(TerminalDashboard({ groups, width: 1200, height: 700, fitAcross: 4, fitHigh: 2 }));
     expect(markup).toContain('aria-label="Open Codex in Project One"');
-    expect(markup).toContain('aria-label="Busy" title="Busy"');
+    expect(markup).toMatch(/class="terminal-tile__state" title="Busy"><span class="kui-badge"[^>]*aria-label="Busy"/);
     expect(markup).not.toContain('/work/one');
   });
   it('reserves fixed 80x24 sizing for dashboard grid previews', () => {
@@ -458,7 +460,9 @@ describe('halted AI sessions on dashboard tiles (HS2-HJ4D1H)', () => {
       const markup = String(FixedAspectTerminalCard({ session: { ...session, aiConnection } }));
       expect(markup).toContain(`data-ai-connection="${aiConnection}"`);
       expect(markup).toContain(`data-lucide="${aiConnection === 'connected' ? 'plug' : 'unplug'}"`);
-      expect(markup).toContain('class="terminal-tile__state" aria-label="Busy"');
+      expect(markup).toMatch(
+        /class="terminal-tile__state" title="Busy"><span class="kui-badge"[^>]*data-tone="success"[^>]*aria-label="Busy"/,
+      );
       expect(markup).toContain(
         aiConnection === 'connected' ? 'its permission prompts come to the app' : 'Run /hooks in Codex',
       );
@@ -473,7 +477,7 @@ describe('halted AI sessions on dashboard tiles (HS2-HJ4D1H)', () => {
       );
       expect(halted).toContain('Stopped: Rate limit reached.');
       expect(halted).not.toContain('data-ai-connection');
-      expect(halted).not.toContain('class="terminal-tile__state"');
+      expect(halted).not.toContain('terminal-tile__state');
     }
     expect(String(FixedAspectTerminalCard({ session }))).not.toContain('data-ai-connection');
   });
@@ -491,9 +495,9 @@ describe('halted AI sessions on dashboard tiles (HS2-HJ4D1H)', () => {
     expect(halted).toContain('data-halted="true"');
     expect(halted).toContain('class="terminal-tile__halt"');
     expect(halted).toContain('title="Stopped: Rate limit reached."');
-    expect(halted).not.toContain('class="terminal-tile__state"');
+    expect(halted).not.toContain('terminal-tile__state');
     const running = String(FixedAspectTerminalCard({ session }));
     expect(running).not.toContain('data-halted');
-    expect(running).toContain('class="terminal-tile__state"');
+    expect(running).toContain('terminal-tile__state');
   });
 });

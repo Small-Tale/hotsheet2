@@ -365,20 +365,6 @@
   flex: none;
   gap: remify(6.4px);
 }
-.terminal-tile__state {
-  width: remify(8px);
-  height: remify(8px);
-  border-radius: var(--wa-border-radius-circle);
-  background: var(--wa-color-neutral-fill-loud);
-  flex: none;
-}
-.terminal-tile[data-busy='true'] .terminal-tile__state {
-  background: var(--wa-color-success-fill-loud);
-  box-shadow: 0 0 0 3px var(--wa-color-success-fill-quiet);
-}
-.terminal-tile[data-alive='false'] .terminal-tile__state {
-  background: var(--wa-color-danger-fill-loud);
-}
 .terminal-tile__halt {
   display: inline-flex;
   flex: none;
@@ -607,6 +593,8 @@
   width: 1px;
   height: 1px;
 }
+/* The empty, loading and message states stay compact app copy: a short drawer grid (about 100px) is
+   shorter than Kerf EmptyState's icon-slot geometry, which clipped the title there. */
 .terminal-dashboard__empty {
   display: grid;
   height: 100%;
