@@ -1,4 +1,8 @@
-/* Reading scale (HS2-MGVE50): a reading surface such as the large-text reader sets the unitless
+/* MarkdownPreview renders sanitized, user-authored Markdown as raw HTML (headings, lists, code, tables,
+   quotes, images). No Kerf or Web Awesome component styles arbitrary rendered prose, so this stylesheet
+   owns that typography (docs/CSS-OWNERSHIP-AUDIT.md: raw Markdown justifies CSS).
+
+   Reading scale (HS2-MGVE50): a reading surface such as the large-text reader sets the unitless
    --hotsheet-reading-scale on its own root, and every size below scales by it, so each element stays
    exactly that multiple of its ordinary size without the host restyling this component. */
 .markdown-preview {
@@ -9,12 +13,16 @@
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
-.markdown-preview > :first-child {
+/* The preview and each quote sit flush against their container: no outer block margins. */
+.markdown-preview > :first-child,
+.markdown-preview blockquote > :first-child {
   margin-top: 0;
 }
-.markdown-preview > :last-child {
+.markdown-preview > :last-child,
+.markdown-preview blockquote > :last-child {
   margin-bottom: 0;
 }
+/* Prose rhythm: heading scale and block spacing on the Kerf spacing tokens. */
 .markdown-preview h1 {
   margin: var(--kui-space-l) 0 var(--kui-space-xs);
   font-size: calc(var(--hotsheet-reading-scale, 1) * var(--wa-font-size-l));
@@ -44,12 +52,14 @@
 .markdown-preview ol {
   padding-left: remify(22.4px);
 }
+/* Web Awesome's native list styles indent items; the list padding above owns the indent instead. */
 .markdown-preview li {
   margin-inline-start: 0;
 }
 .markdown-preview li + li {
   margin-top: var(--kui-space-2xs);
 }
+/* Links, including ticket references that open in the reader. */
 .markdown-preview a {
   color: var(--wa-color-text-link);
   text-decoration-thickness: 1px;
@@ -63,6 +73,7 @@
 .markdown-preview__ticket-reference:focus-visible {
   text-decoration: underline;
 }
+/* Inline code chips and dark fenced code blocks. */
 .markdown-preview code {
   padding: remify(1.6px) remify(4.48px);
   border-radius: remify(4.8px);
@@ -85,6 +96,7 @@
   background: transparent;
   color: inherit;
 }
+/* Quotes are quieter, smaller asides with a leading rule. */
 .markdown-preview blockquote {
   margin-inline: 0;
   padding: var(--kui-space-2xs) 0 var(--kui-space-2xs) var(--kui-space-xs);
@@ -96,12 +108,7 @@
 .markdown-preview blockquote :is(h1, h2, h3, h4, h5, h6) {
   font-size: calc(var(--hotsheet-reading-scale, 1) * var(--wa-font-size-xs));
 }
-.markdown-preview blockquote > :first-child {
-  margin-top: 0;
-}
-.markdown-preview blockquote > :last-child {
-  margin-bottom: 0;
-}
+/* GFM tables: full-width, collapsed, cell-bordered grids. */
 .markdown-preview table {
   width: 100%;
   border-collapse: collapse;
@@ -115,6 +122,7 @@
 .markdown-preview th {
   background: var(--wa-color-neutral-fill-quiet);
 }
+/* Images fit the column; attachment images are zoomable buttons that open the gallery. */
 .markdown-preview img {
   display: block;
   max-width: 100%;
@@ -138,6 +146,7 @@
   outline: var(--wa-focus-ring);
   outline-offset: var(--kui-space-2xs);
 }
+/* GFM task-list checkboxes and the italic empty placeholder. */
 .markdown-preview input[type='checkbox'] {
   margin-right: var(--kui-space-2xs);
 }
