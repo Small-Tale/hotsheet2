@@ -48,19 +48,17 @@ describe('TerminalVisibilityDialog', () => {
     expect(markup).not.toContain('data-component="list-header"');
     expect(markup).not.toContain('data-action="toggle-terminal-visibility"');
   });
-  it('keeps the tab toolbar transparent', () => {
-    const css = readFileSync(resolve(import.meta.dirname, 'terminal-visibility-dialog.css'), 'utf8'),
-      toolbar = css.match(/\.terminal-visibility-dialog__toolbar \{([^}]+)\}/)?.[1] ?? '';
-    expect(toolbar).toContainSource('background:transparent');
-    expect(toolbar).not.toContain('surface-lowered');
-    // The Add icon is sized by its LucideIcon prop; no selector reaches into the Kerf AppTabs (HS2-YNW0B3).
-    expect(css).not.toMatch(/__tabs svg/);
+  it('composes Kerf TabBar, List and DialogSurface with only the context-menu anchor in CSS (HS2-W68SWJ)', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'terminal-visibility-dialog.css'), 'utf8');
+    expect(css.match(/\{/g)).toHaveLength(1);
+    expect(css).toContain('.terminal-visibility-dialog__context-menu');
     const markup = String(
       TerminalVisibilityDialog({ open: true, state: initialTerminalVisibilityState(), scope: 'dashboard', groups }),
     );
-    expect(markup).toMatch(
-      /class="terminal-visibility-dialog__add"[^]*?<svg[^>]*data-lucide="plus"[^>]*data-size="16"/,
-    );
+    expect(markup).toContain('terminal-visibility-dialog__toolbar');
+    expect(markup).toContain('data-component="tab-bar"');
+    // The Add icon is sized by its LucideIcon prop inside a Kerf ToolbarControlGroup (HS2-YNW0B3).
+    expect(markup).toMatch(/aria-label="Add visibility group"[^]*?<svg[^>]*data-lucide="plus"[^>]*data-size="16"/);
   });
   it('uses selected app-tab styling, shared menu headers, and shared menu rows', () => {
     const markup = String(
