@@ -80,7 +80,7 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
           <List gap="m">
             <wa-input name="bulk-ticket-tag" label={adding ? 'Tag to add' : 'Tag to remove'} required autofocus />
             {!adding && state.choices.length > 0 && (
-              <div aria-label="Tags in selection">
+              <div role="group" aria-label="Tags in selection">
                 <Row gap="xs" wrap>
                   {state.choices.map((tag) => (
                     <wa-button

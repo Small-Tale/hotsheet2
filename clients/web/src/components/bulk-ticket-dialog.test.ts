@@ -15,6 +15,7 @@ describe('BulkTicketDialog', () => {
     expect(remove).toContain('data-action="choose-bulk-tag" data-tag="bug"');
     expect(remove).toContain('data-component="row"');
     expect(remove).toContain('data-wrap="true"');
+    expect(remove).toContain('<div role="group" aria-label="Tags in selection">');
   });
 
   it('requires explicit confirmation for deletion', () => {
