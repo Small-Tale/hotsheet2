@@ -140,9 +140,6 @@
   margin: 0;
   color: var(--wa-color-danger-on-quiet);
 }
-.halted-session-popup__questions > wa-button {
-  justify-self: end;
-}
 .halted-session-popup__footer {
   display: flex;
   padding: remify(12.8px) remify(16px) remify(16px);

@@ -3,6 +3,7 @@ import './halted-session-popup.css';
 
 import { foregroundColorVar } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { Bot, CircleAlert, CircleHelp } from 'lucide';
 
 import type { HaltedSessionEpisode } from '../halted-sessions';
@@ -87,15 +88,17 @@ export function HaltedSessionPopup({ episode }: { episode: HaltedSessionEpisode 
               </fieldset>
             ))}
             <p class="halted-session-popup__answer-error" role="alert" hidden />
-            <wa-button
-              class="halted-session-popup__send"
-              variant="brand"
-              appearance="accent"
-              size="small"
-              type="submit"
-            >
-              Send answer
-            </wa-button>
+            <Row hAlign="right">
+              <wa-button
+                class="halted-session-popup__send"
+                variant="brand"
+                appearance="accent"
+                size="small"
+                type="submit"
+              >
+                Send answer
+              </wa-button>
+            </Row>
           </form>
         ) : (
           <pre class="halted-session-popup__details">
