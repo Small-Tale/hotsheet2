@@ -1,11 +1,11 @@
 import '@kerfjs/ui/layout.css';
 
+import { Badge } from '@kerfjs/ui/badge';
 import { rem } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Text } from '@kerfjs/ui/text';
 import { Bell, BellOff, CalendarDays, Clock3 } from 'lucide';
 
 import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
@@ -47,15 +47,14 @@ export function notificationNavigationPanel({
               icon={<LucideIcon icon={item.icon} name={item.iconName} />}
               label={item.label}
               trailing={
-                <Text
-                  variant="span"
+                <Badge
+                  appearance="quiet"
                   size="compact"
-                  tone="quiet"
+                  tone={item.id === 'pending' && counts.pending > 0 ? 'danger' : 'neutral'}
                   className="notification-navigation__count"
-                  data-attention={String(item.id === 'pending' && counts.pending > 0)}
                 >
-                  {counts[item.id]}
-                </Text>
+                  {String(counts[item.id])}
+                </Badge>
               }
             />
           ))}
@@ -107,7 +106,7 @@ export function NotificationNavigation({
   return (
     <SidebarPane
       parts={notificationNavigationPanel({ selected, counts, paused })}
-      className="settings-navigation"
+      className="notification-navigation"
       collapseControl={collapseControl}
     />
   );

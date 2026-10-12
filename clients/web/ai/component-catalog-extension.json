@@ -910,9 +910,9 @@
       "id": "notification-navigation",
       "name": "NotificationNavigation",
       "kind": "component",
-      "purpose": "Notification views with attention counts and a pause footer composed from Kerf List and Text in an unpadded sidebar pane.",
+      "purpose": "Notification views with attention counts and a pause footer composed from Kerf List and Badge in an unpadded sidebar pane.",
       "useWhen": [
-        "Hot Sheet needs notification views with attention counts and a pause footer composed from Kerf List and Text in an unpadded sidebar pane."
+        "Hot Sheet needs notification views with attention counts and a pause footer composed from Kerf List and Badge in an unpadded sidebar pane."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific NotificationNavigation behavior."

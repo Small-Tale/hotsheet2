@@ -214,10 +214,10 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'notification-navigation',
         'NotificationNavigation',
-        'Notification views with attention counts and a pause footer composed from Kerf List and Text in an unpadded sidebar pane.',
+        'Notification views with attention counts and a pause footer composed from Kerf List and Badge in an unpadded sidebar pane.',
         'feature-floor',
         true,
-        ['list', 'list-item', 'toolbar'],
+        ['list', 'list-item', 'badge', 'toolbar'],
       ),
     ],
   },

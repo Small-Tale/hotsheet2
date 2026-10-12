@@ -2692,7 +2692,7 @@
       "id": "notification-navigation",
       "name": "NotificationNavigation",
       "kind": "component",
-      "purpose": "Notification views with attention counts and a pause footer composed from Kerf List and Text in an unpadded sidebar pane.",
+      "purpose": "Notification views with attention counts and a pause footer composed from Kerf List and Badge in an unpadded sidebar pane.",
       "publicExports": [
         {
           "name": "NotificationNavigation"

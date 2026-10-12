@@ -228,11 +228,12 @@ describe('permission presentation components', () => {
     expect(markup).not.toContain('divider-sides');
     for (const label of ['Pending', 'Last 24 Hours', 'Last 7 Days']) expect(markup).toContain(label);
     expect(markup.match(/notification-navigation__count/g)).toHaveLength(3);
-    expect(markup).toMatch(/data-attention="true"[^>]*>2<\/span>/);
+    // Pending notifications take the danger Badge tone, matching ViewNavigation's attention counts.
+    expect(markup).toMatch(/notification-navigation__count" data-component="badge" data-tone="danger"[^>]*>2<\/span>/);
     expect(markup).toContain('data-item-id="day"');
     expect(markup).toContain('aria-current="page"');
     expect(String(NotificationNavigation({ selected: 'pending', counts: { pending: 0, day: 0, week: 0 } }))).toMatch(
-      /data-attention="false"[^>]*>0<\/span>/,
+      /data-tone="neutral"[^>]*>0<\/span>/,
     );
   });
 });
