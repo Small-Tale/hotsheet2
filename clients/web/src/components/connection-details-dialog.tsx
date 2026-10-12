@@ -3,7 +3,9 @@ import './connection-details-dialog.css';
 import './native-popover-dialog.css';
 
 import { uiColor } from '@kerfjs/ui/css-values';
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -127,8 +129,14 @@ export function ConnectionDetailsDialog({
           />
         </ValueTable>
         <section>
-          <h3 class="connection-details-dialog__section-title">What to do</h3>
-          <p class="connection-details-dialog__guidance">{connectionRecoveryGuidance(assessment)}</p>
+          <List gap="xs">
+            <Text variant="h3" flush>
+              What to do
+            </Text>
+            <Text variant="p" flush>
+              {connectionRecoveryGuidance(assessment)}
+            </Text>
+          </List>
         </section>
       </div>
     </section>

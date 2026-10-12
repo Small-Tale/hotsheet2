@@ -1,17 +1,16 @@
+/* The app-owned native popover's viewport-capped size. */
 .connection-details-dialog {
   width: min(remify(672px), calc(100vw - remify(32px)));
   max-height: calc(100vh - remify(32px));
 }
+/* The dialog body's inset and scrollport inside the native popover. */
 .connection-details-dialog__body {
   display: grid;
   gap: var(--kui-space-l);
   padding: var(--kui-space-l);
   overflow: auto;
 }
-.connection-details-dialog__guidance {
-  margin: 0;
-  line-height: 1.5;
-}
+/* Room for the longest metadata label; Kerf ValueTable has no column prop, only this public token (KF-BTMDH5). */
 .connection-details-dialog__metadata {
   --kui-value-table-row-columns: minmax(remify(160px), auto) minmax(0, 1fr);
 }
@@ -23,16 +22,14 @@
   max-width: 100%;
   font-size: var(--wa-font-size-xs);
 }
-.connection-details-dialog__section-title {
-  margin: 0 0 var(--kui-space-xs);
-  font-size: var(--wa-font-size-m);
-}
+/* The embedded (demo and inline) variant renders the popover in flow. */
 .connection-details-dialog[data-embedded='true'] {
   position: relative;
   inset: auto;
   display: block;
   margin: 0;
 }
+/* Phones stack each label above its value; ValueTable has no responsive stacking prop (KF-BTMDH5). */
 @media (max-width: remify(512px)) {
   .connection-details-dialog .connection-details-dialog__metadata {
     --kui-value-table-row-columns: 1fr;
