@@ -44,7 +44,7 @@ import {
   saveDisplayPreferences,
   selectDemo,
   selectedId,
-  settingsOpen,
+  settingsCollapsed,
   tabContextMenu,
   theme,
   URL_PARAM,
@@ -95,6 +95,8 @@ demoListeners.add(
 demoListeners.add(
   wireCatalog(root, {
     collapsed,
+    settingsCollapsed,
+    toggleSettingsAction: 'toggle-settings',
     onSelect: selectDemo,
     onToggleSidebar: () => {
       collapsed.value = !collapsed.value;
@@ -124,11 +126,6 @@ demoListeners.add(
   }),
 );
 revealCatalogEntry(root, selectedId.value, { block: 'center' });
-demoListeners.add(
-  delegate(root, 'click', DEMO_ACTIONS.toggleSettings.selector, () => {
-    settingsOpen.value = !settingsOpen.value;
-  }),
-);
 demoListeners.add(
   delegate(root, 'click', DEMO_ACTIONS.resetSettings.selector, () => {
     demoEntry(selectedId.value)?.reset?.(root);

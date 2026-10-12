@@ -64,7 +64,7 @@ test('demonstrates adjacent full-width A-B push/pop with chrome crossfades and r
     node.parentNode?.removeChild(node);
   });
 
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Show settings' }).first().click();
   const crossfadePause = await page.addStyleTag({ content: pausedMotion });
   for (const [name, value] of [
     ['transition-style', 'crossfade'],

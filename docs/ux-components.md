@@ -2099,20 +2099,21 @@ its conditional Clear filter button clears the query and returns focus to the fi
 Filtering still matches entry and section names without regard to case, and rerenders
 retain the query. The app retains
 ownership of the selected entry, the display choices it persists as one
-`hotsheet.ux-demo.display` record (`src/ux-demo/display-preferences.ts`), and an optional
-manually closed settings inspector that keeps the demo visible during live adjustment.
+`hotsheet.ux-demo.display` record (`src/ux-demo/display-preferences.ts`), and whether Kerf's
+Catalog settings pane (KF-0AY6AE) is collapsed. The pane starts collapsed and collapses again on
+every selection; below Kerf's narrow breakpoint it is a transient overlay that also collapses on
+resize, Escape, or an outside press.
 
 The demo is registry-driven (HS2-HMVBZW). Every `src/ux-demo/*-demo.tsx` file exports a
 `demoModule` naming the catalog entries it renders (`Demo`, optional `Settings`, and `reset`)
 and an optional `wire(root)` that installs that file's delegated, window, and document
 listeners in one disposable scope. `src/ux-demo/registry.ts` maps catalog ids to entries and
-wires the modules in their original listener-registration order; `settings-inspector.tsx`
-renders any entry's `Settings`, and the Settings action appears only for entries that have one.
+wires the modules in their original listener-registration order. The selected entry's `Settings`
+form is passed to the Catalog's `settings` pane, so only entries with settings get the pane and its
+Show/Hide settings toggle (`data-action="toggle-settings"`).
 `main.tsx` keeps only the catalog chrome: mounting, Kerf `wireCatalog`, the staged context-menu
-and top-layer helpers, Settings/Reset, and the shared ticket and project-tab menu dismissal.
-Shared fixtures live in `src/ux-demo/fixtures.ts`. The settings action lives with the
-other catalog-header tools; while the inspector is open, its Close settings action stays
-viewport anchored. Stateful Web Awesome control properties stay synchronized when a demo
+and top-layer helpers, Reset, and the shared ticket and project-tab menu dismissal.
+Shared fixtures live in `src/ux-demo/fixtures.ts`. Stateful Web Awesome control properties stay synchronized when a demo
 reset restores its canonical mock state. Every settings form ends with a Reset action, including the
 TicketInspector, AIConversation, QuickTicketComposer, and ContentTransition forms (HS2-X1SM48).
 Further catalog review tooling is tracked by HS2-89692E.

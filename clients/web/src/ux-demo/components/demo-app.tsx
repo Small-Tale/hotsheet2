@@ -1,12 +1,10 @@
 import { Catalog } from '@kerfjs/ui/catalog';
 import { Text } from '@kerfjs/ui/text';
-import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 
 import { ProjectTabContextMenu } from '../../components/project-tab-context-menu';
 import { TicketRowContextMenu } from '../../components/ticket-row-context-menu';
 import { demoCatalog, type DemoDefinition, demoKind, findDemo, kerfCatalogSections } from '../catalog';
 import { demoEntry } from '../registry';
-import { SettingsInspector } from '../settings-inspector';
 import { collectionTickets } from '../ticket-collections-demo';
 import { TICKET_ROW_DEMO_SLUG, ticketRowSettings } from '../ticket-row-demo';
 import {
@@ -17,7 +15,7 @@ import {
   increasedContrast,
   reducedMotion,
   selectedId,
-  settingsOpen,
+  settingsCollapsed,
   tabContextMenu,
   theme,
 } from './demo-state';
@@ -34,7 +32,8 @@ function PlannedDemo({ item }: { item: DemoDefinition }) {
 export function DemoApp() {
   const selected = findDemo(selectedId.value) ?? findDemo(DEFAULT_DEMO)!;
   const entry = demoEntry(selected.id),
-    Demo = entry?.Demo;
+    Demo = entry?.Demo,
+    Settings = entry?.Settings;
   // The standalone TicketRow demo row isn't a collection ticket, so resolve its context
   // menu from the live demo settings; collection rows resolve from their fixtures (HS2-AFB17W).
   const menuTicket =
@@ -49,46 +48,38 @@ export function DemoApp() {
         : undefined;
   return (
     <>
-      {/* The demo-owned shell narrows beside the settings inspector; Kerf's Catalog root stays unstyled. */}
-      <div class="demo-shell" data-settings-open={String(settingsOpen.value)}>
-        <Catalog
-          brand={{ title: 'UX components', subtitle: 'Hot Sheet · deterministic production components' }}
-          sections={kerfCatalogSections(demoCatalog)}
-          active={selected.id}
-          collapsed={collapsed.value}
-          theme={theme.value}
-          increasedContrast={increasedContrast.value}
-          reducedMotion={reducedMotion.value}
-          backgroundControl
-          backgroundStyle={backgroundStyle.value}
-          content={
-            <section
-              class="demo-catalog-examples"
-              data-catalog-example-stack
-              data-catalog-geometry-skip={demoKind(selected.id) === 'composition' ? '' : undefined}
-              aria-label={`${selected.name} examples`}
-            >
-              {Demo ? <Demo /> : <PlannedDemo item={selected} />}
-            </section>
-          }
-          // Each entry's phase and Planned state are Catalog tags on its sidebar row (HS2-HMVBZW).
-          status={
-            <Text variant="span" size="compact" tone="quiet">
-              Production components · deterministic fixtures
-            </Text>
-          }
-          headerActions={
-            entry?.Settings && !settingsOpen.value ? (
-              <ToolbarControlGroup label="Demo tools" content="mixed">
-                <button type="button" data-action="toggle-settings" aria-expanded="false" title="Open demo settings">
-                  <span>Settings</span>
-                </button>
-              </ToolbarControlGroup>
-            ) : undefined
-          }
-        />
-      </div>
-      {settingsOpen.value && <SettingsInspector name={selected.name} entry={entry} />}
+      <Catalog
+        brand={{ title: 'UX components', subtitle: 'Hot Sheet · deterministic production components' }}
+        sections={kerfCatalogSections(demoCatalog)}
+        active={selected.id}
+        collapsed={collapsed.value}
+        theme={theme.value}
+        increasedContrast={increasedContrast.value}
+        reducedMotion={reducedMotion.value}
+        backgroundControl
+        backgroundStyle={backgroundStyle.value}
+        // Kerf's settings pane hosts the entry's Settings form; entries without one get no pane or toggle.
+        settings={Settings ? <Settings /> : undefined}
+        settingsCollapsed={settingsCollapsed.value}
+        settingsPanel={{ size: 368 }}
+        toggleSettingsAction="toggle-settings"
+        content={
+          <section
+            class="demo-catalog-examples"
+            data-catalog-example-stack
+            data-catalog-geometry-skip={demoKind(selected.id) === 'composition' ? '' : undefined}
+            aria-label={`${selected.name} examples`}
+          >
+            {Demo ? <Demo /> : <PlannedDemo item={selected} />}
+          </section>
+        }
+        // Each entry's phase and Planned state are Catalog tags on its sidebar row (HS2-HMVBZW).
+        status={
+          <Text variant="span" size="compact" tone="quiet">
+            Production components · deterministic fixtures
+          </Text>
+        }
+      />
       {contextMenu.value && (
         <TicketRowContextMenu
           x={contextMenu.value.x}

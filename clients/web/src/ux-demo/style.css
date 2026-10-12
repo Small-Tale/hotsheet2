@@ -42,12 +42,6 @@ body[data-resizing-project-sidebar='true'] {
   cursor: row-resize;
   user-select: none;
 }
-.demo-shell {
-  height: 100%;
-}
-.demo-shell[data-settings-open='true'] {
-  width: calc(100% - min(remify(432px), calc(100vw - remify(32px))));
-}
 .demo-catalog-examples {
   width: 100%;
   min-width: 0;
@@ -61,14 +55,6 @@ body[data-resizing-project-sidebar='true'] {
 }
 .command-settings-editor-demo {
   width: 100%;
-}
-.eyebrow {
-  margin: 0;
-  color: var(--wa-color-text-link) !important;
-  font-size: var(--wa-font-size-xs);
-  font-weight: 750;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }
 .component-stage,
 .planned-demo {
@@ -169,37 +155,6 @@ body[data-resizing-project-sidebar='true'] {
   display: grid;
   gap: remify(16px);
   min-width: min(remify(368px), 80vw);
-}
-.settings-inspector {
-  position: fixed;
-  z-index: 10;
-  inset: 0 0 0 auto;
-  width: min(remify(432px), calc(100vw - remify(32px)));
-  overflow: auto;
-  padding: remify(24px);
-  border-left: 1px solid var(--wa-color-neutral-border-normal);
-  background: var(--wa-color-surface-lowered);
-  box-shadow: var(--wa-shadow-l);
-}
-.settings-inspector > header {
-  display: flex;
-  padding-top: remify(52px);
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: remify(16px);
-  margin-bottom: remify(24px);
-}
-.settings-inspector__title {
-  margin: remify(2.4px) 0 0;
-  overflow-wrap: anywhere;
-  font-size: var(--wa-font-size-xl);
-}
-.settings-toggle {
-  position: fixed;
-  z-index: 20;
-  top: remify(24px);
-  right: remify(24px);
-  width: remify(136px);
 }
 .component-stage--row {
   justify-items: stretch;

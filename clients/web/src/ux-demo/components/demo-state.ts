@@ -13,7 +13,8 @@ const requestedDemo = findDemo(
   typeof location === 'undefined' ? '' : (new URL(location.href).searchParams.get(URL_PARAM) ?? ''),
 );
 export const selectedId = signal(requestedDemo?.id ?? DEFAULT_DEMO);
-export const settingsOpen = signal(false);
+/** Kerf's Catalog settings pane starts collapsed and collapses again on every selection (KF-0AY6AE). */
+export const settingsCollapsed = signal(true);
 
 let displayStorage: Storage | null = null;
 try {
@@ -65,7 +66,7 @@ export function onDemoSelected(listener: (id: string) => void): () => void {
 export function selectDemo(id: string): void {
   if (!findDemo(id)) return;
   selectedId.value = id;
-  settingsOpen.value = false;
+  settingsCollapsed.value = true;
   contextMenu.value = undefined;
   const url = new URL(location.href);
   url.searchParams.set(URL_PARAM, id);

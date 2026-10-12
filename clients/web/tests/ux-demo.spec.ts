@@ -1,6 +1,30 @@
-import { expect, type Locator, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
+
+/**
+ * Open or close Kerf's Catalog settings pane (KF-0AY6AE). Below the narrow breakpoint the pane is a
+ * transient overlay that collapses on resize, Escape, or an outside press, so steps that need the form
+ * reopen it first and steps that press the stage close it first (HS2-HMVBZW).
+ */
+async function setDemoSettingsOpen(page: Page, open: boolean): Promise<void> {
+  const toggle = (expanded: boolean) =>
+    page.locator(`[data-action="toggle-settings"][aria-expanded="${String(expanded)}"]`);
+  // A resize into the narrow layout collapses the pane asynchronously, so retry until the state settles.
+  await expect(async () => {
+    if (await toggle(open).count()) return;
+    await toggle(!open)
+      .first()
+      .evaluate(
+        (node) => {
+          (node as HTMLElement).click();
+        },
+        undefined,
+        { timeout: 1000 },
+      );
+    expect(await toggle(open).count()).toBeGreaterThan(0);
+  }).toPass({ timeout: 10_000 });
+}
 
 test('clears the halted terminal example from its menu at wide and phone widths (HS2-6J79SA)', async ({ page }) => {
   for (const width of [1280, 390]) {
@@ -692,7 +716,7 @@ test('represents the shared repository-status composition in the UX catalog', as
   });
   expect(paneSpacing).toEqual({ wrappers: 0, headerAboveItems: true, rowGaps: [0, 0, 0, 0] });
   await expect(dialog.locator('nav[aria-label="Repository views"] .kui-list-item__status')).toHaveCount(5);
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   const inspector = page.getByRole('complementary', { name: 'RepositoryStatusPopover settings' }),
     scenario = inspector.locator('wa-select[name="scenario"]');
   for (const [value, state, copy, icon] of [
@@ -717,12 +741,13 @@ test('represents the shared repository-status composition in the UX catalog', as
       state === 'clean' ? 'success' : state === 'conflicted' || state === 'error' ? 'danger' : 'brand',
     );
   }
+  await setDemoSettingsOpen(page, true);
   await inspector.getByRole('button', { name: 'Reset' }).click();
   await expect(scenario).toHaveJSProperty('value', 'conflicted');
   await expect(dialog).toHaveAttribute('data-state', 'conflicted');
   await expect(dialog.locator('.app-heading [data-tile-tone="danger"] [data-lucide="triangle-alert"]')).toHaveCount(1);
   await page.screenshot({ path: 'target/visual-captures/hs2-s6f817-repository-scenario-settings.png', fullPage: true });
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   await dialog.getByRole('button', { name: /Unstaged 2/ }).click();
   await dialog.screenshot({ path: 'target/visual-captures/hs2-72z7cb-repository-status-wide.png' });
   await dialog.getByRole('button', { name: /Staged 2/ }).click();
@@ -886,7 +911,7 @@ test('represents every server-build details state with shared dialog geometry', 
     }),
   ).toEqual({ border: '1px', left: '8px', right: '8px' });
   await expect(dialog.getByRole('button', { name: 'Close' })).toHaveCount(0);
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   const scenario = page
     .getByRole('complementary', { name: 'ConnectionDetailsDialog settings' })
     .locator('wa-select[name="scenario"]');
@@ -910,7 +935,7 @@ test('represents every server-build details state with shared dialog geometry', 
     .getByRole('button', { name: 'Reset' })
     .click();
   await expect(scenario).toHaveJSProperty('value', 'source-stale');
-  const settingsTrigger = page.locator('[data-action="toggle-settings"]');
+  const settingsTrigger = page.locator('[data-action="toggle-settings"]').first();
   await settingsTrigger.click();
   await settingsTrigger.evaluate((node) => {
     (node as HTMLElement).hidden = true;
@@ -1551,7 +1576,7 @@ test('round-trips ConfidenceCalibration states through reset and a post-reset ed
   await expect(panel.locator('tbody tr[data-band="assumed"] td').nth(4)).toHaveText('50%');
   await expect(panel.locator('tbody tr[data-band="partial"] wa-progress-bar')).toHaveCount(0);
   await expect(panel.locator('.confidence-calibration__recent li')).toHaveCount(7);
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   const inspector = page.getByRole('complementary', { name: 'ConfidenceCalibration settings' });
   const state = inspector.locator('wa-select[name="state"]');
   const set = (value: string) =>
@@ -1567,6 +1592,7 @@ test('round-trips ConfidenceCalibration states through reset and a post-reset ed
   await set('error');
   await expect(panel).toHaveAttribute('data-state', 'error');
   await expect(panel).toContainText('Confidence calibration is unavailable');
+  await setDemoSettingsOpen(page, true);
   await inspector.getByRole('button', { name: 'Reset' }).click();
   await expect(state).toHaveJSProperty('value', 'ready');
   await expect(panel).toHaveAttribute('data-state', 'ready');
@@ -1582,7 +1608,7 @@ test('round-trips ConfidenceBadge appearance and band controls through reset and
   await expect(badge).toHaveText('82%');
   await expect(badge).toHaveAttribute('data-band', 'assumed');
   await expect(badge).toHaveAttribute('data-appearance', 'compact');
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   const inspector = page.getByRole('complementary', { name: 'ConfidenceBadge settings' });
   const value = inspector.locator('wa-select[name="value"]');
   const appearance = inspector.locator('wa-select[name="appearance"]');
@@ -1605,6 +1631,7 @@ test('round-trips ConfidenceBadge appearance and band controls through reset and
   await expect(badge).toHaveText('Confidence 20%');
   await expect(badge).toHaveAttribute('data-appearance', 'labeled');
   await expect(badge.locator('[data-lucide="gauge"]')).toHaveCount(1);
+  await setDemoSettingsOpen(page, true);
   await inspector.getByRole('button', { name: 'Reset' }).click();
   await expect(value).toHaveJSProperty('value', '82');
   await expect(appearance).toHaveJSProperty('value', 'compact');
@@ -1621,11 +1648,13 @@ test('resets the TicketInspector, AIConversation, QuickTicketComposer, and Conte
 }) => {
   // Eight demo navigations and reset cycles share one test deadline under the full worker load.
   test.setTimeout(120_000);
-  const setValue = (control: Locator, value: string) =>
-    control.evaluate((node: HTMLElement & { value: string }, next) => {
+  const setValue = async (control: Locator, value: string) => {
+    await setDemoSettingsOpen(page, true);
+    await control.evaluate((node: HTMLElement & { value: string }, next) => {
       node.value = next;
       node.dispatchEvent(new Event('change', { bubbles: true }));
     }, value);
+  };
   const openSettings = async (component: string, name: string) => {
     await page.goto(`/ux-demo?component=${component}`);
     const inspector = page.getByRole('complementary', { name: `${name} settings` });
@@ -1634,8 +1663,7 @@ test('resets the TicketInspector, AIConversation, QuickTicketComposer, and Conte
       await expect(page.locator('[data-component="ai-conversation"]').getByRole('dialog')).toBeVisible();
       await page.keyboard.press('Escape');
     }
-    if (!(await inspector.isVisible()))
-      await page.locator('[data-action="toggle-settings"][aria-expanded="false"]').click();
+    await setDemoSettingsOpen(page, true);
     await expect(inspector).toBeVisible();
     return inspector;
   };
@@ -1648,6 +1676,7 @@ test('resets the TicketInspector, AIConversation, QuickTicketComposer, and Conte
     const liveClaim = settings.locator('wa-select[name="inspector-live-claim"]');
     await setValue(liveClaim, 'overrun');
     await expect(notice).toHaveCount(1);
+    await setDemoSettingsOpen(page, true);
     await settings.getByRole('button', { name: 'Reset' }).click();
     await expect(liveClaim).toHaveJSProperty('value', 'none');
     await expect(notice).toHaveCount(0);
@@ -1664,6 +1693,7 @@ test('resets the TicketInspector, AIConversation, QuickTicketComposer, and Conte
     await expect(host.first()).toContainText('Conversation unavailable');
     await setValue(presentation, 'embedded');
     await expect(page.locator('[data-component="ai-conversation"][data-presentation="embedded"]')).toHaveCount(1);
+    await setDemoSettingsOpen(page, true);
     await settings.getByRole('button', { name: 'Reset' }).click();
     await expect(presentation).toHaveJSProperty('value', 'dialog');
     await expect(scenario).toHaveJSProperty('value', 'streaming');
@@ -1678,12 +1708,14 @@ test('resets the TicketInspector, AIConversation, QuickTicketComposer, and Conte
     const sourceCount = settings.locator('wa-select[name="composer-source-count"]'),
       source = page.locator('[data-component="quick-ticket-composer"] wa-select[name="new-ticket-source"]');
     const expectSourceSelect = async (count: number) => {
+      await setDemoSettingsOpen(page, false);
       await page.getByRole('button', { name: /New ticket/ }).click();
       await expect(source).toHaveCount(count);
       await page.getByRole('button', { name: /Cancel/ }).click();
     };
     await setValue(sourceCount, 'one');
     await expectSourceSelect(0);
+    await setDemoSettingsOpen(page, true);
     await settings.getByRole('button', { name: 'Reset' }).click();
     await expect(sourceCount).toHaveJSProperty('value', 'several');
     await expectSourceSelect(1);
@@ -1700,6 +1732,7 @@ test('resets the TicketInspector, AIConversation, QuickTicketComposer, and Conte
     await setValue(side, 'b');
     await expect(transition).toHaveAttribute('data-transition-style', 'crossfade');
     await expect(transition).toHaveAttribute('data-active-side', 'b');
+    await setDemoSettingsOpen(page, true);
     await settings.getByRole('button', { name: 'Reset' }).click();
     await expect(style).toHaveJSProperty('value', 'push');
     await expect(side).toHaveJSProperty('value', 'a');
@@ -1759,6 +1792,7 @@ test('round-trips AppShell presentation and work-area focus-ring settings (HS2-8
     await expect(workArea).toHaveCSS('outline-color', 'rgba(0, 0, 0, 0)');
     await page.screenshot({ path: `target/visual-captures/hs2-8zjmce-app-shell-viewport-overlay-${width}.png` });
     // Reset → every live control and the render return to the defaults.
+    await setDemoSettingsOpen(page, true);
     await inspector.getByRole('button', { name: 'Reset' }).click();
     await expect(presentation).toHaveJSProperty('value', 'framed');
     await expect(overlay).toHaveJSProperty('checked', false);
@@ -1804,6 +1838,7 @@ test('round-trips the AppShell phone view header and its Empty Trash action (HS2
   await expect(demo.locator('.component-stage__event')).toHaveText('Empty Trash confirmation requested.');
   await header.screenshot({ path: 'target/visual-captures/hs2-t35vn7-app-shell-phone-header-trash.png' });
   // Reset → the toggle, the selected view, and the render return to the defaults.
+  await setDemoSettingsOpen(page, true);
   await inspector.getByRole('button', { name: 'Reset' }).click();
   await expect(toggle).toHaveJSProperty('checked', false);
   await expect(header).toHaveCount(0);
@@ -1818,7 +1853,7 @@ test('round-trips StatusBadge controls through reset and a post-reset edit', asy
   const badge = page.locator('[data-component="status-badge"]');
   await expect(badge).toContainText('Started');
   await expect(badge.locator('[data-lucide="clock"]')).toHaveAttribute('aria-hidden', 'true');
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   const inspector = page.getByRole('complementary', { name: 'StatusBadge settings' });
   const status = inspector.locator('wa-select[name="status"]');
   const appearance = inspector.locator('wa-select[name="appearance"]');
@@ -1848,6 +1883,7 @@ test('round-trips StatusBadge controls through reset and a post-reset edit', asy
   await expect(badge).toHaveClass(/status-badge--compact/);
   await icon.click();
   await expect(badge.locator('.status-badge__icon')).toHaveCount(0);
+  await setDemoSettingsOpen(page, true);
   await inspector.getByRole('button', { name: 'Reset' }).click();
   await expect(status).toHaveJSProperty('value', 'started');
   await expect(appearance).toHaveJSProperty('value', 'filled');
@@ -1871,7 +1907,7 @@ test('round-trips StatusBadge controls through reset and a post-reset edit', asy
 
 test('shows remote final testing as a Started phase at wide and phone widths', async ({ page }, testInfo) => {
   await page.goto('/ux-demo?component=status-badge');
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   const phase = page.locator('wa-select[name="started-phase"]');
   await phase.evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'final_testing';
@@ -1883,7 +1919,7 @@ test('shows remote final testing as a Started phase at wide and phone widths', a
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.screenshot({ path: testInfo.outputPath('final-testing-wide.png') });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Close settings' }).click();
+  await setDemoSettingsOpen(page, false);
   await expect(badge).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('final-testing-phone.png') });
 });
@@ -1891,7 +1927,7 @@ test('shows remote final testing as a Started phase at wide and phone widths', a
 test('shows a released final-testing ticket in the list row at wide and phone widths', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=ticket-row');
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   const settings = page.locator('[data-settings="ticket-list-row"]');
   await settings.locator('wa-select[name="started-phase"]').evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'final_testing';
@@ -1904,7 +1940,7 @@ test('shows a released final-testing ticket in the list row at wide and phone wi
   await expect(row.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'started');
   await page.screenshot({ path: testInfo.outputPath('final-testing-row-wide.png') });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Close settings' }).click();
+  await setDemoSettingsOpen(page, false);
   await expect(row).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('final-testing-row-phone.png') });
 });
@@ -1914,9 +1950,9 @@ test('shows a GitHub issue number without its repository prefix in the ticket ro
 }, testInfo) => {
   await page.setViewportSize({ width: 560, height: 760 });
   await page.goto('/ux-demo?component=ticket-row');
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   await page.getByRole('textbox', { name: 'Title' }).fill('i deleted a github issue-based ticket that was verified');
-  await page.getByRole('button', { name: 'Close settings' }).click();
+  await setDemoSettingsOpen(page, false);
   const row = page.locator('[data-component="ticket-list-row"]');
   await expect(row).toHaveAttribute('data-ticket-slug', 'Small-Tale/hotsheet2#5');
   await expect(row.locator('.ticket-list-row__slug')).toHaveText('#5');
@@ -1976,7 +2012,7 @@ test('switches the TicketInspector live-claim header through every claim state (
   const notice = inspector.locator('[data-component="live-claim-notice"]'),
     eta = notice.locator('[data-claim-eta]');
   await expect(notice).toHaveCount(0);
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   const control = page
     .getByRole('complementary', { name: 'TicketInspector settings' })
     .locator('wa-select[name="inspector-live-claim"]');
@@ -2016,7 +2052,7 @@ test('switches the TicketInspector live-claim header through every claim state (
   await expect(notice).toHaveCount(0);
   await setLiveClaim('estimate');
   await expect(eta).toHaveText('~45m left');
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   await page.screenshot({ path: test.info().outputPath('live-claim-wide.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(notice).toBeVisible();
@@ -2024,9 +2060,9 @@ test('switches the TicketInspector live-claim header through every claim state (
   expect(narrowRing!.width).toBeCloseTo(16.8, 1);
   expect(narrowRing!.height).toBeCloseTo(16.8, 1);
   await page.screenshot({ path: test.info().outputPath('live-claim-narrow.png') });
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   await setLiveClaim('generated-id');
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   await expect(notice).toContainText('Codex is working on this');
   await expect(notice).toHaveAttribute('title', 'codex-01M44ZE2BPEZKWTW49DCTATTPW is actively working on this ticket');
   await expect(eta).toHaveText('~45m left');
@@ -2074,15 +2110,17 @@ test('uses the row claim slot for one same-size ring or spinner at wide and phon
 }) => {
   await page.goto('/ux-demo?component=ticket-row');
   const row = page.locator('[data-component="ticket-list-row"]');
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   const claimEta = page
     .getByRole('complementary', { name: 'TicketRow settings' })
     .locator('wa-select[name="claim-eta"]');
-  const setClaimEta = (value: string) =>
-    claimEta.evaluate((node: HTMLElement & { value: string }, next) => {
+  const setClaimEta = async (value: string) => {
+    await setDemoSettingsOpen(page, true);
+    await claimEta.evaluate((node: HTMLElement & { value: string }, next) => {
       node.value = next;
       node.dispatchEvent(new Event('change', { bubbles: true }));
     }, value);
+  };
   for (const width of [1100, 390]) {
     await page.setViewportSize({ width, height: 844 });
     const ring = row.locator('.ticket-list-row__claim .claim-eta__ring');
@@ -2100,9 +2138,9 @@ test('uses the row claim slot for one same-size ring or spinner at wide and phon
     expect(box!.width).toBeCloseTo(16.8, 1);
     expect(box!.height).toBeCloseTo(16.8, 1);
     await setClaimEta('estimate');
-    await page.getByRole('button', { name: 'Close settings' }).click();
+    await setDemoSettingsOpen(page, false);
     await page.screenshot({ path: test.info().outputPath(`live-claim-row-${width}.png`) });
-    await page.locator('[data-action="toggle-settings"]').click();
+    await page.locator('[data-action="toggle-settings"]').first().click();
   }
 });
 
@@ -2110,7 +2148,7 @@ test('clips a long worker ID inside the TicketRow while retaining its full acces
   page,
 }) => {
   await page.goto('/ux-demo?component=ticket-row');
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   const worker = 'codex-01M44ZE2BPEZKWTW49DCTATTPW';
   const agent = page
     .getByRole('complementary', { name: 'TicketRow settings' })
@@ -2118,7 +2156,7 @@ test('clips a long worker ID inside the TicketRow while retaining its full acces
   const row = page.locator('[data-component="ticket-list-row"]');
   const owner = row.locator('.ticket-list-row__owner');
   await agent.fill(worker);
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   for (const width of [1100, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await expect(owner).toHaveAttribute('title', worker);
@@ -2130,9 +2168,9 @@ test('clips a long worker ID inside the TicketRow while retaining its full acces
     expect(ownerBox!.x + ownerBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
     await row.screenshot({ path: test.info().outputPath(`long-worker-${width}.png`) });
   }
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   await agent.fill('Codex');
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   await expect(owner).toHaveText('Codex');
   const shortDimensions = await owner.evaluate((node) => ({ width: node.clientWidth, content: node.scrollWidth }));
   expect(shortDimensions.content).toBeLessThanOrEqual(shortDimensions.width);
@@ -2141,13 +2179,13 @@ test('clips a long worker ID inside the TicketRow while retaining its full acces
 test('keeps a long GitHub issue title scannable in a 228px TicketRow (HS2-KWPCFP)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/ux-demo?component=ticket-row');
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   const title = 'Improve search results when several filters change together';
   await page
     .getByRole('complementary', { name: 'TicketRow settings' })
     .getByRole('textbox', { name: 'Title' })
     .fill(title);
-  await page.getByRole('button', { name: 'Close settings' }).click();
+  await setDemoSettingsOpen(page, false);
 
   const row = page.locator('[data-component="ticket-list-row"]');
   const identity = row.locator('.ticket-list-row__identity');
@@ -2183,7 +2221,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await page.goto('/ux-demo?component=ticket-row');
   const row = page.locator('[data-component="ticket-list-row"]');
   await expect(row).toContainText('Build the first client ticket list');
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   const inspector = page.getByRole('complementary', { name: 'TicketRow settings' });
   const title = inspector.getByRole('textbox', { name: 'Title' });
   const category = inspector.getByRole('textbox', { name: 'Category' });
@@ -2201,11 +2239,13 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   const busy = inspector.locator('wa-checkbox[name="busy"]');
   const claimEta = inspector.locator('wa-select[name="claim-eta"]');
   const eta = row.locator('[data-claim-eta]');
-  const setClaimEta = (value: string) =>
-    claimEta.evaluate((node: HTMLElement & { value: string }, next) => {
+  const setClaimEta = async (value: string) => {
+    await setDemoSettingsOpen(page, true);
+    await claimEta.evaluate((node: HTMLElement & { value: string }, next) => {
       node.value = next;
       node.dispatchEvent(new Event('change', { bubbles: true }));
     }, value);
+  };
   // A live claim with an estimate shows a progress ring and the time left (HS2-XQMDQB).
   await expect(eta).toHaveAttribute('data-claim-eta', 'estimate');
   await expect(eta).toHaveText('~45m left');
@@ -2306,6 +2346,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(selected).toHaveJSProperty('checked', false);
   await expect(row).toHaveAttribute('data-selected', 'false');
   await expect(page.getByText('Ticket deselected')).toBeVisible();
+  await setDemoSettingsOpen(page, true);
   await inspector.getByRole('button', { name: 'Reset' }).click();
   await expect(title).toHaveJSProperty('value', 'Build the first client ticket list');
   await expect(status).toHaveJSProperty('value', 'started');
@@ -2649,7 +2690,7 @@ test('switches the MarkdownEditor demo appearance and inset, then resets them (H
     await expect(editor.locator('.markdown-editor__toolbar')).toBeVisible();
 
     // The Settings button is reachable, and the live controls start at the defaults.
-    await page.locator('[data-action="toggle-settings"]').click();
+    await page.locator('[data-action="toggle-settings"]').first().click();
     await expect(appearance).toHaveJSProperty('value', 'standalone');
     await expect(inset).toHaveJSProperty('value', 'padded');
 
@@ -2667,13 +2708,14 @@ test('switches the MarkdownEditor demo appearance and inset, then resets them (H
     await expect(preview).toHaveCSS('padding-left', '0px');
     await page.screenshot({ path: `target/visual-captures/claude/hs2-qbr5hc-embedded-flush-${width}.png` });
     // Closing and reopening the settings keeps the live controls on the chosen variants.
-    await page.locator('.settings-inspector [data-action="toggle-settings"]').click();
+    await setDemoSettingsOpen(page, false);
     await editor.screenshot({ path: `target/visual-captures/claude/hs2-qbr5hc-embedded-flush-editor-${width}.png` });
-    await page.locator('[data-action="toggle-settings"]').click();
+    await page.locator('[data-action="toggle-settings"]').first().click();
     await expect(appearance).toHaveJSProperty('value', 'embedded');
     await expect(inset).toHaveJSProperty('value', 'flush');
 
     // Reset -> state, render, and the live controls all return to the defaults.
+    await setDemoSettingsOpen(page, true);
     await settings.locator('[data-action="reset-settings"]').click();
     await expect(editor).toHaveAttribute('data-appearance', 'standalone');
     await expect(editor).toHaveAttribute('data-inset', 'padded');
@@ -2752,7 +2794,7 @@ test('previews every BulkTicketDialog presentation through demo settings, then r
     await tagDialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(tagDialog).toHaveCount(0);
     await expect(event).toHaveText('Cancelled; the selection is unchanged.');
-    await page.locator('[data-action="toggle-settings"]').click();
+    await page.locator('[data-action="toggle-settings"]').first().click();
     await expect(scenario).toHaveJSProperty('value', 'add-tag');
 
     // Remove mode offers the selection's tags as choices; a choice fills the field and submit reports it.
@@ -2799,6 +2841,7 @@ test('previews every BulkTicketDialog presentation through demo settings, then r
     await expect(scenario).toHaveJSProperty('value', 'empty-trash-error');
 
     // Reset restores add-tag in the dialog and the live control, then another edit still applies.
+    await setDemoSettingsOpen(page, true);
     await page.locator('[data-settings="bulk-ticket-dialog"] [data-action="reset-settings"]').click();
     await expect(tagDialog).toHaveJSProperty('open', true);
     await expect(tagDialog.locator('form')).toHaveAttribute('data-tag-mode', 'add');
@@ -2838,13 +2881,13 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
       shot = async (name: string, ...visible: Locator[]) => {
         // The phone-width settings inspector takes the whole viewport, so check and capture the workspace
         // with the inspector closed, then reopen it.
-        await page.locator('.settings-inspector [data-action="toggle-settings"]').click();
+        await setDemoSettingsOpen(page, false);
         for (const locator of visible) await expect(locator).toBeVisible();
         await workspace.screenshot({ path: `target/visual-captures/claude/hs2-ps9bqv-workspace-${name}-${width}.png` });
-        await page.locator('[data-action="toggle-settings"]').click();
+        await page.locator('[data-action="toggle-settings"]').first().click();
       };
     await expect(workspace).toHaveAttribute('data-settings-category', 'sources');
-    await page.locator('[data-action="toggle-settings"]').click();
+    await page.locator('[data-action="toggle-settings"]').first().click();
     await expect(category).toHaveJSProperty('value', 'sources');
     await expect(action).toHaveJSProperty('value', 'off');
 
@@ -2874,6 +2917,7 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
     await shot('general', workspace.getByRole('checkbox', { name: /Show loading activity/ }));
 
     // Reset restores the sources category and Off automation in the render and both live controls.
+    await setDemoSettingsOpen(page, true);
     await settings.locator('[data-action="reset-settings"]').click();
     await expect(workspace).toHaveAttribute('data-settings-category', 'sources');
     await expect(category).toHaveJSProperty('value', 'sources');
@@ -4190,7 +4234,7 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await page.getByRole('button', { name: /Cancel/ }).click();
   await expect(source).toHaveCount(0);
   // The demo settings switch to the single-source variant, which keeps the plain label.
-  await page.locator('[data-action="toggle-settings"][aria-expanded="false"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   const sourceCount = page.locator('[data-settings="quick-ticket-composer"] wa-select[name="composer-source-count"]');
   await expect(sourceCount).toHaveJSProperty('value', 'several');
   await sourceCount.evaluate((node: HTMLElement & { value: string }) => {
@@ -5394,13 +5438,13 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
   await expect(kerfChip).toHaveAttribute('data-item-id', 'demo-tag');
   const chipPadding = await chip.evaluate((node) => getComputedStyle(node).paddingLeft);
   expect(chipPadding).toBe('0px');
-  const toggle = page.locator('[data-action="toggle-settings"]');
+  const toggle = page.locator('[data-action="toggle-settings"]').first();
   await expect(toggle).toHaveCount(1);
-  await expect(toggle).toContainText('Settings');
+  await expect(toggle).toHaveAttribute('aria-label', 'Show settings');
   await expect(toggle).toBeVisible();
   await toggle.click();
   await expect(toggle).toHaveCount(1);
-  await expect(toggle).toContainText('Close settings');
+  await expect(toggle).toHaveAttribute('aria-label', 'Hide settings');
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(toggle).toBeVisible();
   const inspector = page.getByRole('complementary', { name: 'TagChip settings' });
@@ -5428,6 +5472,7 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
   await chip.getByRole('button', { name: 'Remove server' }).click();
   await expect(page.getByText('Remove requested for demo-tag')).toBeVisible();
   await expect(inspector).toBeVisible();
+  await setDemoSettingsOpen(page, true);
   await inspector.getByRole('button', { name: 'Reset' }).click();
   await expect(label).toHaveJSProperty('value', 'needs-design');
   await expect(page.locator('wa-select[name="variant"]')).toHaveJSProperty('value', 'neutral');
@@ -5443,7 +5488,7 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
   await expect(inspector).toBeVisible();
   await toggle.click();
   await expect(inspector).toBeHidden();
-  await expect(toggle).toContainText('Settings');
+  await expect(toggle).toHaveAttribute('aria-label', 'Show settings');
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
 });
 
@@ -5451,14 +5496,14 @@ test('maps the brand tag variant to Kerf info tone at wide and phone widths', as
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto('/ux-demo?component=tag-chip');
-    await page.locator('[data-action="toggle-settings"]').click();
+    await page.locator('[data-action="toggle-settings"]').first().click();
     await page.locator('wa-select[name="variant"]').evaluate((node: HTMLElement & { value: string }) => {
       node.value = 'brand';
       node.dispatchEvent(new Event('change', { bubbles: true }));
     });
     const chip = page.locator('[data-component="tag-chip"]');
     await expect(chip.locator('[data-component="chip"]')).toHaveAttribute('data-tone', 'info');
-    await page.locator('[data-action="toggle-settings"]').click();
+    await page.locator('[data-action="toggle-settings"]').first().click();
     await expect(chip).toBeVisible();
     await chip.screenshot({ path: testInfo.outputPath(`tag-chip-brand-${width}.png`) });
   }
@@ -5468,7 +5513,7 @@ test('uses semantic cursors across native and Web Awesome interactions', async (
   await page.goto('/ux-demo?component=ticket-row');
   await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCSS('cursor', 'pointer');
   await expect(page.locator('[data-action="toggle-row-up-next"]')).toHaveCSS('cursor', 'pointer');
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   const inspector = page.getByRole('complementary', { name: 'TicketRow settings' });
   await expect(inspector.getByRole('textbox', { name: 'Title' })).toHaveCSS('cursor', 'text');
   const selectCursor = await inspector
@@ -5483,7 +5528,7 @@ test('uses semantic cursors across native and Web Awesome interactions', async (
     .locator('wa-button[data-action="reset-settings"]')
     .evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="base"]')!).cursor);
   expect(buttonCursor).toBe('pointer');
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   await page.locator('[data-component="ticket-list-row"]').click({ button: 'right' });
   await expect(page.getByRole('menu', { name: 'Ticket actions' }).locator('wa-dropdown-item').first()).toHaveCSS(
     'cursor',
@@ -5774,7 +5819,7 @@ test('keeps workspace spacing and the new-ticket action in the project tab bar',
         (node as HTMLElement).style.display = 'none';
       });
     });
-  await page.locator('.demo-shell').evaluate((node) => {
+  await page.locator('[data-component="catalog"]').evaluate((node) => {
     (node as HTMLElement).style.gridTemplateColumns = '1fr';
   });
   await page.locator('.kui-workbench__main,.component-stage').evaluateAll((nodes) => {
@@ -6988,7 +7033,7 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
 test('previews and resets important PermissionRequestCard variants', async ({ page }) => {
   await page.setViewportSize({ width: 1728, height: 971 });
   await page.goto('/ux-demo?component=permission-request');
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Show settings' }).first().click();
   const settings = page.getByRole('complementary', { name: 'PermissionRequestCard settings' });
   const card = page.locator('[data-component="permission-request-card"]');
   const presentation = settings.locator('[name="presentation"]');
@@ -7122,6 +7167,8 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await expect(card.locator('.permission-request-card__explanation')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hotsheet-permission-settings-wide.png', fullPage: true });
 
+  await setDemoSettingsOpen(page, true);
+
   await settings.getByRole('button', { name: 'Reset' }).click();
   await expect(presentation).toHaveJSProperty('value', 'popup');
   await expect(variant).toHaveJSProperty('value', 'pending');
@@ -7137,7 +7184,7 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await expect(card).toContainText('Decision made outside Hot Sheet');
   await expect(settings).toBeVisible();
   await expect(card).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Close settings' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Hide settings' })).toBeVisible();
   const [cardBox, settingsBox] = await Promise.all([card.boundingBox(), settings.boundingBox()]);
   expect(cardBox!.x + cardBox!.width).toBeLessThanOrEqual(settingsBox!.x);
   await page.screenshot({ path: 'target/visual-captures/hotsheet-permission-settings-narrow.png', fullPage: true });
@@ -7164,7 +7211,7 @@ test('previews AIConversation public states at wide and narrow sizes', async ({ 
   await dialog.screenshot({ path: 'target/visual-captures/hs2-s3j29e-ai-conversation-demo-wide.png' });
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   const scenario = page.locator('[data-settings="ai-conversation"] [name="scenario"]');
   for (const value of ['empty', 'permission', 'completed', 'usage-unpriced', 'failed', 'interrupted'] as const) {
     await scenario.evaluate((node: HTMLElement & { value: string }, next) => {
@@ -7885,7 +7932,7 @@ test('swaps the CommandRunDialog demo between run output and stop confirmation (
     await output.getByRole('button', { name: 'Close' }).click();
     await expect(output).toHaveJSProperty('open', false);
     await expect(event).toHaveText('Closed Run checks output');
-    await page.locator('[data-action="toggle-settings"]').click();
+    await page.locator('[data-action="toggle-settings"]').first().click();
     await expect(presentation).toHaveJSProperty('value', 'output');
 
     // Swapping the presentation re-opens the native dialog modally with the stop confirmation.
@@ -7917,12 +7964,16 @@ test('swaps the CommandRunDialog demo between run output and stop confirmation (
     await expect(presentation).toHaveJSProperty('value', 'stop');
 
     // Reset restores the run-output presentation in both the dialog and the live control, then edits again.
+    await setDemoSettingsOpen(page, true);
     await page.locator('[data-settings="command-run-dialog"] [data-action="reset-settings"]').click();
     await expect(output).toHaveJSProperty('open', true);
     await expect(output).toContainText('All checks passed in 4.2s');
     await expect(presentation).toHaveJSProperty('value', 'output');
+    // Escape would first dismiss the phone-width settings overlay, so close it before dismissing the dialog.
+    await setDemoSettingsOpen(page, false);
     await page.keyboard.press('Escape');
     await expect(output).toHaveJSProperty('open', false);
+    await setDemoSettingsOpen(page, true);
     await presentation.evaluate((control: HTMLElement & { value: string }) => {
       control.value = 'stop';
       control.dispatchEvent(new Event('change', { bubbles: true }));
@@ -7963,7 +8014,7 @@ for (const theme of ['light', 'dark'] as const) {
     await save.press('Enter');
     await page.keyboard.press('Escape');
     await expect(page.locator('.ai-conversation-demo > output')).toContainText('Prepared 1 conversation export.');
-    await page.locator('[data-action="toggle-settings"]').click();
+    await page.locator('[data-action="toggle-settings"]').first().click();
     const settings = page.locator('[data-settings="ai-conversation"]');
     await settings.locator('[name="presentation"]').evaluate((node: HTMLElement & { value: string }) => {
       node.value = 'embedded';
@@ -7974,7 +8025,7 @@ for (const theme of ['light', 'dark'] as const) {
       node.value = 'streaming';
       node.dispatchEvent(new Event('change', { bubbles: true }));
     });
-    await page.getByRole('button', { name: 'Close settings' }).click();
+    await setDemoSettingsOpen(page, false);
     await host.screenshot({ path: `target/visual-captures/hs2-wxvaf3-embedded-${theme}-wide.png` });
     await page.setViewportSize({ width: 390, height: 850 });
     await expect(save).toBeDisabled();
@@ -8240,7 +8291,7 @@ test('shows the source mark after the type on cards and beside the inspector num
   const row = page.locator('[data-component="ticket-list-row"]');
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'github');
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(59, 130, 246)');
-  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-action="toggle-settings"]').first().click();
   const multipleSources = page.locator('[data-settings="ticket-list-row"] wa-checkbox[name="show-source-icon"]');
   await multipleSources.click();
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
@@ -8248,7 +8299,7 @@ test('shows the source mark after the type on cards and beside the inspector num
   await multipleSources.click();
   await expect(row.locator('[data-component="ticket-source-icon"]')).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Close settings' }).click();
+  await setDemoSettingsOpen(page, false);
   await expect(row.locator('[data-component="ticket-source-icon"]')).toBeVisible();
   await row.screenshot({ path: 'target/visual-captures/hs2-myw20v-multiple-list-phone.png' });
   await page.goto('/ux-demo?component=ticket-inspector');
