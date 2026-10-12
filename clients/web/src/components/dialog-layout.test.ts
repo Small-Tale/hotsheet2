@@ -42,9 +42,10 @@ describe('dialog layout primitives', () => {
     expect(css).not.toContain('.kui-toolbar {');
     expect(css).not.toContain('.app-heading__icon');
     const commandCss = readFileSync(resolve(import.meta.dirname, 'command-settings-editor.css'), 'utf8');
-    // The editor styles only its own classed buttons, never a descendant `button` such as the Done control
-    // inside the Kerf ToolbarControlGroup or a nested component's buttons (HS2-JSSMFY).
-    expect(commandCss).toContain('.command-settings-editor__button {');
+    // The editor styles no buttons at all: never a descendant `button` such as the Done control inside the
+    // Kerf ToolbarControlGroup or a nested component's buttons (HS2-JSSMFY), and its group delete is now a
+    // Kerf ListHeader action (HS2-7BBRJT).
+    expect(commandCss).not.toContain('.command-settings-editor__button');
     expect(commandCss).not.toMatch(/\.command-settings-editor\s+button\b/);
   });
 });

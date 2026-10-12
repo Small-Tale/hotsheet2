@@ -131,7 +131,7 @@ export const demoCatalog: DemoCategory[] = [
         'Master-detail editor for custom command buttons, incl. color and icon pickers.',
         'feature-floor',
         true,
-        ['command-navigation'],
+        ['command-navigation', 'toolbar', 'list-header'],
       ),
       demo(
         'drive-control',

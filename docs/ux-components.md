@@ -1671,7 +1671,10 @@ capability-aware sections when their underlying features and data contracts land
   reports as fixture events (HS2-CWWX7S).
 - `CommandSettingsEditor` (Project Settings → Commands) is an HS1-style WYSIWYG editor:
   a sidebar-aligned grouped list of command rows (drag handle, colored icon, name, type)
-  whose group headers come from each command's `group`, with ungrouped commands at the top.
+  whose group headers come from each command's `group`, with ungrouped commands at the top. Each
+  group header is a Kerf `ListHeader`, and an empty group's delete is its logical-end action. The
+  editor heading is a wrapping Kerf `Toolbar` (HS2-7BBRJT, HS2-EBY4E3). The rows stay app-owned until
+  Kerf rows support drag-to-reorder states (KF-HWYE11) and a trailing menu (KF-VWTCYB).
   Rows reorder by pointer drag-and-drop within and across groups (dropping into another
   group changes membership); there are no up/down arrows. Rows are multi-selectable —
   click to select, Cmd/Ctrl-click to toggle a row, Shift-click to select a range — and

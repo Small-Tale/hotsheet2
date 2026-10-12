@@ -7607,7 +7607,10 @@ test('edits custom command color and icon in the command settings editor', async
   // The WYSIWYG list groups draggable rows; each row exposes an overflow menu (HS2-D9JBXT).
   await expect(editor.locator('.command-settings-editor__row')).toHaveCount(3);
   await expect(editor.locator('.command-settings-editor__row[draggable="true"]')).toHaveCount(3);
-  await expect(editor.locator('.command-settings-editor__group-label')).toHaveText(['Quality', 'Release']);
+  await expect(editor.locator('[data-command-group] [data-component="list-header"]')).toHaveText([
+    'Quality',
+    'Release',
+  ]);
   await page.screenshot({ path: 'target/visual-captures/hs2-656xj2-command-list.png' });
   // Add command is the brand-filled primary action; Add group stays a plain secondary button (HS2-JSSMFY).
   const buttonFill = (name: string) =>

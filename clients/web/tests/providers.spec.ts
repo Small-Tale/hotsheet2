@@ -12841,18 +12841,10 @@ test('keeps an empty command group across reloads, populating, and emptying it (
   await editor.getByRole('button', { name: 'Add group' }).click();
   await expect(ideas.locator('.command-settings-editor__group-empty')).toHaveText('Drag commands here');
   await expect(ideas.getByRole('button', { name: 'Delete empty group Ideas' })).toBeVisible();
-  // The quiet icon-only delete keeps its own 24px geometry instead of the editor's generic button chrome.
-  expect(
-    await ideas.getByRole('button', { name: 'Delete empty group Ideas' }).evaluate((button) => {
-      const box = button.getBoundingClientRect(),
-        icon = button.querySelector('svg')!.getBoundingClientRect();
-      return {
-        button: [box.width, box.height],
-        icon: [icon.width, icon.height],
-        border: getComputedStyle(button).borderTopColor,
-      };
-    }),
-  ).toEqual({ button: [24, 24], icon: [14, 14], border: 'rgba(0, 0, 0, 0)' });
+  // The delete is the Kerf ListHeader action, with Kerf-owned geometry (HS2-7BBRJT).
+  await expect(
+    ideas.locator('[data-component="list-header"]').getByRole('button', { name: 'Delete empty group Ideas' }),
+  ).toHaveAttribute('data-group', 'Ideas');
   await expect.poll(() => groupWrites.at(-1)).toEqual(['Ideas']);
   // 2. Reload: the empty group is still there.
   await reopen();

@@ -9,6 +9,7 @@ import { foregroundColorVar, px, uiColor } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
+import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Select } from '@kerfjs/ui/select';
@@ -341,22 +342,20 @@ function CommandGroup({
       data-command-group={group || undefined}
       data-ungrouped={group ? undefined : 'true'}
     >
-      {group && (
-        <div class="command-settings-editor__group-header">
-          <span class="command-settings-editor__group-label">{group}</span>
-          {empty && (
-            <button
-              type="button"
-              class="command-settings-editor__button command-settings-editor__group-delete"
-              {...COMMANDS_AND_AI_ACTIONS.deleteCommandGroup.attrs}
-              data-group={group}
-              aria-label={`Delete empty group ${group}`}
-            >
-              <LucideIcon size={14} icon={Trash2} name="trash-2" />
-            </button>
-          )}
-        </div>
-      )}
+      {/* A Kerf ListHeader names the group; an empty group's delete is its logical-end action
+          (HS2-7BBRJT, HS2-EBY4E3). */}
+      {group &&
+        (empty ? (
+          <ListHeader
+            label={group}
+            action={COMMANDS_AND_AI_ACTIONS.deleteCommandGroup.value}
+            actionLabel={`Delete empty group ${group}`}
+            actionIcon={<LucideIcon icon={Trash2} name="trash-2" />}
+            triggerAttributes={{ 'data-group': group }}
+          />
+        ) : (
+          <ListHeader label={group} />
+        ))}
       <ul class="command-settings-editor__group-items" data-command-group-drop={group}>
         {commands.map((command) => (
           <CommandRow command={command} editing={command.id === editingId} selected={selectedIds.has(command.id)} />

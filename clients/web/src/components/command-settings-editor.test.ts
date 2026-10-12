@@ -24,7 +24,7 @@ describe('CommandSettingsEditor', () => {
     expect(markup).toContain('data-component="command-settings-editor"');
     // Rows are draggable and carry their id; the group header renders once.
     expect(markup).toMatch(/class="command-settings-editor__row" data-command-id="a"[^>]*draggable="true"/);
-    expect(markup).toMatch(/command-settings-editor__group-label">Quality</);
+    expect(markup).toMatch(/data-component="list-header"[^]*Quality/);
     // Actions live in a per-row overflow menu (edit/delete), not inline arrow/delete icons.
     expect(markup).toContain('command-settings-editor__row-menu');
     expect(markup).toContain('data-action="edit-command-setting"');
@@ -68,8 +68,11 @@ describe('CommandSettingsEditor', () => {
         extraGroups: ['Ideas'],
       }),
     );
-    expect(markup).toContain('command-settings-editor__group-label">Ideas<');
-    expect(markup).toMatch(/data-action="delete-command-group" data-group="Ideas"/);
+    // The empty group's header is a Kerf ListHeader whose logical-end action deletes it (HS2-7BBRJT).
+    expect(markup).toMatch(/data-component="list-header"[^]*Ideas/);
+    expect(markup).toMatch(/<button[^>]*data-action="delete-command-group"[^>]*>/);
+    expect(markup).toMatch(/data-group="Ideas"/);
+    expect(markup).toContain('aria-label="Delete empty group Ideas"');
     expect(markup).toContain('Drag commands here');
     // Ungrouped command 'a' has a drop container keyed to the blank group.
     expect(markup).toContain('data-command-group-drop=""');
