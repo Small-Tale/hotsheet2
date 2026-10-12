@@ -20,7 +20,7 @@ describe('global stylesheet ownership', () => {
         'ticket-sources-settings.css',
         ['.ticket-sources-settings', '.ticket-provider-settings'],
       ],
-      ['settings workspace', 'settings-workspace.css', ['.settings-workspace', '.project-settings']],
+      ['settings workspace', 'settings-workspace.css', ['.settings-workspace']],
       ['ticket row context menu', 'ticket-row-context-menu.css', ['.ticket-row-context-menu', '.ticket-context-menu']],
       ['app loading indicator', 'app-loading-indicator.css', ['.app-loading-indicator']],
     ] as const;

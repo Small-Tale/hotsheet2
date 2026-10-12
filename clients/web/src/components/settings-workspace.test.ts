@@ -82,11 +82,17 @@ describe('SettingsWorkspace', () => {
     expect(sources).toContain('/work/demo.hs2');
   });
 
-  it('owns workspace layout styles outside the global stylesheet', () => {
+  it('composes Web Awesome checkboxes and Kerf layout, owning only the page column (HS2-3TVKXG)', () => {
     const global = readFileSync(new URL('../style.css', import.meta.url), 'utf8'),
       owned = readFileSync(new URL('./settings-workspace.css', import.meta.url), 'utf8');
-    expect(global).not.toContain('.project-settings');
-    expect(owned).toContain('.project-settings');
-    expect(owned).toContain('.project-settings__permission-grid');
+    expect(global).not.toContain('.settings-workspace');
+    expect(owned).toContain('.settings-workspace {');
+    expect(owned).not.toContain('.project-settings');
+    const general = String(SettingsWorkspace(props));
+    expect(general).toMatch(/<wa-checkbox data-action="toggle-loading-activity" checked hint="Shows a small label/);
+    expect(general).not.toContain('type="checkbox"');
+    const permissions = String(SettingsWorkspace({ ...props, category: 'permissions' }));
+    expect(permissions).toContain('data-component="grid"');
+    expect(permissions).toContain('data-permission-note="true"');
   });
 });

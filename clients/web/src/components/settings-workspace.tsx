@@ -1,6 +1,11 @@
 import './settings-workspace.css';
+import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
 
+import { rem } from '@kerfjs/ui/css-values';
+import { Grid } from '@kerfjs/ui/grid';
+import { List } from '@kerfjs/ui/list';
 import { Select } from '@kerfjs/ui/select';
+import { Text } from '@kerfjs/ui/text';
 
 import type { AiToolDefaults, AiToolDescriptor } from '../api';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
@@ -48,7 +53,7 @@ export function SettingsWorkspace({
 }: SettingsWorkspaceProps) {
   return (
     <section
-      class="project-settings settings-workspace"
+      class="settings-workspace"
       data-component="settings-workspace"
       aria-label={`${settingsCategoryTitle(category)} settings`}
       data-settings-category={category}
@@ -61,73 +66,66 @@ export function SettingsWorkspace({
       {category === 'commands' && <CommandSettingsEditor {...commands} />}
       {category === 'lifecycle' && <TrashSettings days={lifecycle.days} message={lifecycle.message} />}
       {category === 'terminals' && (
-        <>
-          <label class="project-settings__option">
-            <input
-              type="checkbox"
-              {...COMMANDS_AND_AI_ACTIONS.toggleGlobalShellHistory.attrs}
-              checked={terminals.inheritGlobalShellHistory}
-            />{' '}
-            Use my global shell history{' '}
-            <span>
-              By default, each terminal keeps private, machine-local command recall for this project and terminal. This
-              opt-out applies only on this machine and affects newly created terminals.
-            </span>
-          </label>
-          <p role="status">{terminals.message}</p>
-        </>
+        <List gap="xs">
+          <wa-checkbox
+            {...COMMANDS_AND_AI_ACTIONS.toggleGlobalShellHistory.attrs}
+            checked={terminals.inheritGlobalShellHistory}
+            hint="By default, each terminal keeps private, machine-local command recall for this project and terminal. This opt-out applies only on this machine and affects newly created terminals."
+          >
+            Use my global shell history
+          </wa-checkbox>
+          <Text tone="quiet" size="compact" role="status" flush>
+            {terminals.message}
+          </Text>
+        </List>
       )}
       {category === 'permissions' && (
-        <div class="project-settings__permission-grid">
-          <Select
-            name="permission-automation-action"
-            label="Automatic decision"
-            value={permissions.automation.action}
-            choices={[
-              { value: 'off', label: 'Off' },
-              { value: 'allow', label: 'Auto-allow' },
-              { value: 'deny', label: 'Auto-deny' },
-            ]}
-          />
-          <Select
-            name="permission-automation-delay"
-            label="After visible for"
-            value={String(permissions.automation.delayMs)}
-            disabled={permissions.automation.action === 'off'}
-            choices={permissions.delays
-              .filter((value) => permissionDelaysFor(permissions.automation.action).includes(value))
-              .map((value) => ({ value: String(value), label: formatPermissionDelay(value) }))}
-          />
-          <p class="project-settings__permission-note">
+        <List gap="xs">
+          <Grid minColumnWidth={rem(15)} gap="m">
+            <Select
+              name="permission-automation-action"
+              label="Automatic decision"
+              value={permissions.automation.action}
+              choices={[
+                { value: 'off', label: 'Off' },
+                { value: 'allow', label: 'Auto-allow' },
+                { value: 'deny', label: 'Auto-deny' },
+              ]}
+            />
+            <Select
+              name="permission-automation-delay"
+              label="After visible for"
+              value={String(permissions.automation.delayMs)}
+              disabled={permissions.automation.action === 'off'}
+              choices={permissions.delays
+                .filter((value) => permissionDelaysFor(permissions.automation.action).includes(value))
+                .map((value) => ({ value: String(value), label: formatPermissionDelay(value) }))}
+            />
+          </Grid>
+          <Text tone="quiet" size="compact" flush data-permission-note="true">
             Runs only while this project's floating permission popup is visible. Ignore pauses the timer; Stop
             auto-allow or Stop auto-deny disables that automatic decision for this request. Auto-allow after 0 seconds
             allows each request without showing the popup; it is still recorded in Notifications.
-          </p>
-        </div>
+          </Text>
+        </List>
       )}
       {category === 'columns' && (
-        <label class="project-settings__option">
-          <input
-            type="checkbox"
-            {...NOTIFICATIONS_AND_LINKS_ACTIONS.toggleVerifiedColumn.attrs}
-            checked={columns.hideVerified}
-          />{' '}
-          Hide Verified column <span>Verified tickets appear in Completed.</span>
-        </label>
+        <wa-checkbox
+          {...NOTIFICATIONS_AND_LINKS_ACTIONS.toggleVerifiedColumn.attrs}
+          checked={columns.hideVerified}
+          hint="Verified tickets appear in Completed."
+        >
+          Hide Verified column
+        </wa-checkbox>
       )}
       {category === 'general' && (
-        <label class="project-settings__option">
-          <input
-            type="checkbox"
-            {...COMMANDS_AND_AI_ACTIONS.toggleLoadingActivity.attrs}
-            checked={general.showLoadingActivity}
-          />{' '}
-          Show loading activity{' '}
-          <span>
-            Shows a small label at the top of the app describing what the server is doing (for example “Loading
-            tickets”). This applies only on this machine.
-          </span>
-        </label>
+        <wa-checkbox
+          {...COMMANDS_AND_AI_ACTIONS.toggleLoadingActivity.attrs}
+          checked={general.showLoadingActivity}
+          hint="Shows a small label at the top of the app describing what the server is doing (for example “Loading tickets”). This applies only on this machine."
+        >
+          Show loading activity
+        </wa-checkbox>
       )}
       {category === 'keyboard' && <KeyboardSettings {...keyboard} />}
     </section>

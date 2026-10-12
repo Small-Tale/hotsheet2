@@ -20157,10 +20157,10 @@ test('stores the shell-history inheritance opt-out locally and applies it only t
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByLabel('Settings view').click();
   await page.getByRole('button', { name: 'Terminals', exact: true }).click();
-  const option = page.getByLabel('Use my global shell history');
+  const option = page.getByRole('checkbox', { name: 'Use my global shell history' });
   await expect(option).not.toBeChecked();
   await expect(page.getByText(/each terminal keeps private/)).toBeVisible();
-  await option.check();
+  await page.locator('wa-checkbox', { hasText: 'Use my global shell history' }).click({ position: { x: 8, y: 8 } });
   await expect.poll(() => writes).toEqual([{ inherit_global_shell_history: true }]);
   await expect(page.getByText('Saved locally. New terminals will use this setting.', { exact: true })).toContainText(
     'Saved locally. New terminals will use this setting.',
@@ -21514,7 +21514,7 @@ test('derives board columns from the selected view and merges Verified by projec
 
   await page.getByLabel('Settings view').click();
   await page.getByRole('button', { name: 'Column view' }).click();
-  await page.getByLabel('Hide Verified column').check();
+  await page.locator('wa-checkbox', { hasText: 'Hide Verified column' }).click({ position: { x: 8, y: 8 } });
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem('hotsheet.project.demo-checkout.hide-verified-column')))
     .toBe('true');
@@ -21525,7 +21525,7 @@ test('derives board columns from the selected view and merges Verified by projec
 
   await page.getByLabel('Settings view').click();
   await page.getByRole('button', { name: 'Column view' }).click();
-  await page.getByLabel('Hide Verified column').uncheck();
+  await page.locator('wa-checkbox', { hasText: 'Hide Verified column' }).click({ position: { x: 8, y: 8 } });
   await page.getByLabel('Columns view').click();
   await expect(board.locator('.ticket-board-column__title')).toHaveText([
     'Not Started',

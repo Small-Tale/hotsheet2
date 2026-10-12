@@ -2914,10 +2914,10 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
     await expect(category).toHaveJSProperty('value', 'terminals');
 
     await choose(category, 'permissions');
-    await expect(workspace.locator('.project-settings__permission-note')).toContainText('floating permission popup');
+    await expect(workspace.locator('[data-permission-note="true"]')).toContainText('floating permission popup');
     await expect(workspace.locator('[name="permission-automation-action"]')).toHaveJSProperty('value', 'off');
     await expect(delay).toHaveJSProperty('disabled', true);
-    await shot('permissions-off', workspace.locator('.project-settings__permission-grid'));
+    await shot('permissions-off', workspace.locator('[data-component="grid"]'));
     await choose(action, 'allow');
     await expect(workspace.locator('[name="permission-automation-action"]')).toHaveJSProperty('value', 'allow');
     await expect(delay).toHaveJSProperty('disabled', false);
