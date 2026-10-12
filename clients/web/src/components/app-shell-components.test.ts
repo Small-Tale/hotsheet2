@@ -609,9 +609,10 @@ describe('application shell components', () => {
       }),
     );
     expect(markup).toMatch(/<wa-select\b[^>]*\slabel="Project"/);
-    expect(markup).toContain('class="project-tab-bar__selected-project">Demo');
+    // Kerf Row and compact Text lay out the selected value (HS2-VMHN64).
+    expect(markup).toMatch(/class="kui-row project-tab-bar__selected-project"[^>]*>Demo/);
     expect(markup).toContain(`aria-label="${operation.label}"`);
-    expect(markup).toContain(`<small>${operation.text}</small>`);
+    expect(markup).toMatch(new RegExp(`class="kui-text project-tab-bar__operation"[^>]*><svg[^>]*>.*</svg> ${operation.text}</span>`));
   });
 
   it('shares context-menu actions across project and terminal tabs with Option reversing direction', () => {

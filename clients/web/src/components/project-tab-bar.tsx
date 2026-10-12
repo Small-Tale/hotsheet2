@@ -3,8 +3,10 @@ import './project-tab-bar.css';
 
 import { uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
 import { TabBar } from '@kerfjs/ui/tab-bar';
+import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ArchiveRestore, CircleAlert } from 'lucide';
@@ -82,8 +84,8 @@ export function ProjectTabBar({
                       color: tab.attention ? uiColor('danger-on-quiet') : undefined,
                     }))}
                     renderSelected={(choice) => (
-                      <span class="project-tab-bar__selected-project">
-                        {choosable.find((tab) => tab.id === choice.value)?.name ?? choice.label}
+                      <Row gap="2xs" vAlign="middle" className="project-tab-bar__selected-project">
+                        <>{choosable.find((tab) => tab.id === choice.value)?.name ?? choice.label}</>
                         {active.attention && (
                           <LucideIcon
                             icon={CircleAlert}
@@ -94,24 +96,25 @@ export function ProjectTabBar({
                           />
                         )}
                         {active.operation && (
-                          <span
-                            class="project-tab-bar__operation"
+                          <Text
+                            variant="span"
+                            size="compact"
+                            wrap="nowrap"
+                            className="project-tab-bar__operation"
                             aria-label={active.operation.label}
                             title={active.operation.label}
                           >
-                            <LucideIcon icon={ArchiveRestore} name="archive-restore" />
-                            <small>
-                              {active.operation.percent !== undefined
-                                ? `${Math.floor(active.operation.percent)}%`
-                                : active.operation.state === 'running'
-                                  ? 'Working'
-                                  : active.operation.state === 'succeeded'
-                                    ? 'Backup'
-                                    : 'Attention'}
-                            </small>
-                          </span>
+                            <LucideIcon inline icon={ArchiveRestore} name="archive-restore" />{' '}
+                            {active.operation.percent !== undefined
+                              ? `${Math.floor(active.operation.percent)}%`
+                              : active.operation.state === 'running'
+                                ? 'Working'
+                                : active.operation.state === 'succeeded'
+                                  ? 'Backup'
+                                  : 'Attention'}
+                          </Text>
                         )}
-                      </span>
+                      </Row>
                     )}
                   />
                 </ToolbarControlGroup>

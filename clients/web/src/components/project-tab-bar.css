@@ -27,9 +27,11 @@
   border-bottom: 1px solid var(--wa-color-surface-border);
   background: var(--wa-color-surface-lowered);
 }
+/* The `surface="default"` variant shares the surface of the column it heads. */
 .project-tab-bar[data-surface='default'] {
   background: var(--wa-color-surface-default);
 }
+/* The `divider={false}` variant drops the bottom rule. */
 .project-tab-bar[data-divider='false'] {
   border-bottom: 0;
 }
@@ -37,16 +39,4 @@
    project Select, and Add project as control groups (HS2-4C5RM7, HS2-PNCDAE). */
 .project-tab-bar--mobile {
   align-items: center;
-}
-
-.project-tab-bar__selected-project,
-.project-tab-bar__operation {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--kui-space-2xs);
-  min-width: 0;
-}
-.project-tab-bar__operation {
-  flex-shrink: 0;
-  font-size: var(--wa-font-size-xs);
 }
