@@ -529,7 +529,7 @@ function wireContentComponentsDemo(root: HTMLElement): () => void {
   );
   demoListeners.add(
     delegate(root, 'click', `[data-action="${TAG_CHIP_REMOVE_ACTION}"]`, (_event, target) => {
-      const tag = target.closest<HTMLElement>('[data-component="tag-chip"]')?.dataset.tagId;
+      const tag = target.closest<HTMLElement>('[data-component="chip"]')?.dataset.itemId;
       if (!tag) return;
       inspectorTags.value = removeTicketTag(inspectorTags.value, tag);
       tagsAutosave.schedule(inspectorTags.value);

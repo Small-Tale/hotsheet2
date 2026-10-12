@@ -1,5 +1,0 @@
-/* App wrapper around Kerf's Chip: it carries the tag identity and sits inline in chip rows. */
-.tag-chip {
-  display: inline-flex;
-  max-width: 100%;
-}

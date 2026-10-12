@@ -49,7 +49,7 @@ test('adds tags from the shared Tags menu header at wide and narrow sizes (HS2-9
 
   await input.fill('regression');
   await input.press('Enter');
-  await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="regression"]')).toBeVisible();
+  await expect(inspector.locator('.tag-chip[data-item-id="regression"]')).toBeVisible();
   await expect(popover).toBeVisible();
   await expect(input).toHaveValue('');
   await page.keyboard.press('Escape');

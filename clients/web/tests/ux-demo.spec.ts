@@ -2490,8 +2490,8 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
       expect(line.x + line.width).toBeLessThanOrEqual(timeBox!.x);
     }
   }
-  await expect(row.locator('[data-component="tag-chip"]')).toHaveCount(4);
-  for (const chip of await row.locator('[data-component="tag-chip"]').all()) await expect(chip).toBeVisible();
+  await expect(row.locator('.tag-chip')).toHaveCount(4);
+  for (const chip of await row.locator('.tag-chip').all()) await expect(chip).toBeVisible();
 });
 
 test('presents note kinds and round-trips reader and Markdown editor compositions', async ({ page }) => {
@@ -4548,9 +4548,9 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(tagEditor).toBeFocused();
   await tagEditor.fill('regression');
   await tagEditor.press('Enter');
-  await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="regression"]')).toBeVisible();
-  await inspector.locator('[data-component="tag-chip"][data-tag-id="client"] [data-action="remove-tag-chip"]').click();
-  await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="client"]')).toHaveCount(0);
+  await expect(inspector.locator('.tag-chip[data-item-id="regression"]')).toBeVisible();
+  await inspector.locator('.tag-chip[data-item-id="client"] [data-action="remove-tag-chip"]').click();
+  await expect(inspector.locator('.tag-chip[data-item-id="client"]')).toHaveCount(0);
   await expect(inspector.getByRole('tab', { name: 'Info' })).toHaveAttribute('aria-selected', 'true');
   expect(
     await inspector.evaluate((node) => {
@@ -5448,15 +5448,14 @@ test('opens the shared TicketReader intent when a composed row is double-clicked
 test('adjusts and removes TagChip through its settings inspector', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/ux-demo?component=tag-chip');
-  const chip = page.locator('[data-component="tag-chip"]'),
-    kerfChip = chip.locator('[data-component="chip"]');
+  const chip = page.locator('.tag-chip'),
+    kerfChip = chip; // TagChip renders Kerf's Chip directly, with no wrapper (HS2-ET9109).
+  await expect(kerfChip).toHaveAttribute('data-component', 'chip');
   await expect(chip).toContainText('needs-design');
   await expect(kerfChip).toHaveAttribute('data-size', 'compact');
   await expect(kerfChip).toHaveAttribute('data-appearance', 'quiet');
   await expect(kerfChip).toHaveAttribute('data-shape', 'rounded');
   await expect(kerfChip).toHaveAttribute('data-item-id', 'demo-tag');
-  const chipPadding = await chip.evaluate((node) => getComputedStyle(node).paddingLeft);
-  expect(chipPadding).toBe('0px');
   const toggle = page.locator('[data-action="toggle-settings"]').first();
   await expect(toggle).toHaveCount(1);
   await expect(toggle).toHaveAttribute('aria-label', 'Show settings');
@@ -5520,8 +5519,8 @@ test('maps the brand tag variant to Kerf info tone at wide and phone widths', as
       node.value = 'brand';
       node.dispatchEvent(new Event('change', { bubbles: true }));
     });
-    const chip = page.locator('[data-component="tag-chip"]');
-    await expect(chip.locator('[data-component="chip"]')).toHaveAttribute('data-tone', 'info');
+    const chip = page.locator('.tag-chip');
+    await expect(chip).toHaveAttribute('data-tone', 'info');
     await page.locator('[data-action="toggle-settings"]').first().click();
     await expect(chip).toBeVisible();
     await chip.screenshot({ path: testInfo.outputPath(`tag-chip-brand-${width}.png`) });

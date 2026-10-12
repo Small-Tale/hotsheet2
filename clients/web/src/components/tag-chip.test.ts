@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -6,14 +6,13 @@ import { describe, expect, it } from 'vitest';
 import { normalizeTagChipProps, TAG_CHIP_REMOVE_ACTION, TagChip } from './tag-chip';
 
 describe('TagChip', () => {
-  it("renders Kerf's Chip inside an identity wrapper and owns no chip chrome", () => {
-    const tagChipCss = readFileSync(resolve(import.meta.dirname, 'tag-chip.css'), 'utf8');
-    expect(tagChipCss).not.toContain('wa-tag');
-    expect(tagChipCss).not.toContain('::part(');
-    expect(tagChipCss).not.toContain('.kui-chip');
+  it("renders Kerf's Chip directly with the tag identity and owns no stylesheet (HS2-ET9109)", () => {
+    expect(existsSync(resolve(import.meta.dirname, 'tag-chip.css'))).toBe(false);
     const html = String(TagChip({ id: 'tag-1', label: 'needs-design', removable: true }));
-    expect(html).toContain('data-component="tag-chip" data-tag-id="tag-1" data-disabled="false"');
-    expect(html).toContain('data-component="chip"');
+    expect(html).not.toContain('data-component="tag-chip"');
+    expect(html.startsWith('<span class="kui-chip tag-chip" data-component="chip"')).toBe(true);
+    expect(html).toContain('data-truncate=""');
+    expect(html).toContain('title="needs-design"');
     expect(html).toContain('data-tone="neutral"');
     expect(html).toContain('data-appearance="quiet"');
     expect(html).toContain('data-shape="rounded"');
@@ -38,7 +37,7 @@ describe('TagChip', () => {
       'data-appearance="outline"',
     );
     const disabled = String(TagChip({ id: 'd', label: 'd', removable: true, disabled: true }));
-    expect(disabled).toContain('data-disabled="true"');
+    expect(disabled).toContain('data-disabled=""');
     expect(disabled).toMatch(/<button[^>]*data-action="remove-tag-chip"[^>]*disabled/);
   });
   it('provides stable compact defaults', () => {

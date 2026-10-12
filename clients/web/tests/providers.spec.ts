@@ -15789,12 +15789,12 @@ test('edits title and tags through controlled capability-aware inspector state',
   const tagInput = inspector.getByRole('combobox', { name: 'Tag name' });
   await tagInput.fill('regression');
   await tagInput.press('Enter');
-  await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="regression"]')).toBeVisible();
+  await expect(inspector.locator('.tag-chip[data-item-id="regression"]')).toBeVisible();
   await expect
     .poll(() => patches.some((patch) => Array.isArray(patch.tags) && patch.tags.includes('regression')))
     .toBe(true);
-  await inspector.locator('[data-component="tag-chip"][data-tag-id="client"] [data-action="remove-tag-chip"]').click();
-  await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="client"]')).toHaveCount(0);
+  await inspector.locator('.tag-chip[data-item-id="client"] [data-action="remove-tag-chip"]').click();
+  await expect(inspector.locator('.tag-chip[data-item-id="client"]')).toHaveCount(0);
   await expect
     .poll(() => patches.some((patch) => Array.isArray(patch.tags) && !patch.tags.includes('client')))
     .toBe(true);
@@ -15945,8 +15945,8 @@ test('hides title and tag mutation affordances when the provider cannot update',
   await inspector.getByRole('heading', { name: 'Use real project tickets' }).dblclick();
   await expect(inspector.getByRole('textbox', { name: 'Ticket title' })).toHaveCount(0);
   await expect(inspector.getByRole('combobox', { name: 'Add tag' })).toHaveCount(0);
-  await expect(inspector.locator('[data-component="tag-chip"]')).toHaveCount(1);
-  await expect(inspector.locator('[data-component="tag-chip"] [data-action="remove-tag-chip"]')).toHaveCount(0);
+  await expect(inspector.locator('.tag-chip')).toHaveCount(1);
+  await expect(inspector.locator('.tag-chip [data-action="remove-tag-chip"]')).toHaveCount(0);
   await expect(inspector.getByRole('button', { name: 'Edit note' })).toHaveCount(0);
   await expect(inspector.getByRole('button', { name: 'Delete note' })).toHaveCount(0);
   const statusField = inspector.locator('.ticket-info-panel__status-field'),

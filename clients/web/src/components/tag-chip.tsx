@@ -1,5 +1,4 @@
 import '@kerfjs/ui/chip.css';
-import './tag-chip.css';
 
 import { Chip } from '@kerfjs/ui/chip';
 
@@ -55,8 +54,10 @@ const CHIP_APPEARANCE = {
 } as const;
 
 /**
- * A domain tag on Kerf's `Chip` (HS2-HJEHRW): the app wrapper carries the stable tag identity and
- * the parent owns the mutation that the chip's delegated remove action requests.
+ * A domain tag on Kerf's `Chip` (HS2-HJEHRW). Kerf renders the stable tag identity as the chip's
+ * `data-item-id`, so TagChip needs no wrapper element or stylesheet (HS2-ET9109). The parent owns the
+ * mutation that the chip's delegated remove action requests, and `truncate` keeps a long tag inside
+ * its chip row.
  */
 export function TagChip(raw: TagChipProps) {
   const props = normalizeTagChipProps(raw);
@@ -67,16 +68,14 @@ export function TagChip(raw: TagChipProps) {
     size: props.size === 'small' ? 'compact' : 'default',
     disabled: props.disabled,
     itemId: props.id,
+    className: 'tag-chip',
+    truncate: true,
   } as const;
-  return (
-    <span class="tag-chip" data-component="tag-chip" data-tag-id={props.id} data-disabled={String(props.disabled)}>
-      {props.removable ? (
-        <Chip {...presentation} removeAction={TAG_CHIP_REMOVE_ACTION} removeLabel={`Remove ${props.label}`}>
-          {props.label}
-        </Chip>
-      ) : (
-        <Chip {...presentation}>{props.label}</Chip>
-      )}
-    </span>
+  return props.removable ? (
+    <Chip {...presentation} removeAction={TAG_CHIP_REMOVE_ACTION} removeLabel={`Remove ${props.label}`}>
+      {props.label}
+    </Chip>
+  ) : (
+    <Chip {...presentation}>{props.label}</Chip>
   );
 }

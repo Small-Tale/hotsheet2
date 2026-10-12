@@ -80,12 +80,6 @@
       "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
     },
     {
-      "id": "web-awesome-tag-chip-parts",
-      "rules": ["KUI-L011"],
-      "target": "src/components/tag-chip.css",
-      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
-    },
-    {
       "id": "web-awesome-terminal-dashboard-parts",
       "rules": ["KUI-L011"],
       "target": "src/components/terminal-dashboard.css",

@@ -458,8 +458,8 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   );
   lifetime.add(
     delegate(document.body, 'click', `[data-action="${TAG_CHIP_REMOVE_ACTION}"]`, (_event, target) => {
-      const chip = target.closest<HTMLElement>('[data-component="tag-chip"]'),
-        tag = chip ? data(chip).tagId : undefined;
+      const chip = target.closest<HTMLElement>('[data-component="chip"]'),
+        tag = chip ? data(chip).itemId : undefined;
       if (tag) setSelectedTags(removeTicketTag(selectedTicket.value?.tags ?? [], tag));
     }),
   );

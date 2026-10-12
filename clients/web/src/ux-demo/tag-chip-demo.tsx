@@ -157,9 +157,9 @@ function wireTagChipDemo(root: HTMLElement): () => void {
       'click',
       `[aria-label="TagChip demo"] [data-action="${TAG_CHIP_REMOVE_ACTION}"]`,
       (_event, target) => {
-        const chip = target.closest<HTMLElement>('[data-component="tag-chip"]');
-        if (chip && chip.dataset.disabled !== 'true')
-          tagChipSettings.event.value = `Remove requested for ${chip.dataset.tagId}`;
+        const chip = target.closest<HTMLElement>('[data-component="chip"]');
+        if (chip && chip.dataset.disabled === undefined)
+          tagChipSettings.event.value = `Remove requested for ${chip.dataset.itemId}`;
       },
     ),
   );

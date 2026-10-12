@@ -1442,12 +1442,12 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
 ### 4.3 Tags — feature floor
 
 - `TagList`
-- `TagChip` — **built**: Kerf's removable `Chip` primitive inside an app wrapper that carries
-  the stable domain identity (`data-tag-id`), compact quiet rounded default presentation plus
+- `TagChip` — **built**: Kerf's removable `Chip` primitive rendered directly, carrying the
+  stable domain identity as Chip's `data-item-id` with no wrapper or stylesheet (HS2-ET9109), compact quiet rounded default presentation plus
   optional variants (mapped onto Chip tone, appearance, shape, and size; Hot Sheet `brand`
   uses Kerf's `info` tone since beta.76), disabled/removable
   behavior, unit tests, and interactive `/ux-demo` coverage. Removal is Chip's delegated
-  `remove-tag-chip` action; the owning feature resolves the tag from the wrapper and mutates
+  `remove-tag-chip` action; the owning feature resolves the tag from the chip's `data-item-id` and mutates
   the ticket (HS2-HJEHRW). Hot Sheet owns no chip chrome.
 
 The component catalog records composition relationships. A left-aligned “Related
