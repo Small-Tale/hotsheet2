@@ -5605,8 +5605,8 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await page.goto('/ux-demo?component=repository-summary');
   const repository = page.getByRole('button', { name: 'Repository status for feature/client-sidebar' });
   await expect(repository.locator('[data-lucide="git-branch"]')).toHaveCount(1);
-  await expect(repository.locator('.repository-summary__branch-name')).toHaveCSS('direction', 'rtl');
-  await expect(repository.locator('.repository-summary__branch-name')).toHaveCSS('text-overflow', 'ellipsis');
+  // ListItem's primary label truncates the brand-colored branch Text (HS2-B73RAF).
+  await expect(repository.locator('.kui-list-item__primary-label')).toHaveCSS('text-overflow', 'ellipsis');
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await repository.screenshot({ path: `target/visual-captures/hs2-8k7qk7-summary-${width}.png` });

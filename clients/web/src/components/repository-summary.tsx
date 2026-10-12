@@ -56,9 +56,14 @@ export function RepositorySummary({
             icon={error || conflicted ? CircleAlert : GitBranch}
             name={error || conflicted ? 'circle-alert' : 'git-branch'}
             size={REPOSITORY_SUMMARY_ICON_SIZE}
+            color={foregroundColorVar(error || conflicted ? '--wa-color-danger-on-quiet' : '--wa-color-brand-on-quiet')}
           />
         }
-        label={<span class="repository-summary__branch-name">{branch}</span>}
+        label={
+          <Text variant="span" wrap="nowrap" color={foregroundColorVar('--wa-color-brand-on-quiet')}>
+            {branch}
+          </Text>
+        }
         trailing={
           <Row gap="xs" vAlign="middle">
             {error ? (

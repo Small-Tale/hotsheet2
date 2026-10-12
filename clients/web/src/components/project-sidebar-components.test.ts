@@ -148,7 +148,7 @@ describe('ProjectSidebar component slice', () => {
     const markup = String(RepositorySummary({ branch: 'main', unpushed: 3, behind: 2, uncommitted: 1 }));
     expect(markup).toContain('Repository status for main: 3 ahead, 2 behind, 1 uncommitted, 0 conflicted');
     expect(markup).toContain('data-lucide="git-branch"');
-    expect(markup).toContain('repository-summary__branch-name');
+    expect(markup).toContain('data-wrap="nowrap" style="color:var(--wa-color-brand-on-quiet)">main</span>');
     expect(markup).toContain('3 unpushed commits');
     expect(markup).toContain('2 commits behind');
     expect(markup).not.toContain('data-lucide="file-pen-line"');

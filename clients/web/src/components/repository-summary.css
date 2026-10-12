@@ -1,18 +1,4 @@
+/* The branch label's emphasis: ListItem's public weight token, since neither ListItem nor Text has a weight prop. */
 .repository-summary {
-  /* The icon and label use Kerf's public ListItem theme tokens. */
-  --kui-list-item-icon-color: var(--wa-color-brand-on-quiet);
   --kui-list-item-label-weight: 650;
-}
-.repository-summary__branch-name {
-  min-width: 0;
-  color: var(--wa-color-brand-on-quiet);
-  overflow: hidden;
-  direction: rtl;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.repository-summary[data-state='conflicted'],
-.repository-summary[data-state='error'] {
-  --kui-list-item-icon-color: var(--wa-color-danger-on-quiet);
 }
