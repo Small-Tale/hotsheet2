@@ -1,6 +1,7 @@
 @import '@kerfjs/ui/document.css';
 @import './components/cursor-semantics.css';
 
+/* The device safe-area insets in physical terms, the app's single override point (tests set these). */
 :root {
   --hotsheet-safe-area-top: env(safe-area-inset-top, 0px);
   --hotsheet-safe-area-right: env(safe-area-inset-right, 0px);
@@ -16,12 +17,11 @@ html:root {
   --kui-safe-area-inline-start: var(--hotsheet-safe-area-left);
   --kui-safe-area-inline-end: var(--hotsheet-safe-area-right);
 }
+/* Lock the document to the dynamic viewport so only Panes scroll; Kerf's document baseline sizes the
+   root to 100% and does not clip (KF-1XNQYP, HS2-4TN9GK). */
 html,
 body,
 #app {
   height: 100dvh;
   overflow: clip;
 }
-/* The switching-ticket transition is presented by the value-free TicketInspectorSkeleton
-   (owned by ticket-inspector.tsx since HS2-XBHADT), which replaced the earlier dimmed-stale-inspector overlay
-   (.ticket-inspector-transition) — that dead rule was removed with HS2-YSHZQK. */
