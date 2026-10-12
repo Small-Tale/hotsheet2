@@ -1,7 +1,11 @@
+import '@awesome.me/webawesome/dist/components/input/input.js';
+import '@awesome.me/webawesome/dist/styles/utilities/visually-hidden.css';
 import './lucide-icon-picker.css';
 
 import { uiColor } from '@kerfjs/ui/css-values';
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Text } from '@kerfjs/ui/text';
 import { Search } from 'lucide';
 
 import {
@@ -44,59 +48,61 @@ export function LucideIconPicker({ value, query = '', searchName, selectAction }
   const showCurrent = current && !trimmed && !results.some((entry) => entry.name === current.name);
   return (
     <div class="lucide-icon-picker" data-component="lucide-icon-picker">
-      <label class="lucide-icon-picker__search">
-        <span class="lucide-icon-picker__search-icon" aria-hidden="true">
-          <LucideIcon size="s" icon={Search} name="search" color={uiColor('neutral-on-quiet')} />
-        </span>
-        <input
+      <List gap="xs">
+        <wa-input
+          class="wa-visually-hidden-label"
+          label="Search icons"
           type="search"
+          size="small"
           name={searchName}
           value={query}
           placeholder="Search all icons…"
-          aria-label="Search icons"
           autocomplete="off"
           spellcheck="false"
-        />
-      </label>
-      {trimmed && !loaded ? (
-        <p class="lucide-icon-picker__hint" role="status">
-          Loading icons…
-        </p>
-      ) : (
-        <ul class="lucide-icon-picker__grid" aria-label="Icons">
-          {showCurrent && (
-            <li>
-              <button
-                type="button"
-                class="lucide-icon-picker__icon"
-                data-action={selectAction}
-                data-icon-name={current.name}
-                aria-pressed="true"
-                aria-label={current.name}
-                title={current.name}
-              >
-                <LucideIcon size={18} icon={current.icon} name={current.name} />
-              </button>
-            </li>
-          )}
-          {results.map((entry) => (
-            <li>
-              <button
-                type="button"
-                class="lucide-icon-picker__icon"
-                data-action={selectAction}
-                data-icon-name={entry.name}
-                aria-pressed={entry.name === selectedName ? 'true' : undefined}
-                aria-label={entry.name}
-                title={entry.name}
-              >
-                <LucideIcon size={18} icon={entry.icon} name={entry.name} />
-              </button>
-            </li>
-          ))}
-          {trimmed && results.length === 0 && <li class="lucide-icon-picker__empty">No icons match “{trimmed}”.</li>}
-        </ul>
-      )}
+        >
+          <LucideIcon slot="start" size="s" icon={Search} name="search" color={uiColor('neutral-on-quiet')} />
+        </wa-input>
+        {trimmed && !loaded ? (
+          <Text size="compact" tone="quiet" role="status">
+            Loading icons…
+          </Text>
+        ) : trimmed && results.length === 0 ? (
+          <Text size="compact" tone="quiet">{`No icons match “${trimmed}”.`}</Text>
+        ) : (
+          <ul class="lucide-icon-picker__grid" aria-label="Icons">
+            {showCurrent && (
+              <li>
+                <button
+                  type="button"
+                  class="lucide-icon-picker__icon"
+                  data-action={selectAction}
+                  data-icon-name={current.name}
+                  aria-pressed="true"
+                  aria-label={current.name}
+                  title={current.name}
+                >
+                  <LucideIcon size={18} icon={current.icon} name={current.name} />
+                </button>
+              </li>
+            )}
+            {results.map((entry) => (
+              <li>
+                <button
+                  type="button"
+                  class="lucide-icon-picker__icon"
+                  data-action={selectAction}
+                  data-icon-name={entry.name}
+                  aria-pressed={entry.name === selectedName ? 'true' : undefined}
+                  aria-label={entry.name}
+                  title={entry.name}
+                >
+                  <LucideIcon size={18} icon={entry.icon} name={entry.name} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </List>
     </div>
   );
 }
