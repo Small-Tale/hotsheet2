@@ -2,10 +2,13 @@ import './heading.css';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './ai-conversation.css';
 import './native-popover-dialog.css';
+import '@awesome.me/webawesome/dist/components/button/button.js';
 
 import { uiColor } from '@kerfjs/ui/css-values';
+import { EmptyState } from '@kerfjs/ui/empty-state';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
+import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -308,15 +311,16 @@ export function AIConversation({
     transcript = (
       <section class="ai-conversation__transcript" aria-label="Conversation transcript" aria-live="polite">
         {messages.length === 0 && (
-          <div class="ai-conversation__empty">
-            <LucideIcon size={28} icon={MessageSquare} name="message-square" />
-            <strong>{readOnly ? 'No conversation messages yet' : 'Start a conversation'}</strong>
-            <p>
-              {readOnly
+          <EmptyState
+            className="ai-conversation__empty"
+            icon={<LucideIcon size={28} icon={MessageSquare} name="message-square" />}
+            title={readOnly ? 'No conversation messages yet' : 'Start a conversation'}
+            detail={
+              readOnly
                 ? 'This chat has not received any messages.'
-                : `Ask ${tool} about this project or send it a task.`}
-            </p>
-          </div>
+                : `Ask ${tool} about this project or send it a task.`
+            }
+          />
         )}
         {selectionStatus}
         {timeline.map((group) =>
@@ -344,15 +348,15 @@ export function AIConversation({
           </p>
         )}
         {error && (
-          <p class="ai-conversation__error" role="alert">
-            <span class="ai-conversation__error-icon">
-              <LucideIcon icon={CircleAlert} name="circle-alert" size={17.6} />
-            </span>
-            <span>
-              <strong>Conversation unavailable</strong>
-              {error}
-            </span>
-          </p>
+          <StateBanner
+            className="ai-conversation__error"
+            tone="danger"
+            urgency="alert"
+            copyLayout="stacked"
+            icon={<LucideIcon icon={CircleAlert} name="circle-alert" size={17.6} />}
+            title="Conversation unavailable"
+            detail={error}
+          />
         )}
       </section>
     );
@@ -441,15 +445,18 @@ export function AIConversation({
       </label>
       <div class="ai-conversation__composer-toolbar">
         <small>Enter to send · Shift+Enter for a new line</small>
-        <button
+        <wa-button
           class="ai-conversation__send"
+          appearance="accent"
+          size="small"
+          pill
           type="submit"
           disabled={busy || !draft.trim()}
           aria-label={`Send message to ${tool}`}
           title={busy ? `${tool} is still working` : `Send message to ${tool}`}
         >
           <LucideIcon size="s" icon={ArrowUp} name="arrow-up" />
-        </button>
+        </wa-button>
       </div>
     </form>
   );

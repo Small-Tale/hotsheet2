@@ -186,22 +186,6 @@
   gap: var(--wa-space-3xs);
   pointer-events: auto;
 }
-.ai-conversation__selection-actions wa-button::part(base) {
-  min-height: remify(28px);
-  padding-inline: remify(6.4px);
-}
-.ai-conversation__empty {
-  display: grid;
-  max-width: remify(416px);
-  margin: auto;
-  color: var(--wa-color-neutral-on-quiet);
-  text-align: center;
-  justify-items: center;
-  gap: var(--wa-space-xs);
-}
-.ai-conversation__empty p {
-  margin: 0;
-}
 .ai-conversation__message {
   width: fit-content;
   min-width: 0;
@@ -364,27 +348,6 @@
   gap: remify(7.2px);
   font-size: var(--wa-font-size-s);
 }
-.ai-conversation__error {
-  display: grid;
-  padding: var(--wa-space-s);
-  margin: 0;
-  border: 1px solid var(--wa-color-danger-border-quiet);
-  border-radius: var(--wa-border-radius-m);
-  color: var(--wa-color-danger-on-quiet);
-  background: var(--wa-color-danger-fill-quiet);
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: var(--wa-space-xs);
-  overflow-wrap: anywhere;
-}
-.ai-conversation__error > .ai-conversation__error-icon {
-  display: flex;
-  margin-top: remify(2.4px);
-}
-.ai-conversation__error > span {
-  display: grid;
-  gap: var(--wa-space-3xs);
-}
 .ai-conversation__composer {
   display: grid;
   width: auto;
@@ -444,29 +407,6 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--wa-space-xs);
-}
-.ai-conversation__send {
-  display: grid;
-  width: remify(32px);
-  height: remify(32px);
-  padding: 0;
-  border: 0;
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-neutral-on-loud);
-  background: var(--wa-color-neutral-fill-loud);
-  cursor: pointer;
-  place-items: center;
-}
-.ai-conversation__send:hover {
-  opacity: 0.85;
-}
-.ai-conversation__send:focus-visible {
-  outline: var(--wa-focus-ring);
-  outline-offset: var(--wa-focus-ring-offset);
-}
-.ai-conversation__send:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 @media (max-width: remify(640px)) {
   .ai-conversation::part(dialog) {
