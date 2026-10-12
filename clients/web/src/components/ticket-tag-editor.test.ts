@@ -40,8 +40,12 @@ describe('TicketTagEditor', () => {
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/\.ticket-tag-editor \{[^}]*gap: var\(--kui-space-xs\)/);
     expect(css).toMatch(/__popover \{[^}]*margin: var\(--kui-space-2xs\) 0 0;[^}]*padding: var\(--kui-space-m\)/);
-    expect(css).toMatch(/__popover strong \{[^}]*margin-bottom: var\(--kui-space-m\)/);
-    expect(css).toMatch(/__popover label \{[^}]*gap: var\(--kui-space-2xs\)/);
+    // Kerf Row lays out the chips and Kerf Text owns the title, caption, and hint typography (HS2-DYNGY5).
+    expect(css).not.toContain('__chips');
+    expect(css).not.toMatch(/__popover (?:strong|small|label) \{/);
+    expect(css).toMatch(
+      /\.ticket-tag-editor__field \{[^}]*margin-block: var\(--kui-space-m\) var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-2xs\)/,
+    );
     expect(css).toMatch(
       /\.ticket-tag-editor__popover \{[^}]*position: fixed;[^}]*position-area: block-end span-inline-end;[^}]*box-shadow: var\(--wa-shadow-l\)/,
     );

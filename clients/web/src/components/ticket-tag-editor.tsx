@@ -1,5 +1,8 @@
 import './ticket-tag-editor.css';
 
+import { Row } from '@kerfjs/ui/row';
+import { Text } from '@kerfjs/ui/text';
+
 import { TagChip } from './tag-chip';
 
 export interface TicketTagEditorProps {
@@ -32,9 +35,9 @@ export function TicketTagEditor({
   const titleId = `${popoverId}-title`;
   return (
     <div class="ticket-tag-editor" data-component="ticket-tag-editor" data-editable={String(editable)}>
-      <div class="ticket-tag-editor__chips">
+      <Row wrap gap="xs">
         {tags.map((tag) => TagChip({ id: tag, label: tag, removable: editable }))}
-      </div>
+      </Row>
       {editable && (
         <div
           id={popoverId}
@@ -44,9 +47,13 @@ export function TicketTagEditor({
           role="dialog"
           aria-labelledby={titleId}
         >
-          <strong id={titleId}>Add tag</strong>
-          <label>
-            <span>Tag name</span>
+          <Text id={titleId} flush lineHeight="tight">
+            <strong>Add tag</strong>
+          </Text>
+          <label class="ticket-tag-editor__field">
+            <Text variant="span" size="compact" tone="quiet">
+              Tag name
+            </Text>
             <input
               name="ticket-tag-input"
               list={`${popoverId}-suggestions`}
@@ -55,7 +62,9 @@ export function TicketTagEditor({
               autofocus
             />
           </label>
-          <small>Press Enter to add</small>
+          <Text size="compact" tone="quiet" flush>
+            Press Enter to add
+          </Text>
           <datalist id={`${popoverId}-suggestions`}>
             {available.map((tag) => (
               <option value={tag} />

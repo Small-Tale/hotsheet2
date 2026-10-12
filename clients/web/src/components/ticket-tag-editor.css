@@ -1,12 +1,10 @@
+/* The chip row stacked above the hidden add-tag popover. */
 .ticket-tag-editor {
   display: grid;
   gap: var(--kui-space-xs);
 }
-.ticket-tag-editor__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--kui-space-xs);
-}
+/* A native popover anchored under the Tags header action. Kerf's AnchoredSurface owns this chrome
+   but opens imperatively; moving to it is HS2-Q4JE3V. */
 .ticket-tag-editor__popover {
   position: fixed;
   position-area: block-end span-inline-end;
@@ -20,17 +18,14 @@
   box-shadow: var(--wa-shadow-l);
   box-sizing: border-box;
 }
-.ticket-tag-editor__popover strong {
-  display: block;
-  margin-bottom: var(--kui-space-m);
-  font-size: var(--wa-font-size-s);
-}
-.ticket-tag-editor__popover label {
+/* Stacks the caption over the field with the title and hint spaced from it. */
+.ticket-tag-editor__field {
   display: grid;
-  color: var(--wa-color-text-quiet);
-  font-size: var(--wa-font-size-xs);
+  margin-block: var(--kui-space-m) var(--kui-space-xs);
   gap: var(--kui-space-2xs);
 }
+/* The field stays native because its suggestions come from a <datalist>, which wa-input's shadow
+   input cannot reference (KF-XDVAMR). */
 .ticket-tag-editor__popover input {
   width: 100%;
   min-width: 0;
@@ -42,17 +37,13 @@
   background: var(--wa-color-surface-default);
   box-sizing: border-box;
   font: inherit;
+  font-size: var(--wa-font-size-xs);
 }
+/* Keyboard focus for the native field. */
 .ticket-tag-editor__popover input:focus-visible {
   border-color: var(--wa-color-brand-border-normal);
   outline: var(--wa-focus-ring);
   outline-offset: 1px;
-}
-.ticket-tag-editor__popover small {
-  display: block;
-  margin-top: var(--kui-space-xs);
-  color: var(--wa-color-text-quiet);
-  font-size: var(--wa-font-size-2xs);
 }
 /* iOS zooms into a focused field under 16px (HS2-8JPRRC). */
 @media (pointer: coarse) {
