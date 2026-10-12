@@ -1,3 +1,6 @@
+/* Layered reader shell. Kerf DialogSurface cannot express the stacked-layer inset, offset transform, and
+   pointer pass-through, and it would name the inner panel beside the host's explicit per-layer dialog
+   role; the rules below configure the raw Web Awesome dialog through its documented --width and parts. */
 .ticket-reader-dialog {
   position: fixed;
   inset: remify(24px) max(remify(24px), calc((100vw - remify(1024px)) / 2));
@@ -16,11 +19,13 @@
   transform: translateY(var(--ticket-reader-offset));
   transition: transform 140ms ease;
 }
+/* The inspector owns its own scrolling and insets, so the dialog body is a full-height, unpadded frame. */
 .ticket-reader-dialog::part(body) {
   height: 100%;
   padding: 0;
   overflow: hidden;
 }
+/* Full-height reader frame: the inspector fills it, below the layer toolbar when readers are stacked. */
 .ticket-reader {
   display: grid;
   width: 100%;
@@ -32,35 +37,13 @@
 .ticket-reader-dialog:not([data-reader-count='1']) .ticket-reader {
   grid-template-rows: auto minmax(0, 1fr);
 }
-.ticket-reader__layer-context {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: remify(16px);
-  margin: 0;
-  padding: remify(7.2px) remify(20px);
-  border-bottom: 1px solid var(--wa-color-neutral-border-quiet);
-  color: var(--wa-color-text-quiet);
-  font-size: var(--wa-font-size-xs);
-}
-.ticket-reader__layer-context span {
-  overflow: hidden;
-  color: var(--wa-color-text-normal);
-  font-weight: var(--wa-font-weight-semibold);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ticket-reader__layer-context small {
-  flex: none;
-  font: inherit;
-}
 /* Large reader text (HS2-MGVE50): the reader sets the shared reading scale on its own root, and every
    reading surface inside (Markdown previews and sources, note bodies, feedback prompts, choices, and
    responses) multiplies its own size by it; the reader never restyles those components. */
 .ticket-reader-dialog[data-large-text='true'] {
   --hotsheet-reading-scale: var(--hs-reader-text-scale);
 }
+/* Phone: narrower gutters and no stacked offset, so every layer keeps the full usable width. */
 @media (max-width: remify(768px)) {
   .ticket-reader-dialog {
     inset-inline: remify(16px);
@@ -68,8 +51,5 @@
   }
   .ticket-reader-dialog::part(dialog) {
     transform: none;
-  }
-  .ticket-reader__layer-context {
-    padding-inline: remify(16px);
   }
 }

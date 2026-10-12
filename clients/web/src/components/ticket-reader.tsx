@@ -1,6 +1,9 @@
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import './ticket-reader.css';
 
+import { List } from '@kerfjs/ui/list';
+import { Row } from '@kerfjs/ui/row';
+import { Text } from '@kerfjs/ui/text';
 import type { SafeHtml } from 'kerfjs';
 
 import { INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
@@ -75,12 +78,16 @@ export function TicketReader({
       {open && (
         <div class="ticket-reader">
           {stackSize > 1 && (
-            <p class="ticket-reader__layer-context">
-              <span>{projectName}</span>
-              <small>
-                Reader {stackPosition} of {stackSize}
-              </small>
-            </p>
+            <List dividerSides="b" textInsets="rl" controlInsets="tb">
+              <Row hAlign="full" vAlign="middle" gap="m">
+                <Text variant="span" size="compact" wrap="truncate">
+                  <strong>{projectName}</strong>
+                </Text>
+                <Text variant="span" size="compact" tone="quiet" wrap="nowrap">
+                  Reader {stackPosition} of {stackSize}
+                </Text>
+              </Row>
+            </List>
           )}
           <TicketInspector
             {...props}

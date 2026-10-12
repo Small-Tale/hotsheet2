@@ -391,7 +391,8 @@ describe('content components', () => {
     );
     expect(markup).toContain('label="Read HS2-LINKED in Other project"');
     expect(markup).toContain('data-reader-position="2" data-reader-count="3"');
-    expect(markup).toContain('<span>Other project</span><small>Reader 2 of 3</small>');
+    expect(markup).toContain('<strong>Other project</strong>');
+    expect(markup).toMatch(/data-tone="quiet"[^>]*>Reader 2 of 3<\/span>/);
     expect(markup).not.toContain('data-action="toggle-inspector-up-next"');
     const covered = String(
       TicketReader({
