@@ -7,7 +7,9 @@ import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListInsetText } from '@kerfjs/ui/list-inset-text';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { Skeleton } from '@kerfjs/ui/skeleton';
+import { Text } from '@kerfjs/ui/text';
 import { Activity, MessageSquareText, Plus } from 'lucide';
 
 import type { AttachmentReferenceContext } from '../attachment-references';
@@ -24,17 +26,21 @@ function PlaceholderNote({ kind }: { kind: 'activity' | 'regular' }) {
       : { label: 'Note', icon: MessageSquareText, iconName: 'message-square-text' };
   return (
     <div class="ticket-notes__placeholder-note" data-kind={kind}>
-      <div class="ticket-notes__placeholder-header">
-        <span class="ticket-notes__placeholder-kind">
-          <LucideIcon icon={presentation.icon} name={presentation.iconName} size={14.4} />
-          {presentation.label}
-        </span>
-        <Skeleton width={rem(2.5)} height={rem(0.6875)} />
-      </div>
-      <div class="ticket-notes__placeholder-body">
-        <Skeleton />
-        <Skeleton width={pct(45)} />
-      </div>
+      <List gap="xs">
+        <Row hAlign="space-between" vAlign="middle">
+          <Row gap="2xs" vAlign="middle">
+            <LucideIcon icon={presentation.icon} name={presentation.iconName} size={14.4} />
+            <Text variant="span" size="compact" tone="quiet">
+              <strong>{presentation.label}</strong>
+            </Text>
+          </Row>
+          <Skeleton width={rem(2.5)} height={rem(0.6875)} />
+        </Row>
+        <List gap="2xs">
+          <Skeleton />
+          <Skeleton width={pct(45)} />
+        </List>
+      </List>
     </div>
   );
 }
@@ -53,11 +59,11 @@ function TicketNotesPlaceholder() {
         actionLabel="Add note"
         actionIcon={<LucideIcon icon={Plus} name="plus" />}
       />
-      <div class="ticket-notes__placeholder">
+      <List gap="m">
         <PlaceholderNote kind="activity" />
         <PlaceholderNote kind="activity" />
         <PlaceholderNote kind="regular" />
-      </div>
+      </List>
     </section>
   );
 }
@@ -188,7 +194,9 @@ function LoadedTicketNotes({
         !composing && (
           <div class="ticket-notes__empty-inset">
             <ListInsetText sides="rl">
-              <p class="ticket-notes__empty">No notes added.</p>
+              <Text variant="span" tone="quiet">
+                <em class="ticket-notes__empty">No notes added.</em>
+              </Text>
             </ListInsetText>
           </div>
         )
