@@ -2541,7 +2541,7 @@ Since Kerf 5.0.0-beta.72 (HS2-R9GQJE) the doctor runs strict:
 - `"ownershipContext": "any-package"` also reports Kerf classes used as selector context.
 
 Two app findings were real. The since-removed dev-review dialog restyled the shared `.app-heading`; it was changed to use
-the heading's `data-summary-size="small"` variant and reserve the row on its own form grid. Its
+the heading's `data-summary-size="small"` variant (removed with that dialog, HS2-TK3QFD) and reserve the row on its own form grid. Its
 module also imported `native-popover-dialog.css` directly instead of through a CSS `@import`, so it
 co-owned the `.dialog-surface` it rendered.
 
