@@ -5,23 +5,22 @@
 [data-tab-kind='project'] {
   --kui-app-tab-attention-color: var(--wa-color-danger-on-quiet);
 }
+/* A disconnected project's name reads quiet. */
 [data-tab-kind='project'][data-disconnected='true'] {
   --kui-app-tab-color: var(--wa-color-neutral-on-quiet);
 }
+/* A fixed 16px trailing slot, so the spinner never shifts the tab's width. */
 .project-tab__busy {
   display: grid;
   width: remify(16px);
   height: remify(16px);
   place-items: center;
 }
+/* The state icon wrapper carries its accessible name and title without adding baseline space. */
 .project-tab__state {
   display: inline-flex;
 }
-.project-tab__indicators {
-  display: flex;
-  align-items: center;
-  gap: var(--kui-space-2xs);
-}
+/* The pending-notification bell and count; Kerf AppTab has no notification slot. */
 .project-tab__notification {
   display: flex;
   color: var(--wa-color-warning-on-quiet);
@@ -30,6 +29,7 @@
   font-size: var(--wa-font-size-3xs);
   font-weight: 750;
 }
+/* The Up Next count badge that hosts the active-ticket activity ring (domain indicator). */
 .project-tab__work {
   position: relative;
   display: grid;
@@ -44,10 +44,12 @@
   line-height: 1;
   place-items: center;
 }
+/* While tickets are active, the badge gives way to the ring. */
 .project-tab__work[data-active='true'] {
   color: var(--hs-ticket-state-up-next);
   background: transparent;
 }
+/* The SVG activity ring overlays the badge box. */
 .project-tab__activity-ring {
   position: absolute;
   inset: 0;
@@ -57,9 +59,11 @@
   fill: none;
   stroke-width: 4;
 }
+/* The ring track, under the segments. */
 .project-tab__activity-track {
   stroke: var(--wa-color-neutral-fill-quiet);
 }
+/* One dashed segment per active ticket, rotating. */
 .project-tab__activity-segments {
   stroke: currentColor;
   transform-origin: 12px 12px;
@@ -74,6 +78,7 @@
   z-index: 1;
   color: var(--hs-ticket-state-up-next-on);
 }
+/* The active count uses primary text over the ring (HS2-TF43Y0). */
 .project-tab__work[data-active='true'] .project-tab__work-count {
   color: var(--wa-color-text-normal);
 }
@@ -92,15 +97,18 @@
   }
 }
 
+/* The backup operation chip beside the tab state. */
 .project-tab__operation {
   display: inline-flex;
   align-items: center;
   gap: var(--kui-space-2xs);
   color: var(--wa-color-brand-on-quiet);
 }
+/* The operation's percent at the indicators' small size. */
 .project-tab__operation small {
   font-size: var(--wa-font-size-3xs);
 }
+/* A failed or interrupted operation reads as a warning. */
 .project-tab__operation[data-state='failed'],
 .project-tab__operation[data-state='interrupted'] {
   color: var(--wa-color-warning-on-quiet);

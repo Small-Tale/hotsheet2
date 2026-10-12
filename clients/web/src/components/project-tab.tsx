@@ -4,6 +4,7 @@ import { AppTab } from '@kerfjs/ui/app-tab';
 import { uiColor } from '@kerfjs/ui/css-values';
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { ArchiveRestore, Bell, CircleAlert, Cloud, WifiOff, X } from 'lucide';
 
 export type ProjectTabLocation = 'local' | 'remote';
@@ -146,12 +147,12 @@ export function ProjectTab({
       <LoadingSpinner label={`Opening ${name}`} size={PROJECT_TAB_SPINNER_SIZE} />
     </span>
   ) : work || notification ? (
-    <span class="project-tab__indicators">
+    <Row gap="2xs" vAlign="middle" className="project-tab__indicators">
       {/* Attention stays visible beside counts, so a halted AI session is never hidden (HS2-HJ4D1H). */}
       {attention && attentionIcon}
       {notification}
       {work}
-    </span>
+    </Row>
   ) : busy ? (
     <span class="project-tab__busy">
       <LoadingSpinner label="Project busy" size={PROJECT_TAB_SPINNER_SIZE} />
@@ -181,7 +182,7 @@ export function ProjectTab({
       leading={location === 'remote' ? <LucideIcon icon={Cloud} name="cloud" /> : undefined}
       trailing={
         operation ? (
-          <span class="project-tab__indicators">
+          <Row gap="2xs" vAlign="middle" className="project-tab__indicators">
             <span
               class="project-tab__operation"
               data-state={operation.state}
@@ -192,7 +193,7 @@ export function ProjectTab({
               {operation.percent !== undefined && <small aria-hidden="true">{Math.floor(operation.percent)}%</small>}
             </span>
             {trailing}
-          </span>
+          </Row>
         ) : (
           trailing
         )

@@ -612,7 +612,9 @@ describe('application shell components', () => {
     // Kerf Row and compact Text lay out the selected value (HS2-VMHN64).
     expect(markup).toMatch(/class="kui-row project-tab-bar__selected-project"[^>]*>Demo/);
     expect(markup).toContain(`aria-label="${operation.label}"`);
-    expect(markup).toMatch(new RegExp(`class="kui-text project-tab-bar__operation"[^>]*><svg[^>]*>.*</svg> ${operation.text}</span>`));
+    expect(markup).toMatch(
+      new RegExp(`class="kui-text project-tab-bar__operation"[^>]*><svg[^>]*>.*</svg> ${operation.text}</span>`),
+    );
   });
 
   it('shares context-menu actions across project and terminal tabs with Option reversing direction', () => {
@@ -947,7 +949,8 @@ describe('application shell components', () => {
         attentionLabel: 'An AI session stopped on an error',
       }),
     );
-    expect(counted).toContain('project-tab__indicators');
+    // Kerf Row lays out the indicator cluster (HS2-TNC9QK).
+    expect(counted).toContain('class="kui-row project-tab__indicators"');
     expect(counted).toContain('project-tab__state--attention');
     expect(counted).toContain('aria-label="An AI session stopped on an error"');
     expect(counted.indexOf('project-tab__state--attention')).toBeLessThan(counted.indexOf('project-tab__notification'));
