@@ -1,42 +1,7 @@
-/* TicketAttachments (HS2-MGVE50): the attachment section on the TicketInspectorPanel column. */
-.ticket-attachments__section {
-  display: grid;
-  min-width: 0;
-  gap: var(--kui-space-xs);
-}
-/* The header aligns its text to the 17px column: 1px transparent border + 8px padding. */
-.ticket-attachments__header {
-  display: flex;
-  min-height: remify(32px);
-  padding-inline: var(--kui-space-xs);
-  border-inline: 1px solid transparent;
-  align-items: center;
-  justify-content: space-between;
-}
-.ticket-attachments__title {
-  display: inline-flex;
-  margin: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  align-items: center;
-  gap: var(--kui-space-xs);
-  font-size: var(--wa-font-size-xs);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.ticket-attachments__count {
-  display: inline-grid;
-  min-width: remify(21.6px);
-  height: remify(21.6px);
-  padding: 0 remify(5.6px);
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-neutral-on-quiet);
-  background: var(--wa-color-neutral-fill-quiet);
-  place-items: center;
-  font-size: var(--wa-font-size-3xs);
-  font-weight: 700;
-  letter-spacing: 0;
-}
+/* TicketAttachments (HS2-MGVE50): Kerf List, ListHeader, Row, and Text own the section stack,
+   heading, count, and copy (HS2-QK4HES). These rules style the app-owned attachment rows, batch
+   headers (inline-editable label and native purpose select), media grid, drop zones, and the file
+   inputs they wrap, which no Kerf component expresses. */
 .ticket-attachments__item {
   display: flex;
   box-sizing: border-box;
@@ -85,18 +50,6 @@
   background: var(--wa-color-brand-fill-quiet);
   outline: var(--wa-focus-ring);
   outline-offset: 1px;
-}
-.ticket-attachments__status,
-.ticket-attachments__unsupported {
-  margin: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  line-height: 1.5;
-}
-.ticket-attachments__batches {
-  display: grid;
-  container-type: inline-size;
-  gap: var(--kui-space-m);
 }
 .ticket-attachments__batch {
   display: grid;
@@ -237,9 +190,6 @@
 [data-dragging-attachment='true'] .ticket-attachments__drop {
   border-color: var(--wa-color-focus);
   background: var(--wa-color-brand-fill-quiet);
-}
-.ticket-attachments__drop-icon {
-  display: flex;
 }
 .ticket-attachments__image-grid {
   display: flex;

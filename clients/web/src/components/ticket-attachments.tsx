@@ -1,7 +1,11 @@
 import './ticket-attachments.css';
 
 import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
+import { List } from '@kerfjs/ui/list';
+import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
+import { Text } from '@kerfjs/ui/text';
 import { MoreHorizontal, Paperclip, Pencil, Plus, Upload } from 'lucide';
 
 import type { AttachmentActor, AttachmentPurpose } from '../api';
@@ -137,17 +141,15 @@ export function TicketAttachments({
       presentation={presentation}
       attributes={{ 'data-attachment-drop-target': String(enabled) }}
     >
-      <section class="ticket-attachments__section">
-        <header class="ticket-attachments__header">
-          <h2 class="ticket-attachments__title">
-            Attachments{' '}
-            <span
-              class="ticket-attachments__count"
-              aria-label={`${attachments.length} ${attachments.length === 1 ? 'attachment' : 'attachments'}`}
-            >
-              {attachments.length}
-            </span>
-          </h2>
+      {/* Kerf List, ListHeader, Row, and Text own the section stack, heading, count, and copy (HS2-QK4HES). */}
+      <List gap="xs" className="ticket-attachments__section">
+        <Row hAlign="full" vAlign="middle" controlInsets="r">
+          <ListHeader
+            label="Attachments"
+            width="content"
+            count={attachments.length}
+            countLabel={`${attachments.length} ${attachments.length === 1 ? 'attachment' : 'attachments'}`}
+          />
           {enabled && (
             <label class="ticket-attachments__browse">
               <LucideIcon size={13.6} icon={Plus} name="plus" />
@@ -155,8 +157,8 @@ export function TicketAttachments({
               <input type="file" name="ticket-attachments" multiple aria-label="Browse and add attachments" />
             </label>
           )}
-        </header>
-        <div class="ticket-attachments__batches">
+        </Row>
+        <List gap="m">
           {groups.map((group) => {
             const media = group.items.filter((attachment): attachment is TicketAttachmentItem & { url: string } =>
                 Boolean(attachment.url && isGalleryMediaAttachment(attachment.name)),
@@ -306,7 +308,7 @@ export function TicketAttachments({
               </section>
             );
           })}
-        </div>
+        </List>
         {manageable && attachments.length > 0 && (
           <div class="ticket-attachments__new-group" data-attachment-new-group-drop-target="true">
             <LucideIcon size="s" icon={Plus} name="plus" />
@@ -315,23 +317,21 @@ export function TicketAttachments({
         )}
         {enabled ? (
           <label class="ticket-attachments__drop">
-            <span class="ticket-attachments__drop-icon">
-              <LucideIcon icon={Upload} name="upload" size="s" color={foregroundColorVar('--wa-color-focus')} />
-            </span>
+            <LucideIcon icon={Upload} name="upload" size="s" color={foregroundColorVar('--wa-color-focus')} />
             <span>Drop attachments here or browse</span>
             <input type="file" name="ticket-attachments" multiple aria-label="Drop or browse attachments" />
           </label>
         ) : (
-          <p class="ticket-attachments__unsupported">
+          <Text variant="p" tone="quiet" size="compact" flush>
             {message || 'This provider does not support attachment actions.'}
-          </p>
+          </Text>
         )}
-        {enabled && message && (
-          <p class="ticket-attachments__status" role="status">
+        {enabled && message ? (
+          <Text variant="p" tone="quiet" size="compact" flush role="status" data-attachments-status="true">
             {message}
-          </p>
-        )}
-      </section>
+          </Text>
+        ) : undefined}
+      </List>
     </TicketInspectorPanel>
   );
 }

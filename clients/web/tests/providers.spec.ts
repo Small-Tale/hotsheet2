@@ -17969,7 +17969,7 @@ test('keeps Markdown attachment images in flow and reports reference copies with
     .getByRole('menuitem', { name: 'Copy reference' })
     .click();
   await expect(page.locator('.app-toast')).toContainText('Attachment reference copied to clipboard.');
-  await expect(page.locator('.ticket-attachments__status')).toHaveCount(0);
+  await expect(page.locator('[data-attachments-status]')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-859hq1-attachment-copy-toast.png', fullPage: true });
 });
 
@@ -19166,7 +19166,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await page.getByRole('menu', { name: 'Attachment actions' }).getByRole('menuitem', { name: 'Remove' }).click();
   await expect(page.locator('[data-attachment-id="A3"]')).toHaveCount(0);
   await expect(page.locator('.app-toast')).toContainText('Attachment removed.');
-  await expect(page.locator('.ticket-attachments__status')).toHaveCount(0);
+  await expect(page.locator('[data-attachments-status]')).toHaveCount(0);
   await page.getByRole('tab', { name: 'Info' }).click();
   const referencedNote = page.locator('article[data-note-id="N3"]'),
     referencedImage = referencedNote.locator('.markdown-preview__attachment-image');
