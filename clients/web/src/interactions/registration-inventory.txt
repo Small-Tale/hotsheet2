@@ -35,22 +35,9 @@ repository	delegate	document.body	'click'	'[data-action="refresh-repository-stat
 repository	delegate	document.body	'click'	'[data-action="initialize-repository"]'
 repository	delegate	document.body	'submit'	'[data-action="connect-repository-remote"]'
 repository	delegate	document.body	'click'	'[data-action="skip-repository-remote"]'
-repository	delegate	document.body	'click'	'[data-action="select-repository-view"]'
-repository	delegate	document.body	'click'	'[data-action="toggle-repository-comparison"]'
-repository	delegate	document.body	'click'	'[data-action="set-repository-comparison-side"]'
-repository	delegate	document.body	'click'	'[data-action="select-repository-comparison-commit"]'
-repository	delegate	document.body	'click'	'[data-action="toggle-code-review-commit"]'
-repository	delegate	document.body	'keydown'	'[data-action="select-repository-comparison-commit"],[data-action="toggle-code-review-commit"]'
-repository	delegate	document.body	'click'	'[data-action="open-repository-file-menu-trigger"]'
-repository	delegate	document.body	'keydown'	'[data-action="open-repository-file-menu-trigger"]'
-repository	delegate	document.body	'click'	repositoryFileSelector
-repository	delegate	document.body	'dblclick'	repositoryFileSelector
-repository	delegate	document.body	'keydown'	repositoryFileSelector
-repository	delegate	document.body	'contextmenu'	repositoryFileSelector
-repository	delegate	document.body	'click'	'[data-repository-file-action]'
+repository	wireRepositoryBrowser	document.body
 repository	delegate	document.body	'click'	'[data-action="open-repository-review"]'
 repository	delegate	document.body	'click'	'[data-action="open-change-evidence"]'
-repository	delegate	document.body	'click'	'[data-action="select-change-evidence-view"]'
 repository	delegate	document.body	'submit'	'[data-action="open-project-form"]'
 navigation-and-tabs	wireTabBars	document.body
 navigation-and-tabs	delegate	document.body	'keydown'	'[role="tab"]'
