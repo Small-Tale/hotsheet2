@@ -68,7 +68,7 @@ describe('TicketCodeReview', () => {
     );
     expect(css).toMatch(/__range \{[^}]*padding: var\(--kui-space-xs\)[^}]*gap: var\(--kui-space-xs\)/);
     expect(css).toMatch(
-      /__commit \{[^}]*min-height: remify\(68px\)[^}]*padding: var\(--kui-space-xs\) 0[^}]*gap: var\(--kui-space-xs\)/,
+      /__commit \{[^}]*min-height: remify\(68px\)[^}]*padding: var\(--kui-space-xs\) calc\(var\(--kui-space-xs\) \+ 1px\)[^}]*gap: var\(--kui-space-xs\)/,
     );
     expect(css).toMatch(/__commit-summary \{[^}]*gap: var\(--kui-space-2xs\)/);
     expect(css).toMatchSource(/__notice \{ margin: 0; padding: var\(--kui-space-xs\)/);

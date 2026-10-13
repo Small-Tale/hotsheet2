@@ -2,12 +2,12 @@
    and ref tags (HS2-GQXT52). These rules style the app-owned change-evidence button, compare banner,
    commit graph list, and notice, which no Kerf component expresses. */
 /* App-owned wrapper: the heading Toolbar drops its inset through the public gap token; its texts keep
-   their own inline padding (HS2-VABS08). The 1px transparent border + 8px padding aligns the heading to
-   the inspector's 17px text column (HS2-EQEGGG). */
+   their own inline padding (HS2-VABS08). The 1px transparent border puts the title and the trailing
+   diff tool label on the same 9px text/icon edges as the evidence, bundle, and commit rows
+   (HS2-XZTWTY, HS2-PB0VY5). */
 .ticket-code-review__header {
   --kui-toolbar-gap: 0px;
   display: grid;
-  padding-inline: var(--kui-space-xs);
   border-inline: 1px solid transparent;
 }
 /* As an inspector tab panel (not embedded), the section stacks its parts on the 8px rhythm. */
@@ -176,7 +176,9 @@
   min-width: 0;
   min-height: remify(68px);
   margin-inline-start: 0;
-  padding: var(--kui-space-xs) 0;
+  /* The same 1px + 8px inline inset as the evidence and bundle buttons, so the commit icon and the
+     open icon share their left and right edges (HS2-XZTWTY, HS2-PB0VY5). */
+  padding: var(--kui-space-xs) calc(var(--kui-space-xs) + 1px);
   border-bottom: 1px solid var(--wa-color-neutral-border-quiet);
   grid-template-columns: remify(20.8px) minmax(0, 1fr) remify(32px);
   align-items: start;
@@ -187,7 +189,7 @@
   width: remify(20px);
   height: remify(20px);
   margin-top: remify(0.8px);
-  place-items: center;
+  place-items: center start;
 }
 .ticket-code-review__commit-summary {
   display: grid;
@@ -243,6 +245,9 @@
   display: grid;
   width: remify(32px);
   height: remify(32px);
+  /* The 32px hit target overhangs the row inset so its centered icon ends on the shared right edge. */
+  margin-inline-end: calc((remify(14.4px) - remify(32px)) / 2);
+  justify-self: end;
   padding: 0;
   border: 0;
   border-radius: remify(6.4px);

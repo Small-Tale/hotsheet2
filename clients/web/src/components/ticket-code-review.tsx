@@ -64,14 +64,13 @@ export function TicketCodeReview({
 }: TicketCodeReviewProps) {
   const enabled = Boolean(review?.difftool);
   const compareReady = Boolean(comparison?.a && comparison.b && comparison.a !== comparison.b);
-  const heading = [
-    <ToolbarText text={title} size="xlarge" headingLevel={2} />,
-    review?.difftool ? <ToolbarText text={`Opens in ${review.difftool}`} size="small" /> : undefined,
-  ];
+  // The diff tool label sits on the trailing edge, aligned with the rows' open icons (HS2-PB0VY5).
+  const heading = <ToolbarText text={title} size="xlarge" headingLevel={2} />,
+    difftoolLabel = review?.difftool ? <ToolbarText text={`Opens in ${review.difftool}`} size="small" /> : undefined;
   const body = (
     <section class="ticket-code-review__section">
       <div class="ticket-code-review__header">
-        <Toolbar dividerSides="" leading={heading} />
+        <Toolbar dividerSides="" leading={heading} trailing={difftoolLabel} />
       </div>
       {loading && (
         <Text variant="p" tone="quiet" size="compact" role="status">
