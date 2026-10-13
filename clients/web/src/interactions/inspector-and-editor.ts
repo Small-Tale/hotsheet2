@@ -1,4 +1,5 @@
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
+import { type OverlayHandle } from 'kerfjs/overlay';
 import { createScope } from 'kerfjs/scope';
 
 import { Api, type CodeReview, type FullTicket } from '../api';
@@ -14,7 +15,7 @@ import {
 import { type InspectorTab } from '../components/ticket-inspector';
 import { type TicketReaderDialogElement } from '../components/ticket-reader';
 import { statusMenuAnchorY } from '../components/ticket-status-menu';
-import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
+import { addTicketTag, openTicketTagSurface, removeTicketTag } from '../components/ticket-tag-editor';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { maintainContextPopupMenuAnchor } from '../context-menu-position';
 import { copyText } from '../copy-text';
@@ -419,6 +420,21 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     selectedTicket.value = { ...selectedTicket.value, tags };
     tagsAutosave.schedule(tags);
   }
+  // Kerf's AnchoredSurface owns the Add tag surface's chrome, position, focus, and dismissal; one
+  // surface is open at a time and Escape or an outside click closes it (HS2-Q4JE3V). The field's
+  // Enter and focusout reach wireTicketTagEditor, which delegates from the body that hosts it.
+  let tagSurface: OverlayHandle | undefined;
+  lifetime.add(() => tagSurface?.close());
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.openTicketTagPopover.selector, (_event, target) => {
+      tagSurface?.close();
+      const surface = openTicketTagSurface(target);
+      tagSurface = surface;
+      void surface.result.then(() => {
+        if (tagSurface === surface) tagSurface = undefined;
+      });
+    }),
+  );
   lifetime.add(
     wireTicketTagEditor(document.body, {
       add: (value) => {

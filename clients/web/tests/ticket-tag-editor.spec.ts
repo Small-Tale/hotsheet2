@@ -17,18 +17,21 @@ test('adds tags from the shared Tags menu header at wide and narrow sizes (HS2-9
   await trigger.click();
   await expect(popover).toBeVisible();
   await expect(input).toBeFocused();
+  // The field lists from the editor's datalist, which stays in the page while Kerf's AnchoredSurface
+  // owns the surface (HS2-Q4JE3V).
   expect(
-    await popover
-      .locator('option')
-      .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value)),
+    await input.evaluate((field) =>
+      Array.from((field as HTMLInputElement).list?.options ?? []).map((option) => option.value),
+    ),
   ).toEqual(['accessibility', 'regression', 'server']);
+  await expect(popover.locator('[data-component="ticket-tag-popover"]')).toBeVisible();
 
   const wideLayout = await page.evaluate(() => {
     const triggerBox = document
       .querySelector<HTMLElement>('[data-component="list-header"] button[aria-label="Add tag"]')!
       .getBoundingClientRect();
     const popoverBox = document
-      .querySelector<HTMLElement>('[data-component="ticket-tag-popover"]')!
+      .querySelector<HTMLElement>('[role="dialog"][aria-label="Add tag"]')!
       .getBoundingClientRect();
     return {
       belowTrigger: popoverBox.top >= triggerBox.bottom,

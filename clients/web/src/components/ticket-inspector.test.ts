@@ -269,8 +269,10 @@ describe('TicketInspector', () => {
     expect(markup).toContain('data-action="edit-markdown"');
     expect(markup).toContain('data-edit-on-click="true"');
     expect(markup).not.toContain('data-action="edit-note"');
-    expect(markup).toContain('popoverTarget="ticket-tag-reader-hs2-test"');
-    expect(String(TicketInspector({ ...base }))).toContain('popoverTarget="ticket-tag-sidebar-hs2-test"');
+    expect(markup).toContain('data-tag-suggestions="ticket-tag-reader-hs2-test-suggestions"');
+    expect(String(TicketInspector({ ...base }))).toContain(
+      'data-tag-suggestions="ticket-tag-sidebar-hs2-test-suggestions"',
+    );
     const editing = String(
       TicketInspector({
         ...base,

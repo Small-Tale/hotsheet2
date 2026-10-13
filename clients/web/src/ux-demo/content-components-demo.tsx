@@ -17,7 +17,7 @@ import {
 } from '../components/ticket-field-editor-interactions';
 import type { InspectorTab } from '../components/ticket-inspector';
 import { showTicketReaderDialog, TicketReader } from '../components/ticket-reader';
-import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
+import { addTicketTag, openTicketTagSurface, removeTicketTag } from '../components/ticket-tag-editor';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { clickBeginsMarkdownEdit, keyBeginsMarkdownEdit, repeatPressWouldLeaveNewEditor } from '../markdown-click-edit';
 import { DemoEvent } from './components/demo-event';
@@ -511,8 +511,18 @@ function wireContentComponentsDemo(root: HTMLElement): () => void {
       },
     }),
   );
+  // The Add tag surface opens through Kerf's AnchoredSurface on document.body, outside the demo
+  // root, so the tag editor's field listeners delegate from the body (HS2-Q4JE3V).
+  let tagSurface: ReturnType<typeof openTicketTagSurface> | undefined;
+  demoListeners.add(() => tagSurface?.close());
   demoListeners.add(
-    wireTicketTagEditor(root, {
+    delegate(root, 'click', DEMO_ACTIONS.openTicketTagPopover.selector, (_event, target) => {
+      tagSurface?.close();
+      tagSurface = openTicketTagSurface(target);
+    }),
+  );
+  demoListeners.add(
+    wireTicketTagEditor(document.body, {
       add: (value) => {
         inspectorTags.value = addTicketTag(inspectorTags.value, value);
         tagsAutosave.schedule(inspectorTags.value);

@@ -27,6 +27,7 @@ export const DEMO_ACTIONS = {
   dismissHs1Migration: attr('data-action', 'dismiss-hs1-migration'),
   editAttachmentBatchLabel: attr('data-action', 'edit-attachment-batch-label'),
   editBlockedReason: attr('data-action', 'edit-blocked-reason'),
+  openTicketTagPopover: attr('data-action', 'open-ticket-tag-popover'),
   editCommandSetting: attr('data-action', 'edit-command-setting'),
   editMarkdown: attr('data-action', 'edit-markdown'),
   editTicketTitle: attr('data-action', 'edit-ticket-title'),

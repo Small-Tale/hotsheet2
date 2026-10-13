@@ -63,6 +63,42 @@ test('opens a checkout and its exact ticket from a deep link @ci-smoke', async (
   await expect(page.getByRole('tab', { name: /^demo/ })).toHaveAttribute('aria-selected', 'true');
 });
 
+test('adds a tag through the Add tag surface inside the modal reader (HS2-Q4JE3V)', async ({ page }) => {
+  const patches = await mockProject(page);
+  await page.route('**/__hotsheet/checkouts', (route) =>
+    route.fulfill({ json: [{ id: project.id, alias: 'demo', root: project.root, stores: project.stores }] }),
+  );
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/?store=demo-checkout&ticket=HS2-DEMO01');
+    const reader = page.locator('[data-component="ticket-reader"][data-reader-active="true"]');
+    await expect(reader).toBeVisible();
+    const addTag = reader.getByRole('button', { name: 'Add tag' }),
+      surface = page.getByRole('dialog', { name: 'Add tag' }),
+      input = surface.getByRole('combobox', { name: 'Tag name' });
+    await addTag.scrollIntoViewIfNeeded();
+    await addTag.click();
+    await expect(input).toBeFocused();
+    const layout = await surface.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      return box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight;
+    });
+    expect(layout).toBe(true);
+    await page.screenshot({ path: `target/visual-captures/hs2-q4je3v-reader-add-tag-${width}.png` });
+    const tag = `reader-${width}`;
+    await input.fill(tag);
+    await input.press('Enter');
+    await expect(reader.locator(`.tag-chip[data-item-id="${tag}"]`)).toBeVisible();
+    await expect(input).toHaveValue('');
+    await expect.poll(() => patches.some((patch) => Array.isArray(patch.tags) && patch.tags.includes(tag))).toBe(true);
+    // Escape dismisses only the surface, returning focus to its trigger inside the open reader.
+    await page.keyboard.press('Escape');
+    await expect(surface).toHaveCount(0);
+    await expect(reader).toBeVisible();
+    await expect(addTag).toBeFocused();
+  }
+});
+
 test('opens a ticket from the project= deep-link key and a project path (HS2-BQ0ECV)', async ({ page }) => {
   await mockProject(page);
   await page.route('**/__hotsheet/checkouts', (route) =>
@@ -15972,7 +16008,9 @@ test('edits title and tags through controlled capability-aware inspector state',
   await expect(addTag.locator('[data-lucide="plus"]')).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-9zpyr8-tags-production-wide.png', fullPage: true });
   await addTag.click();
-  const tagInput = inspector.getByRole('combobox', { name: 'Tag name' });
+  // Kerf's AnchoredSurface hosts the Add tag field outside the rail (HS2-Q4JE3V).
+  const tagInput = page.getByRole('dialog', { name: 'Add tag' }).getByRole('combobox', { name: 'Tag name' });
+  await expect(tagInput).toBeFocused();
   await tagInput.fill('regression');
   await tagInput.press('Enter');
   await expect(inspector.locator('.tag-chip[data-item-id="regression"]')).toBeVisible();

@@ -348,6 +348,7 @@ inspector-and-editor	delegate	document.body	'click'	'[data-action="apply-ticket-
 inspector-and-editor	wireTicketTitleEditor	document.body
 inspector-and-editor	delegate	document.body	'keydown'	'[data-component="ticket-inspector-header"]'
 inspector-and-editor	delegate	document.body	'keydown'	'[data-component="ticket-inspector-body"]'
+inspector-and-editor	delegate	document.body	'click'	'[data-action="open-ticket-tag-popover"]'
 inspector-and-editor	wireTicketTagEditor	document.body
 inspector-and-editor	delegateCapture	document.body	'pointerdown'	'*'
 inspector-and-editor	delegateCapture	document.body	'mousedown'	'*'

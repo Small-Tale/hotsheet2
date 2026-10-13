@@ -4650,15 +4650,13 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(tagEditor).toBeFocused();
   expect(
     await tagDialog.evaluate((node) => {
-      const editor = getComputedStyle(node.parentElement!),
-        popover = getComputedStyle(node),
+      const editor = getComputedStyle(document.querySelector('[data-component="ticket-tag-editor"]')!),
         label = getComputedStyle(node.querySelector('label')!),
         input = getComputedStyle(node.querySelector('input')!);
-      // The field owns the title and hint spacing since Kerf Text renders both (HS2-DYNGY5).
+      // The field owns the title and hint spacing since Kerf Text renders both (HS2-DYNGY5); Kerf's
+      // AnchoredSurface owns the surface frame and padding (HS2-Q4JE3V).
       return {
         editorGap: editor.gap,
-        popoverMargin: popover.marginTop,
-        popoverPadding: popover.paddingTop,
         headingMargin: label.marginTop,
         labelGap: label.gap,
         inputPadding: input.paddingLeft,
@@ -4667,8 +4665,6 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
     }),
   ).toEqual({
     editorGap: '8px',
-    popoverMargin: '4px',
-    popoverPadding: '16px',
     headingMargin: '16px',
     labelGap: '4px',
     inputPadding: '16px',

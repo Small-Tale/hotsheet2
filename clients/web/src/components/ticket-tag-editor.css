@@ -1,22 +1,12 @@
-/* The chip row stacked above the hidden add-tag popover. */
+/* The chip row; the suggestion datalist beside it renders nothing. */
 .ticket-tag-editor {
   display: grid;
   gap: var(--kui-space-xs);
 }
-/* A native popover anchored under the Tags header action. Kerf's AnchoredSurface owns this chrome
-   but opens imperatively; moving to it is HS2-Q4JE3V. */
-.ticket-tag-editor__popover {
-  position: fixed;
-  position-area: block-end span-inline-end;
-  width: min(remify(288px), calc(100vw - 2 * var(--kui-space-m)));
-  margin: var(--kui-space-2xs) 0 0;
-  padding: var(--kui-space-m);
-  border: 1px solid var(--wa-color-surface-border);
-  border-radius: var(--wa-border-radius-m);
-  color: var(--wa-color-text-normal);
-  background: var(--wa-color-surface-raised);
-  box-shadow: var(--wa-shadow-l);
-  box-sizing: border-box;
+/* The Add tag content keeps a readable field width inside Kerf's AnchoredSurface, which owns the
+   surface chrome, position, focus, and dismissal (HS2-Q4JE3V). */
+.ticket-tag-editor__surface {
+  width: min(remify(256px), calc(100vw - 4 * var(--kui-space-m)));
 }
 /* Stacks the caption over the field with the title and hint spaced from it. */
 .ticket-tag-editor__field {
@@ -26,7 +16,7 @@
 }
 /* The field stays native because its suggestions come from a <datalist>, which wa-input's shadow
    input cannot reference (KF-XDVAMR). */
-.ticket-tag-editor__popover input {
+.ticket-tag-editor__input {
   width: 100%;
   min-width: 0;
   height: remify(36px);
@@ -40,14 +30,14 @@
   font-size: var(--wa-font-size-xs);
 }
 /* Keyboard focus for the native field. */
-.ticket-tag-editor__popover input:focus-visible {
+.ticket-tag-editor__input:focus-visible {
   border-color: var(--wa-color-brand-border-normal);
   outline: var(--wa-focus-ring);
   outline-offset: 1px;
 }
 /* iOS zooms into a focused field under 16px (HS2-8JPRRC). */
 @media (pointer: coarse) {
-  .ticket-tag-editor__popover input {
+  .ticket-tag-editor__input {
     font-size: max(var(--hs-touch-field-min-font-size), var(--wa-font-size-xs));
   }
 }

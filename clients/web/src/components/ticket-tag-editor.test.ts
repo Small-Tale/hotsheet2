@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { addTicketTag, removeTicketTag, TicketTagEditor } from './ticket-tag-editor';
+import { addTicketTag, removeTicketTag, TicketTagEditor, TicketTagPopoverContent } from './ticket-tag-editor';
 
 describe('TicketTagEditor', () => {
   it('normalizes additions, rejects duplicates, and removes exact tags', () => {
@@ -22,16 +22,18 @@ describe('TicketTagEditor', () => {
       }),
     );
     expect(editable).toContain('data-action="remove-tag-chip"');
-    expect(editable).toContain(
-      'data-component="ticket-tag-popover" popover="auto" role="dialog" aria-labelledby="ticket-tag-sidebar-test-title"',
+    // Kerf openAnchoredSurface hosts the Add tag content; the editor keeps only the suggestions (HS2-Q4JE3V).
+    expect(editable).not.toContain('popover="auto"');
+    expect(editable).toContain('<datalist id="ticket-tag-sidebar-test-suggestions"');
+    expect(String(TicketTagPopoverContent({ suggestionsId: 'ticket-tag-sidebar-test-suggestions' }))).toContain(
+      'name="ticket-tag-input" list="ticket-tag-sidebar-test-suggestions"',
     );
-    expect(editable).toContain('name="ticket-tag-input" list="ticket-tag-sidebar-test-suggestions"');
     expect(editable).not.toContain('aria-haspopup="dialog"');
     expect(editable).toContain('<option value="server"');
     expect(editable).not.toContain('<option value="client"');
     const readOnly = String(TicketTagEditor({ tags: ['client'], suggestions: ['server'], editable: false }));
     expect(readOnly).not.toContain('data-action="remove-tag-chip"');
-    expect(readOnly).not.toContain('ticket-tag-popover');
+    expect(readOnly).not.toContain('<datalist');
   });
 
   it('styles the editor as an anchored popup surface', () => {
@@ -39,15 +41,14 @@ describe('TicketTagEditor', () => {
     expect(css).not.toContain('.ticket-tag-editor__add');
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/\.ticket-tag-editor \{[^}]*gap: var\(--kui-space-xs\)/);
-    expect(css).toMatch(/__popover \{[^}]*margin: var\(--kui-space-2xs\) 0 0;[^}]*padding: var\(--kui-space-m\)/);
+    // Kerf's AnchoredSurface owns the popup chrome; no app surface rule remains (HS2-Q4JE3V).
+    expect(css).not.toContain('__popover');
+    expect(css).not.toContain('box-shadow');
     // Kerf Row lays out the chips and Kerf Text owns the title, caption, and hint typography (HS2-DYNGY5).
     expect(css).not.toContain('__chips');
     expect(css).not.toMatch(/__popover (?:strong|small|label) \{/);
     expect(css).toMatch(
       /\.ticket-tag-editor__field \{[^}]*margin-block: var\(--kui-space-m\) var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-2xs\)/,
-    );
-    expect(css).toMatch(
-      /\.ticket-tag-editor__popover \{[^}]*position: fixed;[^}]*position-area: block-end span-inline-end;[^}]*box-shadow: var\(--wa-shadow-l\)/,
     );
   });
 });

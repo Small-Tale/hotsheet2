@@ -34,6 +34,7 @@ export const INSPECTOR_AND_EDITOR_ACTIONS = {
   openCodeReview: action('open-code-review'),
   retryProviderOutbox: action('retry-provider-outbox'),
   discardProviderOutbox: action('discard-provider-outbox'),
+  openTicketTagPopover: action('open-ticket-tag-popover'),
 } as const;
 
 /**

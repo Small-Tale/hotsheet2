@@ -26,7 +26,7 @@ import { TicketNotes } from './ticket-notes';
 import { TicketPrioritySelect } from './ticket-priority-select';
 import type { TicketPriority } from './ticket-row';
 import { TicketStatusMenu } from './ticket-status-menu';
-import { TicketTagEditor } from './ticket-tag-editor';
+import { TicketTagEditor, ticketTagSuggestionsId } from './ticket-tag-editor';
 
 /** The warning foreground the Feedback needed header shares with its tinted surface. */
 const WARNING_TEXT = foregroundColorVar('--wa-color-warning-on-quiet');
@@ -290,8 +290,7 @@ function LoadedTicketInfoPanel({
             actionLabel="Add tag"
             actionIcon={<LucideIcon icon={Plus} name="plus" />}
             triggerAttributes={{
-              popoverTarget: resolvedTagPopoverId,
-              'aria-controls': resolvedTagPopoverId,
+              'data-tag-suggestions': ticketTagSuggestionsId(resolvedTagPopoverId),
               'aria-haspopup': 'dialog',
             }}
           />

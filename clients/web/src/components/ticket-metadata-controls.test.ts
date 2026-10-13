@@ -144,7 +144,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(info).toContain('data-font="default" data-border="none">Details</h2>');
     expect(info).toContain('data-font="default" data-border="none">Tags</h2>');
     expect(info).toMatch(
-      /popoverTarget="ticket-tag-popover"[^>]*aria-controls="ticket-tag-popover"[^>]*aria-haspopup="dialog"[^>]*data-action="open-ticket-tag-popover"[^>]*aria-label="Add tag"/,
+      /data-tag-suggestions="ticket-tag-popover-suggestions"[^>]*aria-haspopup="dialog"[^>]*data-action="open-ticket-tag-popover"[^>]*aria-label="Add tag"/,
     );
     expect(info).toContain('data-action="edit-blocked-reason"');
     expect(info).toContain('Block ticket');
