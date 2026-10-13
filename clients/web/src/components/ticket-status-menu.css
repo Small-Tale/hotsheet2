@@ -1,5 +1,0 @@
-/* WebKit hit-tests Web Awesome's fixed submenu safe triangle over the Started phase rows, blocking
-   hover and clicks; remove once Kerf's PopupMenu owns the fix (KF-YAHAZK). */
-.ticket-status-menu wa-dropdown-item::part(submenu)::before {
-  pointer-events: none;
-}

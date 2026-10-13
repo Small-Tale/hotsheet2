@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { Bug } from 'lucide';
@@ -126,11 +126,8 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(status).toContain('data-action="open-inspector-status-menu"');
     expect(status).toContain('aria-haspopup="menu"');
     expect(status).toContain('data-interactive="true"');
-    const css = readFileSync(new URL('./ticket-status-menu.css', import.meta.url), 'utf8');
-    expect(css).not.toContain('status-badge');
-    // The submenu safe triangle is the only Web Awesome part exception (HS2-0VXN1A).
-    expect([...css.matchAll(/::part\(([^)]+)\)/g)].map((match) => match[1])).toEqual(['submenu']);
-    expect(css).not.toContain('wa-select');
+    // Kerf beta.96 owns the submenu safe-triangle fix (KF-YAHAZK), so the menu ships no CSS (HS2-80E3X0).
+    expect(existsSync(new URL('./ticket-status-menu.css', import.meta.url))).toBe(false);
   });
 
   it('renders inspector sections independently of the inspector shell', () => {

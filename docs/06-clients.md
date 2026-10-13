@@ -75,8 +75,9 @@ Started opens a submenu with all six phases and a No phase choice. Changing a ph
 on an already Started ticket preserves its lifecycle status; choosing a phase from
 another status moves the ticket to Started. External providers omit the phase submenu.
 Every phase row responds to pointer hover and click in WebKit as well as Chromium. The
-status menu disables pointer hit testing on Web Awesome's submenu safe triangle, which
-otherwise overlays rows in WebKit (HS2-0VXN1A).
+status menu relies on Kerf's PopupMenu (beta.96, KF-YAHAZK) to keep Web Awesome's submenu
+safe triangle from overlaying rows; it no longer ships its own override (HS2-0VXN1A,
+HS2-80E3X0).
 Pointer-positioned context menus and the inspector/reader status popup retain their opening
 anchor through view morphs, including a replaced popup host or cleared inline position.
 Dismissal ends the status popup's anchor tracking so later renders do not reopen it.

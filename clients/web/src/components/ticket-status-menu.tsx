@@ -1,5 +1,3 @@
-import './ticket-status-menu.css';
-
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 
