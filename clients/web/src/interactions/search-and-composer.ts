@@ -8,11 +8,11 @@ import { createScope } from 'kerfjs/scope';
 import { type TicketRow as WireTicketRow } from '../api';
 import { NEW_TICKET_ATTACHMENT_PICKER, STRANDED_ATTACHMENTS_MESSAGE } from '../components/quick-ticket-composer';
 import {
-  nextWorkspaceSort,
   type WorkspaceSort,
   type WorkspaceSortDirection,
   type WorkspaceViewMode,
 } from '../components/workspace-header';
+import { wireWorkspaceHeaderActions } from '../components/workspace-header-interactions';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { type InlineSearchToken } from '../inline-search';
 import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
@@ -231,34 +231,30 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
       else queueMicrotask(collapse);
     }),
   );
+  const applyWorkspaceSort = (next: { sort: WorkspaceSort; direction: WorkspaceSortDirection }) => {
+    resetProgressiveTicketRendering();
+    sort.value = next.sort;
+    sortDirection.value = next.direction;
+    persistWorkspacePreferences();
+    if (searchQuery.value.trim() || searchTokens.value.length) scheduleTicketSearch();
+    else void refreshProject({ showLoading: false });
+  };
   lifetime.add(
-    delegate(document.body, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, target) => {
-      const next = nextWorkspaceSort(sort.value, sortDirection.value, (target as Control).value as WorkspaceSort);
-      resetProgressiveTicketRendering();
-      sort.value = next.sort;
-      sortDirection.value = next.direction;
-      persistWorkspacePreferences();
-      if (searchQuery.value.trim() || searchTokens.value.length) scheduleTicketSearch();
-      else void refreshProject({ showLoading: false });
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'wa-select', '[data-workspace-overflow]', (event) => {
-      const item = (event as CustomEvent<{ item: HTMLElement }>).detail.item,
-        action = item.dataset.workspaceOverflowAction;
-      if (action === 'toggle-selected-up-next') {
+    wireWorkspaceHeaderActions(document.body, {
+      currentSort: () => ({ sort: sort.value, direction: sortDirection.value }),
+      sort: applyWorkspaceSort,
+      toggleSelectedUpNext: () => {
         const selected = selectedRows();
         if (selected.length > 0)
           void executeBulkTicketAction(
             { kind: 'up-next', value: !selected.every((ticket) => ticket.up_next) },
             selected.map((ticket) => ticket.slug),
           );
-        return;
-      }
-      if (action === 'open-selected-ticket-actions') {
+      },
+      openSelectedTicketActions: (anchor) => {
         const selected = selectedRows();
         if (selected.length === 0) return;
-        const rect = item.getBoundingClientRect(),
+        const rect = anchor.getBoundingClientRect(),
           position = viewportSafeContextMenuPosition(
             rect.right - 232,
             rect.bottom,
@@ -267,31 +263,16 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
             { width: 232, height: 382 },
           );
         ticketContextMenu.value = { ...position, ticketSlug: selected[0].slug, hideUpNext: true };
-        return;
-      }
-      if (action === 'open-workspace-search') {
+      },
+      openSearch: () => {
         tokenSearchFields.open('workspace-search');
-        return;
-      }
-      if (action === 'set-view-mode') {
-        const mode = item.dataset.viewMode as WorkspaceViewMode;
+      },
+      setViewMode: (mode) => {
         resetProgressiveTicketRendering();
         viewMode.value = mode;
         persistWorkspacePreferences();
         if (mode === 'list' || mode === 'board') void refreshProject({ showLoading: false });
-        return;
-      }
-      if (action === 'set-workspace-sort') {
-        const selected = item.dataset.workspaceSort as WorkspaceSort | undefined;
-        if (!selected) return;
-        const next = nextWorkspaceSort(sort.value, sortDirection.value, selected);
-        resetProgressiveTicketRendering();
-        sort.value = next.sort;
-        sortDirection.value = next.direction;
-        persistWorkspacePreferences();
-        if (searchQuery.value.trim() || searchTokens.value.length) scheduleTicketSearch();
-        else void refreshProject({ showLoading: false });
-      }
+      },
     }),
   );
   lifetime.add(

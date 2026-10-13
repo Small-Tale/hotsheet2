@@ -61,6 +61,7 @@ const registrations = new Set([
   'wireTerminalClipboardActions',
   'wireTerminalClipboardSheets',
   'wireTerminalRenameDialog',
+  'wireWorkspaceHeaderActions',
   'window.addEventListener',
   'document.addEventListener',
 ]);
@@ -133,7 +134,7 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
           .join('\t'),
       );
     expect(actual).toEqual(baseline);
-    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(368);
+    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(366);
     expect(
       actual
         .filter((line) => /\tdelegate(?:Capture)?\t/.test(line))

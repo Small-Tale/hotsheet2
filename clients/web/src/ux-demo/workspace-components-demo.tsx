@@ -34,7 +34,7 @@ import {
 import { TicketList } from '../components/ticket-list';
 import type { TicketRowProps } from '../components/ticket-row';
 import { statusMenuAnchorY } from '../components/ticket-status-menu';
-import { nextWorkspaceSort, wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
+import { wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
 import {
   applyWorkspaceSortDirection,
   defaultWorkspaceSortDirection,
@@ -45,6 +45,7 @@ import {
   workspaceUpNextState,
   type WorkspaceViewMode,
 } from '../components/workspace-header';
+import { wireWorkspaceHeaderActions } from '../components/workspace-header-interactions';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { orderedSearchText } from '../inline-search';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
@@ -864,37 +865,23 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
       );
     }),
   );
+  // The sort and overflow menus run production's WorkspaceHeader wiring (HS2-AAX2B5).
   demoListeners.add(
-    delegate(root, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, target) => {
-      const next = nextWorkspaceSort(
-        workspaceSort.value,
-        workspaceSortDirection.value,
-        (target as FormControl).value as typeof workspaceSort.value,
-      );
-      workspaceSort.value = next.sort;
-      workspaceSortDirection.value = next.direction;
-      recordCollectionEvent(`Sorted by ${workspaceSort.value}, ${workspaceSortDirection.value}`);
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'wa-select', '[data-workspace-overflow]', (event) => {
-      const item = (event as CustomEvent<{ item: HTMLElement }>).detail.item;
-      const action = item.dataset.workspaceOverflowAction;
-      if (action === 'toggle-selected-up-next') {
-        toggleWorkspaceDemoUpNext();
-        return;
-      }
-      if (action === 'open-selected-ticket-actions') {
-        openSelectedDemoTicketActions(item);
-        return;
-      }
-      if (action === 'open-workspace-search') {
+    wireWorkspaceHeaderActions(root, {
+      currentSort: () => ({ sort: workspaceSort.value, direction: workspaceSortDirection.value }),
+      sort: (next) => {
+        workspaceSort.value = next.sort;
+        workspaceSortDirection.value = next.direction;
+        recordCollectionEvent(`Sorted by ${workspaceSort.value}, ${workspaceSortDirection.value}`);
+      },
+      toggleSelectedUpNext: toggleWorkspaceDemoUpNext,
+      openSelectedTicketActions: openSelectedDemoTicketActions,
+      openSearch: () => {
         workspaceSearchOpen.value = true;
         queueMicrotask(() => focusWorkspaceSearch(root));
-        return;
-      }
-      if (action === 'set-view-mode') {
-        workspaceMode.value = item.dataset.viewMode as typeof workspaceMode.value;
+      },
+      setViewMode: (mode) => {
+        workspaceMode.value = mode;
         if (workspaceMode.value === 'settings') {
           workspaceSearchOpen.value = false;
           workspaceSearchHelpOpen.value = false;
@@ -903,15 +890,7 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
         recordCollectionEvent(
           `${workspaceMode.value === 'list' ? 'List' : workspaceMode.value === 'board' ? 'Columns' : workspaceMode.value === 'notifications' ? 'Notifications' : 'Settings'} view selected`,
         );
-        return;
-      }
-      if (action !== 'set-workspace-sort') return;
-      const selected = item.dataset.workspaceSort as typeof workspaceSort.value | undefined;
-      if (!selected) return;
-      const next = nextWorkspaceSort(workspaceSort.value, workspaceSortDirection.value, selected);
-      workspaceSort.value = next.sort;
-      workspaceSortDirection.value = next.direction;
-      recordCollectionEvent(`Sorted by ${workspaceSort.value}, ${workspaceSortDirection.value}`);
+      },
     }),
   );
   demoListeners.add(
