@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -69,9 +70,9 @@ export const terminalVisibilityDemoOpen = signal(false),
   terminalVisibilityDemoNamePrompt = signal<TerminalVisibilityNamePrompt | undefined>(undefined);
 export function TerminalVisibilityDialogDemo() {
   return (
-    <section class="terminal-visibility-demo">
+    <CatalogExample label="Interactive" align="inline-control">
       <wa-button appearance="accent" data-action="show-terminal-visibility-demo" aria-haspopup="dialog">
-        <LucideIcon size="s" icon={Eye} name="eye" />
+        <LucideIcon size="s" icon={Eye} name="eye" slot="start" />
         Manage Workspace Visibility
       </wa-button>
       <TerminalVisibilityDialog
@@ -83,7 +84,7 @@ export function TerminalVisibilityDialogDemo() {
         contextMenu={terminalVisibilityDemoContextMenu.value}
       />
       <TerminalVisibilityNameDialog prompt={terminalVisibilityDemoNamePrompt.value} />
-    </section>
+    </CatalogExample>
   );
 }
 export function showTerminalVisibilityDemo() {
@@ -262,7 +263,7 @@ function wireTerminalVisibilityDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'terminal-visibility-dialog': { Demo: TerminalVisibilityDialogDemo },
+    'terminal-visibility-dialog': { catalogExamples: true, Demo: TerminalVisibilityDialogDemo },
   },
   wire: wireTerminalVisibilityDemo,
 };

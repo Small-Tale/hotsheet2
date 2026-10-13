@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -139,52 +140,54 @@ function scenarioState() {
 export function AIConversationDemo() {
   const state = scenarioState();
   return (
-    <section
-      aria-label="AIConversation demo"
-      class="ai-conversation-demo"
-      data-presentation={aiConversationPresentation.value}
-    >
-      {aiConversationPresentation.value === 'dialog' && (
-        <wa-button appearance="accent" data-action="open-ai-conversation-demo">
-          Open conversation
-        </wa-button>
-      )}
-      <output role="status">
-        {aiConversationSaveCount.value
-          ? `Prepared ${aiConversationSaveCount.value} conversation export${aiConversationSaveCount.value === 1 ? '' : 's'}.`
-          : ''}
-      </output>
-      <AIConversation
-        presentation={aiConversationPresentation.value}
-        open={aiConversationDemoOpen.value}
-        tool={aiConversationProviderLabel()}
-        sessionId="019-demo-session"
-        messages={state.messages}
-        draft={aiConversationDraft.value}
-        busy={state.busy}
-        progress={state.progress}
-        interruptible={state.interruptible}
-        permissions={state.permissions}
-        activity={state.activity}
-        totalUsage={conversationUsage({ messages: state.messages })}
-        error={state.error}
-        feedbackAvailable
-        providerId={aiConversationProvider.value}
-        providers={AI_CONVERSATION_PROVIDERS}
-        canChangeProvider
-        model="gpt-5.6"
-        effort="high"
-        models={[
-          { id: 'gpt-5.6', label: 'GPT-5.6' },
-          { id: 'gpt-5.6-codex', label: 'GPT-5.6 Codex' },
-        ]}
-        efforts={['medium', 'high', 'xhigh']}
-        canChangeModel
-        canChangeEffort
-        readOnly={aiConversationScenario.value === 'saved'}
-        savedSource={aiConversationScenario.value === 'saved' ? 'client-review.hotsheet-chat' : undefined}
-      />
-    </section>
+    <CatalogExample label="Interactive" viewport={{ width: 'full' }}>
+      <section
+        aria-label="AIConversation demo"
+        class="ai-conversation-demo"
+        data-presentation={aiConversationPresentation.value}
+      >
+        {aiConversationPresentation.value === 'dialog' && (
+          <wa-button appearance="accent" data-action="open-ai-conversation-demo">
+            Open conversation
+          </wa-button>
+        )}
+        <output role="status">
+          {aiConversationSaveCount.value
+            ? `Prepared ${aiConversationSaveCount.value} conversation export${aiConversationSaveCount.value === 1 ? '' : 's'}.`
+            : ''}
+        </output>
+        <AIConversation
+          presentation={aiConversationPresentation.value}
+          open={aiConversationDemoOpen.value}
+          tool={aiConversationProviderLabel()}
+          sessionId="019-demo-session"
+          messages={state.messages}
+          draft={aiConversationDraft.value}
+          busy={state.busy}
+          progress={state.progress}
+          interruptible={state.interruptible}
+          permissions={state.permissions}
+          activity={state.activity}
+          totalUsage={conversationUsage({ messages: state.messages })}
+          error={state.error}
+          feedbackAvailable
+          providerId={aiConversationProvider.value}
+          providers={AI_CONVERSATION_PROVIDERS}
+          canChangeProvider
+          model="gpt-5.6"
+          effort="high"
+          models={[
+            { id: 'gpt-5.6', label: 'GPT-5.6' },
+            { id: 'gpt-5.6-codex', label: 'GPT-5.6 Codex' },
+          ]}
+          efforts={['medium', 'high', 'xhigh']}
+          canChangeModel
+          canChangeEffort
+          readOnly={aiConversationScenario.value === 'saved'}
+          savedSource={aiConversationScenario.value === 'saved' ? 'client-review.hotsheet-chat' : undefined}
+        />
+      </section>
+    </CatalogExample>
   );
 }
 
@@ -311,6 +314,7 @@ function wireAiConversationDemo(root: HTMLElement): () => void {
 export const demoModule: DemoModule = {
   entries: {
     'ai-conversation': {
+      catalogExamples: true,
       Demo: AIConversationDemo,
       Settings: AIConversationSettings,
       reset: (root) => {

@@ -9,7 +9,7 @@ for (const systemTheme of ['light', 'dark'] as const) {
     await page.goto('/ux-demo?component=project-dialog');
     const root = page.locator('html');
     const dialog = page.locator('[data-remote-project-dialog]');
-    const stage = page.getByRole('region', { name: 'Project dialog variants' });
+    const stage = page.getByRole('region', { name: 'ProjectDialog examples' });
     const palette = () =>
       dialog.evaluate((element) => ({
         surface: getComputedStyle(element.shadowRoot!.querySelector('dialog')!).backgroundColor,
@@ -72,7 +72,7 @@ test('demonstrates project chooser states and opens again after empty, error, an
   await page.goto('/ux-demo?component=project-dialog');
   const remote = page.locator('[data-remote-project-dialog]');
   const local = page.locator('[data-project-dialog]');
-  const stage = page.getByRole('region', { name: 'Project dialog variants' });
+  const stage = page.getByRole('region', { name: 'ProjectDialog examples' });
   const cancel = () => remote.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(remote).toHaveJSProperty('open', true);
   await expect(remote.locator('[data-component="list-item"]')).toHaveCount(10);
@@ -115,7 +115,7 @@ test('demonstrates project chooser states and opens again after empty, error, an
   await expect(remote.locator('[data-component="list-item"]')).toHaveCount(10);
   await remote.getByRole('button', { name: 'Demo /work/demo', exact: true }).click();
   await expect(remote).toHaveJSProperty('open', false);
-  await expect(stage.getByRole('status')).toHaveText('Opened /work/demo');
+  await expect(stage.locator('[data-demo-event]')).toHaveText('Opened /work/demo');
   await stage.getByRole('button', { name: 'Remote projects', exact: true }).click();
   await expect(remote).toHaveJSProperty('open', true);
   await remote.getByRole('button', { name: 'Close', exact: true }).click();
@@ -129,7 +129,7 @@ test('demonstrates project chooser states and opens again after empty, error, an
   await local.getByRole('textbox', { name: /^Project folder/ }).fill('/work/edited');
   await local.getByRole('button', { name: 'Open project', exact: true }).click();
   await expect(local).toHaveJSProperty('open', false);
-  await expect(stage.getByRole('status')).toHaveText('Opened /work/edited');
+  await expect(stage.locator('[data-demo-event]')).toHaveText('Opened /work/edited');
   await stage.getByRole('button', { name: 'Local project', exact: true }).click();
   await expect(local.getByRole('textbox', { name: /^Project folder/ })).toHaveValue('/work/edited');
   await local.getByRole('button', { name: 'Cancel', exact: true }).click();

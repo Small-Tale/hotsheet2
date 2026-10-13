@@ -94,9 +94,7 @@ body[data-resizing-project-sidebar='true'] {
   position: relative;
   anchor-name: --app-shell-main;
   width: 100%;
-  max-width: remify(1120px);
   min-height: remify(640px);
-  margin: auto;
 }
 .permission-request-demo__list {
   width: min(remify(704px), 100%);
@@ -253,17 +251,6 @@ body[data-resizing-project-sidebar='true'] {
   .fixed-aspect-terminal-card-demo {
     grid-template-columns: 1fr;
   }
-}
-.terminal-visibility-demo {
-  display: grid;
-  width: min(remify(512px), 100%);
-  min-height: remify(320px);
-  margin: auto;
-  place-items: center;
-}
-.terminal-visibility-demo > wa-button::part(base) {
-  gap: var(--wa-space-xs);
-  cursor: pointer;
 }
 .project-tab-demo__surface {
   display: grid;

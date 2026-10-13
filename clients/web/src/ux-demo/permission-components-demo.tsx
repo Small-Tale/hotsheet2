@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -199,24 +200,27 @@ export function PermissionRequestDemo() {
           : undefined,
   };
   return (
-    <section class="permission-request-demo" aria-label="PermissionRequestCard demo">
-      {permissionRequestSettings.presentation.value === 'flow' ? (
-        // The in-flow popup is laid out by its host; this centered column stands in for the AI
-        // conversation's foreground (HS2-M2W2DP).
-        <div class="permission-request-demo__list">
-          <PermissionRequestPopup {...props} layer="flow" />
-        </div>
-      ) : permissionRequestSettings.presentation.value !== 'list' ? (
-        <PermissionRequestPopup
-          {...props}
-          layer={permissionRequestSettings.presentation.value === 'top-layer' ? 'top' : 'inline'}
-        />
-      ) : (
-        <div class="permission-request-demo__list">
-          <PermissionRequestCard {...props} presentation="list" />
-        </div>
-      )}
-    </section>
+    <CatalogExample label="Interactive" viewport={{ width: 'full' }}>
+      {/* The stage stands in for the shell's main column, which anchors the top-layer popup. */}
+      <div class="permission-request-demo">
+        {permissionRequestSettings.presentation.value === 'flow' ? (
+          // The in-flow popup is laid out by its host; this centered column stands in for the AI
+          // conversation's foreground (HS2-M2W2DP).
+          <div class="permission-request-demo__list">
+            <PermissionRequestPopup {...props} layer="flow" />
+          </div>
+        ) : permissionRequestSettings.presentation.value !== 'list' ? (
+          <PermissionRequestPopup
+            {...props}
+            layer={permissionRequestSettings.presentation.value === 'top-layer' ? 'top' : 'inline'}
+          />
+        ) : (
+          <div class="permission-request-demo__list">
+            <PermissionRequestCard {...props} presentation="list" />
+          </div>
+        )}
+      </div>
+    </CatalogExample>
   );
 }
 
@@ -284,9 +288,9 @@ export function PermissionRequestSettings() {
 
 export function NotificationCenterDemo() {
   return (
-    <section class="notification-center-demo" aria-label="NotificationCenter demo">
+    <CatalogExample label="Pending and history" viewport={{ width: 'full', height: 'app', layout: 'flex-column' }}>
       <NotificationCenter pending={[pending]} history={history} countdowns={{ [pending.key]: '0:13' }} />
-    </section>
+    </CatalogExample>
   );
 }
 
@@ -339,11 +343,12 @@ function wirePermissionComponentsDemo(root: HTMLElement): () => void {
 export const demoModule: DemoModule = {
   entries: {
     'permission-request': {
+      catalogExamples: true,
       Demo: PermissionRequestDemo,
       Settings: PermissionRequestSettings,
       reset: resetPermissionRequestDemo,
     },
-    'notification-center': { Demo: NotificationCenterDemo },
+    'notification-center': { catalogExamples: true, Demo: NotificationCenterDemo },
   },
   wire: wirePermissionComponentsDemo,
 };

@@ -1,9 +1,10 @@
-import './project-dialog-demo.css';
-
+import { CatalogExample } from '@kerfjs/ui/catalog';
+import { Row } from '@kerfjs/ui/row';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { ProjectDialog, RemoteProjectDialog } from '../components/project-dialog';
+import { DemoEvent } from './components/demo-event';
 import type { DemoModule } from './demo-module';
 
 const variants = {
@@ -47,15 +48,20 @@ const checkouts = [
 export function ProjectDialogDemo() {
   const local = ['local', 'recovery', 'busy'].includes(variant.value);
   return (
-    <section class="project-dialog-demo" aria-label="Project dialog variants">
-      <div class="project-dialog-demo__variants">
+    <CatalogExample
+      label="Interactive"
+      align="inline-control"
+      note="Each button opens one local or remote dialog state."
+      rootAttributes={{ 'data-project-dialog-demo': '' }}
+    >
+      <Row gap="xs" wrap>
         {Object.entries(variants).map(([id, label]) => (
           <wa-button data-action="show-project-dialog-demo" data-variant={id}>
             {label}
           </wa-button>
         ))}
-      </div>
-      <p role="status">{result.value}</p>
+      </Row>
+      <DemoEvent>{result.value}</DemoEvent>
       <ProjectDialog
         open={open.value && local}
         root={localRoot.value}
@@ -69,7 +75,7 @@ export function ProjectDialogDemo() {
         loading={variant.value === 'loading'}
         error={variant.value === 'error' ? 'Could not load the projects open on the Hot Sheet server. Try again.' : ''}
       />
-    </section>
+    </CatalogExample>
   );
 }
 
@@ -79,7 +85,7 @@ export function ProjectDialogDemo() {
  * @returns A teardown that removes every listener this call installed.
  */
 export function wireProjectDialogDemo(root: HTMLElement): () => void {
-  const scope = '[aria-label="Project dialog variants"]';
+  const scope = '[data-project-dialog-demo]';
   const listeners = createScope();
   listeners.add(
     delegate(root, 'click', `${scope} [data-action="show-project-dialog-demo"]`, (_event, target) => {
@@ -141,7 +147,7 @@ export function wireProjectDialogDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'project-dialog': { Demo: ProjectDialogDemo },
+    'project-dialog': { catalogExamples: true, Demo: ProjectDialogDemo },
   },
   wire: wireProjectDialogDemo,
 };
