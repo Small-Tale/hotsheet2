@@ -43,14 +43,11 @@ describe('SavedViewDialog', () => {
     // The shared ticket search brings tag completion and syntax help into the dialog (HS2-N5G6JS).
     expect(markup).not.toContain('workspace-header__search-group');
     expect(markup).toContain('aria-label="Search syntax help"');
-    expect(markup).toContain('aria-label="Search syntax"');
-    // The surfaces stack in flow below the field, inside the same wrapper, so nothing floats in the clipped body.
-    const fieldStart = markup.indexOf('data-presentation="form-field"'),
-      surfacesStart = markup.indexOf('class="ticket-search-surfaces"');
-    expect(fieldStart).toBeGreaterThan(0);
-    expect(surfacesStart).toBeGreaterThan(fieldStart);
-    expect(markup).toMatch(
-      /<div class="ticket-search-surfaces" data-ticket-search-for="saved-view-query" data-token-search-keep-open>[\s\S]*aria-label="Search syntax"[\s\S]*<input type="hidden" name="saved-view-query"/,
+    // The help surface is a Kerf anchored surface hosted in the dialog (KF-F52T5D, HS2-8TE69P); the
+    // field renders only its state marker, never an in-flow surface.
+    expect(markup).not.toContain('ticket-search-surfaces');
+    expect(markup).toContain(
+      '<span hidden data-ticket-search-surface-state data-ticket-search-for="saved-view-query" data-date-prefix="" data-help-open="true">',
     );
     // Kerf's tag completion excludes the committed chip (HS2-5JXBQY).
     expect(markup).toContain('data-token-search-suggestion="tag:design"');

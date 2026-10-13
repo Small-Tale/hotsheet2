@@ -530,30 +530,41 @@ test('offers tag completion, the date helper, and syntax help inside the saved-v
   await dialog.getByRole('button', { name: 'Search syntax help' }).click();
   const help = dialog.getByRole('dialog', { name: 'Search syntax' });
   await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
-  // The dialog places the surfaces in flow, so the help is fully inside the dialog panel, not clipped by it.
+  // The help is a Kerf anchored surface hosted in the wa-dialog's interactive slot (KF-F52T5D,
+  // HS2-8TE69P): it floats outside the field's flow, stays in the viewport, and keeps focus in the field.
   await expect(help).toBeVisible();
   expect(
     await help.evaluate((node) => {
-      const box = node.getBoundingClientRect(),
-        surfaces = node.closest('.ticket-search-surfaces')!,
-        host = node.closest('wa-dialog')!,
-        panel = (host.shadowRoot?.querySelector('[part~="dialog"]') ?? host).getBoundingClientRect();
+      const box = node.getBoundingClientRect();
       return {
         position: getComputedStyle(node).position,
-        external: !surfaces.closest('.ticket-search-field'),
-        inside:
-          box.top >= panel.top &&
-          box.bottom <= panel.bottom + 1 &&
-          box.left >= panel.left &&
-          box.right <= panel.right + 1,
-        tall: box.height > 300,
+        hosted: node.closest('wa-dialog') !== null,
+        inFieldFlow: node.closest('.ticket-search-form-field') !== null,
+        onScreen: box.top >= 0 && box.bottom <= innerHeight + 1 && box.left >= 0 && box.right <= innerWidth + 1,
+        tall: box.height > 200,
       };
     }),
-  ).toEqual({ position: 'static', external: true, inside: true, tall: true });
+  ).toEqual({ position: 'fixed', hosted: true, inFieldFlow: false, onScreen: true, tall: true });
+  // Pressing inside the help keeps it open and the field in the dialog.
+  await help.locator('[data-syntax-group="Tags"]').click();
+  await expect(help).toBeVisible();
   await page.screenshot({
     path: 'target/visual-captures/hs2-n5g6js-saved-view-help-wide.png',
     clip: { x: 380, y: 60, width: 680, height: 840 },
   });
+  // On a phone the help still fits beside the dialog's field without horizontal overflow.
+  const wide = page.viewportSize()!;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(() =>
+      help.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight + 1;
+      }),
+    )
+    .toBe(true);
+  await page.screenshot({ path: 'target/visual-captures/hs2-8te69p-saved-view-help-phone.png' });
+  await page.setViewportSize(wide);
   await dialog.getByRole('button', { name: 'Search syntax help' }).click();
   await expect(help).toHaveCount(0);
   // Enter inside the date helper applies the date instead of submitting the form.

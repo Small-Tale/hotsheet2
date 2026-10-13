@@ -3933,7 +3933,8 @@ test('organizes search syntax help in the WorkspaceHeader demo', async ({ page }
   await header.getByRole('button', { name: 'Search tickets' }).click();
   await header.getByRole('searchbox', { name: 'Search tickets' }).fill('client');
   await header.getByRole('button', { name: 'Search syntax help' }).click();
-  const help = header.getByRole('dialog', { name: 'Search syntax' });
+  const help = page.getByRole('dialog', { name: 'Search syntax' });
+  const helpBody = help.locator('.ticket-search-field__help');
   await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
   await expect(help).toContainText('Combine filters');
   await page.screenshot({ path: 'target/visual-captures/hs2-7efj3e-search-help-demo-wide.png', fullPage: true });
@@ -3958,28 +3959,33 @@ test('organizes search syntax help in the WorkspaceHeader demo', async ({ page }
       }),
     )
     .toBe(true);
-  expect(await help.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+  expect(await helpBody.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-pv2ag1-search-phone.png', fullPage: true });
-  await help.evaluate((node) => {
+  await helpBody.evaluate((node) => {
     node.scrollTop = node.scrollHeight;
   });
-  await expect.poll(() => help.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
-  expect(
-    await help.evaluate((node) => {
-      const panel = node.getBoundingClientRect(),
-        // The notes are the last group inside the help body List (HS2-65XJ6C).
-        finalNote = node.lastElementChild!.lastElementChild!.getBoundingClientRect();
-      // The panel ends above the catalog's fixed footer pane (HS2-HMVBZW: the header now also carries
-      // Kerf's display controls, so measure the footer instead of a fixed allowance).
-      const footer = document.querySelector('.kui-workbench__main > .kui-pane > .kui-pane__footer')!;
-      return panel.bottom <= footer.getBoundingClientRect().top && finalNote.bottom <= panel.bottom - 4;
-    }),
-  ).toBe(true);
+  await expect.poll(() => helpBody.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+  // Kerf repositions the anchored surface on the frame after a resize or scroll, so poll for the settled box.
+  await expect
+    .poll(() =>
+      help.evaluate((node) => {
+        const panel = node.getBoundingClientRect(),
+          // The notes are the last group inside the help body List (HS2-65XJ6C).
+          finalNote = node
+            .querySelector('.ticket-search-field__help')!
+            .lastElementChild!.lastElementChild!.getBoundingClientRect();
+        // The panel ends above the catalog's fixed footer pane (HS2-HMVBZW: the header now also carries
+        // Kerf's display controls, so measure the footer instead of a fixed allowance).
+        const footer = document.querySelector('.kui-workbench__main > .kui-pane > .kui-pane__footer')!;
+        return panel.bottom <= footer.getBoundingClientRect().top && finalNote.bottom <= panel.bottom - 4;
+      }),
+    )
+    .toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-pv2ag1-search-phone-bottom.png', fullPage: true });
   await header.getByRole('button', { name: 'Search syntax help' }).click();
   await expect(help).toHaveCount(0);
   await header.getByRole('searchbox', { name: 'Search tickets' }).fill('updated-after:');
-  const date = header.getByRole('group', { name: 'Date and time helper' });
+  const date = page.getByRole('group', { name: 'Date and time helper' });
   await expect(date).toBeVisible();
   expect(await date.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-pv2ag1-date-phone.png', fullPage: true });
@@ -8705,10 +8711,10 @@ test('aligns the TicketSearchFormField with a Web Awesome input and keeps its se
       page.locator('[data-token-search-id="ticket-search-demo"] [data-component="token-search-token"]'),
     ).toHaveCount(0);
     await section.getByRole('button', { name: 'Search syntax help' }).click();
-    await expect(section.getByRole('dialog', { name: 'Search syntax' })).toBeVisible();
-    await section.screenshot({ path: test.info().outputPath(`ticket-search-form-field-${width}.png`) });
+    await expect(page.getByRole('dialog', { name: 'Search syntax' })).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath(`ticket-search-form-field-${width}.png`) });
     await section.getByRole('button', { name: 'Search syntax help' }).click();
-    await expect(section.getByRole('dialog', { name: 'Search syntax' })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: 'Search syntax' })).toHaveCount(0);
     await section.getByRole('button', { name: 'Clear form search query' }).click();
     await expect(section.locator('[data-component="token-search-token"]')).toHaveCount(0);
   }
@@ -8721,7 +8727,7 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   await page.goto('/ux-demo?component=ticket-search-field');
   const demo = page.locator('[data-catalog-example-stack]');
   const fields = demo.locator('.ticket-search-field');
-  await expect(fields).toHaveCount(6);
+  await expect(fields).toHaveCount(5);
   expect(
     await fields.evaluateAll((nodes) =>
       nodes.every((node) => node.getAttribute('data-expanded-overflow') === 'visible'),
@@ -8759,7 +8765,11 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   await expect(query).toHaveText('');
   // A trailing lifecycle filter opens the date helper; Apply commits the chip.
   await query.fill('updated-after:');
-  const helper = demo.getByRole('group', { name: 'Date and time helper' });
+  // The helper is a Kerf anchored surface outside the demo's flow that never takes focus (HS2-8TE69P).
+  const helper = page.getByRole('group', { name: 'Date and time helper' });
+  await expect(helper).toBeVisible();
+  await expect(query).toBeFocused();
+  expect(await helper.evaluate((node) => node.closest('.ticket-search-field') === null)).toBe(true);
   await helper.getByLabel('Date').fill('2026-09-01');
   await helper.getByLabel('Time (optional)').fill('11:05');
   await helper.getByRole('button', { name: 'Apply' }).click();
@@ -8774,16 +8784,27 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   // Syntax help toggles from the field's trailing button.
   const helpButton = demo.getByRole('button', { name: 'Search syntax help' }).first();
   await helpButton.click();
-  const help = fields.first().getByRole('dialog', { name: 'Search syntax' });
+  const help = page.getByRole('dialog', { name: 'Search syntax' });
   await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
   await expect(helpButton).toHaveAttribute('aria-expanded', 'true');
-  // The floating popover escapes Kerf's clipped search group and overlays the sections below.
-  const overlays = await help.evaluate((node) => {
-    const box = node.getBoundingClientRect(),
-      next = node.closest('[data-catalog-example]')!.nextElementSibling!.getBoundingClientRect();
-    return box.height > 200 && box.bottom > next.top && getComputedStyle(node).position === 'absolute';
-  });
-  expect(overlays).toBe(true);
+  // Kerf's anchored surface floats below the field's end edge, outside the clipped group (HS2-8TE69P).
+  const placement = await help.evaluate(
+    (node, field) => {
+      const box = node.getBoundingClientRect(),
+        anchor = field.getBoundingClientRect();
+      return {
+        tall: box.height > 200,
+        below: box.top >= anchor.bottom,
+        endAligned: Math.abs(box.right - anchor.right) <= 2,
+        fixed: getComputedStyle(node).position === 'fixed',
+      };
+    },
+    await fields.first().elementHandle(),
+  );
+  expect(placement).toEqual({ tall: true, below: true, endAligned: true, fixed: true });
+  // Pressing inside the help keeps it open; an outside press dismisses it through the toggle state.
+  await help.locator('[data-syntax-group="Tags"]').click();
+  await expect(help).toBeVisible();
   await expect(fields.first()).toHaveCSS('overflow', 'visible');
   await page.screenshot({ path: 'target/visual-captures/hs2-pv2ag1-search-wide.png', fullPage: true });
   await page.screenshot({
@@ -8807,49 +8828,8 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   await helpButton.click();
   await expect(help).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 1100 });
-  // The external variant renders its surfaces in flow below the toolbar, inside the consumer's layout.
-  const externalSection = demo.locator('[data-search-demo="external"]'),
-    externalQuery = externalSection.getByRole('searchbox', { name: 'Dialog search query' }),
-    externalSurfaces = externalSection.locator('.ticket-search-surfaces');
-  await expect(fields.nth(1).locator('.ticket-search-surfaces')).toHaveCount(0);
-  await externalQuery.fill('tag:d');
-  // Kerf's tag completion stays inside the field itself, even with external helper surfaces; since
-  // beta.63 (KF-EZRBXH, KF-94A4J3) it is an anchored popover below the editor rather than in flow.
-  const externalSuggestions = fields.nth(1).locator('.kui-token-search__suggestions');
-  await expect(externalSuggestions.getByRole('button')).toHaveText(['tag:docs']);
-  expect(
-    await externalSuggestions.evaluate((node) => {
-      const field = node.closest<HTMLElement>('.ticket-search-field')!;
-      return {
-        position: getComputedStyle(node).position,
-        insideField: field.contains(node),
-        belowEditor:
-          node.getBoundingClientRect().top >=
-          field.querySelector<HTMLElement>('[data-token-search-editor]')!.getBoundingClientRect().bottom - 1,
-      };
-    }),
-  ).toEqual({ position: 'absolute', insideField: true, belowEditor: true });
-  await expect(externalSurfaces.locator('.kui-token-search__suggestions')).toHaveCount(0);
-  await externalSuggestions.getByRole('button', { name: 'tag:docs' }).click();
-  await expect(fields.nth(1).locator('[data-component="token-search-token"]')).toHaveAttribute(
-    'data-token-value',
-    'tag:docs',
-  );
-  await expect(externalSuggestions.getByRole('button')).toHaveCount(0);
-  await externalSection.getByRole('button', { name: 'Search syntax help' }).click();
-  const externalHelp = externalSurfaces.getByRole('dialog', { name: 'Search syntax' });
-  await expect(externalHelp).toBeVisible();
-  expect(await externalHelp.evaluate((node) => getComputedStyle(node).position)).toBe('static');
-  await page.screenshot({
-    path: 'target/visual-captures/hs2-n5g6js-ticket-search-field-demo-external.png',
-    fullPage: true,
-  });
-  await externalSection.getByRole('button', { name: 'Search syntax help' }).click();
-  await expect(externalHelp).toHaveCount(0);
-  await externalSection.getByRole('button', { name: 'Clear dialog search query' }).click();
-  await expect(fields.nth(1).locator('[data-component="token-search-token"]')).toHaveCount(0);
   // The collapsible variant opens from its magnifier and collapses again on Escape.
-  const collapsible = fields.nth(2);
+  const collapsible = fields.nth(1);
   await expect(collapsible).toHaveAttribute('data-expanded', 'false');
   await expect(collapsible).toHaveCSS('overflow', 'hidden');
   await demo.getByRole('button', { name: 'Search tickets' }).click();
@@ -8865,8 +8845,8 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   await expect(collapsible).toHaveCSS('overflow', 'hidden');
   // Each `layout` sizes the open field through TicketSearchField's own policy (Kerf group props,
   // HS2-DAMHD1), open -> closed -> open again, with no consumer stylesheet involved (HS2-8FS5BJ).
-  const grow = fields.nth(3),
-    row = fields.nth(4);
+  const grow = fields.nth(2),
+    row = fields.nth(3);
   for (let pass = 0; pass < 2; pass += 1) {
     await demo.getByRole('button', { name: 'Search grow layout' }).click();
     await expect(grow).toHaveAttribute('data-expanded', 'true');
@@ -8902,7 +8882,7 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
     'aria-disabled',
     'true',
   );
-  await expect(fields.nth(5)).toHaveAttribute('data-expanded', 'true');
+  await expect(fields.nth(4)).toHaveAttribute('data-expanded', 'true');
 });
 
 test('pushes and pops ticket detail on the TerminalTicketRail NavStack with one toolbar row (HS2-FY06N4)', async ({

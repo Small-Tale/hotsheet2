@@ -5,9 +5,10 @@ import { describe, expect, it } from 'vitest';
 import { createTicketSearchModel, replaceTicketSearch } from '../ticket-search-model';
 import {
   TICKET_SEARCH_ACTIONS,
+  TicketSearchDateHelper,
   TicketSearchField,
   TicketSearchFormField,
-  TicketSearchSurfaces,
+  TicketSearchHelp,
 } from './ticket-search-field';
 
 const tags = ['client', 'Docs', 'needs design', 'server'];
@@ -75,16 +76,25 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
   });
 
   it('offers the date helper for a trailing lifecycle filter and the syntax help on request', () => {
-    const date = String(TicketSearchField({ id: 'f', label: 'Search', model: model('', 'updated-after:') }));
-    expect(date).toContain('role="group" aria-label="Date and time helper"');
+    // The field renders only the surface state; the wiring opens Kerf anchored surfaces from it (HS2-8TE69P).
+    const field = String(TicketSearchField({ id: 'f', label: 'Search', model: model('', 'updated-after:') }));
+    expect(field).toContain(
+      '<span hidden data-ticket-search-surface-state data-ticket-search-for="f" data-date-prefix="updated-after" data-help-open="false">',
+    );
+    expect(field).not.toContain('aria-label="Date and time helper"');
+    const date = String(TicketSearchDateHelper({ id: 'f', prefix: 'updated-after' }));
+    expect(date).toContain('role="group" aria-label="Date and time helper" data-ticket-search-for="f"');
     expect(date).toContain('<wa-input name="ticket-search-date" type="date" label="Date" size="small">');
     expect(date).toContain('<wa-button size="small"');
     expect(date).toContain('<wa-input name="ticket-search-time" type="time" label="Time (optional)" size="small">');
     expect(date).toContain(`data-action="${TICKET_SEARCH_ACTIONS.applyDate.value}" data-date-prefix="updated-after"`);
-    expect(date).not.toContain('aria-label="Search syntax"');
-    const help = String(TicketSearchField({ id: 'f', label: 'Search', model: model(), helpOpen: true }));
-    expect(help).toContain('aria-expanded="true"');
-    expect(help).toContain('class="ticket-search-field__help" role="dialog" aria-label="Search syntax"');
+    const open = String(TicketSearchField({ id: 'f', label: 'Search', model: model(), helpOpen: true }));
+    expect(open).toContain('aria-expanded="true"');
+    expect(open).toContain('data-date-prefix="" data-help-open="true"');
+    const help = String(TicketSearchHelp({ id: 'f' }));
+    expect(help).toContain(
+      'class="ticket-search-surfaces ticket-search-field__help" data-ticket-search-for="f" data-token-search-keep-open',
+    );
     expect(help).toContain('<strong>Tags</strong>');
     expect(help).toContain('<strong>Content</strong>');
     expect(help).toContain('<strong>Workflow</strong>');
@@ -95,6 +105,7 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(help).toContain('local, relative, and ISO 8601 dates work');
     const noHelp = String(TicketSearchField({ id: 'f', label: 'Search', model: model(), helpOpen: true, help: false }));
     expect(noHelp).not.toContain('Search syntax');
+    expect(noHelp).toContain('data-help-open="false"');
   });
 
   it('collapses every helper surface with a closed collapsible field and reopens them with it', () => {
@@ -105,19 +116,19 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(closed).toContain('data-collapsible="true" data-expanded="false"');
     expect(closed).toContain('data-action="expand-token-search"');
     expect(closed).not.toContain('kui-token-search__suggestions');
-    expect(closed).not.toContain('aria-label="Search syntax"');
+    expect(closed).not.toContain('data-help-open="true"');
     const open = String(TicketSearchField({ ...props, model: model('', 'tag:s'), expanded: true }));
     expect(open).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-expanded="true"/);
     expect(open).toContain('data-collapsible="true" data-expanded="true"');
     expect(open).toContain('data-token-search-suggestion="tag:server"');
-    expect(open).toContain('aria-label="Search syntax"');
+    expect(open).toContain('data-help-open="true"');
     const reclosed = String(TicketSearchField({ ...props, model: model(), expanded: false }));
     expect(reclosed).toBe(closed);
     // The group's expansion follows the app signal even while the populated field stays open; Kerf's
     // suggestions belong to the field itself, the app's help surface to the group's open state.
     const populatedClosed = String(TicketSearchField({ ...props, model: model('', 'tag:s'), expanded: false }));
     expect(populatedClosed).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-expanded="false"/);
-    expect(populatedClosed).not.toContain('aria-label="Search syntax"');
+    expect(populatedClosed).not.toContain('data-help-open="true"');
   });
 
   it('passes disabled, autofocus, placeholder, and clear label through with literal root classes', () => {
@@ -137,41 +148,6 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(markup).toContain('data-token-search-id="saved-view-query" data-disabled="true"');
     expect(markup).toContain('data-placeholder="Find tickets"');
     expect(markup).toContain('aria-label="Clear search query"');
-  });
-
-  it('renders no popovers with external surfaces and lets the consumer place the same surfaces block', () => {
-    const external = model('', 'updated-after:');
-    const field = String(
-      TicketSearchField({
-        id: 'saved-view-query',
-        label: 'Search query',
-        model: external,
-        helpOpen: true,
-        surfaces: 'external',
-      }),
-    );
-    expect(field).not.toContain('ticket-search-surfaces');
-    expect(field).not.toContain('aria-label="Date and time helper"');
-    expect(field).not.toContain('aria-label="Search syntax"');
-    expect(field).toContain('aria-label="Search syntax help" aria-expanded="true"');
-    const surfaces = String(TicketSearchSurfaces({ id: 'saved-view-query', model: external, helpOpen: true }));
-    expect(surfaces).toMatch(
-      /^<div class="ticket-search-surfaces" data-ticket-search-for="saved-view-query" data-token-search-keep-open>/,
-    );
-    expect(surfaces).toContain('role="group" aria-label="Date and time helper"');
-    expect(surfaces).toContain('role="dialog" aria-label="Search syntax"');
-    // The floating variant renders the identical surfaces block inside its group.
-    const floating = String(
-      TicketSearchField({ id: 'saved-view-query', label: 'Search query', model: external, helpOpen: true }),
-    );
-    expect(floating).toContain(surfaces);
-    const empty = String(TicketSearchSurfaces({ id: 'saved-view-query', model: model('', 'parser') }));
-    expect(empty).toBe(
-      '<div class="ticket-search-surfaces" data-ticket-search-for="saved-view-query" data-token-search-keep-open></div>',
-    );
-    expect(String(TicketSearchSurfaces({ id: 'f', model: model(), helpOpen: true, help: false }))).not.toContain(
-      'Search syntax',
-    );
   });
 
   it('sizes itself in its toolbar through Kerf group props chosen by the layout prop (HS2-8FS5BJ, HS2-DAMHD1)', () => {
@@ -266,20 +242,10 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     // Tag suggestions are Kerf's own in-flow rows now (HS2-5JXBQY); the app styles only its helpers.
     expect(css).not.toContain('__suggestions');
     expect(css).toContainSource('.ticket-search-field__date { display: grid; grid-template-columns: 1fr 1fr auto;');
-    expect(css).toContainSource('.ticket-search-field > .ticket-search-surfaces { display: contents; }');
-    expect(css).toContainSource(
-      ':not(.ticket-search-field) > .ticket-search-surfaces { display: grid; gap: var(--wa-space-2xs); }',
-    );
-    expect(css).toContainSource(
-      ':not(.ticket-search-field) > .ticket-search-surfaces > .ticket-search-field__date, :not(.ticket-search-field) > .ticket-search-surfaces > .ticket-search-field__help { position: static; width: 100%; max-width: 100%; box-shadow: none; }',
-    );
-    expect(css).toMatch(
-      /\.ticket-search-field__date,\s*\.ticket-search-field__help \{[^}]*z-index: 1300;[^}]*box-sizing: border-box;/,
-    );
+    // Kerf openAnchoredSurface owns position, stacking, chrome, and dialog hosting (HS2-8TE69P).
+    for (const owned of ['position:', 'z-index', 'box-shadow', 'var(--wa-shadow', '.ticket-search-surfaces'])
+      expect(css).not.toContain(owned);
     expect(css).toContain('@media (max-width: remify(480px))');
-    expect(css).toContainSource(
-      '.ticket-search-field__date, .ticket-search-field__help { right: auto; left: 0; width: min(remify(304px), calc(100vw - 2 * var(--wa-space-s))); }',
-    );
     expect(css).toContainSource('.ticket-search-field__date { grid-template-columns: repeat(2, minmax(0, 1fr)); }');
     // Web Awesome owns the date/time fields and Apply button chrome (HS2-HEXGFB).
     expect(css).not.toContain('.ticket-search-field__date input');
@@ -288,12 +254,6 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(css).not.toContain('wa-button');
     expect(css).toContainSource(
       '.ticket-search-field__help code { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }',
-    );
-    expect(css).toContainSource(
-      '.ticket-search-field__help { max-height: min(remify(448px), calc(100dvh - remify(448px))); }',
-    );
-    expect(css).toContainSource(
-      '@media (max-height: remify(704px)) { .ticket-search-field__help { max-height: calc(100vh - remify(368px)); } }',
     );
     expect(css).not.toContain('workspace-header');
   });

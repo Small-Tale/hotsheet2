@@ -135,7 +135,7 @@ describe('connected workspace demo state', () => {
     expect(expanded).toContain('data-expanded="true"');
     expect(expanded).toContain('data-token-search-editor="workspace-search"');
     expect(expanded).toContain('long-tag-example');
-    expect(expanded).toContain('aria-label="Search syntax"');
+    expect(expanded).toContain('data-help-open="true"');
     expect(expanded.match(/data-component="ticket-list-row"/g)).toHaveLength(1);
     workspaceSearchOpen.value = false;
     workspaceSearchQuery.value = '';
@@ -143,7 +143,7 @@ describe('connected workspace demo state', () => {
     const reset = String(TerminalTicketRailDemo());
     expect(reset).toContain('data-expanded="false"');
     expect(reset).not.toContain('data-token-search-editor="workspace-search"');
-    expect(reset).not.toContain('aria-label="Search syntax"');
+    expect(reset).not.toContain('data-help-open="true"');
     expect(reset.match(/data-component="ticket-list-row"/g)).toHaveLength(7);
   });
 

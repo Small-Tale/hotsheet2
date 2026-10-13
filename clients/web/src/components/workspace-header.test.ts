@@ -153,19 +153,10 @@ describe('WorkspaceHeader', () => {
           searchModel: searchModelWith('created-after:', ['client']),
         }),
       ),
-    ).toContain('aria-label="Date and time helper"');
-    expect(markup).not.toContain('aria-label="Search syntax"');
+    ).toContain('data-date-prefix="created-after"');
+    expect(markup).not.toContain('data-help-open="true"');
     const enabledWithHelp = String(WorkspaceControls({ mode: 'list', searchOpen: true, searchHelpOpen: true }));
-    expect(enabledWithHelp).toContain('aria-label="Search syntax"');
-    expect(enabledWithHelp).toContain('data-syntax-group="Tags"');
-    expect(enabledWithHelp).toContain('data-syntax-group="Content"');
-    expect(enabledWithHelp).toContain('data-syntax-group="Workflow"');
-    expect(enabledWithHelp).toContain('<code>is:closed</code>');
-    expect(enabledWithHelp).toContain('<code>is:duplicate</code>');
-    expect(enabledWithHelp).toContain('data-syntax-group="Dates"');
-    expect(enabledWithHelp).toContain('<strong>Combine filters</strong>');
-    expect(enabledWithHelp).toContain('local, relative, and ISO 8601 dates work');
-    expect(enabledWithHelp).toContain('updated-after:2026-09-01T11:05');
+    expect(enabledWithHelp).toContain('data-help-open="true"');
     expect(markup).not.toContain('class="workspace-header__search-button"');
     expect(markup).not.toContain('data-action="open-global-search"');
     expect(markup.indexOf('workspace-header__utility-group')).toBeLessThan(markup.indexOf('ticket-search-field'));

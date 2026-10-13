@@ -1015,16 +1015,22 @@ date (and time) format (`created after 9/1/26, 11:05 AM`) while relative, zoned,
 locale-typed values keep the text as written (HS2-074E0P). Kerf (5.0.0-beta.64, `KF-Q2G9QS`)
 restores the caret itself after a model-mode Backspace/Delete beside a chip and after a model
 field's clear, so the app no longer snapshots chip offsets or refocuses a cleared field
-(HS2-45F8WW). The surfaces have two placements:
-`surfaces="floating"` (default) hangs them below the group as popovers, with the component
-overriding Kerf's search-group clipping while expanded; `surfaces="external"` renders none inside
-the group, and the consumer places the exported `TicketSearchSurfaces` for the same `id` in its
-own stacked layout, for a clipping container that still wants a toolbar field.
+(HS2-45F8WW). The date helper and syntax help are Kerf `openAnchoredSurface` surfaces
+(HS2-8TE69P): the field renders only a hidden `data-ticket-search-surface-state` marker (active
+date prefix, help open), and `wireTicketSearchFields` keeps one surface per field and kind in sync
+with it through a `MutationObserver` on its root. The surfaces anchor to the field's group (end
+edge; start edge at phone widths), open with `initialFocus: false` so typing stays in the editor,
+and carry `data-token-search-keep-open` so pressing inside one never collapses the field. The date
+helper follows the query (Apply or Enter commits it, and the owner refocuses the editor); help also
+closes on Escape or an outside press (the field's own controls and its date helper are
+`outsideIgnore`d) through `toggleHelp`. Inside a `wa-dialog` Kerf hosts them in the dialog's
+interactive slot (`KF-F52T5D`), so there is no longer an in-flow "external" variant. Kerf does
+not clamp a surface's height, so the help body keeps short-viewport `max-height` clamps.
 In a form, the sibling `TicketSearchFormField` (same module) renders Kerf's
 `TokenSearchField presentation="form-field"`: a visible label, hint, and required marker with the
-same inset, typography, and edges as a neighboring `wa-input`, no Toolbar, and the helper surfaces
-stacked below it in an app-owned `.ticket-search-form-field` wrapper that carries the field id for
-the shared wiring. Its chips keep Kerf's default tint (see above). The saved-view dialog uses it
+same inset, typography, and edges as a neighboring `wa-input`, no Toolbar, and the same anchored
+helper surfaces, anchored to an app-owned `.ticket-search-form-field` wrapper that carries the
+field id for the shared wiring. Its chips keep Kerf's default tint (see above). The saved-view dialog uses it
 (HS2-E40KC0); the TicketSearchField demo's "Form field" example exposes it. The remaining field
 radius and required-marker color differences from `wa-input` are Kerf's (`KF-6P4NAV`). The wrapper is declared to Kerf's composition rule through
 `clients/web/kerf.components.json` (`rendersAs`

@@ -4855,7 +4855,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
     rail.locator('[data-component="token-search-token"][data-token-value=\'updated-after:"4h ago"\']'),
   ).toBeVisible();
   await rail.getByRole('button', { name: 'Search syntax help' }).click();
-  await expect(rail.getByRole('dialog', { name: 'Search syntax' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Search syntax' })).toBeVisible();
   await rail.getByRole('button', { name: 'Search syntax help' }).click();
   await page.screenshot({
     path: 'target/visual-captures/hs2-egekzg-terminal-ticket-rail-search-wide.png',

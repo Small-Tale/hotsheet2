@@ -6206,7 +6206,7 @@
       "responsive": {
         "owner": "application",
         "behaviors": [
-          "The consumer sizes and places the rendered group by context selector; helper popovers hang below it."
+          "The consumer sizes and places the rendered group by context selector; its date helper and syntax help open as Kerf anchored surfaces below it."
         ]
       },
       "layout": {

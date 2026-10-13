@@ -5,7 +5,7 @@ import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { batch, signal } from 'kerfjs';
 
-import { TicketSearchField, TicketSearchFormField, TicketSearchSurfaces } from '../components/ticket-search-field';
+import { TicketSearchField, TicketSearchFormField } from '../components/ticket-search-field';
 import { createTicketSearchModel, replaceTicketSearch } from '../ticket-search-model';
 import { DemoEvent } from './components/demo-event';
 import { onDemoSelected } from './components/demo-state';
@@ -21,7 +21,6 @@ export const ticketSearchDemoRowOpen = signal(false);
 export const ticketSearchDemoEvent = signal('');
 const ticketSearchDemoHelpOpen: Record<string, ReturnType<typeof signal<boolean>>> = {
   'ticket-search-demo': signal(false),
-  'ticket-search-demo-external': signal(false),
   'ticket-search-demo-form': signal(false),
 };
 
@@ -72,7 +71,6 @@ function demoModel(initial = '', { commit = true } = {}): TokenSearchModel {
 /** The demo fields' models, keyed by editor id for `wireTokenSearchFields({ models })`. */
 export const ticketSearchDemoModels: Readonly<Record<string, TokenSearchModel>> = {
   'ticket-search-demo': demoModel(),
-  'ticket-search-demo-external': demoModel(),
   'ticket-search-demo-collapsible': demoModel(),
   'ticket-search-demo-grow': demoModel(),
   'ticket-search-demo-row': demoModel(),
@@ -106,8 +104,7 @@ export function toggleDemoHelp(id: string): void {
 }
 
 export function TicketSearchFieldDemo() {
-  const floating = ticketSearchDemoModels['ticket-search-demo'],
-    external = ticketSearchDemoModels['ticket-search-demo-external'];
+  const floating = ticketSearchDemoModels['ticket-search-demo'];
   return (
     <>
       <CatalogExample
@@ -136,44 +133,13 @@ export function TicketSearchFieldDemo() {
       </CatalogExample>
       <CatalogExample
         align="glyph"
-        label="External surfaces, dialog layout"
-        rootAttributes={{ 'data-search-demo': 'external' }}
-        note={
-          <>
-            Inside a dialog or other clipping container the field renders no popovers; the consumer places{' '}
-            <code>TicketSearchSurfaces</code> for the same id in its own stacked layout. Kerf's tag suggestions stay in
-            flow inside the field.
-          </>
-        }
-        viewport={{ width: 'full' }}
-      >
-        <Toolbar
-          centerAlign="stretch"
-          center={
-            <TicketSearchField
-              id="ticket-search-demo-external"
-              label="Dialog search query"
-              model={external}
-              helpOpen={ticketSearchDemoHelpOpen['ticket-search-demo-external'].value}
-              clearLabel="Clear dialog search query"
-              surfaces="external"
-            />
-          }
-        />
-        <TicketSearchSurfaces
-          id="ticket-search-demo-external"
-          model={external}
-          helpOpen={ticketSearchDemoHelpOpen['ticket-search-demo-external'].value}
-        />
-      </CatalogExample>
-      <CatalogExample
-        align="glyph"
         label="Form field beside Web Awesome inputs"
         rootAttributes={{ 'data-search-demo': 'form' }}
         note={
           <>
             <code>TicketSearchFormField</code> uses Kerf's form-field presentation: a visible label, hint, and required
-            marker that line up with a <code>wa-input</code>, with the helper surfaces stacked below (HS2-E40KC0).
+            marker that line up with a <code>wa-input</code>, with the same anchored helper surfaces (HS2-E40KC0,
+            HS2-8TE69P).
           </>
         }
         viewport={{ width: 'full' }}

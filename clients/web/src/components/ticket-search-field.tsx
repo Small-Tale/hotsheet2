@@ -60,14 +60,6 @@ export interface TicketSearchFieldProps {
   help?: boolean;
   clearLabel?: string;
   /**
-   * Where the date and help surfaces render. `floating` (default) hangs them below the group as
-   * popovers. `external` renders none inside the group; the consumer places one
-   * `TicketSearchSurfaces` for the same `id` in its own stacked layout — for dialogs and other
-   * clipping containers where a popover cannot escape. Kerf's tag suggestions always render in
-   * flow inside the field itself.
-   */
-  surfaces?: 'floating' | 'external';
-  /**
    * How the toolbar group sizes itself in its Toolbar zone (HS2-8FS5BJ), each a Kerf
    * ToolbarControlGroup policy (HS2-DAMHD1). `inline` (default) keeps Kerf's own collapsed and
    * expanded widths and hides its collapsed icon in tiny toolbars. `grow` is the generic toolbar policy (`sizing="grow"`): the expanded field grows
@@ -82,15 +74,6 @@ export interface TicketSearchFieldProps {
 
 /** The toolbar sizing policies a TicketSearchField offers (see `TicketSearchFieldProps.layout`). */
 export type TicketSearchFieldLayout = 'inline' | 'grow' | 'row';
-
-/** Props for the helper surfaces a consumer places itself when the field uses `surfaces="external"`. */
-export interface TicketSearchSurfacesProps {
-  /** The `id` of the TicketSearchField these surfaces serve. */
-  id: string;
-  model: TokenSearchModel;
-  helpOpen?: boolean;
-  help?: boolean;
-}
 
 const localSearchDateExample = new Intl.DateTimeFormat(undefined, { dateStyle: 'short' }).format(new Date(2026, 8, 1));
 const localSearchDateTimeExample = new Intl.DateTimeFormat(undefined, {
@@ -138,9 +121,18 @@ const SEARCH_SYNTAX_GROUPS: readonly { label: string; examples: readonly string[
   },
 ];
 
-function TicketSearchHelp() {
+/**
+ * The syntax-help content. Kerf `openAnchoredSurface` hosts it (the non-modal `Search syntax`
+ * dialog, its chrome, position, and top-layer or `wa-dialog` hosting) while the field's
+ * `helpOpen` state is set (HS2-8TE69P).
+ */
+export function TicketSearchHelp({ id }: { id: string }) {
   return (
-    <aside class="ticket-search-field__help" role="dialog" aria-label="Search syntax" data-token-search-keep-open>
+    <div
+      class="ticket-search-surfaces ticket-search-field__help"
+      data-ticket-search-for={id}
+      data-token-search-keep-open
+    >
       <List gap="xs">
         <List gap="2xs">
           <strong>Search syntax</strong>
@@ -183,37 +175,61 @@ function TicketSearchHelp() {
           </Text>
         </List>
       </List>
-    </aside>
+    </div>
   );
 }
 
 /**
- * The lifecycle date helper and syntax-help dialog for one TicketSearchField (its tag completion
- * is Kerf's, rendered by the model inside the field). Rendered inside the field's group (floating
- * popovers) or, with `surfaces="external"`, placed by the consumer in its own stacked layout;
- * either way the `data-ticket-search-for` attribute tells the shared wiring which field the
- * actions belong to.
+ * The lifecycle date helper's content for one field while a trailing lifecycle filter such as
+ * `updated-after:` is typed. Kerf `openAnchoredSurface` hosts it; `data-ticket-search-for` tells
+ * the shared wiring which field its Apply belongs to.
  */
-export function TicketSearchSurfaces({ id, model, helpOpen = false, help = true }: TicketSearchSurfacesProps) {
-  const datePrefix = activeDatePrefix(model.state.value.query);
+export function TicketSearchDateHelper({ id, prefix }: { id: string; prefix: string }) {
   return (
-    <div class="ticket-search-surfaces" data-ticket-search-for={id} data-token-search-keep-open>
-      {datePrefix ? (
-        <div class="ticket-search-field__date" role="group" aria-label="Date and time helper">
-          {/* Web Awesome owns the date and time fields and the Apply button (HS2-HEXGFB). */}
-          <wa-input name={TICKET_SEARCH_DATE_INPUT} type="date" label="Date" size="small" />
-          <wa-input name={TICKET_SEARCH_TIME_INPUT} type="time" label="Time (optional)" size="small" />
-          <div class="ticket-search-field__date-apply">
-            <wa-button size="small" {...TICKET_SEARCH_ACTIONS.applyDate.attrs} data-date-prefix={datePrefix}>
-              Apply
-            </wa-button>
-          </div>
-        </div>
-      ) : (
-        <></>
-      )}
-      {help && helpOpen ? <TicketSearchHelp /> : <></>}
+    <div
+      class="ticket-search-surfaces ticket-search-field__date"
+      role="group"
+      aria-label="Date and time helper"
+      data-ticket-search-for={id}
+      data-token-search-keep-open
+    >
+      {/* Web Awesome owns the date and time fields and the Apply button (HS2-HEXGFB). */}
+      <wa-input name={TICKET_SEARCH_DATE_INPUT} type="date" label="Date" size="small" />
+      <wa-input name={TICKET_SEARCH_TIME_INPUT} type="time" label="Time (optional)" size="small" />
+      <div class="ticket-search-field__date-apply">
+        <wa-button size="small" {...TICKET_SEARCH_ACTIONS.applyDate.attrs} data-date-prefix={prefix}>
+          Apply
+        </wa-button>
+      </div>
     </div>
+  );
+}
+
+/**
+ * The declarative state of one field's floating surfaces, read by `wireTicketSearchFields`, which
+ * opens and closes the Kerf anchored surfaces to match (HS2-8TE69P). An empty `data-date-prefix`
+ * means no date helper.
+ */
+function TicketSearchSurfaceState({
+  id,
+  model,
+  open,
+  helpOpen,
+}: {
+  id: string;
+  model: TokenSearchModel;
+  open: boolean;
+  helpOpen: boolean;
+}) {
+  const prefix = open ? (activeDatePrefix(model.state.value.query) ?? '') : '';
+  return (
+    <span
+      hidden
+      data-ticket-search-surface-state
+      data-ticket-search-for={id}
+      data-date-prefix={prefix}
+      data-help-open={String(open && helpOpen)}
+    />
   );
 }
 
@@ -254,8 +270,9 @@ export interface TicketSearchFormFieldProps {
 /**
  * The ticket search query editor as a form field beside Web Awesome controls (HS2-E40KC0):
  * Kerf's `TokenSearchField presentation="form-field"` (visible label, hint, required marker,
- * full width, no Toolbar) driven by the same managed model, with the syntax-help button and
- * the date/help surfaces stacked below it in flow. The app-owned wrapper carries the field id
+ * full width, no Toolbar) driven by the same managed model, with the syntax-help button. Its
+ * date/help surfaces are Kerf anchored surfaces, which stay interactive inside a `wa-dialog`
+ * (KF-F52T5D). The app-owned wrapper carries the field id
  * for the shared delegated wiring. Its chips share the grouped field's quieter tint through the same
  * `ticket-search-field__query` hook Kerf renders on the form-field root (KF-5G8WJ0, HS2-RXHZVR).
  */
@@ -289,7 +306,7 @@ export function TicketSearchFormField({
         clearLabel={clearLabel}
         trailing={help ? <TicketSearchHelpButton open={helpOpen} /> : undefined}
       />
-      <TicketSearchSurfaces id={id} model={model} helpOpen={helpOpen} help={help} />
+      <TicketSearchSurfaceState id={id} model={model} open={!disabled} helpOpen={help && helpOpen} />
     </div>
   );
 }
@@ -314,7 +331,6 @@ export function TicketSearchField({
   helpOpen = false,
   help = true,
   clearLabel = 'Clear search',
-  surfaces = 'floating',
   layout = 'inline',
 }: TicketSearchFieldProps) {
   const open = collapsible ? expanded && !disabled : true,
@@ -341,11 +357,7 @@ export function TicketSearchField({
     content = (
       <>
         {collapsible ? <TokenSearchField {...field} collapsible expanded={open} /> : <TokenSearchField {...field} />}
-        {open && surfaces === 'floating' ? (
-          <TicketSearchSurfaces id={id} model={model} helpOpen={helpOpen} help={help} />
-        ) : (
-          <></>
-        )}
+        <TicketSearchSurfaceState id={id} model={model} open={open} helpOpen={help && helpOpen} />
       </>
     );
   // Each layout is a Kerf ToolbarControlGroup policy (HS2-DAMHD1). `grow` (Kerf `sizing="grow"`,

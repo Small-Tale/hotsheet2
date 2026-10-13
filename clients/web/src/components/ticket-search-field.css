@@ -1,6 +1,6 @@
 /* TicketSearchField: Kerf's grouped TokenSearchField owns the border, padding, and focus ring.
-   This module owns only the Hot Sheet helper surfaces (tag suggestions, date helper, syntax
-   help) that hang below the field, plus token colors (HS2-N5G6JS, HS2-8FS5BJ). */
+   Kerf openAnchoredSurface owns the date helper and syntax help chrome, position, and hosting
+   (HS2-8TE69P); this module keeps token colors and the layout of its own surface content. */
 /* Both presentations' quieter chips: the token color is set on the app-owned `className` hook
    Kerf's TokenSearchField renders on its root in the grouped and the form-field presentation alike
    (HS2-8FS5BJ, HS2-RXHZVR). Kerf resolves its token defaults at their use sites, so the bare hook
@@ -29,51 +29,18 @@
   color: var(--wa-color-neutral-on-normal);
   background: var(--wa-color-neutral-border-quiet);
 }
-/* Inside the group the surfaces wrapper is transparent so each popover positions against the
-   group; placed externally (dialogs) it is a stacked block and the surfaces sit in normal flow. */
-.ticket-search-field > .ticket-search-surfaces {
-  display: contents;
-}
-:not(.ticket-search-field) > .ticket-search-surfaces {
-  display: grid;
-  gap: var(--wa-space-2xs);
-}
-:not(.ticket-search-field) > .ticket-search-surfaces:empty {
-  display: none;
-}
-:not(.ticket-search-field) > .ticket-search-surfaces > .ticket-search-field__date,
-:not(.ticket-search-field) > .ticket-search-surfaces > .ticket-search-field__help {
-  position: static;
-  width: 100%;
-  max-width: 100%;
-  box-shadow: none;
-}
-/* Floating surfaces align to the group's end edge and keep a readable width, extending past a
-   narrower group's start edge (over the toolbar) rather than cramping their content. */
-.ticket-search-field__date,
-.ticket-search-field__help {
-  position: absolute;
-  z-index: 1300;
-  top: calc(100% + var(--wa-space-2xs));
-  right: 0;
-  box-sizing: border-box;
-  width: min(remify(416px), calc(100vw - 2 * var(--wa-space-s)));
-  padding: var(--wa-space-xs);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-m);
-  color: var(--wa-color-neutral-on-normal);
-  background: var(--wa-color-surface-raised);
-  box-shadow: var(--wa-shadow-m);
-}
+/* Surface content (app-owned markup inside Kerf's anchored surface): a readable width clamped
+   to the viewport beside the surface's own inset, and a scrolling help body. */
 .ticket-search-field__date {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
   gap: var(--wa-space-s);
   align-items: end;
+  width: min(remify(384px), calc(100vw - remify(64px)));
 }
 .ticket-search-field__help {
-  width: min(remify(480px), calc(100vw - 2 * var(--wa-space-s)));
-  max-height: min(remify(512px), calc(100vh - remify(224px)));
+  width: min(remify(448px), calc(100vw - remify(64px)));
+  max-height: min(remify(512px), calc(100dvh - remify(224px)));
   overflow: auto;
 }
 .ticket-search-field__help code {
@@ -84,17 +51,17 @@
   background: var(--wa-color-neutral-fill-quiet);
   font-size: var(--wa-font-size-xs);
 }
+/* Kerf's anchored surface flips and clamps horizontally but not by height, so the help body keeps
+   its own short-viewport clamps (follow-up KF ticket) for the host header above the field and a
+   pinned footer below it (the UX catalog's display controls and footer pane, HS2-JEKRXN). */
 @media (max-height: remify(704px)) {
   .ticket-search-field__help {
-    max-height: calc(100vh - remify(368px));
+    max-height: calc(100dvh - remify(368px));
   }
 }
 @media (max-width: remify(480px)) {
-  .ticket-search-field__date,
   .ticket-search-field__help {
-    right: auto;
-    left: 0;
-    width: min(remify(304px), calc(100vw - 2 * var(--wa-space-s)));
+    max-height: min(remify(448px), calc(100dvh - remify(448px)));
   }
   .ticket-search-field__date {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -108,11 +75,5 @@
     max-width: 100%;
     white-space: normal;
     overflow-wrap: anywhere;
-  }
-  /* Leave room for a taller host header above the field and a pinned footer below it (the UX
-     catalog's display controls and footer pane, HS2-JEKRXN) until Kerf anchoring (KF-M8SV15)
-     can clamp the surface to its real scrollport. */
-  .ticket-search-field__help {
-    max-height: min(remify(448px), calc(100dvh - remify(448px)));
   }
 }
