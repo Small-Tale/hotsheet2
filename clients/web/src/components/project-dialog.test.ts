@@ -34,6 +34,10 @@ describe('project dialogs', () => {
     expect(markup).toContain('data-action="open-remote-checkout"');
     expect(markup).toContain('data-item-id="demo"');
     expect(markup).toContain('aria-label="Open projects"');
+    // Kerf sizes the dialog and scrolls the checkout list; no app max-height remains (HS2-W4RNKJ).
+    expect(markup).toContain('data-component="dialog-surface"');
+    expect(markup).toMatch(/role="navigation"[^>]*data-scrollable="true"|data-scrollable="true"[^>]*role="navigation"/);
+    expect(css).not.toContain('.remote-project-dialog__list');
     expect(css).not.toContain('.remote-project-dialog__copy');
     expect(css).not.toContain('.remote-project-dialog__item');
   });
@@ -90,7 +94,6 @@ describe('project dialogs', () => {
       '.project-dialog__path {',
       '.project-dialog__path wa-button::part(base) {',
       '.project-dialog__error:empty {',
-      '.remote-project-dialog__list {',
     ]);
     expect(localMarkup).toContain('data-component="dialog-surface"');
     const recovery = String(

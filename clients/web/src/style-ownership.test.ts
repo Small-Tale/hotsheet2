@@ -8,7 +8,7 @@ describe('global stylesheet ownership', () => {
   it('keeps extracted surface selectors in their component stylesheets', () => {
     const global = read('./style.css');
     const ownership = [
-      ['project dialog', 'project-dialog.css', ['.project-dialog', '.remote-project-dialog']],
+      ['project dialog', 'project-dialog.css', ['.project-dialog']],
       [
         'ticket-source setup',
         'ticket-source-setup-dialog.css',

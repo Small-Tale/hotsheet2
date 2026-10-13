@@ -139,15 +139,22 @@ export function RemoteProjectDialog({
   error?: string;
 }) {
   return (
-    <wa-dialog
-      data-key="remote-project-dialog"
-      data-remote-project-dialog
-      label="Open a project"
-      open={open}
-      data-controlled-open={String(open)}
+    // Kerf bounds the dialog height; the checkout List flexes inside that bound and owns its scrolling
+    // (KF-93GZC1), so the app keeps no viewport-size CSS (HS2-W4RNKJ).
+    <DialogSurface
+      maxHeight={remify(560)}
+      viewportGutter={remify(16)}
+      bodyLayout="fill"
+      rootAttributes={{ 'data-key': 'remote-project-dialog-surface' }}
     >
-      <div class="remote-project-dialog">
-        <List gap="m">
+      <wa-dialog
+        data-key="remote-project-dialog"
+        data-remote-project-dialog
+        label="Open a project"
+        open={open}
+        data-controlled-open={String(open)}
+      >
+        <List gap="m" flex className="remote-project-dialog">
           <Text tone="quiet">
             Pick a project that is open on the Hot Sheet server. Browsing the server’s files isn’t available from
             another device.
@@ -167,28 +174,33 @@ export function RemoteProjectDialog({
               No projects are open on the server yet. Open one from the device running Hot Sheet first.
             </Text>
           ) : (
-            <nav class="remote-project-dialog__list" aria-label="Open projects">
-              <List gap="2xs">
-                {checkouts.map((checkout) => (
-                  <ListItem
-                    action="open-remote-checkout"
-                    itemId={checkout.id}
-                    multiline
-                    rootAttributes={{ 'data-checkout-root': checkout.root }}
-                    label={
-                      <Text variant="span" wrap="anywhere">
-                        {checkout.alias || checkout.root.split('/').filter(Boolean).pop() || checkout.root}
-                      </Text>
-                    }
-                    description={
-                      <Text variant="span" wrap="anywhere" className="remote-project-dialog__path">
-                        {checkout.root}
-                      </Text>
-                    }
-                  />
-                ))}
-              </List>
-            </nav>
+            <List
+              gap="2xs"
+              flex
+              scrollable
+              controlInsets="tb"
+              className="remote-project-dialog__list"
+              rootAttributes={{ role: 'navigation', 'aria-label': 'Open projects' }}
+            >
+              {checkouts.map((checkout) => (
+                <ListItem
+                  action="open-remote-checkout"
+                  itemId={checkout.id}
+                  multiline
+                  rootAttributes={{ 'data-checkout-root': checkout.root }}
+                  label={
+                    <Text variant="span" wrap="anywhere">
+                      {checkout.alias || checkout.root.split('/').filter(Boolean).pop() || checkout.root}
+                    </Text>
+                  }
+                  description={
+                    <Text variant="span" wrap="anywhere" className="remote-project-dialog__path">
+                      {checkout.root}
+                    </Text>
+                  }
+                />
+              ))}
+            </List>
           )}
           <footer>
             <Row hAlign="right" vAlign="middle" gap="xs">
@@ -198,7 +210,7 @@ export function RemoteProjectDialog({
             </Row>
           </footer>
         </List>
-      </div>
-    </wa-dialog>
+      </wa-dialog>
+    </DialogSurface>
   );
 }

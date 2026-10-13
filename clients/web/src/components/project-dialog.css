@@ -16,11 +16,3 @@
 .project-dialog__error:empty {
   display: none;
 }
-/* Bounded scroller around the remote checkout List: a scrollable Kerf List in a max-height parent
-   shrinks its multiline rows instead of scrolling (KF-93GZC1). The block padding
-   keeps the first and last rows' focus rings inside the scroller's clip. */
-.remote-project-dialog__list {
-  max-height: min(remify(360px), 50vh);
-  padding: var(--kui-space-2xs) 0;
-  overflow: auto;
-}
