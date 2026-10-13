@@ -1295,13 +1295,25 @@ fn project_git_dir(project: &Path) -> Option<std::path::PathBuf> {
     })
 }
 
+/// The `info/exclude` git actually reads for this checkout. A linked worktree's gitdir
+/// (`.git/worktrees/<name>`) carries a `commondir` pointer, and git reads `info/exclude`
+/// only from that common directory, so an entry in the per-worktree gitdir is ignored and
+/// the machine-local config would show up as untracked (HS2-8XTDZP).
+fn project_exclude_file(project: &Path) -> Option<std::path::PathBuf> {
+    let git_dir = project_git_dir(project)?;
+    let common = std::fs::read_to_string(git_dir.join("commondir"))
+        .ok()
+        .map(|pointer| git_dir.join(pointer.trim()))
+        .unwrap_or(git_dir);
+    Some(common.join("info/exclude"))
+}
+
 /// Keep a wholly Hot Sheet-owned machine config out of this checkout without changing its
 /// shared `.gitignore`. Existing mixed/user-owned configs remain visible to git.
 fn ensure_local_git_exclude(project: &Path, rel: &str) -> Result<(), SetupError> {
-    let Some(git_dir) = project_git_dir(project) else {
+    let Some(target) = project_exclude_file(project) else {
         return Ok(());
     };
-    let target = git_dir.join("info/exclude");
     let entry = format!("/{}", rel.replace('\\', "/"));
     let existing = std::fs::read_to_string(&target).unwrap_or_default();
     if existing.lines().any(|line| line == entry) {
@@ -1318,10 +1330,9 @@ fn ensure_local_git_exclude(project: &Path, rel: &str) -> Result<(), SetupError>
 /// Drop the `/<rel>` line setup added to this checkout's `.git/info/exclude` for a wholly
 /// Hot Sheet-owned config that has now been deleted.
 fn remove_local_git_exclude(project: &Path, rel: &str) -> Result<(), SetupError> {
-    let Some(git_dir) = project_git_dir(project) else {
+    let Some(target) = project_exclude_file(project) else {
         return Ok(());
     };
-    let target = git_dir.join("info/exclude");
     let Ok(existing) = std::fs::read_to_string(&target) else {
         return Ok(());
     };
@@ -3455,6 +3466,54 @@ args = []
         assert_eq!(
             std::fs::read_to_string(git_dir.join("info/exclude")).unwrap(),
             "/.codex/config.toml\n"
+        );
+    }
+
+    #[test]
+    fn local_excludes_land_in_the_common_dir_git_reads_for_a_linked_worktree() {
+        let root = tempfile::tempdir().unwrap();
+        let main = root.path().join("main");
+        let linked = root.path().join("linked");
+        let git = |dir: &Path, args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .arg("-C")
+                .arg(dir)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            String::from_utf8(out.stdout).unwrap()
+        };
+        std::fs::create_dir(&main).unwrap();
+        git(&main, &["init", "-q"]);
+        git(
+            &main,
+            &[
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-q",
+                "--allow-empty",
+                "-m",
+                "i",
+            ],
+        );
+        git(&main, &["worktree", "add", "-q", linked.to_str().unwrap()]);
+        std::fs::write(linked.join("opencode.json"), "{}").unwrap();
+
+        ensure_local_git_exclude(&linked, "opencode.json").unwrap();
+
+        assert_eq!(git(&linked, &["status", "--porcelain"]), "");
+        remove_local_git_exclude(&linked, "opencode.json").unwrap();
+        assert_eq!(
+            git(&linked, &["status", "--porcelain"]),
+            "?? opencode.json\n"
         );
     }
 

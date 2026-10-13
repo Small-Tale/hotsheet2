@@ -221,7 +221,9 @@ Machine-specific integrations never alter the shared ignore policy: Claude's per
 hook uses `.claude/settings.local.json`, Codex's uses `.codex/hooks.json`, and both are
 added only to that checkout's `.git/info/exclude`. A newly created, wholly Hot Sheet-owned
 MCP config is excluded the same way. A pre-existing config with unrelated user content
-remains visible to git while the Hot Sheet entry is merged into it.
+remains visible to git while the Hot Sheet entry is merged into it. In a linked git worktree the entry goes to
+the common directory's `info/exclude` (via the gitdir's `commondir`), because git never reads a
+per-worktree exclude file (HS2-8XTDZP).
 
 All bundled instruction and ticket-workflow artifacts teach **portable durable
 references** (HS2-ERKA8N). AI-authored documentation, ticket text, notes, and completion
