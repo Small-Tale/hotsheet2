@@ -148,72 +148,6 @@ body[data-resizing-project-sidebar='true'] {
   width: min(remify(704px), 100%);
   margin: auto;
 }
-.toolbar-control-group-demo {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: remify(32px);
-  padding: clamp(remify(24px), 4vw, remify(48px));
-}
-.toolbar-control-group-demo > div {
-  width: max-content;
-  min-width: remify(160px);
-}
-.toolbar-text-demo {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: remify(32px);
-  padding: clamp(remify(24px), 4vw, remify(48px));
-}
-.toolbar-text-demo__caption {
-  margin: 0 0 remify(10.4px);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-}
-.toolbar-demo {
-  display: grid;
-  width: min(remify(832px), 100%);
-  margin: auto;
-  overflow: hidden;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(13.6px);
-  background: var(--wa-color-surface-lowered);
-}
-.toolbar-control-group-demo__caption {
-  margin: 0 0 remify(10.4px);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-}
-.list-item-demo {
-  display: grid;
-  width: min(remify(480px), 100%);
-  margin: auto;
-  padding: remify(16px);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(13.6px);
-  background: var(--wa-color-surface-lowered);
-  gap: remify(20px);
-}
-.list-item-demo__caption {
-  margin: 0 0 remify(5.6px);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.list-item-demo__detail {
-  color: var(--wa-color-neutral-on-quiet);
-  font-variant-numeric: tabular-nums;
-}
-.list-item-demo__copy {
-  display: grid;
-}
-.list-item-demo > p {
-  margin: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-s);
-}
 /* Demo-owned color contexts for the MarkdownPreview and AIContentLabel inherit/inverse tones; Kerf's
    CatalogExample surfaces cover only the default and lowered fills. */
 .demo-tone-surface {
@@ -407,14 +341,6 @@ body[data-resizing-project-sidebar='true'] {
 .resizable-region-demo {
   display: grid;
   gap: remify(20px);
-}
-.dialog-layout-demo {
-  position: relative;
-  width: min(remify(608px), 100%);
-  margin: 0;
-}
-.dialog-layout-demo__body {
-  padding: var(--wa-space-l);
 }
 .project-tab-bar-demo__frame,
 .connection-banner-demo {

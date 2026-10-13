@@ -1,48 +1,53 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Text } from '@kerfjs/ui/text';
 import { Archive, Layers3 } from 'lucide';
 
 import { ProviderIcon } from '../components/provider-icon';
 import type { DemoModule } from './demo-module';
 
+const count = (value: number) => (
+  <Text variant="span" size="compact" tone="quiet">
+    {value}
+  </Text>
+);
+
 export function ListItemDemo() {
   return (
-    <section class="list-item-demo" aria-label="ListItem demo">
-      <div>
-        <h2 class="list-item-demo__caption">Standard</h2>
+    <>
+      <CatalogExample
+        label="Standard"
+        note="Icons, labels, trailing values, and selection boundaries share one alignment grid."
+        viewport={{ width: 'compact' }}
+      >
         <ListItem
           action="demo-menu-item"
           icon={<LucideIcon icon={Archive} name="archive" />}
           label="Archive"
-          trailing={<small class="list-item-demo__detail">241</small>}
+          trailing={count(241)}
         />
-      </div>
-      <div>
-        <h2 class="list-item-demo__caption">Selected</h2>
+      </CatalogExample>
+      <CatalogExample label="Selected" viewport={{ width: 'compact' }}>
         <ListItem
           action="demo-menu-item"
           selected
           icon={<LucideIcon icon={Layers3} name="layers-3" />}
           label="Queue"
-          trailing={<small class="list-item-demo__detail">12</small>}
+          trailing={count(12)}
         />
-      </div>
-      <div>
-        <h2 class="list-item-demo__caption">Multiline</h2>
+      </CatalogExample>
+      <CatalogExample label="Multiline" viewport={{ width: 'compact' }}>
         <ListItem
           action="demo-menu-item"
           multiline
           state="modified"
           icon={<span aria-hidden="true">M</span>}
-          label={
-            <span class="list-item-demo__copy">
-              src/components/example.ts<small class="list-item-demo__detail">Secondary detail</small>
-            </span>
-          }
+          label="src/components/example.ts"
+          description="Secondary detail"
         />
-      </div>
-      <div>
-        <h2 class="list-item-demo__caption">Provider identities</h2>
+      </CatalogExample>
+      <CatalogExample label="Provider identities" viewport={{ width: 'compact' }}>
         {(['github', 'gitlab', 'jira'] as const).map((kind) => (
           <ListItem
             action="demo-menu-item"
@@ -50,24 +55,22 @@ export function ListItemDemo() {
             label={kind === 'github' ? 'GitHub Issues' : kind === 'gitlab' ? 'GitLab Issues' : 'Jira Cloud'}
           />
         ))}
-      </div>
-      <div>
-        <h2 class="list-item-demo__caption">Disabled</h2>
+      </CatalogExample>
+      <CatalogExample label="Disabled" viewport={{ width: 'compact' }}>
         <ListItem
           action="demo-menu-item"
           disabled
           icon={<LucideIcon icon={Archive} name="archive" />}
           label="Already connected"
         />
-      </div>
-      <p>Icons, labels, trailing values, and selection boundaries share one alignment grid.</p>
-    </section>
+      </CatalogExample>
+    </>
   );
 }
 
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'list-item': { Demo: ListItemDemo },
+    'list-item': { catalogExamples: true, Demo: ListItemDemo },
   },
 };

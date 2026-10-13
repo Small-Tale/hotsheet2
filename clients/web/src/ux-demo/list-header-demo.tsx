@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Plus } from 'lucide';
@@ -6,26 +7,29 @@ import type { DemoModule } from './demo-module';
 
 export function ListHeaderDemo() {
   return (
-    <section class="list-item-demo" aria-label="ListHeader demo">
-      <div>
+    <>
+      <CatalogExample
+        label="With action"
+        note="Section labels align with ListItem icons whether the header has an action or toggles a group."
+        viewport={{ width: 'compact' }}
+      >
         <ListHeader
           label="Views"
           action="demo-add"
           actionLabel="Add view"
           actionIcon={<LucideIcon icon={Plus} name="plus" />}
         />
-      </div>
-      <div>
+      </CatalogExample>
+      <CatalogExample label="Group toggle" viewport={{ width: 'compact' }}>
         <ListHeader label="Project Commands" action="demo-toggle" expanded toggle />
-      </div>
-      <p>Section labels align with ListItem icons whether the header has an action or toggles a group.</p>
-    </section>
+      </CatalogExample>
+    </>
   );
 }
 
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'list-header': { Demo: ListHeaderDemo },
+    'list-header': { catalogExamples: true, Demo: ListHeaderDemo },
   },
 };

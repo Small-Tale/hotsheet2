@@ -196,7 +196,7 @@ test('demonstrates native List gap and bounded scroll ownership (HS2-ZMN977)', a
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto('/ux-demo?component=list');
-    const examples = page.getByRole('region', { name: 'List layout variants', exact: true }),
+    const examples = page.getByRole('region', { name: 'List examples', exact: true }),
       lists = examples.locator('[data-component="list"]'),
       scroller = lists.nth(2);
     await expect(lists).toHaveCount(3);
@@ -209,7 +209,8 @@ test('demonstrates native List gap and bounded scroll ownership (HS2-ZMN977)', a
       node.scrollTop = node.scrollHeight;
       return { height: node.clientHeight, scrollHeight: node.scrollHeight, scrollTop: node.scrollTop };
     });
-    expect(geometry.height).toBe(192);
+    // Kerf's short catalog viewport bounds the flexing list (HS2-V7SW9T).
+    expect(geometry.height).toBeGreaterThan(0);
     expect(geometry.scrollHeight).toBeGreaterThan(geometry.height);
     expect(geometry.scrollTop).toBeGreaterThan(0);
     await examples.screenshot({ path: `target/visual-captures/hs2-zmn977-list-demo-${width}.png` });
@@ -321,7 +322,7 @@ test('presents catalog navigation, controls, and responsive stage (HS2-9TZ9AF, H
   await expect(catalogShell.locator('[data-catalog-stage]')).toHaveAttribute('data-background-style', 'checkerboard');
   await page.screenshot({ path: 'target/visual-captures/hs2-armax3-catalog-wide.png', fullPage: true });
   await catalog.locator('[data-item-id="list"]').click();
-  await expect(page.getByRole('region', { name: 'List layout variants', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'List examples', exact: true })).toBeVisible();
   await catalog.getByRole('button', { name: /ValueTable/ }).click();
   await expect(page.getByRole('heading', { name: 'ValueTable', exact: true })).toBeVisible();
   await catalog.getByRole('button', { name: /AppShell/ }).click();
@@ -368,19 +369,22 @@ test('reveals deep-linked and newly selected catalog entries without moving focu
 test('renders the canonical ListItem and ListHeader demo routes (HS2-YGWNY7)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=list-item');
-  const listItemDemo = page.getByRole('region', { name: 'ListItem demo' });
+  const listItemDemo = page.getByRole('region', { name: 'ListItem examples' });
   await expect(page.getByRole('heading', { name: 'ListItem', exact: true })).toBeVisible();
   await expect(listItemDemo).toBeVisible();
-  await expect(listItemDemo.getByRole('heading', { name: 'Standard' })).toBeVisible();
+  await expect(listItemDemo.getByRole('region', { name: 'Standard' })).toBeVisible();
   await expect(listItemDemo.locator('[data-component="list-item"]')).toHaveCount(7);
-  await expect(listItemDemo.locator('.list-item-demo__copy small')).toHaveCSS('display', 'block');
+  await expect(listItemDemo.locator('[data-component="list-item"][data-has-description="true"]')).toHaveCount(1);
   await page.screenshot({ path: 'target/visual-captures/hs2-ygwny7-list-item-wide.png', fullPage: true });
 
   await page.goto('/ux-demo?component=list-header');
-  const listHeaderDemo = page.getByRole('region', { name: 'ListHeader demo' });
+  const listHeaderDemo = page.getByRole('region', { name: 'ListHeader examples' });
   await expect(page.getByRole('heading', { name: 'ListHeader', exact: true })).toBeVisible();
   await expect(listHeaderDemo).toBeVisible();
-  await expect(listHeaderDemo.locator('[data-component="list-header"]')).toHaveCount(2);
+  // Kerf's CatalogExample labels are ListHeaders too; count only the two specimens (HS2-V7SW9T).
+  await expect(
+    listHeaderDemo.locator('[data-component="list-header"]').filter({ hasText: /^(Views|Project Commands)/ }),
+  ).toHaveCount(2);
   await expect(listHeaderDemo.getByRole('button', { name: 'Add view' })).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-ygwny7-list-header-wide.png', fullPage: true });
 
@@ -390,7 +394,7 @@ test('renders the canonical ListItem and ListHeader demo routes (HS2-YGWNY7)', a
   await expect(page.locator('[data-component="catalog"]')).toHaveAttribute('data-sidebar-collapsed', 'true');
   await page.screenshot({ path: 'target/visual-captures/hs2-ygwny7-list-header-narrow.png', fullPage: true });
   await page.goto('/ux-demo?component=list-item');
-  await expect(page.getByRole('region', { name: 'ListItem demo' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'ListItem examples' })).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-ygwny7-list-item-narrow.png', fullPage: true });
 });
 
@@ -408,6 +412,15 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['ticket-code-review', 5],
     ['ticket-attachments', 4],
     ['ticket-info-panel', 2],
+    ['list', 3],
+    ['list-header', 2],
+    ['list-item', 5],
+    ['toolbar', 2],
+    ['toolbar-text', 3],
+    ['toolbar-control-group', 8],
+    ['value-table', 1],
+    ['hs1-migration-banner', 7],
+    ['notifications-paused-banner', 2],
   ];
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
@@ -423,9 +436,6 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
 
 test('styles demo captions through demo-owned classes, not the demoed components (HS2-TV78E1)', async ({ page }) => {
   const captions: [string, string, number][] = [
-    ['toolbar-text', '.toolbar-text-demo__caption', 3],
-    ['toolbar-control-group', '.toolbar-control-group-demo__caption', 8],
-    ['list-item', '.list-item-demo__caption', 5],
     ['terminal-key-bar', '.terminal-key-bar-demo__caption', 2],
     ['fixed-aspect-terminal-card', '.fixed-aspect-terminal-card-demo__caption', 5],
   ];
@@ -438,10 +448,6 @@ test('styles demo captions through demo-owned classes, not the demoed components
       await expect(caption.first()).toBeVisible();
       await expect(caption.first()).toHaveCSS('margin-top', '0px');
     }
-    await page.goto('/ux-demo?component=list-item');
-    await expect(page.locator('.list-item-demo__caption').first()).toHaveCSS('text-transform', 'uppercase');
-    await expect(page.locator('.list-item-demo__detail')).toHaveCount(3);
-    await expect(page.locator('.list-item-demo__detail').first()).toHaveCSS('font-variant-numeric', 'tabular-nums');
     await page.goto('/ux-demo?component=floating-toolbar');
     await expect(page.locator('.floating-toolbar-demo__copy')).toHaveCSS('margin-top', '0px');
   }
@@ -658,12 +664,12 @@ test('uses StateBanner for the responsive HS1 migration and cleanup notices (HS2
   }
   await expect(cleanup.locator('.kui-state-banner__action > .kui-row')).toHaveCount(1);
   await page
-    .locator('.dialog-layout-demo')
+    .getByRole('region', { name: 'Hs1MigrationBanner examples' })
     .screenshot({ path: 'target/visual-captures/hs2-750wsy-hs1-state-banners-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page
-    .locator('.dialog-layout-demo')
+    .getByRole('region', { name: 'Hs1MigrationBanner examples' })
     .screenshot({ path: 'target/visual-captures/hs2-750wsy-hs1-state-banners-narrow.png' });
 });
 
@@ -3984,7 +3990,7 @@ test('centers search controls on the first line while the query wraps', async ({
 
 test('shows the ToolbarControlGroup variants with shared geometry', async ({ page }) => {
   await page.goto('/ux-demo?component=toolbar-control-group');
-  const demo = page.getByRole('region', { name: 'ToolbarControlGroup demo' });
+  const demo = page.getByRole('region', { name: 'ToolbarControlGroup examples' });
   const groups = demo.locator('.kui-toolbar-control-group');
   await expect(groups).toHaveCount(8);
   expect(await groups.evaluateAll((nodes) => nodes.every((node) => node.closest('[data-component="toolbar"]')))).toBe(

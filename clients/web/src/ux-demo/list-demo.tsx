@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { flex, pct } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListInsetText } from '@kerfjs/ui/list-inset-text';
@@ -9,24 +10,29 @@ export function ListDemo() {
   const rows = (count: number) =>
     Array.from({ length: count }, (_, index) => <ListInsetText>{`Row ${index + 1}`}</ListInsetText>);
   return (
-    <section aria-label="List layout variants">
-      <h2>No gap</h2>
-      <List>{rows(3)}</List>
-      <h2>Standard gap</h2>
-      <List gap>{rows(3)}</List>
-      <h2>Custom gap and scrolling</h2>
-      <div style="display:flex;height:12rem" role="region" aria-label="Scrollable list example">
+    <>
+      <CatalogExample label="No gap" viewport={{ width: 'compact' }}>
+        <List>{rows(3)}</List>
+      </CatalogExample>
+      <CatalogExample label="Standard gap" viewport={{ width: 'compact' }}>
+        <List gap>{rows(3)}</List>
+      </CatalogExample>
+      <CatalogExample
+        label="Custom gap and scrolling"
+        note="A bounded viewport scrolls the list inside its divider edges."
+        viewport={{ width: 'compact', height: 'short', layout: 'flex' }}
+      >
         <List gap="m" flex={flex(1, 1, pct(0))} scrollable dividerSides="trbl">
           {rows(12)}
         </List>
-      </div>
-    </section>
+      </CatalogExample>
+    </>
   );
 }
 
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    list: { Demo: ListDemo },
+    list: { catalogExamples: true, Demo: ListDemo },
   },
 };

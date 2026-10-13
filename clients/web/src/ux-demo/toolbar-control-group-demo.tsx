@@ -2,6 +2,7 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { SegmentedControl } from '@kerfjs/ui/segmented-control';
@@ -30,9 +31,8 @@ export const toolbarGroupDemoMode = signal<'list' | 'board' | 'settings'>('list'
 
 export function ToolbarControlGroupDemo() {
   return (
-    <section class="toolbar-control-group-demo" aria-label="ToolbarControlGroup demo">
-      <div>
-        <h2 class="toolbar-control-group-demo__caption">Segmented choices</h2>
+    <>
+      <CatalogExample label="Segmented choices" align="glyph">
         <Toolbar
           leading={
             <ToolbarControlGroup>
@@ -56,9 +56,8 @@ export function ToolbarControlGroupDemo() {
             </ToolbarControlGroup>
           }
         />
-      </div>
-      <div>
-        <h2 class="toolbar-control-group-demo__caption">Popup menu</h2>
+      </CatalogExample>
+      <CatalogExample label="Popup menu" align="glyph">
         <Toolbar
           leading={
             <ToolbarControlGroup single nestedDropdown>
@@ -70,9 +69,8 @@ export function ToolbarControlGroupDemo() {
             </ToolbarControlGroup>
           }
         />
-      </div>
-      <div>
-        <h2 class="toolbar-control-group-demo__caption">Button group</h2>
+      </CatalogExample>
+      <CatalogExample label="Button group" align="glyph">
         <Toolbar
           leading={
             <ToolbarControlGroup label="View actions">
@@ -85,9 +83,8 @@ export function ToolbarControlGroupDemo() {
             </ToolbarControlGroup>
           }
         />
-      </div>
-      <div>
-        <h2 class="toolbar-control-group-demo__caption">Single button</h2>
+      </CatalogExample>
+      <CatalogExample label="Single button" align="glyph">
         <Toolbar
           leading={
             <ToolbarControlGroup single>
@@ -97,9 +94,8 @@ export function ToolbarControlGroupDemo() {
             </ToolbarControlGroup>
           }
         />
-      </div>
-      <div>
-        <h2 class="toolbar-control-group-demo__caption">Borderless group</h2>
+      </CatalogExample>
+      <CatalogExample label="Borderless group" align="glyph">
         <Toolbar
           leading={
             <ToolbarControlGroup appearance="borderless" single>
@@ -109,9 +105,8 @@ export function ToolbarControlGroupDemo() {
             </ToolbarControlGroup>
           }
         />
-      </div>
-      <div>
-        <h2 class="toolbar-control-group-demo__caption">Push button, resting</h2>
+      </CatalogExample>
+      <CatalogExample label="Push button, resting" align="glyph">
         <Toolbar
           leading={
             <ToolbarControlGroup buttonAppearance="push" single>
@@ -121,9 +116,8 @@ export function ToolbarControlGroupDemo() {
             </ToolbarControlGroup>
           }
         />
-      </div>
-      <div>
-        <h2 class="toolbar-control-group-demo__caption">Push button, pressed</h2>
+      </CatalogExample>
+      <CatalogExample label="Push button, pressed" align="glyph">
         <Toolbar
           leading={
             <ToolbarControlGroup buttonAppearance="push" single>
@@ -133,9 +127,8 @@ export function ToolbarControlGroupDemo() {
             </ToolbarControlGroup>
           }
         />
-      </div>
-      <div>
-        <h2 class="toolbar-control-group-demo__caption">Dark group</h2>
+      </CatalogExample>
+      <CatalogExample label="Dark group" align="glyph">
         <Toolbar
           leading={
             <ToolbarControlGroup label="Dark navigation" tone="dark">
@@ -148,8 +141,8 @@ export function ToolbarControlGroupDemo() {
             </ToolbarControlGroup>
           }
         />
-      </div>
-    </section>
+      </CatalogExample>
+    </>
   );
 }
 
@@ -169,7 +162,7 @@ function wireToolbarControlGroupDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'toolbar-control-group': { Demo: ToolbarControlGroupDemo },
+    'toolbar-control-group': { catalogExamples: true, Demo: ToolbarControlGroupDemo },
   },
   wire: wireToolbarControlGroupDemo,
 };

@@ -1,16 +1,9 @@
-import '../components/heading.css';
 import '../components/native-popover-dialog.css';
 
 import { CatalogExample } from '@kerfjs/ui/catalog';
-import { uiColor } from '@kerfjs/ui/css-values';
-import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Toolbar } from '@kerfjs/ui/toolbar';
-import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
-import { AppWindow } from 'lucide';
 
 import { Hs1CleanupBanner, Hs1JobBanner, Hs1MigrationBanner, Hs1MigrationDialog } from '../components/hs1-migration';
 import { NotificationsPausedBanner } from '../components/notifications-paused-banner';
@@ -19,29 +12,17 @@ import type { DemoModule } from './demo-module';
 
 export function ValueTableDemo() {
   return (
-    <section class="dialog-layout-demo dialog-surface">
-      <div class="app-heading" data-component="heading" data-has-icon="true">
-        <Toolbar
-          dividerSides=""
-          leading={
-            <>
-              <ToolbarControlGroup single tileTone="brand">
-                <LucideIcon color={uiColor('brand-on-quiet')} icon={AppWindow} name="app-window" />
-              </ToolbarControlGroup>
-              <ToolbarText text="Value table" id="value-table-demo-title" size="xlarge" />
-            </>
-          }
-        />
-        <p class="app-heading__summary">Static metadata uses inset separators and aligned values.</p>
-      </div>
-      <div class="dialog-layout-demo__body">
-        <ValueTable label="Example metadata">
-          <ValueTableRow label="Version" value="0.1.0" />
-          <ValueTableRow label="Build" value={<code>source-sha256:example</code>} />
-          <ValueTableRow label="Protocol" value="1–1" />
-        </ValueTable>
-      </div>
-    </section>
+    <CatalogExample
+      label="Metadata"
+      note="Static metadata uses inset separators and aligned values."
+      viewport={{ width: 'medium' }}
+    >
+      <ValueTable label="Example metadata">
+        <ValueTableRow label="Version" value="0.1.0" />
+        <ValueTableRow label="Build" value={<code>source-sha256:example</code>} />
+        <ValueTableRow label="Protocol" value="1–1" />
+      </ValueTable>
+    </CatalogExample>
   );
 }
 export const hs1MigrationDialogDemoOpen = signal(true);
@@ -75,59 +56,78 @@ export function Hs1MigrationDialogDemo() {
 /** Both detail variants of the app-wide notification pause banner (HS2-QYA9SC). */
 export function NotificationsPausedBannerDemo() {
   return (
-    <section class="dialog-layout-demo dialog-surface">
-      <NotificationsPausedBanner waiting={0} />
-      <NotificationsPausedBanner waiting={3} />
-    </section>
+    <>
+      <CatalogExample label="Nothing waiting">
+        <NotificationsPausedBanner waiting={0} />
+      </CatalogExample>
+      <CatalogExample label="Notifications waiting">
+        <NotificationsPausedBanner waiting={3} />
+      </CatalogExample>
+    </>
   );
 }
 
+const hs1JobLabels = {
+  measured: 'Import running, measured progress',
+  unknown: 'Import running, unknown progress',
+  failed: 'Import failed',
+  succeeded: 'Import succeeded',
+  'backup-unverified': 'Backup unverified',
+} as const;
+
 export function Hs1MigrationBannerDemo() {
   return (
-    <section class="dialog-layout-demo dialog-surface">
-      <Hs1MigrationBanner databasePath="/work/demo/.hotsheet/db" />
+    <>
+      <CatalogExample label="Migration available">
+        <Hs1MigrationBanner databasePath="/work/demo/.hotsheet/db" />
+      </CatalogExample>
       {(['measured', 'unknown', 'failed', 'succeeded', 'backup-unverified'] as const).map((state) => (
-        <Hs1JobBanner
-          details
-          backupVerified={state !== 'backup-unverified'}
-          job={{
-            id: 'demo-migration',
-            attempt: state,
-            revision: 1,
-            projectId: 'demo',
-            root: '/work/demo',
-            sourceIdentity: '/work/demo/.hotsheet/db',
-            store: '/work/demo.hs2',
-            kind: state === 'backup-unverified' ? 'backup' : 'import',
-            ownerPid: 0,
-            updatedAt: '',
-            warnings: [],
-            status:
-              state === 'failed'
-                ? 'failed'
-                : state === 'succeeded' || state === 'backup-unverified'
-                  ? 'succeeded'
-                  : 'running',
-            progress:
-              state === 'measured'
-                ? { version: 1, phase: 'copy_database', completed: 5242880, total: 10485760, unit: 'bytes' }
-                : { version: 1, phase: 'open_database' },
-            error: state === 'failed' ? 'The repository could not be written. Free disk space, then retry.' : undefined,
-            result:
-              state === 'succeeded'
-                ? {
-                    ticketStore: '/work/demo.hs2',
-                    connectionId: 'git-demo',
-                    tickets: 12,
-                    attachments: 4,
-                    toolsConfigured: true,
-                  }
-                : undefined,
-          }}
-        />
+        <CatalogExample label={hs1JobLabels[state]}>
+          <Hs1JobBanner
+            details
+            backupVerified={state !== 'backup-unverified'}
+            job={{
+              id: 'demo-migration',
+              attempt: state,
+              revision: 1,
+              projectId: 'demo',
+              root: '/work/demo',
+              sourceIdentity: '/work/demo/.hotsheet/db',
+              store: '/work/demo.hs2',
+              kind: state === 'backup-unverified' ? 'backup' : 'import',
+              ownerPid: 0,
+              updatedAt: '',
+              warnings: [],
+              status:
+                state === 'failed'
+                  ? 'failed'
+                  : state === 'succeeded' || state === 'backup-unverified'
+                    ? 'succeeded'
+                    : 'running',
+              progress:
+                state === 'measured'
+                  ? { version: 1, phase: 'copy_database', completed: 5242880, total: 10485760, unit: 'bytes' }
+                  : { version: 1, phase: 'open_database' },
+              error:
+                state === 'failed' ? 'The repository could not be written. Free disk space, then retry.' : undefined,
+              result:
+                state === 'succeeded'
+                  ? {
+                      ticketStore: '/work/demo.hs2',
+                      connectionId: 'git-demo',
+                      tickets: 12,
+                      attachments: 4,
+                      toolsConfigured: true,
+                    }
+                  : undefined,
+            }}
+          />
+        </CatalogExample>
       ))}
-      <Hs1CleanupBanner />
-    </section>
+      <CatalogExample label="Cleanup offered">
+        <Hs1CleanupBanner />
+      </CatalogExample>
+    </>
   );
 }
 
@@ -147,10 +147,10 @@ function wireDialogLayoutDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'value-table': { Demo: ValueTableDemo },
+    'value-table': { catalogExamples: true, Demo: ValueTableDemo },
     'hs1-migration-dialog': { catalogExamples: true, Demo: Hs1MigrationDialogDemo },
-    'hs1-migration-banner': { Demo: Hs1MigrationBannerDemo },
-    'notifications-paused-banner': { Demo: NotificationsPausedBannerDemo },
+    'hs1-migration-banner': { catalogExamples: true, Demo: Hs1MigrationBannerDemo },
+    'notifications-paused-banner': { catalogExamples: true, Demo: NotificationsPausedBannerDemo },
   },
   wire: wireDialogLayoutDemo,
 };
