@@ -4952,9 +4952,7 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
       ),
   );
   // The demo also renders the append-only variant (HS2-HSA64D); drive the editable one.
-  const editableDemo = page
-      .locator('[data-catalog-example]')
-      .filter({ has: page.getByRole('heading', { name: 'Editable', exact: true }) }),
+  const editableDemo = page.getByRole('region', { name: 'Editable', exact: true }),
     surface = editableDemo.locator('[data-component="ticket-attachments"]').first(),
     dragged = surface.locator('[data-component="ticket-attachment-item"][data-drag-attachment-id="wide"]');
   await dragged.evaluate((node) =>
@@ -5018,8 +5016,7 @@ test('styles and edits attachment group labels while preserving drag regrouping'
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-attachments');
   const surface = page
-      .locator('[data-catalog-example]')
-      .filter({ has: page.getByRole('heading', { name: 'Editable', exact: true }) })
+      .getByRole('region', { name: 'Editable', exact: true })
       .locator('[data-component="ticket-attachments"]'),
     groups = surface.locator('[data-attachment-group-drop-target]'),
     first = groups.first();
@@ -5080,8 +5077,7 @@ test('keeps a demo attachment label edit open across a late catalog rerender (HS
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-attachments');
   const surface = page
-      .locator('[data-catalog-example]')
-      .filter({ has: page.getByRole('heading', { name: 'Editable', exact: true }) })
+      .getByRole('region', { name: 'Editable', exact: true })
       .locator('[data-component="ticket-attachments"]'),
     first = surface.locator('[data-attachment-group-drop-target]').first();
   await first.getByRole('button', { name: /Edit batch label/ }).dblclick();
@@ -5116,12 +5112,8 @@ test('shows append-only and unsupported attachment variants in the TicketAttachm
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-attachments');
-  const appendOnly = page.locator('[data-catalog-example]').filter({
-      has: page.getByRole('heading', { name: 'Append-only provider (GitHub assets repository)', exact: true }),
-    }),
-    unsupported = page
-      .locator('[data-catalog-example]')
-      .filter({ has: page.getByRole('heading', { name: 'Provider without attachments', exact: true }) });
+  const appendOnly = page.getByRole('region', { name: 'Append-only provider (GitHub assets repository)', exact: true }),
+    unsupported = page.getByRole('region', { name: 'Provider without attachments', exact: true });
   await expect(appendOnly.getByLabel('Browse and add attachments')).toHaveCount(1);
   await expect(appendOnly.getByLabel('Drop or browse attachments')).toHaveCount(1);
   await expect(appendOnly.getByRole('button', { name: /More actions for/ })).toHaveCount(0);
@@ -7549,12 +7541,8 @@ test('exposes the TicketInfoPanel placeholder variant beside the loaded panel (H
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/ux-demo?component=ticket-info-panel');
-    const loaded = page
-      .locator('[data-catalog-example]')
-      .filter({ has: page.getByRole('heading', { name: 'Loaded', exact: true }) });
-    const placeholder = page
-      .locator('[data-catalog-example]')
-      .filter({ has: page.getByRole('heading', { name: 'Placeholder', exact: true }) });
+    const loaded = page.getByRole('region', { name: 'Loaded', exact: true });
+    const placeholder = page.getByRole('region', { name: 'Placeholder', exact: true });
     await expect(loaded.locator('[data-component="ticket-info-panel"]')).not.toHaveAttribute('data-placeholder');
     await expect(loaded).toContainText('Hot Sheet git');
     const panel = placeholder.locator('[data-component="ticket-info-panel"][data-placeholder="true"]');

@@ -69,17 +69,18 @@ export function DemoApp() {
         toggleSettingsAction="toggle-settings"
         uxReview={uxReviewProject.value ? { projectDirectory: uxReviewProject.value } : undefined}
         content={
-          // Converted demos render their own Kerf CatalogExamples: components inside Kerf's
-          // stack, application-width compositions directly until the stack gains a width option
-          // (KF-HKVT5S). Demos not yet converted get one full-width CatalogExample (HS2-Z3FMEZ).
+          // Converted demos render their own Kerf CatalogExamples inside Kerf's stack, full width
+          // for application-width compositions (KF-HKVT5S). Demos not yet converted get one
+          // full-width CatalogExample (HS2-Z3FMEZ).
           !entry?.catalogExamples ? (
             <CatalogExample viewport={{ width: 'full' }}>
               {Demo ? <Demo /> : <PlannedDemo item={selected} />}
             </CatalogExample>
-          ) : demoKind(selected.id) === 'composition' ? (
-            <>{Demo ? <Demo /> : <PlannedDemo item={selected} />}</>
           ) : (
-            <CatalogExampleStack label={`${selected.name} examples`}>
+            <CatalogExampleStack
+              label={`${selected.name} examples`}
+              width={demoKind(selected.id) === 'composition' ? 'full' : undefined}
+            >
               {Demo ? <Demo /> : <PlannedDemo item={selected} />}
             </CatalogExampleStack>
           )
