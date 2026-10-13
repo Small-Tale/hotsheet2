@@ -2688,7 +2688,10 @@ A terminal whose AI session runs with Hot Sheet's hooks active (HS2-EV1XK3; see
 set by `POST /terminals/{id}/ai-connection` from the session's `SessionStart` hook or by a
 successful interactive permission hook's authenticated `/permissions/ask` request. The latter
 updates the indicator while the answer is pending if `SessionStart` was missed (HS2-XYSXVT).
-It is cleared by `DELETE` from `SessionEnd` or by killing the terminal. Each change emits a
+It is cleared by `DELETE` from `SessionEnd` or by killing the terminal. A session reported
+while a command started from the terminal's shell held the foreground is also cleared when
+the shell takes the foreground back, so a crash or a missed `SessionEnd` cannot leave the tab
+connected (HS2-Z1W068). Each change emits a
 `terminal_ai_connection` event. The client refetches its terminals on that event and on a
 `permission_asked` event, so a visible prompt reconciles the indicator even if the separate
 connection event was missed (HS2-XYSXVT).

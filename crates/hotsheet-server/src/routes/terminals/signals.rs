@@ -440,6 +440,8 @@ pub(crate) async fn connect_terminal_ai(
         session_id: body.session_id.filter(|id| !id.is_empty()),
         source: body.source,
     };
+    let started_from_shell = terminal_foreground_command(&state, &id).await == Some(true);
+    let reported_at = connection.at.clone();
     state
         .terminal_ai_last_reports
         .lock_or_recover()
@@ -463,7 +465,75 @@ pub(crate) async fn connect_terminal_ai(
     if changed {
         emit_terminal_ai_connection(&state, &id, Some(agent.unwrap_or_default()));
     }
+    if started_from_shell {
+        watch_shell_ai_session_exit(&state, id, reported_at);
+    }
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Whether a command the user started from the terminal's shell holds its foreground; `None`
+/// when the terminal is gone or the platform cannot tell.
+async fn terminal_foreground_command(state: &AppState, id: &str) -> Option<bool> {
+    if let Some(tb) = &state.terminal_broker {
+        return match tb
+            .call(hotsheet_terminals::BrokerRequest::Read { id: id.to_owned() })
+            .await
+        {
+            Ok(hotsheet_terminals::BrokerResponse::Read { info, .. }) if info.alive => {
+                info.foreground_command
+            }
+            _ => None,
+        };
+    }
+    let term = state.terminals.get(&term_key(state, id))?;
+    term.is_alive()
+        .then(|| term.foreground_command_running())
+        .flatten()
+}
+
+/// An AI session started from the terminal's shell has ended once the shell takes its
+/// foreground back, even when its SessionEnd hook never ran (a crash, a killed process, or a
+/// failed hook). Clear that connection then, so the tab stops claiming a live session
+/// (HS2-Z1W068). The watch ends as soon as a newer report replaces this one or it is cleared.
+fn watch_shell_ai_session_exit(state: &AppState, id: String, reported_at: String) {
+    let state = state.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            let current = || {
+                state
+                    .terminal_ai_connections
+                    .lock_or_recover()
+                    .get(&id)
+                    .is_some_and(|connection| connection.at == reported_at)
+            };
+            if !current() {
+                return;
+            }
+            match terminal_foreground_command(&state, &id).await {
+                Some(true) => continue,
+                None => return,
+                Some(false) => {}
+            }
+            let removed = {
+                let mut connections = state.terminal_ai_connections.lock_or_recover();
+                let matches = connections
+                    .get(&id)
+                    .is_some_and(|connection| connection.at == reported_at);
+                matches && connections.remove(&id).is_some()
+            };
+            if removed {
+                if forget_terminal_halt(&state, &id) {
+                    emit_terminal_halted(&state, &id, None);
+                }
+                if forget_terminal_question(&state, &id, None) {
+                    emit_terminal_question(&state, &id);
+                }
+                emit_terminal_ai_connection(&state, &id, None);
+            }
+            return;
+        }
+    });
 }
 
 /// `DELETE /terminals/{id}/ai-connection` — the terminal's AI session ended (`SessionEnd`). A

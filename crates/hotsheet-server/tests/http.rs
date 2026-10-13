@@ -1934,6 +1934,79 @@ async fn bridge_probe_requires_auth_and_never_marks_a_terminal_connected() {
     assert!(terminal[0].get("last_hook_report").is_none());
 }
 
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn terminal_ai_connection_clears_when_its_shell_takes_the_foreground_back() {
+    // HS2-Z1W068: an AI session started from the shell whose SessionEnd hook never runs stops
+    // counting as connected once the shell holds the foreground again.
+    let (_dir, state) = state();
+    let router = app(state);
+    let send = |method: &'static str, path: &'static str, body: Option<&'static str>| {
+        let router = router.clone();
+        async move { router.oneshot(authed(method, path, body)).await.unwrap() }
+    };
+    let connected = || async {
+        body_json(send("GET", "/terminals", None).await).await[0]
+            .get("ai_connection")
+            .is_some()
+    };
+    let wait_for = |want: bool| async move {
+        for _ in 0..100 {
+            if connected().await == want {
+                return true;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        false
+    };
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals",
+            Some(r#"{"command":"sh","id":"shell-ai"}"#)
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    // Stand-in for the AI tool: a foreground command started from the shell.
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    send(
+        "POST",
+        "/terminals/shell-ai/input",
+        Some(r#"{"data":"cat\n"}"#),
+    )
+    .await;
+    let mut foreground = false;
+    for _ in 0..50 {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        send(
+            "POST",
+            "/terminals/shell-ai/ai-connection",
+            Some(r#"{"agent":"claude"}"#),
+        )
+        .await;
+        tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+        if connected().await {
+            foreground = true;
+            break;
+        }
+    }
+    assert!(
+        foreground,
+        "the report stays while the command holds the foreground"
+    );
+    // The command exits (no SessionEnd hook) and the shell takes the foreground back.
+    send(
+        "POST",
+        "/terminals/shell-ai/input",
+        Some(r#"{"data":"\u0004"}"#),
+    )
+    .await;
+    assert!(wait_for(false).await, "the stale connection clears");
+    send("DELETE", "/terminals/shell-ai", None).await;
+}
+
 #[tokio::test]
 async fn terminal_ai_connection_ignores_stale_session_end_after_clear() {
     // Codex /clear starts a new session in the retained terminal. A late end for the previous

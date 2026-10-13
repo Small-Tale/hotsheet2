@@ -827,6 +827,10 @@ become model context.
 
 The hook also sends its session id. The server ignores a `SessionEnd` for an older session
 after a new `SessionStart` (for example, Codex `/clear`) has reported in the same terminal.
+A session started from the terminal's shell also ends when the shell regains the foreground,
+even if its `SessionEnd` hook never ran (HS2-Z1W068). The connection map is in memory, so a
+server restart leaves running sessions unreported until their next hook (MCP presence:
+HS2-HNXE38).
 The id remains internal to the server. Terminal APIs expose the active connection and the last
 trusted hook report's time and source (`session_start` or `permission_request`). The last report
 remains visible after `SessionEnd`, but is forgotten when the terminal exits or is killed and
