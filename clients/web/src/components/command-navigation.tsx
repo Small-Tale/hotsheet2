@@ -9,7 +9,6 @@ import {
   ArrowLeftRight,
   Balloon,
   Bot,
-  ChevronDown,
   CircleCheckBig,
   FileText,
   GitCompare,
@@ -80,13 +79,7 @@ export function CommandNavigation({ label, commands, expanded, collapsedGroups =
       data-icon-catalog={lucideCatalogVersion.value}
     >
       <List gap="2xs">
-        <ListHeader
-          label={label}
-          action="toggle-command-group"
-          actionIcon={<LucideIcon icon={ChevronDown} name="chevron-down" />}
-          expanded={expanded}
-          toggle
-        />
+        <ListHeader label={label} action="toggle-command-group" expanded={expanded} toggle />
         {expanded &&
           [...groups].map(([group, items]) => {
             const groupExpanded = !group || !collapsedGroups.includes(group);
@@ -97,7 +90,6 @@ export function CommandNavigation({ label, commands, expanded, collapsedGroups =
                     label={group}
                     density="compact"
                     action="toggle-command-section"
-                    actionIcon={<LucideIcon icon={ChevronDown} name="chevron-down" />}
                     expanded={groupExpanded}
                     toggle
                   />

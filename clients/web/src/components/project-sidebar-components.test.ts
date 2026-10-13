@@ -341,6 +341,11 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toMatch(/data-command-group="Release"[^]*aria-expanded="true"/);
     expect(markup).toContain('data-item-id="ship"');
     expect(markup).toContain('data-item-id="status"');
+    // Disclosure arrows reflect each header's state through Kerf's default DisclosureArrow
+    // instead of a fixed chevron (HS2-DTJ5YZ).
+    expect(markup).not.toContain('data-lucide="chevron-down"');
+    expect(markup).toMatch(/data-command-group="Quality"[^]*--_kui-disclosure-arrow-rotation:0deg/);
+    expect(markup).toMatch(/data-command-group="Release"[^]*--_kui-disclosure-arrow-rotation:90deg/);
   });
 
   it('renders a neutral or unrecognized command color as a transparent, unstyled button (HS2-ZQWQCM)', () => {

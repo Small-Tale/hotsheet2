@@ -1,6 +1,6 @@
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { ChevronDown, Plus } from 'lucide';
+import { Plus } from 'lucide';
 
 import type { DemoModule } from './demo-module';
 
@@ -16,13 +16,7 @@ export function ListHeaderDemo() {
         />
       </div>
       <div>
-        <ListHeader
-          label="Project Commands"
-          action="demo-toggle"
-          actionIcon={<LucideIcon icon={ChevronDown} name="chevron-down" />}
-          expanded
-          toggle
-        />
+        <ListHeader label="Project Commands" action="demo-toggle" expanded toggle />
       </div>
       <p>Section labels align with ListItem icons whether the header has an action or toggles a group.</p>
     </section>

@@ -5763,8 +5763,16 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   ).toBeVisible();
   await commands.getByRole('button', { name: /Running Verify project/ }).click();
   await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveAttribute('aria-pressed', 'false');
+  // The disclosure arrow turns with each group's state (HS2-DTJ5YZ): down while expanded, right
+  // while collapsed.
+  const arrowTransform = (group: typeof qualityGroup) =>
+    group.locator('.kui-disclosure-arrow').evaluate((node) => getComputedStyle(node).transform);
+  const expandedTransform = await arrowTransform(qualityGroup);
   await qualityGroup.click();
   await expect(qualityGroup).toHaveAttribute('aria-expanded', 'false');
+  await expect.poll(() => arrowTransform(qualityGroup)).not.toBe(expandedTransform);
+  await expect.poll(() => arrowTransform(releaseGroup)).toBe(expandedTransform);
+  await commands.screenshot({ path: 'target/visual-captures/hs2-dtj5yz-command-group-collapsed.png' });
   await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveCount(0);
   await expect(commands.getByRole('button', { name: 'Publish preview' })).toBeVisible();
   await qualityGroup.click();
