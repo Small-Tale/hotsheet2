@@ -1,6 +1,6 @@
-/* Chrome shared by the app's native popover="auto" dialogs (command editor, Repository Status, change
-   evidence), which keep native top-layer ownership instead of a Web Awesome dialog, so Kerf's
-   DialogSurface cannot supply it. Moving them onto DialogSurface is tracked in HS2-T1MVPV. */
+/* Chrome for the app's last native popover="auto" dialog (server-build connection details). It waits
+   on Kerf PopoverDialogSurface `describedBy` (KF-SKVEQW) to keep its aria-describedby; the move and the
+   deletion of this file are tracked in HS2-F3F44W. */
 .dialog-surface {
   box-sizing: border-box;
   padding: 0;

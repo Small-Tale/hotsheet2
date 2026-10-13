@@ -243,11 +243,17 @@ describe('CommandSettingsEditor', () => {
     expect(shell).toMatch(/<wa-textarea label="Shell command" name="command"[^>]*hint="Runs in the project root/);
   });
 
-  it('only lays out the popover dialog when it is open, so the closed dialog stays UA-hidden (HS2-D9JBXT)', () => {
-    // Setting `display` unconditionally on a `popover` element overrides [popover]:not(:popover-open){display:none},
-    // rendering the empty closed dialog as a thin bordered strip — the stray line the maintainer reported.
-    expect(css).not.toMatch(/\.command-settings-editor__dialog\s*\{[^}]*display\s*:/);
-    expect(css).toMatch(/\.command-settings-editor__dialog:popover-open\s*\{[^}]*display\s*:\s*flex/);
+  it('composes Kerf PopoverDialogSurface instead of app popover chrome (HS2-T1MVPV, HS2-D9JBXT)', () => {
+    // Kerf lays the surface out only while open, so the closed dialog stays UA-hidden; the app styles only
+    // its own content stack, never the popover root.
+    const markup = String(CommandSettingsEditor({ commands: [] }));
+    expect(markup).toMatch(
+      /<section[^>]*id="command-editor-dialog"[^>]*data-component="popover-dialog-surface"[^>]*popover="auto"[^>]*role="dialog"[^>]*aria-label="Edit command"/,
+    );
+    expect(markup).toContain('data-command-editor-dialog="true"');
+    expect(markup).not.toContain('dialog-surface command-settings-editor__dialog');
+    expect(css).not.toMatch(/\.command-settings-editor__dialog(\s|:|\{)/);
+    expect(css).toMatch(/\.command-settings-editor__dialog-content\s*\{[^}]*grid-template-rows: auto minmax\(0, 1fr\)/);
   });
   it('provides a useful empty state pointing at the toolbar Add command… action', () => {
     const markup = String(CommandSettingsEditor({ commands: [] }));

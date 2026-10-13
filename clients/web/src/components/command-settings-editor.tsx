@@ -1,8 +1,8 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/components/textarea/textarea.js';
+import '@kerfjs/ui/surface-scaffold.css';
 import './command-settings-editor.css';
-import './native-popover-dialog.css';
 
 import { foregroundColorVar, px, uiColor } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
@@ -12,6 +12,7 @@ import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Select } from '@kerfjs/ui/select';
+import { PopoverDialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -424,16 +425,15 @@ export function CommandSettingsEditor({
       <footer>
         <span role="status">{message}</span>
       </footer>
-      <section
-        popover="auto"
+      {/* Kerf's PopoverDialogSurface owns the native popover="auto" chrome, size, and backdrop (HS2-T1MVPV). */}
+      <PopoverDialogSurface
         id={COMMAND_EDITOR_DIALOG_ID}
-        class="dialog-surface command-settings-editor__dialog"
-        data-component="command-editor-dialog"
-        role="dialog"
-        aria-label="Edit command"
+        label="Edit command"
+        bodyLayout="fill"
+        rootAttributes={{ 'data-command-editor-dialog': 'true' }}
       >
         {editing && editingIcon ? (
-          <>
+          <div class="command-settings-editor__dialog-content">
             <Toolbar
               dividerSides=""
               leading={
@@ -482,9 +482,9 @@ export function CommandSettingsEditor({
                 aiDefaults={aiDefaults}
               />
             </div>
-          </>
+          </div>
         ) : null}
-      </section>
+      </PopoverDialogSurface>
     </div>
   );
 }

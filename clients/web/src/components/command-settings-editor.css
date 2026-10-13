@@ -139,13 +139,12 @@
    List and Grid, so no field rules remain here (HS2-WNXRG3). */
 /* Keep `display` off the base rule so a CLOSED popover stays UA-hidden ([popover]:not(:popover-open){display:none});
    setting display here unconditionally rendered the empty closed dialog as a 2px bordered strip (HS2-D9JBXT). */
-.command-settings-editor__dialog {
-  width: min(remify(560px), calc(100vw - remify(32px)));
-  max-height: calc(100vh - remify(64px));
-  flex-direction: column;
-}
-.command-settings-editor__dialog:popover-open {
-  display: flex;
+/* The editor's own stack inside Kerf's filling PopoverDialogSurface: the toolbar stays put while the
+   field body scrolls (HS2-T1MVPV). */
+.command-settings-editor__dialog-content {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 .command-settings-editor__dialog-icon {
   display: grid;

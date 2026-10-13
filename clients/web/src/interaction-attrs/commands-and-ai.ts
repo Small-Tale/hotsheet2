@@ -107,4 +107,4 @@ export const COMMANDS_AND_AI_TARGETS = {
  * `data-command-field`, and the Kerf Type Select is addressed by its name (HS2-WNXRG3).
  */
 export const COMMAND_FIELD_SELECTOR =
-  '[data-command-field], [data-component="command-editor-dialog"] wa-select[name="kind"]';
+  '[data-command-field], [data-command-editor-dialog] wa-select[name="kind"]';
