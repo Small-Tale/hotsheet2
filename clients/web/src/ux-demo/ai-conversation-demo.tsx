@@ -7,6 +7,7 @@ import { type ConversationActivity, type ConversationMessage, conversationUsage 
 import { AIConversation } from '../components/ai-conversation';
 import { wireAiConversation } from '../components/ai-conversation-interactions';
 import type { PermissionItem } from '../permission-notifications';
+import { type DemoDevice, DeviceSetting } from './components/device-setting';
 import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
 import { sidebarEvent } from './project-sidebar-demo';
@@ -15,6 +16,8 @@ import { syncSettingsControls } from './settings-controls';
 export type AIConversationScenario =
   'empty' | 'streaming' | 'permission' | 'completed' | 'usage-unpriced' | 'failed' | 'interrupted' | 'saved';
 export const aiConversationScenario = signal<AIConversationScenario>('streaming');
+/** Remote clients disable the host-only export and saved-conversation actions (HS2-NWWF1Z). */
+export const aiConversationDevice = signal<DemoDevice>('host');
 export const aiConversationDemoOpen = signal(true);
 export const aiConversationPresentation = signal<'dialog' | 'embedded'>('dialog');
 export const aiConversationSaveCount = signal(0);
@@ -185,6 +188,7 @@ export function AIConversationDemo() {
           canChangeEffort
           readOnly={aiConversationScenario.value === 'saved'}
           savedSource={aiConversationScenario.value === 'saved' ? 'client-review.hotsheet-chat' : undefined}
+          hostActionsAvailable={aiConversationDevice.value === 'host'}
         />
       </section>
     </CatalogExample>
@@ -195,10 +199,15 @@ export function AIConversationDemo() {
 export function resetAIConversationDemo(root?: ParentNode): void {
   aiConversationPresentation.value = 'dialog';
   aiConversationScenario.value = 'streaming';
+  aiConversationDevice.value = 'host';
   aiConversationDemoOpen.value = true;
   if (root)
     syncSettingsControls(root, 'ai-conversation', {
-      values: { presentation: aiConversationPresentation.value, scenario: aiConversationScenario.value },
+      values: {
+        presentation: aiConversationPresentation.value,
+        scenario: aiConversationScenario.value,
+        device: aiConversationDevice.value,
+      },
     });
 }
 
@@ -229,6 +238,7 @@ export function AIConversationSettings() {
           { value: 'saved', label: 'Saved read-only transcript' },
         ]}
       />
+      <DeviceSetting value={aiConversationDevice.value} />
       {aiConversationPresentation.value === 'dialog' && (
         <wa-button type="button" data-action="open-ai-conversation-demo">
           Open conversation
@@ -261,6 +271,12 @@ function wireAiConversationDemo(root: HTMLElement): () => void {
   demoListeners.add(
     delegate(root, 'change', '[data-settings="ai-conversation"] [name="scenario"]', (_event, target) => {
       aiConversationScenario.value = (target as FormControl).value as typeof aiConversationScenario.value;
+      openAIConversationDemo(root);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="ai-conversation"] [name="device"]', (_event, target) => {
+      aiConversationDevice.value = (target as FormControl).value as DemoDevice;
       openAIConversationDemo(root);
     }),
   );

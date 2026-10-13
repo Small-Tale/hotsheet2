@@ -413,7 +413,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['ticket-board-column', 1],
     ['ticket-search-field', 7],
     ['ticket-code-review', 5],
-    ['ticket-attachments', 4],
+    ['ticket-attachments', 5],
     ['attachment-gallery', 1],
     ['ticket-info-panel', 2],
     ['list', 3],
@@ -9149,4 +9149,102 @@ test('places AppShell state banners on the header surface above the separator (H
   expect(placement.background).toBe(placement.surface);
   expect(placement.gap).toBe(8);
   await page.screenshot({ path: 'target/visual-captures/hs2-stte4m-app-shell-banner.png' });
+});
+
+test('shows every host-only control disabled in the remote-device demo states (HS2-NWWF1Z)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const remoteReason = /isn't available from this device/;
+  const reasonsIn = (scope: Locator) =>
+    scope.evaluate((node) =>
+      [...node.querySelectorAll('[title], [data-disabled-reason], [aria-description]')]
+        .map((item) =>
+          [item.getAttribute('title'), item.getAttribute('data-disabled-reason'), item.getAttribute('aria-description')]
+            .filter(Boolean)
+            .join(' '),
+        )
+        .join('\n'),
+    );
+  const setDevice = async (component: string, name: string, device: string) => {
+    await setDemoSettingsOpen(page, true);
+    const control = page.getByRole('complementary', { name: `${name} settings` }).locator('wa-select[name="device"]');
+    await control.evaluate((node: HTMLElement & { value: string }, next) => {
+      node.value = next;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, device);
+    await expect(control, component).toHaveJSProperty('value', device);
+    return control;
+  };
+
+  // Settings-driven states: switch to the remote device, see the disabled reason, then Reset restores the host.
+  // The repository surfaces show their host-only Open/Reveal actions in the file menu.
+  for (const [component, name] of [
+    ['repository-status-popover', 'RepositoryStatusPopover'],
+    ['change-evidence-dialog', 'ChangeEvidenceDialog'],
+    ['hs1-migration-dialog', 'Hs1MigrationDialog'],
+    ['ai-conversation', 'AIConversation'],
+    ['ticket-source-setup-dialog', 'TicketSourceSetupDialog'],
+  ] as const) {
+    await page.goto(`/ux-demo?component=${component}`);
+    const fileMenu = page.locator('[data-action="open-repository-file-menu-trigger"]').first(),
+      usesFileMenu = component === 'repository-status-popover' || component === 'change-evidence-dialog';
+    const reasons = async () => {
+      if (usesFileMenu) {
+        await page.keyboard.press('Escape');
+        await setDemoSettingsOpen(page, false);
+        await fileMenu.click();
+      }
+      return reasonsIn(page.locator('body'));
+    };
+    if (component === 'ai-conversation') await page.keyboard.press('Escape');
+    expect(await reasons(), component).not.toMatch(remoteReason);
+    const control = await setDevice(component, name, 'remote');
+    await expect.poll(reasons, component).toMatch(remoteReason);
+    await page.keyboard.press('Escape');
+    await setDemoSettingsOpen(page, true);
+    await page
+      .getByRole('complementary', { name: `${name} settings` })
+      .getByRole('button', { name: 'Reset' })
+      .click();
+    await expect(control, component).toHaveJSProperty('value', 'host');
+    if (component === 'ai-conversation' || component === 'hs1-migration-dialog') await page.keyboard.press('Escape');
+    await expect.poll(reasons, component).not.toMatch(remoteReason);
+  }
+
+  // Specimen states: a dedicated Remote device example beside the host examples.
+  for (const component of ['terminal-drawer', 'ticket-attachments']) {
+    await page.goto(`/ux-demo?component=${component}`);
+    const remote = page.locator('[data-catalog-example]', {
+      has: page.locator('[data-catalog-example-label]', { hasText: 'Remote device' }),
+    });
+    await expect(remote, component).toHaveCount(1);
+    if (component === 'terminal-drawer') {
+      await expect.poll(() => reasonsIn(remote), component).toMatch(remoteReason);
+    } else if (component === 'ticket-attachments') {
+      await remote.locator('[data-action="open-attachment-menu"]').first().click();
+      const menu = page.locator('[data-component="attachment-context-menu"]');
+      await expect.poll(() => reasonsIn(menu), component).toMatch(remoteReason);
+      await page.keyboard.press('Escape');
+      await expect(menu).toHaveCount(0);
+      await page
+        .locator('[data-catalog-example]')
+        .first()
+        .locator('[data-action="open-attachment-menu"]')
+        .first()
+        .click();
+      await expect.poll(() => reasonsIn(menu), component).not.toMatch(remoteReason);
+    } else await expect.poll(() => reasonsIn(remote), component).toMatch(remoteReason);
+  }
+
+  // ProjectDialog: the local dialog opened from a remote device disables Browse.
+  await page.goto('/ux-demo?component=project-dialog');
+  // The demo opens the remote-projects dialog first; close it to reach the variant buttons.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-remote-project-dialog]')).not.toHaveAttribute('open');
+  await page.locator('[data-action="show-project-dialog-demo"][data-variant="local-remote"]').click();
+  const browse = page.locator('[data-action="browse-project-path"]').first();
+  await expect(browse).toHaveJSProperty('disabled', true);
+  await expect(browse).toHaveAttribute('title', remoteReason);
+  await page.keyboard.press('Escape');
+  await page.locator('[data-action="show-project-dialog-demo"][data-variant="local"]').click();
+  await expect(browse).toHaveJSProperty('disabled', false);
 });

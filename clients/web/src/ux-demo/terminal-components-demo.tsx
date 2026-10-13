@@ -141,6 +141,26 @@ export function TerminalDrawerDemo() {
           defaultAiProvider="claude"
         />
       </CatalogExample>
+      {/* A remote client disables host-only drawer entries such as Saved conversation… (HS2-NWWF1Z). */}
+      <CatalogExample
+        label="Remote device"
+        note="Host-only entries in the new-terminal menu, such as Saved conversation…, render disabled with an explanation."
+        viewport={drawerFrame}
+      >
+        <TerminalDrawer
+          projectId="demo-remote"
+          projectName="Demo project"
+          sessions={[]}
+          width={900}
+          height={96}
+          fitAcross={2}
+          fitHigh={2}
+          selectedId="grid"
+          aiProviders={TERMINAL_DRAWER_DEMO_PROVIDERS}
+          defaultAiProvider="claude"
+          hostActionsAvailable={false}
+        />
+      </CatalogExample>
       {/* Tab status: a halted AI session (HS2-HJ4D1H), and whether an AI session reaches Hot Sheet (HS2-EV1XK3). */}
       <CatalogExample label="Terminal tab states" viewport={drawerFrame}>
         <TerminalDrawer

@@ -257,7 +257,7 @@ export function setGalleryDemoAnnotationEndpoint(endpoint: 'start' | 'end', mill
       : { ...annotation, end_ms: Math.max(annotation.start_ms, next) };
   });
 }
-export const attachmentDemoMenu = signal<{ x: number; y: number } | undefined>(undefined);
+export const attachmentDemoMenu = signal<{ x: number; y: number; remote?: boolean } | undefined>(undefined);
 /** The demo's open batch label editor, owned by state like production's (HS2-SG0AZY). */
 export const attachmentDemoLabelEditing = signal<AttachmentLabelEditing | undefined>(undefined);
 const attachmentDemoItems = signal<TicketAttachmentItem[]>([
@@ -276,8 +276,8 @@ const attachmentDemoItems = signal<TicketAttachmentItem[]>([
     thumbnailUrl: '/ux-gallery-preview.svg?variant=video',
   },
 ]);
-export function showAttachmentDemoMenu(x: number, y: number) {
-  attachmentDemoMenu.value = { x, y };
+export function showAttachmentDemoMenu(x: number, y: number, remote = false) {
+  attachmentDemoMenu.value = { x, y, remote };
 }
 export function closeAttachmentDemoMenu() {
   attachmentDemoMenu.value = undefined;
@@ -325,6 +325,11 @@ const appendOnlyAttachmentDemoItems: TicketAttachmentItem[] = [
   // An append-only provider projects no annotations (HS2-HSA64D).
   { ...demoImages[0], id: 'gh-shot', annotationCount: 0, batch_id: 'gh', batch_label: 'Repro' },
 ];
+/** Distinct items for the remote-device specimen, so its rows never collide with the editable example (HS2-NWWF1Z). */
+const remoteAttachmentDemoItems: TicketAttachmentItem[] = [
+  { id: 'remote-notes', name: 'notes.txt', url: 'data:text/plain,notes', batch_id: 'remote', batch_label: 'Evidence' },
+  { ...demoImages[0], id: 'remote-shot', batch_id: 'remote', batch_label: 'Evidence' },
+];
 export function TicketAttachmentsDemo() {
   const menu = attachmentDemoMenu.value;
   return (
@@ -344,7 +349,15 @@ export function TicketAttachmentsDemo() {
             INSPECTOR_ATTACHMENT_LABEL_SCOPE,
           )}
         />
-        {menu && <AttachmentContextMenu x={menu.x} y={menu.y} />}
+        {menu && <AttachmentContextMenu x={menu.x} y={menu.y} hostActionsAvailable={!menu.remote} />}
+      </CatalogExample>
+      <CatalogExample
+        label="Remote device"
+        note="The attachment menu's host-only Open and Reveal actions render disabled with an explanation."
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+        rootAttributes={{ 'data-attachment-remote-demo': '' }}
+      >
+        <TicketAttachments attachments={remoteAttachmentDemoItems} />
       </CatalogExample>
       <CatalogExample
         label="Append-only provider (GitHub assets repository)"
@@ -643,7 +656,7 @@ function wireTicketMetadataDemo(root: HTMLElement): () => void {
     delegate(root, 'click', DEMO_ACTIONS.openAttachmentMenu.selector, (event, target) => {
       event.stopPropagation();
       const rect = target.getBoundingClientRect();
-      showAttachmentDemoMenu(rect.right, rect.bottom);
+      showAttachmentDemoMenu(rect.right, rect.bottom, Boolean(target.closest('[data-attachment-remote-demo]')));
     }),
   );
   demoListeners.add(
@@ -651,10 +664,14 @@ function wireTicketMetadataDemo(root: HTMLElement): () => void {
       root,
       'contextmenu',
       '[data-component="ticket-attachment-item"][data-attachment-menu-kind="item"]',
-      (event) => {
+      (event, target) => {
         event.preventDefault();
         const pointer = event as MouseEvent;
-        showAttachmentDemoMenu(pointer.clientX, pointer.clientY);
+        showAttachmentDemoMenu(
+          pointer.clientX,
+          pointer.clientY,
+          Boolean(target.closest('[data-attachment-remote-demo]')),
+        );
       },
     ),
   );

@@ -7,8 +7,10 @@ import { createScope } from 'kerfjs/scope';
 
 import { Hs1CleanupBanner, Hs1JobBanner, Hs1MigrationBanner, Hs1MigrationDialog } from '../components/hs1-migration';
 import { NotificationsPausedBanner } from '../components/notifications-paused-banner';
+import { type DemoDevice, DeviceSetting } from './components/device-setting';
 import { DEMO_ACTIONS, DEMO_COMPONENTS } from './demo-actions';
-import type { DemoModule } from './demo-module';
+import type { DemoModule, FormControl } from './demo-module';
+import { syncSettingsControls } from './settings-controls';
 
 export function ValueTableDemo() {
   return (
@@ -26,6 +28,8 @@ export function ValueTableDemo() {
   );
 }
 export const hs1MigrationDialogDemoOpen = signal(true);
+/** Remote clients disable the host-only folder chooser (HS2-NWWF1Z). */
+export const hs1MigrationDialogDemoDevice = signal<DemoDevice>('host');
 export function openHs1MigrationDialogDemo() {
   hs1MigrationDialogDemoOpen.value = true;
 }
@@ -49,10 +53,29 @@ export function Hs1MigrationDialogDemo() {
         defaultStore="/work/demo.hs2"
         open={hs1MigrationDialogDemoOpen.value}
         busy={false}
+        hostActionsAvailable={hs1MigrationDialogDemoDevice.value === 'host'}
       />
     </CatalogExample>
   );
 }
+export function Hs1MigrationDialogSettings() {
+  return (
+    <form class="settings-form" data-settings="hs1-migration-dialog">
+      <DeviceSetting value={hs1MigrationDialogDemoDevice.value} />
+      <wa-button type="button" data-action="reset-settings">
+        Reset
+      </wa-button>
+    </form>
+  );
+}
+
+/** Restore the import dialog's device setting and reopen it (HS2-NWWF1Z). */
+export function resetHs1MigrationDialogDemo(root?: ParentNode): void {
+  hs1MigrationDialogDemoDevice.value = 'host';
+  hs1MigrationDialogDemoOpen.value = true;
+  if (root) syncSettingsControls(root, 'hs1-migration-dialog', { values: { device: 'host' } });
+}
+
 /** Both detail variants of the app-wide notification pause banner (HS2-QYA9SC). */
 export function NotificationsPausedBannerDemo() {
   return (
@@ -135,6 +158,12 @@ export function Hs1MigrationBannerDemo() {
 function wireDialogLayoutDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
   demoListeners.add(delegate(root, 'click', DEMO_ACTIONS.openHs1MigrationDemo.selector, openHs1MigrationDialogDemo));
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="hs1-migration-dialog"] [name="device"]', (_event, target) => {
+      hs1MigrationDialogDemoDevice.value = (target as FormControl).value as DemoDevice;
+      openHs1MigrationDialogDemo();
+    }),
+  );
   demoListeners.add(delegate(root, 'click', DEMO_ACTIONS.dismissHs1Migration.selector, closeHs1MigrationDialogDemo));
   demoListeners.add(
     delegate(root, 'wa-hide', DEMO_COMPONENTS.hs1MigrationDialog.selector, closeHs1MigrationDialogDemo),
@@ -148,7 +177,12 @@ function wireDialogLayoutDemo(root: HTMLElement): () => void {
 export const demoModule: DemoModule = {
   entries: {
     'value-table': { catalogExamples: true, Demo: ValueTableDemo },
-    'hs1-migration-dialog': { catalogExamples: true, Demo: Hs1MigrationDialogDemo },
+    'hs1-migration-dialog': {
+      catalogExamples: true,
+      Demo: Hs1MigrationDialogDemo,
+      Settings: Hs1MigrationDialogSettings,
+      reset: resetHs1MigrationDialogDemo,
+    },
     'hs1-migration-banner': { catalogExamples: true, Demo: Hs1MigrationBannerDemo },
     'notifications-paused-banner': { catalogExamples: true, Demo: NotificationsPausedBannerDemo },
   },

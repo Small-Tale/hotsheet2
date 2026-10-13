@@ -15,6 +15,7 @@ const variants = {
   local: 'Local project',
   recovery: 'Local recovery',
   busy: 'Recovery in progress',
+  'local-remote': 'Local, remote device',
 } as const;
 type ProjectDialogDemoVariant = keyof typeof variants;
 
@@ -46,7 +47,7 @@ const checkouts = [
 ];
 
 export function ProjectDialogDemo() {
-  const local = ['local', 'recovery', 'busy'].includes(variant.value);
+  const local = ['local', 'recovery', 'busy', 'local-remote'].includes(variant.value);
   return (
     <CatalogExample
       label="Interactive"
@@ -68,6 +69,7 @@ export function ProjectDialogDemo() {
         error={variant.value === 'recovery' ? 'The registered local server is not responding.' : ''}
         recovery={variant.value === 'recovery' || variant.value === 'busy' ? { expected: { pid: 4242 } } : undefined}
         recoveryBusy={variant.value === 'busy'}
+        hostActionsAvailable={variant.value !== 'local-remote'}
       />
       <RemoteProjectDialog
         open={open.value && !local}

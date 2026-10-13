@@ -10,8 +10,10 @@ import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialo
 import { AccountsSettings, TicketSourcesSettings } from '../components/ticket-sources-settings';
 import { TrashSettings } from '../components/trash-settings';
 import { type PermissionAutomationAction } from '../permission-notifications';
+import { type DemoDevice, DeviceSetting } from './components/device-setting';
 import type { DemoModule, FormControl } from './demo-module';
 import { DEMO_ACCOUNTS, DEMO_PROJECT_SOURCES } from './fixtures';
+import { syncSettingsControls } from './settings-controls';
 import {
   resetSettingsWorkspaceDemo,
   SettingsWorkspaceSettings,
@@ -32,6 +34,25 @@ export type TicketSourceScenario =
   | 'busy'
   | 'remote';
 export const ticketSourceScenario = signal<TicketSourceScenario>('root');
+/** Remote clients disable the host-only folder chooser (HS2-NWWF1Z). */
+export const ticketSourceDevice = signal<DemoDevice>('host');
+
+export function TicketSourceSetupDialogSettings() {
+  return (
+    <form class="settings-form" data-settings="ticket-source-setup-dialog">
+      <DeviceSetting value={ticketSourceDevice.value} />
+      <wa-button type="button" data-action="reset-settings">
+        Reset
+      </wa-button>
+    </form>
+  );
+}
+
+/** Restore the setup dialog's device setting (HS2-NWWF1Z). */
+export function resetTicketSourceSetupDemo(root?: ParentNode): void {
+  ticketSourceDevice.value = 'host';
+  if (root) syncSettingsControls(root, 'ticket-source-setup-dialog', { values: { device: 'host' } });
+}
 
 export function KeyboardSettingsDemo() {
   return (
@@ -64,45 +85,48 @@ export function TicketSourceSetupDialogDemo() {
           : [{ id: 'demo', alias: 'Demo project' }],
     };
   return (
-    <CatalogExample label="Interactive">
-      <TicketSourceSetupDialog
-        project={{ id: 'demo', root: '/work/demo', name: 'Demo project', stores: [], needsTicketSetup: true }}
-        providerKind={
-          scenario === 'root' || scenario === 'remote' ? undefined : scenario === 'jira-account' ? 'jira' : 'github'
-        }
-        providerConnections={editing ? [connection] : []}
-        editingProviderId={editing ? connection.id : undefined}
-        removingProviderId={scenario === 'removing' ? connection.id : undefined}
-        accounts={scenario === 'accounts' || scenario === 'jira-account' ? DEMO_ACCOUNTS : []}
-        chosenAccount={scenario === 'jira-account' ? 'jira-token' : undefined}
-        projectDefault
-        hasProjectDefault={scenario === 'authorized-existing-default'}
-        providerBusy={scenario === 'busy'}
-        githubAuth={
-          scenario === 'waiting'
-            ? {
-                session: 'demo',
-                userCode: 'ABCD-EFGH',
-                verificationUri: 'https://github.com/login/device',
-                state: 'waiting',
-                copied: true,
-              }
-            : scenario === 'authorized' || scenario === 'authorized-existing-default' || editing
+    <>
+      <CatalogExample label="Interactive">
+        <TicketSourceSetupDialog
+          project={{ id: 'demo', root: '/work/demo', name: 'Demo project', stores: [], needsTicketSetup: true }}
+          providerKind={
+            scenario === 'root' || scenario === 'remote' ? undefined : scenario === 'jira-account' ? 'jira' : 'github'
+          }
+          providerConnections={editing ? [connection] : []}
+          editingProviderId={editing ? connection.id : undefined}
+          removingProviderId={scenario === 'removing' ? connection.id : undefined}
+          accounts={scenario === 'accounts' || scenario === 'jira-account' ? DEMO_ACCOUNTS : []}
+          chosenAccount={scenario === 'jira-account' ? 'jira-token' : undefined}
+          projectDefault
+          hasProjectDefault={scenario === 'authorized-existing-default'}
+          providerBusy={scenario === 'busy'}
+          githubAuth={
+            scenario === 'waiting'
               ? {
                   session: 'demo',
                   userCode: 'ABCD-EFGH',
                   verificationUri: 'https://github.com/login/device',
-                  state: 'authorized',
-                  repositories: ['small-tale/hotsheet2', 'small-tale/hotsheet-assets'],
-                  installations: [{ account: 'small-tale', selection: 'all' }],
+                  state: 'waiting',
+                  copied: true,
                 }
-              : undefined
-        }
-        createdGitTicketStore={scenario === 'remote' ? '/work/demo.hs2' : undefined}
-        previewScenario={scenario}
-        navigation="none"
-      />
-    </CatalogExample>
+              : scenario === 'authorized' || scenario === 'authorized-existing-default' || editing
+                ? {
+                    session: 'demo',
+                    userCode: 'ABCD-EFGH',
+                    verificationUri: 'https://github.com/login/device',
+                    state: 'authorized',
+                    repositories: ['small-tale/hotsheet2', 'small-tale/hotsheet-assets'],
+                    installations: [{ account: 'small-tale', selection: 'all' }],
+                  }
+                : undefined
+          }
+          createdGitTicketStore={scenario === 'remote' ? '/work/demo.hs2' : undefined}
+          previewScenario={scenario}
+          hostActionsAvailable={ticketSourceDevice.value === 'host'}
+          navigation="none"
+        />
+      </CatalogExample>
+    </>
   );
 }
 
@@ -186,6 +210,11 @@ export function TrashSettingsDemo() {
 function wireSetupSettingsDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
   demoListeners.add(
+    delegate(root, 'change', '[data-settings="ticket-source-setup-dialog"] [name="device"]', (_event, target) => {
+      ticketSourceDevice.value = (target as FormControl).value as DemoDevice;
+    }),
+  );
+  demoListeners.add(
     delegate(root, 'change', '[data-demo-ticket-source-scenario] [name="scenario"]', (_event, target) => {
       ticketSourceScenario.value = (target as FormControl).value as TicketSourceScenario;
     }),
@@ -214,7 +243,12 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
 export const demoModule: DemoModule = {
   entries: {
     'keyboard-settings': { catalogExamples: true, Demo: KeyboardSettingsDemo },
-    'ticket-source-setup-dialog': { catalogExamples: true, Demo: TicketSourceSetupDialogDemo },
+    'ticket-source-setup-dialog': {
+      catalogExamples: true,
+      Demo: TicketSourceSetupDialogDemo,
+      Settings: TicketSourceSetupDialogSettings,
+      reset: resetTicketSourceSetupDemo,
+    },
     'provider-setup-form': { catalogExamples: true, Demo: ProviderSetupFormDemo },
     'ticket-sources-settings': { catalogExamples: true, Demo: TicketSourcesSettingsDemo },
     'accounts-settings': { catalogExamples: true, Demo: AccountsSettingsDemo },

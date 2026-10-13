@@ -17,6 +17,7 @@ import {
 } from '../components/repository-status-popover';
 import type { CodeReviewComparison } from '../components/ticket-code-review';
 import { DemoEvent } from './components/demo-event';
+import { type DemoDevice, DeviceSetting } from './components/device-setting';
 import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
@@ -33,6 +34,8 @@ export const repositoryDemoFileMenu = signal<RepositoryFileMenu | undefined>(und
 export const repositoryDemoSelectedFiles = signal<string[]>([]);
 /** Compact devices drill from the repository list into a view's detail, as in production (HS2-3B8345). */
 export const repositoryDemoDetailActive = signal(false);
+/** Remote clients disable the host-only diff-tool and file actions (HS2-NWWF1Z). */
+export const repositoryDemoClient = signal<DemoDevice>('host');
 const repositoryDemoDevice = deviceClass(),
   repositoryDemoCompact = computed(() => repositoryDemoDevice.value.compact);
 
@@ -118,7 +121,9 @@ export function resetRepositoryStatusDemo(root?: ParentNode): void {
   repositoryDemoDetailActive.value = false;
   repositoryDemoSelectedFiles.value = [];
   repositoryDemoFileMenu.value = undefined;
-  if (root) syncSettingsControls(root, 'repository-status-popover', { values: { scenario: 'conflicted' } });
+  repositoryDemoClient.value = 'host';
+  if (root)
+    syncSettingsControls(root, 'repository-status-popover', { values: { scenario: 'conflicted', device: 'host' } });
 }
 
 export function RepositoryStatusPopoverDemo() {
@@ -140,6 +145,7 @@ export function RepositoryStatusPopoverDemo() {
         expandedCommits={repositoryDemoExpandedCommits.value}
         fileMenu={repositoryDemoFileMenu.value}
         selectedFiles={repositoryDemoSelectedFiles.value}
+        hostActionsAvailable={repositoryDemoClient.value === 'host'}
       />
       <DemoEvent>{repositoryDemoEvent.value}</DemoEvent>
     </CatalogExample>
@@ -169,6 +175,7 @@ export function ChangeEvidenceDialogDemo() {
         fileMenu={repositoryDemoFileMenu.value}
         selectedFiles={repositoryDemoSelectedFiles.value}
         platform="macos"
+        hostActionsAvailable={repositoryDemoClient.value === 'host'}
       />
       <DemoEvent>{repositoryDemoEvent.value}</DemoEvent>
     </CatalogExample>
@@ -187,11 +194,29 @@ export function RepositoryStatusPopoverSettings() {
           label: value[0].toUpperCase() + value.slice(1),
         }))}
       />
+      <DeviceSetting value={repositoryDemoClient.value} />
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
     </form>
   );
+}
+
+export function ChangeEvidenceDialogSettings() {
+  return (
+    <form class="settings-form" data-settings="change-evidence-dialog">
+      <DeviceSetting value={repositoryDemoClient.value} />
+      <wa-button type="button" data-action="reset-settings">
+        Reset
+      </wa-button>
+    </form>
+  );
+}
+
+/** Restore the change evidence dialog's device setting (HS2-NWWF1Z). */
+export function resetChangeEvidenceDemo(root?: ParentNode): void {
+  repositoryDemoClient.value = 'host';
+  if (root) syncSettingsControls(root, 'change-evidence-dialog', { values: { device: 'host' } });
 }
 
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
@@ -266,6 +291,16 @@ function wireRepositoryStatusDemo(root: HTMLElement): () => void {
       repositoryDemoScenario.value = (target as FormControl).value as typeof repositoryDemoScenario.value;
     }),
   );
+  demoListeners.add(
+    delegate(
+      root,
+      'change',
+      '[data-settings="repository-status-popover"] [name="device"], [data-settings="change-evidence-dialog"] [name="device"]',
+      (_event, target) => {
+        repositoryDemoClient.value = (target as FormControl).value as DemoDevice;
+      },
+    ),
+  );
   return () => {
     demoListeners.dispose();
   };
@@ -280,7 +315,12 @@ export const demoModule: DemoModule = {
       Settings: RepositoryStatusPopoverSettings,
       reset: resetRepositoryStatusDemo,
     },
-    'change-evidence-dialog': { catalogExamples: true, Demo: ChangeEvidenceDialogDemo },
+    'change-evidence-dialog': {
+      catalogExamples: true,
+      Demo: ChangeEvidenceDialogDemo,
+      Settings: ChangeEvidenceDialogSettings,
+      reset: resetChangeEvidenceDemo,
+    },
   },
   wire: wireRepositoryStatusDemo,
 };
