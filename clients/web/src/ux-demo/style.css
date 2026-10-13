@@ -214,69 +214,28 @@ body[data-resizing-project-sidebar='true'] {
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-s);
 }
-.note-card-demo {
-  display: grid;
-  width: min(remify(640px), 100%);
-  margin: auto;
-  gap: remify(12px);
-}
-.note-card-demo__caption {
-  margin: remify(8px) 0 0;
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  font-weight: var(--wa-font-weight-semibold);
-}
-/* Stage grid for the MarkdownPreview and AIContentLabel variant galleries. The surfaces are demo-owned
-   containers that supply the color context the inherit/inverse tones are designed for. */
-.markdown-preview-demo {
-  display: grid;
-  width: min(remify(960px), 100%);
-  margin: auto;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, remify(280px)), 1fr));
-  align-items: start;
-  gap: remify(16px);
-}
-.markdown-preview-demo__variant {
-  display: grid;
+/* Demo-owned color contexts for the MarkdownPreview and AIContentLabel inherit/inverse tones; Kerf's
+   CatalogExample surfaces cover only the default and lowered fills. */
+.demo-tone-surface {
   min-width: 0;
-  margin: 0;
-  gap: remify(8px);
+  padding: remify(16px);
+  border-radius: remify(8px);
 }
-.markdown-preview-demo__variant > figcaption {
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  font-weight: var(--wa-font-weight-semibold);
-}
-.markdown-preview-demo__surface {
-  min-width: 0;
-  padding: remify(12px);
-  border: 1px solid var(--wa-color-neutral-border-quiet);
-  border-radius: remify(12px);
-  background: var(--wa-color-surface-default);
-}
-.markdown-preview-demo__surface[data-surface='muted'] {
+.demo-tone-surface[data-surface='muted'] {
   color: var(--wa-color-neutral-on-quiet);
   background: var(--wa-color-neutral-fill-quiet);
   font-size: var(--wa-font-size-xs);
   line-height: 1.5;
 }
-.markdown-preview-demo__surface[data-surface='accent'] {
-  border-color: transparent;
+.demo-tone-surface[data-surface='accent'] {
   color: var(--wa-color-neutral-on-loud);
   background: var(--wa-color-brand-fill-loud);
 }
-.markdown-preview-demo__surface[data-surface='heading'] {
+.demo-tone-surface[data-surface='heading'] {
+  padding: 0;
   color: var(--wa-color-text-normal);
   font-size: var(--wa-font-size-xs);
   font-weight: 700;
-}
-.ticket-reader-demo,
-.markdown-editor-demo {
-  display: grid;
-  width: 100%;
-  margin: auto;
-  place-items: center;
-  gap: remify(16px);
 }
 /* Stage card around the standalone sidebar Panes (in the shell the Workbench rail owns their box). */
 .sidebar-demo-card {

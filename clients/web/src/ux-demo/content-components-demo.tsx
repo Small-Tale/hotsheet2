@@ -1,5 +1,6 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select } from '@kerfjs/ui/select';
-import { delegate, delegateCapture, effect, signal } from 'kerfjs';
+import { delegate, delegateCapture, effect, type SafeHtml, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { AIContentLabel } from '../components/ai-content-label';
@@ -122,31 +123,34 @@ export function latestDemoConfidence(notes: readonly NoteCardProps[]): number | 
 
 export function NoteCardDemo() {
   return (
-    <section class="note-card-demo" aria-label="NoteCard demo">
-      {noteDemoNotes.value.map((note) => (
-        <NoteCard
-          {...note}
-          editing={editingNoteId.value === note.id}
-          draft={editingNoteId.value === note.id ? noteDraft.value : undefined}
-        />
-      ))}
-      <p class="note-card-demo__caption">density="compact" — the TicketNotes list inset</p>
-      {noteDemoNotes.value
-        .filter((note) => note.kind === 'regular' || note.kind === 'activity')
-        .slice(0, 2)
-        .map((note) => (
-          <NoteCard {...note} id={`compact-${note.id}`} density="compact" editable={false} deletable={false} />
+    <>
+      <CatalogExample label="Every note kind" viewport={{ layout: 'flex-column' }}>
+        {noteDemoNotes.value.map((note) => (
+          <NoteCard
+            {...note}
+            editing={editingNoteId.value === note.id}
+            draft={editingNoteId.value === note.id ? noteDraft.value : undefined}
+          />
         ))}
-    </section>
+      </CatalogExample>
+      <CatalogExample label='density="compact"' note="The TicketNotes list inset." viewport={{ layout: 'flex-column' }}>
+        {noteDemoNotes.value
+          .filter((note) => note.kind === 'regular' || note.kind === 'activity')
+          .slice(0, 2)
+          .map((note) => (
+            <NoteCard {...note} id={`compact-${note.id}`} density="compact" editable={false} deletable={false} />
+          ))}
+      </CatalogExample>
+    </>
   );
 }
 
 export const noteComposerValue = signal('Summarize the design decision and link the verification evidence.');
 export function NoteComposerDemo() {
   return (
-    <section class="note-card-demo" aria-label="NoteComposer demo">
+    <CatalogExample label="Interactive">
       <NoteComposer value={noteComposerValue.value} />
-    </section>
+    </CatalogExample>
   );
 }
 
@@ -216,7 +220,7 @@ export const inspectorBlockedReasonEditing = signal(false);
 
 export function TicketReaderDemo() {
   return (
-    <section class="ticket-reader-demo" aria-label="TicketReader demo">
+    <CatalogExample label="Interactive" note="The reader opens as a dialog over the catalog.">
       <TicketReader
         frameId="ux-demo-ticket-reader"
         open={readerDialogOpen.value}
@@ -261,7 +265,7 @@ export function TicketReaderDemo() {
         ]}
         largeText={readerLargeText.value}
       />
-    </section>
+    </CatalogExample>
   );
 }
 
@@ -343,7 +347,7 @@ export function MarkdownEditorSettings() {
 
 export function MarkdownEditorDemo() {
   return (
-    <section class="markdown-editor-demo" aria-label="MarkdownEditor demo">
+    <CatalogExample label="Interactive">
       <MarkdownEditor
         value={markdownValue.value}
         mode={markdownMode.value}
@@ -353,7 +357,7 @@ export function MarkdownEditorDemo() {
         inset={markdownInset.value}
       />
       <DemoEvent>{markdownEvent.value}</DemoEvent>
-    </section>
+    </CatalogExample>
   );
 }
 
@@ -364,9 +368,10 @@ const PREVIEW_DEMO_SOURCE =
 const PREVIEW_DEMO_IMAGE =
   '![Wide layout](/ux-gallery-preview.svg#/tickets/HS2-DEMO/attachments/by-name/wide-layout.svg)';
 
+type ToneSurfaceKind = 'muted' | 'accent' | 'heading';
 interface PreviewVariant {
   label: string;
-  surface?: 'muted' | 'accent';
+  surface?: ToneSurfaceKind;
   source?: string;
   props: Partial<Pick<MarkdownPreviewProps, 'tone' | 'size' | 'density' | 'media'>>;
 }
@@ -385,49 +390,50 @@ export const PREVIEW_VARIANTS: readonly PreviewVariant[] = [
   { label: 'Empty', source: '', props: {} },
 ];
 
+/** A demo-owned container that supplies the color context the inherit/inverse tones are designed for;
+ * Kerf's CatalogExample surfaces cover only the default and lowered fills. */
+function ToneSurface({ surface, children }: { surface?: ToneSurfaceKind; children: SafeHtml }) {
+  return surface ? (
+    <div class="demo-tone-surface" data-surface={surface}>
+      {children}
+    </div>
+  ) : (
+    children
+  );
+}
+
 export function MarkdownPreviewDemo() {
   return (
-    <section class="markdown-preview-demo" aria-label="MarkdownPreview demo">
+    <>
       {PREVIEW_VARIANTS.map((variant) => (
-        <figure class="markdown-preview-demo__variant">
-          <figcaption>{variant.label}</figcaption>
-          <div class="markdown-preview-demo__surface" data-surface={variant.surface}>
+        <CatalogExample label={variant.label}>
+          <ToneSurface surface={variant.surface}>
             <MarkdownPreview source={variant.source ?? PREVIEW_DEMO_SOURCE} {...variant.props} />
-          </div>
-        </figure>
+          </ToneSurface>
+        </CatalogExample>
       ))}
-    </section>
+    </>
   );
 }
 
 export function AIContentLabelDemo() {
   return (
-    <section class="markdown-preview-demo" aria-label="AIContentLabel demo">
-      <figure class="markdown-preview-demo__variant">
-        <figcaption>Default (quiet)</figcaption>
-        <div class="markdown-preview-demo__surface">
-          <AIContentLabel tool="Claude" />
-        </div>
-      </figure>
-      <figure class="markdown-preview-demo__variant">
-        <figcaption>mayContainErrors</figcaption>
-        <div class="markdown-preview-demo__surface">
-          <AIContentLabel mayContainErrors />
-        </div>
-      </figure>
-      <figure class="markdown-preview-demo__variant">
-        <figcaption>With feedback</figcaption>
-        <div class="markdown-preview-demo__surface">
-          <AIContentLabel tool="Codex" feedbackTarget="demo:label" />
-        </div>
-      </figure>
-      <figure class="markdown-preview-demo__variant">
-        <figcaption>tone="inherit" (heading color)</figcaption>
-        <div class="markdown-preview-demo__surface" data-surface="heading">
+    <>
+      <CatalogExample label="Default (quiet)" align="glyph">
+        <AIContentLabel tool="Claude" />
+      </CatalogExample>
+      <CatalogExample label="mayContainErrors" align="glyph">
+        <AIContentLabel mayContainErrors />
+      </CatalogExample>
+      <CatalogExample label="With feedback" align="glyph">
+        <AIContentLabel tool="Codex" feedbackTarget="demo:label" />
+      </CatalogExample>
+      <CatalogExample label='tone="inherit" (heading color)'>
+        <ToneSurface surface="heading">
           <AIContentLabel tool="Codex" tone="inherit" feedbackTarget="demo:inherit" />
-        </div>
-      </figure>
-    </section>
+        </ToneSurface>
+      </CatalogExample>
+    </>
   );
 }
 
@@ -764,12 +770,17 @@ function wireContentComponentsDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'note-card': { Demo: NoteCardDemo },
-    'note-composer': { Demo: NoteComposerDemo },
-    'ticket-reader': { Demo: TicketReaderDemo },
-    'markdown-editor': { Demo: MarkdownEditorDemo, Settings: MarkdownEditorSettings, reset: resetMarkdownEditorDemo },
-    'markdown-preview': { Demo: MarkdownPreviewDemo },
-    'ai-content-label': { Demo: AIContentLabelDemo },
+    'note-card': { catalogExamples: true, Demo: NoteCardDemo },
+    'note-composer': { catalogExamples: true, Demo: NoteComposerDemo },
+    'ticket-reader': { catalogExamples: true, Demo: TicketReaderDemo },
+    'markdown-editor': {
+      catalogExamples: true,
+      Demo: MarkdownEditorDemo,
+      Settings: MarkdownEditorSettings,
+      reset: resetMarkdownEditorDemo,
+    },
+    'markdown-preview': { catalogExamples: true, Demo: MarkdownPreviewDemo },
+    'ai-content-label': { catalogExamples: true, Demo: AIContentLabelDemo },
   },
   wire: wireContentComponentsDemo,
 };

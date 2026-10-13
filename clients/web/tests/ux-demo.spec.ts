@@ -405,7 +405,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['ticket-board', 3],
     ['ticket-board-column', 1],
     ['ticket-search-field', 7],
-    ['ticket-code-review', 4],
+    ['ticket-code-review', 5],
     ['ticket-attachments', 4],
     ['ticket-info-panel', 2],
   ];
@@ -3022,11 +3022,8 @@ test('exposes every MarkdownPreview and AIContentLabel presentation variant', as
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/ux-demo?component=markdown-preview');
     const variant = (label: string) =>
-      page
-        .locator('.markdown-preview-demo__variant')
-        .filter({ has: page.locator('figcaption', { hasText: label }) })
-        .locator('[data-component="markdown-preview"]');
-    await expect(page.locator('.markdown-preview-demo [data-component="markdown-preview"]')).toHaveCount(10);
+      page.getByRole('region', { name: label }).locator('[data-component="markdown-preview"]');
+    await expect(page.locator('[data-catalog-example] [data-component="markdown-preview"]')).toHaveCount(10);
     const style = (label: string, selector: string, property: string) =>
       variant(label)
         .locator(selector)
@@ -3055,7 +3052,7 @@ test('exposes every MarkdownPreview and AIContentLabel presentation variant', as
     expect(thumbnail!.height).toBeLessThanOrEqual(112);
     expect(full!.width).toBeGreaterThan(thumbnail!.width);
     await expect(
-      page.locator('.markdown-preview-demo [data-component="markdown-preview"].markdown-preview--empty'),
+      page.locator('[data-catalog-example] [data-component="markdown-preview"].markdown-preview--empty'),
     ).toHaveText('Nothing to preview.');
   }
   await page.goto('/ux-demo?component=ai-content-label');
@@ -3110,10 +3107,7 @@ test('keeps inverse inline code legible on the brand fill in the demo and the AI
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/ux-demo?component=markdown-preview');
       const variant = (label: string) =>
-        page
-          .locator('.markdown-preview-demo__variant')
-          .filter({ has: page.locator('figcaption', { hasText: label }) })
-          .locator('[data-component="markdown-preview"]');
+        page.getByRole('region', { name: label }).locator('[data-component="markdown-preview"]');
       const inverseCode = variant('tone="inverse"').locator('code').first();
       await expect(inverseCode).toHaveText('code');
       // The chip takes the container's text color and reads at AA contrast on its own fill.
@@ -7578,7 +7572,7 @@ test('loads the shared touch textarea tokens so catalog textareas auto-grow unde
       page = await context.newPage();
     await page.goto('/ux-demo?component=note-composer');
     expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(coarse);
-    const textarea = page.locator('[aria-label="NoteComposer demo"] textarea').first();
+    const textarea = page.locator('[data-component="note-composer"] textarea').first();
     await expect(textarea).toBeVisible();
     // Coarse pointers size to content with no resize grip, exactly as production does; fine pointers keep
     // the fixed height and vertical grip.
