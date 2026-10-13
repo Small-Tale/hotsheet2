@@ -43,7 +43,7 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
       <List gap="l">
         <Row hAlign="space-between" vAlign="top" gap="m" wrap>
           <Row flex={flex(1, 1, px(320))}>
-            <Text tone="quiet" flush>
+            <Text tone="quiet">
               Rebind the command shortcuts below, including the ticket clipboard and select-all. Fixed ARIA navigation
               shortcuts (list arrows, tab and gallery navigation, activation, and dismissal) are shown for reference and
               use platform conventions. Changes are saved on this device.

@@ -16,6 +16,13 @@
   gap: var(--kui-space-m);
   list-style: none;
 }
+/* Web Awesome's native list styles indent every li by 1.125em; these grouped rows sit on the
+   settings text edge instead (HS2-1711Z5). */
+.command-settings-editor__section,
+.command-settings-editor__row,
+.command-settings-editor__group-empty {
+  margin: 0;
+}
 .command-settings-editor__section {
   display: grid;
   gap: var(--kui-space-2xs);
@@ -45,7 +52,10 @@
   display: flex;
   align-items: center;
   gap: var(--kui-space-xs);
-  padding: var(--kui-space-2xs);
+  /* The 8px inline padding plus a 1px transparent border match Kerf Text item geometry, so the grip
+     starts on the settings text edge and the "…" menu ends on its right edge (HS2-1711Z5). */
+  padding: var(--kui-space-2xs) var(--kui-space-xs);
+  border: 1px solid transparent;
   border-radius: var(--wa-border-radius-m);
   cursor: pointer;
 }

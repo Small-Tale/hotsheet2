@@ -351,18 +351,20 @@ function CommandGroup({
       data-ungrouped={group ? undefined : 'true'}
     >
       {/* A Kerf ListHeader names the group; an empty group's delete is its logical-end action
-          (HS2-7BBRJT, HS2-EBY4E3). */}
+          (HS2-7BBRJT, HS2-EBY4E3). `inline` drops its outer margin so the label sits on the
+          settings text edge with the description and row grips (HS2-1711Z5). */}
       {group &&
         (empty ? (
           <ListHeader
             label={group}
+            inline
             action={COMMANDS_AND_AI_ACTIONS.deleteCommandGroup.value}
             actionLabel={`Delete empty group ${group}`}
             actionIcon={<LucideIcon icon={Trash2} name="trash-2" />}
             triggerAttributes={{ 'data-group': group }}
           />
         ) : (
-          <ListHeader label={group} />
+          <ListHeader label={group} inline />
         ))}
       <ul class="command-settings-editor__group-items" data-command-group-drop={group}>
         {commands.map((command) => (
@@ -400,12 +402,12 @@ export function CommandSettingsEditor({
     >
       {/* The workspace toolbar titles the page (HS2-QEQ1YB) and carries its Add group… and Add
           command… actions (HS2-YKB7HS). */}
-      <List textInsets="rl">
-        <Text flush tone="quiet">
-          Create the buttons shown in this project's sidebar. Drag to reorder or move between groups; changes save
-          automatically.
-        </Text>
-      </List>
+      {/* Kerf Text item geometry puts the copy on the settings text edge shared with the group
+          headers and row grips (HS2-1711Z5). */}
+      <Text tone="quiet">
+        Create the buttons shown in this project's sidebar. Drag to reorder or move between groups; changes save
+        automatically.
+      </Text>
       {sections.length > 0 ? (
         <ul class="command-settings-editor__list" aria-label="Custom commands" aria-multiselectable="true">
           {sections.map((section) => (

@@ -12,6 +12,13 @@ describe('KeyboardSettings', () => {
     expect(css).toMatch(/\.keyboard-settings__row \{[^}]*margin: 0;/);
   });
 
+  it('keeps the intro copy on the row text edge through Kerf Text item geometry (HS2-V8YYXA)', () => {
+    const markup = String(KeyboardSettings({ overrides: {}, apple: true }));
+    const intro = markup.match(/<p[^>]*>\s*Rebind the command shortcuts/)?.[0];
+    expect(intro).toBeDefined();
+    expect(intro).not.toContain('data-flush');
+  });
+
   it('lists every shortcut grouped, with editable rows editable and fixed rows marked System', () => {
     const markup = String(KeyboardSettings({ overrides: {}, capturingId: undefined, apple: true }));
     expect(markup).toContain('data-component="keyboard-settings"');

@@ -94,5 +94,7 @@ describe('SettingsWorkspace', () => {
     const permissions = String(SettingsWorkspace({ ...props, category: 'permissions' }));
     expect(permissions).toContain('data-component="grid"');
     expect(permissions).toContain('data-permission-note="true"');
+    // The help copy keeps Kerf Text item geometry so it starts on the field-label edge (HS2-4JXTS8).
+    expect(permissions.match(/<p[^>]*data-permission-note="true"[^>]*>/)?.[0]).not.toContain('data-flush');
   });
 });

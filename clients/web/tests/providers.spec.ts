@@ -13401,6 +13401,70 @@ for (const width of [1280, 390]) {
   });
 }
 
+test('aligns settings page copy with field labels, group headers, row content, and account icons (HS2-N2ZG5N, HS2-1711Z5, HS2-4JXTS8, HS2-1JSPX7, HS2-V8YYXA)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByLabel('Settings view').click();
+  // The left edge of the first rendered text glyph run inside an element.
+  const textLeft = (selector: string) =>
+    page
+      .locator(selector)
+      .first()
+      .evaluate((element) => {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (!node.textContent?.trim()) continue;
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          const rect = range.getClientRects().item(0);
+          if (rect) return Math.round(rect.left);
+        }
+        return NaN;
+      });
+  const boxLeft = (selector: string) =>
+    page
+      .locator(selector)
+      .first()
+      .evaluate((element) => Math.round(element.getBoundingClientRect().left));
+  const open = async (category: string) => {
+    await page.getByRole('button', { name: category, exact: true }).first().click();
+    await expect(page.locator('#workspace-page-title')).toContainText(category === 'Keyboard' ? 'Keyboard' : category);
+  };
+
+  await open('Ticket sources');
+  const sourcesCopy = await textLeft('[data-component="ticket-sources-settings"] p.kui-text');
+  const sourcesFrame = await boxLeft('.ticket-provider-settings__connections');
+  // Page copy sits on the field-label text edge, inset from the source card frame.
+  expect(sourcesCopy).toBeGreaterThan(sourcesFrame);
+  expect(await textLeft('.ticket-provider-settings__footnote')).toBe(sourcesCopy);
+
+  await open('Commands');
+  const commandsCopy = await textLeft('[data-component="command-settings-editor"] > p.kui-text');
+  expect(commandsCopy).toBe(sourcesCopy);
+  expect(await textLeft('.command-settings-editor__section [data-component="list-header"]')).toBe(commandsCopy);
+  expect(await boxLeft('.command-settings-editor__row-grip')).toBe(commandsCopy);
+
+  await open('Permissions');
+  await expect(page.locator('[data-permission-note]')).toBeVisible();
+  expect(await textLeft('[data-permission-note]')).toBe(sourcesCopy);
+
+  await open('Accounts');
+  const accountsCopy = await textLeft('[data-component="accounts-settings"] p.kui-text');
+  expect(accountsCopy).toBe(sourcesCopy);
+  expect(await boxLeft('.ticket-provider-settings__account-header > :first-child')).toBe(accountsCopy);
+
+  await open('Keyboard');
+  const keyboardCopy = await textLeft('.keyboard-settings p.kui-text');
+  expect(keyboardCopy).toBe(sourcesCopy);
+  expect(await textLeft('.keyboard-settings [data-component="list-header"]')).toBe(keyboardCopy);
+  expect(await textLeft('.keyboard-settings__row strong')).toBe(keyboardCopy);
+});
+
 test('switches settings categories from the project sidebar', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');

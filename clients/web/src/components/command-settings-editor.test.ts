@@ -7,6 +7,22 @@ import { COMMAND_EDITOR_DIALOG_ID, CommandSettingsEditor } from './command-setti
 const css = readFileSync(new URL('./command-settings-editor.css', import.meta.url), 'utf8');
 
 describe('CommandSettingsEditor', () => {
+  it('puts the description, group headers, and row grips on one text edge (HS2-1711Z5)', () => {
+    // Web Awesome's native li indent is reset, and rows pad like Kerf Text item geometry.
+    expect(css).toMatch(
+      /\.command-settings-editor__section,\s*\.command-settings-editor__row,\s*\.command-settings-editor__group-empty \{\s*margin: 0;/,
+    );
+    expect(css).toMatch(
+      /\.command-settings-editor__row \{[^}]*padding: var\(--kui-space-2xs\) var\(--kui-space-xs\);[^}]*border: 1px solid transparent;/,
+    );
+    const markup = String(
+      CommandSettingsEditor({
+        commands: [{ id: 'a', title: 'Lint', group: 'Quality', kind: 'shell', command: 'npm run lint' }],
+      }),
+    );
+    expect(markup.match(/<p[^>]*>\s*Create the buttons/)?.[0]).not.toContain('data-flush');
+    expect(markup).not.toContain('data-text-insets');
+  });
   it('uses the kerf semantic spacing scale for app-owned separation (HS2-4Y6SM9)', () => {
     expect(css).not.toContain('--wa-space-');
     expect(css).toContainSource('gap:var(--kui-space-l)');

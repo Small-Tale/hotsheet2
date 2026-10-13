@@ -102,7 +102,7 @@ export function SettingsWorkspace({
                 .map((value) => ({ value: String(value), label: formatPermissionDelay(value) }))}
             />
           </Grid>
-          <Text tone="quiet" size="compact" flush data-permission-note="true">
+          <Text tone="quiet" size="compact" data-permission-note="true">
             Runs only while this project's floating permission popup is visible. Ignore pauses the timer; Stop
             auto-allow or Stop auto-deny disables that automatic decision for this request. Auto-allow after 0 seconds
             allows each request without showing the popup; it is still recorded in Notifications.

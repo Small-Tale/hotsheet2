@@ -160,7 +160,7 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
         <List gap="m">
           {/* The workspace toolbar titles the page (HS2-FV538C) and carries its "+ Data Source…"
               action (HS2-G9J35B). */}
-          <Text tone="quiet" flush>
+          <Text tone="quiet">
             This project uses {sources.length} ticket source{sources.length === 1 ? '' : 's'}. New tickets go to the
             default source unless you choose another when creating one.
           </Text>
@@ -252,13 +252,13 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
           )}
         </List>
         {error && !setupOpen ? (
-          <Text tone="danger" role="alert" flush>
+          <Text tone="danger" role="alert">
             {error}
           </Text>
         ) : (
           <></>
         )}
-        <Text tone="quiet" class="ticket-provider-settings__footnote" flush>
+        <Text tone="quiet" class="ticket-provider-settings__footnote">
           Sources belong to this project; other projects never see them. GitHub, GitLab, and Jira sign-ins are shared by
           every project on this computer under{' '}
           <button
@@ -310,7 +310,7 @@ export function AccountsSettings({
       <List gap="l">
         <List gap="m">
           {/* The workspace toolbar already titles the page (HS2-MF9D1K). */}
-          <Text tone="quiet" flush>
+          <Text tone="quiet">
             Sign-ins Hot Sheet uses to reach GitHub, GitLab, and Jira. Every project on this computer can reuse them
             when adding a ticket source; each project still chooses its own repository or Jira project.
           </Text>
@@ -447,19 +447,19 @@ export function AccountsSettings({
               })}
             </List>
           ) : (
-            <Text tone="quiet" flush>
+            <Text tone="quiet">
               No accounts yet. Signing in while adding a GitHub, GitLab, or Jira ticket source to a project adds one.
             </Text>
           )}
         </List>
         {error ? (
-          <Text tone="danger" role="alert" flush>
+          <Text tone="danger" role="alert">
             {error}
           </Text>
         ) : (
           <></>
         )}
-        <Text tone="quiet" class="ticket-provider-settings__footnote" flush>
+        <Text tone="quiet" class="ticket-provider-settings__footnote">
           Credentials stay in the operating system keychain; Hot Sheet stores only their references and non-secret
           labels.
         </Text>

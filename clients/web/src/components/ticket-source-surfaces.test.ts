@@ -394,6 +394,9 @@ describe('ticket source surfaces', () => {
     expect(markup).not.toContain('attach-project-source');
     expect(markup).toContain('data-item-id="accounts"');
     expect(markup).toContain('App Settings → Accounts');
+    // Page copy keeps Kerf Text item geometry, on the field-label edge (HS2-N2ZG5N).
+    expect(markup.match(/<p[^>]*>\s*This project uses/)?.[0]).not.toContain('data-flush');
+    expect(markup.match(/<p[^>]*ticket-provider-settings__footnote[^>]*>/)?.[0]).not.toContain('data-flush');
     // The workspace toolbar titles the page; no in-page heading repeats it (HS2-FV538C).
     expect(markup).not.toMatch(/<h2[^>]*>/);
     const single = String(TicketSourcesSettings({ sources: sources.slice(0, 1) }));
@@ -581,6 +584,8 @@ describe('ticket source surfaces', () => {
       ],
       markup = String(AccountsSettings({ accounts }));
     expect(markup).toContain('data-component="accounts-settings"');
+    // Page copy keeps Kerf Text item geometry, on the account-icon edge (HS2-1JSPX7).
+    expect(markup.match(/<p[^>]*>\s*Sign-ins Hot Sheet uses/)?.[0]).not.toContain('data-flush');
     // The workspace toolbar titles the page; no in-page heading repeats it (HS2-MF9D1K).
     expect(markup).not.toMatch(/<h2[^>]*>/);
     expect(markup).toContain('data-account-id="github-app-01work"');

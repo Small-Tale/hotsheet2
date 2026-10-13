@@ -52,7 +52,8 @@
   min-height: remify(64px);
   box-sizing: border-box;
   align-items: center;
-  padding: var(--wa-space-s);
+  /* 8px inline plus the card border puts the account icon on the settings text edge (HS2-1JSPX7). */
+  padding: var(--wa-space-s) var(--kui-space-xs);
   gap: var(--wa-space-s);
   border-bottom: 1px solid var(--wa-color-neutral-border-quiet);
   background: var(--wa-color-neutral-fill-quiet);
@@ -77,7 +78,7 @@
    inline-margin token for its flush ListItems, so Kerf insets cannot provide it here. */
 .ticket-provider-settings__account-source,
 .ticket-provider-settings__account-empty {
-  padding: var(--wa-space-s);
+  padding: var(--wa-space-s) var(--kui-space-xs);
 }
 /* Divider between consecutive account source rows. */
 .ticket-provider-settings__account-source + .ticket-provider-settings__account-source {
