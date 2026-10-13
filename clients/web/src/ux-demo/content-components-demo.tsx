@@ -14,6 +14,7 @@ import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { clickBeginsMarkdownEdit, keyBeginsMarkdownEdit, repeatPressWouldLeaveNewEditor } from '../markdown-click-edit';
 import { normalizeTicketTitleField, ticketTitleKeyFinishesEdit } from '../ticket-title-editing';
+import { DemoEvent } from './components/demo-event';
 import { selectDemo, selectedId } from './components/demo-state';
 import { DEMO_ACTIONS, DEMO_COMPONENTS, DEMO_FIELDS, DEMO_MARKERS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
@@ -351,9 +352,7 @@ export function MarkdownEditorDemo() {
         appearance={markdownAppearance.value}
         inset={markdownInset.value}
       />
-      <p class="component-stage__event" aria-live="polite">
-        {markdownEvent.value}
-      </p>
+      <DemoEvent>{markdownEvent.value}</DemoEvent>
     </section>
   );
 }

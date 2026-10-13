@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { foregroundColorVar } from '@kerfjs/ui/css-values';
 import { Select } from '@kerfjs/ui/select';
 import { Bug, ListChecks, Sparkles } from 'lucide';
@@ -24,15 +25,15 @@ const choices = [
 
 export function SelectDemo() {
   return (
-    <section class="metadata-control-demo" aria-label="Select demo">
+    <CatalogExample label="Interactive" viewport={{ width: 'control' }}>
       <Select name="example-select" label="Ticket type" value="feature" choices={choices} />
-    </section>
+    </CatalogExample>
   );
 }
 
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    select: { Demo: SelectDemo },
+    select: { catalogExamples: true, Demo: SelectDemo },
   },
 };

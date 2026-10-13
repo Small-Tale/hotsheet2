@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -82,15 +83,13 @@ export function resetConfidenceCalibrationDemo(root?: ParentNode): void {
 
 export function ConfidenceCalibrationDemo() {
   return (
-    <section class="component-stage" aria-label="ConfidenceCalibration demo">
-      <div class="component-stage__canvas">
-        {ConfidenceCalibration({ state: confidenceCalibrationDemoState(confidenceCalibrationSettings.state.value) })}
-      </div>
-      <p class="component-stage__guidance">
-        Shown in a project's statistics view. Reopen rate counts completions with a known outcome; the bar appears once
-        a band has one.
-      </p>
-    </section>
+    <CatalogExample
+      label="Interactive"
+      note="Shown in a project's statistics view. Reopen rate counts completions with a known outcome; the bar appears once a band has one."
+      viewport={{ width: 'full' }}
+    >
+      {ConfidenceCalibration({ state: confidenceCalibrationDemoState(confidenceCalibrationSettings.state.value) })}
+    </CatalogExample>
   );
 }
 
@@ -123,6 +122,7 @@ function wireConfidenceCalibrationDemo(root: HTMLElement): () => void {
 export const demoModule: DemoModule = {
   entries: {
     'confidence-calibration': {
+      catalogExamples: true,
       Demo: ConfidenceCalibrationDemo,
       Settings: ConfidenceCalibrationSettings,
       reset: resetConfidenceCalibrationDemo,

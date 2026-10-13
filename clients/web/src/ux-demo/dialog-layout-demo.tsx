@@ -1,6 +1,7 @@
 import '../components/heading.css';
 import '../components/native-popover-dialog.css';
 
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Toolbar } from '@kerfjs/ui/toolbar';
@@ -72,7 +73,7 @@ export function closeHs1MigrationDialogDemo() {
 }
 export function Hs1MigrationDialogDemo() {
   return (
-    <section class="metadata-control-demo" aria-label="Hs1MigrationDialog demo">
+    <CatalogExample align="glyph" label="Interactive">
       {!hs1MigrationDialogDemoOpen.value && (
         <wa-button appearance="accent" data-action="open-hs1-migration-demo">
           Open import dialog
@@ -88,7 +89,7 @@ export function Hs1MigrationDialogDemo() {
         open={hs1MigrationDialogDemoOpen.value}
         busy={false}
       />
-    </section>
+    </CatalogExample>
   );
 }
 /** Both detail variants of the app-wide notification pause banner (HS2-QYA9SC). */
@@ -168,7 +169,7 @@ export const demoModule: DemoModule = {
   entries: {
     'dialog-header': { Demo: DialogHeaderDemo },
     'value-table': { Demo: ValueTableDemo },
-    'hs1-migration-dialog': { Demo: Hs1MigrationDialogDemo },
+    'hs1-migration-dialog': { catalogExamples: true, Demo: Hs1MigrationDialogDemo },
     'hs1-migration-banner': { Demo: Hs1MigrationBannerDemo },
     'notifications-paused-banner': { Demo: NotificationsPausedBannerDemo },
   },

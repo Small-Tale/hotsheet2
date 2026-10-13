@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, delegateCapture, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -5,6 +6,7 @@ import { createScope } from 'kerfjs/scope';
 import type { CommandDefinition, CommandRun } from '../api';
 import { CommandRunDialog } from '../components/command-run-dialog';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { DemoEvent } from './components/demo-event';
 import { onDemoSelected } from './components/demo-state';
 import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
@@ -93,17 +95,15 @@ export function confirmStopCommandRunDemo(runId: string | undefined): void {
 export function CommandRunDialogDemo() {
   const stop = commandRunDialogSettings.presentation.value === 'stop';
   return (
-    <section class="component-stage" aria-label="CommandRunDialog demo">
-      {commandRunDialogSettings.open.value && (
-        <CommandRunDialog command={command} run={stop ? runningRun : completedRun} confirmStop={stop} />
-      )}
-      <button type="button" {...DEMO_ACTIONS.openCommandRunDialogDemo.attrs}>
-        Open dialog
-      </button>
-      <p class="component-stage__event" aria-live="polite">
-        {commandRunDialogSettings.event.value}
-      </p>
-    </section>
+    <>
+      <CatalogExample align="glyph" label="Interactive" rootAttributes={{ 'data-command-run-dialog-demo': '' }}>
+        {commandRunDialogSettings.open.value && (
+          <CommandRunDialog command={command} run={stop ? runningRun : completedRun} confirmStop={stop} />
+        )}
+        <wa-button {...DEMO_ACTIONS.openCommandRunDialogDemo.attrs}>Open dialog</wa-button>
+      </CatalogExample>
+      <DemoEvent>{commandRunDialogSettings.event.value}</DemoEvent>
+    </>
   );
 }
 
@@ -155,7 +155,7 @@ function wireCommandRunDialogDemo(root: HTMLElement): () => void {
     delegate(
       root,
       'click',
-      `[aria-label="CommandRunDialog demo"] ${COMMANDS_AND_AI_ACTIONS.dismissCommandDialog.selector}`,
+      `[data-command-run-dialog-demo] ${COMMANDS_AND_AI_ACTIONS.dismissCommandDialog.selector}`,
       () => {
         dismissCommandRunDialogDemo();
       },
@@ -165,7 +165,7 @@ function wireCommandRunDialogDemo(root: HTMLElement): () => void {
     delegate(
       root,
       'click',
-      `[aria-label="CommandRunDialog demo"] ${COMMANDS_AND_AI_ACTIONS.confirmStopCommand.selector}`,
+      `[data-command-run-dialog-demo] ${COMMANDS_AND_AI_ACTIONS.confirmStopCommand.selector}`,
       (_event, target) => {
         confirmStopCommandRunDemo((target as HTMLElement).dataset.runId);
       },
@@ -180,6 +180,7 @@ function wireCommandRunDialogDemo(root: HTMLElement): () => void {
 export const demoModule: DemoModule = {
   entries: {
     'command-run-dialog': {
+      catalogExamples: true,
       Demo: CommandRunDialogDemo,
       Settings: CommandRunDialogSettings,
       reset: resetCommandRunDialogDemo,

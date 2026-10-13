@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { delegate, delegateCapture, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -33,34 +34,32 @@ import { recordCollectionEvent } from './ticket-collections-demo';
 
 export function TicketCategorySelectDemo() {
   return (
-    <section class="metadata-control-demo" aria-label="TicketCategorySelect demo">
+    <CatalogExample label="Interactive" viewport={{ width: 'control' }}>
       <TicketCategorySelect name="demo-category" value="feature" />
-    </section>
+    </CatalogExample>
   );
 }
 export function TicketPrioritySelectDemo() {
   return (
-    <section class="metadata-control-demo" aria-label="TicketPrioritySelect demo">
+    <CatalogExample label="Interactive" viewport={{ width: 'control' }}>
       <TicketPrioritySelect name="demo-priority" value="urgent" />
-    </section>
+    </CatalogExample>
   );
 }
 export function TicketStatusMenuDemo() {
   return (
-    <section class="metadata-control-demo" aria-label="TicketStatusMenu demo">
-      <div>
-        <span>Status</span>
+    <>
+      <CatalogExample align="glyph" label="Status" rootAttributes={{ 'data-status-menu-demo': '' }}>
         <TicketStatusMenu
           value={statusMenuDemoStatus.value}
           startedPhase={statusMenuDemoStartedPhase.value || undefined}
           canEditStartedPhase
         />
-      </div>
-      <div>
-        <span>Read-only provider</span>
+      </CatalogExample>
+      <CatalogExample align="glyph" label="Read-only provider">
         <TicketStatusMenu value="started" startedPhase="final_testing" disabled />
-      </div>
-    </section>
+      </CatalogExample>
+    </>
   );
 }
 export const statusMenuDemoStatus = signal<
@@ -69,9 +68,11 @@ export const statusMenuDemoStatus = signal<
 export const statusMenuDemoStartedPhase = signal<StartedPhase | ''>('planning');
 export function TicketInfoPanelDemo() {
   return (
-    <div class="info-panel-demo">
-      <p class="info-panel-demo__caption">Loaded</p>
-      <section class="inspector-panel-demo" aria-label="TicketInfoPanel demo">
+    <>
+      <CatalogExample
+        label="Loaded"
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
         <TicketInfoPanel
           status="started"
           priority="high"
@@ -93,19 +94,25 @@ export function TicketInfoPanelDemo() {
           providerName="Hot Sheet git"
           updatedLabel="Updated 2 minutes ago"
         />
-      </section>
-      <p class="info-panel-demo__caption">placeholder — the value-free loading state the inspector skeleton composes</p>
-      <section class="inspector-panel-demo" aria-label="TicketInfoPanel placeholder demo">
+      </CatalogExample>
+      <CatalogExample
+        label="Placeholder"
+        note="The value-free loading state the inspector skeleton composes."
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
         <TicketInfoPanel placeholder />
-      </section>
-    </div>
+      </CatalogExample>
+    </>
   );
 }
 export function TicketTimelineDemo() {
   return (
-    <section class="inspector-panel-demo" aria-label="TicketTimeline demo">
+    <CatalogExample
+      label="Interactive"
+      viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+    >
       <TicketTimeline />
-    </section>
+    </CatalogExample>
   );
 }
 const demoImages = [
@@ -323,8 +330,11 @@ const appendOnlyAttachmentDemoItems: TicketAttachmentItem[] = [
 export function TicketAttachmentsDemo() {
   const menu = attachmentDemoMenu.value;
   return (
-    <div class="ticket-attachments-demo">
-      <section class="inspector-panel-demo" aria-label="TicketAttachments demo">
+    <>
+      <CatalogExample
+        label="Editable"
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
         <TicketAttachments
           attachments={attachmentDemoItems.value}
           editingLabelBatch={attachmentLabelEditingKey(
@@ -337,27 +347,31 @@ export function TicketAttachmentsDemo() {
           )}
         />
         {menu && <AttachmentContextMenu x={menu.x} y={menu.y} />}
-      </section>
-      <h2>Append-only provider (GitHub assets repository)</h2>
-      <p class="component-stage__hint">
-        Files can be added; existing ones open by link and cannot be regrouped, relabelled, renamed, or deleted.
-      </p>
-      <section class="inspector-panel-demo" aria-label="Append-only TicketAttachments demo">
+      </CatalogExample>
+      <CatalogExample
+        label="Append-only provider (GitHub assets repository)"
+        note="Files can be added; existing ones open by link and cannot be regrouped, relabelled, renamed, or deleted."
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
         <TicketAttachments attachments={appendOnlyAttachmentDemoItems} editable={false} />
-      </section>
-      <h2>Provider without attachments</h2>
-      <section class="inspector-panel-demo" aria-label="Unsupported TicketAttachments demo">
+      </CatalogExample>
+      <CatalogExample
+        label="Provider without attachments"
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
         <TicketAttachments attachments={appendOnlyAttachmentDemoItems} enabled={false} />
-      </section>
-      <h2>Linked reader</h2>
-      <section class="inspector-panel-demo" aria-label="Linked reader TicketAttachments demo">
+      </CatalogExample>
+      <CatalogExample
+        label="Linked reader"
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
         <TicketAttachments
           attachments={appendOnlyAttachmentDemoItems}
           enabled={false}
           message="Attachments are view-only in linked ticket readers."
         />
-      </section>
-    </div>
+      </CatalogExample>
+    </>
   );
 }
 export function AttachmentGalleryDemo() {
@@ -397,85 +411,85 @@ export function AttachmentGalleryDemo() {
 }
 export function TicketCodeReviewDemo() {
   return (
-    <section class="code-review-demo" aria-label="TicketCodeReview demo">
-      <article class="code-review-demo__case">
-        <h3 class="code-review-demo__caption">Configured — disjoint bundles</h3>
-        <div class="inspector-panel-demo">
-          <TicketCodeReview
-            review={{
-              difftool: 'Glassbox',
-              truncated: false,
-              summary: {
-                files: { total: 9, docs: 2, tests: 3, source: 3, other: 1 },
-                tests_added: 2,
-                tests_modified: 1,
+    <>
+      <CatalogExample
+        label="Configured — disjoint bundles"
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
+        <TicketCodeReview
+          review={{
+            difftool: 'Glassbox',
+            truncated: false,
+            summary: {
+              files: { total: 9, docs: 2, tests: 3, source: 3, other: 1 },
+              tests_added: 2,
+              tests_modified: 1,
+            },
+            ranges: [
+              { from: 'aaa1111', to: 'bbb2222', count: 2 },
+              { from: 'ccc3333', to: 'ddd4444', count: 2 },
+            ],
+            commits: [
+              {
+                sha: 'ddd4444',
+                short_sha: 'ddd4444',
+                subject: 'HS2-DEMO: complete the later review bundle',
+                committed_at: '2026-09-02T10:00:00Z',
               },
-              ranges: [
-                { from: 'aaa1111', to: 'bbb2222', count: 2 },
-                { from: 'ccc3333', to: 'ddd4444', count: 2 },
-              ],
-              commits: [
-                {
-                  sha: 'ddd4444',
-                  short_sha: 'ddd4444',
-                  subject: 'HS2-DEMO: complete the later review bundle',
-                  committed_at: '2026-09-02T10:00:00Z',
-                },
-                {
-                  sha: 'ccc3333',
-                  short_sha: 'ccc3333',
-                  subject: 'HS2-DEMO: begin the later review bundle',
-                  committed_at: '2026-09-02T09:00:00Z',
-                },
-                {
-                  sha: 'bbb2222',
-                  short_sha: 'bbb2222',
-                  subject: 'HS2-DEMO: complete the initial review bundle',
-                  committed_at: '2026-09-02T08:00:00Z',
-                },
-                {
-                  sha: 'aaa1111',
-                  short_sha: 'aaa1111',
-                  subject: 'HS2-DEMO: begin the initial review bundle',
-                  committed_at: '2026-09-02T07:00:00Z',
-                },
-              ],
-            }}
-          />
-        </div>
-      </article>
-      <article class="code-review-demo__case">
-        <h3 class="code-review-demo__caption">Not configured</h3>
-        <div class="inspector-panel-demo">
-          <TicketCodeReview
-            review={{
-              truncated: false,
-              ranges: [],
-              commits: [
-                {
-                  sha: 'aaa',
-                  short_sha: 'aaaaaaa',
-                  subject: 'HS2-DEMO: readable without a tool',
-                  committed_at: '2026-09-02T07:00:00Z',
-                },
-              ],
-            }}
-          />
-        </div>
-      </article>
-      <article class="code-review-demo__case">
-        <h3 class="code-review-demo__caption">Empty</h3>
-        <div class="inspector-panel-demo">
-          <TicketCodeReview review={{ difftool: 'Meld', truncated: false, ranges: [], commits: [] }} />
-        </div>
-      </article>
-      <article class="code-review-demo__case">
-        <h3 class="code-review-demo__caption">Loading / error</h3>
-        <div class="inspector-panel-demo">
-          <TicketCodeReview loading message="The repository is temporarily unavailable." />
-        </div>
-      </article>
-    </section>
+              {
+                sha: 'ccc3333',
+                short_sha: 'ccc3333',
+                subject: 'HS2-DEMO: begin the later review bundle',
+                committed_at: '2026-09-02T09:00:00Z',
+              },
+              {
+                sha: 'bbb2222',
+                short_sha: 'bbb2222',
+                subject: 'HS2-DEMO: complete the initial review bundle',
+                committed_at: '2026-09-02T08:00:00Z',
+              },
+              {
+                sha: 'aaa1111',
+                short_sha: 'aaa1111',
+                subject: 'HS2-DEMO: begin the initial review bundle',
+                committed_at: '2026-09-02T07:00:00Z',
+              },
+            ],
+          }}
+        />
+      </CatalogExample>
+      <CatalogExample
+        label="Not configured"
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
+        <TicketCodeReview
+          review={{
+            truncated: false,
+            ranges: [],
+            commits: [
+              {
+                sha: 'aaa',
+                short_sha: 'aaaaaaa',
+                subject: 'HS2-DEMO: readable without a tool',
+                committed_at: '2026-09-02T07:00:00Z',
+              },
+            ],
+          }}
+        />
+      </CatalogExample>
+      <CatalogExample
+        label="Empty"
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
+        <TicketCodeReview review={{ difftool: 'Meld', truncated: false, ranges: [], commits: [] }} />
+      </CatalogExample>
+      <CatalogExample
+        label="Loading / error"
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
+        <TicketCodeReview loading message="The repository is temporarily unavailable." />
+      </CatalogExample>
+    </>
   );
 }
 
@@ -819,13 +833,13 @@ function wireTicketMetadataDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'ticket-category-select': { Demo: TicketCategorySelectDemo },
-    'ticket-priority-select': { Demo: TicketPrioritySelectDemo },
-    'ticket-status-menu': { Demo: TicketStatusMenuDemo },
-    'ticket-info-panel': { Demo: TicketInfoPanelDemo },
-    'ticket-timeline': { Demo: TicketTimelineDemo },
-    'ticket-code-review': { Demo: TicketCodeReviewDemo },
-    'ticket-attachments': { Demo: TicketAttachmentsDemo },
+    'ticket-category-select': { catalogExamples: true, Demo: TicketCategorySelectDemo },
+    'ticket-priority-select': { catalogExamples: true, Demo: TicketPrioritySelectDemo },
+    'ticket-status-menu': { catalogExamples: true, Demo: TicketStatusMenuDemo },
+    'ticket-info-panel': { catalogExamples: true, Demo: TicketInfoPanelDemo },
+    'ticket-timeline': { catalogExamples: true, Demo: TicketTimelineDemo },
+    'ticket-code-review': { catalogExamples: true, Demo: TicketCodeReviewDemo },
+    'ticket-attachments': { catalogExamples: true, Demo: TicketAttachmentsDemo },
     'attachment-gallery': { Demo: AttachmentGalleryDemo },
   },
   wire: wireTicketMetadataDemo,

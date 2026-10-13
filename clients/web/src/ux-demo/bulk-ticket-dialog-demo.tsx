@@ -1,9 +1,11 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { BulkTicketDialog, type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
 import { wireBulkTicketDialog } from '../components/bulk-ticket-dialog-interactions';
+import { DemoEvent } from './components/demo-event';
 import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
@@ -76,17 +78,13 @@ export function closeBulkTicketDialogDemo(event: string): void {
 export function BulkTicketDialogDemo() {
   const open = bulkTicketDialogSettings.open.value;
   return (
-    <section class="component-stage" aria-label="BulkTicketDialog demo">
-      {!open && (
-        <button type="button" {...DEMO_ACTIONS.openBulkTicketDialogDemo.attrs}>
-          Open dialog
-        </button>
-      )}
-      <BulkTicketDialog state={open ? bulkTicketDialogState(bulkTicketDialogSettings.scenario.value) : undefined} />
-      <p class="component-stage__event" aria-live="polite">
-        {bulkTicketDialogSettings.event.value}
-      </p>
-    </section>
+    <>
+      <CatalogExample align="glyph" label="Interactive">
+        {!open && <wa-button {...DEMO_ACTIONS.openBulkTicketDialogDemo.attrs}>Open dialog</wa-button>}
+        <BulkTicketDialog state={open ? bulkTicketDialogState(bulkTicketDialogSettings.scenario.value) : undefined} />
+      </CatalogExample>
+      <DemoEvent>{bulkTicketDialogSettings.event.value}</DemoEvent>
+    </>
   );
 }
 
@@ -146,6 +144,7 @@ function wireBulkTicketDialogDemo(root: HTMLElement): () => void {
 export const demoModule: DemoModule = {
   entries: {
     'bulk-ticket-dialog': {
+      catalogExamples: true,
       Demo: BulkTicketDialogDemo,
       Settings: BulkTicketDialogSettings,
       reset: resetBulkTicketDialogDemo,

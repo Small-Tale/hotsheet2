@@ -8,6 +8,9 @@ export interface DemoEntry {
   Settings?: () => SafeHtml;
   /** Restore the entry's settings and fixtures (the settings form's Reset action). */
   reset?: (root: HTMLElement) => void;
+  /** The demo renders Kerf `CatalogExample`s, so a component entry gets Kerf's
+   *  `CatalogExampleStack`; unconverted demos keep their own layout (HS2-Z3FMEZ). */
+  catalogExamples?: boolean;
 }
 
 /**

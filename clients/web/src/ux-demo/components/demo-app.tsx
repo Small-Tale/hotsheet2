@@ -1,4 +1,5 @@
-import { Catalog } from '@kerfjs/ui/catalog';
+import { Catalog, CatalogExample, CatalogExampleStack } from '@kerfjs/ui/catalog';
+import { EmptyState } from '@kerfjs/ui/empty-state';
 import { Text } from '@kerfjs/ui/text';
 
 import { ProjectTabContextMenu } from '../../components/project-tab-context-menu';
@@ -23,10 +24,12 @@ import {
 
 function PlannedDemo({ item }: { item: DemoDefinition }) {
   return (
-    <section class="planned-demo" aria-label={`${item.name} planned demo`}>
-      <span>Planned component</span>
-      <p>The catalog entry and navigation are ready. Its real component demo will be added in a later slice.</p>
-    </section>
+    <CatalogExample label={`${item.name} planned demo`}>
+      <EmptyState
+        title="Planned component"
+        detail="The catalog entry and navigation are ready. Its real component demo will be added in a later slice."
+      />
+    </CatalogExample>
   );
 }
 
@@ -66,14 +69,20 @@ export function DemoApp() {
         toggleSettingsAction="toggle-settings"
         uxReview={uxReviewProject.value ? { projectDirectory: uxReviewProject.value } : undefined}
         content={
-          <section
-            class="demo-catalog-examples"
-            data-catalog-example-stack
-            data-catalog-geometry-skip={demoKind(selected.id) === 'composition' ? '' : undefined}
-            aria-label={`${selected.name} examples`}
-          >
-            {Demo ? <Demo /> : <PlannedDemo item={selected} />}
-          </section>
+          // Converted demos render their own Kerf CatalogExamples: components inside Kerf's
+          // stack, application-width compositions directly until the stack gains a width option
+          // (KF-HKVT5S). Demos not yet converted get one full-width CatalogExample (HS2-Z3FMEZ).
+          !entry?.catalogExamples ? (
+            <CatalogExample viewport={{ width: 'full' }}>
+              {Demo ? <Demo /> : <PlannedDemo item={selected} />}
+            </CatalogExample>
+          ) : demoKind(selected.id) === 'composition' ? (
+            <>{Demo ? <Demo /> : <PlannedDemo item={selected} />}</>
+          ) : (
+            <CatalogExampleStack label={`${selected.name} examples`}>
+              {Demo ? <Demo /> : <PlannedDemo item={selected} />}
+            </CatalogExampleStack>
+          )
         }
         // Each entry's phase and Planned state are Catalog tags on its sidebar row (HS2-HMVBZW).
         status={

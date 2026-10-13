@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -34,20 +35,19 @@ export function resetStatusBadgeDemo(root?: ParentNode): void {
 
 export function StatusBadgeDemo() {
   return (
-    <section class="component-stage" aria-label="StatusBadge demo">
-      <div class="component-stage__canvas">
-        {StatusBadge({
-          status: statusBadgeSettings.status.value,
-          startedPhase: statusBadgeSettings.startedPhase.value || undefined,
-          showIcon: statusBadgeSettings.showIcon.value,
-          appearance: statusBadgeSettings.appearance.value,
-          compact: statusBadgeSettings.compact.value,
-        })}
-      </div>
-      <p class="component-stage__guidance">
-        Status is always communicated with text; its icon is reinforcing decoration.
-      </p>
-    </section>
+    <CatalogExample
+      align="glyph"
+      label="Interactive"
+      note="Status is always communicated with text; its icon is reinforcing decoration."
+    >
+      {StatusBadge({
+        status: statusBadgeSettings.status.value,
+        startedPhase: statusBadgeSettings.startedPhase.value || undefined,
+        showIcon: statusBadgeSettings.showIcon.value,
+        appearance: statusBadgeSettings.appearance.value,
+        compact: statusBadgeSettings.compact.value,
+      })}
+    </CatalogExample>
   );
 }
 
@@ -123,7 +123,12 @@ function wireStatusBadgeDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'status-badge': { Demo: StatusBadgeDemo, Settings: StatusBadgeSettings, reset: resetStatusBadgeDemo },
+    'status-badge': {
+      catalogExamples: true,
+      Demo: StatusBadgeDemo,
+      Settings: StatusBadgeSettings,
+      reset: resetStatusBadgeDemo,
+    },
   },
   wire: wireStatusBadgeDemo,
 };

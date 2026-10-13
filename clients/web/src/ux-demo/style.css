@@ -47,57 +47,12 @@ body[data-resizing-project-sidebar='true'] {
   cursor: row-resize;
   user-select: none;
 }
-.demo-catalog-examples {
-  width: 100%;
-  min-width: 0;
-}
-/* The catalog stage is an app-owned labelled section rather than Kerf's CatalogExampleStack, whose
-   736px reading measure has no width option; Hot Sheet shows application-width compositions (board,
-   app shell, drawers) on the full canvas (Kerf doctor KUI-L001, HS2-9ME409). */
 .repository-status-demo {
   width: 100%;
   min-width: 0;
 }
 .command-settings-editor-demo {
   width: 100%;
-}
-.component-stage,
-.planned-demo {
-  max-width: remify(1120px);
-  min-height: remify(448px);
-  margin: auto;
-  padding: clamp(remify(32px), 5vw, remify(80px));
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(16px);
-  background: var(--wa-color-surface-default);
-  box-shadow: var(--wa-shadow-l);
-}
-.component-stage {
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: remify(20px);
-}
-.component-stage__canvas {
-  display: grid;
-  min-width: min(remify(448px), 80%);
-  min-height: remify(160px);
-  place-items: center;
-  padding: remify(32px);
-  border-radius: remify(12px);
-  background: repeating-conic-gradient(var(--wa-color-surface-lowered) 0 25%, var(--wa-color-surface-default) 0 50%)
-    50% / remify(24px) remify(24px);
-}
-.component-stage__event {
-  min-height: remify(24px);
-  margin: 0;
-  color: var(--wa-color-brand-on-quiet) !important;
-  font-weight: 650;
-}
-.component-stage__guidance {
-  max-width: remify(608px);
-  margin: 0;
-  text-align: center;
 }
 .content-transition-demo {
   display: grid;
@@ -138,114 +93,11 @@ body[data-resizing-project-sidebar='true'] {
   display: flex;
   justify-content: space-between;
 }
-.planned-demo {
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  text-align: center;
-}
-.planned-demo span {
-  padding: remify(5.6px) remify(10.4px);
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-neutral-on-quiet);
-  background: var(--wa-color-neutral-fill-normal);
-  font-size: var(--wa-font-size-xs);
-  font-weight: 700;
-  text-transform: uppercase;
-}
-.planned-demo p {
-  max-width: remify(512px);
-}
 /* The form is the content of Kerf's Catalog settings pane, which leaves its content inset to the app. */
 .settings-form {
   display: grid;
   gap: remify(16px);
   padding: 0 remify(16px) remify(16px);
-}
-.component-stage--row {
-  justify-items: stretch;
-}
-.component-stage__canvas--row {
-  width: 100%;
-  min-width: 0;
-}
-.collection-demo {
-  display: grid;
-  width: 100%;
-  max-width: remify(1120px);
-  margin: auto;
-  gap: remify(20px);
-  justify-items: center;
-}
-.collection-demo--board {
-  max-width: none;
-}
-/* The stage sizes the board; like the scrolling board it replaced as the grid item, it may shrink. */
-.collection-demo__board-stage {
-  width: 100%;
-  min-width: 0;
-  height: remify(544px);
-}
-.collection-demo__paged-board {
-  display: grid;
-  width: min(100%, remify(392px));
-  padding: var(--wa-space-s) 0 0;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-l);
-  background: var(--wa-color-surface-lowered);
-  gap: var(--wa-space-xs);
-}
-.collection-demo__paged-board > h3,
-.collection-demo__paged-board > p {
-  margin: 0;
-  padding-inline: var(--wa-space-s);
-}
-.collection-demo__paged-board > p {
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-s);
-}
-.collection-demo--column {
-  width: min(100%, remify(384px));
-  min-width: 250px;
-  height: remify(544px);
-}
-/* A grid item, the stage stretches to its row; the column fills the stage. */
-.collection-demo__column-stage {
-  display: grid;
-  width: 100%;
-  min-width: 250px;
-  min-height: 0;
-}
-.collection-demo__empty-states {
-  display: grid;
-  width: 100%;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--wa-space-m);
-}
-.collection-demo__empty-state,
-.collection-demo__empty-board {
-  display: grid;
-  min-width: 0;
-  padding: var(--wa-space-s);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-l);
-  background: var(--wa-color-surface-default);
-  gap: var(--wa-space-xs);
-}
-.collection-demo__caption {
-  margin: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  text-transform: uppercase;
-}
-.collection-demo__empty-board {
-  width: 100%;
-  height: remify(384px);
-}
-@media (max-width: 760px) {
-  .collection-demo__empty-states {
-    grid-template-columns: 1fr;
-  }
 }
 .workspace-component-demo {
   display: grid;
@@ -328,91 +180,10 @@ body[data-resizing-project-sidebar='true'] {
   border-radius: remify(13.6px);
   background: var(--wa-color-surface-lowered);
 }
-.ticket-search-field-demo {
-  display: grid;
-  width: min(remify(832px), 100%);
-  margin: auto;
-  padding: clamp(remify(24px), 4vw, remify(48px));
-  gap: remify(32px);
-}
-.ticket-search-field-demo__caption {
-  margin: 0 0 remify(10.4px);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-}
-.ticket-search-field-demo__toolbar {
-  overflow: visible;
-}
-.ticket-search-field-demo__form {
-  display: grid;
-  gap: var(--kui-space-m);
-}
-.ticket-search-field-demo__external {
-  display: grid;
-  gap: var(--wa-space-2xs);
-}
-.ticket-search-field-demo__external > .ticket-search-field-demo__caption,
-.ticket-search-field-demo__external > .component-stage__hint {
-  margin-bottom: 0;
-}
-/* Stage width for the narrow-rail specimen; the field's own layout prop does the rest. */
-.ticket-search-field-demo__narrow {
-  max-width: remify(320px);
-}
 .toolbar-control-group-demo__caption {
   margin: 0 0 remify(10.4px);
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
-}
-.metadata-control-demo {
-  display: grid;
-  width: min(remify(384px), 100%);
-  margin: auto;
-  padding: remify(48px);
-}
-.inspector-panel-demo {
-  width: min(remify(432px), 100%);
-  margin: auto;
-  overflow: hidden;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(12.8px);
-  background: var(--wa-color-surface-default);
-  box-shadow: var(--wa-shadow-l);
-}
-/* TicketInfoPanel variant gallery: the loaded panel above its placeholder variant (HS2-XBHADT). */
-.info-panel-demo {
-  display: grid;
-  width: min(remify(432px), 100%);
-  margin: auto;
-  gap: remify(8px);
-}
-.info-panel-demo__caption {
-  margin: remify(8px) 0 0;
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  font-weight: var(--wa-font-weight-semibold);
-}
-.code-review-demo {
-  display: grid;
-  width: min(remify(896px), 100%);
-  margin: auto;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  gap: remify(24px);
-}
-.code-review-demo__case {
-  display: grid;
-  min-width: 0;
-  gap: remify(8px);
-}
-.code-review-demo__caption {
-  margin: 0;
-  font-size: var(--wa-font-size-xs);
-}
-@media (max-width: remify(720px)) {
-  .code-review-demo {
-    grid-template-columns: 1fr;
-  }
 }
 .sidebar-component-demo {
   display: grid;
@@ -633,39 +404,6 @@ body[data-resizing-project-sidebar='true'] {
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: var(--wa-border-radius-l);
 }
-/* ProviderIcon gallery (HS2-PK8THJ): demo-owned rows that lay out the icons; the icon sizes itself. */
-.provider-icon-demo__variant {
-  display: grid;
-  width: min(remify(448px), 100%);
-  margin: 0;
-  justify-items: center;
-  gap: remify(8px);
-}
-.provider-icon-demo__variant > figcaption {
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  font-weight: var(--wa-font-weight-semibold);
-}
-.provider-icon-demo__variant > .component-stage__canvas {
-  width: 100%;
-  min-width: 0;
-  min-height: 0;
-  box-sizing: border-box;
-}
-.provider-icon-demo__providers {
-  display: flex;
-  margin: 0;
-  padding: 0;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: remify(16px) remify(24px);
-  list-style: none;
-}
-.provider-icon-demo__provider {
-  display: flex;
-  align-items: center;
-  gap: remify(8px);
-}
 .project-summary-demo__variants {
   display: grid;
   gap: var(--wa-space-m);
@@ -745,9 +483,6 @@ body[data-resizing-project-sidebar='true'] {
   overflow: hidden;
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: remify(12.8px);
-}
-.connection-banner-demo > .component-stage__event {
-  margin: remify(4px) remify(16px) remify(16px);
 }
 .resizable-region-demo__horizontal,
 .resizable-region-demo__vertical {

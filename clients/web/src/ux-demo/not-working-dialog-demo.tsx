@@ -1,8 +1,10 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { NotWorkingDialog } from '../components/not-working-dialog';
 import { PendingAttachmentPicker } from '../components/pending-attachment-picker';
+import { DemoEvent } from './components/demo-event';
 import { DEMO_ACTIONS, DEMO_COMPONENTS, DEMO_FIELDS, DEMO_MARKERS } from './demo-actions';
 import type { DemoModule } from './demo-module';
 
@@ -19,25 +21,25 @@ export const notWorkingDemoOpen = signal(false),
 // (HS2-AVTV2D).
 export function NotWorkingDialogDemo() {
   return (
-    <section class="metadata-control-demo" aria-label="NotWorkingDialog demo">
-      <button type="button" data-action="open-not-working-demo">
-        Open Not Working dialog
-      </button>
-      <p role="status">{notWorkingDemoEvent.value}</p>
-      <NotWorkingDialog
-        slug="HS2-DEMO"
-        open={notWorkingDemoOpen.value}
-        note={notWorkingDemoNote.value}
-        attachments={notWorkingDemoFiles.value}
-      />
-    </section>
+    <>
+      <CatalogExample align="glyph" label="Interactive">
+        <wa-button data-action="open-not-working-demo">Open Not Working dialog</wa-button>
+        <NotWorkingDialog
+          slug="HS2-DEMO"
+          open={notWorkingDemoOpen.value}
+          note={notWorkingDemoNote.value}
+          attachments={notWorkingDemoFiles.value}
+        />
+      </CatalogExample>
+      <DemoEvent>{notWorkingDemoEvent.value}</DemoEvent>
+    </>
   );
 }
 export function PendingAttachmentPickerDemo() {
   return (
-    <section class="metadata-control-demo" aria-label="PendingAttachmentPicker demo">
+    <CatalogExample label="Interactive" viewport={{ width: 'medium' }}>
       <PendingAttachmentPicker attachments={notWorkingDemoFiles.value} />
-    </section>
+    </CatalogExample>
   );
 }
 
@@ -129,8 +131,8 @@ function wireNotWorkingDialogDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'not-working-dialog': { Demo: NotWorkingDialogDemo },
-    'pending-attachment-picker': { Demo: PendingAttachmentPickerDemo },
+    'not-working-dialog': { catalogExamples: true, Demo: NotWorkingDialogDemo },
+    'pending-attachment-picker': { catalogExamples: true, Demo: PendingAttachmentPickerDemo },
   },
   wire: wireNotWorkingDialogDemo,
 };

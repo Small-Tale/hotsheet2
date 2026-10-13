@@ -1,9 +1,11 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { List } from '@kerfjs/ui/list';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { ChoiceCard, type ChoiceCardTone } from '../components/choice-card';
+import { DemoEvent } from './components/demo-event';
 import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
@@ -44,8 +46,12 @@ export function ChoiceCardDemo() {
   const type = choiceCardSettings.type.value,
     checked = choiceCardSettings.checked.value;
   return (
-    <section class="component-stage" aria-label="ChoiceCard demo">
-      <div class="component-stage__canvas">
+    <>
+      <CatalogExample
+        label="Interactive"
+        note="The input stays native, so its owning feature reads it by name. The last card always uses the danger tone, the presentation for destructive choices; the Tone setting styles the others."
+        viewport={{ width: 'medium' }}
+      >
         <fieldset data-choice-card-demo>
           <legend>Messages</legend>
           <List gap="2xs">
@@ -63,15 +69,9 @@ export function ChoiceCardDemo() {
             ))}
           </List>
         </fieldset>
-      </div>
-      <p class="component-stage__event" aria-live="polite">
-        Checked: {checked.length ? checked.join(', ') : 'none'}
-      </p>
-      <p class="component-stage__guidance">
-        The input stays native, so its owning feature reads it by name. The last card always uses the danger tone, the
-        presentation for destructive choices; the Tone setting styles the others.
-      </p>
-    </section>
+      </CatalogExample>
+      <DemoEvent>Checked: {checked.length ? checked.join(', ') : 'none'}</DemoEvent>
+    </>
   );
 }
 
@@ -148,7 +148,12 @@ function wireChoiceCardDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders. */
 export const demoModule: DemoModule = {
   entries: {
-    'choice-card': { Demo: ChoiceCardDemo, Settings: ChoiceCardSettings, reset: resetChoiceCardDemo },
+    'choice-card': {
+      catalogExamples: true,
+      Demo: ChoiceCardDemo,
+      Settings: ChoiceCardSettings,
+      reset: resetChoiceCardDemo,
+    },
   },
   wire: wireChoiceCardDemo,
 };

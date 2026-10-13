@@ -20,6 +20,7 @@ import { TerminalOperationsSidebar } from '../components/terminal-operations-sid
 import { ViewNavigation, type ViewNavigationItem } from '../components/view-navigation';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { loadLucideCatalog } from '../lucide-catalog';
+import { DemoEvent } from './components/demo-event';
 import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
 import { listen } from './demo-module';
@@ -89,9 +90,7 @@ function DemoFrame({ children }: { children: unknown }) {
   return (
     <section class="sidebar-component-demo">
       <div class="sidebar-component-demo__rail">{children}</div>
-      <p class="component-stage__event" aria-live="polite">
-        {sidebarEvent.value}
-      </p>
+      <DemoEvent>{sidebarEvent.value}</DemoEvent>
     </section>
   );
 }
@@ -369,9 +368,7 @@ export function ProjectSidebarDemo() {
           <LucideIcon size={18.4} icon={GripHorizontal} name="grip-horizontal" />
         </div>
       </div>
-      <p class="component-stage__event" aria-live="polite">
-        {sidebarEvent.value}
-      </p>
+      <DemoEvent>{sidebarEvent.value}</DemoEvent>
     </section>
   );
 }

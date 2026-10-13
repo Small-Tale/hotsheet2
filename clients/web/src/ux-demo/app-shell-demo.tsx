@@ -21,6 +21,7 @@ import { ticketInspectorPanel } from '../components/ticket-inspector';
 import { ticketInspectorPlaceholderPanel } from '../components/ticket-inspector-placeholder';
 import { TicketList } from '../components/ticket-list';
 import { WorkspaceControls, WorkspaceIdentity } from '../components/workspace-header';
+import { DemoEvent } from './components/demo-event';
 import { tabContextMenu } from './components/demo-state';
 import {
   editingNoteId,
@@ -257,9 +258,9 @@ export function ProjectTabDemo() {
         <ProjectTab id="offline" name="Disconnected" location="remote" disconnected />
         <ProjectTab id="fixed" name="Not closable" location="local" closable={false} upNextCount={100} />
       </div>
-      <p class="component-stage__event">
+      <DemoEvent live={false}>
         Selected, remote, busy, still opening, active queue, active work, attention, disconnected, and fixed states.
-      </p>
+      </DemoEvent>
     </section>
   );
 }
@@ -301,9 +302,7 @@ export function ProjectTabBarDemo() {
       <div class="project-tab-bar-demo__frame" aria-label="Phone project picker">
         <ProjectTabBar tabs={projectTabs.value} mode={shellMode.value} mobile />
       </div>
-      <p class="component-stage__event" aria-live="polite">
-        {shellEvent.value}
-      </p>
+      <DemoEvent>{shellEvent.value}</DemoEvent>
     </section>
   );
 }
@@ -354,9 +353,7 @@ export function ResizableRegionDemo() {
         </ResizableRegion>
         <div class="resizable-region-demo__remainder">Remaining height</div>
       </div>
-      <p class="component-stage__event" aria-live="polite">
-        Drag either handle or use arrow keys while it is focused.
-      </p>
+      <DemoEvent>Drag either handle or use arrow keys while it is focused.</DemoEvent>
     </section>
   );
 }
@@ -369,9 +366,7 @@ export function ConnectionStateBannerDemo() {
       <ConnectionStateBanner state="offline" detail="Changes will remain local until reconnection." />
       <ConnectionStateBanner state="incompatible" detail="This client requires Hot Sheet Server 2.4 or later." />
       <ConnectionStateBanner state="authentication" detail="Your saved credential is no longer accepted." />
-      <p class="component-stage__event" aria-live="polite">
-        {shellEvent.value}
-      </p>
+      <DemoEvent>{shellEvent.value}</DemoEvent>
     </section>
   );
 }
@@ -554,9 +549,7 @@ export function AppShellDemo() {
         upNext={composerUpNext.value}
         providerName="Hot Sheet git"
       />
-      <p class="component-stage__event" aria-live="polite">
-        {shellEvent.value}
-      </p>
+      <DemoEvent>{shellEvent.value}</DemoEvent>
     </section>
   );
 }

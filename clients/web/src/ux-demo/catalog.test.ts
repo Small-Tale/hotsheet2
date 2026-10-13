@@ -691,7 +691,6 @@ describe('UX demo catalog', () => {
     const demo = String(RepositoryStatusPopoverDemo()),
       style = readFileSync(fileURLToPath(new URL('./style.css', import.meta.url)), 'utf8');
     expect(demo).toContain('class="repository-status-demo"');
-    expect(style).toMatchSource(/\.demo-catalog-examples \{ width: 100%; min-width: 0; \}/);
     expect(style).toMatchSource(/\.repository-status-demo \{ width: 100%; min-width: 0; \}/);
     for (const scenario of ['clean', 'dirty', 'ahead', 'behind', 'diverged', 'conflicted', 'error'])
       expect(settings).toContain(`value="${scenario}"`);

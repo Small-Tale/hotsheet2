@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -30,18 +31,16 @@ export function resetConfidenceBadgeDemo(root?: ParentNode): void {
 
 export function ConfidenceBadgeDemo() {
   return (
-    <section class="component-stage" aria-label="ConfidenceBadge demo">
-      <div class="component-stage__canvas">
-        {ConfidenceBadge({
-          value: Number(confidenceBadgeSettings.value.value),
-          appearance: confidenceBadgeSettings.appearance.value,
-        })}
-      </div>
-      <p class="component-stage__guidance">
-        Compact is the pill on note cards and ticket list/board summaries; labeled is reserved for the inspector and
-        reader header. The band tint follows the confidence rubric.
-      </p>
-    </section>
+    <CatalogExample
+      align="glyph"
+      label="Interactive"
+      note="Compact is the pill on note cards and ticket list/board summaries; labeled is reserved for the inspector and reader header. The band tint follows the confidence rubric."
+    >
+      {ConfidenceBadge({
+        value: Number(confidenceBadgeSettings.value.value),
+        appearance: confidenceBadgeSettings.appearance.value,
+      })}
+    </CatalogExample>
   );
 }
 
@@ -90,6 +89,7 @@ function wireConfidenceBadgeDemo(root: HTMLElement): () => void {
 export const demoModule: DemoModule = {
   entries: {
     'confidence-badge': {
+      catalogExamples: true,
       Demo: ConfidenceBadgeDemo,
       Settings: ConfidenceBadgeSettings,
       reset: resetConfidenceBadgeDemo,

@@ -2862,6 +2862,17 @@ cleared every `kerfjs/require-delegate-disposer` and `kerfjs/prefer-attr-selecto
 doctor gate now budgets warnings as well: every warning id is held at 0 except the 56 `KUI-L401`
 wiring findings, which wait on Kerf accepting wiring done once at the app entry (`KF-VXWMM9`,
 HS2-Y2QG3G).
+
+HS2-Z3FMEZ replaced that app-owned stage with Kerf's catalog layout. Each converted demo renders
+Kerf `CatalogExample`s: the label, the note, `viewport` width/height/frame options, and
+`align="glyph"` for bare specimens. Event output goes through the shared `DemoEvent` (Kerf `Text`,
+`data-demo-event`), and an entry opts in with `catalogExamples: true`. Component entries then sit
+in Kerf's `CatalogExampleStack`. Application-width compositions render their examples directly
+until the stack gains a width option (`KF-HKVT5S`), and unconverted demos are hosted in one
+full-width `CatalogExample` while the remaining groups move over (HS2-E2MF3K, HS2-9564VE,
+HS2-3S654M, HS2-V7SW9T, HS2-CEDWW2, HS2-Y2X87R, HS2-WQ2T92, HS2-98EMHM, HS2-2N33S4, HS2-BG9TBZ).
+The `component-stage`, collection, search-field, provider-icon, inspector-panel and code-review
+demo CSS was deleted.
 HS2-TF76Z2 upgraded to 5.0.0-beta.68 and declared `src/main.tsx` and `src/ux-demo/main.tsx` as
 `wiring.entries` in `.kerf-ui-profile.json`, so application-scoped wiring obligations are checked
 once per entry instead of in every rendering file, and moved the single page-lifetime

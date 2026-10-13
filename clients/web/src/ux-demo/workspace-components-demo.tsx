@@ -51,6 +51,7 @@ import { type PermissionDecision, PermissionInbox, type PermissionScope } from '
 import { keepSearchOpenForShadowTarget } from '../search-collapse';
 import { createTicketSearchModel, inlineSearchTokens } from '../ticket-search-model';
 import { compareWorkspaceTickets } from '../workspace-ticket-sort';
+import { DemoEvent } from './components/demo-event';
 import { contextMenu, selectedId } from './components/demo-state';
 import {
   editingNoteId,
@@ -472,9 +473,7 @@ export function WorkspaceHeaderDemo() {
       <div class="workspace-component-demo__content">
         <WorkspaceContent />
       </div>
-      <p class="component-stage__event" aria-live="polite">
-        {collectionEvent.value}
-      </p>
+      <DemoEvent>{collectionEvent.value}</DemoEvent>
     </section>
   );
 }
@@ -488,7 +487,7 @@ export function PageHeaderDemo() {
           leading={<ToolbarText text="Queue" id="page-header-demo-title" size="xlarge" headingLevel={1} />}
         />
       </div>
-      <p class="component-stage__event">View identity remains separate from project-level controls.</p>
+      <DemoEvent live={false}>View identity remains separate from project-level controls.</DemoEvent>
     </section>
   );
 }
@@ -537,9 +536,7 @@ export function QuickTicketComposerDemo() {
         attachmentsEnabled={demoComposerSource().attachments}
       />
       <TicketList tickets={collectionTickets.value.slice(0, 3)} label="Recently updated tickets" />
-      <p class="component-stage__event" aria-live="polite">
-        {collectionEvent.value}
-      </p>
+      <DemoEvent>{collectionEvent.value}</DemoEvent>
     </section>
   );
 }
@@ -725,9 +722,7 @@ export function TicketInspectorDemo({ collapseControl = true }: { collapseContro
       ) : (
         <wa-button data-action="toggle-ticket-inspector">Open ticket inspector</wa-button>
       )}
-      <p class="component-stage__event" aria-live="polite">
-        {collectionEvent.value}
-      </p>
+      <DemoEvent>{collectionEvent.value}</DemoEvent>
     </section>
   );
 }
@@ -1075,7 +1070,7 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
     delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.setInspectorStatus.selector, (_event, target) => {
       const value = (target as HTMLElement).dataset.ticketStatus;
       if (!value) return;
-      if (target.closest('.metadata-control-demo')) {
+      if (target.closest('[data-status-menu-demo]')) {
         statusMenuDemoStatus.value = value as typeof statusMenuDemoStatus.value;
         statusMenuDemoStartedPhase.value = '';
       } else {
@@ -1088,7 +1083,7 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
     delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.setInspectorStartedPhase.selector, (_event, target) => {
       const phase = (target as HTMLElement).dataset.startedPhase;
       if (phase === undefined) return;
-      if (target.closest('.metadata-control-demo')) {
+      if (target.closest('[data-status-menu-demo]')) {
         statusMenuDemoStatus.value = 'started';
         statusMenuDemoStartedPhase.value = phase as typeof statusMenuDemoStartedPhase.value;
       } else {

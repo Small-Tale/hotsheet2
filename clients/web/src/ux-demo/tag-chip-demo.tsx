@@ -1,9 +1,11 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { TAG_CHIP_REMOVE_ACTION } from '../components/tag-chip';
 import { TagChip, type TagChipAppearance, type TagChipSize, type TagChipVariant } from '../components/tag-chip';
+import { DemoEvent } from './components/demo-event';
 import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
@@ -48,8 +50,13 @@ export function resetTagChipDemo(controlRoot?: ParentNode): void {
 
 export function TagChipDemo() {
   return (
-    <section class="component-stage" aria-label="TagChip demo">
-      <div class="component-stage__canvas">
+    <>
+      <CatalogExample
+        align="glyph"
+        label="Interactive"
+        rootAttributes={{ 'data-tag-chip-demo': '' }}
+        note="The owning feature handles removal and ticket mutation. The chip's delegated remove action carries the stable tag identity."
+      >
         {TagChip({
           id: 'demo-tag',
           label: tagChipSettings.label.value,
@@ -60,15 +67,9 @@ export function TagChipDemo() {
           pill: tagChipSettings.pill.value,
           disabled: tagChipSettings.disabled.value,
         })}
-      </div>
-      <p class="component-stage__event" aria-live="polite">
-        {tagChipSettings.event}
-      </p>
-      <p class="component-stage__guidance">
-        The owning feature handles removal and ticket mutation. The chip's delegated remove action carries the stable
-        tag identity.
-      </p>
-    </section>
+      </CatalogExample>
+      <DemoEvent>{tagChipSettings.event.value}</DemoEvent>
+    </>
   );
 }
 
@@ -152,16 +153,11 @@ function wireTagChipDemo(root: HTMLElement): () => void {
     }),
   );
   demoListeners.add(
-    delegate(
-      root,
-      'click',
-      `[aria-label="TagChip demo"] [data-action="${TAG_CHIP_REMOVE_ACTION}"]`,
-      (_event, target) => {
-        const chip = target.closest<HTMLElement>('[data-component="chip"]');
-        if (chip && chip.dataset.disabled === undefined)
-          tagChipSettings.event.value = `Remove requested for ${chip.dataset.itemId}`;
-      },
-    ),
+    delegate(root, 'click', `[data-tag-chip-demo] [data-action="${TAG_CHIP_REMOVE_ACTION}"]`, (_event, target) => {
+      const chip = target.closest<HTMLElement>('[data-component="chip"]');
+      if (chip && chip.dataset.disabled === undefined)
+        tagChipSettings.event.value = `Remove requested for ${chip.dataset.itemId}`;
+    }),
   );
   return () => {
     demoListeners.dispose();
@@ -171,7 +167,7 @@ function wireTagChipDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'tag-chip': { Demo: TagChipDemo, Settings: TagChipSettings, reset: resetTagChipDemo },
+    'tag-chip': { catalogExamples: true, Demo: TagChipDemo, Settings: TagChipSettings, reset: resetTagChipDemo },
   },
   wire: wireTagChipDemo,
 };

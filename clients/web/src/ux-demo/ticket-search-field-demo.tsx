@@ -1,3 +1,5 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
+import { Grid } from '@kerfjs/ui/grid';
 import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -5,6 +7,7 @@ import { batch, signal } from 'kerfjs';
 
 import { TicketSearchField, TicketSearchFormField, TicketSearchSurfaces } from '../components/ticket-search-field';
 import { createTicketSearchModel, replaceTicketSearch } from '../ticket-search-model';
+import { DemoEvent } from './components/demo-event';
 import { onDemoSelected } from './components/demo-state';
 import type { DemoModule } from './demo-module';
 
@@ -106,16 +109,19 @@ export function TicketSearchFieldDemo() {
   const floating = ticketSearchDemoModels['ticket-search-demo'],
     external = ticketSearchDemoModels['ticket-search-demo-external'];
   return (
-    <section class="ticket-search-field-demo" aria-label="TicketSearchField demo">
-      <div>
-        <h2 class="ticket-search-field-demo__caption">Standalone query field, floating surfaces</h2>
-        <p class="component-stage__hint">
-          Type <code>tag:</code> for Kerf's in-place tag completion, a lifecycle filter such as{' '}
-          <code>updated-after:</code> for the date helper, or open the syntax help. Whitespace commits a filter as a
-          chip.
-        </p>
+    <>
+      <CatalogExample
+        align="glyph"
+        label="Standalone query field, floating surfaces"
+        note={
+          <>
+            Type <code>tag:</code> for Kerf's in-place tag completion, a lifecycle filter such as{' '}
+            <code>updated-after:</code> for the date helper, or open the syntax help. Whitespace commits a filter as a
+            chip.
+          </>
+        }
+      >
         <Toolbar
-          className="ticket-search-field-demo__toolbar"
           centerAlign="stretch"
           center={
             <TicketSearchField
@@ -127,16 +133,21 @@ export function TicketSearchFieldDemo() {
             />
           }
         />
-      </div>
-      <div class="ticket-search-field-demo__external">
-        <h2 class="ticket-search-field-demo__caption">External surfaces, dialog layout</h2>
-        <p class="component-stage__hint">
-          Inside a dialog or other clipping container the field renders no popovers; the consumer places
-          <code>TicketSearchSurfaces</code> for the same id in its own stacked layout. Kerf's tag suggestions stay in
-          flow inside the field.
-        </p>
+      </CatalogExample>
+      <CatalogExample
+        align="glyph"
+        label="External surfaces, dialog layout"
+        rootAttributes={{ 'data-search-demo': 'external' }}
+        note={
+          <>
+            Inside a dialog or other clipping container the field renders no popovers; the consumer places{' '}
+            <code>TicketSearchSurfaces</code> for the same id in its own stacked layout. Kerf's tag suggestions stay in
+            flow inside the field.
+          </>
+        }
+        viewport={{ width: 'full' }}
+      >
         <Toolbar
-          className="ticket-search-field-demo__toolbar"
           centerAlign="stretch"
           center={
             <TicketSearchField
@@ -154,32 +165,43 @@ export function TicketSearchFieldDemo() {
           model={external}
           helpOpen={ticketSearchDemoHelpOpen['ticket-search-demo-external'].value}
         />
-      </div>
-      <div class="ticket-search-field-demo__form">
-        <h2 class="ticket-search-field-demo__caption">Form field beside Web Awesome inputs</h2>
-        <p class="component-stage__hint">
-          <code>TicketSearchFormField</code> uses Kerf's form-field presentation: a visible label, hint, and required
-          marker that line up with a <code>wa-input</code>, with the helper surfaces stacked below (HS2-E40KC0).
-        </p>
-        <wa-input name="ticket-search-demo-form-name" label="View name" required />
-        <TicketSearchFormField
-          id="ticket-search-demo-form"
-          label="View query"
-          model={ticketSearchDemoModels['ticket-search-demo-form']}
-          required
-          hint="Use the same words, fields, operators, and filter chips as ticket search."
-          helpOpen={ticketSearchDemoHelpOpen['ticket-search-demo-form'].value}
-          clearLabel="Clear form search query"
-        />
-      </div>
-      <div>
-        <h2 class="ticket-search-field-demo__caption">Collapsible toolbar field, inline layout</h2>
-        <p class="component-stage__hint">
-          <code>layout="inline"</code> (the default) keeps Kerf's own collapsed and expanded widths; a{' '}
-          <code>trailing-priority</code> Toolbar reserves the expanded field's track.
-        </p>
+      </CatalogExample>
+      <CatalogExample
+        align="glyph"
+        label="Form field beside Web Awesome inputs"
+        rootAttributes={{ 'data-search-demo': 'form' }}
+        note={
+          <>
+            <code>TicketSearchFormField</code> uses Kerf's form-field presentation: a visible label, hint, and required
+            marker that line up with a <code>wa-input</code>, with the helper surfaces stacked below (HS2-E40KC0).
+          </>
+        }
+        viewport={{ width: 'full' }}
+      >
+        <Grid columns={1} gap="m" textInsets="rl">
+          <wa-input name="ticket-search-demo-form-name" label="View name" required />
+          <TicketSearchFormField
+            id="ticket-search-demo-form"
+            label="View query"
+            model={ticketSearchDemoModels['ticket-search-demo-form']}
+            required
+            hint="Use the same words, fields, operators, and filter chips as ticket search."
+            helpOpen={ticketSearchDemoHelpOpen['ticket-search-demo-form'].value}
+            clearLabel="Clear form search query"
+          />
+        </Grid>
+      </CatalogExample>
+      <CatalogExample
+        align="glyph"
+        label="Collapsible toolbar field, inline layout"
+        note={
+          <>
+            <code>layout="inline"</code> (the default) keeps Kerf's own collapsed and expanded widths; a{' '}
+            <code>trailing-priority</code> Toolbar reserves the expanded field's track.
+          </>
+        }
+      >
         <Toolbar
-          className="ticket-search-field-demo__toolbar"
           responsive="trailing-priority"
           responsiveAt="narrow"
           trailing={
@@ -192,15 +214,18 @@ export function TicketSearchFieldDemo() {
             />
           }
         />
-      </div>
-      <div>
-        <h2 class="ticket-search-field-demo__caption">Grow layout (workspace header)</h2>
-        <p class="component-stage__hint">
-          <code>layout="grow"</code>: the open field grows into the free room on its row from a 19rem floor, takes the
-          whole row on a compact toolbar, and its collapsed icon leaves the tiniest toolbars (HS2-8FS5BJ).
-        </p>
+      </CatalogExample>
+      <CatalogExample
+        align="glyph"
+        label="Grow layout (workspace header)"
+        note={
+          <>
+            <code>layout="grow"</code>: the open field grows into the free room on its row from a 19rem floor, takes the
+            whole row on a compact toolbar, and its collapsed icon leaves the tiniest toolbars (HS2-8FS5BJ).
+          </>
+        }
+      >
         <Toolbar
-          className="ticket-search-field-demo__toolbar"
           responsive="stack"
           responsiveAt="compact"
           leading={<ToolbarText text="Queue" size="large" />}
@@ -215,15 +240,19 @@ export function TicketSearchFieldDemo() {
             />
           }
         />
-      </div>
-      <div class="ticket-search-field-demo__narrow">
-        <h2 class="ticket-search-field-demo__caption">Row layout (narrow rail)</h2>
-        <p class="component-stage__hint">
-          <code>layout="row"</code>: the collapsed icon sits at its zone's trailing edge and the open field fills a row
-          of its own (Kerf <code>fill</code>), sliding in from the row above.
-        </p>
+      </CatalogExample>
+      <CatalogExample
+        align="glyph"
+        label="Row layout (narrow rail)"
+        note={
+          <>
+            <code>layout="row"</code>: the collapsed icon sits at its zone's trailing edge and the open field fills a
+            row of its own (Kerf <code>fill</code>), sliding in from the row above.
+          </>
+        }
+        viewport={{ width: 'text' }}
+      >
         <Toolbar
-          className="ticket-search-field-demo__toolbar"
           responsive="stack"
           responsiveAt="narrow"
           leading={<ToolbarText text="Queue" size="large" />}
@@ -238,11 +267,9 @@ export function TicketSearchFieldDemo() {
             />
           }
         />
-      </div>
-      <div>
-        <h2 class="ticket-search-field-demo__caption">Disabled</h2>
+      </CatalogExample>
+      <CatalogExample align="glyph" label="Disabled">
         <Toolbar
-          className="ticket-search-field-demo__toolbar"
           centerAlign="stretch"
           center={
             <TicketSearchField
@@ -253,11 +280,9 @@ export function TicketSearchFieldDemo() {
             />
           }
         />
-      </div>
-      <p class="component-stage__event" aria-live="polite">
-        {ticketSearchDemoEvent.value}
-      </p>
-    </section>
+      </CatalogExample>
+      <DemoEvent>{ticketSearchDemoEvent.value}</DemoEvent>
+    </>
   );
 }
 
@@ -271,7 +296,7 @@ function wireTicketSearchFieldDemo(): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'ticket-search-field': { Demo: TicketSearchFieldDemo },
+    'ticket-search-field': { catalogExamples: true, Demo: TicketSearchFieldDemo },
   },
   wire: wireTicketSearchFieldDemo,
 };

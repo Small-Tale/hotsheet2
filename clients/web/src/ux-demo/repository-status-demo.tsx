@@ -15,6 +15,7 @@ import {
   type RepositoryStatusView,
 } from '../components/repository-status-popover';
 import type { CodeReviewComparison } from '../components/ticket-code-review';
+import { DemoEvent } from './components/demo-event';
 import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
@@ -135,9 +136,7 @@ export function RepositoryStatusPopoverDemo() {
         fileMenu={repositoryDemoFileMenu.value}
         selectedFiles={repositoryDemoSelectedFiles.value}
       />
-      <p class="component-stage__event" aria-live="polite">
-        {repositoryDemoEvent.value}
-      </p>
+      <DemoEvent>{repositoryDemoEvent.value}</DemoEvent>
     </section>
   );
 }
@@ -166,9 +165,7 @@ export function ChangeEvidenceDialogDemo() {
         selectedFiles={repositoryDemoSelectedFiles.value}
         platform="macos"
       />
-      <p class="component-stage__event" aria-live="polite">
-        {repositoryDemoEvent.value}
-      </p>
+      <DemoEvent>{repositoryDemoEvent.value}</DemoEvent>
     </section>
   );
 }

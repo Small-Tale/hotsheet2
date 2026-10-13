@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { delegateCapture, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -12,6 +13,7 @@ import {
   type TicketSelectionState,
   updateTicketSelection,
 } from '../components/ticket-selection';
+import { DemoEvent } from './components/demo-event';
 import { contextMenu, selectDemo, selectedId } from './components/demo-state';
 import { openDemoTicketReader } from './content-components-demo';
 import { DEMO_ACTIONS } from './demo-actions';
@@ -299,30 +301,25 @@ export function toggleCollectionTicketUpNext(slug: string): void {
 
 export function TicketListDemo() {
   return (
-    <section class="collection-demo" aria-label="TicketList demo">
-      <TicketList tickets={collectionTickets.value} label="Example ticket list" />
-      <div class="collection-demo__empty-states" aria-label="TicketList empty states">
-        <article class="collection-demo__empty-state">
-          <h3 class="collection-demo__caption">New project</h3>
-          <TicketList tickets={[]} emptyState={{ kind: 'project' }} label="Empty new project" />
-        </article>
-        <article class="collection-demo__empty-state">
-          <h3 class="collection-demo__caption">Empty view</h3>
-          <TicketList tickets={[]} emptyState={{ kind: 'view', viewLabel: 'Backlog' }} label="Empty Backlog" />
-        </article>
-        <article class="collection-demo__empty-state">
-          <h3 class="collection-demo__caption">No search results</h3>
-          <TicketList tickets={[]} emptyState={{ kind: 'search', query: 'parser' }} label="Empty search" />
-        </article>
-      </div>
-      <p class="component-stage__event" aria-live="polite">
-        {collectionEvent.value}
-      </p>
-      <p class="component-stage__guidance">
-        The list gives TicketRow the full content width for fast scanning while preserving the same selection and
-        metadata contract used in columns.
-      </p>
-    </section>
+    <>
+      <CatalogExample
+        label="Interactive"
+        note="The list gives TicketRow the full content width for fast scanning while preserving the same selection and metadata contract used in columns."
+        viewport={{ width: 'full' }}
+      >
+        <TicketList tickets={collectionTickets.value} label="Example ticket list" />
+      </CatalogExample>
+      <CatalogExample label="Empty state: new project" viewport={{ width: 'full' }}>
+        <TicketList tickets={[]} emptyState={{ kind: 'project' }} label="Empty new project" />
+      </CatalogExample>
+      <CatalogExample label="Empty state: empty view" viewport={{ width: 'full' }}>
+        <TicketList tickets={[]} emptyState={{ kind: 'view', viewLabel: 'Backlog' }} label="Empty Backlog" />
+      </CatalogExample>
+      <CatalogExample label="Empty state: no search results" viewport={{ width: 'full' }}>
+        <TicketList tickets={[]} emptyState={{ kind: 'search', query: 'parser' }} label="Empty search" />
+      </CatalogExample>
+      <DemoEvent>{collectionEvent.value}</DemoEvent>
+    </>
   );
 }
 
@@ -342,53 +339,46 @@ export function TicketBoardDemo() {
     },
   ];
   return (
-    <section class="collection-demo collection-demo--board" aria-label="TicketBoard demo">
-      <div class="collection-demo__board-stage">
+    <>
+      <CatalogExample
+        label="Interactive"
+        note="Each narrow column activates TicketRow’s own card presentation; no TicketCard component or parallel summary markup is involved."
+        viewport={{ width: 'full', height: 'app' }}
+      >
         <TicketBoard columns={columns} label="Example status board" />
-      </div>
-      <article class="collection-demo__paged-board">
-        <h3 class="collection-demo__caption">Paged layout</h3>
-        <p>Phone widths show one column at a time and snap to the nearest column when a swipe is released.</p>
-        <div class="collection-demo__board-stage">
-          <TicketBoard columns={columns} layout="paged" label="Paged status board" />
-        </div>
-      </article>
-      <article class="collection-demo__empty-board">
-        <h3 class="collection-demo__caption">Empty search</h3>
-        <div class="collection-demo__board-stage">
-          <TicketBoard
-            columns={columns.map((column) => ({ ...column, tickets: [] }))}
-            emptyState={{ kind: 'search', query: 'parser' }}
-            label="Empty search board"
-          />
-        </div>
-      </article>
-      <p class="component-stage__event" aria-live="polite">
-        {collectionEvent.value}
-      </p>
-      <p class="component-stage__guidance">
-        Each narrow column activates TicketRow’s own card presentation; no TicketCard component or parallel summary
-        markup is involved.
-      </p>
-    </section>
+      </CatalogExample>
+      <CatalogExample
+        label="Paged layout"
+        note="Phone widths show one column at a time and snap to the nearest column when a swipe is released."
+        viewport={{ width: 'compact', height: 'app' }}
+      >
+        <TicketBoard columns={columns} layout="paged" label="Paged status board" />
+      </CatalogExample>
+      <CatalogExample label="Empty search" viewport={{ width: 'full', height: 'tall' }}>
+        <TicketBoard
+          columns={columns.map((column) => ({ ...column, tickets: [] }))}
+          emptyState={{ kind: 'search', query: 'parser' }}
+          label="Empty search board"
+        />
+      </CatalogExample>
+      <DemoEvent>{collectionEvent.value}</DemoEvent>
+    </>
   );
 }
 
 export function TicketBoardColumnDemo() {
   const tickets = collectionTickets.value.filter((ticket) => ticket.status === 'started');
   return (
-    <section class="collection-demo collection-demo--column" aria-label="TicketBoardColumn demo">
-      <div class="collection-demo__column-stage">
+    <>
+      <CatalogExample
+        label="Interactive"
+        note="The column owns its fixed heading, derived count, independently scrollable ticket region, and shared responsive TicketRow composition."
+        viewport={{ width: 'compact', height: 'app' }}
+      >
         <TicketBoardColumn id="in-progress-demo" title="In progress" tickets={tickets} />
-      </div>
-      <p class="component-stage__event" aria-live="polite">
-        {collectionEvent.value}
-      </p>
-      <p class="component-stage__guidance">
-        The column owns its fixed heading, derived count, independently scrollable ticket region, and shared responsive
-        TicketRow composition.
-      </p>
-    </section>
+      </CatalogExample>
+      <DemoEvent>{collectionEvent.value}</DemoEvent>
+    </>
   );
 }
 
@@ -533,9 +523,9 @@ function wireTicketCollectionsDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'ticket-list': { Demo: TicketListDemo },
-    'ticket-board': { Demo: TicketBoardDemo },
-    'ticket-board-column': { Demo: TicketBoardColumnDemo },
+    'ticket-list': { catalogExamples: true, Demo: TicketListDemo },
+    'ticket-board': { catalogExamples: true, Demo: TicketBoardDemo },
+    'ticket-board-column': { catalogExamples: true, Demo: TicketBoardColumnDemo },
   },
   wire: wireTicketCollectionsDemo,
 };

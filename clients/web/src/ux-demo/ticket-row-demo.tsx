@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -9,6 +10,7 @@ import { CorruptTicketRow } from '../components/corrupt-ticket-row';
 import type { TicketStatus } from '../components/status-badge';
 import { type TicketPriority, TicketRow } from '../components/ticket-row';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
+import { DemoEvent } from './components/demo-event';
 import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
@@ -115,53 +117,57 @@ const TICKET_ROW_DEMO_CORRUPT = {
 
 export function TicketRowDemo() {
   return (
-    <section class="component-stage component-stage--row" aria-label="TicketRow demo">
-      <div class="component-stage__canvas component-stage__canvas--row" role="listbox" aria-label="Example ticket list">
-        {TicketRow({
-          slug: TICKET_ROW_DEMO_SLUG,
-          title: ticketRowSettings.title.value,
-          status: ticketRowSettings.status.value,
-          startedPhase: ticketRowSettings.startedPhase.value || undefined,
-          priority: ticketRowSettings.priority.value,
-          category: ticketRowSettings.category.value,
-          source: { provider: 'github', name: 'Product issues', color: '#3b82f6' },
-          showSourceIcon: ticketRowSettings.showSourceIcon.value,
-          tags: ticketRowSettings.tags.value.split(','),
-          upNext: ticketRowSettings.upNext.value,
-          blocked: ticketRowSettings.blocked.value,
-          needsReview: ticketRowSettings.needsReview.value,
-          feedbackNeeded: ticketRowSettings.feedbackNeeded.value,
-          selected: ticketRowSettings.selected.value,
-          busy: ticketRowSettings.busy.value,
-          claimEta:
-            ticketRowSettings.claimEta.value === 'none'
-              ? undefined
-              : TICKET_ROW_CLAIM_ETA[ticketRowSettings.claimEta.value],
-          categoryIcon: ticketRowSettings.categoryIcon.value,
-          categoryColor: ticketRowSettings.categoryColor.value,
-          agentName: ticketRowSettings.agentName.value,
-          updatedLabel: ticketRowSettings.updatedLabel.value,
-          latestConfidence:
-            ticketRowSettings.confidence.value === 'none' ? undefined : Number(ticketRowSettings.confidence.value),
-        })}
-      </div>
+    <>
+      <CatalogExample
+        label="Interactive"
+        note="The full row is the selection target. Metadata stays scannable while tags and transient AI activity remain secondary."
+        viewport={{ width: 'full' }}
+      >
+        <div role="listbox" aria-label="Example ticket list">
+          {TicketRow({
+            slug: TICKET_ROW_DEMO_SLUG,
+            title: ticketRowSettings.title.value,
+            status: ticketRowSettings.status.value,
+            startedPhase: ticketRowSettings.startedPhase.value || undefined,
+            priority: ticketRowSettings.priority.value,
+            category: ticketRowSettings.category.value,
+            source: { provider: 'github', name: 'Product issues', color: '#3b82f6' },
+            showSourceIcon: ticketRowSettings.showSourceIcon.value,
+            tags: ticketRowSettings.tags.value.split(','),
+            upNext: ticketRowSettings.upNext.value,
+            blocked: ticketRowSettings.blocked.value,
+            needsReview: ticketRowSettings.needsReview.value,
+            feedbackNeeded: ticketRowSettings.feedbackNeeded.value,
+            selected: ticketRowSettings.selected.value,
+            busy: ticketRowSettings.busy.value,
+            claimEta:
+              ticketRowSettings.claimEta.value === 'none'
+                ? undefined
+                : TICKET_ROW_CLAIM_ETA[ticketRowSettings.claimEta.value],
+            categoryIcon: ticketRowSettings.categoryIcon.value,
+            categoryColor: ticketRowSettings.categoryColor.value,
+            agentName: ticketRowSettings.agentName.value,
+            updatedLabel: ticketRowSettings.updatedLabel.value,
+            latestConfidence:
+              ticketRowSettings.confidence.value === 'none' ? undefined : Number(ticketRowSettings.confidence.value),
+          })}
+        </div>
+      </CatalogExample>
       {/* The shared row shell's danger presentation (HS2-1FH8BG): a danger rail and a selection wiggle
           around CorruptTicketRow's diagnostic content; Selected drives both rows. */}
-      <div class="component-stage__canvas component-stage__canvas--row" data-ticket-row-demo-danger>
+      <CatalogExample
+        label="Danger presentation"
+        viewport={{ width: 'full' }}
+        rootAttributes={{ 'data-ticket-row-demo-danger': '' }}
+      >
         {CorruptTicketRow({
           ticket: TICKET_ROW_DEMO_CORRUPT,
           selected: ticketRowSettings.selected.value,
           listEdge: 'only',
         })}
-      </div>
-      <p class="component-stage__event" aria-live="polite">
-        {ticketRowSettings.event}
-      </p>
-      <p class="component-stage__guidance">
-        The full row is the selection target. Metadata stays scannable while tags and transient AI activity remain
-        secondary.
-      </p>
-    </section>
+      </CatalogExample>
+      <DemoEvent>{ticketRowSettings.event.value}</DemoEvent>
+    </>
   );
 }
 
@@ -346,7 +352,12 @@ function wireTicketRowDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'ticket-row': { Demo: TicketRowDemo, Settings: TicketRowSettings, reset: resetTicketRowDemo },
+    'ticket-row': {
+      catalogExamples: true,
+      Demo: TicketRowDemo,
+      Settings: TicketRowSettings,
+      reset: resetTicketRowDemo,
+    },
   },
   wire: wireTicketRowDemo,
 };

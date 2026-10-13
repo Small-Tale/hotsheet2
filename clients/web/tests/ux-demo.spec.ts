@@ -222,11 +222,11 @@ test('preserves a selected catalog component through a real reload (HS2-9TZ9AF)'
   await expect(catalog).toBeVisible();
   await catalog.getByRole('button', { name: /TicketRow/ }).click();
   await expect(page).toHaveURL('/ux-demo?component=ticket-row');
-  await expect(page.getByRole('region', { name: 'TicketRow demo' })).toBeVisible();
+  await expect(page.locator('[data-catalog-example-stack]')).toBeVisible();
   await page.reload();
   await expect(page).toHaveURL('/ux-demo?component=ticket-row');
   await expect(page.getByRole('heading', { name: 'TicketRow', exact: true })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'TicketRow demo' })).toBeVisible();
+  await expect(page.locator('[data-catalog-example-stack]')).toBeVisible();
 });
 
 test('keeps the catalog filter and placeholder across rerenders (HS2-458BS5, HS2-WATFM5)', async ({ page }) => {
@@ -288,7 +288,7 @@ test('presents catalog navigation, controls, and responsive stage (HS2-9TZ9AF, H
   await catalog.getByRole('button', { name: /TicketRow/ }).click();
   await expect(page).toHaveURL('/ux-demo?component=ticket-row');
   await expect(page.getByRole('heading', { name: 'TicketRow', exact: true })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'TicketRow demo' })).toBeVisible();
+  await expect(page.locator('[data-catalog-example-stack]')).toBeVisible();
   const catalogTop = await page
     .getByRole('complementary', { name: 'UX components catalog' })
     .evaluate((node) => node.getBoundingClientRect().top);
@@ -396,14 +396,37 @@ test('renders the canonical ListItem and ListHeader demo routes (HS2-YGWNY7)', a
   await page.screenshot({ path: 'target/visual-captures/hs2-ygwny7-list-item-narrow.png', fullPage: true });
 });
 
+test('labels converted demo specimens through Kerf CatalogExample, not app-owned stages (HS2-Z3FMEZ)', async ({
+  page,
+}) => {
+  const examples: [string, number][] = [
+    ['status-badge', 1],
+    ['provider-icon', 2],
+    ['ticket-row', 2],
+    ['ticket-list', 4],
+    ['ticket-board', 3],
+    ['ticket-board-column', 1],
+    ['ticket-search-field', 7],
+    ['ticket-code-review', 4],
+    ['ticket-attachments', 4],
+    ['ticket-info-panel', 2],
+  ];
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const [component, count] of examples) {
+      await page.goto(`/ux-demo?component=${component}`);
+      await expect(page.locator('[data-catalog-example-label]'), component).toHaveCount(count);
+      await expect(page.locator('[data-catalog-example]').first(), component).toBeVisible();
+      await expect(page.locator('.component-stage, .collection-demo, .inspector-panel-demo')).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    }
+  }
+});
+
 test('styles demo captions through demo-owned classes, not the demoed components (HS2-TV78E1)', async ({ page }) => {
   const captions: [string, string, number][] = [
-    ['ticket-list', '.collection-demo__caption', 3],
-    ['ticket-board', '.collection-demo__caption', 2],
     ['toolbar-text', '.toolbar-text-demo__caption', 3],
-    ['ticket-search-field', '.ticket-search-field-demo__caption', 7],
     ['toolbar-control-group', '.toolbar-control-group-demo__caption', 8],
-    ['ticket-code-review', '.code-review-demo__caption', 4],
     ['list-item', '.list-item-demo__caption', 5],
     ['terminal-key-bar', '.terminal-key-bar-demo__caption', 2],
     ['fixed-aspect-terminal-card', '.fixed-aspect-terminal-card-demo__caption', 5],
@@ -421,11 +444,6 @@ test('styles demo captions through demo-owned classes, not the demoed components
     await expect(page.locator('.list-item-demo__caption').first()).toHaveCSS('text-transform', 'uppercase');
     await expect(page.locator('.list-item-demo__detail')).toHaveCount(3);
     await expect(page.locator('.list-item-demo__detail').first()).toHaveCSS('font-variant-numeric', 'tabular-nums');
-    await page.goto('/ux-demo?component=ticket-list');
-    await expect(page.locator('.collection-demo__empty-state')).toHaveCount(3);
-    await expect(page.locator('.collection-demo__empty-state').first()).toHaveCSS('border-top-style', 'solid');
-    await page.goto('/ux-demo?component=ticket-code-review');
-    await expect(page.locator('.code-review-demo__case')).toHaveCount(4);
     await page.goto('/ux-demo?component=floating-toolbar');
     await expect(page.locator('.floating-toolbar-demo__copy')).toHaveCSS('margin-top', '0px');
   }
@@ -775,9 +793,9 @@ test('represents the shared repository-status composition in the UX catalog', as
   await fileMenu.click();
   await expect(dialog.getByRole('menuitem', { name: 'Show Diff' })).toBeVisible();
   await dialog.getByRole('menuitem', { name: 'Show Diff' }).click();
-  await expect(page.locator('.component-stage__event')).toContainText('Would review');
+  await expect(page.locator('[data-demo-event]')).toContainText('Would review');
   await file.dblclick();
-  await expect(page.locator('.component-stage__event')).toContainText('Would open');
+  await expect(page.locator('[data-demo-event]')).toContainText('Would open');
   await dialog.screenshot({ path: 'target/visual-captures/hs2-s6f817-repository-scenarios-wide.png' });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-repository-status-wide.png' });
   await dialog.getByRole('button', { name: /Commits 24/ }).click();
@@ -863,7 +881,7 @@ test('represents the ticket change-evidence master-detail dialog in the UX catal
   await file.click();
   await expect(dialog.getByRole('menuitem', { name: 'Show Diff' })).toBeVisible();
   await dialog.getByRole('menuitem', { name: 'Show Diff' }).click();
-  await expect(page.locator('.component-stage__event')).toContainText('Would review');
+  await expect(page.locator('[data-demo-event]')).toContainText('Would review');
   await dialog.getByRole('button', { name: /Source 1/ }).click();
   await expect(dialog).toHaveAttribute('data-view', 'source');
   await dialog.screenshot({ path: 'target/visual-captures/hs2-s7x4sb-change-evidence-demo-wide.png' });
@@ -1610,7 +1628,7 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
 
 test('round-trips ConfidenceCalibration states through reset and a post-reset edit (HS2-Q1WCCY)', async ({ page }) => {
   await page.goto('/ux-demo?component=confidence-calibration');
-  const panel = page.locator('.component-stage [data-component="confidence-calibration"]');
+  const panel = page.locator('[data-catalog-example] [data-component="confidence-calibration"]');
   await expect(panel).toHaveAttribute('data-state', 'ready');
   await expect(panel).toContainText('7 completions, 5 scored');
   await expect(panel.locator('tbody tr')).toHaveCount(5);
@@ -1645,7 +1663,7 @@ test('round-trips ConfidenceBadge appearance and band controls through reset and
   page,
 }) => {
   await page.goto('/ux-demo?component=confidence-badge');
-  const badge = page.locator('.component-stage [data-component="confidence-badge"]');
+  const badge = page.locator('[data-catalog-example] [data-component="confidence-badge"]');
   await expect(badge).toHaveText('82%');
   await expect(badge).toHaveAttribute('data-band', 'assumed');
   await expect(badge).toHaveAttribute('data-appearance', 'compact');
@@ -1892,7 +1910,7 @@ test('round-trips the AppShell phone view header and its Empty Trash action (HS2
   await expect(emptyTrash).toBeVisible();
   await expect(header.locator('[data-component="quick-ticket-composer-launcher"]')).toHaveCount(0);
   await emptyTrash.click();
-  await expect(demo.locator('.component-stage__event')).toHaveText('Empty Trash confirmation requested.');
+  await expect(demo.locator('[data-demo-event]')).toHaveText('Empty Trash confirmation requested.');
   await header.screenshot({ path: 'target/visual-captures/hs2-t35vn7-app-shell-phone-header-trash.png' });
   // Reset → the toggle, the selected view, and the render return to the defaults.
   await setDemoSettingsOpen(page, true);
@@ -2234,6 +2252,13 @@ test('keeps a long GitHub issue title scannable in a 228px TicketRow (HS2-KWPCFP
     .getByRole('textbox', { name: 'Title' })
     .fill(title);
   await setDemoSettingsOpen(page, false);
+  // Stand in for a narrow board column: the Kerf example viewport is the row's container.
+  await page
+    .locator('[data-catalog-example-viewport]')
+    .first()
+    .evaluate((node: HTMLElement) => {
+      node.style.width = '228px';
+    });
 
   const row = page.locator('[data-component="ticket-list-row"]');
   const identity = row.locator('.ticket-list-row__identity');
@@ -2786,10 +2811,10 @@ test('catalogs ProviderIcon kinds at the m and l size variants (HS2-PK8THJ)', as
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/ux-demo?component=provider-icon');
-    const demo = page.locator('.provider-icon-demo');
+    const demo = page.locator('[data-catalog-example-stack]');
     for (const size of ['m', 'l'] as const) {
       const variant = demo.locator(`[data-size-variant="${size}"]`);
-      await expect(variant.locator('figcaption')).toContainText(`size="${size}"`);
+      await expect(variant.locator('[data-catalog-example-label]')).toContainText(`size="${size}"`);
       for (const [kind, label] of [
         ['github', 'GitHub'],
         ['gitlab', 'GitLab'],
@@ -2825,7 +2850,7 @@ test('previews every BulkTicketDialog presentation through demo settings, then r
     const tagDialog = page.locator('[data-component="bulk-tag-dialog"]'),
       deleteDialog = page.locator('[data-component="bulk-delete-dialog"]'),
       trashDialog = page.locator('[data-component="empty-trash-dialog"]'),
-      event = page.locator('.component-stage__event'),
+      event = page.locator('[data-demo-event]'),
       scenario = page.locator('[data-settings="bulk-ticket-dialog"] [name="bulk-scenario"]'),
       choose = (value: string) =>
         scenario.evaluate((node: HTMLElement & { value: string }, next) => {
@@ -3146,7 +3171,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const list = page.getByRole('listbox', { name: 'Example ticket list' });
   const listRows = list.locator('[data-component="ticket-list-row"]');
   await expect(listRows).toHaveCount(20);
-  const emptyExamples = page.getByLabel('TicketList empty states');
+  const emptyExamples = page.locator('[data-catalog-example-stack], .kui-workbench__main').first();
   await expect(emptyExamples.getByText('No tickets yet')).toBeVisible();
   await expect(emptyExamples.getByText('No tickets in Backlog')).toBeVisible();
   await expect(emptyExamples.getByText('No tickets match “parser”')).toBeVisible();
@@ -3322,9 +3347,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await menu.getByText('Toggle Up Next', { exact: true }).click();
   await expect(page.getByText(/Toggle Up Next selected for HS2-R76MMW/)).toBeVisible();
   await page.goto('/ux-demo?component=ticket-board-column');
-  const columnStage = page.locator('.collection-demo--column');
   const columnDemo = page.locator('[data-component="ticket-board-column"]');
-  await expect(columnStage).toHaveCSS('min-width', '250px');
   expect((await columnDemo.first().boundingBox())!.width).toBeGreaterThanOrEqual(250);
   await expect(columnDemo).toHaveCount(1);
   await expect(columnDemo.first().getByLabel('7 tickets')).toBeVisible();
@@ -4929,7 +4952,9 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
       ),
   );
   // The demo also renders the append-only variant (HS2-HSA64D); drive the editable one.
-  const editableDemo = page.getByRole('region', { name: 'TicketAttachments demo', exact: true }),
+  const editableDemo = page
+      .locator('[data-catalog-example]')
+      .filter({ has: page.getByRole('heading', { name: 'Editable', exact: true }) }),
     surface = editableDemo.locator('[data-component="ticket-attachments"]').first(),
     dragged = surface.locator('[data-component="ticket-attachment-item"][data-drag-attachment-id="wide"]');
   await dragged.evaluate((node) =>
@@ -4993,7 +5018,8 @@ test('styles and edits attachment group labels while preserving drag regrouping'
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-attachments');
   const surface = page
-      .getByRole('region', { name: 'TicketAttachments demo', exact: true })
+      .locator('[data-catalog-example]')
+      .filter({ has: page.getByRole('heading', { name: 'Editable', exact: true }) })
       .locator('[data-component="ticket-attachments"]'),
     groups = surface.locator('[data-attachment-group-drop-target]'),
     first = groups.first();
@@ -5054,7 +5080,8 @@ test('keeps a demo attachment label edit open across a late catalog rerender (HS
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-attachments');
   const surface = page
-      .getByRole('region', { name: 'TicketAttachments demo', exact: true })
+      .locator('[data-catalog-example]')
+      .filter({ has: page.getByRole('heading', { name: 'Editable', exact: true }) })
       .locator('[data-component="ticket-attachments"]'),
     first = surface.locator('[data-attachment-group-drop-target]').first();
   await first.getByRole('button', { name: /Edit batch label/ }).dblclick();
@@ -5089,8 +5116,12 @@ test('shows append-only and unsupported attachment variants in the TicketAttachm
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-attachments');
-  const appendOnly = page.getByRole('region', { name: 'Append-only TicketAttachments demo' }),
-    unsupported = page.getByRole('region', { name: 'Unsupported TicketAttachments demo' });
+  const appendOnly = page.locator('[data-catalog-example]').filter({
+      has: page.getByRole('heading', { name: 'Append-only provider (GitHub assets repository)', exact: true }),
+    }),
+    unsupported = page
+      .locator('[data-catalog-example]')
+      .filter({ has: page.getByRole('heading', { name: 'Provider without attachments', exact: true }) });
   await expect(appendOnly.getByLabel('Browse and add attachments')).toHaveCount(1);
   await expect(appendOnly.getByLabel('Drop or browse attachments')).toHaveCount(1);
   await expect(appendOnly.getByRole('button', { name: /More actions for/ })).toHaveCount(0);
@@ -5676,7 +5707,7 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await expect(addView).toHaveAttribute('title', 'Add view');
   await page.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-view-navigation.png', fullPage: true });
   await addView.click();
-  await expect(page.locator('.component-stage__event')).toContainText('New view editor requested.');
+  await expect(page.locator('[data-demo-event]')).toContainText('New view editor requested.');
 
   await page.goto('/ux-demo?component=command-navigation');
   const commands = page.locator('[data-component="command-navigation"]');
@@ -5904,7 +5935,7 @@ test('keeps workspace spacing and the new-ticket action in the project tab bar',
   await page.locator('[data-component="catalog"]').evaluate((node) => {
     (node as HTMLElement).style.gridTemplateColumns = '1fr';
   });
-  await page.locator('.kui-workbench__main,.component-stage').evaluateAll((nodes) => {
+  await page.locator('.kui-workbench__main').evaluateAll((nodes) => {
     nodes.forEach((node) => {
       (node as HTMLElement).style.padding = '0';
       (node as HTMLElement).style.border = '0';
@@ -6638,14 +6669,14 @@ test('reorders demo project tabs through Kerf wireTabBars by keyboard and drag (
         .evaluateAll((tabs) => tabs.map((tab) => (tab as HTMLElement).dataset.tabId)),
     )
     .toEqual(['website', 'hotsheet', 'api', 'archive']);
-  await expect(page.locator('.project-tab-bar-demo .component-stage__event')).toHaveText(
+  await expect(page.locator('.project-tab-bar-demo [data-demo-event]')).toHaveText(
     'Moved hotsheet after website by keyboard.',
   );
   await bar
     .locator('[data-component="app-tab"][data-tab-id="archive"]')
     .dragTo(bar.locator('[data-component="app-tab"][data-tab-id="website"]'), { targetPosition: { x: 4, y: 10 } });
   await expect.poll(names).toEqual(['archive', 'website', 'hotsheet', 'api']);
-  await expect(page.locator('.project-tab-bar-demo .component-stage__event')).toHaveText(
+  await expect(page.locator('.project-tab-bar-demo [data-demo-event]')).toHaveText(
     'Moved archive before website by pointer.',
   );
   // Delete closes the focused tab through the same wiring.
@@ -7518,8 +7549,12 @@ test('exposes the TicketInfoPanel placeholder variant beside the loaded panel (H
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/ux-demo?component=ticket-info-panel');
-    const loaded = page.getByRole('region', { name: 'TicketInfoPanel demo', exact: true });
-    const placeholder = page.getByRole('region', { name: 'TicketInfoPanel placeholder demo' });
+    const loaded = page
+      .locator('[data-catalog-example]')
+      .filter({ has: page.getByRole('heading', { name: 'Loaded', exact: true }) });
+    const placeholder = page
+      .locator('[data-catalog-example]')
+      .filter({ has: page.getByRole('heading', { name: 'Placeholder', exact: true }) });
     await expect(loaded.locator('[data-component="ticket-info-panel"]')).not.toHaveAttribute('data-placeholder');
     await expect(loaded).toContainText('Hot Sheet git');
     const panel = placeholder.locator('[data-component="ticket-info-panel"][data-placeholder="true"]');
@@ -8074,7 +8109,7 @@ test('swaps the CommandRunDialog demo between run output and stop confirmation (
     await page.goto('/ux-demo?component=command-run-dialog');
     const output = page.locator('[data-component="command-run-dialog"]'),
       stop = page.locator('[data-component="command-cancellation-dialog"]'),
-      event = page.locator('.component-stage__event'),
+      event = page.locator('[data-demo-event]'),
       presentation = page.locator('[data-settings="command-run-dialog"] [name="presentation"]');
     await expect(output).toHaveJSProperty('open', true);
     await expect(stop).toHaveCount(0);
@@ -8493,7 +8528,7 @@ test('aligns the TicketSearchFormField with a Web Awesome input and keeps its se
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/ux-demo?component=ticket-search-field');
-    const section = page.locator('.ticket-search-field-demo__form');
+    const section = page.locator('[data-search-demo="form"]');
     await section.scrollIntoViewIfNeeded();
     const query = section.getByRole('searchbox', { name: 'View query' });
     await expect(query).toHaveAttribute('aria-required', 'true');
@@ -8540,7 +8575,7 @@ test('aligns the TicketSearchFormField with a Web Awesome input and keeps its se
         const quiet = getComputedStyle(probe).backgroundColor;
         probe.remove();
         return {
-          form: background('.ticket-search-field-demo__form'),
+          form: background('[data-search-demo="form"]'),
           grouped: background('[data-token-search-id="ticket-search-demo"]'),
           quiet,
         };
@@ -8573,7 +8608,7 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
 }) => {
   await page.setViewportSize({ width: 1280, height: 1100 });
   await page.goto('/ux-demo?component=ticket-search-field');
-  const demo = page.getByRole('region', { name: 'TicketSearchField demo' });
+  const demo = page.locator('[data-catalog-example-stack]');
   const fields = demo.locator('.ticket-search-field');
   await expect(fields).toHaveCount(6);
   expect(
@@ -8604,7 +8639,7 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   await expect(chips.first()).toHaveAttribute('data-token-value', 'tag:"needs design"');
   await expect(chips.first()).toContainText('tag:needs design');
   await expect(suggestions).toHaveCount(0);
-  await expect(demo.locator('.component-stage__event')).toHaveText('Added tag:"needs design"');
+  await expect(demo.locator('[data-demo-event]')).toHaveText('Added tag:"needs design"');
   // Chip edit returns the raw filter to text; remove drops it.
   await chips.first().getByRole('button', { name: 'Edit tag:needs design' }).click();
   await expect(chips).toHaveCount(0);
@@ -8634,7 +8669,7 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   // The floating popover escapes Kerf's clipped search group and overlays the sections below.
   const overlays = await help.evaluate((node) => {
     const box = node.getBoundingClientRect(),
-      next = node.closest('.ticket-search-field-demo > div')!.nextElementSibling!.getBoundingClientRect();
+      next = node.closest('[data-catalog-example]')!.nextElementSibling!.getBoundingClientRect();
     return box.height > 200 && box.bottom > next.top && getComputedStyle(node).position === 'absolute';
   });
   expect(overlays).toBe(true);
@@ -8662,7 +8697,7 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   await expect(help).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 1100 });
   // The external variant renders its surfaces in flow below the toolbar, inside the consumer's layout.
-  const externalSection = demo.locator('.ticket-search-field-demo__external'),
+  const externalSection = demo.locator('[data-search-demo="external"]'),
     externalQuery = externalSection.getByRole('searchbox', { name: 'Dialog search query' }),
     externalSurfaces = externalSection.locator('.ticket-search-surfaces');
   await expect(fields.nth(1).locator('.ticket-search-surfaces')).toHaveCount(0);
@@ -8863,9 +8898,9 @@ test('drives every ChoiceCard presentation from its demo settings (HS2-V7PCS6)',
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto('/ux-demo?component=choice-card');
-    const stage = page.getByLabel('ChoiceCard demo'),
+    const stage = page.locator('[data-catalog-example-stack]'),
       cards = stage.locator('[data-component="choice-card"]'),
-      event = stage.locator('.component-stage__event');
+      event = stage.locator('[data-demo-event]');
     await expect(cards).toHaveCount(3);
     // Radio cards: one checked, brand tone, and equal full-width cards in their column.
     await expect(stage.getByRole('radio', { name: /Entire conversation/ })).toBeChecked();

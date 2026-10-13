@@ -27,6 +27,7 @@ import {
   type TerminalSpecialKey,
   toggleTerminalModifier,
 } from '../terminal-keys';
+import { DemoEvent } from './components/demo-event';
 import { onDemoSelected } from './components/demo-state';
 import { DEMO_ACTIONS, DEMO_COMPONENTS } from './demo-actions';
 import type { DemoModule } from './demo-module';
@@ -341,9 +342,9 @@ export function TerminalKeyBarDemo() {
           <TerminalKeyBar modifiers={{ ctrl: 'once', alt: 'locked', shift: 'off' }} functionRow />
         </div>
       </div>
-      <p class="component-stage__event" data-key-bar-demo-output>
+      <DemoEvent live={false} attributes={{ 'data-key-bar-demo-output': '' }}>
         {keyBarDemoOutput.value || 'Tap a key to see the bytes it sends.'}
-      </p>
+      </DemoEvent>
     </section>
   );
 }
@@ -403,9 +404,9 @@ export function TerminalEditMenuDemo() {
         <wa-button data-edit-menu-demo-open>Long-press here</wa-button>
         <wa-button data-edit-menu-demo-open="selection">Long-press a word</wa-button>
       </Row>
-      <p class="component-stage__event" data-edit-menu-demo-output>
+      <DemoEvent live={false} attributes={{ 'data-edit-menu-demo-output': '' }}>
         {editMenuDemoOutput.value || 'Open the menu, then choose an action.'}
-      </p>
+      </DemoEvent>
       <TerminalEditMenu state={editMenuDemo.value} />
     </section>
   );
@@ -424,9 +425,9 @@ export function terminalClipboardDemo(copy: boolean) {
           </>
         )}
       </Row>
-      <p class="component-stage__event" data-clipboard-demo-output>
+      <DemoEvent live={false} attributes={{ 'data-clipboard-demo-output': '' }}>
         {clipboardDemoOutput.value || 'Open the sheet to try it.'}
-      </p>
+      </DemoEvent>
       {copy ? (
         <TerminalCopyDialog state={clipboardDemoCopy.value} />
       ) : (
@@ -443,9 +444,9 @@ export function TerminalRenameDialogDemo() {
         <wa-button data-rename-demo-open="renamed">Rename a renamed terminal</wa-button>
         <wa-button data-rename-demo-open="default">Rename a default-named terminal</wa-button>
       </Row>
-      <p class="component-stage__event" data-rename-demo-output>
+      <DemoEvent live={false} attributes={{ 'data-rename-demo-output': '' }}>
         {renameDemoOutput.value || 'Reset to default appears only while a rename applies.'}
-      </p>
+      </DemoEvent>
       <TerminalRenameDialog target={renameDemoTarget.value} />
     </section>
   );
