@@ -3062,7 +3062,12 @@ async fn compatibility_is_authenticated_and_reports_ranges_with_safe_restart() {
     assert_eq!(value["capabilities"]["lifecycle_restart"], true);
     assert_eq!(value["capabilities"]["lifecycle_quiescence"], true);
     assert!(value["build_revision"].is_string());
-    assert_eq!(value["source_revision"], value["build_revision"]);
+    if local_source_build() {
+        assert_eq!(value["source_revision"], value["build_revision"]);
+    } else {
+        // Built with an inherited HOT_SHEET_BUILD_REVISION (HS2-2PVW3W): no source root.
+        assert!(value["source_revision"].is_null());
+    }
     assert_eq!(value["source_stale"], false);
     assert!(value.get("started_at").is_some());
 }
@@ -3175,8 +3180,26 @@ fn server_binary_reports_its_revision_without_opening_a_store() {
             .unwrap()
             .starts_with("source-sha256:")
     );
-    assert_eq!(status["build_revision"], status["source_revision"]);
+    if local_source_build() {
+        assert_eq!(status["build_revision"], status["source_revision"]);
+    } else {
+        assert!(status["source_revision"].is_null());
+        assert!(
+            status["source_unavailable_reason"]
+                .as_str()
+                .unwrap()
+                .contains("HOT_SHEET_BUILD_REVISION")
+        );
+    }
     assert_eq!(status["source_stale"], false);
+}
+
+/// Whether this package was built as an unpinned local source build. A shell that inherits
+/// the local host's `HOT_SHEET_BUILD_REVISION` pin builds an explicitly revisioned binary
+/// that monitors no source root, which these tests must accept rather than fail on
+/// (HS2-2PVW3W).
+fn local_source_build() -> bool {
+    option_env!("HOT_SHEET_LOCAL_SOURCE_ROOT").is_some()
 }
 
 #[tokio::test]

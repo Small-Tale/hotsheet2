@@ -58,7 +58,7 @@ async fn fake_agent_permission_round_trip_in_a_terminal_persists_always_rule() {
     let fake_agent = workspace_binary("hs-fake-agent");
     assert!(
         fake_agent.is_file(),
-        "build the workspace hs-fake-agent binary at {}",
+        "build the workspace hs-fake-agent binary at {} (run nextest with --workspace, or cargo build -p hs-fake-agent into the same target dir)",
         fake_agent.display()
     );
     std::fs::write(

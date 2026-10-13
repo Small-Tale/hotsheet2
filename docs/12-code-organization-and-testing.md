@@ -173,6 +173,22 @@ installed. `RUSTC_WRAPPER` applies unchanged to the `cargo lint` alias,
 `sccache --show-stats`. CI continues to use its existing Cargo cache and does not
 enable sccache.
 
+Never point several concurrently edited git worktrees at one shared `CARGO_TARGET_DIR`.
+A build in one worktree can then link another worktree's `hotsheet-server` (or other
+workspace path crate) build: new routes 404 and the source-revision tests see whichever
+worktree's `HOT_SHEET_LOCAL_SOURCE_ROOT` was built last (HS2-2PVW3W). Give each worktree
+its own target directory (the default `target/` inside the worktree already does); a
+configured `sccache` still lets them share compiled third-party dependencies.
+
+Two other local environment effects look like regressions but are not:
+
+- A shell that inherits the local host's `HOT_SHEET_BUILD_REVISION` pin builds an
+  explicitly revisioned binary that monitors no source root. The server compatibility and
+  `--revision-status` tests accept that shape; unset the variable to exercise the
+  source-root comparison.
+- `terminal_ws` drives the workspace `hs-fake-agent` binary, which `-p hotsheet-server`
+  alone does not build; run nextest with `--workspace` or build that package first.
+
 ### 12.6.2 Isolated Clippy artifacts
 
 The repository's `cargo lint` alias supplies the scoped Cargo config
