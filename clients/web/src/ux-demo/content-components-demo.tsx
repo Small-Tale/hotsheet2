@@ -1,5 +1,5 @@
 import { Select } from '@kerfjs/ui/select';
-import { delegate, delegateCapture, signal } from 'kerfjs';
+import { delegate, delegateCapture, effect, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { AIContentLabel } from '../components/ai-content-label';
@@ -443,7 +443,14 @@ export function openDemoTicketReader(root: HTMLElement): void {
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireContentComponentsDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
-  if (selectedId.value === 'ticket-reader') queueMicrotask(() => showTicketReaderDialog(root, 'ux-demo-ticket-reader'));
+  // Open the reader whenever its entry is selected, from a deep link or the catalog sidebar, so the
+  // stage never shows an empty TicketReader (HS2-G2XKEH).
+  demoListeners.add(
+    effect(() => {
+      if (selectedId.value === 'ticket-reader')
+        requestAnimationFrame(() => showTicketReaderDialog(root, 'ux-demo-ticket-reader'));
+    }),
+  );
   demoListeners.add(
     delegate(root, 'change', '[data-settings="markdown-editor"] [name="markdown-appearance"]', (_event, target) => {
       markdownAppearance.value = (target as FormControl).value as MarkdownEditorAppearanceDemo;

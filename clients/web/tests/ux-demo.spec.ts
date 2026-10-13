@@ -2999,6 +2999,18 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
   }
 });
 
+test('opens the TicketReader dialog when its entry is chosen from the catalog sidebar (HS2-G2XKEH)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=choice-card');
+  await page.locator('[data-item-id="ticket-reader"]').first().click();
+  await expect(page).toHaveURL('/ux-demo?component=ticket-reader');
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-H892P1' });
+  await expect(reader).toBeVisible();
+  await expect(reader.locator('dialog:modal')).toHaveCount(1);
+});
+
 test('lets the TicketReader native dialog complete dismissal before leaving the demo', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-reader');
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-H892P1' });
