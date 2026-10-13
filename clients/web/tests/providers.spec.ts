@@ -18765,6 +18765,21 @@ test('keeps failed gallery markup visible until retry succeeds (HS2-VXCSMZ) @ci-
   await gallery.getByRole('button', { name: 'Finish markup' }).click();
   await expect(gallery.getByRole('alert')).toContainText('Markup was not saved');
   await page.screenshot({ path: 'target/visual-captures/hs2-qz2eg3-save-banner-failed.png' });
+  await expect(gallery.getByRole('alert')).toHaveAttribute('data-action-placement', 'below');
+  // At phone width the failed-save StateBanner and its Retry action stay inside the viewport (HS2-1FRWAJ).
+  const wide = page.viewportSize()!;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(() =>
+      gallery.getByRole('alert').evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight;
+      }),
+    )
+    .toBe(true);
+  await expect(gallery.getByRole('button', { name: 'Retry save' })).toBeInViewport();
+  await page.screenshot({ path: 'target/visual-captures/hs2-1frwaj-save-banner-failed-390.png' });
+  await page.setViewportSize(wide);
   await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(1);
   await gallery.getByRole('button', { name: 'Retry save' }).click();
   await expect(gallery.getByRole('alert')).toHaveCount(0);

@@ -741,113 +741,132 @@ export function AttachmentGallery({
       <footer class="attachment-gallery__footer">
         {timed && (
           <div class="attachment-gallery__timeline">
-            <button
-              class="attachment-gallery__playback"
-              type="button"
-              {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryPlayback.attrs}
-              aria-label={playing ? 'Pause' : 'Play'}
-            >
-              <LucideIcon icon={playing ? Pause : Play} name={playing ? 'pause' : 'play'} size={24} />
-            </button>
-            <span data-gallery-current-time="true">{formatTime(playheadMs)}</span>
-            <div class="attachment-gallery__timeline-track">
-              {annotations
-                .filter((annotation) => annotation.start_ms !== undefined)
-                .map((annotation) => {
-                  const start = timelinePercent(annotation.start_ms, durationMs),
-                    end = timelinePercent(annotation.end_ms ?? annotation.start_ms, durationMs),
-                    hasRange = end > start;
-                  return (
+            <Toolbar
+              position="footer"
+              label="Playback"
+              density="compact"
+              centerAlign="stretch"
+              leading={
+                <>
+                  <ToolbarControlGroup label="Playback" tone="dark" size="compact" single>
                     <button
                       type="button"
-                      class="attachment-gallery__timeline-annotation"
-                      {...ATTACHMENTS_AND_GALLERY_ACTIONS.seekGalleryAnnotation.attrs}
-                      data-annotation-id={annotation.id}
-                      data-annotation-time={annotation.start_ms}
-                      data-selected={String(annotation.id === selectedAnnotation)}
-                      data-has-range={String(hasRange)}
-                      style={`--annotation-start:${start}%;--annotation-end:${end}%`}
-                      aria-label={`Annotation ${annotationNumberOffset + annotations.indexOf(annotation) + 1} at ${formatTime(annotation.start_ms ?? 0)}${annotation.text ? `: ${annotation.text}` : ''}`}
-                    />
-                  );
-                })}
-              <input
-                type="range"
-                name="gallery-playhead"
-                min="0"
-                max={String(Math.max(1, durationMs))}
-                value={String(playheadMs)}
-                aria-label="Video position"
-              />
-              {selectedTimedAnnotation && (
-                <>
-                  <button
-                    type="button"
-                    class="attachment-gallery__range-handle attachment-gallery__range-handle--start"
-                    data-gallery-range-handle="start"
-                    data-annotation-id={selectedTimedAnnotation.id}
-                    style={`left:${timelinePercent(selectedTimedAnnotation.start_ms, durationMs)}%`}
-                    aria-label={`Annotation range start at ${formatTime(selectedTimedAnnotation.start_ms ?? 0)}`}
-                  >
-                    [
-                  </button>
-                  <button
-                    type="button"
-                    class="attachment-gallery__range-handle attachment-gallery__range-handle--end"
-                    data-gallery-range-handle="end"
-                    data-annotation-id={selectedTimedAnnotation.id}
-                    style={`left:${timelinePercent(selectedTimedAnnotation.end_ms ?? selectedTimedAnnotation.start_ms, durationMs)}%`}
-                    aria-label={`Annotation range end at ${formatTime(selectedTimedAnnotation.end_ms ?? selectedTimedAnnotation.start_ms ?? 0)}`}
-                  >
-                    ]
-                  </button>
+                      {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryPlayback.attrs}
+                      aria-label={playing ? 'Pause' : 'Play'}
+                    >
+                      <LucideIcon icon={playing ? Pause : Play} name={playing ? 'pause' : 'play'} />
+                    </button>
+                  </ToolbarControlGroup>
+                  <span data-gallery-current-time="true">{formatTime(playheadMs)}</span>
                 </>
-              )}
-            </div>
-            <span>{formatTime(durationMs)}</span>
-            {video && (
-              <div class="attachment-gallery__volume">
-                <button
-                  type="button"
-                  {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryVolume.attrs}
-                  aria-label="Volume controls"
-                  aria-expanded={String(volumeOpen)}
-                >
-                  <LucideIcon
-                    icon={muted || volume === 0 ? VolumeX : Volume2}
-                    name={muted || volume === 0 ? 'volume-x' : 'volume-2'}
-                    size={24}
-                  />
-                </button>
-                <div
-                  class="attachment-gallery__volume-popup"
-                  role="group"
-                  aria-label="Volume controls"
-                  hidden={!volumeOpen}
-                >
-                  <span>Volume</span>
+              }
+              center={
+                <div class="attachment-gallery__timeline-track">
+                  {annotations
+                    .filter((annotation) => annotation.start_ms !== undefined)
+                    .map((annotation) => {
+                      const start = timelinePercent(annotation.start_ms, durationMs),
+                        end = timelinePercent(annotation.end_ms ?? annotation.start_ms, durationMs),
+                        hasRange = end > start;
+                      return (
+                        <button
+                          type="button"
+                          class="attachment-gallery__timeline-annotation"
+                          {...ATTACHMENTS_AND_GALLERY_ACTIONS.seekGalleryAnnotation.attrs}
+                          data-annotation-id={annotation.id}
+                          data-annotation-time={annotation.start_ms}
+                          data-selected={String(annotation.id === selectedAnnotation)}
+                          data-has-range={String(hasRange)}
+                          style={`--annotation-start:${start}%;--annotation-end:${end}%`}
+                          aria-label={`Annotation ${annotationNumberOffset + annotations.indexOf(annotation) + 1} at ${formatTime(annotation.start_ms ?? 0)}${annotation.text ? `: ${annotation.text}` : ''}`}
+                        />
+                      );
+                    })}
                   <input
                     type="range"
-                    name="gallery-volume"
+                    name="gallery-playhead"
                     min="0"
-                    max="1"
-                    step="0.05"
-                    value={String(volume)}
-                    aria-label="Video volume"
+                    max={String(Math.max(1, durationMs))}
+                    value={String(playheadMs)}
+                    aria-label="Video position"
                   />
-                  <button
-                    type="button"
-                    {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMuted.attrs}
-                    aria-label={muted || volume === 0 ? 'Unmute video' : 'Mute video'}
-                  >
+                  {selectedTimedAnnotation && (
+                    <>
+                      <button
+                        type="button"
+                        class="attachment-gallery__range-handle attachment-gallery__range-handle--start"
+                        data-gallery-range-handle="start"
+                        data-annotation-id={selectedTimedAnnotation.id}
+                        style={`left:${timelinePercent(selectedTimedAnnotation.start_ms, durationMs)}%`}
+                        aria-label={`Annotation range start at ${formatTime(selectedTimedAnnotation.start_ms ?? 0)}`}
+                      >
+                        [
+                      </button>
+                      <button
+                        type="button"
+                        class="attachment-gallery__range-handle attachment-gallery__range-handle--end"
+                        data-gallery-range-handle="end"
+                        data-annotation-id={selectedTimedAnnotation.id}
+                        style={`left:${timelinePercent(selectedTimedAnnotation.end_ms ?? selectedTimedAnnotation.start_ms, durationMs)}%`}
+                        aria-label={`Annotation range end at ${formatTime(selectedTimedAnnotation.end_ms ?? selectedTimedAnnotation.start_ms ?? 0)}`}
+                      >
+                        ]
+                      </button>
+                    </>
+                  )}
+                </div>
+              }
+              trailing={
+                <>
+                  <span>{formatTime(durationMs)}</span>
+                  {video && (
+                    <ToolbarControlGroup label="Volume" tone="dark" size="compact" single>
+                      <button
+                        type="button"
+                        {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryVolume.attrs}
+                        aria-label="Volume controls"
+                        aria-expanded={String(volumeOpen)}
+                      >
+                        <LucideIcon
+                          icon={muted || volume === 0 ? VolumeX : Volume2}
+                          name={muted || volume === 0 ? 'volume-x' : 'volume-2'}
+                        />
+                      </button>
+                    </ToolbarControlGroup>
+                  )}
+                </>
+              }
+            />
+            {/* The popup rises from the timeline's end, above the volume trigger, outside the Kerf Toolbar. */}
+            {video && (
+              <div
+                class="attachment-gallery__volume-popup"
+                role="group"
+                aria-label="Volume controls"
+                hidden={!volumeOpen}
+              >
+                <span>Volume</span>
+                <input
+                  type="range"
+                  name="gallery-volume"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={String(volume)}
+                  aria-label="Video volume"
+                />
+                <ListItem
+                  action={ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMuted.value}
+                  label={muted || volume === 0 ? 'Unmute' : 'Mute'}
+                  accessibleLabel={muted || volume === 0 ? 'Unmute video' : 'Mute video'}
+                  icon={
                     <LucideIcon
                       icon={muted || volume === 0 ? VolumeX : Volume2}
                       name={muted || volume === 0 ? 'volume-x' : 'volume-2'}
-                      size={16}
                     />
-                    <span>{muted || volume === 0 ? 'Unmute' : 'Mute'}</span>
-                  </button>
-                </div>
+                  }
+                  density="compact"
+                />
               </div>
             )}
           </div>
@@ -966,6 +985,9 @@ export function AttachmentGallery({
                 tone: 'danger',
                 urgency: 'alert',
                 title: 'Markup was not saved. Retry or discard your changes.',
+                // Two actions do not fit beside the copy at phone width; the documented trailing row
+                // keeps them from overlapping the message (HS2-1FRWAJ).
+                actionPlacement: 'below',
                 action: (
                   <Row gap="xs" wrap>
                     <wa-button

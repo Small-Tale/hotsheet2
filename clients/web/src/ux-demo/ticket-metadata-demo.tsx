@@ -635,7 +635,10 @@ function wireTicketMetadataDemo(root: HTMLElement): () => void {
   );
   demoListeners.add(
     listen(root, 'click', (event) => {
-      if (galleryDemoVolumeOpen.value && !(event.target as Element).closest('.attachment-gallery__volume'))
+      if (
+        galleryDemoVolumeOpen.value &&
+        !(event.target as Element).closest('.attachment-gallery__volume-popup, [data-action="toggle-gallery-volume"]')
+      )
         galleryDemoVolumeOpen.value = false;
     }),
   );

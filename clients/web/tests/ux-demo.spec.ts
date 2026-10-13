@@ -5501,6 +5501,7 @@ test('navigates and zooms the standalone attachment gallery demo', async ({ page
   await gallery.screenshot({ path: 'target/visual-captures/hs2-ddpkts-gallery-dark-wide.png' });
   await gallery
     .locator('[data-component="toolbar"]')
+    .first()
     .screenshot({ path: 'target/visual-captures/hs2-ddpkts-gallery-dark-toolbar.png' });
   await page.setViewportSize({ width: 760, height: 640 });
   await gallery.getByRole('button', { name: 'Next image' }).click();
@@ -5582,23 +5583,24 @@ test('uses canonical spacing throughout the attachment gallery chrome (HS2-4Y6SM
   await volumeButton.click();
   await expect(volumeButton).toHaveAttribute('aria-expanded', 'true');
   const videoSpacing = await gallery.evaluate((node) => {
-    const timeline = getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__timeline')!),
-      popup = getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__volume-popup')!),
-      action = getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__volume-popup > button')!);
+    const timeline = node.querySelector<HTMLElement>('.attachment-gallery__timeline')!,
+      popup = getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__volume-popup')!);
     return {
-      timelineGap: timeline.gap,
+      // Playback, the track, and volume sit in a Kerf Toolbar that owns their spacing (HS2-1FRWAJ).
+      timelineToolbar: timeline.querySelectorAll(
+        ':scope > [data-component="toolbar"] [data-component="toolbar-control-group"]',
+      ).length,
       popupPadding: popup.padding,
       popupGap: popup.gap,
-      actionPadding: action.padding,
-      actionGap: action.gap,
+      // The mute row is a Kerf ListItem and owns its own geometry (HS2-1FRWAJ).
+      muteRow: node.querySelectorAll('.attachment-gallery__volume-popup [data-component="list-item"]').length,
     };
   });
   expect(videoSpacing).toEqual({
-    timelineGap: '8px',
+    timelineToolbar: 2,
     popupPadding: '16px',
     popupGap: '8px',
-    actionPadding: '8px',
-    actionGap: '8px',
+    muteRow: 1,
   });
   await gallery.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-attachment-gallery-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });

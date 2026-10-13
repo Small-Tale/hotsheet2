@@ -135,7 +135,7 @@ describe('AttachmentGallery', () => {
     expect(css).toMatchSource(
       /__footer \{[^}]*padding:var\(--kui-space-xs\) calc\(var\(--kui-space-m\) \+ var\(--hotsheet-safe-area-right, 0px\)\) calc\(var\(--kui-space-m\) \+ var\(--hotsheet-safe-area-bottom, 0px\)\) calc\(var\(--kui-space-m\) \+ var\(--hotsheet-safe-area-left, 0px\)\)[^}]*gap:var\(--kui-space-xs\)/,
     );
-    expect(css).toMatchSource(/__timeline \{[^}]*gap:var\(--kui-space-xs\)/);
+    expect(css).not.toMatch(/__timeline \{[^}]*grid-template-columns/);
     expect(css).toMatchSource(/__volume-popup \{[^}]*padding:var\(--kui-space-m\)[^}]*gap:var\(--kui-space-xs\)/);
     // Media-control icons take their size from LucideIcon, not a gallery-wide svg rule that would reach
     // into Kerf's toolbars (HS2-PK1C1X).
@@ -144,8 +144,12 @@ describe('AttachmentGallery', () => {
       AttachmentGallery({ images: [{ id: 'clip', name: 'clip.mp4', url: '/clip.mp4' }], activeUrl: '/clip.mp4' }),
     );
     expect(video).toContain('class="attachment-gallery__video"');
-    expect(video).toContain('data-lucide="play" data-size="24"');
-    expect(video).toContain('data-lucide="volume-2" data-size="16"');
+    // Playback and volume are native buttons in dark Kerf ToolbarControlGroups, and the mute row is a
+    // Kerf ListItem, so Kerf owns their geometry and icon size (HS2-1FRWAJ).
+    expect(video).toMatch(/aria-label="Playback"[^>]*data-tone="dark"[^>]*data-single="true"/);
+    expect(video).toMatch(/aria-label="Volume"[^>]*data-tone="dark"[^>]*data-single="true"/);
+    expect(video).toMatch(/data-component="list-item" data-action="toggle-gallery-muted"/);
+    expect(css).not.toMatch(/__playback|__volume > button|__volume-popup > button/);
     expect(css).toMatchSource(/__annotation i \{[^}]*width:remify\(12px\); height:remify\(12px\)/);
     expect(css).toMatchSource(/__range-handle \{[^}]*width:remify\(16px\); height:remify\(32px\)/);
   });
@@ -401,7 +405,10 @@ describe('AttachmentGallery', () => {
     );
     expect(deselected).not.toContain('data-gallery-range-handle=');
     // The notes rail lists each annotation as a Kerf pressed ListItem (HS2-RSBVSZ).
-    const rail = selected.slice(selected.indexOf('attachment-gallery__notes-list'));
+    const rail = selected.slice(
+      selected.indexOf('attachment-gallery__notes-list'),
+      selected.indexOf('attachment-gallery__footer'),
+    );
     expect(rail.match(/data-component="list-item"/g)).toHaveLength(2);
     expect(rail).toMatch(/data-annotation-id="second"[^>]*>|aria-pressed="true"[^>]*data-annotation-id="second"/);
     expect(rail).toMatch(/aria-pressed="false"/);

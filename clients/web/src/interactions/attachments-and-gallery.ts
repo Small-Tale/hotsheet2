@@ -1239,7 +1239,10 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
   document.addEventListener(
     'click',
     (event) => {
-      if (attachmentGalleryVolumeOpen.value && !(event.target as Element).closest('.attachment-gallery__volume'))
+      if (
+        attachmentGalleryVolumeOpen.value &&
+        !(event.target as Element).closest('.attachment-gallery__volume-popup, [data-action="toggle-gallery-volume"]')
+      )
         attachmentGalleryVolumeOpen.value = false;
     },
     { signal: lifetime.signal },
