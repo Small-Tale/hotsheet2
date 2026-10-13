@@ -170,7 +170,6 @@ commands-and-ai	delegate	document.body	'click'	'[data-action="select-drive-effor
 commands-and-ai	document.addEventListener	'pointerdown'
 commands-and-ai	delegate	document.body	'click'	'[data-action="open-conversation"]'
 commands-and-ai	wireAiConversation	document.body
-commands-and-ai	delegate	document.body	'keydown'	'[data-action="pick-conversation-message"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="copy-conversation-selection"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="clear-conversation-selection"]'
 commands-and-ai	delegateCapture	document.body	'click'	'[data-component="conversation-export-dialog"]'

@@ -566,16 +566,17 @@ describe('AIConversation', () => {
     // color); assistant responses inherit the bubble color and keep link color (HS2-7RY5GK).
     expect(markup).toMatch(/data-component="markdown-preview" data-tone="inverse" data-density="compact"/);
     expect(markup).toMatch(/data-component="markdown-preview" data-tone="inherit" data-density="compact"/);
-    const assistant = markup.match(/<article[^>]*ai-conversation__message--assistant[^>]*>[\s\S]*?<\/article>/)?.[0];
-    expect(assistant).toBeDefined();
-    expect(assistant).not.toContain('<strong>');
+    // Messages are Kerf ContentItem chat bubbles: the person's on brand-loud at the end (HS2-P16J04).
+    expect(markup).toMatch(/data-component="content-item" data-appearance="brand-loud" data-bubble="end"/);
+    expect(markup).toMatch(/data-component="content-item" data-appearance="neutral" data-bubble="start"/);
+    const assistant = markup.slice(markup.indexOf('ai-conversation__message--assistant'));
+    expect(assistant).not.toContain('ai-conversation__message-author');
     expect(assistant).not.toContain('data-component="ai-content-label"');
     expect(assistant).toContain('aria-label="AI-generated response by Codex"');
-    expect(css).toMatch(/\.ai-conversation__message--user \{[^}]*color: var\(--wa-color-neutral-on-loud\)/);
     expect(previewCss).toMatchSource(
       /\.markdown-preview\[data-tone='inverse'\] a \{[^}]*color:inherit[^}]*text-decoration-color:currentcolor/,
     );
-    expect(css).toMatch(/\.ai-conversation__message--user \.ai-conversation__usage[^}]*color: color-mix/);
+    expect(css).toMatch(/\.ai-conversation__usage \{[^}]*color: color-mix\(in srgb, currentcolor/);
   });
 });
 

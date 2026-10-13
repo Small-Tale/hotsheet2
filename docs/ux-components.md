@@ -2763,6 +2763,11 @@ an own class or configures the child through its props:
   - The activity list and items have own classes, so a summary's Markdown lists keep their own
     presentation.
   - The foreground passes `PermissionRequestPopup layer="flow"` instead of repositioning the popup.
+  - Messages are Kerf `ContentItem` chat bubbles (`bubble="end"` + `brand-loud` for the person,
+    `bubble="start"` + `neutral` for responses, `danger` when failed); a selectable transcript makes
+    them interactive `selectionMode="single"` options activated through `wireContentItems`. The
+    embedded drawer header is a `density="compact"` Kerf Toolbar, and the Save/Stop group relies on
+    `ToolbarControlGroup`'s own disabled state (HS2-P16J04; KF-M3HJK8, KF-0QDF0V, KF-Y3ZZ10).
 
 HS2-4V4CV2 cleared the dialogs, settings, and forms group (32 entries). Each element those
 components author now carries an own class, so the styled subject cannot reach a child component.

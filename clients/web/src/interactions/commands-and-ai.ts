@@ -1,3 +1,4 @@
+import { wireContentItems } from '@kerfjs/ui/wire-content-items';
 import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -412,14 +413,9 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       },
     }),
   );
-  lifetime.add(
-    delegate(document.body, 'keydown', COMMANDS_AND_AI_ACTIONS.pickConversationMessage.selector, (event, target) => {
-      const keyboard = event as KeyboardEvent;
-      if (keyboard.key !== 'Enter' && keyboard.key !== ' ') return;
-      keyboard.preventDefault();
-      (target as HTMLElement).click();
-    }),
-  );
+  // Selectable transcript messages are interactive Kerf ContentItems; Kerf gives them Enter/Space
+  // activation, which reaches the ordinary delegated click handler (HS2-P16J04).
+  lifetime.add(wireContentItems(document.body));
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.copyConversationSelection.selector, (_event, target) => {
       const connectionId = target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId;

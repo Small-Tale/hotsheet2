@@ -43,25 +43,6 @@
 .ai-conversation--embedded > .ai-conversation__transcript {
   flex: 1 1 0;
 }
-/* A compact 40px drawer header: Kerf Toolbar has no compact density, and its taller row pushes the
-   transcript under the floating composer (KF-0QDF0V). */
-.ai-conversation__embedded-header {
-  display: flex;
-  min-height: remify(40px);
-  padding-inline: var(--wa-space-s);
-  border-bottom: 1px solid var(--wa-color-neutral-border-quiet);
-  align-items: center;
-  justify-content: space-between;
-}
-.ai-conversation__embedded-header > span {
-  display: flex;
-  align-items: center;
-  gap: var(--wa-space-xs);
-}
-/* The title grows so the trailing Kerf control group sits at the end without app CSS on it. */
-.ai-conversation__embedded-header > span {
-  flex: 1 1 auto;
-}
 /* Compact current-model label + popup trigger for changing model/effort, mirroring the drive
    button (HS2-R5F7A5). */
 /* The read-only notice is a Kerf StateBanner; this app wrapper only spaces it below the header. */
@@ -95,11 +76,6 @@
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-/* Kerf ToolbarControlGroup has no disabled state for native buttons yet (KF-Y3ZZ10). */
-.ai-conversation__header-action:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 /* The foreground covers the dialog panel (its positioned `dialog` part), not the viewport, so its
    padding alone insets a foreground popup symmetrically inside the dialog, below the heading
@@ -172,48 +148,14 @@
   gap: var(--wa-space-3xs);
   pointer-events: auto;
 }
-.ai-conversation__message {
-  width: fit-content;
-  min-width: 0;
-  max-width: min(85%, remify(576px));
-  padding: remify(11.2px) remify(13.6px);
-  box-sizing: border-box;
-  border-radius: remify(12.8px);
-  background: var(--wa-color-neutral-fill-quiet);
-  overflow-wrap: anywhere;
-}
-.ai-conversation__message[data-action='pick-conversation-message'] {
-  cursor: pointer;
-  outline: 2px solid transparent;
-  outline-offset: 2px;
-  transition:
-    outline-color 120ms ease,
-    opacity 120ms ease;
-}
-.ai-conversation__message[data-action='pick-conversation-message']:hover {
-  outline-color: var(--wa-color-neutral-border-normal);
-}
-.ai-conversation__message[data-action='pick-conversation-message'][data-selected='true'] {
-  outline-color: var(--wa-color-brand-border-normal);
-}
-.ai-conversation__message[data-action='pick-conversation-message']:focus-visible {
-  outline: var(--wa-focus-ring);
-  outline-offset: var(--wa-focus-ring-offset);
-}
-.ai-conversation__message--user {
-  margin-left: auto;
-  color: var(--wa-color-neutral-on-loud);
-  background: var(--wa-color-brand-fill-loud);
-}
-.ai-conversation__message--user .ai-conversation__usage {
-  color: color-mix(in srgb, var(--wa-color-neutral-on-loud) 78%, transparent);
-}
-.ai-conversation__message > strong {
+/* Messages are Kerf ContentItem chat bubbles (KF-M3HJK8, HS2-P16J04), which own the frame, tone,
+   bubble width, and selected/focus states; these rules style only the app's own markup inside. */
+.ai-conversation__message-author {
   display: block;
-  margin-bottom: remify(3.2px);
+  margin-bottom: remify(4px);
   font-size: var(--wa-font-size-xs);
 }
-.ai-conversation__message > p {
+.ai-conversation__awaiting {
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -257,13 +199,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ai-conversation__message[data-status='failed'] {
-  border: 1px solid var(--wa-color-danger-border-normal);
-}
+/* Usage is quiet relative to the surrounding foreground, so it reads on both the neutral and the
+   brand-loud bubble without targeting the Kerf item. */
 .ai-conversation__usage {
   display: flex;
   margin: remify(7.2px) 0 0;
-  color: var(--wa-color-neutral-on-quiet);
+  color: color-mix(in srgb, currentcolor 72%, transparent);
   align-items: center;
   gap: remify(5.6px);
   font-size: var(--wa-font-size-xs);
@@ -401,9 +342,6 @@
   }
   .ai-conversation__foreground {
     padding-inline: remify(16px);
-  }
-  .ai-conversation__message {
-    max-width: 92%;
   }
   .ai-conversation__header-usage {
     display: none;

@@ -4,6 +4,7 @@ import './ai-conversation.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 
 import { Badge } from '@kerfjs/ui/badge';
+import { ContentItem } from '@kerfjs/ui/content-item';
 import { uiColor } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -110,22 +111,28 @@ export function ConversationMessages({
   selectedIds?: ReadonlySet<string>;
   selectionAction?: string;
 }) {
-  const selectable = Boolean(selectionAction);
   return (
     <>
       {messages.map((message) => (
-        <article
-          class={`ai-conversation__message ai-conversation__message--${message.role}`}
-          data-message-id={message.id}
-          data-status={message.status}
-          data-action={selectionAction}
-          data-selected={selectable ? String(selectedIds?.has(message.id)) : undefined}
-          role={selectable ? 'option' : undefined}
-          aria-selected={selectable ? String(selectedIds?.has(message.id)) : undefined}
-          tabindex={selectable ? 0 : undefined}
-          aria-label={message.role === 'assistant' ? `AI-generated response by ${tool}` : undefined}
+        // Kerf ContentItem chat bubbles (KF-M3HJK8, HS2-P16J04): the person's messages sit at the end on the
+        // brand-loud fill, responses at the start; a selectable transcript makes each one an option.
+        <ContentItem
+          bubble={message.role === 'user' ? 'end' : 'start'}
+          appearance={message.status === 'failed' ? 'danger' : message.role === 'user' ? 'brand-loud' : 'neutral'}
+          className={`ai-conversation__message ai-conversation__message--${message.role}`}
+          ariaLabel={message.role === 'assistant' ? `AI-generated response by ${tool}` : undefined}
+          {...(selectionAction
+            ? {
+                interactive: true as const,
+                action: selectionAction,
+                itemId: message.id,
+                selectionMode: 'single' as const,
+                selected: Boolean(selectedIds?.has(message.id)),
+                rootAttributes: { 'data-message-id': message.id, 'data-status': message.status },
+              }
+            : { rootAttributes: { 'data-message-id': message.id, 'data-status': message.status } })}
         >
-          {message.role === 'user' && <strong>You</strong>}
+          {message.role === 'user' && <strong class="ai-conversation__message-author">You</strong>}
           {message.content ? (
             <MarkdownPreview
               source={message.content}
@@ -133,9 +140,11 @@ export function ConversationMessages({
               density="compact"
             />
           ) : (
-            <p aria-label="Awaiting response"> </p>
+            <p class="ai-conversation__awaiting" aria-label="Awaiting response">
+              {' '}
+            </p>
           )}
-          {message.files?.length && (
+          {message.files && message.files.length > 0 && (
             <ul class="ai-conversation__files" aria-label="Referenced files">
               {message.files.map((file) => (
                 <li>
@@ -159,7 +168,7 @@ export function ConversationMessages({
               )}
             </footer>
           )}
-        </article>
+        </ContentItem>
       ))}
     </>
   );
@@ -244,7 +253,6 @@ export function AIConversation({
   const saveAction = previewOnly ? null : (
     <button
       type="button"
-      class="ai-conversation__header-action"
       {...COMMANDS_AND_AI_ACTIONS.saveConversation.attrs}
       disabled={busy || messages.length === 0 || !hostActionsAvailable}
       aria-label="Save conversation"
@@ -260,7 +268,6 @@ export function AIConversation({
     busy && interruptible ? (
       <button
         type="button"
-        class="ai-conversation__header-action"
         {...COMMANDS_AND_AI_ACTIONS.stopConversation.attrs}
         aria-label={`Stop ${tool}`}
         title={`Stop ${tool}`}
@@ -480,20 +487,29 @@ export function AIConversation({
         data-selection-id={selectionId}
         aria-label={`${tool} conversation`}
       >
-        <header class="ai-conversation__embedded-header">
-          <span>
-            <LucideIcon icon={Bot} name="bot" size={16} />
-            <strong>{tool} conversation</strong>
-          </span>
-          {(saveAction || stopAction) && (
-            <ToolbarControlGroup label={`${tool} conversation actions`} appearance="borderless">
-              <>
-                {saveAction}
-                {stopAction}
-              </>
-            </ToolbarControlGroup>
-          )}
-        </header>
+        {/* A compact (40px) Kerf Toolbar keeps the drawer header short enough that the transcript clears
+            the floating composer (KF-0QDF0V, HS2-P16J04). */}
+        <Toolbar
+          density="compact"
+          dividerSides="b"
+          className="ai-conversation__embedded-header"
+          leading={
+            <>
+              <LucideIcon icon={Bot} name="bot" size={16} />
+              <ToolbarText text={`${tool} conversation`} />
+            </>
+          }
+          trailing={
+            saveAction || stopAction ? (
+              <ToolbarControlGroup label={`${tool} conversation actions`} appearance="borderless" size="compact">
+                <>
+                  {saveAction}
+                  {stopAction}
+                </>
+              </ToolbarControlGroup>
+            ) : undefined
+          }
+        />
         {savedNotice}
         {sessionControls}
         {transcript}
