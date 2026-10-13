@@ -119,6 +119,7 @@ describe('UX demo catalog', () => {
       'ai-feedback-dialog',
       'ai-tool-settings',
       'manual-model-dialog',
+      'notification-card',
       'halted-session-popup',
       'permission-request',
       'notification-center',
@@ -367,8 +368,6 @@ describe('UX demo catalog', () => {
       'main-shell': 'Typed application configuration boundary around the cataloged AppShell.',
       'sidebar-panel': 'Panel-parts contract and standalone Pane wrapper behind the cataloged sidebars and AppShell.',
       'notification-inspector': 'Empty notification-mode inspector chrome rendered within the cataloged AppShell.',
-      'notification-card':
-        'Shared notification frame rendered by PermissionRequestCard (popup, list, flat) and HaltedSessionPopup (both demoed).',
       'attachment-context-menu': 'Context menu rendered by the demoed attachment surfaces (inspector/gallery).',
       'corrupt-ticket-row': 'Parse-error row variant rendered within TicketList (demoed).',
       'flow-back-button': 'Shared back affordance rendered inside multi-step dialogs/flows.',

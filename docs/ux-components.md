@@ -8,6 +8,11 @@ content layout. The `/ux-demo?component=halted-session-popup` entry exercises
 the three actions and restore control; production owns episode acknowledgment, routing,
 permission priority, and app-wide pause. See [client requirements](06-clients.md).
 
+`NotificationCard` (HS2-XS71FB) is the shared frame under permission requests and halted
+sessions. Its `/ux-demo?component=notification-card` entry (HS2-V2G3W1) shows every
+elevation (`popup`, `list`, `flat`), both footer layouts (`wrap`, `stack`), and the prose,
+code, and bounded details appearances, with consumer-supplied footer actions.
+
 > **Status: initial inventory; implementation started.** The development-only Hono
 > `/ux-demo` catalog shell and production `TagChip`, `StatusBadge`, and initial
 > `TicketRow` components are built in `clients/web` (HS2-61XG15/HS2-H0T0MV/HS2-RP0FKP). This

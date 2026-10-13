@@ -441,6 +441,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['ai-feedback-dialog', 1],
     ['manual-model-dialog', 1],
     ['connection-details-dialog', 1],
+    ['notification-card', 5],
     ['halted-session-popup', 1],
     ['content-transition', 2],
     ['repository-status-popover', 1],
@@ -630,6 +631,39 @@ test('uses Kerf layout primitives across migrated settings and dialog surfaces (
   expect(narrowBox!.x).toBeGreaterThanOrEqual(0);
   expect(narrowBox!.x + narrowBox!.width).toBeLessThanOrEqual(390);
   await provider.screenshot({ path: 'target/visual-captures/hs2-s3bxc0-provider-narrow.png', animations: 'disabled' });
+});
+
+test('demos every NotificationCard elevation, footer layout, and details appearance (HS2-V2G3W1)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.goto('/ux-demo?component=notification-card');
+  const cards = page.locator('article.notification-card');
+  await expect(cards).toHaveCount(6);
+  for (const elevation of ['popup', 'list', 'flat'])
+    await expect(page.locator(`article.notification-card[data-elevation="${elevation}"]`).first()).toBeVisible();
+  await expect(page.locator('article.notification-card[data-footer-layout="stack"]')).toHaveCount(1);
+  await expect(page.locator('.notification-card__details[data-appearance="prose"]')).toHaveCount(1);
+  const bounded = page.locator('.notification-card__details[data-bounded="true"]');
+  await expect(bounded).toHaveCount(1);
+  expect(await bounded.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+  // Stacked footer groups each take a full-width row; wrapped groups share one row on a wide card.
+  const groupTops = (card: ReturnType<typeof page.locator>) =>
+    card.evaluate((node) =>
+      [...node.querySelectorAll('.notification-card__footer > div')].map((group) =>
+        Math.round(group.getBoundingClientRect().top),
+      ),
+    );
+  const [stackQuiet, stackEnd] = await groupTops(page.locator('article[data-footer-layout="stack"]'));
+  expect(stackEnd).toBeGreaterThan(stackQuiet);
+  const [wrapQuiet, wrapEnd] = await groupTops(page.locator('article[data-elevation="popup"]'));
+  expect(wrapEnd).toBe(wrapQuiet);
+  await page.getByRole('button', { name: 'Allow', exact: true }).first().click();
+  await expect(page.getByText('Allow was chosen; the composing notification owns its decision.')).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-v2g3w1-notification-card-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(cards.first()).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-v2g3w1-notification-card-narrow.png', fullPage: true });
 });
 
 test('demos the unapplied Trash retention leave warning through the production wire helper (HS2-WFFDAA)', async ({

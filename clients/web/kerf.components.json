@@ -3794,6 +3794,74 @@
       }
     },
     {
+      "id": "notification-card",
+      "name": "NotificationCard",
+      "kind": "component",
+      "purpose": "Shared notification frame for permission requests and halted AI sessions: identity, project pill, summary, optional details, and footer actions across popup, list, and flat elevations.",
+      "source": "src/components/notification-card.tsx",
+      "publicExports": [
+        {
+          "name": "NotificationCard"
+        }
+      ],
+      "sourceLinks": ["src/components/notification-card.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "self",
+            "padding": "self",
+            "notes": [
+              "Owns its card frame, elevation shadow, and footer wrap/stack layout; composers supply the footer actions (HS2-XS71FB, HS2-V2G3W1)."
+            ]
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["notification-card"],
+        "publicTokens": [],
+        "placeableClasses": ["notification-card"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/notification-card.tsx",
+        "composition": "src/components/notification-card.tsx"
+      },
+      "selection": {
+        "useWhen": [
+          "Hot Sheet needs a compact notification frame shared by permission requests, halted sessions, and notification history."
+        ],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific NotificationCard behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "halted-session-popup",
       "name": "HaltedSessionPopup",
       "kind": "component",

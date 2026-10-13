@@ -2673,6 +2673,77 @@
       }
     },
     {
+      "key": "hotsheet-web:notification-card",
+      "package": "hotsheet-web",
+      "id": "notification-card",
+      "name": "NotificationCard",
+      "kind": "component",
+      "purpose": "Shared notification frame for permission requests and halted AI sessions: identity, project pill, summary, optional details, and footer actions across popup, list, and flat elevations.",
+      "publicExports": [
+        {
+          "name": "NotificationCard"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/notification-card.tsx"
+      ],
+      "source": "src/components/notification-card.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "self",
+          "padding": "self",
+          "notes": [
+            "Owns its card frame, elevation shadow, and footer wrap/stack layout; composers supply the footer actions (HS2-XS71FB, HS2-V2G3W1)."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "notification-card"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "notification-card"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/notification-card.tsx",
+        "composition": "src/components/notification-card.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:notification-center",
       "package": "hotsheet-web",
       "id": "notification-center",
