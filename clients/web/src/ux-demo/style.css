@@ -166,55 +166,13 @@ body[data-resizing-project-sidebar='true'] {
 .app-shell-demo {
   width: min(remify(1152px), 100%);
 }
-.terminal-drawer-demo {
-  width: min(remify(1152px), 100%);
-  height: remify(384px);
-  overflow: hidden;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(12.8px);
-}
-.terminal-drawer-provider-demo__caption {
-  margin: 0 0 var(--wa-space-s);
-  font-size: var(--wa-font-size-s);
-}
-.terminal-drawer-provider-demo__stage {
-  width: min(remify(1152px), 100%);
-  height: remify(160px);
-  overflow: hidden;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(12.8px);
-}
-.terminal-drawer-demos {
-  display: grid;
-  width: min(remify(1152px), 100%);
-  gap: var(--wa-space-l);
-}
-.terminal-drawer-focus-demo {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--wa-space-l);
-  align-items: flex-start;
-}
-.terminal-drawer-focus-demo h2 {
-  margin: 0 0 var(--wa-space-s);
-  font-size: var(--wa-font-size-s);
-}
-/* contain: paint makes this stage the containing block for the fixed focus surface and backdrop. */
+/* A phone-sized screen inside the framed CatalogExample: contain: paint makes it the containing
+   block for the fixed focus surface and backdrop. */
 .terminal-drawer-focus-demo__stage {
   position: relative;
   width: remify(390px);
   max-width: 100%;
-  overflow: hidden;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(12.8px);
   contain: paint;
-}
-.terminal-dashboard-demo {
-  width: min(remify(1152px), 100%);
-  height: remify(560px);
-  overflow: hidden;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-l);
 }
 .terminal-ticket-rail-demo {
   /* The stage stretches the rail's standalone panel Pane to its fixed height (HS2-QQW6CT). */
@@ -224,33 +182,6 @@ body[data-resizing-project-sidebar='true'] {
   overflow: hidden;
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: var(--wa-border-radius-l);
-}
-/* The demo stage owns only its grid shell; the cards size themselves through `fit="aspect"`
-   (HS2-0X36TX). */
-.fixed-aspect-terminal-card-demo {
-  position: relative;
-  display: grid;
-  width: min(remify(1152px), 100%);
-  min-width: 0;
-  min-height: 0;
-  padding: var(--wa-space-l);
-  overflow: auto;
-  background: var(--wa-color-surface-lowered);
-  grid-template-columns: minmax(remify(256px), remify(352px)) minmax(0, 1fr);
-  gap: var(--wa-space-xl);
-  align-items: start;
-}
-.fixed-aspect-terminal-card-demo > div {
-  min-width: 0;
-}
-.fixed-aspect-terminal-card-demo__caption {
-  margin: 0 0 var(--wa-space-s);
-  font-size: var(--wa-font-size-s);
-}
-@media (max-width: 700px) {
-  .fixed-aspect-terminal-card-demo {
-    grid-template-columns: 1fr;
-  }
 }
 .project-tab-demo__surface {
   display: grid;
@@ -364,24 +295,4 @@ body[data-resizing-project-sidebar='true'] {
 /* Embedded, the empty status output keeps its zero-height first grid row. */
 .ai-conversation-demo:not([data-presentation='embedded']) > output:empty {
   display: none;
-}
-.fixed-aspect-terminal-card-demo__phone {
-  max-width: remify(392px);
-}
-
-.terminal-key-bar-demo {
-  display: grid;
-  width: min(remify(390px), 100%);
-  gap: var(--wa-space-l);
-}
-.terminal-key-bar-demo > div {
-  min-width: 0;
-}
-.terminal-key-bar-demo__caption {
-  margin: 0 0 var(--wa-space-s);
-  font-size: var(--wa-font-size-s);
-}
-.terminal-key-bar-demo__frame {
-  overflow: hidden;
-  border-radius: remify(12.8px);
 }

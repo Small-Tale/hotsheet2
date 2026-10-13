@@ -472,10 +472,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
 });
 
 test('styles demo captions through demo-owned classes, not the demoed components (HS2-TV78E1)', async ({ page }) => {
-  const captions: [string, string, number][] = [
-    ['terminal-key-bar', '.terminal-key-bar-demo__caption', 2],
-    ['fixed-aspect-terminal-card', '.fixed-aspect-terminal-card-demo__caption', 5],
-  ];
+  const captions: [string, string, number][] = [];
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     for (const [component, selector, count] of captions) {
@@ -1518,7 +1515,7 @@ test('keeps rail view tabs above search and parks the closed trigger at the righ
 test('catalogs every FixedAspectTerminalCard variant and its dashboard relationship', async ({ page }) => {
   await page.setViewportSize({ width: 1728, height: 971 });
   await page.goto('/ux-demo?component=fixed-aspect-terminal-card');
-  const stage = page.getByRole('region', { name: 'Fixed aspect terminal card variants' }),
+  const stage = page.locator('[data-catalog-example-stack]'),
     preview = stage.locator('[data-fixed-aspect-terminal-card="preview"]'),
     magnified = stage.locator('[data-fixed-aspect-terminal-card="magnified"]:not([data-mobile-chrome])').first(),
     phone = stage.locator('[data-mobile-chrome="true"]'),
@@ -6306,10 +6303,8 @@ test('catalogs the drawer phone focus-mode text-size control with and without th
 }) => {
   await page.setViewportSize({ width: 1280, height: 1100 });
   await page.goto('/ux-demo?component=terminal-drawer');
-  const variants = page.locator('.terminal-drawer-focus-demo__variant');
-  await expect(variants).toHaveCount(2);
-  const shown = variants.nth(0),
-    underKeyboard = variants.nth(1),
+  const shown = page.getByRole('region', { name: 'Phone focus mode', exact: true }),
+    underKeyboard = page.getByRole('region', { name: 'Phone focus mode, keyboard presented' }),
     control = shown.getByRole('button', { name: /^Text size: \d+ columns/ });
   await expect(shown.locator('[data-component="terminal-drawer"]')).toHaveAttribute('data-focus-mode', 'true');
   await expect(control).toBeVisible();
@@ -6332,7 +6327,9 @@ test('catalogs the drawer phone focus-mode text-size control with and without th
     });
     expect(contained).toBe(true);
   }
-  const drawerDemo = page.locator('.terminal-drawer-demo [data-component="terminal-drawer"]');
+  const drawerDemo = page
+    .getByRole('region', { name: 'Interactive', exact: true })
+    .locator('[data-component="terminal-drawer"]');
   await expect(drawerDemo).toBeVisible();
   // The drawer configures its dedicated TerminalSession through `focus`: inset in the drawer, edge to
   // edge in focus mode, with no drawer CSS reaching into the session (HS2-YNW0B3).
@@ -6353,9 +6350,7 @@ test('catalogs the drawer phone focus-mode text-size control with and without th
   await control.click();
   await expect(control).toHaveAttribute('data-columns', '50');
   await expect(control).toHaveAccessibleName('Text size: 50 columns. Change text size');
-  await page
-    .locator('.terminal-drawer-focus-demo')
-    .screenshot({ path: test.info().outputPath('drawer-focus-demo.png') });
+  await shown.screenshot({ path: test.info().outputPath('drawer-focus-demo.png') });
 });
 
 test('catalogs shared application tabs and terminal-drawer tabs', async ({ page }) => {
@@ -6385,7 +6380,9 @@ test('catalogs shared application tabs and terminal-drawer tabs', async ({ page 
   await demoTabStrip.evaluate((node) => (node.scrollLeft = node.scrollWidth));
   await expect(page.getByRole('tab', { name: /Terminal tab/ })).toBeInViewport();
   await page.goto('/ux-demo?component=terminal-drawer');
-  const terminalDrawer = page.locator('.terminal-drawer-demo [data-component="terminal-drawer"]');
+  const terminalDrawer = page
+    .getByRole('region', { name: 'Interactive', exact: true })
+    .locator('[data-component="terminal-drawer"]');
   await expect(terminalDrawer).toBeVisible();
   await expect(terminalDrawer.locator('[data-tab-kind="terminal"]')).toHaveCount(1);
   await expect(terminalDrawer.locator('.kui-tab-bar__trailing [data-component="toolbar-control-group"]')).toHaveCount(
@@ -8347,7 +8344,7 @@ test('keeps equal notification card gaps across pending and history groups (HS2-
 test('catalogs the TerminalKeyBar rows, sticky modifiers, and sent bytes (HS2-CKS78M)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=terminal-key-bar');
-  const demo = page.getByRole('region', { name: 'Terminal key bar variants' }),
+  const demo = page.locator('[data-catalog-example-stack]'),
     bars = demo.locator('[data-component="terminal-key-bar"]'),
     keys = bars.nth(0),
     output = demo.locator('[data-key-bar-demo-output]');
@@ -8387,14 +8384,14 @@ test('catalogs the touch-first desktop Copy and Paste variants (HS2-5DHHPV)', as
   await expect(rail.getByRole('button', { name: 'Hide terminal drawer' })).toBeVisible();
   // The ordinary drawer variant keeps its single Hide action.
   await expect(
-    page.locator('.terminal-drawer-demo .terminal-drawer__rail').getByRole('button', { name: 'Copy terminal text' }),
+    page
+      .getByRole('region', { name: 'Interactive', exact: true })
+      .locator('.terminal-drawer__rail')
+      .getByRole('button', { name: 'Copy terminal text' }),
   ).toHaveCount(0);
   await touchDrawer.screenshot({ path: test.info().outputPath('hs2-5dhhpv-drawer-demo.png') });
   await page.goto('/ux-demo?component=fixed-aspect-terminal-card');
-  const cards = page.getByRole('region', { name: 'Fixed aspect terminal card variants' }),
-    tablet = cards
-      .locator('div', { has: page.getByRole('heading', { name: 'Magnified, touch-first desktop' }) })
-      .last();
+  const tablet = page.getByRole('region', { name: 'Magnified, touch-first desktop' });
   await expect(tablet.getByRole('button', { name: 'Copy terminal text' })).toBeVisible();
   await expect(tablet.getByRole('button', { name: 'Paste', exact: true })).toBeVisible();
   await expect(tablet.getByRole('button', { name: 'Open Development in project terminal drawer' })).toBeVisible();
@@ -8404,7 +8401,7 @@ test('catalogs the long-press terminal edit menu and its actions (HS2-KKP8YJ)', 
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/ux-demo?component=terminal-edit-menu');
-    const demo = page.getByRole('region', { name: 'Terminal edit menu' }),
+    const demo = page.getByRole('region', { name: 'Interactive', exact: true }),
       output = demo.locator('[data-edit-menu-demo-output]'),
       menu = page.locator('[data-context-menu="terminal-edit"]');
     await expect(output).toHaveText('Open the menu, then choose an action.');
@@ -8454,7 +8451,7 @@ test('catalogs the terminal Copy and Paste sheets with every variant (HS2-FRB545
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/ux-demo?component=terminal-copy-dialog');
-    const copyDemo = page.getByRole('region', { name: 'Terminal copy sheet' }),
+    const copyDemo = page.getByRole('region', { name: 'Interactive', exact: true }),
       copySheet = copyDemo.locator('[data-component="terminal-copy-dialog"]'),
       output = copyDemo.locator('[data-clipboard-demo-output]'),
       field = copySheet.getByRole('textbox', { name: 'Terminal text' });
@@ -8475,7 +8472,7 @@ test('catalogs the terminal Copy and Paste sheets with every variant (HS2-FRB545
     await expect(output).toHaveText('Copied terminal text (43 lines)');
 
     await page.goto('/ux-demo?component=terminal-paste-dialog');
-    const pasteDemo = page.getByRole('region', { name: 'Terminal paste sheet' }),
+    const pasteDemo = page.getByRole('region', { name: 'Interactive', exact: true }),
       pasteSheet = pasteDemo.locator('[data-component="terminal-paste-dialog"]'),
       pasteOutput = pasteDemo.locator('[data-clipboard-demo-output]'),
       pasteField = pasteSheet.getByRole('textbox', { name: 'Text to paste' });

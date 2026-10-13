@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Row } from '@kerfjs/ui/row';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -77,8 +78,11 @@ export function TerminalDrawerDemo() {
   // Phone focus mode is a fixed, viewport-sized surface; each stage contains it (and its blackout
   // backdrop) so the variant can be inspected in place (HS2-01D4JP).
   const focusVariant = (label: string, keyboardVisible: boolean, height: number) => (
-    <div class="terminal-drawer-focus-demo__variant">
-      <h2>{label}</h2>
+    <CatalogExample
+      label={label}
+      viewport={{ width: 'compact', frame: 'solid', overflow: 'hidden' }}
+      rootAttributes={{ 'data-demo-scope': 'terminal-drawer-focus-demo' }}
+    >
       <div class="terminal-drawer-focus-demo__stage" style={`height:${height}px`}>
         <TerminalDrawer
           projectId="demo"
@@ -98,11 +102,12 @@ export function TerminalDrawerDemo() {
           }}
         />
       </div>
-    </div>
+    </CatalogExample>
   );
+  const drawerFrame = { width: 'full', height: 'short', frame: 'solid', overflow: 'hidden' } as const;
   return (
-    <div class="terminal-drawer-demos">
-      <section class="terminal-drawer-demo">
+    <>
+      <CatalogExample label="Interactive" viewport={{ ...drawerFrame, height: 'medium' }}>
         <TerminalDrawer
           projectId="demo"
           projectName="Demo project"
@@ -116,137 +121,123 @@ export function TerminalDrawerDemo() {
           aiProviders={TERMINAL_DRAWER_DEMO_PROVIDERS}
           defaultAiProvider="claude"
         />
-      </section>
+      </CatalogExample>
       {/* With one installed AI provider the AI shell entry is named for it instead of a submenu (HS2-3HT4PA). */}
-      <section class="terminal-drawer-provider-demo" aria-label="One AI provider">
-        <h2 class="terminal-drawer-provider-demo__caption">One AI provider</h2>
-        <div class="terminal-drawer-provider-demo__stage">
-          <TerminalDrawer
-            projectId="demo-single"
-            projectName="Demo project"
-            sessions={[]}
-            width={900}
-            height={96}
-            fitAcross={2}
-            fitHigh={2}
-            selectedId="grid"
-            aiProviders={TERMINAL_DRAWER_DEMO_PROVIDERS.slice(1)}
-            defaultAiProvider="claude"
-          />
-        </div>
-      </section>
+      <CatalogExample label="One AI provider" viewport={drawerFrame}>
+        <TerminalDrawer
+          projectId="demo-single"
+          projectName="Demo project"
+          sessions={[]}
+          width={900}
+          height={96}
+          fitAcross={2}
+          fitHigh={2}
+          selectedId="grid"
+          aiProviders={TERMINAL_DRAWER_DEMO_PROVIDERS.slice(1)}
+          defaultAiProvider="claude"
+        />
+      </CatalogExample>
       {/* Tab status: a halted AI session (HS2-HJ4D1H), and whether an AI session reaches Hot Sheet (HS2-EV1XK3). */}
-      <section class="terminal-drawer-provider-demo" aria-label="Terminal tab states">
-        <h2 class="terminal-drawer-provider-demo__caption">Terminal tab states</h2>
-        <div class="terminal-drawer-provider-demo__stage">
-          <TerminalDrawer
-            projectId="demo-states"
-            projectName="Demo project"
-            sessions={[
-              {
-                ...shell,
-                id: 'connected',
-                projectId: 'demo-states',
-                title: 'Connected',
-                tool: 'codex',
-                ai_connection: { agent: 'codex', at: '2026-10-05T08:00:00Z' },
-                last_hook_report: {
-                  agent: 'codex',
-                  at: '2026-10-05T08:00:00Z',
-                  source: 'session_start',
-                },
-                aiConnection: 'connected',
+      <CatalogExample label="Terminal tab states" viewport={drawerFrame}>
+        <TerminalDrawer
+          projectId="demo-states"
+          projectName="Demo project"
+          sessions={[
+            {
+              ...shell,
+              id: 'connected',
+              projectId: 'demo-states',
+              title: 'Connected',
+              tool: 'codex',
+              ai_connection: { agent: 'codex', at: '2026-10-05T08:00:00Z' },
+              last_hook_report: {
+                agent: 'codex',
+                at: '2026-10-05T08:00:00Z',
+                source: 'session_start',
               },
-              {
-                ...shell,
-                id: 'missing',
-                projectId: 'demo-states',
-                title: 'Not connected',
-                kind: 'ai',
-                tool: 'codex',
-                busy: false,
-                aiConnection: 'missing',
+              aiConnection: 'connected',
+            },
+            {
+              ...shell,
+              id: 'missing',
+              projectId: 'demo-states',
+              title: 'Not connected',
+              kind: 'ai',
+              tool: 'codex',
+              busy: false,
+              aiConnection: 'missing',
+            },
+            {
+              ...shell,
+              id: 'halted',
+              projectId: 'demo-states',
+              title: 'Halted',
+              kind: 'ai',
+              tool: 'claude',
+              halt: {
+                error_type: 'overloaded',
+                message: 'Selected model is at capacity. Please try a different model.',
+                at: '2026-10-05T08:00:00Z',
               },
-              {
-                ...shell,
-                id: 'halted',
-                projectId: 'demo-states',
-                title: 'Halted',
-                kind: 'ai',
-                tool: 'claude',
-                halt: {
-                  error_type: 'overloaded',
-                  message: 'Selected model is at capacity. Please try a different model.',
-                  at: '2026-10-05T08:00:00Z',
-                },
-              },
-            ]}
-            width={900}
-            height={96}
-            fitAcross={2}
-            fitHigh={2}
-            selectedId="connected"
-          />
-        </div>
-      </section>
-      <section class="terminal-drawer-provider-demo" aria-label="AI chat tab states">
-        <h2 class="terminal-drawer-provider-demo__caption">AI chat tab states</h2>
-        <div class="terminal-drawer-provider-demo__stage">
-          <TerminalDrawer
-            projectId="demo-chat-states"
-            projectName="Demo project"
-            sessions={[]}
-            chatTabs={[
-              {
-                id: 'failed-chat',
-                name: 'Stopped chat',
-                tool: 'Codex',
-                error: 'Selected model is at capacity',
-                content: <p>Selected model is at capacity</p>,
-              },
-              {
-                id: 'recovered-chat',
-                name: 'Recovered chat',
-                tool: 'Claude',
-                content: <p>Retry completed successfully.</p>,
-              },
-            ]}
-            width={900}
-            height={96}
-            fitAcross={2}
-            fitHigh={2}
-            selectedId="failed-chat"
-          />
-        </div>
-      </section>
+            },
+          ]}
+          width={900}
+          height={96}
+          fitAcross={2}
+          fitHigh={2}
+          selectedId="connected"
+        />
+      </CatalogExample>
+      <CatalogExample label="AI chat tab states" viewport={drawerFrame}>
+        <TerminalDrawer
+          projectId="demo-chat-states"
+          projectName="Demo project"
+          sessions={[]}
+          chatTabs={[
+            {
+              id: 'failed-chat',
+              name: 'Stopped chat',
+              tool: 'Codex',
+              error: 'Selected model is at capacity',
+              content: <p>Selected model is at capacity</p>,
+            },
+            {
+              id: 'recovered-chat',
+              name: 'Recovered chat',
+              tool: 'Claude',
+              content: <p>Retry completed successfully.</p>,
+            },
+          ]}
+          width={900}
+          height={96}
+          fitAcross={2}
+          fitHigh={2}
+          selectedId="failed-chat"
+        />
+      </CatalogExample>
       {/* A touch-first desktop (coarse primary pointer) adds rail Copy and Paste (HS2-5DHHPV). */}
-      <section class="terminal-drawer-provider-demo" aria-label="Touch-first desktop">
-        <h2 class="terminal-drawer-provider-demo__caption">Touch-first desktop</h2>
-        <div class="terminal-drawer-provider-demo__stage">
-          <TerminalDrawer
-            projectId="demo-touch"
-            projectName="Demo project"
-            sessions={[{ ...shell, projectId: 'demo-touch' }]}
-            width={900}
-            height={96}
-            fitAcross={2}
-            fitHigh={2}
-            selectedId="shell"
-            touchClipboard
-          />
-        </div>
-      </section>
-      <section class="terminal-drawer-focus-demo" aria-label="Phone focus mode variants">
-        {focusVariant('Phone focus mode', false, 560)}
-        {focusVariant('Phone focus mode, keyboard presented', true, 360)}
-      </section>
-    </div>
+      <CatalogExample label="Touch-first desktop" viewport={drawerFrame}>
+        <TerminalDrawer
+          projectId="demo-touch"
+          projectName="Demo project"
+          sessions={[{ ...shell, projectId: 'demo-touch' }]}
+          width={900}
+          height={96}
+          fitAcross={2}
+          fitHigh={2}
+          selectedId="shell"
+          touchClipboard
+        />
+      </CatalogExample>
+      {focusVariant('Phone focus mode', false, 560)}
+      {focusVariant('Phone focus mode, keyboard presented', true, 360)}
+    </>
   );
 }
 
 export function TerminalDashboardDemo() {
   return (
-    <section class="terminal-dashboard-demo">
+    <CatalogExample label="Interactive" viewport={{ width: 'full', height: 'app', frame: 'solid', overflow: 'hidden' }}>
       <TerminalDashboard
         groups={[
           {
@@ -323,29 +314,31 @@ export function TerminalDashboardDemo() {
         fitHigh={3}
         contextMenu={terminalDashboardContextMenu.value}
       />
-    </section>
+    </CatalogExample>
   );
 }
 
 export function TerminalKeyBarDemo() {
   return (
-    <section class="terminal-key-bar-demo" aria-label="Terminal key bar variants">
-      <div>
-        <h2 class="terminal-key-bar-demo__caption">Keys</h2>
-        <div class="terminal-key-bar-demo__frame">
-          <TerminalKeyBar modifiers={keyBarDemoModifiers.value} functionRow={keyBarDemoFunctionRow.value} />
-        </div>
-      </div>
-      <div>
-        <h2 class="terminal-key-bar-demo__caption">Function row</h2>
-        <div class="terminal-key-bar-demo__frame">
-          <TerminalKeyBar modifiers={{ ctrl: 'once', alt: 'locked', shift: 'off' }} functionRow />
-        </div>
-      </div>
-      <DemoEvent live={false} attributes={{ 'data-key-bar-demo-output': '' }}>
-        {keyBarDemoOutput.value || 'Tap a key to see the bytes it sends.'}
-      </DemoEvent>
-    </section>
+    <>
+      <CatalogExample
+        label="Keys"
+        viewport={{ width: 'compact', overflow: 'hidden' }}
+        rootAttributes={{ 'data-demo-scope': 'terminal-key-bar-demo' }}
+      >
+        <TerminalKeyBar modifiers={keyBarDemoModifiers.value} functionRow={keyBarDemoFunctionRow.value} />
+        <DemoEvent live={false} attributes={{ 'data-key-bar-demo-output': '' }}>
+          {keyBarDemoOutput.value || 'Tap a key to see the bytes it sends.'}
+        </DemoEvent>
+      </CatalogExample>
+      <CatalogExample
+        label="Function row"
+        viewport={{ width: 'compact', overflow: 'hidden' }}
+        rootAttributes={{ 'data-demo-scope': 'terminal-key-bar-demo' }}
+      >
+        <TerminalKeyBar modifiers={{ ctrl: 'once', alt: 'locked', shift: 'off' }} functionRow />
+      </CatalogExample>
+    </>
   );
 }
 
@@ -362,44 +355,39 @@ export function FixedAspectTerminalCardDemo() {
     scrollback: 'GNU nano 8.4\n80 columns × 24 rows\n^X Exit',
   };
   return (
-    <section class="fixed-aspect-terminal-card-demo" aria-label="Fixed aspect terminal card variants">
-      <div>
-        <h2 class="fixed-aspect-terminal-card-demo__caption">Grid preview</h2>
+    <>
+      <CatalogExample label="Grid preview" viewport={{ width: 'text', surface: 'lowered' }}>
         <FixedAspectTerminalCard session={session} fit="aspect" />
-      </div>
-      <div class="fixed-aspect-terminal-card-demo__magnified">
-        <h2 class="fixed-aspect-terminal-card-demo__caption">Magnified interactive</h2>
+      </CatalogExample>
+      <CatalogExample label="Magnified interactive" viewport={{ width: 'full', surface: 'lowered' }}>
         <FixedAspectTerminalCard session={session} mode="magnified" fit="aspect" />
-      </div>
-      <div class="fixed-aspect-terminal-card-demo__magnified">
-        <h2 class="fixed-aspect-terminal-card-demo__caption">Magnified, touch-first desktop</h2>
+      </CatalogExample>
+      <CatalogExample label="Magnified, touch-first desktop" viewport={{ width: 'full', surface: 'lowered' }}>
         <FixedAspectTerminalCard session={session} mode="magnified" fit="aspect" touchClipboard />
-      </div>
-      <div class="fixed-aspect-terminal-card-demo__magnified fixed-aspect-terminal-card-demo__phone">
-        <h2 class="fixed-aspect-terminal-card-demo__caption">Magnified phone toolbar</h2>
+      </CatalogExample>
+      <CatalogExample label="Magnified phone toolbar" viewport={{ width: 'compact', surface: 'lowered' }}>
         <FixedAspectTerminalCard
           session={session}
           mode="magnified"
           fit="aspect"
           mobile={{ viewport: { left: 0, top: 0, width: 390, height: 844 }, keyboardVisible: false, columns: 60 }}
         />
-      </div>
-      <div class="fixed-aspect-terminal-card-demo__magnified fixed-aspect-terminal-card-demo__phone">
-        <h2 class="fixed-aspect-terminal-card-demo__caption">Magnified phone, keyboard presented</h2>
+      </CatalogExample>
+      <CatalogExample label="Magnified phone, keyboard presented" viewport={{ width: 'compact', surface: 'lowered' }}>
         <FixedAspectTerminalCard
           session={session}
           mode="magnified"
           fit="aspect"
           mobile={{ viewport: { left: 0, top: 0, width: 390, height: 500 }, keyboardVisible: true, columns: 60 }}
         />
-      </div>
-    </section>
+      </CatalogExample>
+    </>
   );
 }
 
 export function TerminalEditMenuDemo() {
   return (
-    <section class="terminal-edit-menu-demo" aria-label="Terminal edit menu">
+    <CatalogExample label="Interactive" rootAttributes={{ 'data-demo-scope': 'terminal-edit-menu-demo' }}>
       <Row gap="xs">
         <wa-button data-edit-menu-demo-open>Long-press here</wa-button>
         <wa-button data-edit-menu-demo-open="selection">Long-press a word</wa-button>
@@ -408,13 +396,13 @@ export function TerminalEditMenuDemo() {
         {editMenuDemoOutput.value || 'Open the menu, then choose an action.'}
       </DemoEvent>
       <TerminalEditMenu state={editMenuDemo.value} />
-    </section>
+    </CatalogExample>
   );
 }
 
 export function terminalClipboardDemo(copy: boolean) {
   return (
-    <section class="terminal-clipboard-demo" aria-label={copy ? 'Terminal copy sheet' : 'Terminal paste sheet'}>
+    <CatalogExample label="Interactive" rootAttributes={{ 'data-demo-scope': 'terminal-clipboard-demo' }}>
       <Row gap="xs">
         {copy ? (
           <wa-button data-clipboard-demo-open="copy">Open copy sheet</wa-button>
@@ -433,13 +421,13 @@ export function terminalClipboardDemo(copy: boolean) {
       ) : (
         <TerminalPasteDialog state={clipboardDemoPaste.value} />
       )}
-    </section>
+    </CatalogExample>
   );
 }
 
 export function TerminalRenameDialogDemo() {
   return (
-    <section class="terminal-rename-demo" aria-label="Terminal rename dialog">
+    <CatalogExample label="Interactive" rootAttributes={{ 'data-demo-scope': 'terminal-rename-demo' }}>
       <Row gap="xs">
         <wa-button data-rename-demo-open="renamed">Rename a renamed terminal</wa-button>
         <wa-button data-rename-demo-open="default">Rename a default-named terminal</wa-button>
@@ -448,7 +436,7 @@ export function TerminalRenameDialogDemo() {
         {renameDemoOutput.value || 'Reset to default appears only while a rename applies.'}
       </DemoEvent>
       <TerminalRenameDialog target={renameDemoTarget.value} />
-    </section>
+    </CatalogExample>
   );
 }
 
@@ -520,30 +508,45 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
   // The TerminalKeyBar demo exercises the same modifier and Fn transitions as production and shows the
   // exact bytes each key would send (HS2-CKS78M).
   demoListeners.add(
-    delegate(root, 'click', '.terminal-key-bar-demo [data-action="toggle-terminal-modifier"]', (_event, target) => {
-      const modifier = (target as HTMLElement).dataset.modifier as TerminalModifier | undefined;
-      if (modifier) keyBarDemoModifiers.value = toggleTerminalModifier(keyBarDemoModifiers.value, modifier);
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', '.terminal-key-bar-demo [data-action="toggle-terminal-function-row"]', (_event, target) => {
-      keyBarDemoFunctionRow.value = !keyBarDemoFunctionRow.value;
-      target.closest('[data-component="terminal-key-bar"]')?.scrollTo({ left: 0 });
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', '.terminal-key-bar-demo [data-action="send-terminal-key"]', (_event, target) => {
-      const key = (target as HTMLElement).dataset.key as TerminalSpecialKey,
-        bytes = encodeTerminalKey(key, keyBarDemoModifiers.value);
-      keyBarDemoModifiers.value = consumeTerminalModifiers(keyBarDemoModifiers.value);
-      keyBarDemoOutput.value = `${key} → ${JSON.stringify(bytes).slice(1, -1)}`;
-    }),
+    delegate(
+      root,
+      'click',
+      '[data-demo-scope="terminal-key-bar-demo"] [data-action="toggle-terminal-modifier"]',
+      (_event, target) => {
+        const modifier = (target as HTMLElement).dataset.modifier as TerminalModifier | undefined;
+        if (modifier) keyBarDemoModifiers.value = toggleTerminalModifier(keyBarDemoModifiers.value, modifier);
+      },
+    ),
   );
   demoListeners.add(
     delegate(
       root,
       'click',
-      '.terminal-key-bar-demo [data-action="copy-terminal-text"], .terminal-key-bar-demo [data-action="paste-terminal-text"]',
+      '[data-demo-scope="terminal-key-bar-demo"] [data-action="toggle-terminal-function-row"]',
+      (_event, target) => {
+        keyBarDemoFunctionRow.value = !keyBarDemoFunctionRow.value;
+        target.closest('[data-component="terminal-key-bar"]')?.scrollTo({ left: 0 });
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      '[data-demo-scope="terminal-key-bar-demo"] [data-action="send-terminal-key"]',
+      (_event, target) => {
+        const key = (target as HTMLElement).dataset.key as TerminalSpecialKey,
+          bytes = encodeTerminalKey(key, keyBarDemoModifiers.value);
+        keyBarDemoModifiers.value = consumeTerminalModifiers(keyBarDemoModifiers.value);
+        keyBarDemoOutput.value = `${key} → ${JSON.stringify(bytes).slice(1, -1)}`;
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      '[data-demo-scope="terminal-key-bar-demo"] [data-action="copy-terminal-text"], [data-demo-scope="terminal-key-bar-demo"] [data-action="paste-terminal-text"]',
       (_event, target) => {
         keyBarDemoOutput.value =
           (target as HTMLElement).dataset.action === 'copy-terminal-text'
@@ -561,27 +564,32 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
     }),
   );
   demoListeners.add(
-    delegate(root, 'click', '.terminal-rename-demo [data-action="reset-terminal-rename"]', () => {
+    delegate(root, 'click', '[data-demo-scope="terminal-rename-demo"] [data-action="reset-terminal-rename"]', () => {
       renameDemoOutput.value = `Reset to default → the tab shows ${renameDemoTarget.value?.defaultName ?? ''} again`;
       renameDemoTarget.value = undefined;
     }),
   );
   demoListeners.add(
-    delegate(root, 'click', '.terminal-rename-demo [data-action="cancel-terminal-rename"]', () => {
+    delegate(root, 'click', '[data-demo-scope="terminal-rename-demo"] [data-action="cancel-terminal-rename"]', () => {
       renameDemoOutput.value = 'Cancel → the name is unchanged';
       renameDemoTarget.value = undefined;
     }),
   );
   demoListeners.add(
-    delegate(root, 'submit', '.terminal-rename-demo [data-action="rename-terminal-form"]', (event, target) => {
-      event.preventDefault();
-      const name = target.querySelector<HTMLInputElement>('[name="terminal-name"]')?.value.trim() ?? '';
-      renameDemoOutput.value = `Rename → the tab shows ${name}`;
-      renameDemoTarget.value = undefined;
-    }),
+    delegate(
+      root,
+      'submit',
+      '[data-demo-scope="terminal-rename-demo"] [data-action="rename-terminal-form"]',
+      (event, target) => {
+        event.preventDefault();
+        const name = target.querySelector<HTMLInputElement>('[name="terminal-name"]')?.value.trim() ?? '';
+        renameDemoOutput.value = `Rename → the tab shows ${name}`;
+        renameDemoTarget.value = undefined;
+      },
+    ),
   );
   demoListeners.add(
-    delegate(root, 'wa-hide', '.terminal-rename-demo [data-terminal-rename-dialog]', () => {
+    delegate(root, 'wa-hide', '[data-demo-scope="terminal-rename-demo"] [data-terminal-rename-dialog]', () => {
       renameDemoTarget.value = undefined;
     }),
   );
@@ -606,9 +614,9 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
     if (clipboardDemoPaste.value?.open) clipboardDemoPaste.value = { ...clipboardDemoPaste.value, open: false };
   };
   demoListeners.add(
-    delegate(root, 'click', '.terminal-clipboard-demo [data-action="confirm-terminal-copy"]', () => {
+    delegate(root, 'click', '[data-demo-scope="terminal-clipboard-demo"] [data-action="confirm-terminal-copy"]', () => {
       const field = root.querySelector<HTMLTextAreaElement>(
-        '.terminal-clipboard-demo textarea[name="terminal-copy-text"]',
+        '[data-demo-scope="terminal-clipboard-demo"] textarea[name="terminal-copy-text"]',
       );
       if (!field) return;
       const { text, selection } = terminalCopySelection(field.value, field.selectionStart, field.selectionEnd);
@@ -617,22 +625,29 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
     }),
   );
   demoListeners.add(
-    delegate(root, 'submit', '.terminal-clipboard-demo [data-action="submit-terminal-paste"]', (event, target) => {
-      event.preventDefault();
-      const text = target.querySelector<HTMLTextAreaElement>('textarea[name="terminal-paste-text"]')?.value ?? '';
-      clipboardDemoOutput.value = `Pasted → ${JSON.stringify(text.replace(/\r?\n/g, '\r')).slice(1, -1)}`;
-      closeClipboardDemo();
-    }),
+    delegate(
+      root,
+      'submit',
+      '[data-demo-scope="terminal-clipboard-demo"] [data-action="submit-terminal-paste"]',
+      (event, target) => {
+        event.preventDefault();
+        const text = target.querySelector<HTMLTextAreaElement>('textarea[name="terminal-paste-text"]')?.value ?? '';
+        clipboardDemoOutput.value = `Pasted → ${JSON.stringify(text.replace(/\r?\n/g, '\r')).slice(1, -1)}`;
+        closeClipboardDemo();
+      },
+    ),
   );
   demoListeners.add(
     delegate(
       root,
       'click',
-      '.terminal-clipboard-demo [data-action="close-terminal-copy"], .terminal-clipboard-demo [data-action="cancel-terminal-paste"]',
+      '[data-demo-scope="terminal-clipboard-demo"] [data-action="close-terminal-copy"], [data-demo-scope="terminal-clipboard-demo"] [data-action="cancel-terminal-paste"]',
       closeClipboardDemo,
     ),
   );
-  demoListeners.add(delegate(root, 'wa-hide', '.terminal-clipboard-demo wa-dialog', closeClipboardDemo));
+  demoListeners.add(
+    delegate(root, 'wa-hide', '[data-demo-scope="terminal-clipboard-demo"] wa-dialog', closeClipboardDemo),
+  );
   // The edit menu demo opens where the stage was pressed and reports the production action (HS2-KKP8YJ).
   demoListeners.add(
     delegate(root, 'click', '[data-edit-menu-demo-open]', (_event, target) => {
@@ -652,7 +667,7 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
     delegate(
       root,
       'click',
-      '.terminal-edit-menu-demo [data-action="copy-terminal-selection"], .terminal-edit-menu-demo [data-action="copy-terminal-text"], .terminal-edit-menu-demo [data-action="paste-terminal-text"]',
+      '[data-demo-scope="terminal-edit-menu-demo"] [data-action="copy-terminal-selection"], [data-demo-scope="terminal-edit-menu-demo"] [data-action="copy-terminal-text"], [data-demo-scope="terminal-edit-menu-demo"] [data-action="paste-terminal-text"]',
       (_event, target) => {
         const action = (target as HTMLElement).dataset.action;
         editMenuDemoOutput.value =
@@ -667,9 +682,14 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
   );
   // The drawer focus-mode text-size control cycles the demo's column fixture like production (HS2-01D4JP).
   demoListeners.add(
-    delegate(root, 'click', '.terminal-drawer-focus-demo [data-action="cycle-mobile-terminal-columns"]', () => {
-      drawerFocusDemoColumns.value = nextMobileTerminalColumns(drawerFocusDemoColumns.value);
-    }),
+    delegate(
+      root,
+      'click',
+      '[data-demo-scope="terminal-drawer-focus-demo"] [data-action="cycle-mobile-terminal-columns"]',
+      () => {
+        drawerFocusDemoColumns.value = nextMobileTerminalColumns(drawerFocusDemoColumns.value);
+      },
+    ),
   );
   demoListeners.add(
     delegate(root, 'click', DEMO_ACTIONS.openTerminalContextMenu.selector, (event, target) => {
@@ -687,14 +707,14 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders: terminal drawer, dashboard, keyboard, and clipboard surfaces over deterministic sessions (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'terminal-drawer': { Demo: TerminalDrawerDemo },
-    'terminal-dashboard': { Demo: TerminalDashboardDemo },
-    'terminal-key-bar': { Demo: TerminalKeyBarDemo },
-    'fixed-aspect-terminal-card': { Demo: FixedAspectTerminalCardDemo },
-    'terminal-edit-menu': { Demo: TerminalEditMenuDemo },
-    'terminal-copy-dialog': { Demo: () => terminalClipboardDemo(true) },
-    'terminal-paste-dialog': { Demo: () => terminalClipboardDemo(false) },
-    'terminal-rename-dialog': { Demo: TerminalRenameDialogDemo },
+    'terminal-drawer': { catalogExamples: true, Demo: TerminalDrawerDemo },
+    'terminal-dashboard': { catalogExamples: true, Demo: TerminalDashboardDemo },
+    'terminal-key-bar': { catalogExamples: true, Demo: TerminalKeyBarDemo },
+    'fixed-aspect-terminal-card': { catalogExamples: true, Demo: FixedAspectTerminalCardDemo },
+    'terminal-edit-menu': { catalogExamples: true, Demo: TerminalEditMenuDemo },
+    'terminal-copy-dialog': { catalogExamples: true, Demo: () => terminalClipboardDemo(true) },
+    'terminal-paste-dialog': { catalogExamples: true, Demo: () => terminalClipboardDemo(false) },
+    'terminal-rename-dialog': { catalogExamples: true, Demo: TerminalRenameDialogDemo },
   },
   wire: wireTerminalComponentsDemo,
 };

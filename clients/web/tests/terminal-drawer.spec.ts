@@ -4,7 +4,9 @@ test('keeps selected terminal-tab shadows inside the horizontal scrollport', asy
   await page.setViewportSize({ width: 900, height: 600 });
   await page.goto('/ux-demo?component=terminal-drawer');
 
-  const drawer = page.locator('.terminal-drawer-demo [data-component="terminal-drawer"]');
+  const drawer = page
+    .getByRole('region', { name: 'Interactive', exact: true })
+    .locator('[data-component="terminal-drawer"]');
   const gridTab = drawer.getByRole('tab', { name: 'Project grid' });
   const tabs = drawer.locator('.kui-tab-bar__tabs');
   await expect(drawer.locator('[data-tab-kind="terminal"]')).toHaveCount(1);
@@ -43,7 +45,9 @@ test('keeps the hide-drawer action at the trailing edge of the drawer toolbar (H
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 700 });
     await page.goto('/ux-demo?component=terminal-drawer');
-    const drawer = page.locator('.terminal-drawer-demo [data-component="terminal-drawer"]'),
+    const drawer = page
+        .getByRole('region', { name: 'Interactive', exact: true })
+        .locator('[data-component="terminal-drawer"]'),
       rail = drawer.locator('.terminal-drawer__rail'),
       hide = drawer.getByRole('button', { name: 'Hide terminal drawer' }),
       create = drawer.locator('[data-terminal-drawer-create]');
@@ -67,7 +71,9 @@ for (const width of [1280, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 700 });
     await page.goto('/ux-demo?component=terminal-drawer');
-    const states = page.locator('[aria-label="Terminal tab states"] [data-component="terminal-drawer"]'),
+    const states = page
+        .getByRole('region', { name: 'Terminal tab states' })
+        .locator('[data-component="terminal-drawer"]'),
       tab = (id: string) => states.locator(`[data-tab-kind="terminal"][data-terminal-id="${id}"]`);
     await expect(tab('connected').locator('[data-ai-connection="connected"] [data-lucide="plug"]')).toBeVisible();
     await expect(tab('connected').locator('.terminal-drawer__busy-dot')).toBeVisible();
