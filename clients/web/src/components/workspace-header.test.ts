@@ -8,6 +8,7 @@ import {
   applyWorkspaceSortDirection,
   EmptyTrashAction,
   nextWorkspaceSort,
+  TicketViewAction,
   WorkspaceControls,
   WorkspaceHeader,
   WorkspaceIdentity,
@@ -497,5 +498,31 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).not.toContain('view-mode-switcher--rail');
     expect(headerCss).not.toContain('ticket-search-field');
     expect(headerCss).not.toContain('.workspace-header__identity {');
+  });
+});
+
+describe('TicketViewAction settings actions', () => {
+  it('renders Ticket sources as one brand "+ Data Source…" pill that opens the source dialog (HS2-G9J35B)', () => {
+    const markup = String(TicketViewAction({ action: { kind: 'add-data-source' } }));
+    expect(markup).toMatch(/<wa-button[^>]*variant="brand"[^>]*pill[^>]*data-action="open-provider-dialog"/);
+    expect(markup).toContain('plus');
+    expect(markup).toContain('Data Source…');
+  });
+  it('renders Commands as an outlined Add group… pill then a brand Add command… pill (HS2-YKB7HS)', () => {
+    const markup = String(TicketViewAction({ action: { kind: 'command-settings' } }));
+    const group = markup.indexOf('data-action="add-command-group"'),
+      command = markup.indexOf('data-action="add-command-setting"');
+    expect(group).toBeGreaterThan(-1);
+    expect(command).toBeGreaterThan(group);
+    expect(markup).toMatch(/<wa-button[^>]*appearance="outlined"[^>]*pill[^>]*data-action="add-command-group"/);
+    expect(markup).toMatch(/<wa-button[^>]*variant="brand"[^>]*pill[^>]*data-action="add-command-setting"/);
+    expect(markup).toContain('Add group…');
+    expect(markup).toContain('Add command…');
+  });
+  it('uses small pills with shorter labels in the narrow page header (HS2-YKB7HS)', () => {
+    const markup = String(TicketViewAction({ action: { kind: 'command-settings', size: 'compact' } }));
+    expect(markup).toMatch(/size="small"[^>]*title="Add a command group"[^]*Group…/);
+    expect(markup).toMatch(/size="small"[^>]*title="Add a custom command"[^]*Command…/);
+    expect(markup).not.toContain('Add group…');
   });
 });

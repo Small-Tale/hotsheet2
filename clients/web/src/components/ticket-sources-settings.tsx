@@ -158,12 +158,8 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
     <div class="ticket-provider-settings ticket-sources-settings" data-component="ticket-sources-settings">
       <List gap="l">
         <List gap="m">
-          {/* The workspace toolbar already titles the page (HS2-FV538C). */}
-          <Row hAlign="right" vAlign="middle" gap="m">
-            <wa-button appearance="outlined" {...COMMANDS_AND_AI_ACTIONS.openProviderDialog.attrs}>
-              Add data source
-            </wa-button>
-          </Row>
+          {/* The workspace toolbar titles the page (HS2-FV538C) and carries its "+ Data Source…"
+              action (HS2-G9J35B). */}
           <Text tone="quiet" flush>
             This project uses {sources.length} ticket source{sources.length === 1 ? '' : 's'}. New tickets go to the
             default source unless you choose another when creating one.

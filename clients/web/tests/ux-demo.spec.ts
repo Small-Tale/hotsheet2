@@ -7757,20 +7757,8 @@ test('edits custom command color and icon in the command settings editor', async
     'Release',
   ]);
   await page.screenshot({ path: 'target/visual-captures/hs2-656xj2-command-list.png' });
-  // Add command is the brand-filled primary action; Add group stays a plain secondary button (HS2-JSSMFY).
-  const buttonFill = (name: string) =>
-    editor.getByRole('button', { name, exact: true }).evaluate((node) => {
-      const probe = document.createElement('span');
-      probe.style.background = 'var(--wa-color-brand-fill-loud)';
-      node.append(probe);
-      const brand = getComputedStyle(probe).backgroundColor;
-      probe.remove();
-      return { background: getComputedStyle(node).backgroundColor, brand };
-    });
-  const addCommandFill = await buttonFill('Add command'),
-    addGroupFill = await buttonFill('Add group');
-  expect(addCommandFill.background).toBe(addCommandFill.brand);
-  expect(addGroupFill.background).not.toBe(addGroupFill.brand);
+  // Add group… and the brand Add command… moved to the workspace toolbar (HS2-YKB7HS); providers.spec
+  // exercises them in the real app.
   // Details, including the color and icon pickers, live in the Edit command dialog opened from the row menu.
   const verifyRow = editor.locator('.command-settings-editor__row', { hasText: 'Verify project' });
   await verifyRow.locator('.command-settings-editor__row-menu [slot="trigger"]').click();

@@ -17,7 +17,7 @@ import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { Bot, FolderPlus, GripVertical, MoreHorizontal, Pencil, Plus, RotateCcw, Trash2 } from 'lucide';
+import { Bot, GripVertical, MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide';
 
 import type { AiToolDefaults, AiToolDescriptor, CommandDefinition } from '../api';
 import { commandGroupSections } from '../command-order';
@@ -398,36 +398,13 @@ export function CommandSettingsEditor({
       data-component="command-settings-editor"
       data-icon-catalog={lucideCatalogVersion.value}
     >
-      {/* Kerf Toolbar owns the action row: the standalone Add group and primary Add command buttons
-          (HS2-EBY4E3). The workspace toolbar already titles the page (HS2-QEQ1YB). */}
-      <List gap="2xs">
-        <Toolbar
-          dividerSides=""
-          responsive="wrap"
-          trailing={
-            <>
-              <wa-button appearance="outlined" size="small" {...COMMANDS_AND_AI_ACTIONS.addCommandGroup.attrs}>
-                <LucideIcon slot="start" size="s" icon={FolderPlus} name="folder-plus" />
-                Add group
-              </wa-button>
-              <wa-button
-                variant="brand"
-                appearance="accent"
-                size="small"
-                {...COMMANDS_AND_AI_ACTIONS.addCommandSetting.attrs}
-              >
-                <LucideIcon slot="start" size="s" icon={Plus} name="plus" />
-                Add command
-              </wa-button>
-            </>
-          }
-        />
-        <List textInsets="rl">
-          <Text flush tone="quiet">
-            Create the buttons shown in this project's sidebar. Drag to reorder or move between groups; changes save
-            automatically.
-          </Text>
-        </List>
+      {/* The workspace toolbar titles the page (HS2-QEQ1YB) and carries its Add group… and Add
+          command… actions (HS2-YKB7HS). */}
+      <List textInsets="rl">
+        <Text flush tone="quiet">
+          Create the buttons shown in this project's sidebar. Drag to reorder or move between groups; changes save
+          automatically.
+        </Text>
       </List>
       {sections.length > 0 ? (
         <ul class="command-settings-editor__list" aria-label="Custom commands" aria-multiselectable="true">

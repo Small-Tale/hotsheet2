@@ -969,7 +969,8 @@ preview/download, server directory browser) are separate design work.
   checkout/store links in the machine registry, while external provider connections are
   non-secret records in the ticket store's `providers.json` (credentials remain keychain
   references). The real Sources settings view lists active git and external connections
-  without embedding setup forms. Its Add data source action opens the same dialog used by
+  without embedding setup forms. Its brand "+ Data Source…" pill, in the workspace action zone where
+  ticket views put New ticket… (HS2-G9J35B), opens the same dialog used by
   source-less project onboarding: the first screen selects GitHub, GitLab, or Jira (and,
   during initial setup, a standalone Hot Sheet git store), then pushes the provider-specific
   configuration screen within that dialog. Its shared multiline menu rows use intrinsic

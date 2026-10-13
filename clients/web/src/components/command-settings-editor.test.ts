@@ -30,14 +30,14 @@ describe('CommandSettingsEditor', () => {
     expect(markup).toContain('data-action="edit-command-setting"');
     expect(markup).toContain('data-action="delete-command-setting"');
     expect(markup).not.toContain('data-action="move-command-setting"');
-    // Header offers Add group + Add command; the list autosaves (no explicit Save button).
-    expect(markup).toContain('data-action="add-command-group"');
-    expect(markup).toContain('data-action="add-command-setting"');
+    // Add group… / Add command… live in the workspace toolbar (HS2-YKB7HS); the list autosaves
+    // (no explicit Save button).
+    expect(markup).not.toContain('data-action="add-command-group"');
+    expect(markup).not.toContain('data-action="add-command-setting"');
     expect(markup).not.toContain('data-action="save-command-settings"');
     expect(markup).toContain('save automatically');
-    // The action row is a Kerf Toolbar; the workspace toolbar titles the page, so no in-page
-    // "Custom commands" heading repeats it (HS2-EBY4E3, HS2-QEQ1YB).
-    expect(markup).toContain('data-component="toolbar"');
+    // The workspace toolbar titles the page, so no in-page "Custom commands" heading repeats it
+    // (HS2-QEQ1YB).
     expect(markup).not.toContain('aria-level="2"');
     expect(markup).not.toContain('command-settings-editor__heading');
     expect(css).not.toContain('__heading');
@@ -233,11 +233,9 @@ describe('CommandSettingsEditor', () => {
     expect(css).not.toMatch(/\.command-settings-editor__dialog\s*\{[^}]*display\s*:/);
     expect(css).toMatch(/\.command-settings-editor__dialog:popover-open\s*\{[^}]*display\s*:\s*flex/);
   });
-  it('provides a useful empty state with Add command and Add group affordances', () => {
+  it('provides a useful empty state pointing at the toolbar Add command… action', () => {
     const markup = String(CommandSettingsEditor({ commands: [] }));
     expect(markup).toContain('No custom commands yet');
-    expect(markup).toContain('data-action="add-command-setting"');
-    expect(markup).toContain('data-action="add-command-group"');
     expect(markup).not.toContain('data-action="save-command-settings"');
   });
 });

@@ -406,9 +406,19 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           return viewMode.value satisfies never;
       }
     })();
+    // Settings pages put their page-level add actions where ticket views put New ticket…
+    // (HS2-G9J35B, HS2-YKB7HS).
+    const settingsAction: TicketViewActionSpec | undefined =
+      viewMode.value !== 'settings'
+        ? undefined
+        : settingsCategory() === 'sources'
+          ? { kind: 'add-data-source' }
+          : settingsCategory() === 'commands'
+            ? { kind: 'command-settings', size: viewportMobile.value ? 'compact' : 'default' }
+            : undefined;
     const headingAction = !['settings', 'notifications'].includes(viewMode.value)
       ? ticketViewActionSpec(selectedView.value, canCreate)
-      : undefined;
+      : settingsAction;
     // Heading Toolbars render the view action as literal `trailing` content: Kerf Toolbar accepts one
     // standalone primary wa-button there (KF-9N7K8S, HS2-F4P7ZA).
     const secondaryPageHeader = (
@@ -485,11 +495,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
             selectedTicketsMutable={canBulkUpdate(selection, capabilitiesFor)}
           />
         }
-        projectTabAction={
-          !viewportMobile.value && !['settings', 'notifications'].includes(viewMode.value)
-            ? ticketViewActionSpec(selectedView.value, canCreate)
-            : undefined
-        }
+        projectTabAction={viewportMobile.value ? undefined : headingAction}
         banner={
           <>
             <CompatibilityBannerSurface assessment={current.compatibility} />

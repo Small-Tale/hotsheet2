@@ -4,6 +4,7 @@ import './workspace-header.css';
 import { foregroundColorVar, px } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuItem } from '@kerfjs/ui/popup-menu';
+import { Row } from '@kerfjs/ui/row';
 import { SegmentedControl, type SegmentedControlChoice } from '@kerfjs/ui/segmented-control';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
@@ -19,16 +20,19 @@ import {
   ClockArrowDown,
   ClockArrowUp,
   Columns3,
+  FolderPlus,
   List,
   ListSortAscending,
   ListSortDescending,
   MoreHorizontal,
+  Plus,
   Search,
   Settings,
   Star,
   Trash2,
 } from 'lucide';
 
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { createTicketSearchModel } from '../ticket-search-model';
 import { QuickTicketLauncher } from './quick-ticket-composer';
@@ -127,7 +131,12 @@ export function WorkspaceIdentity({
  * (HS2-PNCDAE). */
 export type TicketViewActionSpec =
   | { kind: 'new-ticket'; attachmentsEnabled?: boolean; label?: string; size?: 'default' | 'compact' }
-  | { kind: 'empty-trash' };
+  | { kind: 'empty-trash' }
+  /** Settings → Ticket sources: open the add-source dialog (HS2-G9J35B). */
+  | { kind: 'add-data-source' }
+  /** Settings → Commands: add a command group, then add a command (HS2-YKB7HS). `compact` (the
+   * narrow page header) uses small pills with shorter "Group…" and "Command…" labels. */
+  | { kind: 'command-settings'; size?: 'default' | 'compact' };
 
 /** The Trash view's standalone outlined danger `wa-button` (declared `rendersAs @kerfjs/ui:wa-button`). */
 export function EmptyTrashAction() {
@@ -144,13 +153,52 @@ export function EmptyTrashAction() {
   );
 }
 
-/** Renders a {@link TicketViewActionSpec} as its single standalone `wa-button` (HS2-PNCDAE). */
+/** Renders a {@link TicketViewActionSpec} as standalone pill `wa-button`s (HS2-PNCDAE). Settings pages
+ * put their page-level add actions here, like New ticket… in ticket views; a trailing "…" marks an
+ * action that opens a dialog or prompt (HS2-G9J35B, HS2-YKB7HS). */
 export function TicketViewAction({ action }: { action: TicketViewActionSpec }) {
-  return action.kind === 'empty-trash' ? (
-    <EmptyTrashAction />
-  ) : (
-    <QuickTicketLauncher attachmentsEnabled={action.attachmentsEnabled} label={action.label} size={action.size} />
-  );
+  switch (action.kind) {
+    case 'empty-trash':
+      return <EmptyTrashAction />;
+    case 'new-ticket':
+      return (
+        <QuickTicketLauncher attachmentsEnabled={action.attachmentsEnabled} label={action.label} size={action.size} />
+      );
+    case 'add-data-source':
+      return (
+        <wa-button variant="brand" pill {...COMMANDS_AND_AI_ACTIONS.openProviderDialog.attrs}>
+          <LucideIcon size="s" slot="start" icon={Plus} name="plus" />
+          Data Source…
+        </wa-button>
+      );
+    case 'command-settings':
+      return (
+        <Row gap="xs" vAlign="middle">
+          <wa-button
+            appearance="outlined"
+            pill
+            size={action.size === 'compact' ? 'small' : 'medium'}
+            title="Add a command group"
+            {...COMMANDS_AND_AI_ACTIONS.addCommandGroup.attrs}
+          >
+            <LucideIcon size="s" slot="start" icon={FolderPlus} name="folder-plus" />
+            {action.size === 'compact' ? 'Group…' : 'Add group…'}
+          </wa-button>
+          <wa-button
+            variant="brand"
+            pill
+            size={action.size === 'compact' ? 'small' : 'medium'}
+            title="Add a custom command"
+            {...COMMANDS_AND_AI_ACTIONS.addCommandSetting.attrs}
+          >
+            <LucideIcon size="s" slot="start" icon={Plus} name="plus" />
+            {action.size === 'compact' ? 'Command…' : 'Add command…'}
+          </wa-button>
+        </Row>
+      );
+    default:
+      return action satisfies never;
+  }
 }
 
 function workspaceModeChoices(

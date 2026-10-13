@@ -3265,13 +3265,18 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(page.locator('#workspace-page-title')).toContainText('Ticket sources');
   await expect(sourcesPanel.getByRole('heading', { name: 'Ticket sources' })).toHaveCount(0);
   await expect(page.locator('[data-action="save-provider-connection"]')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Add data source' })).toBeVisible();
+  // The brand "+ Data Source…" pill sits in the project tab bar's action zone, not the form (HS2-G9J35B).
+  await expect(page.locator('.project-tab-bar').locator('wa-button', { hasText: 'Data Source…' })).toHaveJSProperty(
+    'variant',
+    'brand',
+  );
+  await expect(sourcesPanel.locator('[data-action="open-provider-dialog"]')).toHaveCount(0);
   const primaryConnection = sourcesPanel.getByRole('button', { name: 'Edit GitHub Issues' });
   await expect(primaryConnection).toContainText('small-tale/hotsheet2');
   await expect(primaryConnection).toContainText('Default');
   await expect(sourcesPanel.getByRole('button', { name: 'Remove GitHub Issues from this project' })).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-y4zpqq-provider-settings-list-after.png', fullPage: true });
-  await page.getByRole('button', { name: 'Add data source' }).click();
+  await page.getByRole('button', { name: 'Data Source…', exact: true }).click();
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
   await providerForm.getByRole('button', { name: 'Sign in with GitHub' }).click();
   await expect(providerForm.getByText('Signed in to GitHub.')).toBeVisible();
@@ -3441,7 +3446,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/github-auth/device'))
       signIns.push(request.postDataJSON());
   });
-  await page.getByRole('button', { name: 'Add data source' }).click();
+  await page.getByRole('button', { name: 'Data Source…', exact: true }).click();
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
   const reuse = providerForm.getByRole('button', { name: 'Use alice on github.com, used by demo' });
   await expect(reuse).toBeVisible();
@@ -4037,7 +4042,7 @@ test('adds a second git ticket store and connects its remote from one guided for
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByLabel('Settings view').click();
-  await page.getByRole('button', { name: 'Add data source' }).click();
+  await page.getByRole('button', { name: 'Data Source…', exact: true }).click();
   const setup = page.locator('[data-ticket-source-setup-dialog]'),
     recommended = setup.getByRole('button', { name: 'Create a Hot Sheet 2 git ticket repository', exact: true });
   await expect(recommended).toBeDisabled();
@@ -12788,11 +12793,18 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   const editor = page.locator('[data-component="command-settings-editor"]');
   const commandDialog = page.locator('#command-editor-dialog');
-  await editor.getByRole('button', { name: 'Add command' }).click();
+  // Add group… and the brand Add command… pills sit in the project tab bar's far-edge action zone,
+  // where ticket views put New ticket…, not in the page body (HS2-YKB7HS).
+  const tabBar = page.locator('.project-tab-bar');
+  await expect(tabBar.locator('wa-button', { hasText: 'Add command…' })).toHaveJSProperty('variant', 'brand');
+  await expect(tabBar.locator('wa-button', { hasText: 'Add command…' })).toHaveJSProperty('pill', true);
+  await expect(tabBar.locator('wa-button', { hasText: 'Add group…' })).toHaveJSProperty('appearance', 'outlined');
+  await expect(editor.locator('[data-action="add-command-setting"], [data-action="add-command-group"]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Add command…', exact: true }).click();
   await commandDialog.getByLabel('Button label').fill('Lint');
   await commandDialog.getByLabel('Shell command').fill('npm run lint');
   await commandDialog.getByRole('button', { name: 'Done' }).click();
-  await editor.getByRole('button', { name: 'Add command' }).click();
+  await page.getByRole('button', { name: 'Add command…', exact: true }).click();
   await commandDialog.getByLabel('Button label').fill('Review changes');
   // Type is a Kerf Select (HS2-WNXRG3): choose the AI option through its real popup.
   const typeSelect = commandDialog.locator('wa-select[name="kind"]');
@@ -12874,7 +12886,7 @@ test('keeps an empty command group across reloads, populating, and emptying it (
     };
   await openCommandSettings();
   // 1. Add an empty group: it renders with its drop placeholder and delete action, and saves at once.
-  await editor.getByRole('button', { name: 'Add group' }).click();
+  await page.getByRole('button', { name: 'Add group…', exact: true }).click();
   await expect(ideas.locator('.command-settings-editor__group-empty')).toHaveText('Drag commands here');
   await expect(ideas.getByRole('button', { name: 'Delete empty group Ideas' })).toBeVisible();
   // The delete is the Kerf ListHeader action, with Kerf-owned geometry (HS2-7BBRJT).
@@ -12977,7 +12989,7 @@ test('persists an empty command group through the real server (HS2-EZ5KMC)', asy
       storedGroups = () => server.request<string[]>(`/checkouts/${server.checkoutId}/command-groups`);
     await openCommandSettings();
     await expect(editor.getByText('No custom commands yet.')).toBeVisible();
-    await editor.getByRole('button', { name: 'Add group' }).click();
+    await page.getByRole('button', { name: 'Add group…', exact: true }).click();
     await expect(ideas.locator('.command-settings-editor__group-empty')).toBeVisible();
     await expect.poll(storedGroups).toEqual(['Ideas']);
     await page.reload();
@@ -13023,7 +13035,7 @@ test('keeps a command edit made just before a reload through the real server (HS
           (command) => command.title,
         );
     await openCommandSettings();
-    await editor.getByRole('button', { name: 'Add command' }).click();
+    await page.getByRole('button', { name: 'Add command…', exact: true }).click();
     await commandDialog.getByLabel('Button label').fill('Ship it');
     await commandDialog.getByLabel('Shell command').fill('echo ship');
     await commandDialog.getByRole('button', { name: 'Done' }).click();
@@ -13063,7 +13075,7 @@ test('multi-selects command rows and drags the whole selection to reorder (HS2-V
     commandDialog = page.locator('#command-editor-dialog'),
     rowFor = (title: string) => editor.locator('.command-settings-editor__row', { hasText: title });
   for (const label of ['Alpha', 'Beta', 'Gamma']) {
-    await editor.getByRole('button', { name: 'Add command' }).click();
+    await page.getByRole('button', { name: 'Add command…', exact: true }).click();
     await commandDialog.getByLabel('Button label').fill(label);
     await commandDialog.getByLabel('Shell command').fill(`echo ${label}`);
     await commandDialog.getByRole('button', { name: 'Done' }).click();

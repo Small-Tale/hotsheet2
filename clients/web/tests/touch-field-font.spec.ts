@@ -317,7 +317,7 @@ async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
       await audit('ticket source form');
       await page.keyboard.press('Escape');
       for (const provider of ['GitHub Issues', 'GitLab Issues', 'Jira Cloud']) {
-        await page.getByRole('button', { name: 'Add data source' }).click();
+        await page.getByRole('button', { name: 'Data Source…', exact: true }).click();
         await page.getByRole('button', { name: `Connect ${provider}` }).click();
         const form = page.locator('[data-component="provider-setup-form"]').last();
         await expect(form).toBeVisible();
