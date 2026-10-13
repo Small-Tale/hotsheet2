@@ -108,6 +108,16 @@ describe('AttachmentGallery', () => {
     expect(markup).toMatch(/<button[^>]*aria-label="Zoom out"[^>]*disabled/);
     expect(markup).not.toContain('attachment-gallery__control');
   });
+  it('bounds the notes rail tracks so a long note wraps instead of overflowing (HS2-JF94J1)', () => {
+    const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
+    for (const selector of [
+      '\\.attachment-gallery__notes',
+      '\\.attachment-gallery__editor',
+      '\\.attachment-gallery__editor > label',
+    ])
+      expect(css).toMatch(new RegExp(`${selector} \\{[^}]*grid-template-columns: minmax\\(0, 1fr\\);`));
+    expect(css).toMatch(/\.attachment-gallery__editor textarea \{[^}]*max-width: 100%;/);
+  });
   it('keeps full-screen media and its sizing wrapper square-cornered', () => {
     const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
     expect(css).toMatchSource(/\.attachment-gallery__media-wrap \{[^}]*border-radius:0/);

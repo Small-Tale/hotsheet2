@@ -18584,6 +18584,22 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   await notes.getByRole('button', { name: /Annotation 1.*Check the selected region/ }).click();
   await expect(gallery.getByRole('textbox', { name: 'Annotation note' })).toBeVisible();
   expect((await media.boundingBox())!).toEqual(mediaBeforeSelection);
+  // A long note wraps inside the rail instead of growing the editor out of bounds (HS2-JF94J1).
+  const noteField = gallery.getByRole('textbox', { name: 'Annotation note' });
+  await noteField.fill('');
+  // Type it, as a reviewer does, so field-sizing re-measures on each keystroke.
+  await noteField.pressSequentially(
+    'this should have a white background since its in the header area and keep wrapping like a normal text area',
+  );
+  const railFits = () =>
+    notes.evaluate((rail) => {
+      const field = rail.querySelector('textarea')!.getBoundingClientRect(),
+        bounds = rail.getBoundingClientRect();
+      return rail.scrollWidth <= rail.clientWidth && field.right <= bounds.right + 0.5;
+    });
+  await expect.poll(railFits).toBe(true);
+  await gallery.screenshot({ path: 'target/visual-captures/hs2-jf94j1-long-note-wide.png' });
+  await noteField.fill('Check the selected region');
   await gallery.screenshot({ path: test.info().outputPath('hs2-xrzmcp-notes-wide.png') });
   const annotation = gallery.getByRole('button', { name: /Annotation 1, rect, comment: Check the selected region/ });
   await expect(annotation).toBeVisible();

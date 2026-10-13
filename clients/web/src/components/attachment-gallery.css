@@ -76,6 +76,10 @@
 .attachment-gallery__notes {
   display: grid;
   min-width: 0;
+  /* Single explicit tracks no wider than the rail: an implicit auto track would size to the note
+     field's one-line max-content width where field-sizing is content (Safari), scrolling the
+     rail sideways instead of wrapping the note (HS2-JF94J1). */
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   padding: var(--kui-space-m);
   box-sizing: border-box;
@@ -385,16 +389,21 @@
 .attachment-gallery__editor {
   display: grid;
   min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   order: -1;
   gap: var(--kui-space-xs);
 }
 .attachment-gallery__editor > label {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--kui-space-2xs);
   color: white;
 }
 .attachment-gallery__editor textarea {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   box-sizing: border-box;
   min-height: remify(52px);
   padding: var(--kui-space-xs);
