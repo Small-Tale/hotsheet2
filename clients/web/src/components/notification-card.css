@@ -42,15 +42,11 @@
 .notification-card__summary-icon {
   display: flex;
 }
-/* The project pill truncates long names with a tooltip; Kerf Badge has no truncation (KF-0WKZY2). */
+/* The project slot caps the Kerf Badge pill, which truncates inside it (HS2-B0B28R). */
 .notification-card__project {
-  overflow: hidden;
+  display: flex;
+  min-width: 0;
   max-width: remify(224px);
-  padding: remify(2.88px) remify(8.8px);
-  border-radius: var(--wa-border-radius-pill);
-  background: var(--wa-color-neutral-fill-quiet);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .notification-card__summary {
   display: grid;

@@ -1,6 +1,7 @@
 import './notification-card.css';
 
-import { foregroundColorVar } from '@kerfjs/ui/css-values';
+import { Badge } from '@kerfjs/ui/badge';
+import { foregroundColorVar, pct } from '@kerfjs/ui/css-values';
 import { LucideIcon, type LucideIconProps } from '@kerfjs/ui/lucide-icon';
 import { Text } from '@kerfjs/ui/text';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
@@ -77,8 +78,11 @@ export function NotificationCard({
           {role && <span aria-hidden="true">·</span>}
           {role && <span>{role}</span>}
         </span>
-        <span class="notification-card__project" title={projectName}>
-          {projectName}
+        {/* Kerf Badge truncates the project pill with a tooltip (KF-0WKZY2, HS2-B0B28R); the slot places it. */}
+        <span class="notification-card__project">
+          <Badge appearance="quiet" shape="pill" tone="neutral" maxWidth={pct(100)}>
+            {projectName}
+          </Badge>
         </span>
         {time && <time class="notification-card__time">{time}</time>}
       </header>

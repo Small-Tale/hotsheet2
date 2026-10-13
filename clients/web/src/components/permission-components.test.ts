@@ -42,6 +42,10 @@ describe('permission presentation components', () => {
     );
     expect(markup).toContain('Wants permission to run a command');
     expect(markup).toContain('Hot Sheet 2');
+    // The project pill is a truncating Kerf Badge with its name as the tooltip (HS2-B0B28R).
+    expect(markup).toMatch(
+      /class="notification-card__project"><span[^>]*data-component="badge"[^>]*data-truncate[^>]*title="Hot Sheet 2"|class="notification-card__project"><span[^>]*title="Hot Sheet 2"[^>]*data-truncate/,
+    );
     expect(markup).toContain('npm run test\nnpm run lint');
     expect(markup).toContain('Ignore');
     expect(markup).toContain('Deny');
