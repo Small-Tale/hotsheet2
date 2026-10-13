@@ -61,12 +61,16 @@ describe('TicketCodeReview', () => {
     expect(readFileSync(resolve(import.meta.dirname, 'repository-status-popover.css'), 'utf8')).not.toContain(
       'ticket-code-review',
     );
-    expect(css).toMatchSource(/__evidence \{[^}]*margin-bottom: var\(--kui-space-m\); padding: var\(--kui-space-xs\) var\(--kui-space-m\)/);
+    expect(css).toMatchSource(
+      /__evidence \{[^}]*margin-bottom: var\(--kui-space-m\); padding: var\(--kui-space-xs\) var\(--kui-space-m\)/,
+    );
     expect(css).toMatch(/__evidence-grid span \{[^}]*gap: var\(--kui-space-2xs\)/);
     expect(css).toMatchSource(
       /__compare-banner \{[^}]*margin-bottom: var\(--kui-space-m\); padding: var\(--kui-space-xs\)[^}]*gap: var\(--kui-space-xs\)/,
     );
-    expect(css).toMatch(/__range \{[^}]*padding: var\(--kui-space-xs\) var\(--kui-space-m\)[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatch(
+      /__range \{[^}]*padding: var\(--kui-space-xs\) var\(--kui-space-m\)[^}]*gap: var\(--kui-space-xs\)/,
+    );
     expect(css).toMatch(
       /__commit \{[^}]*min-height: remify\(68px\)[^}]*padding: var\(--kui-space-xs\) calc\(var\(--kui-space-m\) \+ 1px\)[^}]*gap: var\(--kui-space-xs\)/,
     );
