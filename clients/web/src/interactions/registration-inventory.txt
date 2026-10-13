@@ -303,25 +303,14 @@ inspector-and-editor	delegate	document.body	'keydown'	'[data-component="ticket-i
 inspector-and-editor	delegate	document.body	'click'	'[data-action="open-ticket-tag-popover"]'
 inspector-and-editor	wireTicketTagEditor	document.body
 inspector-and-editor	delegateCapture	document.body	'pointerdown'	'*'
-inspector-and-editor	delegateCapture	document.body	'mousedown'	'*'
-inspector-and-editor	delegate	document.body	'click'	'[data-action="edit-markdown"]'
-inspector-and-editor	delegate	document.body	'keydown'	'[data-action="edit-markdown"]'
-inspector-and-editor	delegate	document.body	'input'	'[name="markdown-source"]'
-inspector-and-editor	delegate	document.body	'focusout'	'[name="markdown-source"]'
-inspector-and-editor	delegate	document.body	'click'	'[data-action="add-ticket-note"]'
-inspector-and-editor	delegate	document.body	'input'	'[name="new-note-body"]'
-inspector-and-editor	delegate	document.body	'click'	'[data-action="cancel-new-note"]'
-inspector-and-editor	delegate	document.body	'submit'	'[data-action="create-note-form"]'
-inspector-and-editor	delegate	document.body	'click'	'[data-edit-on-click="true"]'
-inspector-and-editor	delegate	document.body	'keydown'	'[data-edit-on-click="true"]'
-inspector-and-editor	delegate	document.body	'input'	'[name="note-body"]'
+inspector-and-editor	wireMarkdownDetailsEditor	document.body
+inspector-and-editor	wireNoteComposer	document.body
 inspector-and-editor	delegate	document.body	'click'	'[data-action="add-inline-feedback-reply"]'
 inspector-and-editor	delegate	document.body	'keydown'	'[data-action="add-inline-feedback-reply"]'
 inspector-and-editor	delegate	document.body	'input'	'[name="inline-feedback-response"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="remove-inline-feedback-reply"]'
 inspector-and-editor	wireFeedbackChoices	document.body
-inspector-and-editor	delegate	document.body	'focusout'	'[name="note-body"]'
-inspector-and-editor	delegate	document.body	'click'	'[data-action="save-note-edit"]'
+inspector-and-editor	wireNoteEditor	document.body
 inspector-and-editor	delegate	document.body	'click'	'[data-action="dismiss-feedback"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="delete-note"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="load-next-ticket-page"]'

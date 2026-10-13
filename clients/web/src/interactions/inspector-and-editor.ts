@@ -6,6 +6,11 @@ import { Api, type CodeReview, type FullTicket } from '../api';
 import { boardColumnStatus, isPerColumnBoardView } from '../board-pagination';
 import { codeReviewTarget } from '../components/ticket-code-review';
 import {
+  wireMarkdownDetailsEditor,
+  wireNoteComposer,
+  wireNoteEditor,
+} from '../components/ticket-content-editor-interactions';
+import {
   type FeedbackChoiceModifiers,
   wireBlockedReasonEditor,
   wireFeedbackChoices,
@@ -27,7 +32,6 @@ import { HostOnlyActionError } from '../host-only-actions';
 import { inlineEditorEscape } from '../inline-editor-escape';
 import { ATTACHMENTS_AND_GALLERY_TARGETS } from '../interaction-attrs/attachments-and-gallery';
 import { INSPECTOR_AND_EDITOR_ACTIONS, INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
-import { clickBeginsMarkdownEdit, keyBeginsMarkdownEdit, repeatPressWouldLeaveNewEditor } from '../markdown-click-edit';
 import { manuallyResizedTicketEditorHeight, saveTicketEditorSize, ticketEditorKind } from '../ticket-editor-size';
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
 import { type TicketPatch } from '../ticket-operations';
@@ -466,72 +470,52 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   // action instead (HS2-H1K9YY). The repeat press of a habitual double-click keeps focus in the
   // editor its first click opened.
   lifetime.add(
-    delegateCapture(document.body, 'mousedown', '*', (event) => {
-      if (repeatPressWouldLeaveNewEditor(event as MouseEvent, document.activeElement)) event.preventDefault();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.editMarkdown.selector, (event, target) => {
-      if (clickBeginsMarkdownEdit(event as MouseEvent, target))
+    wireMarkdownDetailsEditor(document.body, {
+      begin: (target) => {
         beginDetailsEdit(isReaderSurface(target), linkedReaderFrame(target));
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_ACTIONS.editMarkdown.selector, (event, target) => {
-      if (!keyBeginsMarkdownEdit(event as KeyboardEvent, target)) return;
-      event.preventDefault();
-      beginDetailsEdit(isReaderSurface(target), linkedReaderFrame(target));
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'input', INSPECTOR_AND_EDITOR_TARGETS.markdownSourceField.selector, (_event, target) => {
-      const frame = linkedReaderFrame(target),
-        value = (target as HTMLTextAreaElement).value;
-      if (frame) {
-        replaceLinkedReaderFrame(frame.id, (current) => ({
-          ...current,
-          edit: { ...current.edit, detailsDraft: value },
-        }));
-        linkedReaderSaves(frame.id).details.schedule(value);
-        return;
-      }
-      const reader = isReaderSurface(target),
-        draft = reader ? readerDetailsDraft : detailsDraft,
-        autosave = reader ? readerDetailsAutosave : detailsAutosave;
-      draft.value = value;
-      autosave.schedule(draft.value);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.markdownSourceField.selector, (event, target) => {
-      const frame = linkedReaderFrame(target);
-      if (frame) {
-        void linkedReaderSaves(frame.id)
-          .details.flush()
-          .then((saved) => {
-            if (saved)
-              replaceLinkedReaderFrame(frame.id, (current) => ({
-                ...current,
-                edit: { ...current.edit, detailsMode: 'preview' },
-              }));
-          });
-        return;
-      }
-      const next = (event as FocusEvent).relatedTarget;
-      if (next instanceof Node && target.closest('[data-component="markdown-editor"]')?.contains(next)) {
-        dependencies.pointerDetailsReader = undefined;
-        return;
-      }
-      if (next instanceof Element && next.closest('[data-component="ticket-field-conflict"]')) {
-        dependencies.pointerDetailsReader = undefined;
-        return;
-      }
-      const reader = isReaderSurface(target);
-      if (dependencies.pointerDetailsReader === reader) {
-        dependencies.pointerDetailsFinish = beginDetailsFinish(reader);
-        return;
-      }
-      setTimeout(() => void finishDetailsEdit(reader), 0);
+      },
+      input: (field) => {
+        const frame = linkedReaderFrame(field),
+          value = field.value;
+        if (frame) {
+          replaceLinkedReaderFrame(frame.id, (current) => ({
+            ...current,
+            edit: { ...current.edit, detailsDraft: value },
+          }));
+          linkedReaderSaves(frame.id).details.schedule(value);
+          return;
+        }
+        const reader = isReaderSurface(field),
+          draft = reader ? readerDetailsDraft : detailsDraft,
+          autosave = reader ? readerDetailsAutosave : detailsAutosave;
+        draft.value = value;
+        autosave.schedule(draft.value);
+      },
+      focusLeave: (field, next, insideEditor) => {
+        const frame = linkedReaderFrame(field);
+        if (frame) {
+          void linkedReaderSaves(frame.id)
+            .details.flush()
+            .then((saved) => {
+              if (saved)
+                replaceLinkedReaderFrame(frame.id, (current) => ({
+                  ...current,
+                  edit: { ...current.edit, detailsMode: 'preview' },
+                }));
+            });
+          return;
+        }
+        if (insideEditor || (next instanceof Element && next.closest('[data-component="ticket-field-conflict"]'))) {
+          dependencies.pointerDetailsReader = undefined;
+          return;
+        }
+        const reader = isReaderSurface(field);
+        if (dependencies.pointerDetailsReader === reader) {
+          dependencies.pointerDetailsFinish = beginDetailsFinish(reader);
+          return;
+        }
+        setTimeout(() => void finishDetailsEdit(reader), 0);
+      },
     }),
   );
   function beginNoteEdit(id: string, reader = false, frame?: TicketReaderFrame) {
@@ -570,85 +554,35 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     );
   }
   lifetime.add(
-    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.addTicketNote.selector, () => {
-      if (!canAddNotes()) return;
-      editingNoteId.value = undefined;
-      composingNote.value = true;
-      newNoteDraft.value = '';
-      scheduleProjectSessionPersistence();
-      queueMicrotask(() => activeTicketSurface().querySelector<HTMLElement>('[name="new-note-body"]')?.focus());
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'input', INSPECTOR_AND_EDITOR_TARGETS.newNoteBodyField.selector, (_event, target) => {
-      newNoteDraft.value = (target as HTMLTextAreaElement).value;
-      scheduleProjectSessionPersistence();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.cancelNewNote.selector, () => {
-      composingNote.value = false;
-      newNoteDraft.value = '';
-      scheduleProjectSessionPersistence();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'submit', INSPECTOR_AND_EDITOR_ACTIONS.createNoteForm.selector, (event) => {
-      event.preventDefault();
-      const text = newNoteDraft.value.trim();
-      if (!text || !canAddNotes()) return;
-      void updateSelected({ note: text, note_kind: 'regular' }).then((saved) => {
-        if (saved) {
-          composingNote.value = false;
-          newNoteDraft.value = '';
-          scheduleProjectSessionPersistence();
-        }
-      });
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_TARGETS.editOnClick.selector, (event, target) => {
-      if (!clickBeginsMarkdownEdit(event as MouseEvent, target)) return;
-      beginNoteEdit(
-        data(target.closest('[data-note-id]')!).noteId!,
-        isReaderSurface(target),
-        linkedReaderFrame(target),
-      );
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_TARGETS.editOnClick.selector, (event, target) => {
-      if (!keyBeginsMarkdownEdit(event as KeyboardEvent, target)) return;
-      event.preventDefault();
-      beginNoteEdit(
-        data(target.closest('[data-note-id]')!).noteId!,
-        isReaderSurface(target),
-        linkedReaderFrame(target),
-      );
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'input', INSPECTOR_AND_EDITOR_TARGETS.noteBodyField.selector, (_event, target) => {
-      const frame = linkedReaderFrame(target),
-        id = data(target).noteId,
-        value = (target as HTMLTextAreaElement).value;
-      if (frame && id) {
-        replaceLinkedReaderFrame(frame.id, (current) => ({
-          ...current,
-          edit: { ...current.edit, editingNoteId: id, noteDraft: value },
-        }));
-        linkedReaderSaves(frame.id).note.schedule({ id, value });
-        return;
-      }
-      const reader = isReaderSurface(target),
-        editing = reader ? readerEditingNoteId : editingNoteId,
-        draft = reader ? readerNoteDraft : noteDraft,
-        autosave = reader ? readerNoteAutosave : noteAutosave;
-      editing.value = id;
-      draft.value = value;
-      if (data(target).noteResponse !== 'true' && editing.value)
-        autosave.schedule({ id: editing.value, value: draft.value });
-      else scheduleProjectSessionPersistence();
+    wireNoteComposer(document.body, {
+      open: () => {
+        if (!canAddNotes()) return;
+        editingNoteId.value = undefined;
+        composingNote.value = true;
+        newNoteDraft.value = '';
+        scheduleProjectSessionPersistence();
+        queueMicrotask(() => activeTicketSurface().querySelector<HTMLElement>('[name="new-note-body"]')?.focus());
+      },
+      setDraft: (value) => {
+        newNoteDraft.value = value;
+        scheduleProjectSessionPersistence();
+      },
+      cancel: () => {
+        composingNote.value = false;
+        newNoteDraft.value = '';
+        scheduleProjectSessionPersistence();
+      },
+      submit: () => {
+        const text = newNoteDraft.value.trim();
+        if (!text || !canAddNotes()) return;
+        void updateSelected({ note: text, note_kind: 'regular' }).then((saved) => {
+          if (saved) {
+            composingNote.value = false;
+            newNoteDraft.value = '';
+            scheduleProjectSessionPersistence();
+          }
+        });
+      },
     }),
   );
   function focusInlineFeedbackReply(noteId: string, offset: number) {
@@ -760,62 +694,84 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   }
   lifetime.add(wireFeedbackChoices(document.body, { toggle: toggleFeedbackChoice }));
   lifetime.add(
-    delegate(document.body, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.noteBodyField.selector, (_event, target) => {
-      if (data(target).noteResponse === 'true') return;
-      const frame = linkedReaderFrame(target);
-      if (frame) {
-        void linkedReaderSaves(frame.id)
-          .note.flush()
-          .then((saved) => {
-            if (saved)
-              replaceLinkedReaderFrame(frame.id, (current) => ({
-                ...current,
-                edit: { ...current.edit, editingNoteId: undefined, noteDraft: '', noteBase: '' },
-              }));
-          });
-        return;
-      }
-      const reader = isReaderSurface(target),
-        editing = reader ? readerEditingNoteId : editingNoteId,
-        draft = reader ? readerNoteDraft : noteDraft,
-        autosave = reader ? readerNoteAutosave : noteAutosave;
-      void autosave.flush().then((saved) => {
-        if (saved) {
-          editing.value = undefined;
-          draft.value = '';
+    wireNoteEditor(document.body, {
+      begin: (noteId, target) => {
+        beginNoteEdit(noteId, isReaderSurface(target), linkedReaderFrame(target));
+      },
+      input: (field, id, response) => {
+        const frame = linkedReaderFrame(field),
+          value = field.value;
+        if (frame && id) {
+          replaceLinkedReaderFrame(frame.id, (current) => ({
+            ...current,
+            edit: { ...current.edit, editingNoteId: id, noteDraft: value },
+          }));
+          linkedReaderSaves(frame.id).note.schedule({ id, value });
+          return;
         }
-      });
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.saveNoteEdit.selector, (_event, target) => {
-      const reader = isReaderSurface(target),
-        editing = reader ? readerEditingNoteId : editingNoteId,
-        draft = reader ? readerNoteDraft : noteDraft,
-        id = editing.value ?? data(target).noteId,
-        note = selectedTicket.value?.notes.find((item) => item.id === id),
-        response = data(target).noteResponse === 'true' || note?.kind === 'feedback_draft',
-        source = id ? feedbackSource(id) : undefined,
-        value =
-          source && response
-            ? combineFeedbackReply(
-                source,
-                readerInlineFeedbackReplies.value[id ?? ''] ?? [],
-                draft.value,
-                readerFeedbackChoiceSelections.value[id ?? ''] ?? [],
-              )
-            : draft.value;
-      if (!id || !value.trim()) return;
-      const patch = response ? { note: value, note_kind: 'regular' } : { note_id: id, note: value };
-      void updateSelected(patch).then((saved) => {
-        if (saved) {
-          editing.value = undefined;
-          draft.value = '';
-          readerInlineFeedbackReplies.value = { ...readerInlineFeedbackReplies.value, [id]: [] };
-          readerFeedbackChoiceSelections.value = { ...readerFeedbackChoiceSelections.value, [id]: [] };
-          readerFeedbackChoiceAnchors.delete(id);
+        const reader = isReaderSurface(field),
+          editing = reader ? readerEditingNoteId : editingNoteId,
+          draft = reader ? readerNoteDraft : noteDraft,
+          autosave = reader ? readerNoteAutosave : noteAutosave;
+        editing.value = id;
+        draft.value = value;
+        if (!response && editing.value) autosave.schedule({ id: editing.value, value: draft.value });
+        else scheduleProjectSessionPersistence();
+      },
+      finish: (field) => {
+        const frame = linkedReaderFrame(field);
+        if (frame) {
+          void linkedReaderSaves(frame.id)
+            .note.flush()
+            .then((saved) => {
+              if (saved)
+                replaceLinkedReaderFrame(frame.id, (current) => ({
+                  ...current,
+                  edit: { ...current.edit, editingNoteId: undefined, noteDraft: '', noteBase: '' },
+                }));
+            });
+          return;
         }
-      });
+        const reader = isReaderSurface(field),
+          editing = reader ? readerEditingNoteId : editingNoteId,
+          draft = reader ? readerNoteDraft : noteDraft,
+          autosave = reader ? readerNoteAutosave : noteAutosave;
+        void autosave.flush().then((saved) => {
+          if (saved) {
+            editing.value = undefined;
+            draft.value = '';
+          }
+        });
+      },
+      save: (target) => {
+        const reader = isReaderSurface(target),
+          editing = reader ? readerEditingNoteId : editingNoteId,
+          draft = reader ? readerNoteDraft : noteDraft,
+          id = editing.value ?? data(target).noteId,
+          note = selectedTicket.value?.notes.find((item) => item.id === id),
+          response = data(target).noteResponse === 'true' || note?.kind === 'feedback_draft',
+          source = id ? feedbackSource(id) : undefined,
+          value =
+            source && response
+              ? combineFeedbackReply(
+                  source,
+                  readerInlineFeedbackReplies.value[id ?? ''] ?? [],
+                  draft.value,
+                  readerFeedbackChoiceSelections.value[id ?? ''] ?? [],
+                )
+              : draft.value;
+        if (!id || !value.trim()) return;
+        const patch = response ? { note: value, note_kind: 'regular' } : { note_id: id, note: value };
+        void updateSelected(patch).then((saved) => {
+          if (saved) {
+            editing.value = undefined;
+            draft.value = '';
+            readerInlineFeedbackReplies.value = { ...readerInlineFeedbackReplies.value, [id]: [] };
+            readerFeedbackChoiceSelections.value = { ...readerFeedbackChoiceSelections.value, [id]: [] };
+            readerFeedbackChoiceAnchors.delete(id);
+          }
+        });
+      },
     }),
   );
   lifetime.add(
