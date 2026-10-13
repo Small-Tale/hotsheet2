@@ -86,6 +86,8 @@ export const sidebarCommands: CommandNavigationItem[] = [
   { id: 'publish', label: 'Publish preview', color: '#8b5cf6', icon: 'send', kind: 'ai', group: 'Release' },
 ];
 
+// Resizing the sidebar is visible on its own and does not write to the shared event log, so the
+// summary demos never show a stale height readout (HS2-3HC2A7, HS2-7F6MJ7).
 function DemoFrame({ children }: { children: unknown }) {
   return (
     <section class="sidebar-component-demo">
@@ -543,7 +545,6 @@ function wireProjectSidebarDemo(root: HTMLElement): () => void {
       projectSidebarHeight.value = clampProjectSidebarHeight(
         projectSidebarHeight.value + ((event as KeyboardEvent).key === 'ArrowDown' ? 24 : -24),
       );
-      sidebarEvent.value = `Sidebar height ${projectSidebarHeight.value} pixels.`;
     }),
   );
   demoListeners.add(
@@ -559,7 +560,6 @@ function wireProjectSidebarDemo(root: HTMLElement): () => void {
       if (!sidebarResizeDrag) return;
       sidebarResizeDrag = undefined;
       delete document.body.dataset.resizingProjectSidebar;
-      sidebarEvent.value = `Sidebar height ${projectSidebarHeight.value} pixels.`;
     }),
   );
   return () => {
