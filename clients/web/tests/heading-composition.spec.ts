@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 test('preserves page headings and dialog naming with direct Toolbar compositions (HS2-AGDJ6E)', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/ux-demo?component=workspace-header');
-  const demo = page.locator('[aria-label="WorkspaceHeader demo"]');
+  const demo = page.locator('[data-catalog-example-stack]');
   await expect(demo.getByRole('heading', { name: 'Queue', level: 1 })).toBeVisible();
   await demo.getByRole('button', { name: 'Notifications view' }).click();
   await expect(demo.getByRole('heading', { name: 'Notifications', level: 1 })).toBeVisible();

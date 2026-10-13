@@ -421,7 +421,12 @@ function wireTicketCollectionsDemo(root: HTMLElement): () => void {
           selectCollectionTicket(slug, intent);
           // Like the workspace grid's rail, a plain click in the TerminalTicketRail demo pushes that ticket's
           // detail onto its NavStack (HS2-FY06N4).
-          if (event.type === 'click' && row.closest('.terminal-ticket-rail-demo') && !intent.range && !intent.toggle) {
+          if (
+            event.type === 'click' &&
+            row.closest('[data-component="terminal-ticket-rail"]') &&
+            !intent.range &&
+            !intent.toggle
+          ) {
             terminalRailDemoTicket.value = slug;
             recordCollectionEvent(`${slug} pushed onto the ticket rail`);
           }

@@ -1155,7 +1155,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
   await page.goto('/ux-demo?component=terminal-ticket-rail');
   // The rail is a navigation panel (HS2-FY06N4): its root NavStack view's toolbar holds the project
   // selector before the standard toggle, above the pinned controls and the scrolling ticket list.
-  const panel = page.locator('.terminal-ticket-rail-demo'),
+  const panel = page.getByRole('region', { name: 'Interactive', exact: true }),
     rail = page.locator('[data-component="terminal-ticket-rail"]'),
     project = panel.locator('wa-select[name="terminal-rail-project"]'),
     view = rail.locator('wa-select[name="terminal-rail-view"]'),
@@ -1181,7 +1181,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
       utility = node.querySelector('.workspace-header__utility-group')!.getBoundingClientRect(),
       project = document.querySelector('wa-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
       projectChrome = getComputedStyle(
-        document.querySelector<HTMLElement>('.terminal-ticket-rail-demo [data-nav-stack-chrome] .kui-toolbar')!,
+        document.querySelector<HTMLElement>('[data-catalog-example-viewport] [data-nav-stack-chrome] .kui-toolbar')!,
       ),
       controls = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__controls')!),
       heading = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
@@ -1343,7 +1343,7 @@ for (const component of ['workspace-header', 'terminal-ticket-rail']) {
     await page.goto(`/ux-demo?component=${component}`);
     const demo =
       component === 'workspace-header'
-        ? page.getByRole('region', { name: 'WorkspaceHeader demo' })
+        ? page.locator('[data-catalog-example-stack]')
         : page.locator('[data-component="terminal-ticket-rail"]');
     const star = demo.getByRole('button', { name: 'Toggle Up Next for selected tickets' });
     // A plain click in the rail also pushes the ticket's detail (HS2-FY06N4); return to the list.
@@ -1462,7 +1462,7 @@ test('keeps the ticket rail search bordered across focus, blur, collapse, and re
 test('keeps rail view tabs above search and parks the closed trigger at the right (HS2-JJ6ZE1)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=terminal-ticket-rail');
-  const stage = page.locator('.terminal-ticket-rail-demo');
+  const stage = page.getByRole('region', { name: 'Interactive', exact: true });
   const toolbar = stage.locator('.terminal-ticket-rail__controls');
   const closedGroupMargins = () =>
     toolbar.evaluate((node) => {
@@ -1486,7 +1486,9 @@ test('keeps rail view tabs above search and parks the closed trigger at the righ
   await stage.screenshot({ path: 'target/visual-captures/hs2-jj6ze1-after-closed-narrow.png', animations: 'disabled' });
   await expect.poll(async () => Math.max(...(await closedGroupMargins()))).toBeLessThan(40);
   await expect.poll(closedSearchRightInset).toBeLessThan(40);
-  const wideRailStyle = await page.addStyleTag({ content: '.terminal-ticket-rail-demo { width: 700px !important; }' });
+  const wideRailStyle = await page.addStyleTag({
+    content: '[data-catalog-example-viewport] { width: 700px !important; max-width: none !important; }',
+  });
   await expect.poll(() => toolbar.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(650);
   await expect.poll(async () => Math.max(...(await closedGroupMargins()))).toBeLessThan(40);
   await expect.poll(closedSearchRightInset).toBeLessThan(40);
@@ -1505,6 +1507,8 @@ test('keeps rail view tabs above search and parks the closed trigger at the righ
   await wideRailStyle.evaluate((node) => {
     (node as HTMLElement).remove();
   });
+  // The phone-width rail (the compact catalog frame is wider) parks the utility group in overflow.
+  await page.addStyleTag({ content: '[data-catalog-example-viewport] { width: 384px !important; }' });
   await expect(toolbar.locator('.view-mode-switcher')).toBeVisible();
   await expect(toolbar.locator('.workspace-header__utility-group')).toBeHidden();
   await expect(toolbar.getByRole('button', { name: 'More workspace controls' })).toBeVisible();
@@ -3849,7 +3853,7 @@ test('connects WorkspaceHeader notifications, actions, reset and badge count acr
 }) => {
   await page.setViewportSize({ width: 1280, height: 1200 });
   await page.goto('/ux-demo?component=workspace-header');
-  const demo = page.getByRole('region', { name: 'WorkspaceHeader demo', exact: true }),
+  const demo = page.locator('[data-catalog-example-stack]'),
     notifications = demo.getByRole('button', { name: /^Notifications view/ }),
     center = demo.locator('[data-component="notification-center"]'),
     pending = center.locator('[data-component="permission-request-card"][data-state="pending"]'),

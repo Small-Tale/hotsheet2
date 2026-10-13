@@ -1,5 +1,8 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
+import { Grid } from '@kerfjs/ui/grid';
 import { openPopupMenuAt, type PopupMenuElement } from '@kerfjs/ui/popup-menu';
 import { Select } from '@kerfjs/ui/select';
+import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { wireFilePickers } from '@kerfjs/ui/wire-file-pickers';
@@ -285,7 +288,10 @@ export function TerminalTicketRailDemo() {
     }
   })();
   return (
-    <section class="terminal-ticket-rail-demo">
+    <CatalogExample
+      label="Interactive"
+      viewport={{ width: 'compact', height: 'app', frame: 'solid', overflow: 'hidden', layout: 'grid' }}
+    >
       <TerminalTicketRail
         collapseControl
         projects={[
@@ -323,7 +329,7 @@ export function TerminalTicketRailDemo() {
         }
         action={{ kind: 'new-ticket', label: 'Ticket…', size: 'compact' }}
       />
-    </section>
+    </CatalogExample>
   );
 }
 
@@ -445,34 +451,40 @@ function WorkspaceContent() {
 
 export function WorkspaceHeaderDemo() {
   return (
-    <section class="workspace-component-demo" aria-label="WorkspaceHeader demo">
-      <WorkspaceHeader
-        {...workspaceDemoSelection()}
-        projectName="Hot Sheet 2"
-        mode={workspaceMode.value}
-        searchOpen={workspaceSearchOpen.value}
-        searchModel={workspaceSearchModel}
-        searchHelpOpen={workspaceSearchHelpOpen.value}
-        sort={workspaceSort.value}
-        sortDirection={workspaceSortDirection.value}
-        notificationCount={workspaceDemoNotifications.value.pending.length}
-      />
-      <Toolbar
-        dividerSides=""
-        leading={
-          <ToolbarText
-            text={workspaceHeadingTitle(workspaceMode.value)}
-            id="workspace-demo-page-title"
-            size="xlarge"
-            headingLevel={1}
-          />
-        }
-      />
-      <div class="workspace-component-demo__content">
-        <WorkspaceContent />
-      </div>
-      <DemoEvent>{collectionEvent.value}</DemoEvent>
-    </section>
+    <CatalogExample
+      label="Interactive"
+      viewport={{ width: 'full' }}
+      rootAttributes={{ 'data-demo-scope': 'workspace-header' }}
+    >
+      <Grid columns={1} gap="m">
+        <WorkspaceHeader
+          {...workspaceDemoSelection()}
+          projectName="Hot Sheet 2"
+          mode={workspaceMode.value}
+          searchOpen={workspaceSearchOpen.value}
+          searchModel={workspaceSearchModel}
+          searchHelpOpen={workspaceSearchHelpOpen.value}
+          sort={workspaceSort.value}
+          sortDirection={workspaceSortDirection.value}
+          notificationCount={workspaceDemoNotifications.value.pending.length}
+        />
+        <Toolbar
+          dividerSides=""
+          leading={
+            <ToolbarText
+              text={workspaceHeadingTitle(workspaceMode.value)}
+              id="workspace-demo-page-title"
+              size="xlarge"
+              headingLevel={1}
+            />
+          }
+        />
+        <SunkenPanel>
+          <WorkspaceContent />
+        </SunkenPanel>
+        <DemoEvent>{collectionEvent.value}</DemoEvent>
+      </Grid>
+    </CatalogExample>
   );
 }
 
@@ -503,25 +515,27 @@ export function QuickTicketComposerSettings() {
 
 export function QuickTicketComposerDemo() {
   return (
-    <section class="workspace-component-demo" aria-label="QuickTicketComposer demo">
-      <QuickTicketLauncher />
-      <QuickTicketComposer
-        expanded={composerExpanded.value}
-        title={composerTitle.value}
-        details={composerDetails.value}
-        category={composerCategory.value}
-        upNext={composerUpNext.value}
-        providerName={demoComposerSource().label}
-        defaultSourceName={composerSources[0].label}
-        sourceIsDefault={demoComposerSource().value === composerSources[0].value}
-        sources={composerMultipleSources.value ? composerSources : composerSources.slice(0, 1)}
-        source={demoComposerSource().value}
-        attachments={composerAttachments.value}
-        attachmentsEnabled={demoComposerSource().attachments}
-      />
-      <TicketList tickets={collectionTickets.value.slice(0, 3)} label="Recently updated tickets" />
-      <DemoEvent>{collectionEvent.value}</DemoEvent>
-    </section>
+    <CatalogExample label="Interactive" viewport={{ width: 'full' }}>
+      <Grid columns={1} gap="m">
+        <QuickTicketLauncher />
+        <QuickTicketComposer
+          expanded={composerExpanded.value}
+          title={composerTitle.value}
+          details={composerDetails.value}
+          category={composerCategory.value}
+          upNext={composerUpNext.value}
+          providerName={demoComposerSource().label}
+          defaultSourceName={composerSources[0].label}
+          sourceIsDefault={demoComposerSource().value === composerSources[0].value}
+          sources={composerMultipleSources.value ? composerSources : composerSources.slice(0, 1)}
+          source={demoComposerSource().value}
+          attachments={composerAttachments.value}
+          attachmentsEnabled={demoComposerSource().attachments}
+        />
+        <TicketList tickets={collectionTickets.value.slice(0, 3)} label="Recently updated tickets" />
+        <DemoEvent>{collectionEvent.value}</DemoEvent>
+      </Grid>
+    </CatalogExample>
   );
 }
 
@@ -700,22 +714,22 @@ function demoInspectorProps(slug?: string): TicketInspectorProps {
 
 export function TicketInspectorDemo({ collapseControl = true }: { collapseControl?: boolean } = {}) {
   return (
-    <section class="inspector-demo" aria-label="TicketInspector demo">
+    <CatalogExample label="Interactive">
       {inspectorOpen.value ? (
         <TicketInspector {...demoInspectorProps()} collapseControl={collapseControl} />
       ) : (
         <wa-button data-action="toggle-ticket-inspector">Open ticket inspector</wa-button>
       )}
       <DemoEvent>{collectionEvent.value}</DemoEvent>
-    </section>
+    </CatalogExample>
   );
 }
 
 export function TicketInspectorSkeletonDemo() {
   return (
-    <section class="inspector-demo" aria-label="TicketInspectorSkeleton demo">
+    <CatalogExample label="Loading">
       <TicketInspectorSkeleton slug="HS2-4J50K3" collapseControl />
-    </section>
+    </CatalogExample>
   );
 }
 
@@ -771,7 +785,7 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
   // (HS2-FY06N4), rewired whenever the demo mounts a new stack.
   let demoRailNavStack: { section: Element; dispose: () => void } | undefined;
   function syncDemoRailNavStack() {
-    const section = root.querySelector('.terminal-ticket-rail-demo [data-component="nav-stack"]');
+    const section = root.querySelector('[data-component="terminal-ticket-rail"] [data-component="nav-stack"]');
     if (section === (demoRailNavStack?.section ?? null)) return;
     demoRailNavStack?.dispose();
     demoRailNavStack = section
@@ -789,18 +803,28 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
   new MutationObserver(syncDemoRailNavStack).observe(root, { childList: true, subtree: true });
   queueMicrotask(syncDemoRailNavStack);
   demoListeners.add(
-    delegate(root, 'click', '.workspace-component-demo [data-action="resolve-permission"]', (_event, target) => {
-      const { requestKey, decision, scope } = (target as HTMLElement).dataset;
-      if (!requestKey || (decision !== 'allow' && decision !== 'deny') || (scope !== 'once' && scope !== 'always'))
-        return;
-      resolveWorkspaceDemoPermission(requestKey, decision, scope);
-    }),
+    delegate(
+      root,
+      'click',
+      '[data-demo-scope="workspace-header"] [data-action="resolve-permission"]',
+      (_event, target) => {
+        const { requestKey, decision, scope } = (target as HTMLElement).dataset;
+        if (!requestKey || (decision !== 'allow' && decision !== 'deny') || (scope !== 'once' && scope !== 'always'))
+          return;
+        resolveWorkspaceDemoPermission(requestKey, decision, scope);
+      },
+    ),
   );
   demoListeners.add(
-    delegate(root, 'click', '.workspace-component-demo [data-action="ignore-permission"]', (_event, target) => {
-      const key = (target as HTMLElement).dataset.requestKey;
-      if (key) ignoreWorkspaceDemoPermission(key);
-    }),
+    delegate(
+      root,
+      'click',
+      '[data-demo-scope="workspace-header"] [data-action="ignore-permission"]',
+      (_event, target) => {
+        const key = (target as HTMLElement).dataset.requestKey;
+        if (key) ignoreWorkspaceDemoPermission(key);
+      },
+    ),
   );
   demoListeners.add(
     delegate(root, 'click', DEMO_ACTIONS.resetWorkspaceNotifications.selector, () => {
@@ -1094,19 +1118,21 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'workspace-header': { Demo: WorkspaceHeaderDemo },
+    'workspace-header': { catalogExamples: true, Demo: WorkspaceHeaderDemo },
     'quick-ticket-composer': {
+      catalogExamples: true,
       Demo: QuickTicketComposerDemo,
       Settings: QuickTicketComposerSettings,
       reset: resetQuickTicketComposerDemo,
     },
     'ticket-inspector': {
+      catalogExamples: true,
       Demo: TicketInspectorDemo,
       Settings: TicketInspectorSettings,
       reset: resetTicketInspectorDemo,
     },
-    'ticket-inspector-skeleton': { Demo: TicketInspectorSkeletonDemo },
-    'terminal-ticket-rail': { Demo: TerminalTicketRailDemo },
+    'ticket-inspector-skeleton': { catalogExamples: true, Demo: TicketInspectorSkeletonDemo },
+    'terminal-ticket-rail': { catalogExamples: true, Demo: TerminalTicketRailDemo },
   },
   wire: wireWorkspaceComponentsDemo,
 };

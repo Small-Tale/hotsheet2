@@ -53,21 +53,6 @@ body[data-resizing-project-sidebar='true'] {
   gap: remify(16px);
   padding: 0 remify(16px) remify(16px);
 }
-.workspace-component-demo {
-  display: grid;
-  width: 100%;
-  max-width: remify(1120px);
-  margin: auto;
-  gap: remify(20px);
-}
-.workspace-component-demo__content {
-  min-height: remify(384px);
-  padding: remify(16px);
-  overflow: hidden;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(13.6px);
-  background: var(--wa-color-neutral-fill-quiet);
-}
 .workspace-settings-preview {
   display: grid;
   max-width: remify(608px);
@@ -82,12 +67,6 @@ body[data-resizing-project-sidebar='true'] {
 .workspace-settings-preview__title,
 .workspace-settings-preview__description {
   margin: 0;
-}
-.inspector-demo {
-  display: grid;
-  min-height: remify(576px);
-  place-items: center;
-  gap: remify(16px);
 }
 /* The demo stage stands in for the shell's main column, which anchors the top-layer popup. */
 .permission-request-demo {
@@ -173,15 +152,6 @@ body[data-resizing-project-sidebar='true'] {
   width: remify(390px);
   max-width: 100%;
   contain: paint;
-}
-.terminal-ticket-rail-demo {
-  /* The stage stretches the rail's standalone panel Pane to its fixed height (HS2-QQW6CT). */
-  display: grid;
-  width: min(remify(384px), 100%);
-  height: remify(672px);
-  overflow: hidden;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-l);
 }
 .project-tab-demo__surface {
   display: grid;
