@@ -3,8 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   wireTerminalClipboardActions,
   wireTerminalClipboardSheets,
+  wireTerminalDashboardMenu,
   wireTerminalKeyBar,
   wireTerminalRenameDialog,
+  wireTerminalTextSizeControl,
 } from './terminal-component-interactions';
 
 interface Registration {
@@ -98,5 +100,53 @@ describe('terminal component wiring (HS2-XE048K)', () => {
     handler('wa-hide', '[data-terminal-rename-dialog]')(new Event('wa-hide'), {});
     expect(bindings.reset).toHaveBeenCalledTimes(1);
     expect(bindings.dismiss.mock.calls).toEqual([['cancel'], ['hide']]);
+  });
+});
+
+describe('terminal dashboard menu and text-size wiring (HS2-05NMW0)', () => {
+  it('opens the menu from an unmagnified tile or its button inside the viewport, and clears a halt', () => {
+    vi.stubGlobal('window', { innerWidth: 400, innerHeight: 300 });
+    const bindings = { open: vi.fn(), clearHalt: vi.fn() };
+    const dispose = wireTerminalDashboardMenu({} as HTMLElement, bindings);
+    const contextmenu = handler('contextmenu', '[data-component="terminal-tile"]');
+    const magnified = { preventDefault: vi.fn(), clientX: 10, clientY: 10 };
+    contextmenu(magnified, { dataset: { magnified: 'true', terminalKey: 'a' } });
+    expect(magnified.preventDefault).not.toHaveBeenCalled();
+    const pointer = { preventDefault: vi.fn(), clientX: 390, clientY: 290 };
+    contextmenu(pointer, { dataset: { terminalKey: 'a' } });
+    contextmenu({ preventDefault: vi.fn(), clientX: 5, clientY: 5 }, { dataset: { itemId: 'b' } });
+    contextmenu({ preventDefault: vi.fn(), clientX: 5, clientY: 5 }, { dataset: {} });
+    const click = { preventDefault: vi.fn() };
+    const box = { right: 20, bottom: 30 };
+    handler('click', action('open-terminal-context-menu'))(click, {
+      dataset: { itemId: 'c' },
+      getBoundingClientRect: () => box,
+    });
+    handler('click', action('open-terminal-context-menu'))(click, {
+      dataset: { terminalKey: 'd' },
+      getBoundingClientRect: () => box,
+    });
+    handler('click', action('clear-terminal-halt'))({}, { dataset: { itemId: 'c' } });
+    expect(pointer.preventDefault).toHaveBeenCalled();
+    expect(click.preventDefault).toHaveBeenCalledTimes(2);
+    const opened = bindings.open.mock.calls.map(([menu]) => menu as { key: string; x: number; y: number });
+    expect(opened.map((menu) => menu.key)).toEqual(['a', 'b', '', 'c', 'd']);
+    // A press near the corner keeps the 224 by 104 menu inside the 400 by 300 viewport.
+    expect(opened[0].x + 224).toBeLessThanOrEqual(400);
+    expect(opened[0].y + 104).toBeLessThanOrEqual(300);
+    expect(bindings.clearHalt).toHaveBeenCalledWith('c');
+    dispose();
+    expect(registrations.slice(-3).every((item) => item.disposed)).toBe(true);
+    vi.unstubAllGlobals();
+  });
+
+  it('cycles the focus-mode text size with the pressed control', () => {
+    const cycle = vi.fn();
+    const dispose = wireTerminalTextSizeControl({} as HTMLElement, cycle);
+    const control = { id: 'size' };
+    handler('click', action('cycle-mobile-terminal-columns'))({}, control);
+    expect(cycle).toHaveBeenCalledWith(control);
+    dispose();
+    expect(registrations.at(-1)!.disposed).toBe(true);
   });
 });

@@ -14,15 +14,16 @@ import {
 import {
   wireTerminalClipboardActions,
   wireTerminalClipboardSheets,
+  wireTerminalDashboardMenu,
   wireTerminalKeyBar,
   wireTerminalRenameDialog,
+  wireTerminalTextSizeControl,
 } from '../components/terminal-component-interactions';
 import { FixedAspectTerminalCard, TerminalDashboard } from '../components/terminal-dashboard';
 import { TerminalDrawer } from '../components/terminal-drawer';
 import { TerminalKeyBar } from '../components/terminal-key-bar';
 import { TerminalRenameDialog, type TerminalRenameTarget } from '../components/terminal-rename-dialog';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
-import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import { nextMobileTerminalColumns } from '../mobile-terminal-columns';
 import { terminalCopyMessage, terminalCopySelection } from '../terminal-clipboard';
 import {
@@ -34,7 +35,6 @@ import {
 } from '../terminal-keys';
 import { DemoEvent } from './components/demo-event';
 import { onDemoSelected } from './components/demo-state';
-import { DEMO_ACTIONS, DEMO_COMPONENTS } from './demo-actions';
 import type { DemoModule } from './demo-module';
 import { listen } from './demo-module';
 import { TERMINAL_DRAWER_DEMO_PROVIDERS } from './fixtures';
@@ -510,23 +510,16 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
   };
   new MutationObserver(syncDemoTerminals).observe(root, { childList: true, subtree: true });
   queueMicrotask(syncDemoTerminals);
-  function showTerminalDashboardContextMenu(target: HTMLElement, x: number, y: number): void {
-    terminalDashboardContextMenu.value = {
-      key: target.dataset.terminalKey ?? target.dataset.itemId ?? '',
-      ...viewportSafeContextMenuPosition(x, y, innerWidth, innerHeight, { width: 224, height: 104 }),
-    };
-  }
+  // The production dashboard context-menu handlers with fixture effects (HS2-05NMW0).
   demoListeners.add(
-    delegate(root, 'contextmenu', DEMO_COMPONENTS.terminalTile.selector, (event, target) => {
-      event.preventDefault();
-      const pointer = event as MouseEvent;
-      showTerminalDashboardContextMenu(target as HTMLElement, pointer.clientX, pointer.clientY);
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', TERMINALS_ACTIONS.clearTerminalHalt.selector, () => {
-      terminalDashboardHaltCleared.value = true;
-      terminalDashboardContextMenu.value = undefined;
+    wireTerminalDashboardMenu(root, {
+      open: (menu) => {
+        terminalDashboardContextMenu.value = menu;
+      },
+      clearHalt: () => {
+        terminalDashboardHaltCleared.value = true;
+        terminalDashboardContextMenu.value = undefined;
+      },
     }),
   );
   // The TerminalKeyBar demo runs production's key-bar wiring and shows the exact bytes each key would
@@ -648,23 +641,12 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
       };
     }),
   );
-  // The drawer focus-mode text-size control cycles the demo's column fixture like production (HS2-01D4JP).
+  // The drawer focus-mode text-size control cycles the demo's column fixture through production's
+  // handler (HS2-01D4JP, HS2-05NMW0).
   demoListeners.add(
-    delegate(
-      root,
-      'click',
-      '[data-demo-scope="terminal-drawer-focus-demo"] [data-action="cycle-mobile-terminal-columns"]',
-      () => {
+    wireTerminalTextSizeControl(root, (control) => {
+      if (control.closest('[data-demo-scope="terminal-drawer-focus-demo"]'))
         drawerFocusDemoColumns.value = nextMobileTerminalColumns(drawerFocusDemoColumns.value);
-      },
-    ),
-  );
-  demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.openTerminalContextMenu.selector, (event, target) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const box = target.getBoundingClientRect();
-      showTerminalDashboardContextMenu(target as HTMLElement, box.right, box.bottom);
     }),
   );
   return () => {

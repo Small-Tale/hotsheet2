@@ -1,6 +1,7 @@
 import { delegate } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
+import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import type { TerminalModifier, TerminalSpecialKey } from '../terminal-keys';
 
@@ -162,4 +163,64 @@ export function wireTerminalRenameDialog(root: HTMLElement, bindings: TerminalRe
   return () => {
     lifetime.dispose();
   };
+}
+
+/** Where the terminal dashboard context menu opens, already kept inside the viewport. */
+export interface TerminalDashboardMenuRequest {
+  readonly key: string;
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface TerminalDashboardMenuBindings {
+  readonly open: (menu: TerminalDashboardMenuRequest) => void;
+  /** Clear a halted session from its menu; the helper reports the menu's terminal key. */
+  readonly clearHalt: (key: string | undefined) => void;
+}
+
+const TERMINAL_MENU_SIZE = { width: 224, height: 104 };
+const menuAt = (key: string, x: number, y: number): TerminalDashboardMenuRequest => ({
+  key,
+  ...viewportSafeContextMenuPosition(x, y, window.innerWidth, window.innerHeight, TERMINAL_MENU_SIZE),
+});
+
+/**
+ * Wire the terminal dashboard context menu under `root` (HS2-05NMW0): a right-click on an unmagnified
+ * tile, the tile's menu button, and the menu's clear-halt action. Production opens its terminal menu
+ * signal and clears the halt over the API; the UX demo passes fixture callbacks.
+ */
+export function wireTerminalDashboardMenu(root: HTMLElement, bindings: TerminalDashboardMenuBindings): () => void {
+  const lifetime = createScope();
+  lifetime.add(
+    delegate(root, 'contextmenu', TERMINALS_TARGETS.terminalTile.selector, (event, target) => {
+      const tile = (target as HTMLElement).dataset;
+      if (tile.magnified === 'true') return;
+      event.preventDefault();
+      const pointer = event as MouseEvent;
+      bindings.open(menuAt(tile.terminalKey ?? tile.itemId ?? '', pointer.clientX, pointer.clientY));
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', TERMINALS_ACTIONS.openTerminalContextMenu.selector, (event, target) => {
+      event.preventDefault();
+      const trigger = (target as HTMLElement).dataset,
+        box = target.getBoundingClientRect();
+      bindings.open(menuAt(trigger.itemId ?? trigger.terminalKey ?? '', box.right, box.bottom));
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', TERMINALS_ACTIONS.clearTerminalHalt.selector, (_event, target) => {
+      bindings.clearHalt((target as HTMLElement).dataset.itemId);
+    }),
+  );
+  return () => {
+    lifetime.dispose();
+  };
+}
+
+/** Wire the terminal drawer focus mode's text-size control under `root` (HS2-05NMW0). */
+export function wireTerminalTextSizeControl(root: HTMLElement, cycle: (control: Element) => void): () => void {
+  return delegate(root, 'click', TERMINALS_ACTIONS.cycleMobileTerminalColumns.selector, (_event, target) => {
+    cycle(target);
+  });
 }

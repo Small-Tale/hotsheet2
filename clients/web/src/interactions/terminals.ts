@@ -13,8 +13,10 @@ import {
 import {
   wireTerminalClipboardActions,
   wireTerminalClipboardSheets,
+  wireTerminalDashboardMenu,
   wireTerminalKeyBar,
   wireTerminalRenameDialog,
+  wireTerminalTextSizeControl,
 } from '../components/terminal-component-interactions';
 import { type TerminalDashboardGroup, type TerminalDashboardSession } from '../components/terminal-dashboard';
 import { type TerminalRenameTarget } from '../components/terminal-rename-dialog';
@@ -303,37 +305,14 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'contextmenu', TERMINALS_TARGETS.terminalTile.selector, (event, target) => {
-      if (data(target).magnified === 'true') return;
-      event.preventDefault();
-      const pointer = event as MouseEvent;
-      terminalContextMenu.value = {
-        key: data(target).terminalKey!,
-        ...viewportSafeContextMenuPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight, {
-          width: 224,
-          height: 104,
-        }),
-      };
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', TERMINALS_ACTIONS.openTerminalContextMenu.selector, (event, target) => {
-      event.preventDefault();
-      const box = target.getBoundingClientRect();
-      terminalContextMenu.value = {
-        key: data(target).itemId!,
-        ...viewportSafeContextMenuPosition(box.right, box.bottom, window.innerWidth, window.innerHeight, {
-          width: 224,
-          height: 104,
-        }),
-      };
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', TERMINALS_ACTIONS.clearTerminalHalt.selector, (_event, target) => {
-      const key = data(target).itemId;
-      terminalContextMenu.value = undefined;
-      if (key) void clearTerminalHalt(key);
+    wireTerminalDashboardMenu(document.body, {
+      open: (menu) => {
+        terminalContextMenu.value = menu;
+      },
+      clearHalt: (key) => {
+        terminalContextMenu.value = undefined;
+        if (key) void clearTerminalHalt(key);
+      },
     }),
   );
   lifetime.add(
@@ -551,7 +530,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', TERMINALS_ACTIONS.cycleMobileTerminalColumns.selector, () => {
+    wireTerminalTextSizeControl(document.body, () => {
       cycleMobileTerminalColumns();
     }),
   );
