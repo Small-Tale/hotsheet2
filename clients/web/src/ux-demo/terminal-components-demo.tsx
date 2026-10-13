@@ -11,6 +11,12 @@ import {
   TerminalPasteDialog,
   type TerminalPasteState,
 } from '../components/terminal-clipboard-dialogs';
+import {
+  wireTerminalClipboardActions,
+  wireTerminalClipboardSheets,
+  wireTerminalKeyBar,
+  wireTerminalRenameDialog,
+} from '../components/terminal-component-interactions';
 import { FixedAspectTerminalCard, TerminalDashboard } from '../components/terminal-dashboard';
 import { TerminalDrawer } from '../components/terminal-drawer';
 import { TerminalKeyBar } from '../components/terminal-key-bar';
@@ -23,9 +29,7 @@ import {
   consumeTerminalModifiers,
   encodeTerminalKey,
   NO_TERMINAL_MODIFIERS,
-  type TerminalModifier,
   type TerminalModifiers,
-  type TerminalSpecialKey,
   toggleTerminalModifier,
 } from '../terminal-keys';
 import { DemoEvent } from './components/demo-event';
@@ -321,21 +325,13 @@ export function TerminalDashboardDemo() {
 export function TerminalKeyBarDemo() {
   return (
     <>
-      <CatalogExample
-        label="Keys"
-        viewport={{ width: 'compact', overflow: 'hidden' }}
-        rootAttributes={{ 'data-demo-scope': 'terminal-key-bar-demo' }}
-      >
+      <CatalogExample label="Keys" viewport={{ width: 'compact', overflow: 'hidden' }}>
         <TerminalKeyBar modifiers={keyBarDemoModifiers.value} functionRow={keyBarDemoFunctionRow.value} />
         <DemoEvent live={false} attributes={{ 'data-key-bar-demo-output': '' }}>
           {keyBarDemoOutput.value || 'Tap a key to see the bytes it sends.'}
         </DemoEvent>
       </CatalogExample>
-      <CatalogExample
-        label="Function row"
-        viewport={{ width: 'compact', overflow: 'hidden' }}
-        rootAttributes={{ 'data-demo-scope': 'terminal-key-bar-demo' }}
-      >
+      <CatalogExample label="Function row" viewport={{ width: 'compact', overflow: 'hidden' }}>
         <TerminalKeyBar modifiers={{ ctrl: 'once', alt: 'locked', shift: 'off' }} functionRow />
       </CatalogExample>
     </>
@@ -387,7 +383,7 @@ export function FixedAspectTerminalCardDemo() {
 
 export function TerminalEditMenuDemo() {
   return (
-    <CatalogExample label="Interactive" rootAttributes={{ 'data-demo-scope': 'terminal-edit-menu-demo' }}>
+    <CatalogExample label="Interactive">
       <Row gap="xs">
         <wa-button data-edit-menu-demo-open>Long-press here</wa-button>
         <wa-button data-edit-menu-demo-open="selection">Long-press a word</wa-button>
@@ -402,7 +398,7 @@ export function TerminalEditMenuDemo() {
 
 export function terminalClipboardDemo(copy: boolean) {
   return (
-    <CatalogExample label="Interactive" rootAttributes={{ 'data-demo-scope': 'terminal-clipboard-demo' }}>
+    <CatalogExample label="Interactive">
       <Row gap="xs">
         {copy ? (
           <wa-button data-clipboard-demo-open="copy">Open copy sheet</wa-button>
@@ -427,7 +423,7 @@ export function terminalClipboardDemo(copy: boolean) {
 
 export function TerminalRenameDialogDemo() {
   return (
-    <CatalogExample label="Interactive" rootAttributes={{ 'data-demo-scope': 'terminal-rename-demo' }}>
+    <CatalogExample label="Interactive">
       <Row gap="xs">
         <wa-button data-rename-demo-open="renamed">Rename a renamed terminal</wa-button>
         <wa-button data-rename-demo-open="default">Rename a default-named terminal</wa-button>
@@ -505,55 +501,50 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
       terminalDashboardContextMenu.value = undefined;
     }),
   );
-  // The TerminalKeyBar demo exercises the same modifier and Fn transitions as production and shows the
-  // exact bytes each key would send (HS2-CKS78M).
+  // The TerminalKeyBar demo runs production's key-bar wiring and shows the exact bytes each key would
+  // send (HS2-CKS78M, HS2-XE048K).
   demoListeners.add(
-    delegate(
-      root,
-      'click',
-      '[data-demo-scope="terminal-key-bar-demo"] [data-action="toggle-terminal-modifier"]',
-      (_event, target) => {
-        const modifier = (target as HTMLElement).dataset.modifier as TerminalModifier | undefined;
-        if (modifier) keyBarDemoModifiers.value = toggleTerminalModifier(keyBarDemoModifiers.value, modifier);
+    wireTerminalKeyBar(root, {
+      toggleModifier: (modifier) => {
+        keyBarDemoModifiers.value = toggleTerminalModifier(keyBarDemoModifiers.value, modifier);
       },
-    ),
-  );
-  demoListeners.add(
-    delegate(
-      root,
-      'click',
-      '[data-demo-scope="terminal-key-bar-demo"] [data-action="toggle-terminal-function-row"]',
-      (_event, target) => {
+      toggleFunctionRow: () => {
         keyBarDemoFunctionRow.value = !keyBarDemoFunctionRow.value;
-        target.closest('[data-component="terminal-key-bar"]')?.scrollTo({ left: 0 });
       },
-    ),
-  );
-  demoListeners.add(
-    delegate(
-      root,
-      'click',
-      '[data-demo-scope="terminal-key-bar-demo"] [data-action="send-terminal-key"]',
-      (_event, target) => {
-        const key = (target as HTMLElement).dataset.key as TerminalSpecialKey,
-          bytes = encodeTerminalKey(key, keyBarDemoModifiers.value);
+      sendKey: (key) => {
+        const bytes = encodeTerminalKey(key, keyBarDemoModifiers.value);
         keyBarDemoModifiers.value = consumeTerminalModifiers(keyBarDemoModifiers.value);
         keyBarDemoOutput.value = `${key} → ${JSON.stringify(bytes).slice(1, -1)}`;
       },
-    ),
+    }),
   );
-  demoListeners.add(
-    delegate(
-      root,
-      'click',
-      '[data-demo-scope="terminal-key-bar-demo"] [data-action="copy-terminal-text"], [data-demo-scope="terminal-key-bar-demo"] [data-action="paste-terminal-text"]',
-      (_event, target) => {
-        keyBarDemoOutput.value =
-          (target as HTMLElement).dataset.action === 'copy-terminal-text'
-            ? 'Copy → opens the terminal Copy sheet'
+  // The key bar's Fn-row clipboard group and the long-press edit menu report what production does
+  // (HS2-FRB545, HS2-KKP8YJ).
+  const reportClipboardAction = (target: Element, action: 'selection' | 'copy' | 'paste') => {
+    if (target.closest('[data-component="terminal-edit-menu"]')) {
+      editMenuDemoOutput.value =
+        action === 'selection'
+          ? 'Copy → copies the selected terminal text'
+          : action === 'copy'
+            ? 'Copy Text… → opens the terminal Copy sheet'
             : 'Paste → sends the clipboard to the terminal';
+      editMenuDemo.value = undefined;
+    } else if (target.closest('[data-component="terminal-key-bar"]'))
+      keyBarDemoOutput.value =
+        action === 'paste' ? 'Paste → sends the clipboard to the terminal' : 'Copy → opens the terminal Copy sheet';
+  };
+  demoListeners.add(
+    wireTerminalClipboardActions(root, {
+      copySelection: (target) => {
+        reportClipboardAction(target, 'selection');
       },
-    ),
+      copyText: (target) => {
+        reportClipboardAction(target, 'copy');
+      },
+      paste: (target) => {
+        reportClipboardAction(target, 'paste');
+      },
+    }),
   );
   // The rename dialog demo reports what each production action would do (HS2-2Q7KTX).
   demoListeners.add(
@@ -564,33 +555,19 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
     }),
   );
   demoListeners.add(
-    delegate(root, 'click', '[data-demo-scope="terminal-rename-demo"] [data-action="reset-terminal-rename"]', () => {
-      renameDemoOutput.value = `Reset to default → the tab shows ${renameDemoTarget.value?.defaultName ?? ''} again`;
-      renameDemoTarget.value = undefined;
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', '[data-demo-scope="terminal-rename-demo"] [data-action="cancel-terminal-rename"]', () => {
-      renameDemoOutput.value = 'Cancel → the name is unchanged';
-      renameDemoTarget.value = undefined;
-    }),
-  );
-  demoListeners.add(
-    delegate(
-      root,
-      'submit',
-      '[data-demo-scope="terminal-rename-demo"] [data-action="rename-terminal-form"]',
-      (event, target) => {
-        event.preventDefault();
-        const name = target.querySelector<HTMLInputElement>('[name="terminal-name"]')?.value.trim() ?? '';
+    wireTerminalRenameDialog(root, {
+      rename: (name) => {
         renameDemoOutput.value = `Rename → the tab shows ${name}`;
         renameDemoTarget.value = undefined;
       },
-    ),
-  );
-  demoListeners.add(
-    delegate(root, 'wa-hide', '[data-demo-scope="terminal-rename-demo"] [data-terminal-rename-dialog]', () => {
-      renameDemoTarget.value = undefined;
+      reset: () => {
+        renameDemoOutput.value = `Reset to default → the tab shows ${renameDemoTarget.value?.defaultName ?? ''} again`;
+        renameDemoTarget.value = undefined;
+      },
+      dismiss: (reason) => {
+        if (reason === 'cancel') renameDemoOutput.value = 'Cancel → the name is unchanged';
+        renameDemoTarget.value = undefined;
+      },
     }),
   );
   // The clipboard sheet demos drive the same open/close/selection behavior as production (HS2-FRB545).
@@ -614,39 +591,19 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
     if (clipboardDemoPaste.value?.open) clipboardDemoPaste.value = { ...clipboardDemoPaste.value, open: false };
   };
   demoListeners.add(
-    delegate(root, 'click', '[data-demo-scope="terminal-clipboard-demo"] [data-action="confirm-terminal-copy"]', () => {
-      const field = root.querySelector<HTMLTextAreaElement>(
-        '[data-demo-scope="terminal-clipboard-demo"] textarea[name="terminal-copy-text"]',
-      );
-      if (!field) return;
-      const { text, selection } = terminalCopySelection(field.value, field.selectionStart, field.selectionEnd);
-      clipboardDemoOutput.value = terminalCopyMessage(text, selection);
-      closeClipboardDemo();
-    }),
-  );
-  demoListeners.add(
-    delegate(
-      root,
-      'submit',
-      '[data-demo-scope="terminal-clipboard-demo"] [data-action="submit-terminal-paste"]',
-      (event, target) => {
-        event.preventDefault();
-        const text = target.querySelector<HTMLTextAreaElement>('textarea[name="terminal-paste-text"]')?.value ?? '';
+    wireTerminalClipboardSheets(root, {
+      confirmCopy: (field) => {
+        const { text, selection } = terminalCopySelection(field.value, field.selectionStart, field.selectionEnd);
+        clipboardDemoOutput.value = terminalCopyMessage(text, selection);
+        closeClipboardDemo();
+      },
+      closeCopy: closeClipboardDemo,
+      submitPaste: (text) => {
         clipboardDemoOutput.value = `Pasted → ${JSON.stringify(text.replace(/\r?\n/g, '\r')).slice(1, -1)}`;
         closeClipboardDemo();
       },
-    ),
-  );
-  demoListeners.add(
-    delegate(
-      root,
-      'click',
-      '[data-demo-scope="terminal-clipboard-demo"] [data-action="close-terminal-copy"], [data-demo-scope="terminal-clipboard-demo"] [data-action="cancel-terminal-paste"]',
-      closeClipboardDemo,
-    ),
-  );
-  demoListeners.add(
-    delegate(root, 'wa-hide', '[data-demo-scope="terminal-clipboard-demo"] wa-dialog', closeClipboardDemo),
+      closePaste: closeClipboardDemo,
+    }),
   );
   // The edit menu demo opens where the stage was pressed and reports the production action (HS2-KKP8YJ).
   demoListeners.add(
@@ -662,23 +619,6 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
         selection,
       };
     }),
-  );
-  demoListeners.add(
-    delegate(
-      root,
-      'click',
-      '[data-demo-scope="terminal-edit-menu-demo"] [data-action="copy-terminal-selection"], [data-demo-scope="terminal-edit-menu-demo"] [data-action="copy-terminal-text"], [data-demo-scope="terminal-edit-menu-demo"] [data-action="paste-terminal-text"]',
-      (_event, target) => {
-        const action = (target as HTMLElement).dataset.action;
-        editMenuDemoOutput.value =
-          action === 'copy-terminal-selection'
-            ? 'Copy → copies the selected terminal text'
-            : action === 'copy-terminal-text'
-              ? 'Copy Text… → opens the terminal Copy sheet'
-              : 'Paste → sends the clipboard to the terminal';
-        editMenuDemo.value = undefined;
-      },
-    ),
   );
   // The drawer focus-mode text-size control cycles the demo's column fixture like production (HS2-01D4JP).
   demoListeners.add(
