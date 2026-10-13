@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { deviceClass } from '@kerfjs/ui/device-class';
 import { Select } from '@kerfjs/ui/select';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
@@ -123,7 +124,11 @@ export function resetRepositoryStatusDemo(root?: ParentNode): void {
 export function RepositoryStatusPopoverDemo() {
   const scenario = repositoryDemoScenario.value;
   return (
-    <section class="repository-status-demo" aria-label="RepositoryStatusPopover demo">
+    <CatalogExample
+      label="Interactive"
+      viewport={{ width: 'full' }}
+      rootAttributes={{ 'data-repository-status-demo': '' }}
+    >
       <RepositoryStatusPopover
         embedded
         status={repositoryStatusForScenario(scenario)}
@@ -137,7 +142,7 @@ export function RepositoryStatusPopoverDemo() {
         selectedFiles={repositoryDemoSelectedFiles.value}
       />
       <DemoEvent>{repositoryDemoEvent.value}</DemoEvent>
-    </section>
+    </CatalogExample>
   );
 }
 
@@ -156,7 +161,7 @@ const evidence: CodeReview = {
 };
 export function ChangeEvidenceDialogDemo() {
   return (
-    <section aria-label="ChangeEvidenceDialog demo">
+    <CatalogExample label="Interactive" viewport={{ width: 'full' }}>
       <ChangeEvidenceDialog
         embedded
         review={evidence}
@@ -166,7 +171,7 @@ export function ChangeEvidenceDialogDemo() {
         platform="macos"
       />
       <DemoEvent>{repositoryDemoEvent.value}</DemoEvent>
-    </section>
+    </CatalogExample>
   );
 }
 
@@ -195,7 +200,7 @@ function wireRepositoryStatusDemo(root: HTMLElement): () => void {
   // The compact Repository Status drill-down pops back to its list the same way (HS2-3B8345).
   let demoRepositoryNavStack: { section: Element; dispose: () => void } | undefined;
   function syncDemoRepositoryNavStack() {
-    const section = root.querySelector('.repository-status-demo [data-component="nav-stack"]');
+    const section = root.querySelector('[data-repository-status-demo] [data-component="nav-stack"]');
     if (section === (demoRepositoryNavStack?.section ?? null)) return;
     demoRepositoryNavStack?.dispose();
     demoRepositoryNavStack = section
@@ -270,11 +275,12 @@ function wireRepositoryStatusDemo(root: HTMLElement): () => void {
 export const demoModule: DemoModule = {
   entries: {
     'repository-status-popover': {
+      catalogExamples: true,
       Demo: RepositoryStatusPopoverDemo,
       Settings: RepositoryStatusPopoverSettings,
       reset: resetRepositoryStatusDemo,
     },
-    'change-evidence-dialog': { Demo: ChangeEvidenceDialogDemo },
+    'change-evidence-dialog': { catalogExamples: true, Demo: ChangeEvidenceDialogDemo },
   },
   wire: wireRepositoryStatusDemo,
 };

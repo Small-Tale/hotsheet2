@@ -681,10 +681,10 @@ describe('UX demo catalog', () => {
 
   it('offers and resets every repository-status headline scenario', () => {
     const settings = String(RepositoryStatusPopoverSettings());
-    const demo = String(RepositoryStatusPopoverDemo()),
-      style = readFileSync(fileURLToPath(new URL('./style.css', import.meta.url)), 'utf8');
-    expect(demo).toContain('class="repository-status-demo"');
-    expect(style).toMatchSource(/\.repository-status-demo \{ width: 100%; min-width: 0; \}/);
+    const demo = String(RepositoryStatusPopoverDemo());
+    // Kerf's CatalogExample owns the specimen frame; the app keeps no demo stage CSS (HS2-WQ2T92).
+    expect(demo).toContain('data-repository-status-demo');
+    expect(demo).toContain('data-catalog-example');
     for (const scenario of ['clean', 'dirty', 'ahead', 'behind', 'diverged', 'conflicted', 'error'])
       expect(settings).toContain(`value="${scenario}"`);
     expect(
