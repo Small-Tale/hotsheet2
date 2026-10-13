@@ -5,22 +5,21 @@ import { Select } from '@kerfjs/ui/select';
 import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { wireFilePickers } from '@kerfjs/ui/wire-file-pickers';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
-import { delegate, delegateCapture, effect, signal } from 'kerfjs';
+import { delegate, effect, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import type { CodeReview, DuplicateBacklink } from '../api';
 import type { LiveClaimNoticeProps } from '../components/active-claim';
 import { NotificationCenter } from '../components/notification-center';
 import {
-  NEW_TICKET_ATTACHMENT_PICKER,
   QuickTicketComposer,
   QuickTicketLauncher,
   showQuickTicketComposer,
   strandedNewTicketAttachments,
 } from '../components/quick-ticket-composer';
+import { wireQuickTicketComposer } from '../components/quick-ticket-composer-interactions';
 import { TerminalTicketRail } from '../components/terminal-ticket-rail';
 import { TicketBoard, type TicketColumnProps } from '../components/ticket-board';
 import { DEFAULT_TICKET_CATEGORIES } from '../components/ticket-category-select';
@@ -70,7 +69,7 @@ import {
   readerNotes,
   readerTab,
 } from './content-components-demo';
-import { DEMO_ACTIONS, DEMO_COMPONENTS, DEMO_FIELDS } from './demo-actions';
+import { DEMO_ACTIONS, DEMO_FIELDS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 import { collectionEvent, collectionTickets, recordCollectionEvent } from './ticket-collections-demo';
@@ -903,43 +902,62 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
       recordCollectionEvent('Workspace actions requested');
     }),
   );
+  // The production QuickTicketComposer handlers with fixture side effects (HS2-NRW5ZR).
+  let demoAttachmentSequence = 0;
   demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.expandTicketComposer.selector, (_event, target) => {
-      if (document.activeElement !== target) (target as HTMLElement).focus({ preventScroll: true });
-      composerExpanded.value = true;
-      requestAnimationFrame(() => requestAnimationFrame(() => showQuickTicketComposer(root)));
-    }),
-  );
-  demoListeners.add(
-    delegateCapture(root, 'wa-after-hide', DEMO_COMPONENTS.quickTicketComposer.selector, (event, target) => {
-      if (event.target !== target || !composerExpanded.value) return;
-      composerExpanded.value = false;
-      composerTitle.value = '';
-      composerDetails.value = '';
-      composerUpNext.value = false;
-      composerSourcePick.value = undefined;
-      composerAttachments.value = [];
-      recordCollectionEvent('Ticket creation cancelled');
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'input', DEMO_FIELDS.newTicketTitle.selector, (_event, target) => {
-      composerTitle.value = (target as FormControl).value;
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'input', DEMO_FIELDS.newTicketDetails.selector, (_event, target) => {
-      composerDetails.value = (target as HTMLTextAreaElement).value;
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'change', DEMO_FIELDS.newTicketCategory.selector, (_event, target) => {
-      composerCategory.value = (target as FormControl).value;
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'change', DEMO_FIELDS.newTicketSource.selector, (_event, target) => {
-      composerSourcePick.value = (target as FormControl).value;
+    wireQuickTicketComposer(root, {
+      expand: (trigger) => {
+        if (document.activeElement !== trigger) trigger.focus({ preventScroll: true });
+        composerExpanded.value = true;
+        requestAnimationFrame(() => requestAnimationFrame(() => showQuickTicketComposer(root)));
+      },
+      expanded: () => composerExpanded.value,
+      canHide: () => true,
+      dismissed: () => {
+        composerExpanded.value = false;
+        composerTitle.value = '';
+        composerDetails.value = '';
+        composerUpNext.value = false;
+        composerSourcePick.value = undefined;
+        composerAttachments.value = [];
+        recordCollectionEvent('Ticket creation cancelled');
+      },
+      setTitle: (title) => {
+        composerTitle.value = title;
+      },
+      setDetails: (details) => {
+        composerDetails.value = details;
+      },
+      setCategory: (category) => {
+        composerCategory.value = category;
+      },
+      setSource: (source) => {
+        composerSourcePick.value = source;
+      },
+      toggleUpNext: () => {
+        composerUpNext.value = !composerUpNext.value;
+      },
+      addFiles: (files) => {
+        composerAttachments.value = [
+          ...composerAttachments.value,
+          ...Array.from(files, (file) => ({ id: `demo-${demoAttachmentSequence++}`, name: file.name })),
+        ];
+      },
+      removeAttachment: (id) => {
+        composerAttachments.value = composerAttachments.value.filter((item) => item.id !== id);
+      },
+      clearAttachments: () => {
+        composerAttachments.value = [];
+        recordCollectionEvent('Staged attachments removed');
+      },
+      submit: () => {
+        if (!createDemoTicket())
+          recordCollectionEvent(
+            composerTitle.value.trim()
+              ? 'Remove the staged attachments or choose another source'
+              : 'Enter a ticket title',
+          );
+      },
     }),
   );
   demoListeners.add(
@@ -971,55 +989,6 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
         composerMultipleSources.value = (target as FormControl).value === 'several';
       },
     ),
-  );
-  demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.toggleNewTicketUpNext.selector, () => {
-      composerUpNext.value = !composerUpNext.value;
-    }),
-  );
-  let demoAttachmentSequence = 0;
-  const stageDemoFiles = (files: readonly File[]) => {
-    composerAttachments.value = [
-      ...composerAttachments.value,
-      ...files.map((file) => ({ id: `demo-${demoAttachmentSequence++}`, name: file.name })),
-    ];
-  };
-  demoListeners.add(
-    delegate(root, 'change', '.quick-ticket-composer__drop input[name="new-ticket-attachments"]', (_event, target) => {
-      const input = target as HTMLInputElement;
-      stageDemoFiles(Array.from(input.files ?? []));
-      input.value = '';
-    }),
-  );
-  demoListeners.add(
-    wireFilePickers(root, {
-      onFiles: ({ id, files }) => {
-        if (id === NEW_TICKET_ATTACHMENT_PICKER) stageDemoFiles(files);
-      },
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.removeNewTicketAttachment.selector, (_event, target) => {
-      const id = (target as HTMLElement).dataset.pendingAttachmentId;
-      composerAttachments.value = composerAttachments.value.filter((item) => item.id !== id);
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.clearNewTicketAttachments.selector, () => {
-      composerAttachments.value = [];
-      recordCollectionEvent('Staged attachments removed');
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'submit', DEMO_ACTIONS.createTicketForm.selector, (event) => {
-      event.preventDefault();
-      if (!createDemoTicket())
-        recordCollectionEvent(
-          composerTitle.value.trim()
-            ? 'Remove the staged attachments or choose another source'
-            : 'Enter a ticket title',
-        );
-    }),
   );
   demoListeners.add(
     delegate(root, 'click', DEMO_ACTIONS.setInspectorTab.selector, (_event, target) => {

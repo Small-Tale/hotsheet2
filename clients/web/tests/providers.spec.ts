@@ -14774,6 +14774,10 @@ test('projects Up Next immediately and reconciles without a full project refresh
   await page.waitForTimeout(300);
   const afterPatch = requests.slice(requests.findIndex((value) => value.startsWith('PATCH ')) + 1);
   expect(afterPatch.filter((value) => value.includes('/tickets') || value.includes('/repository/status'))).toEqual([]);
+  // The star stays keyboard-operable inside the selectable row: Enter toggles it (HS2-NRW5ZR).
+  await row.getByRole('button', { name: 'Remove from Up Next' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(row.getByRole('button', { name: 'Add to Up Next' })).toBeVisible();
 });
 
 test('keeps primary 138-ticket interactions within the painted UI budget', async ({ page }, testInfo) => {

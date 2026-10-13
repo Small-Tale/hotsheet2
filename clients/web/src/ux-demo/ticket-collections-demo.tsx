@@ -1,10 +1,10 @@
 import { CatalogExample } from '@kerfjs/ui/catalog';
-import { delegateCapture, signal } from 'kerfjs';
+import { signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { TicketBoard, type TicketColumnProps } from '../components/ticket-board';
 import { TicketBoardColumn } from '../components/ticket-board-column';
-import { wireTicketCollection } from '../components/ticket-collection-interactions';
+import { wireTicketCollection, wireTicketRowUpNextToggle } from '../components/ticket-collection-interactions';
 import { TicketList } from '../components/ticket-list';
 import type { TicketRowProps } from '../components/ticket-row';
 import {
@@ -495,30 +495,17 @@ function wireTicketCollectionsDemo(root: HTMLElement): () => void {
       },
     }),
   );
-  function toggleRowUpNext(target?: Element): void {
-    if (usesCollectionState()) {
-      const row = target?.closest('[data-component="ticket-list-row"]') as HTMLElement | null;
-      if (row) toggleCollectionTicketUpNext(row.dataset.ticketSlug!);
-      return;
-    }
-    ticketRowSettings.upNext.value = !ticketRowSettings.upNext.value;
-    ticketRowSettings.event.value = ticketRowSettings.upNext.value ? 'Added to Up Next' : 'Removed from Up Next';
-    const control = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="up-next"]');
-    if (control) control.checked = ticketRowSettings.upNext.value;
-  }
+  // The production Up Next star handler with fixture side effects (HS2-NRW5ZR).
   demoListeners.add(
-    delegateCapture(root, 'click', DEMO_ACTIONS.toggleRowUpNext.selector, (event) => {
-      event.stopPropagation();
-      toggleRowUpNext(event.target as Element);
-    }),
-  );
-  demoListeners.add(
-    delegateCapture(root, 'keydown', DEMO_ACTIONS.toggleRowUpNext.selector, (event) => {
-      const key = (event as KeyboardEvent).key;
-      if (key !== 'Enter' && key !== ' ') return;
-      event.preventDefault();
-      event.stopPropagation();
-      toggleRowUpNext(event.target as Element);
+    wireTicketRowUpNextToggle(root, (row) => {
+      if (usesCollectionState()) {
+        toggleCollectionTicketUpNext(row.dataset.ticketSlug!);
+        return;
+      }
+      ticketRowSettings.upNext.value = !ticketRowSettings.upNext.value;
+      ticketRowSettings.event.value = ticketRowSettings.upNext.value ? 'Added to Up Next' : 'Removed from Up Next';
+      const control = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="up-next"]');
+      if (control) control.checked = ticketRowSettings.upNext.value;
     }),
   );
   return () => {

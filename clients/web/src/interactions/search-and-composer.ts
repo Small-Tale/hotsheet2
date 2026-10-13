@@ -1,12 +1,13 @@
 import { readTokenSearchField } from '@kerfjs/ui/token-search-field';
 import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
-import { wireFilePickers } from '@kerfjs/ui/wire-file-pickers';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
-import { attr, delegate, delegateCapture, type Signal } from 'kerfjs';
+import { attr, delegate, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { type TicketRow as WireTicketRow } from '../api';
-import { NEW_TICKET_ATTACHMENT_PICKER, STRANDED_ATTACHMENTS_MESSAGE } from '../components/quick-ticket-composer';
+import { STRANDED_ATTACHMENTS_MESSAGE } from '../components/quick-ticket-composer';
+import { wireQuickTicketComposer } from '../components/quick-ticket-composer-interactions';
+import { wireTicketRowUpNextToggle } from '../components/ticket-collection-interactions';
 import {
   type WorkspaceSort,
   type WorkspaceSortDirection,
@@ -15,15 +16,13 @@ import {
 import { wireWorkspaceHeaderActions } from '../components/workspace-header-interactions';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { type InlineSearchToken } from '../inline-search';
-import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
 import { isWhitespaceOnlySearch, keepSearchOpenForShadowTarget } from '../search-collapse';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { saveLastTicketCategory } from '../ticket-category-preference';
 import { type TicketHistory } from '../ticket-operations';
 import { deleteDraftFiles } from '../workspace-session';
-import { data } from './dom';
 import { wireTicketSearchFields } from './ticket-search-field';
-import { type Control, type PendingEvidence, type Project } from './types';
+import { type PendingEvidence, type Project } from './types';
 
 /** Live application bindings used by this handler group. */
 export interface SearchAndComposerInteractionsDependencies {
@@ -275,149 +274,65 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
       },
     }),
   );
+  const resetComposerAttachmentMessage = () => {
+    composerAttachmentMessage.value = '';
+    composerAttachmentError.value = false;
+  };
   lifetime.add(
-    delegate(document.body, 'click', SEARCH_AND_COMPOSER_ACTIONS.expandTicketComposer.selector, (_event, target) => {
-      openTicketComposer(target as HTMLElement);
-    }),
-  );
-  lifetime.add(
-    delegateCapture(
-      document.body,
-      'wa-hide',
-      SEARCH_AND_COMPOSER_TARGETS.quickTicketComposer.selector,
-      (event, target) => {
-        if (event.target === target && composerSubmitting.value) event.preventDefault();
-      },
-    ),
-  );
-  lifetime.add(
-    delegateCapture(
-      document.body,
-      'wa-after-hide',
-      SEARCH_AND_COMPOSER_TARGETS.quickTicketComposer.selector,
-      (event, target) => {
-        if (event.target === target && composerExpanded.value) resetTicketComposer();
-      },
-    ),
-  );
-  lifetime.add(
-    delegate(document.body, 'input', SEARCH_AND_COMPOSER_TARGETS.newTicketTitleField.selector, (_event, target) => {
-      composerTitle.value = (target as Control).value;
-      scheduleProjectSessionPersistence();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'input', SEARCH_AND_COMPOSER_TARGETS.newTicketDetailsField.selector, (_event, target) => {
-      composerDetails.value = (target as HTMLTextAreaElement).value;
-      scheduleProjectSessionPersistence();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'change', SEARCH_AND_COMPOSER_TARGETS.newTicketCategoryField.selector, (_event, target) => {
-      composerCategory.value = (target as Control).value;
-      saveLastTicketCategory(localStorage, composerCategory.value);
-      scheduleProjectSessionPersistence();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'change', SEARCH_AND_COMPOSER_TARGETS.newTicketSourceField.selector, (_event, target) => {
-      // In-memory only: the pick lasts while the composer is open; creating remembers it (HS2-NZMJBJ).
-      composerSource.value = (target as Control).value || undefined;
-      // A blocked-submit explanation is about the previous source; the new one shows its own state.
-      if (composerAttachmentMessage.value === STRANDED_ATTACHMENTS_MESSAGE) {
-        composerAttachmentMessage.value = '';
-        composerAttachmentError.value = false;
-      }
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', SEARCH_AND_COMPOSER_ACTIONS.toggleNewTicketUpNext.selector, () => {
-      composerUpNext.value = !composerUpNext.value;
-      scheduleProjectSessionPersistence();
-    }),
-  );
-  lifetime.add(
-    delegate(
-      document.body,
-      'change',
-      '.quick-ticket-composer__drop input[name="new-ticket-attachments"]',
-      (_event, target) => {
-        const input = target as HTMLInputElement;
-        if (input.files?.length) void addNewTicketFiles(input.files);
-        input.value = '';
-      },
-    ),
-  );
-  // The header's Kerf FilePickerTrigger reports through its documented wiring contract (HS2-ZWRCAZ).
-  lifetime.add(
-    wireFilePickers(document.body, {
-      onFiles: ({ id, files }) => {
-        if (id === NEW_TICKET_ATTACHMENT_PICKER && files.length) void addNewTicketFiles(files);
-      },
-    }),
-  );
-  lifetime.add(
-    delegate(
-      document.body,
-      'click',
-      SEARCH_AND_COMPOSER_ACTIONS.removeNewTicketAttachment.selector,
-      (_event, target) => {
-        const id = data(target).pendingAttachmentId;
-        if (id) void deleteDraftFiles(draftScope('composer'), [id]);
-        composerAttachments.value = composerAttachments.value.filter((item) => item.id !== id);
-        composerAttachmentMessage.value = '';
-        composerAttachmentError.value = false;
+    wireQuickTicketComposer(document.body, {
+      expand: openTicketComposer,
+      expanded: () => composerExpanded.value,
+      canHide: () => !composerSubmitting.value,
+      dismissed: resetTicketComposer,
+      setTitle: (title) => {
+        composerTitle.value = title;
         scheduleProjectSessionPersistence();
       },
-    ),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', SEARCH_AND_COMPOSER_ACTIONS.clearNewTicketAttachments.selector, () => {
-      // Drops every file staged for a source that cannot take attachments (HS2-8HHHK3).
-      const ids = composerAttachments.value.map((item) => item.id);
-      if (ids.length) void deleteDraftFiles(draftScope('composer'), ids);
-      composerAttachments.value = [];
-      composerAttachmentMessage.value = '';
-      composerAttachmentError.value = false;
-      scheduleProjectSessionPersistence();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'dragover', SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.selector, (event, target) => {
-      if (dependencies.draggedTickets) return;
-      event.preventDefault();
-      (target as HTMLElement).dataset.dragging = 'true';
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'dragleave', SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.selector, (_event, target) => {
-      delete (target as HTMLElement).dataset.dragging;
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'drop', SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.selector, (event, target) => {
-      if (dependencies.draggedTickets) return;
-      event.preventDefault();
-      event.stopPropagation();
-      delete (target as HTMLElement).dataset.dragging;
-      const files = (event as DragEvent).dataTransfer?.files;
-      if (files?.length) {
-        if (!composerExpanded.value) openTicketComposer(target as HTMLElement);
+      setDetails: (details) => {
+        composerDetails.value = details;
+        scheduleProjectSessionPersistence();
+      },
+      setCategory: (category) => {
+        composerCategory.value = category;
+        saveLastTicketCategory(localStorage, composerCategory.value);
+        scheduleProjectSessionPersistence();
+      },
+      setSource: (source) => {
+        // In-memory only: the pick lasts while the composer is open; creating remembers it (HS2-NZMJBJ).
+        composerSource.value = source;
+        // A blocked-submit explanation is about the previous source; the new one shows its own state.
+        if (composerAttachmentMessage.value === STRANDED_ATTACHMENTS_MESSAGE) resetComposerAttachmentMessage();
+      },
+      toggleUpNext: () => {
+        composerUpNext.value = !composerUpNext.value;
+        scheduleProjectSessionPersistence();
+      },
+      addFiles: (files) => {
         void addNewTicketFiles(files);
-      }
+      },
+      removeAttachment: (id) => {
+        if (id) void deleteDraftFiles(draftScope('composer'), [id]);
+        composerAttachments.value = composerAttachments.value.filter((item) => item.id !== id);
+        resetComposerAttachmentMessage();
+        scheduleProjectSessionPersistence();
+      },
+      clearAttachments: () => {
+        // Drops every file staged for a source that cannot take attachments (HS2-8HHHK3).
+        const ids = composerAttachments.value.map((item) => item.id);
+        if (ids.length) void deleteDraftFiles(draftScope('composer'), ids);
+        composerAttachments.value = [];
+        resetComposerAttachmentMessage();
+        scheduleProjectSessionPersistence();
+      },
+      draggingTickets: () => Boolean(dependencies.draggedTickets),
+      submit: () => {
+        void submitNewTicket();
+      },
     }),
   );
   lifetime.add(
-    delegate(document.body, 'submit', SEARCH_AND_COMPOSER_ACTIONS.createTicketForm.selector, (event) => {
-      event.preventDefault();
-      void submitNewTicket();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', SEARCH_AND_COMPOSER_ACTIONS.toggleRowUpNext.selector, (event, target) => {
-      event.stopPropagation();
-      const article = target.closest('[data-ticket-slug]') as HTMLElement,
-        ticket = tickets.value.find((item) => item.slug === article.dataset.ticketSlug);
+    wireTicketRowUpNextToggle(document.body, (row) => {
+      const ticket = tickets.value.find((item) => item.slug === row.dataset.ticketSlug);
       if (ticket) void history().execute(ticket.slug, { up_next: !ticket.up_next });
     }),
   );

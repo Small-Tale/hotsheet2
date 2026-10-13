@@ -1,4 +1,4 @@
-import { batch, delegate } from 'kerfjs';
+import { batch, delegate, delegateCapture } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { viewportSafePointerPosition } from '../context-menu-position';
@@ -150,6 +150,38 @@ export function wireTicketCollection(root: HTMLElement, bindings: TicketCollecti
           keyboard,
         );
       }
+    }),
+  );
+  return () => {
+    lifetime.dispose();
+  };
+}
+
+/**
+ * Wire the TicketRow Up Next star under `root` (HS2-NRW5ZR). The handlers run in the capture phase and
+ * stop propagation so the row's own click and Enter/Space selection never see the star, which keeps the
+ * star keyboard-operable inside a selectable row. `toggle` receives the star's row.
+ */
+export function wireTicketRowUpNextToggle(root: HTMLElement, toggle: (row: HTMLElement) => void): () => void {
+  const lifetime = createScope(),
+    selector = '[data-action="toggle-row-up-next"]',
+    run = (target: Element) => {
+      const row = target.closest<HTMLElement>('[data-ticket-slug]');
+      if (row) toggle(row);
+    };
+  lifetime.add(
+    delegateCapture(root, 'click', selector, (event, target) => {
+      event.stopPropagation();
+      run(target);
+    }),
+  );
+  lifetime.add(
+    delegateCapture(root, 'keydown', selector, (event, target) => {
+      const key = (event as KeyboardEvent).key;
+      if (key !== 'Enter' && key !== ' ') return;
+      event.preventDefault();
+      event.stopPropagation();
+      run(target);
     }),
   );
   return () => {
