@@ -1,5 +1,7 @@
 import '@kerfjs/ui/layout.css';
 
+import { EmptyState } from '@kerfjs/ui/empty-state';
+import { List } from '@kerfjs/ui/list';
 import { Pane } from '@kerfjs/ui/pane';
 import { Text } from '@kerfjs/ui/text';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
@@ -10,7 +12,7 @@ import { NotificationCenter } from './notification-center';
 import { NotificationNavigation, notificationNavigationPanel, type NotificationView } from './notification-navigation';
 import { ProjectSidebar, projectSidebarPanel, type ProjectSidebarProps } from './project-sidebar';
 import { type SettingsCategory, SettingsNavigation, settingsNavigationPanel } from './settings-navigation';
-import type { NavigationPanelParts, SidebarPanelParts } from './sidebar-panel';
+import { inspectorToggle, type NavigationPanelParts, type SidebarPanelParts } from './sidebar-panel';
 import { TerminalDashboard, type TerminalDashboardProps } from './terminal-dashboard';
 import { TerminalDrawer, type TerminalDrawerProps } from './terminal-drawer';
 import {
@@ -105,6 +107,40 @@ export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
       </Pane>
     );
   return <AppMessageState title="Cross-project stats" message="This dashboard is still being designed." />;
+}
+
+function statsPlaceholderPanel(label: string, toggle: SidebarPanelParts['toggle'], message: string): SidebarPanelParts {
+  return {
+    label,
+    toolbar: { label: `${label} toolbar`, dividerSides: '' },
+    toggle,
+    content: (
+      <List fill hAlign="center" vAlign="middle" rootAttributes={{ 'data-stats-placeholder': 'true' }}>
+        <EmptyState title={message} />
+      </List>
+    ),
+    pane: {},
+  };
+}
+
+/**
+ * The cross-project stats view keeps both rails where the user left them (HS2-MGQDY2): switching to
+ * Stats never hides or shows a sidebar on its own, so each rail shows an empty state until the
+ * dashboard supplies its own rail content.
+ */
+export function statsSidebarPanel(): SidebarPanelParts {
+  return statsPlaceholderPanel(
+    'Stats sidebar',
+    { action: 'toggle-project-sidebar', name: 'stats sidebar' },
+    'Stats filters will appear here',
+  );
+}
+export function statsInspectorPanel(): SidebarPanelParts {
+  return statsPlaceholderPanel(
+    'Stats details',
+    inspectorToggle('stats details'),
+    'Select a statistic to see its details',
+  );
 }
 
 export interface ProjectTerminalDrawerSurfaceProps {

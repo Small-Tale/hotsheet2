@@ -136,8 +136,11 @@ export function AppShell({
 }: AppShellProps) {
   const sidePanelPresentation = mobile ? 'overlay' : 'inline';
   const terminalDrawerExpanded = mode === 'project' && Boolean(terminalDrawer) && terminalDrawerVisible;
+  // Stats keeps both rails as the user left them on wide layouts (HS2-MGQDY2); a phone shows the
+  // stats page alone, since its rails are overlays that would cover it.
+  const railsAllowed = !gridFullscreen && !(mobile && mode === 'stats');
   const leftRail: WorkbenchStaticPanel | undefined =
-    !gridFullscreen && mode !== 'stats' && sidebar
+    railsAllowed && sidebar
       ? {
           ...workbenchSidebarPanel(sidebar),
           // Rail names stay distinct from the landmarks inside them (the panel's content, the inspector).
@@ -152,7 +155,7 @@ export function AppShell({
         }
       : undefined;
   const rightRail: WorkbenchPanel | undefined =
-    !gridFullscreen && mode !== 'stats' && inspector
+    railsAllowed && inspector
       ? {
           // Every right-rail surface exposes panel parts (HS2-QQW6CT): the Workbench composes the
           // toolbar, the fixed header, and the scrolling content in one Pane, which takes the

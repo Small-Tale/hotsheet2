@@ -117,7 +117,7 @@ describe('application shell components', () => {
     expect(scrim({ mobile: true, sidebarVisible: false, inspectorVisible: true })).toBe(true);
     expect(scrim({ mobile: true, sidebarVisible: false, inspectorVisible: false })).toBe(false);
     expect(scrim({ mobile: false, sidebarVisible: true })).toBe(false);
-    // Stats and a fullscreen grid compose no rails, so remembered rail visibility must not dim them.
+    // Phone stats and a fullscreen grid compose no rails, so remembered rail visibility must not dim them.
     expect(scrim({ mobile: true, mode: 'stats', sidebarVisible: true, inspectorVisible: true })).toBe(false);
     expect(scrim({ mobile: true, gridFullscreen: true, sidebarVisible: true, inspectorVisible: true })).toBe(false);
     expect(scrim({ mobile: true, sidebar: undefined, inspector: undefined, sidebarVisible: true })).toBe(false);
@@ -848,8 +848,22 @@ describe('application shell components', () => {
       }),
     );
     expect(globalMarkup).toContain('data-mode="stats"');
-    expect(globalMarkup).not.toContain('data-region-id="app-left-rail"');
-    expect(globalMarkup).not.toContain('data-region-id="app-right-rail"');
+    // Wide stats keeps both rails as the user left them (HS2-MGQDY2); a phone shows stats alone.
+    expect(globalMarkup).toContain('data-region-id="app-left-rail"');
+    expect(globalMarkup).toContain('data-region-id="app-right-rail"');
+    const phoneStats = String(
+      AppShell({
+        mode: 'stats',
+        mobile: true,
+        tabs: [],
+        sidebar: sidebarParts('project sidebar'),
+        header: 'head' as never,
+        workspace: 'work' as never,
+        inspector: inspectorParts('inspect'),
+      }),
+    );
+    expect(phoneStats).not.toContain('data-region-id="app-left-rail"');
+    expect(phoneStats).not.toContain('data-region-id="app-right-rail"');
     const terminalMarkup = String(
       AppShell({
         mode: 'terminals',

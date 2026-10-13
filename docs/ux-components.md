@@ -133,7 +133,9 @@ category navigator for Ticket sources, Commands, Permissions, and Column view; t
 selected category alone occupies the workspace and names the shared page header without
 a duplicate workspace title. Settings shows the standard empty inspector placeholder and
 disables ticket-view actions.
-Cross-project Stats hides both project-scoped regions. Global Terminal Dashboard replaces
+Stats never shows or hides a rail on its own (HS2-MGQDY2): on wide layouts both rails keep the
+visibility the user left and show empty-state placeholders (stats filters on the left, statistic
+details on the right); a phone shows the stats page alone. Global Terminal Dashboard replaces
 the project sidebar with a resizable operations sidebar and keeps the ticket rail at the
 right; both regions remain explicitly hideable and restorable. It owns the top-level arrangement.
 The project-scoped list/column workspace also composes the real `QuickTicketComposer`

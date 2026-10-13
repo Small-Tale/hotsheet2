@@ -58,6 +58,8 @@ import {
   GlobalWorkspaceSurface,
   ProjectTerminalDrawerSurface,
   sidebarSurfacePanel,
+  statsInspectorPanel,
+  statsSidebarPanel,
   terminalOperationsSurfacePanel,
   terminalRailSurfacePanel,
   WorkspaceSurface,
@@ -326,7 +328,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           sidebar={
             shellMode.value === 'terminals'
               ? terminalOperationsSurfacePanel(terminalOperationsSurfaceProps())
-              : undefined
+              : statsSidebarPanel()
           }
           sidebarVisible={!sidebarCollapsed.value}
           sidebarSize={sidebarSize.value}
@@ -343,7 +345,11 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           }
           workspace={<GlobalWorkspaceSurface {...globalWorkspaceSurfaceProps()} />}
           workspacePresentation="edge-to-edge"
-          inspector={shellMode.value === 'terminals' ? terminalRailSurfacePanel(terminalRailSurfaceProps()) : undefined}
+          inspector={
+            shellMode.value === 'terminals'
+              ? terminalRailSurfacePanel(terminalRailSurfaceProps())
+              : statsInspectorPanel()
+          }
           inspectorVisible={!inspectorCollapsed.value}
           inspectorSize={inspectorSize.value}
           sidePanelSeparator={magnifiedTerminalKey.value ? 'hidden' : 'auto'}

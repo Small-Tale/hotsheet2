@@ -1592,5 +1592,14 @@ test('opening project statistics on a phone leaves the UI interactive, with no s
   await expect(shell).toHaveAttribute('data-mode', 'stats');
   await expect(calibration).toHaveAttribute('data-state', 'ready');
   await expect(scrim).toHaveCount(0);
+  // Wide stats keeps the rails the user left in place, showing their empty states (HS2-MGQDY2).
+  await expect(page.locator('#app-left-rail')).toHaveCount(1);
+  await expect(page.locator('#app-right-rail')).toHaveCount(1);
+  await strip.getByRole('button', { name: 'Cross-project stats' }).click();
+  await expect(page.locator('#app-left-rail')).toHaveCount(1);
+  await page.screenshot({ path: 'target/visual-captures/hs2-mgqdy2-cross-project-stats-wide.png' });
+  await strip.getByRole('tab', { name: 'demo' }).click();
+  await page.locator('[data-component="project-summary"]').click();
+  await expect(calibration).toHaveAttribute('data-state', 'ready');
   await page.screenshot({ path: test.info().outputPath('hs2-s2xqp8-wide-stats.png') });
 });

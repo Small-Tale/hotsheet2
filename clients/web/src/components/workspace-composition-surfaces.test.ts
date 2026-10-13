@@ -6,6 +6,8 @@ import {
   GlobalWorkspaceSurface,
   ProjectTerminalDrawerSurface,
   SidebarSurface,
+  statsInspectorPanel,
+  statsSidebarPanel,
   TerminalOperationsSurface,
   WorkspaceSurface,
 } from './workspace-composition-surfaces';
@@ -37,6 +39,11 @@ describe('workspace composition surfaces', () => {
 
   it('owns global stats, optional drawers, and terminal summaries', () => {
     expect(String(GlobalWorkspaceSurface({ kind: 'stats', projectName: 'Demo' }))).toContain('Demo project statistics');
+    // Stats rails show empty states rather than being hidden (HS2-MGQDY2).
+    expect(statsSidebarPanel().toggle.action).toBe('toggle-project-sidebar');
+    expect(String(statsSidebarPanel().content)).toContain('Stats filters will appear here');
+    expect(statsInspectorPanel().toggle.action).toBe('toggle-ticket-inspector');
+    expect(String(statsInspectorPanel().content)).toContain('data-stats-placeholder="true"');
     expect(String(ProjectTerminalDrawerSurface({}))).toBe('');
     expect(String(TerminalOperationsSurface({ projects: [] }))).toContain(
       'class="kui-pane terminal-operations-sidebar"',
