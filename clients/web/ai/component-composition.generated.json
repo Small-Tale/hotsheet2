@@ -2577,7 +2577,7 @@
           "controls"
         ],
         "geometry": {
-          "margin": "none",
+          "margin": "child",
           "border": "child",
           "padding": "child"
         }

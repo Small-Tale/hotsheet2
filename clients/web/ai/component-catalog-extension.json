@@ -869,7 +869,7 @@
       "publicTokens": [],
       "source": "src/components/note-card.tsx",
       "geometry": {
-        "margin": "none",
+        "margin": "child",
         "border": "child",
         "padding": "child"
       },

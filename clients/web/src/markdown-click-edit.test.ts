@@ -137,6 +137,13 @@ describe('single-click Markdown edit entry (HS2-H1K9YY)', () => {
       });
     const press = (target: unknown, detail = 2, button = 0) => ({ detail, button, target }) as MouseEvent;
     expect(repeatPressWouldLeaveNewEditor(press(withClosest(paragraph)), textarea as unknown as Element)).toBe(true);
+    // A press on the note's Kerf ContentItem frame padding still belongs to the note (HS2-GZDKM7).
+    const selectors: string[] = [];
+    const frame = Object.assign(element('div', card), {
+      closest: (selector: string) => (selectors.push(selector), card),
+    });
+    expect(repeatPressWouldLeaveNewEditor(press(frame), textarea as unknown as Element)).toBe(true);
+    expect(selectors[0]).toContain('[data-component="content-item"]:has(> [data-component="note-card"])');
     // A first press, a non-primary press, a press on the editor itself, or on a nested control is left alone.
     expect(repeatPressWouldLeaveNewEditor(press(withClosest(paragraph), 1), textarea as unknown as Element)).toBe(
       false,

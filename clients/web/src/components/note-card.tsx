@@ -2,6 +2,7 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import './native-textarea.css';
 import './note-card.css';
 
+import { ContentItem, type ContentItemAppearance } from '@kerfjs/ui/content-item';
 import { foregroundColor, rem, uiColor } from '@kerfjs/ui/css-values';
 import { DisclosureArrow } from '@kerfjs/ui/disclosure-arrow';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -46,6 +47,19 @@ export interface NoteCardProps {
   aiFeedback?: readonly NoteCardProps[];
   /** `comfortable` (default) uses the canonical card inset; `compact` the tighter list inset. */
   density?: 'comfortable' | 'compact';
+  /**
+   * Whether the note paints its own Kerf ContentItem frame (default). A note nested inside another
+   * note's AI-feedback disclosure renders unframed so the parent frame is the only inset.
+   */
+  framed?: boolean;
+}
+
+/** HS2-PATEA0 kind mapping onto Kerf ContentItem appearances. */
+function noteAppearance(kind: NoteKind, acknowledgement: boolean): ContentItemAppearance {
+  if (acknowledgement || kind === 'status') return 'neutral';
+  if (kind === 'activity') return 'transparent';
+  if (kind === 'feedback_needed' || kind === 'feedback_draft') return 'warning';
+  return 'surface';
 }
 
 const presentations = {
@@ -314,6 +328,7 @@ export function NoteCard({
   confidence,
   aiFeedback = [],
   density = 'comfortable',
+  framed = true,
 }: NoteCardProps) {
   const presentation = presentations[kind];
   const showAiAttribution = aiAuthored && hasAiAuthoredText(kind, body);
@@ -333,7 +348,7 @@ export function NoteCard({
         }
       : {};
   const acknowledgement = kind === 'regular' && body.trim() === 'No response needed';
-  return (
+  const card = (
     <article
       class={`note-card${editorOpen ? ' note-card--editing' : ''}`}
       data-component="note-card"
@@ -431,12 +446,20 @@ export function NoteCard({
           <div class="note-card__ai-feedback-list">
             {aiFeedback.map((feedback) => (
               <div class="note-card__ai-feedback-entry">
-                <NoteCard {...feedback} density="compact" aiFeedback={[]} />
+                <NoteCard {...feedback} density="compact" aiFeedback={[]} framed={false} />
               </div>
             ))}
           </div>
         </details>
       )}
     </article>
+  );
+  // The frame carries the note's morph key so a re-render (opening the editor) keeps the same nodes.
+  return framed ? (
+    <ContentItem appearance={noteAppearance(kind, acknowledgement)} rootAttributes={{ 'data-key': `note-${id}` }}>
+      {card}
+    </ContentItem>
+  ) : (
+    card
   );
 }

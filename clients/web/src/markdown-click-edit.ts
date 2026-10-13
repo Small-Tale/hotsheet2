@@ -78,8 +78,12 @@ export function keyBeginsMarkdownEdit(
   return !startsInInteractiveDescendant(event.target, surface);
 }
 
-/** Containers whose editor a single click opens in place of the rendered Markdown. */
-const CLICK_EDIT_CONTAINER = '[data-component="note-card"], [data-component="markdown-editor"]';
+/**
+ * Containers whose editor a single click opens in place of the rendered Markdown. A note's Kerf
+ * ContentItem frame (HS2-GZDKM7) owns its padding, so a repeat press there belongs to the note too.
+ */
+const CLICK_EDIT_CONTAINER =
+  '[data-component="note-card"], [data-component="content-item"]:has(> [data-component="note-card"]), [data-component="markdown-editor"]';
 
 /**
  * Whether a `mousedown` is the repeat press of a double-click whose first click just opened an

@@ -1,4 +1,5 @@
 import { CatalogExample } from '@kerfjs/ui/catalog';
+import { List } from '@kerfjs/ui/list';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, delegateCapture, effect, type SafeHtml, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -129,21 +130,25 @@ export function NoteCardDemo() {
   return (
     <>
       <CatalogExample label="Every note kind" viewport={{ layout: 'flex-column' }}>
-        {noteDemoNotes.value.map((note) => (
-          <NoteCard
-            {...note}
-            editing={editingNoteId.value === note.id}
-            draft={editingNoteId.value === note.id ? noteDraft.value : undefined}
-          />
-        ))}
+        <List gap="xs">
+          {noteDemoNotes.value.map((note) => (
+            <NoteCard
+              {...note}
+              editing={editingNoteId.value === note.id}
+              draft={editingNoteId.value === note.id ? noteDraft.value : undefined}
+            />
+          ))}
+        </List>
       </CatalogExample>
       <CatalogExample label='density="compact"' note="The TicketNotes list inset." viewport={{ layout: 'flex-column' }}>
-        {noteDemoNotes.value
-          .filter((note) => note.kind === 'regular' || note.kind === 'activity')
-          .slice(0, 2)
-          .map((note) => (
-            <NoteCard {...note} id={`compact-${note.id}`} density="compact" editable={false} deletable={false} />
-          ))}
+        <List gap="xs">
+          {noteDemoNotes.value
+            .filter((note) => note.kind === 'regular' || note.kind === 'activity')
+            .slice(0, 2)
+            .map((note) => (
+              <NoteCard {...note} id={`compact-${note.id}`} density="compact" editable={false} deletable={false} />
+            ))}
+        </List>
       </CatalogExample>
     </>
   );

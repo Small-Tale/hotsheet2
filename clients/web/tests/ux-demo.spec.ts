@@ -2620,8 +2620,11 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   for (const id of ['compact-regular', 'compact-activity']) {
     const compact = page.locator(`[data-component="note-card"][data-note-id="${id}"]`);
     await expect(compact).toHaveAttribute('data-density', 'compact');
-    await expect(compact).toHaveCSS('padding', '11.2px 8px');
-    await expect(compact).toHaveCSS('border-radius', '9.6px');
+    // The Kerf ContentItem frame owns the one 8px inset and 12px radius for every density (HS2-GZDKM7).
+    const frame = compact.locator('xpath=..');
+    await expect(frame).toHaveAttribute('data-component', 'content-item');
+    await expect(frame).toHaveCSS('padding', '8px');
+    await expect(frame).toHaveCSS('border-radius', '12px');
   }
   const noteById = (id: string) => page.locator(`[data-component="note-card"][data-note-id="${id}"]`);
   for (const [id, kind, icon] of [
@@ -2664,20 +2667,20 @@ test('presents note kinds and round-trips reader and Markdown editor composition
         kind = getComputedStyle(node.querySelector('.note-card__kind')!),
         headerEnd = getComputedStyle(node.querySelector('.note-card__header-end')!);
       return {
-        padding: card.padding,
+        padding: getComputedStyle(node.parentElement!).padding,
         gap: card.rowGap,
         headerGap: header.gap,
         kindGap: kind.gap,
         headerEndGap: headerEnd.gap,
       };
     }),
-  ).toEqual({ padding: '16px', gap: '8px', headerGap: '16px', kindGap: '4px', headerEndGap: '4px' });
+  ).toEqual({ padding: '8px', gap: '8px', headerGap: '16px', kindGap: '4px', headerEndGap: '4px' });
   expect(
     await activityNote.evaluate((node) => {
       const style = getComputedStyle(node);
-      return { padding: style.padding, gap: style.rowGap };
+      return { padding: getComputedStyle(node.parentElement!).padding, gap: style.rowGap };
     }),
-  ).toEqual({ padding: '8px 16px', gap: '4px' });
+  ).toEqual({ padding: '8px', gap: '4px' });
   await feedbackNote.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-note-card-feedback-wide.png' });
   await activityNote.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-note-card-activity-wide.png' });
   await page.setViewportSize({ width: 430, height: 760 });

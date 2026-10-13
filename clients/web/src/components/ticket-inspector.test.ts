@@ -500,7 +500,7 @@ describe('TicketInspector', () => {
     expect(infoCss).not.toContain('.kui-select');
     expect(markup).toContain('data-trigger-width="fill"');
     expect(noteCss).toMatch(/\.note-card__body \{[^}]*overflow-wrap: anywhere/);
-    expect(noteCss).toMatchSource(/\.note-card\[data-kind="activity"\] \{[^}]*background: transparent/);
+    expect(markup).not.toMatch(/data-appearance="transparent"[^>]*>\s*<article[^>]*data-kind="regular"/);
     expect(noteCss).toMatchSource(
       /\.note-card\[data-kind="activity"\] \.note-card__body \{[^}]*font-size: calc\(var\(--hotsheet-reading-scale, 1\) \* var\(--wa-font-size-xs\)\)/,
     );

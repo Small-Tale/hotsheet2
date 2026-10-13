@@ -277,7 +277,7 @@ describe('NoteCard', () => {
   it('uses canonical semantic spacing while retaining note-control geometry', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
-    expect(css).toMatch(/\.note-card \{[^}]*padding: var\(--kui-space-m\);[^}]*gap: var\(--kui-space-xs\)/);
+    expect(css).toMatch(/\.note-card \{[^}]*gap: var\(--kui-space-xs\)/);
     expect(css).toMatch(/\.note-card__kind \{[^}]*gap: var\(--kui-space-2xs\)/);
     expect(css).toMatch(/\.note-card__editor > div \{[^}]*gap: var\(--kui-space-xs\)/);
     expect(css).toMatch(
@@ -286,9 +286,28 @@ describe('NoteCard', () => {
     expect(css).toMatchSource(/__inline-reply-row button \{[^}]*width: remify\(32px\); height: remify\(32px\)/);
     // The response badge carries a Lucide icon, never a font glyph (HS2-MDJRCM).
     expect(css).not.toMatch(/feedback-block::after|content: '\+'/);
-    expect(css).toMatchSource(
-      /\[data-kind="activity"\] \{[^}]*padding: var\(--kui-space-xs\) var\(--kui-space-m\);[^}]*gap: var\(--kui-space-2xs\)/,
+    expect(css).toMatchSource(/\[data-kind="activity"\] \{[^}]*gap: var\(--kui-space-2xs\)/);
+  });
+
+  it('frames every note kind in the Kerf ContentItem appearance chosen by HS2-PATEA0', () => {
+    const base = { id: 'n', author: 'A', time: 'now', body: 'Body' };
+    const appearance = (props: Partial<Parameters<typeof NoteCard>[0]>) =>
+      /data-component="content-item" data-appearance="([a-z-]+)"/.exec(
+        String(NoteCard({ ...base, kind: 'regular', ...props })),
+      )?.[1];
+    expect(appearance({ kind: 'regular' })).toBe('surface');
+    expect(appearance({ kind: 'status' })).toBe('neutral');
+    expect(appearance({ kind: 'activity' })).toBe('transparent');
+    expect(appearance({ kind: 'feedback_needed' })).toBe('warning');
+    expect(appearance({ kind: 'feedback_draft' })).toBe('warning');
+    expect(appearance({ kind: 'regular', body: 'No response needed' })).toBe('neutral');
+    expect(appearance({ kind: 'regular', density: 'compact' })).toBe('surface');
+    // A nested AI-feedback entry renders unframed inside its parent's single frame.
+    const nested = String(
+      NoteCard({ ...base, kind: 'regular', aiFeedback: [{ ...base, id: 'f', kind: 'regular', body: 'Helpful' }] }),
     );
+    expect(nested.match(/data-component="content-item"/g)).toHaveLength(1);
+    expect(nested.match(/data-component="note-card"/g)).toHaveLength(2);
   });
 
   it('selects the compact list inset through the density prop and picks Markdown variants itself', () => {
@@ -298,11 +317,9 @@ describe('NoteCard', () => {
     expect(compact).toContain('data-kind="activity" data-density="compact"');
     expect(compact).toContain('data-component="markdown-preview" data-size="inherit"');
     const css = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
-    // The compact rule follows the activity rule so one inset covers every kind (HS2-7RY5GK).
-    expect(css.indexOf("[data-density='compact']")).toBeGreaterThan(css.indexOf(".note-card[data-kind='activity'] {"));
-    expect(css).toMatchSource(
-      /\.note-card\[data-density='compact'\] \{ padding: remify\(11\.2px\) remify\(8px\); border-radius: remify\(9\.6px\)/,
-    );
+    // Compact only tightens the internal stack; Kerf ContentItem owns the one 8px inset (HS2-GZDKM7).
+    expect(css).toMatchSource(/\.note-card\[data-density='compact'\] \{ gap: var\(--kui-space-2xs\); \}/);
+    expect(css).not.toMatch(/\.note-card(\[[^\]]*\])* \{[^}]*(padding|border|background):/);
     expect(css).not.toContain('.markdown-preview');
     const choices = String(
       NoteCard({
