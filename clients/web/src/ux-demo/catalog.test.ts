@@ -370,8 +370,6 @@ describe('UX demo catalog', () => {
       'notification-card':
         'Shared notification frame rendered by PermissionRequestCard (popup, list, flat) and HaltedSessionPopup (both demoed).',
       'attachment-context-menu': 'Context menu rendered by the demoed attachment surfaces (inspector/gallery).',
-      'context-menu-anchor':
-        'Zero-footprint wrapper with no visual of its own around context-mode PopupMenus (demoed via their surfaces).',
       'corrupt-ticket-row': 'Parse-error row variant rendered within TicketList (demoed).',
       'flow-back-button': 'Shared back affordance rendered inside multi-step dialogs/flows.',
       'lucide-icon-picker': 'Icon-picker sub-control of CommandSettingsEditor (demoed).',

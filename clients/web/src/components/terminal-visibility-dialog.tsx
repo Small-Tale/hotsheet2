@@ -17,6 +17,7 @@ import { Text } from '@kerfjs/ui/text';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { Eye, EyeOff, Globe, MessageSquare, Pencil, Plus, Sparkles, Terminal, Trash2 } from 'lucide';
 
+import { contextMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import {
   DEFAULT_TERMINAL_VISIBILITY_GROUP_ID,
@@ -25,7 +26,6 @@ import {
   type TerminalVisibilityState,
   type TerminalVisibilityType,
 } from '../terminal-visibility';
-import { ContextMenuAnchor } from './context-menu-anchor';
 import type { TerminalDashboardGroup } from './terminal-dashboard';
 
 export interface TerminalVisibilityDialogProps {
@@ -226,32 +226,28 @@ export function TerminalVisibilityDialog({
           {contextMenu && contextMenu.id !== DEFAULT_TERMINAL_VISIBILITY_GROUP_ID && (
             // A context-mode Kerf PopupMenu anchored at the pointer (HS2-84751P); the app owns the open
             // state through `contextMenu` and reveals the rendered menu with `revealContextPopupMenu`.
-            <ContextMenuAnchor
-              x={contextMenu.x}
-              y={contextMenu.y}
-              component="terminal-visibility-group-context-menu"
+            <PopupMenu
+              context
+              anchor={contextMenuAnchor(contextMenu.x, contextMenu.y)}
               label="Visibility group actions"
-              attributes={{ 'data-context-group-id': contextMenu.id }}
-            >
-              <PopupMenu
-                context
-                label="Visibility group actions"
-                rootAttributes={{ 'data-context-menu': 'terminal-visibility-group' }}
-                items={[
-                  {
-                    label: 'Rename…',
-                    action: 'rename-terminal-visibility-group',
-                    icon: <LucideIcon icon={Pencil} name="pencil" />,
-                  },
-                  {
-                    label: 'Delete',
-                    action: 'remove-terminal-visibility-group',
-                    tone: 'danger',
-                    icon: <LucideIcon icon={Trash2} name="trash-2" />,
-                  },
-                ]}
-              />
-            </ContextMenuAnchor>
+              rootAttributes={{
+                'data-context-menu': 'terminal-visibility-group',
+                'data-context-group-id': contextMenu.id,
+              }}
+              items={[
+                {
+                  label: 'Rename…',
+                  action: 'rename-terminal-visibility-group',
+                  icon: <LucideIcon icon={Pencil} name="pencil" />,
+                },
+                {
+                  label: 'Delete',
+                  action: 'remove-terminal-visibility-group',
+                  tone: 'danger',
+                  icon: <LucideIcon icon={Trash2} name="trash-2" />,
+                },
+              ]}
+            />
           )}
         </wa-dialog>
       </DialogSurface>

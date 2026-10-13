@@ -49,9 +49,9 @@ import {
 } from 'lucide';
 
 import type { CodeReview, RepositoryFile, RepositoryFileChange, RepositoryStatus } from '../api';
+import { contextMenuAnchor } from '../context-menu-position';
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
-import { ContextMenuAnchor } from './context-menu-anchor';
 import { RepositorySetup, type RepositorySetupStep } from './repository-setup';
 import { type CodeReviewComparison, DiffToolMissingNotice, TicketCodeReview } from './ticket-code-review';
 
@@ -616,39 +616,38 @@ function RepositoryFileContextMenu({
   const reveal =
     platform === 'macos' ? 'Show in Finder' : platform === 'windows' ? 'Show in File Explorer' : 'Show in file manager';
   return (
-    <ContextMenuAnchor x={menu.x} y={menu.y} component="repository-file-context-menu" label="File actions">
-      <PopupMenu
-        context
-        label="File actions"
-        rootAttributes={{ 'data-context-menu': 'repository-file' }}
-        items={[
-          fileMenuItem('show-diff', menu.path, 'Show Diff', GitCompare, 'git-compare', !menu.diff),
-          fileMenuItem(
-            'open',
-            menu.path,
-            'Open',
-            ExternalLink,
-            'external-link',
-            multiple,
-            hostOnlyDisabledReason('open-file', hostActionsAvailable),
-          ),
-          fileMenuItem(
-            'reveal',
-            menu.path,
-            reveal,
-            FolderOpen,
-            'folder-open',
-            multiple,
-            hostOnlyDisabledReason('reveal-file', hostActionsAvailable),
-          ),
-          { kind: 'divider' },
-          fileMenuItem('copy-path', menu.path, 'Copy Relative Path', Clipboard, 'clipboard'),
-          ...(menu.absolutePath
-            ? [fileMenuItem('copy-absolute-path', menu.absolutePath, 'Copy Absolute Path', Copy, 'copy')]
-            : []),
-        ]}
-      />
-    </ContextMenuAnchor>
+    <PopupMenu
+      context
+      anchor={contextMenuAnchor(menu.x, menu.y)}
+      label="File actions"
+      rootAttributes={{ 'data-context-menu': 'repository-file' }}
+      items={[
+        fileMenuItem('show-diff', menu.path, 'Show Diff', GitCompare, 'git-compare', !menu.diff),
+        fileMenuItem(
+          'open',
+          menu.path,
+          'Open',
+          ExternalLink,
+          'external-link',
+          multiple,
+          hostOnlyDisabledReason('open-file', hostActionsAvailable),
+        ),
+        fileMenuItem(
+          'reveal',
+          menu.path,
+          reveal,
+          FolderOpen,
+          'folder-open',
+          multiple,
+          hostOnlyDisabledReason('reveal-file', hostActionsAvailable),
+        ),
+        { kind: 'divider' },
+        fileMenuItem('copy-path', menu.path, 'Copy Relative Path', Clipboard, 'clipboard'),
+        ...(menu.absolutePath
+          ? [fileMenuItem('copy-absolute-path', menu.absolutePath, 'Copy Absolute Path', Copy, 'copy')]
+          : []),
+      ]}
+    />
   );
 }
 

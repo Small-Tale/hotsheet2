@@ -1,7 +1,0 @@
-/* A zero-footprint anchor: Kerf positions the opened menu itself at the recorded viewport point. */
-.context-menu-anchor {
-  position: fixed;
-  z-index: 1410;
-  width: 1px;
-  height: 1px;
-}

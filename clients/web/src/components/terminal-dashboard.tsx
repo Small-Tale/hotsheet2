@@ -32,6 +32,7 @@ import {
 } from 'lucide';
 
 import type { TerminalAiConnection, TerminalHalt } from '../api';
+import { contextMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
 import { aiConnectionLabel, type AiConnectionState } from '../terminal-ai-connection';
@@ -44,7 +45,6 @@ import {
 } from '../terminal-grid-layout';
 import { terminalPhysicalScale } from '../terminal-viewport';
 import type { TerminalVisibilityGroup } from '../terminal-visibility';
-import { ContextMenuAnchor } from './context-menu-anchor';
 import { TerminalKeyBar, type TerminalKeyBarProps } from './terminal-key-bar';
 
 export interface TerminalDashboardSession {
@@ -858,51 +858,44 @@ export function TerminalDashboard({
         </div>
       )}
       {contextMenu && menuTargetsThisGrid && (
-        <ContextMenuAnchor
-          x={contextMenu.x}
-          y={contextMenu.y}
-          component="terminal-context-menu"
+        <PopupMenu
+          context
+          anchor={contextMenuAnchor(contextMenu.x, contextMenu.y)}
           label="Terminal actions"
-          attributes={{ 'data-terminal-key': contextMenu.key }}
-        >
-          <PopupMenu
-            context
-            label="Terminal actions"
-            rootAttributes={{ 'data-context-menu': 'terminal' }}
-            items={[
-              ...(contextMenuActions.includes('clear-halt') && menuSession?.halt
-                ? [
-                    {
-                      label: 'Clear stopped state',
-                      action: TERMINALS_ACTIONS.clearTerminalHalt.value,
-                      icon: <LucideIcon icon={CircleCheck} name="circle-check" />,
-                      attributes: { 'data-item-id': contextMenu.key },
-                    },
-                  ]
-                : []),
-              ...(contextMenuActions.includes('open')
-                ? [
-                    {
-                      label: 'Open',
-                      action: 'open-terminal-project',
-                      icon: <LucideIcon icon={ExternalLink} name="external-link" />,
-                      attributes: { 'data-item-id': contextMenu.key },
-                    },
-                  ]
-                : []),
-              ...(contextMenuActions.includes('hide')
-                ? [
-                    {
-                      label: 'Hide Terminal',
-                      action: 'hide-dashboard-terminal',
-                      icon: <LucideIcon icon={EyeOff} name="eye-off" />,
-                      attributes: { 'data-item-id': contextMenu.key },
-                    },
-                  ]
-                : []),
-            ]}
-          />
-        </ContextMenuAnchor>
+          rootAttributes={{ 'data-context-menu': 'terminal', 'data-terminal-key': contextMenu.key }}
+          items={[
+            ...(contextMenuActions.includes('clear-halt') && menuSession?.halt
+              ? [
+                  {
+                    label: 'Clear stopped state',
+                    action: TERMINALS_ACTIONS.clearTerminalHalt.value,
+                    icon: <LucideIcon icon={CircleCheck} name="circle-check" />,
+                    attributes: { 'data-item-id': contextMenu.key },
+                  },
+                ]
+              : []),
+            ...(contextMenuActions.includes('open')
+              ? [
+                  {
+                    label: 'Open',
+                    action: 'open-terminal-project',
+                    icon: <LucideIcon icon={ExternalLink} name="external-link" />,
+                    attributes: { 'data-item-id': contextMenu.key },
+                  },
+                ]
+              : []),
+            ...(contextMenuActions.includes('hide')
+              ? [
+                  {
+                    label: 'Hide Terminal',
+                    action: 'hide-dashboard-terminal',
+                    icon: <LucideIcon icon={EyeOff} name="eye-off" />,
+                    attributes: { 'data-item-id': contextMenu.key },
+                  },
+                ]
+              : []),
+          ]}
+        />
       )}
     </section>
   );

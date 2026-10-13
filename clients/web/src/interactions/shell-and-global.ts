@@ -637,7 +637,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
         observer.observe(document.body, {
           childList: true,
           attributes: true,
-          attributeFilter: ['style', 'data-context-anchor-x', 'data-context-anchor-y'],
+          attributeFilter: ['style'],
           subtree: true,
         });
         reanchorReplacedContextPopupMenus(active, opened);
@@ -651,23 +651,20 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     'pointerdown',
     (event) => {
       if (ticketContextMenu.value && !eventTargetsContextMenu(event)) ticketContextMenu.value = undefined;
-      if (appTabContextMenu.value && !(event.target as Element).closest('[data-component="app-tab-context-menu"]'))
+      if (appTabContextMenu.value && !(event.target as Element).closest('[data-context-menu="app-tab"]'))
         appTabContextMenu.value = undefined;
-      if (terminalContextMenu.value && !(event.target as Element).closest('[data-component="terminal-context-menu"]'))
+      if (terminalContextMenu.value && !(event.target as Element).closest('[data-context-menu="terminal"]'))
         terminalContextMenu.value = undefined;
       if (terminalEditMenu.value && !(event.target as Element).closest(TERMINALS_TARGETS.terminalEditMenu.selector))
         terminalEditMenu.value = undefined;
       if (
         terminalVisibilityContextMenu.value &&
-        !(event.target as Element).closest('[data-component="terminal-visibility-group-context-menu"]')
+        !(event.target as Element).closest('[data-context-menu="terminal-visibility-group"]')
       )
         terminalVisibilityContextMenu.value = undefined;
-      if (
-        repositoryFileMenu.value &&
-        !(event.target as Element).closest('[data-component="repository-file-context-menu"]')
-      )
+      if (repositoryFileMenu.value && !(event.target as Element).closest('[data-context-menu="repository-file"]'))
         repositoryFileMenu.value = undefined;
-      if (attachmentMenu.value && !(event.target as Element).closest('[data-component="attachment-context-menu"]'))
+      if (attachmentMenu.value && !(event.target as Element).closest('[data-context-menu="attachment"]'))
         attachmentMenu.value = undefined;
     },
     { capture: true, signal: lifetime.signal },

@@ -506,7 +506,7 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
         if (
           terminalDashboardContextMenu.value &&
           !(event.target as Element).closest(
-            '[data-component="terminal-context-menu"], [data-action="open-terminal-context-menu"]',
+            '[data-context-menu="terminal"], [data-action="open-terminal-context-menu"]',
           )
         )
           terminalDashboardContextMenu.value = undefined;
@@ -562,7 +562,7 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
   // The key bar's Fn-row clipboard group and the long-press edit menu report what production does
   // (HS2-FRB545, HS2-KKP8YJ).
   const reportClipboardAction = (target: Element, action: 'selection' | 'copy' | 'paste') => {
-    if (target.closest('[data-component="terminal-edit-menu"]')) {
+    if (target.closest('[data-context-menu="terminal-edit"]')) {
       editMenuDemoOutput.value =
         action === 'selection'
           ? 'Copy → copies the selected terminal text'

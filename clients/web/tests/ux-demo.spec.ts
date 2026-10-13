@@ -975,8 +975,8 @@ test('keeps repository file action menus visible at wide and narrow sizes', asyn
   await repository.getByRole('button', { name: /Staged 2/ }).click();
   await repository.locator('[data-action="open-repository-file-menu-trigger"]').first().click();
   // A context-mode Kerf PopupMenu owns the menu surface, item geometry, and placement (HS2-HBFXQY).
-  const repositoryMenu = repository.locator('[data-component="repository-file-context-menu"]'),
-    repositoryMenuPanel = repositoryMenu.locator('[data-component="popup-menu"]').getByRole('menu');
+  const repositoryMenu = repository.locator('[data-context-menu="repository-file"]'),
+    repositoryMenuPanel = repositoryMenu.getByRole('menu');
   await expect(repositoryMenu.getByRole('menuitem').allTextContents()).resolves.toEqual([
     'Show Diff',
     'Open',
@@ -984,7 +984,7 @@ test('keeps repository file action menus visible at wide and narrow sizes', asyn
     'Copy Relative Path',
     'Copy Absolute Path',
   ]);
-  await expect(repositoryMenu.locator('[data-component="popup-menu"]')).toHaveCount(1);
+  await expect(repositoryMenu).toHaveCount(1);
   await expect(repositoryMenuPanel).toBeVisible();
   await repository.screenshot({ path: 'target/visual-captures/hs2-3yzn0s-repository-file-menu-wide.png' });
   // Dismiss the open menu first, as a user would, before opening another row's menu.
@@ -1093,7 +1093,7 @@ test('represents the production terminal dashboard and its shared context menu i
   await expect(chat).toHaveCount(1);
   await expect(chat).toContainText('Codex AI chat');
   await expect(chat).toContainText('Reviewing the latest workspace changes');
-  const menu = dashboard.getByRole('menu', { name: 'Terminal actions' });
+  const menu = dashboard.locator('[data-context-menu="terminal"]');
   await expect(menu).toHaveCount(0);
   const first = dashboard.locator('[data-component="terminal-tile"]').first();
   await first.getByRole('button', { name: /More actions/ }).click();
@@ -1103,7 +1103,7 @@ test('represents the production terminal dashboard and its shared context menu i
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
   await first.click({ button: 'right' });
-  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-hpy5r0-workspace-grid-ai-chat-wide.png', fullPage: true });
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 700, height: 700 });
@@ -1380,7 +1380,7 @@ for (const component of ['workspace-header', 'terminal-ticket-rail']) {
     await star.click();
     await expect(star).toHaveAttribute('aria-pressed', 'false');
     await demo.getByRole('button', { name: 'More actions for selected tickets' }).click();
-    await expect(page.getByRole('menu', { name: 'Ticket actions' })).toBeVisible();
+    await expect(page.locator('[data-context-menu="ticket"]').getByRole('menu').first()).toBeVisible();
     await page.keyboard.press('Escape');
     await plainClick('HS2-K00QPZ');
     await expect(star).toBeDisabled();
@@ -1694,7 +1694,7 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
   await page.screenshot({ path: 'target/visual-captures/hs2-z0m2vv-visibility-demo-open-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
   await review.click({ button: 'right' });
-  const menu = dialog.getByRole('menu', { name: 'Visibility group actions' });
+  const menu = dialog.locator('[data-context-menu="terminal-visibility-group"]');
   await expect(menu.getByText('Rename…')).toBeVisible();
   await expect(menu.getByText('Delete')).toBeVisible();
 });
@@ -2553,10 +2553,10 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(star).toHaveClass(/active/);
 
   await row.click({ button: 'right' });
-  const menu = page.getByRole('menu', { name: 'Ticket actions' });
-  await expect(menu).toBeVisible();
+  const menu = page.locator('[data-context-menu="ticket"]');
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   const menuItems = menu.locator('wa-dropdown-item');
-  await expect(menu.locator(':scope > wa-dropdown > wa-dropdown-item')).toHaveCount(11);
+  await expect(menu.locator(':scope > wa-dropdown-item')).toHaveCount(11);
   await expect(menuItems).toHaveCount(27);
   expect(
     await menuItems.evaluateAll((items) => items.every((item) => item.querySelector('[data-lucide]') !== null)),
@@ -3422,8 +3422,8 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const eligibleRow = board.locator('[data-ticket-slug="HS2-R76MMW"]');
   await expect(eligibleRow).toHaveAttribute('data-status', 'started');
   await eligibleRow.click({ button: 'right' });
-  const menu = page.getByRole('menu', { name: 'Ticket actions' });
-  await expect(menu).toBeVisible();
+  const menu = page.locator('[data-context-menu="ticket"]');
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   await menu.getByText('Toggle Up Next', { exact: true }).click();
   await expect(page.getByText(/Toggle Up Next selected for HS2-R76MMW/)).toBeVisible();
   await page.goto('/ux-demo?component=ticket-board-column');
@@ -5124,7 +5124,7 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
   await expect(trigger).toHaveAttribute('title', 'More actions for choppy.mov');
   await expect(trigger.locator('[data-lucide="more-horizontal"]')).toBeVisible();
   await trigger.click();
-  let menu = page.getByRole('menu', { name: 'Attachment actions' });
+  let menu = page.locator('[data-context-menu="attachment"]');
   await expect(menu.getByRole('menuitem')).toHaveCount(6);
   await expect(menu.getByRole('menuitem').allTextContents()).resolves.toEqual([
     'Open',
@@ -5153,8 +5153,8 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
     .toBeGreaterThan(0);
   await item.scrollIntoViewIfNeeded();
   await item.click({ button: 'right' });
-  menu = page.getByRole('menu', { name: 'Attachment actions' });
-  await expect(menu).toBeVisible();
+  menu = page.locator('[data-context-menu="attachment"]');
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   await expect(menu.getByRole('menuitem')).toHaveCount(6);
   await page.screenshot({
     path: 'target/visual-captures/hs2-6fp1kt-attachment-batches-final-narrow.png',
@@ -5277,7 +5277,7 @@ test('shows append-only and unsupported attachment variants in the TicketAttachm
   await expect(link).toHaveAttribute('target', '_blank');
   await expect(link).toHaveCSS('cursor', 'pointer');
   await appendOnly.locator('[data-component="ticket-attachment-item"]').first().click({ button: 'right' });
-  await expect(page.getByRole('menu', { name: 'Attachment actions' })).toHaveCount(0);
+  await expect(page.locator('[data-context-menu="attachment"]')).toHaveCount(0);
   // Media stays viewable in the gallery.
   await expect(appendOnly.locator('[data-action="open-attachment-gallery"]')).toHaveCount(1);
   await expect(unsupported.getByText('This provider does not support attachment actions.')).toBeVisible();
@@ -5751,7 +5751,7 @@ test('uses semantic cursors across native and Web Awesome interactions', async (
   expect(buttonCursor).toBe('pointer');
   await page.locator('[data-action="toggle-settings"]').first().click();
   await page.locator('[data-component="ticket-list-row"]').click({ button: 'right' });
-  await expect(page.getByRole('menu', { name: 'Ticket actions' }).locator('wa-dropdown-item').first()).toHaveCSS(
+  await expect(page.locator('[data-context-menu="ticket"]').locator('wa-dropdown-item').first()).toHaveCSS(
     'cursor',
     'pointer',
   );
@@ -6646,7 +6646,7 @@ test('operates the project tab bar across pointer, keyboard, and responsive stat
   await firstTab.screenshot({ path: 'target/visual-captures/hs2-3n470h-project-tab-centered-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 900 });
   await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click({ button: 'right' });
-  const tabMenu = page.getByRole('menu', { name: 'Project tab actions' });
+  const tabMenu = page.locator('[data-context-menu="app-tab"]');
   await expect(tabMenu.locator('wa-dropdown-item')).toHaveCount(4);
   await expect(tabMenu.locator('[data-lucide]')).toHaveCount(4);
   await page.keyboard.press('Escape');

@@ -328,7 +328,7 @@ describe('RepositoryStatusPopover', () => {
           platform: 'macos',
         }),
       ),
-    ).toContain('data-component="repository-file-context-menu"');
+    ).toContain('data-context-menu="repository-file"');
     const multiple = String(
       RepositoryStatusPopover({
         status: status(),

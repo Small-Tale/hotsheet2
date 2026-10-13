@@ -51,7 +51,7 @@ export const SIDE_PANEL_PORTAL_SELECTOR = [
   '[role="alertdialog"]',
   '[role="menu"]',
   '[role="listbox"]',
-  '[data-component="saved-view-context-menu"]',
+  '[data-context-menu="saved-view"]',
 ].join(', ');
 
 /** Whether a node in a press's composed path is the root of a surface a side panel launched. */

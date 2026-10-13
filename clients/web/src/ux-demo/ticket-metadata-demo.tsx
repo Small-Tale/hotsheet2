@@ -556,9 +556,7 @@ function wireTicketMetadataDemo(root: HTMLElement): () => void {
       (event) => {
         if (
           attachmentDemoMenu.value &&
-          !(event.target as Element).closest(
-            '[data-component="attachment-context-menu"], [data-action="open-attachment-menu"]',
-          )
+          !(event.target as Element).closest('[data-context-menu="attachment"], [data-action="open-attachment-menu"]')
         )
           closeAttachmentDemoMenu();
       },

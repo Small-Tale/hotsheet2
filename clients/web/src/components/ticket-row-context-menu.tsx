@@ -21,8 +21,8 @@ import {
   XCircle,
 } from 'lucide';
 
+import { contextMenuAnchor } from '../context-menu-position';
 import { DEFAULT_TICKET_CATEGORIES } from './category-presentation';
-import { ContextMenuAnchor } from './context-menu-anchor';
 import type { TicketStatus } from './status-badge';
 import { getPriorityPresentation, type TicketPriority } from './ticket-row';
 import { TICKET_STATUS_CHOICES } from './ticket-status-menu';
@@ -173,7 +173,7 @@ export interface TicketRowContextMenuProps {
 /** Shadow-DOM-safe containment check for capture-phase context-menu dismissal. */
 export function eventTargetsContextMenu(
   event: { composedPath(): unknown[] },
-  selector = '[data-component="ticket-context-menu"]',
+  selector = '[data-context-menu="ticket"]',
 ): boolean {
   return event.composedPath().some((node) => {
     const candidate = node as { matches?: (value: string) => boolean };
@@ -257,8 +257,12 @@ export function TicketRowContextMenu({
     );
   }
   return (
-    <ContextMenuAnchor x={x} y={y} component="ticket-context-menu" label="Ticket actions">
-      <PopupMenu context label="Ticket actions" rootAttributes={{ 'data-context-menu': 'ticket' }} items={entries} />
-    </ContextMenuAnchor>
+    <PopupMenu
+      context
+      anchor={contextMenuAnchor(x, y)}
+      label="Ticket actions"
+      rootAttributes={{ 'data-context-menu': 'ticket' }}
+      items={entries}
+    />
   );
 }

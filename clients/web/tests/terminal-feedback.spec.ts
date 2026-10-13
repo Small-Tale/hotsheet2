@@ -334,7 +334,7 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   await assertGridGeometry();
   const menuButton = tile.getByRole('button', { name: 'More actions for nano' });
   await menuButton.click();
-  const footerMenu = dashboard.getByRole('menu');
+  const footerMenu = dashboard.locator('[data-context-menu="terminal"]');
   await expect(footerMenu.getByText('Open')).toBeVisible();
   await expect(footerMenu.getByText('Hide Terminal')).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-rq290f-terminal-footer-menu-after.png', fullPage: true });
@@ -427,13 +427,13 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   // only, since terminal visibility is dashboard-scoped; Open switches the drawer to that terminal
   // (HS2-V2CCN6).
   await drawer.getByRole('button', { name: 'More actions for nano' }).click();
-  const drawerMenu = drawer.getByRole('menu', { name: 'Terminal actions' });
-  await expect(drawerMenu).toBeVisible();
+  const drawerMenu = drawer.locator('[data-context-menu="terminal"]');
+  await expect(drawerMenu.getByRole('menu').first()).toBeVisible();
   await expect(drawerMenu.locator('wa-dropdown-item')).toHaveCount(1);
   await expect(drawerMenu.getByText('Hide Terminal')).toHaveCount(0);
-  await expect(page.locator('[data-component="terminal-context-menu"]')).toHaveCount(1);
+  await expect(page.locator('[data-context-menu="terminal"]')).toHaveCount(1);
   await drawerMenu.getByText('Open').click();
-  await expect(page.locator('[data-component="terminal-context-menu"]')).toHaveCount(0);
+  await expect(page.locator('[data-context-menu="terminal"]')).toHaveCount(0);
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
 });
 

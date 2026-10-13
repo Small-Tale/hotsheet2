@@ -42,20 +42,20 @@ test('uses one disclosure and aligned icon-label choices at wide and narrow size
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=drive-options-menu');
 
-  const menu = page.locator('[data-component="drive-options-menu"]');
-  const provider = menu.locator('wa-dropdown > wa-dropdown-item').filter({ hasText: 'Provider' });
-  const model = menu.locator('wa-dropdown > wa-dropdown-item').filter({ hasText: 'Model' });
-  const effort = menu.locator('wa-dropdown > wa-dropdown-item').filter({ hasText: 'Effort' });
+  const menu = page.locator('[data-context-menu="drive-options"]');
+  const provider = menu.locator(':scope > wa-dropdown-item').filter({ hasText: 'Provider' });
+  const model = menu.locator(':scope > wa-dropdown-item').filter({ hasText: 'Model' });
+  const effort = menu.locator(':scope > wa-dropdown-item').filter({ hasText: 'Effort' });
 
   await expect(provider).toBeVisible();
   await expect(provider.locator(':scope > [data-lucide="chevron-right"]')).toHaveCount(0);
   expect(await provider.evaluate((node) => node.shadowRoot?.querySelectorAll('[part="submenu-icon"]').length)).toBe(1);
   // A context-mode PopupMenu: the stage opened it at its anchor and the popup sits above the anchor.
-  await expect(menu.locator('[data-context-menu="drive-options"]')).toHaveAttribute('open', '');
+  await expect(menu).toHaveAttribute('open', '');
   expect(
     await menu.evaluate((node) => {
-      const anchor = node.getBoundingClientRect(),
-        popup = node.querySelector('wa-dropdown')!.shadowRoot!.querySelector('[part="menu"]')!.getBoundingClientRect();
+      const anchor = node.querySelector('[slot="trigger"]')!.getBoundingClientRect(),
+        popup = node.shadowRoot!.querySelector('[part="menu"]')!.getBoundingClientRect();
       return anchor.top - popup.bottom;
     }),
   ).toBeGreaterThanOrEqual(0);

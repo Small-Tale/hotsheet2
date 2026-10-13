@@ -65,7 +65,7 @@ export const TERMINALS_TARGETS = {
   terminalKeyBar: attr('data-component', 'terminal-key-bar'),
   terminalCopyDialog: attr('data-component', 'terminal-copy-dialog'),
   terminalPasteDialog: attr('data-component', 'terminal-paste-dialog'),
-  terminalEditMenu: attr('data-component', 'terminal-edit-menu'),
+  terminalEditMenu: attr('data-context-menu', 'terminal-edit'),
   terminalViewport: attr('data-component', 'terminal-viewport'),
   terminalVisibilityGroupField: attr('name', 'terminal-visibility-group'),
   workspaceChatTile: attr('data-component', 'workspace-chat-tile'),

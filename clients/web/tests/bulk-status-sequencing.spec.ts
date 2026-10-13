@@ -224,7 +224,7 @@ test('serializes rapid Verified then Archive batches onto fresh concurrency toke
   const mock = await mockBulkProject(page);
   await page.setViewportSize({ width: 1600, height: 900 });
   await openBulkProject(page);
-  const menu = page.getByRole('menu', { name: 'Ticket actions' }),
+  const menu = page.locator('[data-context-menu="ticket"]'),
     completed = page.locator('[data-column-id="completed"]'),
     first = completed.locator('[data-ticket-slug="HS2-FAST01"]'),
     second = completed.locator('[data-ticket-slug="HS2-FAST02"]');
@@ -271,7 +271,7 @@ test('finishes queued bulk changes for their owning project after a project swit
   await expect(page.getByRole('tab', { name: 'Other project' })).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('tab', { name: 'Bulk status demo' }).click();
   await page.getByRole('button', { name: 'Columns view' }).click();
-  const menu = page.getByRole('menu', { name: 'Ticket actions' }),
+  const menu = page.locator('[data-context-menu="ticket"]'),
     completed = page.locator('[data-column-id="completed"]'),
     first = completed.locator('[data-ticket-slug="HS2-FAST01"]'),
     second = completed.locator('[data-ticket-slug="HS2-FAST02"]');
@@ -300,7 +300,7 @@ test('rolls a genuine external atomic conflict back to the prior status', async 
   await openBulkProject(page);
   const first = page.locator('[data-column-id="completed"] [data-ticket-slug="HS2-FAST01"]'),
     second = page.locator('[data-column-id="completed"] [data-ticket-slug="HS2-FAST02"]'),
-    menu = page.getByRole('menu', { name: 'Ticket actions' });
+    menu = page.locator('[data-context-menu="ticket"]');
   await first.click();
   await second.click({ modifiers: ['Meta'] });
   await first.click({ button: 'right' });
@@ -316,7 +316,7 @@ test('keeps archived tickets hidden when a refresh was already in flight (HS2-91
   mock.releaseVerified();
   await page.setViewportSize({ width: 1600, height: 900 });
   await openBulkProject(page);
-  const menu = page.getByRole('menu', { name: 'Ticket actions' }),
+  const menu = page.locator('[data-context-menu="ticket"]'),
     completed = page.locator('[data-column-id="completed"]'),
     first = completed.locator('[data-ticket-slug="HS2-FAST01"]'),
     second = completed.locator('[data-ticket-slug="HS2-FAST02"]');

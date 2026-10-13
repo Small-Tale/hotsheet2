@@ -274,7 +274,7 @@ async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
 
   await sidebar();
   await page.getByRole('button', { name: 'More actions for Mine' }).click();
-  await page.getByRole('menu', { name: 'Mine view actions' }).getByText('Edit view…').click();
+  await page.locator('[data-context-menu="saved-view"]').getByText('Edit view…').click();
   await expect(page.getByRole('textbox', { name: 'View name' })).toHaveValue('Mine');
   await audit('saved view rename');
   await page.keyboard.press('Escape');
@@ -283,7 +283,7 @@ async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('tab', { name: /Codex Main/ }).click({ button: 'right' });
-  await page.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+  await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
   const rename = page.locator('[data-terminal-rename-dialog]');
   await expect(rename).toHaveJSProperty('open', true);
   await audit('terminal rename');

@@ -61,10 +61,9 @@ describe('TerminalEditMenu (HS2-KKP8YJ)', () => {
 
   it('anchors a context PopupMenu at the press with Copy Text… and Paste reusing the clipboard actions', () => {
     const markup = String(TerminalEditMenu({ state: { x: 120, y: 340 } }));
-    expect(markup).toContain('data-component="terminal-edit-menu"');
+    expect(markup).toContain('data-context-menu="terminal-edit"');
     expect(markup).toContain('aria-label="Terminal edit actions"');
-    expect(markup).toContain('data-context-anchor-x="120"');
-    expect(markup).toContain('data-context-anchor-y="340"');
+    expect(markup).toContain('--kui-popup-menu-context-x:120px;--kui-popup-menu-context-y:340px');
     expect(markup).toContain('data-context-menu="terminal-edit"');
     expect(markup.match(/<wa-dropdown-item/g)).toHaveLength(2);
     expect(markup).toContain('data-action="copy-terminal-text"');

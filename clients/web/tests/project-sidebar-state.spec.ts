@@ -420,7 +420,7 @@ test('keeps the authoritative completion trend after a local delete drops the co
   const del = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEL"]');
   await del.click();
   await del.click({ button: 'right' });
-  await page.getByRole('menu', { name: 'Ticket actions' }).locator('[data-context-action="Delete ticket"]').click();
+  await page.locator('[data-context-menu="ticket"]').locator('[data-context-action="Delete ticket"]').click();
   await page.locator('[data-component="bulk-delete-dialog"]').getByRole('button', { name: 'Delete 1 ticket' }).click();
   await expect(del).toHaveCount(0);
   // The authoritative completion trend and completed-today must persist through the local delete (HS2-BRDMBB).

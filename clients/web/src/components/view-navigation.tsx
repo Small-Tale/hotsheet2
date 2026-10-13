@@ -23,7 +23,7 @@ import {
   Trash2,
 } from 'lucide';
 
-import { ContextMenuAnchor } from './context-menu-anchor';
+import { contextMenuAnchor } from '../context-menu-position';
 
 export interface ViewNavigationItem {
   id: string;
@@ -160,33 +160,26 @@ export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
 
 export function SavedViewContextMenu({ id, label, x, y }: SavedViewContextMenuState) {
   return (
-    <ContextMenuAnchor
-      x={x}
-      y={y}
-      component="saved-view-context-menu"
+    <PopupMenu
+      context
+      anchor={contextMenuAnchor(x, y)}
       label={`${label} view actions`}
-      attributes={{ 'data-saved-view-id': id }}
-    >
-      <PopupMenu
-        context
-        label={`${label} view actions`}
-        rootAttributes={{ 'data-context-menu': 'saved-view' }}
-        items={[
-          {
-            label: 'Edit view…',
-            action: 'edit-saved-view',
-            icon: <LucideIcon icon={Pencil} name="pencil" />,
-            attributes: { 'data-item-id': id },
-          },
-          {
-            label: 'Delete view…',
-            action: 'delete-saved-view',
-            tone: 'danger',
-            icon: <LucideIcon icon={Trash2} name="trash-2" />,
-            attributes: { 'data-item-id': id },
-          },
-        ]}
-      />
-    </ContextMenuAnchor>
+      rootAttributes={{ 'data-context-menu': 'saved-view', 'data-saved-view-id': id }}
+      items={[
+        {
+          label: 'Edit view…',
+          action: 'edit-saved-view',
+          icon: <LucideIcon icon={Pencil} name="pencil" />,
+          attributes: { 'data-item-id': id },
+        },
+        {
+          label: 'Delete view…',
+          action: 'delete-saved-view',
+          tone: 'danger',
+          icon: <LucideIcon icon={Trash2} name="trash-2" />,
+          attributes: { 'data-item-id': id },
+        },
+      ]}
+    />
   );
 }

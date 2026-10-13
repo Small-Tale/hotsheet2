@@ -1058,15 +1058,15 @@ test('opens the drawer grid tile More actions menu from a phone tap, in front of
   await expect(drawer).toHaveAttribute('data-mode', 'grid');
   const more = drawer.getByRole('button', { name: 'More actions for Codex Main' });
   await more.tap();
-  const menu = page.locator('[data-component="terminal-context-menu"]');
-  await expect(menu).toBeVisible();
+  const menu = page.locator('[data-context-menu="terminal"]');
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   await expect(menu.locator('wa-dropdown-item')).toHaveCount(1);
   await expect(menu.getByText('Hide Terminal')).toHaveCount(0);
   // The menu must be painted in front of the terminal grid, not merely present in the DOM.
   const inFront = await menu.evaluate((node) => {
-    const box = node.getBoundingClientRect(),
+    const box = node.shadowRoot!.querySelector('[part="menu"]')!.getBoundingClientRect(),
       hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-    return Boolean(hit && node.contains(hit));
+    return Boolean(hit && (hit === node || node.contains(hit)));
   });
   expect(inFront).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('drawer-grid-tile-menu-phone.png') });
@@ -1085,7 +1085,7 @@ test('opens the drawer grid tile More actions menu from a phone tap, in front of
   const magnified = drawer.getByRole('dialog', { name: /Magnified/ });
   await expect(magnified).toBeVisible();
   await magnified.getByRole('button', { name: 'More actions for Codex Main' }).tap();
-  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   // The magnified terminal is a top-layer popover (HS2-Z9PQSC); the menu's own popup opens in the top
   // layer after it, so probe the visible menu item rather than the wrapper's positioning anchor.
   const item = menu.locator('wa-dropdown-item').first();

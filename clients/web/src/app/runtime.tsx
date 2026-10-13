@@ -3803,9 +3803,7 @@ export async function startHotSheetWebClient() {
     (event) => {
       if (
         savedViewMenu.value &&
-        !(event.target as Element).closest(
-          '[data-component="saved-view-context-menu"], [data-action="open-saved-view-menu"]',
-        )
+        !(event.target as Element).closest('[data-context-menu="saved-view"], [data-action="open-saved-view-menu"]')
       )
         savedViewMenu.value = undefined;
     },

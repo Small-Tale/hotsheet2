@@ -132,7 +132,6 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/flow-back-button.tsx # Shared chevron back affordance for multi-screen dialog detail screens
     src/components/project-close-dialog.tsx # Shared-menu running-resource inventory, keyed live terminal/shared-read-only-AIConversation preview, and explicit keep-running versus stop-all project-tab dismissal
     src/context-menu-position.ts # Shared viewport-edge clamping for fixed context menus
-    src/components/context-menu-anchor.tsx # Shared zero-footprint wrapper that names and anchors a context-mode Kerf PopupMenu
     src/components/terminal-drawer.tsx # Drawer create action menu uses Kerf PopupMenu placement and keyboard behavior
     src/tab-order.ts         #   Stable same-strip drag reordering plus remembered project-order application
     src/terminal-grid-layout.ts # Pure workspace tile geometry: responsive global 1–10-across/1–3-high scales plus the drawer's full-height level 1 and width-driven levels 2–3

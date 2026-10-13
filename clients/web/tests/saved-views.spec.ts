@@ -211,8 +211,8 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await expect(page.getByRole('button', { name: 'Rename Needs docs' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Delete Needs docs' })).toHaveCount(0);
   await page.getByRole('button', { name: 'More actions for Needs docs' }).click();
-  const menu = page.getByRole('menu', { name: 'Needs docs view actions' });
-  await expect(menu).toBeVisible();
+  const menu = page.locator('[data-context-menu="saved-view"]');
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   await page.waitForTimeout(250);
   await page.screenshot({
     path: 'target/visual-captures/hs2-r7gpjm-view-menu-wide.png',
@@ -249,8 +249,8 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await page.getByRole('button', { name: 'Show project sidebar' }).click();
   await expect(savedRow).toBeInViewport();
   await savedRow.click({ button: 'right' });
-  const narrowMenu = page.getByRole('menu', { name: 'Documentation view actions' });
-  await expect(narrowMenu).toBeVisible();
+  const narrowMenu = page.locator('[data-context-menu="saved-view"]');
+  await expect(narrowMenu.getByRole('menu').first()).toBeVisible();
   await page.waitForTimeout(250);
   await page.screenshot({
     path: 'target/visual-captures/hs2-r7gpjm-view-menu-narrow.png',

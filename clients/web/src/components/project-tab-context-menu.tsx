@@ -2,7 +2,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { ArrowLeft, ArrowRight, CircleX, type IconNode, Pencil, Trash2, X } from 'lucide';
 
-import { ContextMenuAnchor } from './context-menu-anchor';
+import { contextMenuAnchor } from '../context-menu-position';
 
 export type AppTabKind = 'project' | 'terminal' | 'ai-chat';
 export function AppTabContextMenu({
@@ -54,29 +54,22 @@ export function AppTabContextMenu({
     }
   })();
   return (
-    <ContextMenuAnchor
-      x={x}
-      y={y}
-      component="app-tab-context-menu"
+    <PopupMenu
+      context
+      anchor={contextMenuAnchor(x, y)}
       label={`${label} tab actions`}
-      attributes={{ 'data-tab-kind': kind, 'data-tab-id': id, ...legacyId }}
-    >
-      <PopupMenu
-        context
-        label={`${label} tab actions`}
-        rootAttributes={{ 'data-context-menu': 'app-tab' }}
-        items={actions.flatMap((item): PopupMenuEntry[] => [
-          ...(item.id === 'close-all' ? [{ kind: 'divider' } as const] : []),
-          {
-            label: item.label,
-            action,
-            tone: item.danger ? 'danger' : 'default',
-            icon: <LucideIcon icon={item.icon} name={item.iconName} />,
-            attributes: { 'data-tab-action': item.id, 'data-tab-kind': kind, 'data-tab-id': id, ...legacyId },
-          },
-        ])}
-      />
-    </ContextMenuAnchor>
+      rootAttributes={{ 'data-context-menu': 'app-tab', 'data-tab-kind': kind, 'data-tab-id': id, ...legacyId }}
+      items={actions.flatMap((item): PopupMenuEntry[] => [
+        ...(item.id === 'close-all' ? [{ kind: 'divider' } as const] : []),
+        {
+          label: item.label,
+          action,
+          tone: item.danger ? 'danger' : 'default',
+          icon: <LucideIcon icon={item.icon} name={item.iconName} />,
+          attributes: { 'data-tab-action': item.id, 'data-tab-kind': kind, 'data-tab-id': id, ...legacyId },
+        },
+      ])}
+    />
   );
 }
 

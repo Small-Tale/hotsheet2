@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  contextMenuAnchor,
   type ContextPopupMenuElement,
   maintainContextPopupMenuAnchor,
   reanchorReplacedContextPopupMenus,
@@ -66,52 +67,49 @@ describe('maintainContextPopupMenuAnchor', () => {
 });
 
 describe('reanchorReplacedContextPopupMenus', () => {
-  it('opens each new host at its original pointer once and resets after dismissal', () => {
-    const makeMenu = () => {
-      const properties = new Map<string, string>(),
-        setProperty = vi.fn((name: string, value: string) => properties.set(name, value)),
-        anchor = { contextAnchorX: '418', contextAnchorY: '267' };
-      return {
-        menu: {
-          open: true,
-          style: { setProperty },
-          getAttribute: () =>
-            properties.size ? [...properties].map(([name, value]) => `${name}:${value}`).join(';') : null,
-          closest: () => ({ dataset: anchor }),
-        } as unknown as ContextPopupMenuElement,
-        setProperty,
-        properties,
-        anchor,
-      };
+  it('opens each new or re-rendered host once and resets after dismissal (HS2-H4JZDQ)', () => {
+    // Kerf renders the context anchor into the menu's inline style (KF-FXGW0C), so a changed style
+    // or a replacement host reopens; an unchanged one is left alone.
+    const makeMenu = (style: string) => {
+      const state = { style, opens: 0 };
+      const menu = {
+        set open(value: boolean) {
+          if (value) state.opens += 1;
+        },
+        getAttribute: (name: string) => (name === 'style' ? state.style : null),
+      } as unknown as ContextPopupMenuElement;
+      return { menu, state };
     };
-    const first = makeMenu(),
-      second = makeMenu(),
+    const first = makeMenu('anchor-a'),
+      second = makeMenu('anchor-a'),
       opened = new Map<string, ContextPopupMenuElement>();
     let current = first.menu;
     const root = { querySelector: () => current } as unknown as ParentNode;
 
     reanchorReplacedContextPopupMenus(['ticket'], opened, root);
-    expect(first.setProperty).toHaveBeenCalledTimes(2);
+    expect(first.state.opens).toBe(1);
     reanchorReplacedContextPopupMenus(['ticket'], opened, root);
-    expect(first.setProperty).toHaveBeenCalledTimes(2);
-    first.anchor.contextAnchorX = '512';
+    expect(first.state.opens).toBe(1);
+    first.state.style = 'anchor-b';
     reanchorReplacedContextPopupMenus(['ticket'], opened, root);
-    expect(first.setProperty.mock.calls.at(-2)?.[1]).toBe('512px');
-    expect(first.setProperty).toHaveBeenCalledTimes(4);
+    expect(first.state.opens).toBe(2);
 
     current = second.menu;
     reanchorReplacedContextPopupMenus(['ticket'], opened, root);
-    expect(second.setProperty.mock.calls.map(([, value]) => value)).toEqual(['418px', '267px']);
+    expect(second.state.opens).toBe(1);
+    reanchorReplacedContextPopupMenus(['ticket'], opened, root);
+    expect(second.state.opens).toBe(1);
 
-    second.properties.clear();
-    reanchorReplacedContextPopupMenus(['ticket'], opened, root);
-    expect(second.setProperty).toHaveBeenCalledTimes(4);
-    reanchorReplacedContextPopupMenus(['ticket'], opened, root);
-    expect(second.setProperty).toHaveBeenCalledTimes(4);
     reanchorReplacedContextPopupMenus([], opened, root);
     expect(opened.size).toBe(0);
     reanchorReplacedContextPopupMenus(['ticket'], opened, root);
-    expect(second.setProperty).toHaveBeenCalledTimes(6);
+    expect(second.state.opens).toBe(2);
+  });
+
+  it('skips a surface whose menu is not rendered', () => {
+    const opened = new Map<string, ContextPopupMenuElement>();
+    reanchorReplacedContextPopupMenus(['ticket'], opened, { querySelector: () => null } as unknown as ParentNode);
+    expect(opened.size).toBe(0);
   });
 });
 
@@ -137,8 +135,16 @@ describe('viewportSafeContextMenuPosition', () => {
 describe('viewportSafePointerPosition', () => {
   it('preserves a pointer at the viewport edge for measured popup collision handling', () => {
     expect(viewportSafePointerPosition(998, 698, 1000, 700)).toEqual({ x: 998, y: 698 });
+    expect(viewportSafePointerPosition(Number.NaN, Number.POSITIVE_INFINITY, 1000, 700)).toEqual({ x: 0, y: 0 });
   });
   it('only clamps coordinates which are actually outside the viewport', () => {
     expect(viewportSafePointerPosition(-20, 730, 1000, 700)).toEqual({ x: 0, y: 700 });
+  });
+});
+
+describe('contextMenuAnchor', () => {
+  it('passes finite points through and replaces missing coordinates with 0', () => {
+    expect(contextMenuAnchor(12.5, 40)).toEqual({ x: 12.5, y: 40 });
+    expect(contextMenuAnchor(Number.NaN, Number.NEGATIVE_INFINITY)).toEqual({ x: 0, y: 0 });
   });
 });

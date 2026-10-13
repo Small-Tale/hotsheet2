@@ -276,7 +276,7 @@ describe('TerminalDashboard', () => {
       }),
     );
     expect(markup).toContain('data-action="open-terminal-context-menu"');
-    expect(markup).toContain('data-component="terminal-context-menu"');
+    expect(markup).toContain('data-context-menu="terminal"');
     expect(markup.match(/<wa-dropdown-item/g)).toHaveLength(2);
     expect(markup).toContain('data-action="open-terminal-project"');
     expect(markup).toContain('data-action="hide-dashboard-terminal"');
@@ -304,7 +304,7 @@ describe('TerminalDashboard', () => {
           contextMenu: { key: 'other:term-9', x: 20, y: 30 },
         }),
       ),
-    ).not.toContain('data-component="terminal-context-menu"');
+    ).not.toContain('data-context-menu="terminal"');
   });
   it('uses a compact label select with a content-sized popup for visibility groups and omits global layout grouping', () => {
     const visibilityGroups = [

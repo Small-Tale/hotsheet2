@@ -49,7 +49,7 @@ describe('TerminalVisibilityDialog', () => {
     expect(markup).not.toContain('data-action="toggle-terminal-visibility"');
   });
   it('composes Kerf TabBar, List and DialogSurface with no stylesheet (HS2-W68SWJ, HS2-N940N4)', () => {
-    // The group menu's anchor is the shared ContextMenuAnchor, so the dialog owns no CSS at all.
+    // Kerf's context PopupMenu renders the group menu's anchor (HS2-H4JZDQ), so the dialog owns no CSS at all.
     expect(existsSync(resolve(import.meta.dirname, 'terminal-visibility-dialog.css'))).toBe(false);
     const markup = String(
       TerminalVisibilityDialog({ open: true, state: initialTerminalVisibilityState(), scope: 'dashboard', groups }),
@@ -98,7 +98,7 @@ describe('TerminalVisibilityDialog', () => {
     expect(markup).not.toContain('>Project</h2>');
     expect(markup).toContain('>Other</h2>');
     expect(markup).toContain('aria-label="Visibility group actions"');
-    expect(markup).toContain('data-context-anchor-x="20" data-context-anchor-y="30"');
+    expect(markup).toContain('--kui-popup-menu-context-x:20px;--kui-popup-menu-context-y:30px');
     expect(markup).toContain('data-context-menu="terminal-visibility-group"');
     expect(markup).toContain('data-component="popup-menu"');
     expect(markup).toContain('rename-terminal-visibility-group');

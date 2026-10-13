@@ -2,7 +2,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { RotateCcw } from 'lucide';
 
-import { ContextMenuAnchor } from './context-menu-anchor';
+import { contextMenuAnchor } from '../context-menu-position';
 import { providerModelEffortEntries } from './provider-model-effort-menu';
 
 export interface AiToolModel {
@@ -44,15 +44,14 @@ export function DriveOptionsMenu({
 }) {
   if (!tools.length)
     return (
-      <ContextMenuAnchor x={x} y={y} component="drive-options-menu" label="Drive provider, model, and effort options">
-        <PopupMenu
-          context
-          label="Drive provider, model, and effort options"
-          placement="top-start"
-          rootAttributes={{ 'data-context-menu': 'drive-options' }}
-          items={[{ label: loading ? 'Detecting AI tools…' : error || 'No AI tools detected', disabled: true }]}
-        />
-      </ContextMenuAnchor>
+      <PopupMenu
+        context
+        anchor={contextMenuAnchor(x, y)}
+        label="Drive provider, model, and effort options"
+        placement="top-start"
+        rootAttributes={{ 'data-context-menu': 'drive-options' }}
+        items={[{ label: loading ? 'Detecting AI tools…' : error || 'No AI tools detected', disabled: true }]}
+      />
     );
   const activeTool = tools.find((tool) => tool.id === (selection.tool ?? defaultSelection.tool)) ?? tools.at(0)!,
     modelId =
@@ -65,43 +64,42 @@ export function DriveOptionsMenu({
       ? (tools.find((tool) => tool.id === defaultSelection.tool)?.display_name ?? defaultSelection.tool)
       : undefined;
   return (
-    <ContextMenuAnchor x={x} y={y} component="drive-options-menu" label="Drive provider, model, and effort options">
-      <PopupMenu
-        context
-        label="Drive provider, model, and effort options"
-        placement="top-start"
-        rootAttributes={{ 'data-context-menu': 'drive-options' }}
-        items={[
-          {
-            label: 'Default',
-            action: 'select-drive-default',
-            checked: !selection.tool,
-            icon: <LucideIcon icon={RotateCcw} name="rotate-ccw" />,
-            details: defaultToolLabel ? <>{defaultToolLabel}</> : undefined,
+    <PopupMenu
+      context
+      anchor={contextMenuAnchor(x, y)}
+      label="Drive provider, model, and effort options"
+      placement="top-start"
+      rootAttributes={{ 'data-context-menu': 'drive-options' }}
+      items={[
+        {
+          label: 'Default',
+          action: 'select-drive-default',
+          checked: !selection.tool,
+          icon: <LucideIcon icon={RotateCcw} name="rotate-ccw" />,
+          details: defaultToolLabel ? <>{defaultToolLabel}</> : undefined,
+        },
+        { kind: 'divider' },
+        ...providerModelEffortEntries({
+          actions: {
+            provider: 'select-drive-tool',
+            model: 'select-drive-model',
+            effort: 'select-drive-effort',
+            manualModel: 'open-drive-manual-model',
           },
-          { kind: 'divider' },
-          ...providerModelEffortEntries({
-            actions: {
-              provider: 'select-drive-tool',
-              model: 'select-drive-model',
-              effort: 'select-drive-effort',
-              manualModel: 'open-drive-manual-model',
-            },
-            providers: {
-              choices: tools.map((tool) => ({ id: tool.id, label: tool.display_name })),
-              currentId: activeTool.id,
-              currentLabel: activeTool.display_name,
-            },
-            model: {
-              choices: activeTool.models.map((model) => ({ id: model.id, label: model.label })),
-              currentId: activeModel?.id,
-              currentLabel: activeModel?.label ?? modelId,
-              customModel,
-            },
-            effort: { efforts, current: currentEffort },
-          }),
-        ]}
-      />
-    </ContextMenuAnchor>
+          providers: {
+            choices: tools.map((tool) => ({ id: tool.id, label: tool.display_name })),
+            currentId: activeTool.id,
+            currentLabel: activeTool.display_name,
+          },
+          model: {
+            choices: activeTool.models.map((model) => ({ id: model.id, label: model.label })),
+            currentId: activeModel?.id,
+            currentLabel: activeModel?.label ?? modelId,
+            customModel,
+          },
+          effort: { efforts, current: currentEffort },
+        }),
+      ]}
+    />
   );
 }

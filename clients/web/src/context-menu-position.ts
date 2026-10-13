@@ -1,4 +1,4 @@
-import { openPopupMenuAt } from '@kerfjs/ui/popup-menu';
+import { openPopupMenu, openPopupMenuAt } from '@kerfjs/ui/popup-menu';
 
 export interface ContextMenuSize {
   width: number;
@@ -15,7 +15,10 @@ export function viewportSafePointerPosition(
   viewportWidth: number,
   viewportHeight: number,
 ): ContextMenuPosition {
-  return { x: Math.max(0, Math.min(x, viewportWidth)), y: Math.max(0, Math.min(y, viewportHeight)) };
+  // A synthetic or keyboard-originated event can lack pointer coordinates; Kerf's context anchor
+  // rejects non-finite points, so fall back to the viewport origin (HS2-H4JZDQ).
+  const clamp = (value: number, max: number) => (Number.isFinite(value) ? Math.max(0, Math.min(value, max)) : 0);
+  return { x: clamp(x, viewportWidth), y: clamp(y, viewportHeight) };
 }
 
 export function viewportSafeContextMenuPosition(
@@ -38,11 +41,11 @@ export function viewportSafeContextMenuPosition(
 export type ContextPopupMenuElement = HTMLElement & { open: boolean };
 
 /**
- * Open the context-mode Kerf PopupMenu that a menu signal has just rendered, at the viewport point
- * its app-owned wrapper records in `data-context-anchor-x`/`-y`. The app owns the open state (the
- * menu exists only while its signal is set), so this only hands the anchor to Kerf's
- * `openPopupMenuAt` once the element is in the DOM: now if the render was synchronous, else after
- * the microtask/frame Kerf uses to morph (HS2-2EHD8R).
+ * Open the context-mode Kerf PopupMenu that a menu signal has just rendered. The menu carries its
+ * own viewport `anchor` (KF-FXGW0C, HS2-H4JZDQ), and the app owns the open state (the menu exists
+ * only while its signal is set), so this only calls Kerf's `openPopupMenu` once the element is in
+ * the DOM: now if the render was synchronous, else after the microtask/frame Kerf uses to morph
+ * (HS2-2EHD8R).
  */
 export function revealContextPopupMenu(surface: string, root: ParentNode = document, attempts = 3): void {
   const menu = root.querySelector<ContextPopupMenuElement>(`[data-context-menu="${surface}"]`);
@@ -58,12 +61,9 @@ export function revealContextPopupMenu(surface: string, root: ParentNode = docum
   else requestAnimationFrame(retry);
 }
 
-/** Open one rendered context-mode PopupMenu at the anchor its wrapper records. */
+/** Open one rendered context-mode PopupMenu at the `anchor` it was rendered with. */
 export function openContextPopupMenu(menu: ContextPopupMenuElement): void {
-  const wrapper = menu.closest<HTMLElement>('[data-context-anchor-x]'),
-    x = Number(wrapper?.dataset.contextAnchorX ?? 0),
-    y = Number(wrapper?.dataset.contextAnchorY ?? 0);
-  openPopupMenuAt(menu, x, y);
+  openPopupMenu(menu);
 }
 
 /** Keep a context popup opened from a persistent trigger at its click anchor while
@@ -111,10 +111,10 @@ export function maintainContextPopupMenuAnchor(
   return stop;
 }
 
-/** A live menu can lose its inline anchor during a morph, even when the DOM host survives.
- * Restore that anchor (or open a replacement host) and forget hosts after dismissal. */
+/** A ticket update can replace a live menu's host or re-render it at a new anchor. Kerf renders
+ * the anchor into the menu's inline style (KF-FXGW0C), so a morph restores it with the host; open
+ * a replacement host or re-anchored menu and forget hosts after dismissal (HS2-S1EE53). */
 const anchoredStyles = new WeakMap<ContextPopupMenuElement, string | null>();
-const anchoredPositions = new WeakMap<ContextPopupMenuElement, string>();
 
 export function reanchorReplacedContextPopupMenus(
   activeSurfaces: readonly string[],
@@ -125,25 +125,15 @@ export function reanchorReplacedContextPopupMenus(
   for (const surface of activeSurfaces) {
     const menu = root.querySelector<ContextPopupMenuElement>(`[data-context-menu="${surface}"]`);
     if (!menu) continue;
-    const wrapper = menu.closest<HTMLElement>('[data-context-anchor-x]');
-    const position = `${wrapper?.dataset.contextAnchorX ?? 0},${wrapper?.dataset.contextAnchorY ?? 0}`;
-    if (
-      opened.get(surface) !== menu ||
-      anchoredStyles.get(menu) !== menu.getAttribute('style') ||
-      anchoredPositions.get(menu) !== position
-    ) {
-      opened.set(surface, menu);
-      openContextPopupMenu(menu);
-      anchoredStyles.set(menu, menu.getAttribute('style'));
-      anchoredPositions.set(menu, position);
-    }
+    if (opened.get(surface) === menu && anchoredStyles.get(menu) === menu.getAttribute('style')) continue;
+    opened.set(surface, menu);
+    openContextPopupMenu(menu);
+    anchoredStyles.set(menu, menu.getAttribute('style'));
   }
 }
 
-/** Wrapper attributes that record a context-mode PopupMenu's viewport anchor for `revealContextPopupMenu`. */
-export function contextPopupMenuAnchor(
-  x: number,
-  y: number,
-): { 'data-context-anchor-x': string; 'data-context-anchor-y': string } {
-  return { 'data-context-anchor-x': String(x), 'data-context-anchor-y': String(y) };
+/** The `anchor` for a context-mode Kerf PopupMenu. Kerf rejects non-finite points, and a synthetic or
+ * keyboard-originated event can lack pointer coordinates, so those fall back to 0 (HS2-H4JZDQ). */
+export function contextMenuAnchor(x: number, y: number): ContextMenuPosition {
+  return { x: Number.isFinite(x) ? x : 0, y: Number.isFinite(y) ? y : 0 };
 }

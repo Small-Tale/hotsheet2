@@ -76,8 +76,9 @@ describe('DriveOptionsMenu', () => {
     expect(
       markup.match(/slot="submenu" data-action="select-drive-[a-z]+" value="[^"]+" type="checkbox"/g)?.length,
     ).toBeGreaterThan(0);
-    // The shared ContextMenuAnchor owns the zero-footprint wrapper; the menu has no stylesheet (HS2-N940N4).
-    expect(markup).toContain('class="context-menu-anchor" data-component="drive-options-menu"');
+    // Kerf's context PopupMenu renders its own anchor (KF-FXGW0C, HS2-H4JZDQ); the menu has no stylesheet.
+    expect(markup).toContain('data-context-menu="drive-options"');
+    expect(markup).not.toContain('context-menu-anchor');
     expect(existsSync(new URL('./drive-options-menu.css', import.meta.url))).toBe(false);
   });
 });

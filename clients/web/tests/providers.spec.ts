@@ -4295,7 +4295,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await magnified.click({ position: { x: 5, y: 5 } });
   await expect(magnified).toHaveCount(0);
   await compactTile.click({ button: 'right' });
-  const tileMenu = dashboard.getByRole('menu');
+  const tileMenu = dashboard.locator('[data-context-menu="terminal"]');
   await expect(tileMenu.getByText('Open')).toBeVisible();
   await expect(tileMenu.getByText('Hide Terminal')).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-3d8frb-terminal-context-menu.png', fullPage: true });
@@ -5298,13 +5298,13 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
     ),
   ).toBeGreaterThan(19);
   await projectTab.click({ button: 'right', modifiers: ['Alt'] });
-  const projectMenu = page.getByRole('menu', { name: 'Project tab actions' });
+  const projectMenu = page.locator('[data-context-menu="app-tab"]');
   await expect(projectMenu.getByText('Close Tabs to the Left')).toBeVisible();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Workspace grid' }).click();
   const globalTile = page.locator('[data-component="terminal-tile"][data-terminal-key="demo-checkout:codex-main"]');
   await globalTile.click({ button: 'right' });
-  await page.getByRole('menu').getByText('Open').click();
+  await page.locator('[data-context-menu="terminal"]').getByText('Open').click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer).toBeVisible();
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
@@ -5365,8 +5365,8 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await codexTile.click({ button: 'right' });
   // The drawer grid offers the tile menu with Open only: terminal visibility (Hide) is scoped to
   // the workspace dashboard (HS2-V2CCN6).
-  const drawerTileMenu = drawer.getByRole('menu', { name: 'Terminal actions' });
-  await expect(drawerTileMenu).toBeVisible();
+  const drawerTileMenu = drawer.locator('[data-context-menu="terminal"]');
+  await expect(drawerTileMenu.getByRole('menu').first()).toBeVisible();
   await expect(drawerTileMenu.getByText('Open')).toBeVisible();
   await expect(drawerTileMenu.getByText('Hide Terminal')).toHaveCount(0);
   await page.keyboard.press('Escape');
@@ -5464,7 +5464,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await expect(drawer.locator('[data-tab-kind="terminal"]')).toHaveCount(3);
   await expect(drawer.getByRole('button', { name: 'Close Terminal New' })).toBeAttached();
   await drawer.getByRole('tab', { name: /Tests/ }).click({ button: 'right' });
-  const terminalMenu = page.getByRole('menu', { name: 'Terminal tab actions' });
+  const terminalMenu = page.locator('[data-context-menu="app-tab"]');
   await expect(terminalMenu.getByText('Close Tabs to the Right')).toBeVisible();
   await terminalMenu.getByText('Close Tabs to the Right').click();
   await expect(drawer.getByRole('tab', { name: /Terminal New/ })).toHaveCount(0);
@@ -8122,7 +8122,7 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   await nameDialog.getByRole('button', { name: 'Add' }).click();
   await expect(dialog.getByRole('tab', { name: 'Focus' })).toHaveAttribute('aria-selected', 'true');
   await dialog.getByRole('tab', { name: 'Focus' }).click({ button: 'right' });
-  await dialog.getByRole('menu', { name: 'Visibility group actions' }).getByText('Rename…').click();
+  await dialog.locator('[data-context-menu="terminal-visibility-group"]').getByText('Rename…').click();
   await expect(groupName).toHaveValue('Focus');
   await groupName.fill('Deep Focus');
   await nameDialog.getByRole('button', { name: 'Rename' }).click();
@@ -8188,7 +8188,7 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   ).toEqual({ open: true, modal: true, topmost: true, runningAnimations: 0 });
   await page.screenshot({ path: 'target/visual-captures/hs2-e7cp5z-settled-narrow-dialog.png', fullPage: true });
   await dialog.getByRole('tab', { name: 'Deep Focus' }).click({ button: 'right' });
-  await dialog.getByRole('menu', { name: 'Visibility group actions' }).getByText('Delete').click();
+  await dialog.locator('[data-context-menu="terminal-visibility-group"]').getByText('Delete').click();
   await expect(dialog.getByRole('tab', { name: 'Default' })).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('Escape');
   await expect(
@@ -8326,7 +8326,7 @@ test('renames a terminal from its tab menu, saves it on the server, and keeps it
   await expect(drawer.getByRole('tab', { name: /Codex Main/ })).toBeVisible();
   const tab = drawer.getByRole('tab', { name: /Tests/ });
   await tab.click({ button: 'right' });
-  const menu = page.getByRole('menu', { name: 'Terminal tab actions' });
+  const menu = page.locator('[data-context-menu="app-tab"]');
   await menu.getByText('Rename…').click();
   const dialog = page.locator('[data-terminal-rename-dialog]');
   await expect(dialog).toHaveJSProperty('open', true);
@@ -8395,7 +8395,7 @@ for (const width of [1280, 390])
       field = dialog.locator('wa-input[name="terminal-name"]'),
       openRename = async (tabName: RegExp) => {
         await drawer.getByRole('tab', { name: tabName }).click({ button: 'right' });
-        await page.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+        await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
         await expect(dialog).toHaveJSProperty('open', true);
       };
     await expect(drawer.getByRole('tab', { name: /Codex Main/ })).toBeVisible();
@@ -8450,7 +8450,7 @@ test('serializes terminal name writes so a reset made during a slow rename still
     dialog = page.locator('[data-terminal-rename-dialog]'),
     rename = async (tabName: RegExp, name: string | null) => {
       await drawer.getByRole('tab', { name: tabName }).click({ button: 'right' });
-      await page.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+      await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
       await expect(dialog).toHaveJSProperty('open', true);
       if (name === null) await dialog.getByRole('button', { name: 'Reset to default' }).click();
       else {
@@ -8502,7 +8502,7 @@ for (const width of [1280, 390])
       reset = dialog.getByRole('button', { name: 'Reset to default' }),
       openRename = async (tabName: RegExp) => {
         await drawer.getByRole('tab', { name: tabName }).click({ button: 'right' });
-        await page.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+        await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
         await expect(dialog).toHaveJSProperty('open', true);
       };
     await expect(drawer.getByRole('tab', { name: /Codex Main/ })).toBeVisible();
@@ -8550,12 +8550,12 @@ for (const width of [1280, 390])
     await expect(reloaded.getByRole('tab', { name: /^Tests/ })).toBeVisible();
     // Renaming again after a reset works and offers the reset again.
     await reloaded.getByRole('tab', { name: /^Tests/ }).click({ button: 'right' });
-    await page.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+    await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
     await dialog.getByRole('textbox', { name: /Terminal name/ }).fill('Second name');
     await dialog.getByRole('button', { name: 'Rename' }).click();
     await expect(reloaded.getByRole('tab', { name: /Second name/ })).toBeVisible();
     await reloaded.getByRole('tab', { name: /Second name/ }).click({ button: 'right' });
-    await page.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+    await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
     await expect(reset).toBeVisible();
     await expect(field).toHaveJSProperty('hint', 'Default name: Tests');
   });
@@ -8619,7 +8619,7 @@ test('shares a terminal rename with other devices and restores it through the re
     });
 
     await laptopDrawer.getByRole('tab', { name: /Shared Shell/ }).click({ button: 'right' });
-    await laptop.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+    await laptop.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
     const dialog = laptop.locator('[data-terminal-rename-dialog]');
     await expect(dialog.locator('wa-input[name="terminal-name"]')).toHaveJSProperty('value', 'Shared Shell');
     await dialog.getByRole('textbox', { name: /Terminal name/ }).fill('Release shell');
@@ -8647,7 +8647,7 @@ test('shares a terminal rename with other devices and restores it through the re
     phoneListReads = 0;
     const laptopDrawerAgain = laptop.locator('[data-component="terminal-drawer"]');
     await laptopDrawerAgain.getByRole('tab', { name: /Release shell/ }).click({ button: 'right' });
-    await laptop.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+    await laptop.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
     await laptop.locator('[data-terminal-rename-dialog]').getByRole('button', { name: 'Reset to default' }).click();
     await expect(laptopDrawerAgain.getByRole('tab', { name: /Shared Shell/ })).toBeVisible();
     await expect
@@ -11941,10 +11941,10 @@ test('uploads staged files to a GitHub source with an assets repository and show
   );
   await expect(link).toHaveCSS('cursor', 'pointer');
   await panel.locator('[data-component="ticket-attachment-item"]').first().click({ button: 'right' });
-  await expect(page.getByRole('menu', { name: 'Attachment actions' })).toHaveCount(0);
+  await expect(page.locator('[data-context-menu="attachment"]')).toHaveCount(0);
   // Media keeps its gallery link, but store-only menu actions (open, reveal, remove) are not offered.
   await panel.locator('[data-action="open-attachment-gallery"]').click({ button: 'right' });
-  await expect(page.getByRole('menu', { name: 'Attachment actions' })).toHaveCount(0);
+  await expect(page.locator('[data-context-menu="attachment"]')).toHaveCount(0);
   await expect(panel.locator('video')).not.toHaveAttribute('poster', /.+/);
   expect(posters).toEqual([]);
   await page
@@ -12358,7 +12358,7 @@ test('animates ticket moves, arrivals, and departures in sequence', async ({ pag
   await expect(moved).toHaveCSS('visibility', 'visible');
   await clear();
   await moved.click({ button: 'right' });
-  await page.getByRole('menu', { name: 'Ticket actions' }).locator('[data-context-action="Archive ticket"]').click();
+  await page.locator('[data-context-menu="ticket"]').locator('[data-context-action="Archive ticket"]').click();
   const outgoingGhost = page.locator('[data-ticket-motion-ghost="outgoing"][data-ticket-motion-slug="HS2-DEMO01"]');
   await expect(outgoingGhost).toBeAttached();
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toHaveCount(0);
@@ -14827,7 +14827,7 @@ test('moves tickets to Backlog and Archive from every shipped status menu', asyn
   const backlogged = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-ARCH01"]');
   await expect(backlogged).toBeVisible();
   await backlogged.click({ button: 'right' });
-  const menu = page.getByRole('menu', { name: 'Ticket actions' });
+  const menu = page.locator('[data-context-menu="ticket"]');
   await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change status' }).hover();
   const choices = menu.locator('[data-context-field="status"]');
   await expect(choices).toHaveCount(6);
@@ -16674,16 +16674,16 @@ test('keeps the Drive menu open while choosing provider, model, and effort', asy
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const sidebar = page.locator('#app-left-rail'),
     options = sidebar.getByRole('button', { name: 'Choose Drive provider, model, and effort' }),
-    menu = sidebar.locator('[data-component="drive-options-menu"]');
+    menu = sidebar.locator('[data-context-menu="drive-options"]');
   await options.click();
-  await menu.locator('wa-dropdown > wa-dropdown-item').filter({ hasText: 'Provider' }).hover();
+  await menu.locator(':scope > wa-dropdown-item').filter({ hasText: 'Provider' }).hover();
   await menu.locator('[data-action="select-drive-tool"][data-value="claude"]').click();
-  const model = menu.locator('wa-dropdown > wa-dropdown-item').filter({ hasText: 'Model' });
+  const model = menu.locator(':scope > wa-dropdown-item').filter({ hasText: 'Model' });
   await expect(model).toBeVisible();
   await model.hover();
   await expect(model.locator('[data-action="select-drive-model"][data-value="fable"]')).toBeVisible();
   await model.locator('[data-action="select-drive-model"][data-value="fable"]').click();
-  const effort = menu.locator('wa-dropdown > wa-dropdown-item').filter({ hasText: 'Effort' });
+  const effort = menu.locator(':scope > wa-dropdown-item').filter({ hasText: 'Effort' });
   await expect(effort).toBeVisible();
   await effort.hover();
   for (const level of ['low', 'medium', 'high', 'xhigh', 'max'])
@@ -17452,10 +17452,10 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
   await page.getByLabel('List view').click();
   const sidebar = page.locator('#app-left-rail'),
     options = sidebar.getByRole('button', { name: 'Choose Drive provider, model, and effort' }),
-    menu = sidebar.locator('[data-component="drive-options-menu"]'),
+    menu = sidebar.locator('[data-context-menu="drive-options"]'),
     driveCustom = "drive legacy 'one'";
   await options.click();
-  const modelMenu = menu.locator('wa-dropdown > wa-dropdown-item').filter({ hasText: 'Model' });
+  const modelMenu = menu.locator(':scope > wa-dropdown-item').filter({ hasText: 'Model' });
   await modelMenu.hover();
   await modelMenu.locator('[data-action="open-drive-manual-model"]').click();
   await expect(dialog).toBeVisible();
@@ -17619,7 +17619,7 @@ test('retries a failed AI-tool discovery from Drive without showing a false empt
   const sidebar = page.locator('#app-left-rail'),
     options = sidebar.getByRole('button', { name: 'Choose Drive provider, model, and effort' });
   await options.click();
-  const menu = sidebar.locator('[data-component="drive-options-menu"]');
+  const menu = sidebar.locator('[data-context-menu="drive-options"]');
   await expect(menu).toContainText('Detecting AI tools…');
   await expect(menu).not.toContainText('No AI tools detected');
   await page.screenshot({ path: 'target/visual-captures/hs2-cx4xzr-discovery-retry-wide.png', fullPage: true });
@@ -18315,10 +18315,7 @@ test('keeps Markdown attachment images in flow and reports reference copies with
     .screenshot({ path: 'target/visual-captures/hs2-xane1p-direct-attachment-reference.png' });
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: 'More actions for proof.png' }).click();
-  await page
-    .getByRole('menu', { name: 'Attachment actions' })
-    .getByRole('menuitem', { name: 'Copy reference' })
-    .click();
+  await page.locator('[data-context-menu="attachment"]').getByRole('menuitem', { name: 'Copy reference' }).click();
   await expect(page.locator('.app-toast')).toContainText('Attachment reference copied to clipboard.');
   await expect(page.locator('[data-attachments-status]')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-859hq1-attachment-copy-toast.png', fullPage: true });
@@ -18343,8 +18340,8 @@ test('shows the attachment actions menu above the modal ticket reader (HS2-EZ10R
   ).toBe(true);
   await reader.getByRole('tab', { name: /Attachments/ }).click();
   await reader.getByRole('button', { name: 'More actions for proof.png' }).click();
-  const menu = page.getByRole('menu', { name: 'Attachment actions' });
-  await expect(menu).toBeVisible();
+  const menu = page.locator('[data-context-menu="attachment"]');
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   // The menu renders as a descendant of the modal reader dialog, so it is on top AND interactive
   // (the reader's modality would otherwise leave an out-of-dialog menu inert/covered, HS2-EZ10RS).
   await expect(menu).toHaveCount(1);
@@ -19367,7 +19364,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await expect(more.locator('[data-lucide="more-horizontal"]')).toBeVisible();
   await expect(item.getByRole('button')).toHaveCount(1);
   await more.click();
-  let attachmentMenu = page.getByRole('menu', { name: 'Attachment actions' });
+  let attachmentMenu = page.locator('[data-context-menu="attachment"]');
   await expect(attachmentMenu.getByRole('menuitem')).toHaveCount(6);
   await expect(attachmentMenu.getByRole('menuitem').allTextContents()).resolves.toEqual([
     'Open',
@@ -19402,7 +19399,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await reader.locator('.markdown-preview__attachment-image').click();
   await expect(gallery).toBeVisible();
   await gallery.getByRole('button', { name: 'More image actions' }).click();
-  await expect(page.getByRole('menu', { name: 'Attachment actions' })).toBeVisible();
+  await expect(page.locator('[data-context-menu="attachment"]').getByRole('menu').first()).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-wqe7br-reader-gallery-after.png', fullPage: true });
   await page.keyboard.press('Escape');
   await expect(gallery).toHaveCount(0);
@@ -19412,11 +19409,11 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await thumbnail.evaluate((node) =>
     node.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 1278, clientY: 718 })),
   );
-  attachmentMenu = page.getByRole('menu', { name: 'Attachment actions' });
+  attachmentMenu = page.locator('[data-context-menu="attachment"]');
   await expect(attachmentMenu.getByRole('menuitem', { name: 'Show in Finder' })).toBeVisible();
-  // The wrapper is a 1px anchor; Web Awesome's popup panel is what must stay inside the viewport.
+  // Web Awesome's popup panel is what must stay inside the viewport.
   const menuBounds = await attachmentMenu.evaluate((node) => {
-    const rect = node.querySelector('wa-dropdown')!.shadowRoot!.querySelector('[part="menu"]')!.getBoundingClientRect();
+    const rect = node.shadowRoot!.querySelector('[part="menu"]')!.getBoundingClientRect();
     return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
   });
   expect(menuBounds.x).toBeGreaterThanOrEqual(8);
@@ -19475,7 +19472,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.locator('#app-right-rail').getByRole('heading', { name: 'Attachments' }).scrollIntoViewIfNeeded();
   await item.click({ button: 'right' });
-  attachmentMenu = page.getByRole('menu', { name: 'Attachment actions' });
+  attachmentMenu = page.locator('[data-context-menu="attachment"]');
   await expect(attachmentMenu.getByRole('menuitem')).toHaveCount(6);
   await expect(attachmentMenu.getByRole('menuitem', { name: 'Show in Finder' })).toBeVisible();
   await page
@@ -19531,7 +19528,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await expect(page.getByRole('alert')).toContainText('Wait for it to appear on the desktop');
   await expect(page.locator('[data-attachment-id="A5"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'More actions for new-proof.txt' }).click();
-  await page.getByRole('menu', { name: 'Attachment actions' }).getByRole('menuitem', { name: 'Remove' }).click();
+  await page.locator('[data-context-menu="attachment"]').getByRole('menuitem', { name: 'Remove' }).click();
   await expect(page.locator('[data-attachment-id="A3"]')).toHaveCount(0);
   await expect(page.locator('.app-toast')).toContainText('Attachment removed.');
   await expect(page.locator('[data-attachments-status]')).toHaveCount(0);
@@ -19750,7 +19747,7 @@ test('keeps backlog and archived tickets out of the active Queue', async ({ page
   await expect(page.getByText('Archived ticket')).toHaveCount(0);
   await page.getByRole('button', { name: /Backlog/ }).click();
   const backlog = page.locator('[data-ticket-slug="HS2-BACK01"]'),
-    menu = page.getByRole('menu', { name: 'Ticket actions' });
+    menu = page.locator('[data-context-menu="ticket"]');
   await expect(backlog).toBeVisible();
   await backlog.click({ button: 'right' });
   await expect(menu.locator('[data-context-action="Move to Backlog"]')).toHaveAttribute('disabled', '');
@@ -20135,7 +20132,7 @@ test('refills the loaded Completed page promptly after verifying and archiving 1
   await page.getByLabel('Columns view').click();
   const completedColumn = page.locator('[data-column-id="completed"]'),
     verifiedColumn = page.locator('[data-column-id="verified"]'),
-    menu = page.getByRole('menu', { name: 'Ticket actions' });
+    menu = page.locator('[data-context-menu="ticket"]');
   await expect(completedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
   await completedColumn.getByRole('button', { name: 'Select all Completed tickets' }).click();
   await completedColumn.locator('[data-ticket-slug]').first().click({ button: 'right' });
@@ -20212,7 +20209,7 @@ test('rolls a rejected bulk move back across the prefetched Completed page (HS2-
   await completedColumn.getByRole('button', { name: 'Select all Completed tickets' }).click();
   await expect(completedColumn.locator('[data-selected="true"]')).toHaveCount(100);
   await completedRows.first().click({ button: 'right' });
-  const menu = page.getByRole('menu', { name: 'Ticket actions' });
+  const menu = page.locator('[data-context-menu="ticket"]');
   await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change status' }).hover();
   await menu.locator('[data-context-field="status"][data-context-value="verified"]').click();
   await expect(verifiedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
@@ -20367,7 +20364,7 @@ test('measures real local Git board performance for a 100-ticket verification an
     await completed.getByRole('button', { name: 'Select all Completed tickets' }).click();
     await expect(completed.locator('[data-selected="true"]')).toHaveCount(100);
     await rows(completed).first().click({ button: 'right' });
-    const menu = page.getByRole('menu', { name: 'Ticket actions' });
+    const menu = page.locator('[data-context-menu="ticket"]');
     await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change status' }).hover();
     await page.evaluate(() => {
       const scope = window as typeof window & {
@@ -22159,9 +22156,9 @@ test('offers completed verification actions only for one completed ticket', asyn
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const completed = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DONE01"]'),
     verified = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-VERIFY01"]'),
-    menu = page.getByRole('menu', { name: 'Ticket actions' });
+    menu = page.locator('[data-context-menu="ticket"]');
   await completed.click({ button: 'right' });
-  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   await expect(menu.getByRole('menuitem', { name: 'Verified', exact: true })).toBeVisible();
   await expect(menu.getByRole('menuitem', { name: 'Not Working…', exact: true })).toBeVisible();
   await expect(menu.getByText('Toggle Up Next')).toHaveCount(0);
@@ -22175,7 +22172,7 @@ test('offers completed verification actions only for one completed ticket', asyn
   await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(2);
   await expect(completed).toHaveAttribute('data-selected', 'true');
   await verified.click({ button: 'right' });
-  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   await expect(menu.getByRole('menuitem', { name: 'Verified', exact: true })).toHaveCount(0);
   await expect(menu.getByRole('menuitem', { name: 'Not Working…', exact: true })).toHaveCount(0);
   await expect(menu.getByText('Toggle Up Next')).toHaveCount(0);
@@ -22187,7 +22184,7 @@ test('reopens Verified and Archive tickets into Not Started plus Up Next', async
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const menu = page.getByRole('menu', { name: 'Ticket actions' }),
+  const menu = page.locator('[data-context-menu="ticket"]'),
     verified = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-VERIFY01"]');
   await verified.click({ button: 'right' });
   const verifiedReopen = menu.getByRole('menuitem', { name: 'Reopen Ticket', exact: true });
@@ -22246,7 +22243,7 @@ test('hides Reopen Ticket when the provider cannot update tickets', async ({ pag
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const menu = page.getByRole('menu', { name: 'Ticket actions' });
+  const menu = page.locator('[data-context-menu="ticket"]');
   await page.locator('[data-ticket-slug="HS2-VERIFY01"]').click({ button: 'right' });
   await expect(menu.getByRole('menuitem', { name: 'Reopen Ticket', exact: true })).toHaveCount(0);
   await page.keyboard.press('Escape');
@@ -22318,7 +22315,7 @@ test('hides a pending Not Working report immediately and restores its draft on f
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DONE01"]').click({ button: 'right' });
   await page
-    .getByRole('menu', { name: 'Ticket actions' })
+    .locator('[data-context-menu="ticket"]')
     .getByRole('menuitem', { name: 'Not Working…', exact: true })
     .click();
   const dialog = page.getByRole('dialog', { name: 'Not Working — HS2-DONE01' });
@@ -22616,11 +22613,11 @@ test('ships TicketRow context-menu behavior through real list and board composit
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const first = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]'),
-    menu = page.getByRole('menu', { name: 'Ticket actions' });
+    menu = page.locator('[data-context-menu="ticket"]');
   await first.click();
   await second.click({ modifiers: ['Meta'] });
   await first.click({ button: 'right' });
-  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(2);
   await menu.getByText('Toggle Up Next').click();
   await expect.poll(() => patches.filter((patch) => patch.up_next === true).length).toBe(2);
@@ -22657,7 +22654,7 @@ test('ships TicketRow context-menu behavior through real list and board composit
   await page.getByLabel('Columns view').click();
   const boardRow = page.locator('[data-column-id="verified"] [data-ticket-slug="HS2-DEMO01"]');
   await boardRow.click({ button: 'right' });
-  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hotsheet-real-context-menu.png' });
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
@@ -22674,7 +22671,7 @@ test('adds and removes tags and confirms deletion for a real multi-selection', a
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const first = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-ticket-slug="HS2-START02"]'),
-    menu = page.getByRole('menu', { name: 'Ticket actions' });
+    menu = page.locator('[data-context-menu="ticket"]');
   const selectBoth = async () => {
     await first.click();
     await second.click({ modifiers: ['Meta'] });
@@ -22822,7 +22819,7 @@ test('keeps optimistically archived verified tickets hidden through an intermedi
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const first = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-ticket-slug="HS2-START02"]'),
-    menu = page.getByRole('menu', { name: 'Ticket actions' });
+    menu = page.locator('[data-context-menu="ticket"]');
   await first.click();
   await second.click({ modifiers: ['Meta'] });
   await first.click({ button: 'right' });
@@ -22859,7 +22856,7 @@ test('applies selected-ticket toolbar actions and clears tickets moved outside t
     star = page.getByRole('button', { name: 'Toggle Up Next for selected tickets' }),
     starHost = page.locator('button[data-action="toggle-selected-up-next"]'),
     more = page.getByRole('button', { name: 'More actions for selected tickets' }),
-    menu = page.getByRole('menu', { name: 'Ticket actions' });
+    menu = page.locator('[data-context-menu="ticket"]');
   await expect(star).toBeDisabled();
   await expect(more).toBeDisabled();
   await first.click();
@@ -22870,7 +22867,7 @@ test('applies selected-ticket toolbar actions and clears tickets moved outside t
   await expect.poll(() => patches.filter((patch) => patch.up_next === true).length).toBeGreaterThanOrEqual(1);
   await expect(starHost).toHaveAttribute('aria-pressed', 'true');
   await more.click();
-  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   await expect(menu.getByText('Toggle Up Next')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-z4vzjm-selected-toolbar-actions.png', fullPage: true });
   await page.keyboard.press('Escape');
@@ -23080,7 +23077,7 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
   const overflowMore = overflow.locator('[data-workspace-overflow-action="open-selected-ticket-actions"]');
   await expect(overflowMore).toBeVisible();
   await overflowMore.click();
-  await expect(page.getByRole('menu', { name: 'Ticket actions' })).toBeVisible();
+  await expect(page.locator('[data-context-menu="ticket"]').getByRole('menu').first()).toBeVisible();
   await page.keyboard.press('Escape');
   await trigger.click();
   const overflowSort = overflow.locator('[data-workspace-sort="priority"]');
@@ -23139,20 +23136,20 @@ test('dismisses ticket context menus on every true outside pointerdown', async (
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const first = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]'),
-    menu = page.getByRole('menu', { name: 'Ticket actions' });
+    menu = page.locator('[data-context-menu="ticket"]');
   await first.click({ button: 'right' });
-  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   await menu.locator('wa-dropdown-item', { hasText: 'Change status' }).dispatchEvent('pointerdown');
-  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await expect(menu).toHaveCount(0);
   await first.click({ button: 'right' });
-  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   await second.dispatchEvent('pointerdown');
   await expect(menu).toHaveCount(0);
   await second.click();
   await first.click({ button: 'right' });
-  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menu').first()).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
 });
@@ -24704,7 +24701,7 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const menu = page.locator('[data-component="ticket-context-menu"][role="menu"]');
+  const menu = page.locator('[data-context-menu="ticket"]');
   await expect(page.locator('[data-action="select-ticket-row"]').first()).toBeVisible();
   // List view: scroll the workspace, then open the context menu on a currently-visible row.
   const list = await page.evaluate(() => {
@@ -24724,8 +24721,8 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
     );
     return { before, pointer };
   });
-  await expect(menu).toBeVisible();
-  const listMenu = await menu.locator('wa-dropdown').evaluate((node) => {
+  await expect(menu.getByRole('menu').first()).toBeVisible();
+  const listMenu = await menu.evaluate((node) => {
     const rect = (node.shadowRoot!.querySelector('[part="menu"]') as HTMLElement).getBoundingClientRect();
     return { x: rect.x, y: rect.y };
   });
@@ -24761,44 +24758,23 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
     );
     return { before, pointer, colId: col.closest('[data-column-id]')!.getAttribute('data-column-id') };
   });
-  await expect(menu).toBeVisible();
-  const boardMenu = await menu.locator('wa-dropdown').evaluate((node) => {
+  await expect(menu.getByRole('menu').first()).toBeVisible();
+  const boardMenu = await menu.evaluate((node) => {
     const rect = (node.shadowRoot!.querySelector('[part="menu"]') as HTMLElement).getBoundingClientRect();
     return { x: rect.x, y: rect.y };
   });
   expect(Math.abs(boardMenu.x - board.pointer.x)).toBeLessThanOrEqual(2);
   expect(Math.abs(boardMenu.y - board.pointer.y)).toBeLessThanOrEqual(2);
-  // A render can remove only the inline context coordinates while retaining the host.
-  // The menu signal remains open, so the original pointer must be restored (HS2-S1EE53).
-  for (let render = 0; render < 3; render++) {
-    await menu.locator('wa-dropdown').evaluate((node) => {
-      node.removeAttribute('style');
-    });
-    await expect
-      .poll(async () => {
-        const rect = await menu
-          .locator('wa-dropdown')
-          .evaluate((node) =>
-            (node.shadowRoot!.querySelector('[part="menu"]') as HTMLElement).getBoundingClientRect().toJSON(),
-          );
-        return Math.max(Math.abs(rect.x - board.pointer.x), Math.abs(rect.y - board.pointer.y));
-      })
-      .toBeLessThanOrEqual(2);
-  }
-  // A ticket-state morph can replace the PopupMenu and lose the inline anchor Kerf wrote when
-  // it first opened. The replacement must reopen at the original pointer (HS2-S1EE53).
-  await menu.locator('wa-dropdown').evaluate((node) => {
-    const replacement = node.cloneNode(true) as HTMLElement;
-    replacement.removeAttribute('style');
-    node.replaceWith(replacement);
+  // A ticket-state morph can replace the PopupMenu host. Kerf renders the anchor into the menu
+  // (KF-FXGW0C), so the replacement must reopen at the original pointer (HS2-S1EE53, HS2-H4JZDQ).
+  await menu.evaluate((node) => {
+    node.replaceWith(node.cloneNode(true));
   });
   await expect
     .poll(async () => {
-      const rect = await menu
-        .locator('wa-dropdown')
-        .evaluate((node) =>
-          (node.shadowRoot!.querySelector('[part="menu"]') as HTMLElement).getBoundingClientRect().toJSON(),
-        );
+      const rect = await menu.evaluate((node) =>
+        (node.shadowRoot!.querySelector('[part="menu"]') as HTMLElement).getBoundingClientRect().toJSON(),
+      );
       return Math.max(Math.abs(rect.x - board.pointer.x), Math.abs(rect.y - board.pointer.y));
     })
     .toBeLessThanOrEqual(2);
@@ -24818,10 +24794,10 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
         new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: pointer.x, clientY: pointer.y }),
       );
   }, edgePointer);
-  await expect(menu).toBeVisible();
-  const edgeMenu = await menu.locator('wa-dropdown').evaluate((node) => {
+  await expect(menu.getByRole('menu').first()).toBeVisible();
+  const edgeMenu = await menu.evaluate((node) => {
     const rect = (node.shadowRoot!.querySelector('[part="menu"]') as HTMLElement).getBoundingClientRect(),
-      host = node.closest('[data-component="ticket-context-menu"]')!.getBoundingClientRect();
+      host = node.getBoundingClientRect();
     return {
       left: rect.left,
       right: rect.right,
@@ -25177,7 +25153,7 @@ test('preserves list and every board-column scroll position across ticket mutati
     clientY: contextPoint.y,
   });
   await expect.poll(() => workspace.evaluate((node) => node.scrollTop)).toBe(listBefore);
-  await page.getByRole('menu', { name: 'Ticket actions' }).locator('[data-context-action="Verify ticket"]').click();
+  await page.locator('[data-context-menu="ticket"]').locator('[data-context-action="Verify ticket"]').click();
   await expect(page.locator(`[data-component="ticket-list-row"][data-ticket-slug="${listSlug}"]`)).toHaveAttribute(
     'data-status',
     'verified',
@@ -25216,7 +25192,7 @@ test('preserves list and every board-column scroll position across ticket mutati
     const before = await positions();
     // Opening the context menu is already a render and must not lose pending user scrolling.
     expect(Object.values(before).every((top) => top > 0)).toBe(true);
-    await page.getByRole('menu', { name: 'Ticket actions' }).locator('[data-context-action="Verify ticket"]').click();
+    await page.locator('[data-context-menu="ticket"]').locator('[data-context-action="Verify ticket"]').click();
     await expect(page.locator(`[data-column-id="verified"] [data-ticket-slug="${boardSlug}"]`)).toBeVisible();
     const after = await positions();
     for (const [id, scrollTop] of Object.entries(before)) {
@@ -25247,13 +25223,13 @@ test('dismisses every remaining dialog through its native close event (HS2-3RQ7V
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('tab', { name: /Tests/ }).click({ button: 'right' });
-  await page.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+  await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
   let dialog = page.locator('[data-terminal-rename-dialog]');
   await expect(dialog).toHaveJSProperty('open', true);
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveJSProperty('open', false);
   await drawer.getByRole('tab', { name: /Tests/ }).click({ button: 'right' });
-  await page.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+  await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toHaveJSProperty('open', false);
   await page.getByRole('button', { name: 'Workspace grid' }).click();
@@ -25271,14 +25247,14 @@ test('dismisses every remaining dialog through its native close event (HS2-3RQ7V
   await first.click();
   await second.click({ modifiers: ['Meta'] });
   await first.click({ button: 'right' });
-  await page.getByRole('menu', { name: 'Ticket actions' }).locator('[data-context-action="Add tag"]').click();
+  await page.locator('[data-context-menu="ticket"]').locator('[data-context-action="Add tag"]').click();
   dialog = page.locator('[data-component="bulk-tag-dialog"]');
   await expect(dialog).toHaveJSProperty('open', true);
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await page.locator('[data-ticket-slug="HS2-DONE01"]').click({ button: 'right' });
   await page
-    .getByRole('menu', { name: 'Ticket actions' })
+    .locator('[data-context-menu="ticket"]')
     .getByRole('menuitem', { name: 'Not Working…', exact: true })
     .click();
   dialog = page.locator('[data-component="not-working-dialog"]');
@@ -25734,7 +25710,7 @@ test('moves a media thumbnail between batches and removes active media from its 
   await thumbnail.click();
   const gallery = page.getByRole('dialog', { name: /proof.png/ });
   await gallery.getByRole('button', { name: 'More image actions' }).click();
-  const menu = page.getByRole('menu', { name: 'Attachment actions' });
+  const menu = page.locator('[data-context-menu="attachment"]');
   await expect(menu.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
   await gallery.screenshot({ path: 'target/visual-captures/hs2-edx5j3-gallery-remove-wide.png' });
   await page.setViewportSize({ width: 760, height: 640 });
@@ -26069,7 +26045,7 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
     const row = page.locator(`[data-ticket-slug="${created.slug}"]`).first();
     await row.click();
     await row.click({ button: 'right' });
-    await page.getByRole('menu', { name: 'Ticket actions' }).getByText('Close ticket…').click();
+    await page.locator('[data-context-menu="ticket"]').getByText('Close ticket…').click();
     const dialog = page.locator('[data-component="ticket-close-dialog"]').last();
     await expect(dialog).toHaveJSProperty('open', true);
     const reason = dialog.locator('wa-select[name="ticket-close-reason"]');

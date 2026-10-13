@@ -10,8 +10,8 @@ import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { ClipboardPaste, Copy, TextSelect } from 'lucide';
 
+import { contextMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
-import { ContextMenuAnchor } from './context-menu-anchor';
 
 /** The terminal a clipboard sheet acts on, plus a generation that gives every opening a fresh field. */
 export interface TerminalClipboardTarget {
@@ -49,35 +49,34 @@ const SHEET_WIDTH = remify(672);
 export function TerminalEditMenu({ state }: { state?: TerminalEditMenuState }) {
   if (!state) return null;
   return (
-    <ContextMenuAnchor x={state.x} y={state.y} component="terminal-edit-menu" label="Terminal edit actions">
-      <PopupMenu
-        context
-        label="Terminal edit actions"
-        rootAttributes={{ 'data-context-menu': 'terminal-edit' }}
-        items={[
-          ...(state.selection
-            ? [
-                {
-                  label: 'Copy',
-                  action: TERMINALS_ACTIONS.copyTerminalSelection.value,
-                  icon: <LucideIcon icon={Copy} name="copy" />,
-                },
-              ]
-            : []),
-          {
-            label: 'Copy Text…',
-            action: TERMINALS_ACTIONS.copyTerminalText.value,
-            // Selecting text in a sheet, so the plain `copy` icon stays with Copy (HS2-EYR96N).
-            icon: <LucideIcon icon={TextSelect} name="text-select" />,
-          },
-          {
-            label: 'Paste',
-            action: TERMINALS_ACTIONS.pasteTerminalText.value,
-            icon: <LucideIcon icon={ClipboardPaste} name="clipboard-paste" />,
-          },
-        ]}
-      />
-    </ContextMenuAnchor>
+    <PopupMenu
+      context
+      anchor={contextMenuAnchor(state.x, state.y)}
+      label="Terminal edit actions"
+      rootAttributes={{ 'data-context-menu': 'terminal-edit' }}
+      items={[
+        ...(state.selection
+          ? [
+              {
+                label: 'Copy',
+                action: TERMINALS_ACTIONS.copyTerminalSelection.value,
+                icon: <LucideIcon icon={Copy} name="copy" />,
+              },
+            ]
+          : []),
+        {
+          label: 'Copy Text…',
+          action: TERMINALS_ACTIONS.copyTerminalText.value,
+          // Selecting text in a sheet, so the plain `copy` icon stays with Copy (HS2-EYR96N).
+          icon: <LucideIcon icon={TextSelect} name="text-select" />,
+        },
+        {
+          label: 'Paste',
+          action: TERMINALS_ACTIONS.pasteTerminalText.value,
+          icon: <LucideIcon icon={ClipboardPaste} name="clipboard-paste" />,
+        },
+      ]}
+    />
   );
 }
 

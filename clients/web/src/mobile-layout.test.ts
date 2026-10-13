@@ -50,7 +50,7 @@ describe('isSidePanelPortal (HS2-5APX20)', () => {
       '[role="alertdialog"]',
       '[role="menu"]',
       '[role="listbox"]',
-      '[data-component="saved-view-context-menu"]',
+      '[data-context-menu="saved-view"]',
     ]) {
       expect(SIDE_PANEL_PORTAL_SELECTOR.split(', ')).toContain(own);
       expect(isSidePanelPortal(element(own))).toBe(true);

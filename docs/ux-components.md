@@ -312,7 +312,7 @@ does not introduce polling or another network request.
     - files are divided `ListActionRow`s with a `Badge` status letter and a trailing actions button;
     - empty and busy states are `EmptyState`; errors and the compact state summary are `StateBanner`s;
     - the pointer-anchored file menu is a context-mode Kerf `PopupMenu` inside the shared
-      `ContextMenuAnchor`, rendered only by the surface that opened it;
+      with its own `anchor` (HS2-H4JZDQ), rendered only by the surface that opened it;
     - Kerf `Pane`s own every inset and scroll owner.
 
     App CSS keeps only the popover's viewport-relative size and the middle-ellipsis path.
@@ -2264,11 +2264,14 @@ forms from one module: `providerModelEffortEntries` (typed `PopupMenuEntry[]`, c
 those pointer-positioned menus (drive options, ticket row, attachment, app tab, saved view,
 terminal tile) onto `PopupMenu` context mode and retired the JSX submenus, so every command menu
 is a `PopupMenu`. Each menu still renders from its app signal (the signal owns dismissal, and the
-menu exists only while it is set); its app-owned wrapper keeps the `role="menu"` name tests and
-the capture-phase dismissal use and records the pointer as `data-context-anchor-x`/`-y`; one
-`effect` per signal (`revealContextPopupMenu` in `clients/web/src/context-menu-position.ts`) hands
-that anchor to Kerf's `openPopupMenuAt` once the morph has placed the element, retrying through a
-microtask and a frame. The Drive menu re-reveals after each provider/model/effort choice because
+menu exists only while it is set). HS2-H4JZDQ retired the app-owned `ContextMenuAnchor` wrapper:
+each menu now renders Kerf's `anchor={{ x, y }}` (KF-FXGW0C) and carries its identity on
+`rootAttributes` (`data-context-menu="<surface>"` plus target ids), which capture-phase dismissal
+and tests select. One `effect` per signal (`revealContextPopupMenu` in
+`clients/web/src/context-menu-position.ts`) calls Kerf's `openPopupMenu` once the morph has placed
+the element, retrying through a microtask and a frame, and a mutation observer reopens a replaced
+host or restores an inline anchor a morph stripped. Kerf does not yet name the open menu panel from
+`label` (KF-AB4ZVD), so the menus are temporarily unnamed to assistive technology. The Drive menu re-reveals after each provider/model/effort choice because
 Web Awesome closes a menu on selection while the app keeps it open; its anchor is the drive row's
 top-left corner (`placement="top-start"`). A command-editor row's right-click opens that row's
 PopupMenu in place. Raw `wa-select` pickers moved to `Select` in `HS2-CWA0S6`. HS2-W0N1KP then
