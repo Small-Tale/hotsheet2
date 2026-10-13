@@ -268,7 +268,9 @@ describe('UX demo catalog', () => {
       'ticket-page-more',
       'ticket-row',
     ]);
-    expect(ticketRow?.tags).toEqual(['Feature floor']);
+    // Only compositions carry a tag, like Kerf UI's catalog (HS2-AEHES7).
+    expect(ticketRow?.tags).toEqual([]);
+    expect(ticketList?.entries.find((entry) => entry.id === 'ticket-list')?.tags).toEqual(['Composition']);
     expect(ticketRow?.related?.filter((entry) => entry.group === 'Uses').map((entry) => entry.id)).toEqual([
       'status-badge',
       'confidence-badge',

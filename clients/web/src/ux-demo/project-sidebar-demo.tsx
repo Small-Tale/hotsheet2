@@ -1,5 +1,6 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { delegate, signal } from 'kerfjs';
+import { delegate, type SafeHtml, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 import { GripHorizontal } from 'lucide';
 
@@ -86,14 +87,14 @@ export const sidebarCommands: CommandNavigationItem[] = [
   { id: 'publish', label: 'Publish preview', color: '#8b5cf6', icon: 'send', kind: 'ai', group: 'Release' },
 ];
 
-// Resizing the sidebar is visible on its own and does not write to the shared event log, so the
-// summary demos never show a stale height readout (HS2-3HC2A7, HS2-7F6MJ7).
-function DemoFrame({ children }: { children: unknown }) {
+/** One sidebar specimen in a compact Kerf frame, with the shared sidebar event log below it. Resizing
+ * the sidebar does not write to the log, so no stale height readout lingers (HS2-3HC2A7, HS2-7F6MJ7). */
+function DemoFrame({ children, label = 'Interactive' }: { children: SafeHtml; label?: string }) {
   return (
-    <section class="sidebar-component-demo">
-      <div class="sidebar-component-demo__rail">{children}</div>
+    <CatalogExample label={label} viewport={{ width: 'compact' }}>
+      {children}
       <DemoEvent>{sidebarEvent.value}</DemoEvent>
-    </section>
+    </CatalogExample>
   );
 }
 const completionTrend = [3, 0, 2, 5, 4, 7, 6];
@@ -109,15 +110,19 @@ export const demoAiTools: AiToolDescriptor[] = [
 ];
 export function ProjectSummaryDemo() {
   return (
-    <DemoFrame>
-      <div class="project-summary-demo__variants">
+    <>
+      <DemoFrame label="Default">
         <ProjectSummary completedToday={6} inProgress={3} trend={completionTrend} />
+      </DemoFrame>
+      <CatalogExample label="Success tone" viewport={{ width: 'compact' }}>
         <ProjectSummary
           completedToday={12}
           inProgress={5}
           trend={completionTrend.map((value) => value * 2)}
           chartTone="success"
         />
+      </CatalogExample>
+      <CatalogExample label="Compact with background trend" viewport={{ width: 'compact' }}>
         <ProjectSummary
           completedToday={2}
           inProgress={4}
@@ -125,8 +130,8 @@ export function ProjectSummaryDemo() {
           backgroundTrend={completionTrend.map((value) => value * 2)}
           size="compact"
         />
-      </div>
-    </DemoFrame>
+      </CatalogExample>
+    </>
   );
 }
 export function RepositorySummaryDemo() {
@@ -376,51 +381,41 @@ export function ProjectSidebarDemo() {
 }
 export function SettingsNavigationDemo() {
   return (
-    <section class="sidebar-component-demo">
-      <div class="sidebar-component-demo__rail">
-        <div class="sidebar-demo-card">
-          <SettingsNavigation selected="ai" collapseControl />
-        </div>
-      </div>
-    </section>
+    <CatalogExample label="Interactive" viewport={{ width: 'compact' }}>
+      <SettingsNavigation selected="ai" collapseControl />
+    </CatalogExample>
   );
 }
 export function NotificationNavigationDemo() {
   return (
-    <section class="sidebar-component-demo">
-      <div class="sidebar-component-demo__rail">
-        <div class="sidebar-demo-card">
-          <NotificationNavigation selected="pending" counts={{ pending: 3, day: 5, week: 12 }} collapseControl />
-        </div>
-        {/* Paused: the footer offers Resume instead of Pause (HS2-QYA9SC). */}
-        <div class="sidebar-demo-card" data-demo-variant="paused">
-          <NotificationNavigation selected="pending" counts={{ pending: 3, day: 5, week: 12 }} paused collapseControl />
-        </div>
-      </div>
-    </section>
+    <>
+      <CatalogExample label="Active" viewport={{ width: 'compact' }}>
+        <NotificationNavigation selected="pending" counts={{ pending: 3, day: 5, week: 12 }} collapseControl />
+      </CatalogExample>
+      {/* Paused: the footer offers Resume instead of Pause (HS2-QYA9SC). */}
+      <CatalogExample label="Paused" viewport={{ width: 'compact' }} rootAttributes={{ 'data-demo-variant': 'paused' }}>
+        <NotificationNavigation selected="pending" counts={{ pending: 3, day: 5, week: 12 }} paused collapseControl />
+      </CatalogExample>
+    </>
   );
 }
 export function TerminalOperationsSidebarDemo() {
   return (
-    <section class="sidebar-component-demo">
-      <div class="sidebar-component-demo__rail">
-        <div class="sidebar-demo-card">
-          <TerminalOperationsSidebar
-            projects={[
-              { id: 'hotsheet2', name: 'HotSheet2', completedToday: 1, inProgress: 6, trend: [1, 1, 3, 2, 5, 4, 1] },
-              {
-                id: 'best-in-manila',
-                name: 'Best-in-Manila',
-                completedToday: 0,
-                inProgress: 0,
-                trend: [0, 0, 0, 0, 0, 0, 0],
-              },
-              { id: 'kerf', name: 'Kerf', completedToday: 1, inProgress: 1, trend: [1, 0, 2, 0, 0, 5, 1] },
-            ]}
-          />
-        </div>
-      </div>
-    </section>
+    <CatalogExample label="Interactive" viewport={{ width: 'compact' }}>
+      <TerminalOperationsSidebar
+        projects={[
+          { id: 'hotsheet2', name: 'HotSheet2', completedToday: 1, inProgress: 6, trend: [1, 1, 3, 2, 5, 4, 1] },
+          {
+            id: 'best-in-manila',
+            name: 'Best-in-Manila',
+            completedToday: 0,
+            inProgress: 0,
+            trend: [0, 0, 0, 0, 0, 0, 0],
+          },
+          { id: 'kerf', name: 'Kerf', completedToday: 1, inProgress: 1, trend: [1, 0, 2, 0, 0, 5, 1] },
+        ]}
+      />
+    </CatalogExample>
   );
 }
 
@@ -570,22 +565,22 @@ function wireProjectSidebarDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'project-summary': { Demo: ProjectSummaryDemo },
+    'project-summary': { catalogExamples: true, Demo: ProjectSummaryDemo },
     'project-sidebar': {
       Demo: ProjectSidebarDemo,
       Settings: ProjectSidebarSettings,
       reset: resetProjectSidebarDemo,
     },
-    'repository-summary': { Demo: RepositorySummaryDemo },
-    'settings-navigation': { Demo: SettingsNavigationDemo },
-    'notification-navigation': { Demo: NotificationNavigationDemo },
-    'view-navigation': { Demo: ViewNavigationDemo },
-    'command-navigation': { Demo: CommandNavigationDemo },
+    'repository-summary': { catalogExamples: true, Demo: RepositorySummaryDemo },
+    'settings-navigation': { catalogExamples: true, Demo: SettingsNavigationDemo },
+    'notification-navigation': { catalogExamples: true, Demo: NotificationNavigationDemo },
+    'view-navigation': { catalogExamples: true, Demo: ViewNavigationDemo },
+    'command-navigation': { catalogExamples: true, Demo: CommandNavigationDemo },
     'command-settings-editor': { Demo: CommandSettingsEditorDemo },
-    'drive-control': { Demo: DriveControlDemo },
-    'drive-options-menu': { Demo: DriveOptionsMenuDemo },
+    'drive-control': { catalogExamples: true, Demo: DriveControlDemo },
+    'drive-options-menu': { catalogExamples: true, Demo: DriveOptionsMenuDemo },
     'ai-tool-settings': { Demo: AiToolSettingsDemo },
-    'terminal-operations-sidebar': { Demo: TerminalOperationsSidebarDemo },
+    'terminal-operations-sidebar': { catalogExamples: true, Demo: TerminalOperationsSidebarDemo },
   },
   wire: wireProjectSidebarDemo,
 };

@@ -71,7 +71,7 @@ export function DemoApp() {
             </CatalogExampleStack>
           )
         }
-        // Each entry's phase is a Catalog tag on its sidebar row (HS2-HMVBZW).
+        // Composition entries carry a Composition tag on their sidebar row (HS2-AEHES7).
         status={
           <Text variant="span" size="compact" tone="quiet">
             Production components · deterministic fixtures

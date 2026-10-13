@@ -2,12 +2,10 @@ import type { CatalogEntry, CatalogSection } from '@kerfjs/ui/catalog';
 
 import componentCatalogExtension from '../../ai/component-catalog-extension.json';
 
-export type DemoPhase = 'feature-floor';
 export interface DemoDefinition {
   id: string;
   name: string;
   description: string;
-  phase: DemoPhase;
   uses?: string[];
 }
 export interface DemoCategory {
@@ -17,25 +15,24 @@ export interface DemoCategory {
   demos?: DemoDefinition[];
 }
 
-const demo = (
-  id: string,
-  name: string,
-  description: string,
-  phase: DemoPhase = 'feature-floor',
-  uses?: string[],
-): DemoDefinition => ({ id, name, description, phase, uses });
+const demo = (id: string, name: string, description: string, uses?: string[]): DemoDefinition => ({
+  id,
+  name,
+  description,
+  uses,
+});
 
 const catalogRecords = new Map(componentCatalogExtension.entries.map((entry) => [entry.id, entry] as const));
 
 /**
  * A demo for an app-owned component recorded in `kerf.components.json`. Its name and description
  * come from the generated consumer catalog (`purpose`), so this file only owns ordering,
- * category, phase, and the `uses` graph.
+ * category, and the `uses` graph.
  */
-const cataloged = (id: string, phase: DemoPhase = 'feature-floor', uses?: string[]): DemoDefinition => {
+const cataloged = (id: string, uses?: string[]): DemoDefinition => {
   const record = catalogRecords.get(id);
   if (!record) throw new Error(`UX demo "${id}" has no entry in ai/component-catalog-extension.json`);
-  return demo(id, record.name, record.purpose, phase, uses);
+  return demo(id, record.name, record.purpose, uses);
 };
 
 export const demoCatalog: DemoCategory[] = [
@@ -43,7 +40,7 @@ export const demoCatalog: DemoCategory[] = [
     id: 'shell',
     name: 'Application shell',
     demos: [
-      cataloged('app-shell', 'feature-floor', [
+      cataloged('app-shell', [
         'project-sidebar',
         'workspace-header',
         'project-tabs',
@@ -55,8 +52,8 @@ export const demoCatalog: DemoCategory[] = [
         'ticket-list',
         'ticket-inspector',
       ]),
-      cataloged('app-loading-indicator', 'feature-floor', ['state-banner', 'loading-spinner']),
-      cataloged('project-sidebar', 'feature-floor', [
+      cataloged('app-loading-indicator', ['state-banner', 'loading-spinner']),
+      cataloged('project-sidebar', [
         'toolbar',
         'project-summary',
         'repository-summary',
@@ -68,29 +65,22 @@ export const demoCatalog: DemoCategory[] = [
         'list-item',
         'list-header',
       ]),
-      cataloged('project-summary', 'feature-floor'),
-      cataloged('repository-summary', 'feature-floor', ['list-item', 'row', 'text', 'badge']),
-      cataloged('repository-status-popover', 'feature-floor', [
+      cataloged('project-summary'),
+      cataloged('repository-summary', ['list-item', 'row', 'text', 'badge']),
+      cataloged('repository-status-popover', [
         'toolbar',
         'value-table',
         'list-item',
         'list-header',
         'ticket-code-review',
       ]),
-      cataloged('change-evidence-dialog', 'feature-floor', ['toolbar', 'list-item', 'list-header']),
-      cataloged('view-navigation', 'feature-floor', [
-        'list',
-        'list-header',
-        'list-item',
-        'list-action-row',
-        'badge',
-        'loading-spinner',
-      ]),
-      cataloged('command-navigation', 'feature-floor', ['list', 'list-header', 'list-item', 'loading-spinner']),
-      cataloged('command-settings-editor', 'feature-floor', ['command-navigation', 'toolbar', 'list-header']),
-      cataloged('drive-control', 'feature-floor'),
-      cataloged('drive-options-menu', 'feature-floor'),
-      cataloged('workspace-header', 'feature-floor', [
+      cataloged('change-evidence-dialog', ['toolbar', 'list-item', 'list-header']),
+      cataloged('view-navigation', ['list', 'list-header', 'list-item', 'list-action-row', 'badge', 'loading-spinner']),
+      cataloged('command-navigation', ['list', 'list-header', 'list-item', 'loading-spinner']),
+      cataloged('command-settings-editor', ['command-navigation', 'toolbar', 'list-header']),
+      cataloged('drive-control'),
+      cataloged('drive-options-menu'),
+      cataloged('workspace-header', [
         'toolbar-text',
         'toolbar-control-group',
         'ticket-search-field',
@@ -98,18 +88,13 @@ export const demoCatalog: DemoCategory[] = [
         'ticket-board',
         'notification-center',
       ]),
-      cataloged('project-tab', 'feature-floor', ['app-tab']),
-      cataloged('project-tabs', 'feature-floor', ['project-tab', 'select']),
-      demo(
-        'resizable-region',
-        'ResizableRegion',
-        'Accessible horizontal and vertical shell splitters.',
-        'feature-floor',
-      ),
-      cataloged('connection-state-banner', 'feature-floor'),
-      cataloged('connection-details-dialog', 'feature-floor', ['toolbar', 'value-table']),
-      cataloged('settings-navigation', 'feature-floor', ['list', 'list-item', 'toolbar']),
-      cataloged('notification-navigation', 'feature-floor', ['list', 'list-item', 'badge', 'toolbar']),
+      cataloged('project-tab', ['app-tab']),
+      cataloged('project-tabs', ['project-tab', 'select']),
+      demo('resizable-region', 'ResizableRegion', 'Accessible horizontal and vertical shell splitters.'),
+      cataloged('connection-state-banner'),
+      cataloged('connection-details-dialog', ['toolbar', 'value-table']),
+      cataloged('settings-navigation', ['list', 'list-item', 'toolbar']),
+      cataloged('notification-navigation', ['list', 'list-item', 'badge', 'toolbar']),
     ],
   },
   {
@@ -120,18 +105,18 @@ export const demoCatalog: DemoCategory[] = [
         id: 'ticket-list',
         name: 'List',
         demos: [
-          cataloged('quick-ticket-composer', 'feature-floor', ['ticket-category-select', 'ticket-list']),
-          cataloged('ticket-list', 'feature-floor', ['ticket-row', 'ticket-page-more']),
-          cataloged('ticket-page-more', 'feature-floor'),
-          cataloged('ticket-row', 'feature-floor', ['status-badge', 'confidence-badge', 'tag-chip', 'loading-spinner']),
+          cataloged('quick-ticket-composer', ['ticket-category-select', 'ticket-list']),
+          cataloged('ticket-list', ['ticket-row', 'ticket-page-more']),
+          cataloged('ticket-page-more'),
+          cataloged('ticket-row', ['status-badge', 'confidence-badge', 'tag-chip', 'loading-spinner']),
         ],
       },
       {
         id: 'ticket-board',
         name: 'Columns',
         demos: [
-          cataloged('ticket-board', 'feature-floor', ['ticket-board-column']),
-          cataloged('ticket-board-column', 'feature-floor', ['ticket-row', 'ticket-page-more']),
+          cataloged('ticket-board', ['ticket-board-column']),
+          cataloged('ticket-board-column', ['ticket-row', 'ticket-page-more']),
         ],
       },
     ],
@@ -144,7 +129,7 @@ export const demoCatalog: DemoCategory[] = [
         id: 'metadata',
         name: 'Metadata',
         demos: [
-          cataloged('ticket-inspector', 'feature-floor', [
+          cataloged('ticket-inspector', [
             'toolbar',
             'toolbar-text',
             'toolbar-control-group',
@@ -157,8 +142,8 @@ export const demoCatalog: DemoCategory[] = [
             'note-composer',
             'loading-spinner',
           ]),
-          cataloged('ticket-inspector-skeleton', 'feature-floor'),
-          cataloged('ticket-info-panel', 'feature-floor', [
+          cataloged('ticket-inspector-skeleton'),
+          cataloged('ticket-info-panel', [
             'ticket-category-select',
             'ticket-priority-select',
             'ticket-status-menu',
@@ -168,40 +153,34 @@ export const demoCatalog: DemoCategory[] = [
             'note-card',
             'note-composer',
           ]),
-          cataloged('ticket-timeline', 'feature-floor'),
-          cataloged('ticket-code-review', 'feature-floor'),
-          cataloged('ticket-attachments', 'feature-floor', ['attachment-gallery']),
-          cataloged('ticket-category-select', 'feature-floor', ['select']),
-          cataloged('ticket-priority-select', 'feature-floor', ['select']),
-          cataloged('ticket-status-menu', 'feature-floor', ['status-badge']),
-          cataloged('status-badge', 'feature-floor'),
-          cataloged('confidence-badge', 'feature-floor'),
-          cataloged('confidence-calibration', 'feature-floor', ['confidence-badge']),
-          cataloged('tag-chip', 'feature-floor'),
-          cataloged('choice-card', 'feature-floor'),
+          cataloged('ticket-timeline'),
+          cataloged('ticket-code-review'),
+          cataloged('ticket-attachments', ['attachment-gallery']),
+          cataloged('ticket-category-select', ['select']),
+          cataloged('ticket-priority-select', ['select']),
+          cataloged('ticket-status-menu', ['status-badge']),
+          cataloged('status-badge'),
+          cataloged('confidence-badge'),
+          cataloged('confidence-calibration', ['confidence-badge']),
+          cataloged('tag-chip'),
+          cataloged('choice-card'),
         ],
       },
       {
         id: 'content',
         name: 'Content',
         demos: [
-          cataloged('ticket-reader', 'feature-floor', ['ticket-inspector']),
-          cataloged('markdown-editor', 'feature-floor'),
-          cataloged('markdown-preview', 'feature-floor'),
-          cataloged('attachment-gallery', 'feature-floor'),
-          cataloged('ticket-close-dialog', 'feature-floor', ['select', 'list-item']),
-          cataloged('not-working-dialog', 'feature-floor', ['pending-attachment-picker']),
-          cataloged('bulk-ticket-dialog', 'feature-floor', ['surface-scaffold', 'list', 'text', 'row']),
-          cataloged('saved-view-dialog', 'feature-floor', ['ticket-search-field']),
-          cataloged('ticket-link-choice-dialog', 'feature-floor', [
-            'surface-scaffold',
-            'list',
-            'text',
-            'row',
-            'list-item',
-          ]),
-          cataloged('project-dialog', 'feature-floor', ['list-item']),
-          cataloged('project-close-dialog', 'feature-floor', [
+          cataloged('ticket-reader', ['ticket-inspector']),
+          cataloged('markdown-editor'),
+          cataloged('markdown-preview'),
+          cataloged('attachment-gallery'),
+          cataloged('ticket-close-dialog', ['select', 'list-item']),
+          cataloged('not-working-dialog', ['pending-attachment-picker']),
+          cataloged('bulk-ticket-dialog', ['surface-scaffold', 'list', 'text', 'row']),
+          cataloged('saved-view-dialog', ['ticket-search-field']),
+          cataloged('ticket-link-choice-dialog', ['surface-scaffold', 'list', 'text', 'row', 'list-item']),
+          cataloged('project-dialog', ['list-item']),
+          cataloged('project-close-dialog', [
             'state-banner',
             'list',
             'text',
@@ -211,14 +190,14 @@ export const demoCatalog: DemoCategory[] = [
             'ai-conversation',
             'terminal-dashboard',
           ]),
-          cataloged('conversation-export-dialog', 'feature-floor', ['content-transition', 'choice-card']),
-          cataloged('command-run-dialog', 'feature-floor'),
+          cataloged('conversation-export-dialog', ['content-transition', 'choice-card']),
+          cataloged('command-run-dialog'),
         ],
       },
       {
         id: 'notes',
         name: 'Notes and activity',
-        demos: [cataloged('note-composer', 'feature-floor'), cataloged('note-card', 'feature-floor')],
+        demos: [cataloged('note-composer'), cataloged('note-card')],
       },
     ],
   },
@@ -226,60 +205,54 @@ export const demoCatalog: DemoCategory[] = [
     id: 'ai',
     name: 'AI and attention',
     demos: [
-      cataloged('ai-conversation', 'feature-floor', ['permission-request', 'drive-control']),
-      cataloged('ai-content-label', 'feature-floor'),
-      cataloged('ai-feedback-dialog', 'feature-floor'),
-      cataloged('ai-tool-settings', 'feature-floor', ['select']),
-      cataloged('manual-model-dialog', 'feature-floor'),
-      cataloged('halted-session-popup', 'feature-floor', ['list', 'row', 'text']),
-      cataloged('permission-request', 'feature-floor'),
-      cataloged('notification-center', 'feature-floor', ['permission-request']),
+      cataloged('ai-conversation', ['permission-request', 'drive-control']),
+      cataloged('ai-content-label'),
+      cataloged('ai-feedback-dialog'),
+      cataloged('ai-tool-settings', ['select']),
+      cataloged('manual-model-dialog'),
+      cataloged('halted-session-popup', ['list', 'row', 'text']),
+      cataloged('permission-request'),
+      cataloged('notification-center', ['permission-request']),
     ],
   },
   {
     id: 'terminal',
     name: 'Drawer and terminals',
     demos: [
-      cataloged('terminal-drawer', 'feature-floor', [
-        'app-tab',
-        'list-item',
-        'list-header',
-        'ai-conversation',
-        'terminal-key-bar',
-      ]),
-      cataloged('terminal-dashboard', 'feature-floor', [
+      cataloged('terminal-drawer', ['app-tab', 'list-item', 'list-header', 'ai-conversation', 'terminal-key-bar']),
+      cataloged('terminal-dashboard', [
         'fixed-aspect-terminal-card',
         'floating-toolbar',
         'toolbar-control-group',
         'list-item',
       ]),
-      cataloged('terminal-operations-sidebar', 'feature-floor', ['project-summary', 'list', 'list-header', 'toolbar']),
-      cataloged('terminal-ticket-rail', 'feature-floor', [
+      cataloged('terminal-operations-sidebar', ['project-summary', 'list', 'list-header', 'toolbar']),
+      cataloged('terminal-ticket-rail', [
         'ticket-list',
         'ticket-inspector',
         'workspace-header',
         'quick-ticket-composer',
         'notification-center',
       ]),
-      cataloged('fixed-aspect-terminal-card', 'feature-floor', ['terminal-key-bar']),
-      cataloged('terminal-key-bar', 'feature-floor', ['toolbar-control-group']),
-      cataloged('terminal-visibility-dialog', 'feature-floor', ['list-item']),
-      cataloged('terminal-copy-dialog', 'feature-floor'),
-      cataloged('terminal-paste-dialog', 'feature-floor'),
-      cataloged('terminal-edit-menu', 'feature-floor'),
-      cataloged('terminal-rename-dialog', 'feature-floor'),
+      cataloged('fixed-aspect-terminal-card', ['terminal-key-bar']),
+      cataloged('terminal-key-bar', ['toolbar-control-group']),
+      cataloged('terminal-visibility-dialog', ['list-item']),
+      cataloged('terminal-copy-dialog'),
+      cataloged('terminal-paste-dialog'),
+      cataloged('terminal-edit-menu'),
+      cataloged('terminal-rename-dialog'),
     ],
   },
   {
     id: 'shared',
     name: 'Shared interactions',
     demos: [
-      cataloged('app-empty-state', 'feature-floor'),
-      cataloged('app-error', 'feature-floor', ['state-banner']),
-      cataloged('content-transition', 'feature-floor'),
-      demo('app-tab', 'AppTab', 'Shared project and terminal tab geometry, state, and close action.', 'feature-floor'),
-      demo('select', 'Select', 'Compact icon-bearing single-value selection control.', 'feature-floor'),
-      demo('toolbar', 'Toolbar', 'Shared leading, center, and trailing toolbar geometry.', 'feature-floor', [
+      cataloged('app-empty-state'),
+      cataloged('app-error', ['state-banner']),
+      cataloged('content-transition'),
+      demo('app-tab', 'AppTab', 'Shared project and terminal tab geometry, state, and close action.'),
+      demo('select', 'Select', 'Compact icon-bearing single-value selection control.'),
+      demo('toolbar', 'Toolbar', 'Shared leading, center, and trailing toolbar geometry.', [
         'toolbar-text',
         'toolbar-control-group',
       ]),
@@ -287,62 +260,44 @@ export const demoCatalog: DemoCategory[] = [
         'floating-toolbar',
         'FloatingToolbar',
         'Forced-dark controls floating over positioned content; child groups inherit the dark scheme without an inverse tone.',
-        'feature-floor',
         ['toolbar-control-group'],
       ),
       demo(
         'list',
         'List',
         'Vertical row layout with no gap, standard gap, and bounded scrolling with custom gap and edge dividers.',
-        'feature-floor',
       ),
-      demo(
-        'list-item',
-        'ListItem',
-        'Aligned icon, label, trailing value, and selection geometry for list rows.',
-        'feature-floor',
-      ),
-      demo(
-        'list-header',
-        'ListHeader',
-        'Aligned section heading and optional action for list groups.',
-        'feature-floor',
-      ),
+      demo('list-item', 'ListItem', 'Aligned icon, label, trailing value, and selection geometry for list rows.'),
+      demo('list-header', 'ListHeader', 'Aligned section heading and optional action for list groups.'),
       demo(
         'toolbar-control-group',
         'ToolbarControlGroup',
         'Consistent rounded grouping for native toolbar buttons and Web Awesome popup triggers.',
-        'feature-floor',
       ),
-      demo(
-        'toolbar-text',
-        'ToolbarText',
-        'Vertically aligned large, default, and small toolbar identity text.',
-        'feature-floor',
-      ),
-      cataloged('ticket-search-field', 'feature-floor', ['toolbar-control-group']),
-      demo('value-table', 'ValueTable', 'Shared static key/value rows with inset separators.', 'feature-floor'),
-      cataloged('pending-attachment-picker', 'feature-floor'),
+      demo('toolbar-text', 'ToolbarText', 'Vertically aligned large, default, and small toolbar identity text.'),
+      cataloged('ticket-search-field', ['toolbar-control-group']),
+      demo('value-table', 'ValueTable', 'Shared static key/value rows with inset separators.'),
+      cataloged('pending-attachment-picker'),
     ],
   },
   {
     id: 'setup',
     name: 'Setup and settings',
     demos: [
-      cataloged('hs1-migration-dialog', 'feature-floor', ['value-table']),
-      cataloged('hs1-migration-banner', 'feature-floor', ['shell-banner']),
-      cataloged('codex-hooks-notice-banner', 'feature-floor', ['list', 'state-banner']),
-      cataloged('shell-banner', 'feature-floor', ['state-banner']),
-      cataloged('project-setup-warning-banner', 'feature-floor', ['shell-banner']),
-      cataloged('notifications-paused-banner', 'feature-floor', ['shell-banner']),
-      cataloged('provider-icon', 'feature-floor'),
-      cataloged('ticket-source-setup-dialog', 'feature-floor', ['content-transition', 'list-item', 'provider-icon']),
-      cataloged('provider-setup-form', 'feature-floor', ['provider-icon']),
-      cataloged('ticket-sources-settings', 'feature-floor', ['list', 'list-item', 'provider-icon']),
-      cataloged('accounts-settings', 'feature-floor'),
-      cataloged('settings-workspace', 'feature-floor', ['ticket-sources-settings']),
-      cataloged('keyboard-settings', 'feature-floor'),
-      cataloged('trash-settings', 'feature-floor'),
+      cataloged('hs1-migration-dialog', ['value-table']),
+      cataloged('hs1-migration-banner', ['shell-banner']),
+      cataloged('codex-hooks-notice-banner', ['list', 'state-banner']),
+      cataloged('shell-banner', ['state-banner']),
+      cataloged('project-setup-warning-banner', ['shell-banner']),
+      cataloged('notifications-paused-banner', ['shell-banner']),
+      cataloged('provider-icon'),
+      cataloged('ticket-source-setup-dialog', ['content-transition', 'list-item', 'provider-icon']),
+      cataloged('provider-setup-form', ['provider-icon']),
+      cataloged('ticket-sources-settings', ['list', 'list-item', 'provider-icon']),
+      cataloged('accounts-settings'),
+      cataloged('settings-workspace', ['ticket-sources-settings']),
+      cataloged('keyboard-settings'),
+      cataloged('trash-settings'),
     ],
   },
 ];
@@ -367,8 +322,6 @@ export function demoKind(id: string): 'component' | 'composition' {
   return demoKinds.get(id) ?? 'component';
 }
 
-const phaseLabel: Record<DemoPhase, string> = { 'feature-floor': 'Feature floor' };
-
 function catalogEntry(item: DemoDefinition): CatalogEntry {
   const uses = (item.uses ?? []).map(findDemo).filter((demo): demo is DemoDefinition => Boolean(demo));
   const usedBy = demosUsing(item.id);
@@ -376,7 +329,8 @@ function catalogEntry(item: DemoDefinition): CatalogEntry {
     id: item.id,
     name: item.name,
     description: item.description,
-    tags: [phaseLabel[item.phase]],
+    // Like Kerf UI's own catalog, the only entry tag marks compositions (HS2-AEHES7).
+    tags: demoKind(item.id) === 'composition' ? ['Composition'] : [],
     related: [
       ...usedBy.map((demo) => ({ id: demo.id, name: demo.name, group: 'Used by' })),
       ...uses.map((demo) => ({ id: demo.id, name: demo.name, group: 'Uses' })),

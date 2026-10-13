@@ -2160,7 +2160,7 @@ the generated composition output would add KUI-L401 warnings. AI and human consu
 must search this extension before the installed Kerf component catalog, retain the source
 package identity, and use the ownership fields to avoid duplicate wrappers or insets.
 
-Entries carry their phase as a Catalog tag; the per-entry last-modified stamps and their
+Composition entries carry a Composition Catalog tag, as in Kerf UI's catalog (HS2-AEHES7); the per-entry last-modified stamps and their
 development feed were removed (HS2-HMVBZW).
 The demo loads the same shared global sheets as the app entry (`cursor-semantics.css` and
 `hot-sheet-tokens.css`, which carries the coarse-pointer textarea tokens), so touch textarea

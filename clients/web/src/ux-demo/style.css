@@ -185,23 +185,6 @@ body[data-resizing-project-sidebar='true'] {
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
 }
-.sidebar-component-demo {
-  display: grid;
-  width: min(remify(512px), 100%);
-  min-height: remify(448px);
-  margin: auto;
-  align-content: center;
-  justify-items: center;
-  gap: remify(24px);
-}
-.sidebar-component-demo__rail {
-  width: min(remify(272px), 100%);
-  padding: remify(10.4px);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(13.6px);
-  background: var(--wa-color-surface-lowered);
-  box-shadow: var(--wa-shadow-l);
-}
 .list-item-demo {
   display: grid;
   width: min(remify(480px), 100%);
@@ -403,10 +386,6 @@ body[data-resizing-project-sidebar='true'] {
   overflow: hidden;
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: var(--wa-border-radius-l);
-}
-.project-summary-demo__variants {
-  display: grid;
-  gap: var(--wa-space-m);
 }
 .terminal-ticket-rail-demo {
   /* The stage stretches the rail's standalone panel Pane to its fixed height (HS2-QQW6CT). */

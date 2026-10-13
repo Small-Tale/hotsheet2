@@ -7264,10 +7264,13 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   ).toBe(true);
   await page.keyboard.press('Escape');
   await expect(presentation).toHaveJSProperty('open', false);
-  // The catalog row's status line carries the entry's phase tag (HS2-KMDJRH, HS2-HMVBZW).
+  // Only composition rows carry a status tag, like Kerf UI's catalog (HS2-AEHES7).
   await expect(
     page.locator('[data-action="catalog-select"][data-item-id="permission-request"] .kui-list-item__status'),
-  ).toHaveText('Feature floor');
+  ).toHaveCount(0);
+  await expect(
+    page.locator('[data-action="catalog-select"][data-item-id="app-shell"] .kui-list-item__status'),
+  ).toHaveText('Composition');
   await choose(presentation, 'list');
   await expect(page.locator('[data-component="permission-request-popup"]')).toHaveCount(0);
   // The shell popup variant is a manual popover lifted into the top layer, anchored to the stage that
