@@ -54,45 +54,6 @@ body[data-resizing-project-sidebar='true'] {
 .command-settings-editor-demo {
   width: 100%;
 }
-.content-transition-demo {
-  display: grid;
-  width: min(remify(544px), 100%);
-  margin: auto;
-  gap: var(--wa-space-m);
-}
-.content-transition-demo__dialog {
-  overflow: hidden;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-l);
-  background: var(--wa-color-surface-default);
-  box-shadow: var(--wa-shadow-l);
-}
-.content-transition-demo__dialog > header {
-  padding: var(--wa-space-l) var(--wa-space-2xl);
-  border-bottom: 1px solid var(--wa-color-neutral-border-quiet);
-  font-size: var(--wa-font-size-l);
-  font-weight: var(--wa-font-weight-semibold);
-}
-.content-transition-demo__dialog > footer {
-  padding: var(--wa-space-m) var(--wa-space-2xl);
-  border-top: 1px solid var(--wa-color-neutral-border-quiet);
-}
-.content-transition-demo__card {
-  min-height: remify(256px);
-  padding: var(--wa-space-2xl);
-}
-.content-transition-demo__card h2,
-.content-transition-demo__card p {
-  margin: var(--wa-space-xs) 0;
-}
-.content-transition-demo__card small {
-  color: var(--wa-color-brand-on-quiet);
-  font-weight: var(--wa-font-weight-semibold);
-}
-.content-transition-demo__actions {
-  display: flex;
-  justify-content: space-between;
-}
 /* The form is the content of Kerf's Catalog settings pane, which leaves its content inset to the app. */
 .settings-form {
   display: grid;
@@ -221,14 +182,6 @@ body[data-resizing-project-sidebar='true'] {
 .connection-banner-demo,
 .app-shell-demo {
   width: min(remify(1152px), 100%);
-}
-.app-tab-demo {
-  display: flex;
-  padding: remify(16px);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(12.8px);
-  background: var(--wa-color-surface-lowered);
-  gap: remify(8px);
 }
 .terminal-drawer-demo {
   width: min(remify(1152px), 100%);
@@ -426,20 +379,6 @@ body[data-resizing-project-sidebar='true'] {
   body {
     min-width: 0;
   }
-}
-.floating-toolbar-demo {
-  --kui-color-neutral-fill-normal: var(--hs-floating-control-surface);
-  position: relative;
-  min-height: remify(192px);
-  padding: var(--kui-space-m);
-  box-sizing: border-box;
-  border-radius: var(--wa-border-radius-m);
-  background: var(--wa-color-surface-lowered);
-}
-.floating-toolbar-demo__copy {
-  max-width: remify(480px);
-  margin: 0;
-  color: var(--wa-color-neutral-on-quiet);
 }
 
 /* The embedded conversation takes the remaining stage height below the export status output. */

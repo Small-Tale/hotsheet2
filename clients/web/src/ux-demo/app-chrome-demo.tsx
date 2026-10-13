@@ -1,4 +1,5 @@
 import { AppTab } from '@kerfjs/ui/app-tab';
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { TabBar } from '@kerfjs/ui/tab-bar';
@@ -19,10 +20,16 @@ export const appErrorDemoVisible = signal(true);
 
 export function FloatingToolbarDemo() {
   return (
-    <section class="floating-toolbar-demo">
-      <p class="floating-toolbar-demo__copy">
-        Floating controls remain available over scrolling content without joining the page toolbar.
-      </p>
+    <CatalogExample
+      label="Over content"
+      note="Floating controls remain available over scrolling content without joining the page toolbar."
+      viewport={{
+        width: 'full',
+        minHeight: 'short',
+        surface: 'lowered',
+        tokens: { '--kui-color-neutral-fill-normal': 'var(--hs-floating-control-surface)' },
+      }}
+    >
       <FloatingToolbar label="Preview zoom controls" position="bottom-end">
         <ToolbarControlGroup>
           <button type="button" aria-label="Zoom out">
@@ -33,13 +40,16 @@ export function FloatingToolbarDemo() {
           </button>
         </ToolbarControlGroup>
       </FloatingToolbar>
-    </section>
+    </CatalogExample>
   );
 }
 
 export function AppTabDemo() {
   return (
-    <section class="app-tab-demo">
+    <CatalogExample
+      label="Project and terminal tabs"
+      viewport={{ width: 'full', layout: 'flex', frame: 'solid', surface: 'lowered' }}
+    >
       <TabBar id="app-tab-demo" label="Shared application tab demo">
         <AppTab
           id="project"
@@ -62,75 +72,97 @@ export function AppTabDemo() {
           }
         />
       </TabBar>
-    </section>
+    </CatalogExample>
   );
 }
 
 export function CodexHooksNoticeBannerDemo() {
-  return <CodexHooksNoticeBanner path=".codex/hooks.json" />;
+  return (
+    <CatalogExample label="Default">
+      <CodexHooksNoticeBanner path=".codex/hooks.json" />
+    </CatalogExample>
+  );
 }
 
 export function ProjectSetupWarningBannerDemo() {
   return (
-    <ProjectSetupWarningBanner detail="The development Hot Sheet CLI does not match the current setup templates and may overwrite newer project guidance. Run cargo build -p hotsheet-cli, then reopen the project. No setup files were changed." />
+    <CatalogExample label="Default">
+      <ProjectSetupWarningBanner detail="The development Hot Sheet CLI does not match the current setup templates and may overwrite newer project guidance. Run cargo build -p hotsheet-cli, then reopen the project. No setup files were changed." />
+    </CatalogExample>
   );
 }
 
 export function ShellBannerDemo() {
   return (
-    <section aria-label="Shell banner tones">
-      <ShellBanner
-        component="shell-banner-demo"
-        tone="info"
-        title="Information strip"
-        detail="Info tone with a trailing action."
-        action={<button type="button">Action</button>}
-      />
-      <ShellBanner
-        component="shell-banner-demo"
-        tone="success"
-        title="Success strip"
-        detail="Success tone with the action below the copy."
-        actionPlacement="below"
-        action={<button type="button">Dismiss</button>}
-      />
-      <ShellBanner
-        component="shell-banner-demo"
-        tone="warning"
-        title="Warning strip"
-        detail="Warning tone, no action."
-      />
-    </section>
+    <>
+      <CatalogExample label="Info with trailing action">
+        <ShellBanner
+          component="shell-banner-demo"
+          tone="info"
+          title="Information strip"
+          detail="Info tone with a trailing action."
+          action={<button type="button">Action</button>}
+        />
+      </CatalogExample>
+      <CatalogExample label="Success with action below">
+        <ShellBanner
+          component="shell-banner-demo"
+          tone="success"
+          title="Success strip"
+          detail="Success tone with the action below the copy."
+          actionPlacement="below"
+          action={<button type="button">Dismiss</button>}
+        />
+      </CatalogExample>
+      <CatalogExample label="Warning without action">
+        <ShellBanner
+          component="shell-banner-demo"
+          tone="warning"
+          title="Warning strip"
+          detail="Warning tone, no action."
+        />
+      </CatalogExample>
+    </>
   );
 }
 
 export function TicketPageMoreDemo() {
   return (
-    <section aria-label="Ticket page continuation states">
-      <TicketPageMore />
-      <TicketPageMore loading />
-    </section>
+    <>
+      <CatalogExample label="More available">
+        <TicketPageMore />
+      </CatalogExample>
+      <CatalogExample label="Loading">
+        <TicketPageMore loading />
+      </CatalogExample>
+    </>
   );
 }
 
 export function AppEmptyStateDemo() {
   return (
-    <section class="empty-state-demo-stack" aria-label="Application empty state variants">
-      <AppEmptyState />
-      <ProjectRestoreState />
-      <AppMessageState title="Project unavailable" message="Open another project to continue working." />
-    </section>
+    <>
+      <CatalogExample label="No project open">
+        <AppEmptyState />
+      </CatalogExample>
+      <CatalogExample label="Restoring">
+        <ProjectRestoreState />
+      </CatalogExample>
+      <CatalogExample label="Message">
+        <AppMessageState title="Project unavailable" message="Open another project to continue working." />
+      </CatalogExample>
+    </>
   );
 }
 
 export function AppErrorDemo() {
   return (
-    <section aria-label="Application error feedback">
+    <CatalogExample label="Interactive">
       <button type="button" data-app-error-demo-show>
         Show error
       </button>
       {appErrorDemoVisible.value && <AppError message="The project could not be opened. Try again." />}
-    </section>
+    </CatalogExample>
   );
 }
 
@@ -155,14 +187,14 @@ function wireAppChromeDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders: small application chrome and feedback surfaces (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'floating-toolbar': { Demo: FloatingToolbarDemo },
-    'app-tab': { Demo: AppTabDemo },
-    'codex-hooks-notice-banner': { Demo: CodexHooksNoticeBannerDemo },
-    'shell-banner': { Demo: ShellBannerDemo },
-    'project-setup-warning-banner': { Demo: ProjectSetupWarningBannerDemo },
-    'ticket-page-more': { Demo: TicketPageMoreDemo },
-    'app-empty-state': { Demo: AppEmptyStateDemo },
-    'app-error': { Demo: AppErrorDemo },
+    'floating-toolbar': { catalogExamples: true, Demo: FloatingToolbarDemo },
+    'app-tab': { catalogExamples: true, Demo: AppTabDemo },
+    'codex-hooks-notice-banner': { catalogExamples: true, Demo: CodexHooksNoticeBannerDemo },
+    'shell-banner': { catalogExamples: true, Demo: ShellBannerDemo },
+    'project-setup-warning-banner': { catalogExamples: true, Demo: ProjectSetupWarningBannerDemo },
+    'ticket-page-more': { catalogExamples: true, Demo: TicketPageMoreDemo },
+    'app-empty-state': { catalogExamples: true, Demo: AppEmptyStateDemo },
+    'app-error': { catalogExamples: true, Demo: AppErrorDemo },
   },
   wire: wireAppChromeDemo,
 };

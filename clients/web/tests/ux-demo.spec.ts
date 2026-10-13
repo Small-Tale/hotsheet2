@@ -421,6 +421,24 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['value-table', 1],
     ['hs1-migration-banner', 7],
     ['notifications-paused-banner', 2],
+    ['floating-toolbar', 1],
+    ['app-tab', 1],
+    ['codex-hooks-notice-banner', 1],
+    ['shell-banner', 3],
+    ['project-setup-warning-banner', 1],
+    ['ticket-page-more', 2],
+    ['app-empty-state', 3],
+    ['app-error', 1],
+    ['ticket-close-dialog', 1],
+    ['project-close-dialog', 1],
+    ['conversation-export-dialog', 1],
+    ['saved-view-dialog', 1],
+    ['ticket-link-choice-dialog', 1],
+    ['ai-feedback-dialog', 1],
+    ['manual-model-dialog', 1],
+    ['connection-details-dialog', 1],
+    ['halted-session-popup', 1],
+    ['content-transition', 2],
   ];
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
@@ -448,8 +466,6 @@ test('styles demo captions through demo-owned classes, not the demoed components
       await expect(caption.first()).toBeVisible();
       await expect(caption.first()).toHaveCSS('margin-top', '0px');
     }
-    await page.goto('/ux-demo?component=floating-toolbar');
-    await expect(page.locator('.floating-toolbar-demo__copy')).toHaveCSS('margin-top', '0px');
   }
 });
 
@@ -4103,7 +4119,7 @@ test('catalogs forced-dark FloatingToolbar children across page themes (HS2-HW02
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=floating-toolbar');
   const toolbar = page.getByRole('toolbar', { name: 'Preview zoom controls' }),
-    stage = page.locator('.floating-toolbar-demo');
+    stage = page.getByRole('region', { name: 'Over content', exact: true });
   await expect(toolbar).toHaveAttribute('data-component', 'floating-toolbar');
   await expect(toolbar).toHaveAttribute('data-position', 'bottom-end');
   const group = toolbar.locator('[data-component="toolbar-control-group"]');
@@ -6315,18 +6331,25 @@ test('catalogs shared application tabs and terminal-drawer tabs', async ({ page 
   test.setTimeout(45_000);
   await page.goto('/ux-demo?component=app-tab');
   await expect(
-    page.locator('.app-tab-demo [data-component="tab-bar"]').getByRole('tablist', {
-      name: 'Shared application tab demo',
-    }),
+    page
+      .getByRole('region', { name: 'Project and terminal tabs' })
+      .locator('[data-component="tab-bar"]')
+      .getByRole('tablist', {
+        name: 'Shared application tab demo',
+      }),
   ).toBeVisible();
   const sharedTabs = page.locator('[data-component$="-tab"]');
   await expect(sharedTabs).toHaveCount(2);
   await expect(page.getByRole('tab', { name: /Project tab/ })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('button', { name: 'Close Terminal tab' })).toBeAttached();
-  await page.locator('.app-tab-demo').screenshot({ path: 'target/visual-captures/hs2-gx51f7-app-tabs-wide.png' });
+  await page
+    .getByRole('region', { name: 'Project and terminal tabs' })
+    .screenshot({ path: 'target/visual-captures/hs2-gx51f7-app-tabs-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.locator('.app-tab-demo').screenshot({ path: 'target/visual-captures/hs2-gx51f7-app-tabs-narrow.png' });
-  const demoTabStrip = page.locator('.app-tab-demo [data-kui-tab-list]');
+  await page
+    .getByRole('region', { name: 'Project and terminal tabs' })
+    .screenshot({ path: 'target/visual-captures/hs2-gx51f7-app-tabs-narrow.png' });
+  const demoTabStrip = page.getByRole('region', { name: 'Project and terminal tabs' }).locator('[data-kui-tab-list]');
   await expect.poll(() => demoTabStrip.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeGreaterThan(0);
   await demoTabStrip.evaluate((node) => (node.scrollLeft = node.scrollWidth));
   await expect(page.getByRole('tab', { name: /Terminal tab/ })).toBeInViewport();
@@ -8887,7 +8910,7 @@ test('composes startup and inspector feedback without app CSS (HS2-JMYRT3)', asy
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/ux-demo?component=app-empty-state');
-    const variants = page.getByRole('region', { name: 'Application empty state variants' });
+    const variants = page.getByRole('region', { name: 'AppEmptyState examples' });
     await expect(variants.locator('[data-component="empty-state"]')).toHaveCount(3);
     await expect(variants.locator('[data-busy="true"]')).toContainText('Opening Hot Sheet');
     await expect(variants.locator('[data-busy="true"] [data-component="loading-spinner"]')).toBeVisible();

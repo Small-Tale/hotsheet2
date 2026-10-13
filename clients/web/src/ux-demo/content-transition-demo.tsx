@@ -1,4 +1,8 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
+import { Pane } from '@kerfjs/ui/pane';
+import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
+import { Text } from '@kerfjs/ui/text';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -16,58 +20,76 @@ export const transitionSide = signal<ContentTransitionSide>('a'),
   transitionStyle = signal<ContentTransitionStyle>('push'),
   transitionDirection = signal<ContentTransitionDirection>('forward');
 const card = (title: string, copy: string) => (
-  <article class="content-transition-demo__card">
-    <small>Ticket support</small>
-    <h2>{title}</h2>
-    <p>{copy}</p>
+  <article>
+    <Text size="compact" tone="quiet">
+      Ticket support
+    </Text>
+    <Text variant="h2" size="large">
+      {title}
+    </Text>
+    <Text>{copy}</Text>
   </article>
 );
 export function ContentTransitionDemo() {
   return (
-    <section class="content-transition-demo">
-      <div class="content-transition-demo__dialog">
-        <header>
+    <>
+      <CatalogExample
+        label="Setup dialog"
+        note="Navigation moves between the two sides; the settings pane picks the content transition style."
+        viewport={{ width: 'medium', frame: 'solid', surface: 'default', shadow: true }}
+      >
+        <Pane
+          chromeDividers="always"
+          header={
+            <Row textInsets="trbl">
+              <ContentTransition
+                active={transitionSide.value}
+                style="crossfade"
+                region="label"
+                label="Setup title transition"
+                a={'Set up ticket support' as never}
+                b={'Connect repository' as never}
+              />
+            </Row>
+          }
+          footer={
+            <Row controlInsets="trbl">
+              <ContentTransition
+                active={transitionSide.value}
+                style="crossfade"
+                region="footer"
+                sideLayout="actions"
+                label="Setup actions transition"
+                a={<wa-button>Cancel</wa-button>}
+                b={
+                  <>
+                    <wa-button>Skip</wa-button>
+                    <wa-button appearance="accent">Connect</wa-button>
+                  </>
+                }
+              />
+            </Row>
+          }
+        >
           <ContentTransition
             active={transitionSide.value}
-            style="crossfade"
-            region="label"
-            label="Setup title transition"
-            a={'Set up ticket support' as never}
-            b={'Connect repository' as never}
+            style={transitionStyle.value}
+            direction={transitionDirection.value}
+            label="Setup navigation preview"
+            a={card('Choose a source', 'Create a ticket repository or connect an issue provider.')}
+            b={card('Connect repository', 'Enter a remote URL so tickets are backed up.')}
           />
-        </header>
-        <ContentTransition
-          active={transitionSide.value}
-          style={transitionStyle.value}
-          direction={transitionDirection.value}
-          label="Setup navigation preview"
-          a={card('Choose a source', 'Create a ticket repository or connect an issue provider.')}
-          b={card('Connect repository', 'Enter a remote URL so tickets are backed up.')}
-        />
-        <footer>
-          <ContentTransition
-            active={transitionSide.value}
-            style="crossfade"
-            region="footer"
-            sideLayout="actions"
-            label="Setup actions transition"
-            a={<wa-button>Cancel</wa-button>}
-            b={
-              <>
-                <wa-button>Skip</wa-button>
-                <wa-button appearance="accent">Connect</wa-button>
-              </>
-            }
-          />
-        </footer>
-      </div>
-      <div class="content-transition-demo__actions">
-        <wa-button data-action="transition-back">Back</wa-button>
-        <wa-button appearance="accent" data-action="transition-forward">
-          Continue
-        </wa-button>
-      </div>
-    </section>
+        </Pane>
+      </CatalogExample>
+      <CatalogExample label="Navigation" align="inline-control" viewport={{ width: 'medium' }}>
+        <Row hAlign="space-between" fill>
+          <wa-button data-action="transition-back">Back</wa-button>
+          <wa-button appearance="accent" data-action="transition-forward">
+            Continue
+          </wa-button>
+        </Row>
+      </CatalogExample>
+    </>
   );
 }
 /** Restore the canonical transition settings and sync the live controls (HS2-X1SM48). */
@@ -146,6 +168,7 @@ function wireContentTransitionDemo(root: HTMLElement): () => void {
 export const demoModule: DemoModule = {
   entries: {
     'content-transition': {
+      catalogExamples: true,
       Demo: ContentTransitionDemo,
       Settings: ContentTransitionSettings,
       reset: resetContentTransitionDemo,

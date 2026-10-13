@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -82,7 +83,11 @@ export function resetConnectionDetailsDemo(root?: ParentNode) {
   if (root) syncSettingsControls(root, 'connection-details-dialog', { values: { scenario: 'source-stale' } });
 }
 export function ConnectionDetailsDialogDemo() {
-  return <ConnectionDetailsDialog embedded assessment={connectionDetailsAssessment(connectionDetailsScenario.value)} />;
+  return (
+    <CatalogExample label="Interactive" note="Choose a compatibility scenario in the settings pane.">
+      <ConnectionDetailsDialog embedded assessment={connectionDetailsAssessment(connectionDetailsScenario.value)} />
+    </CatalogExample>
+  );
 }
 export function ConnectionDetailsDialogSettings() {
   return (
@@ -124,6 +129,7 @@ function wireConnectionDetailsDemo(root: HTMLElement): () => void {
 export const demoModule: DemoModule = {
   entries: {
     'connection-details-dialog': {
+      catalogExamples: true,
       Demo: ConnectionDetailsDialogDemo,
       Settings: ConnectionDetailsDialogSettings,
       reset: resetConnectionDetailsDemo,

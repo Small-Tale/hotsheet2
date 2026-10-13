@@ -1,10 +1,10 @@
-import { List } from '@kerfjs/ui/list';
-import { Text } from '@kerfjs/ui/text';
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { HaltedSessionPopup } from '../components/halted-session-popup';
 import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
+import { DemoEvent } from './components/demo-event';
 import { selectedId } from './components/demo-state';
 import type { DemoModule } from './demo-module';
 
@@ -13,8 +13,8 @@ export const haltedSessionDemoVisible = signal(true),
 
 export function HaltedSessionPopupDemo() {
   return (
-    <List gap="m">
-      <Text>{haltedSessionDemoResult.value}</Text>
+    <CatalogExample label="Interactive" align="glyph">
+      <DemoEvent>{haltedSessionDemoResult.value}</DemoEvent>
       <button type="button" data-reset-halt-demo>
         Show halted session
       </button>
@@ -31,7 +31,7 @@ export function HaltedSessionPopupDemo() {
           }}
         />
       )}
-    </List>
+    </CatalogExample>
   );
 }
 
@@ -65,7 +65,7 @@ function wireHaltedSessionDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'halted-session-popup': { Demo: HaltedSessionPopupDemo },
+    'halted-session-popup': { catalogExamples: true, Demo: HaltedSessionPopupDemo },
   },
   wire: wireHaltedSessionDemo,
 };
