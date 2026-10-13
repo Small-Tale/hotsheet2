@@ -2,6 +2,9 @@
    completed/verified rows with an opaque surface. */
 .ticket-list {
   width: 100%;
+  /* The list surface rounds with its edge rows, so no square surface corner shows behind a rounded
+     first or last row (HS2-3239MS). */
+  border-radius: remify(10.4px);
   background: var(--wa-color-surface-default);
 }
 /* Gives an empty view's centered TicketEmptyState room to center vertically. */

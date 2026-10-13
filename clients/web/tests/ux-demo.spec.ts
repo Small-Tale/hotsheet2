@@ -9071,3 +9071,18 @@ test('aligns TicketCloseDialog copy with its field labels (HS2-0CTEP7)', async (
     expect(new Set(edges).size).toBe(1);
   }
 });
+
+test('rounds the AppShell list surface with its first row in list mode (HS2-3239MS)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=app-shell');
+    const row = page.locator('.ticket-list-row--list').first();
+    await expect(row).toHaveAttribute('data-list-edge', 'start');
+    const [rowRadius, listRadius] = await row.evaluate((node) => [
+      getComputedStyle(node).borderTopLeftRadius,
+      getComputedStyle(node.closest('.ticket-list')!).borderTopLeftRadius,
+    ]);
+    expect(listRadius).toBe(rowRadius);
+    await page.screenshot({ path: `target/visual-captures/hs2-3239ms-list-mode-${width}.png` });
+  }
+});
