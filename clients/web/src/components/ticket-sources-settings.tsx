@@ -158,10 +158,8 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
     <div class="ticket-provider-settings ticket-sources-settings" data-component="ticket-sources-settings">
       <List gap="l">
         <List gap="m">
-          <Row hAlign="space-between" vAlign="middle" gap="m">
-            <Text variant="h2" flush>
-              Ticket sources
-            </Text>
+          {/* The workspace toolbar already titles the page (HS2-FV538C). */}
+          <Row hAlign="right" vAlign="middle" gap="m">
             <wa-button appearance="outlined" {...COMMANDS_AND_AI_ACTIONS.openProviderDialog.attrs}>
               Add data source
             </wa-button>
@@ -315,9 +313,7 @@ export function AccountsSettings({
     <div class="ticket-provider-settings" data-component="accounts-settings">
       <List gap="l">
         <List gap="m">
-          <Text variant="h2" flush>
-            Accounts
-          </Text>
+          {/* The workspace toolbar already titles the page (HS2-MF9D1K). */}
           <Text tone="quiet" flush>
             Sign-ins Hot Sheet uses to reach GitHub, GitLab, and Jira. Every project on this computer can reuse them
             when adding a ticket source; each project still chooses its own repository or Jira project.

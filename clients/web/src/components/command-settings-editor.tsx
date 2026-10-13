@@ -398,13 +398,12 @@ export function CommandSettingsEditor({
       data-component="command-settings-editor"
       data-icon-catalog={lucideCatalogVersion.value}
     >
-      {/* Kerf Toolbar owns the heading row: the title, then the standalone Add group and primary
-          Add command buttons, which wrap below the title in a narrow editor (HS2-EBY4E3). */}
+      {/* Kerf Toolbar owns the action row: the standalone Add group and primary Add command buttons
+          (HS2-EBY4E3). The workspace toolbar already titles the page (HS2-QEQ1YB). */}
       <List gap="2xs">
         <Toolbar
           dividerSides=""
           responsive="wrap"
-          leading={<ToolbarText text="Custom commands" size="xlarge" headingLevel={2} />}
           trailing={
             <>
               <wa-button appearance="outlined" size="small" {...COMMANDS_AND_AI_ACTIONS.addCommandGroup.attrs}>

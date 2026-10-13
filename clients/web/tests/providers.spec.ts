@@ -3261,7 +3261,9 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await page.getByLabel('Settings view').click();
   await expect(page.locator('[data-component="settings-workspace"]')).toBeVisible();
   const sourcesPanel = page.locator('[data-component="ticket-sources-settings"]');
-  await expect(sourcesPanel.getByRole('heading', { name: 'Ticket sources' })).toBeVisible();
+  // The workspace toolbar titles the page; the panel does not repeat it (HS2-FV538C).
+  await expect(page.locator('#workspace-page-title')).toContainText('Ticket sources');
+  await expect(sourcesPanel.getByRole('heading', { name: 'Ticket sources' })).toHaveCount(0);
   await expect(page.locator('[data-action="save-provider-connection"]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Add data source' })).toBeVisible();
   const primaryConnection = sourcesPanel.getByRole('button', { name: 'Edit GitHub Issues' });

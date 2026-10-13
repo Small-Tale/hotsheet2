@@ -394,6 +394,8 @@ describe('ticket source surfaces', () => {
     expect(markup).not.toContain('attach-project-source');
     expect(markup).toContain('data-item-id="accounts"');
     expect(markup).toContain('App Settings → Accounts');
+    // The workspace toolbar titles the page; no in-page heading repeats it (HS2-FV538C).
+    expect(markup).not.toMatch(/<h2[^>]*>/);
     const single = String(TicketSourcesSettings({ sources: sources.slice(0, 1) }));
     expect(single).toContain('This project uses 1 ticket source.');
     expect(single).not.toContain('project-default-source');
@@ -579,6 +581,8 @@ describe('ticket source surfaces', () => {
       ],
       markup = String(AccountsSettings({ accounts }));
     expect(markup).toContain('data-component="accounts-settings"');
+    // The workspace toolbar titles the page; no in-page heading repeats it (HS2-MF9D1K).
+    expect(markup).not.toMatch(/<h2[^>]*>/);
     expect(markup).toContain('data-account-id="github-app-01work"');
     expect(markup).toContain('acme/repo · Used by procurement, domotion');
     expect(markup).toContain(
