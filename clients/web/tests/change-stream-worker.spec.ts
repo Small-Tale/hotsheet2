@@ -1,4 +1,4 @@
-import { expect, type Page, test, type WebSocketRoute } from '@playwright/test';
+import { expect, type Page, test, type WebSocketRoute, type Worker } from '@playwright/test';
 
 /**
  * HS2-SH9179: the shared change-stream worker, opted in through its local setting, follows two
@@ -274,4 +274,129 @@ test('keeps the main-thread stream when the worker setting is off', async ({ pag
   fixture.emit(projects.beta.id, 'created', 'HS2-BETA02');
   await expect(page.locator('[data-ticket-slug="HS2-BETA02"]')).toBeVisible();
   expect(workers.filter((url) => url.includes('change-stream'))).toEqual([]);
+});
+
+/** HS2-9XF60G: crash the bundled worker for real by throwing an uncaught error inside it. */
+async function crashWorker(worker: Worker) {
+  await worker.evaluate(() => {
+    setTimeout(() => {
+      throw new Error('Simulated change-stream worker crash (HS2-9XF60G)');
+    }, 0);
+  });
+}
+const streamWorkers = (workers: Worker[]) => workers.filter((worker) => worker.url().includes('change-stream'));
+const enableWorker = (page: Page) =>
+  page.addInitScript(() => {
+    localStorage.setItem('hotsheet.change-stream-worker', 'true');
+  });
+
+test('a crashed worker restarts and replays from the last applied cursor without duplicates', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await enableWorker(page);
+  const workers: Worker[] = [];
+  page.on('worker', (worker) => workers.push(worker));
+  const fixture = await installProjects(page);
+  await openBothProjects(page);
+  await expect.poll(() => streamWorkers(workers).length).toBe(1);
+  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], row('ALPHA2', 'Alpha second')];
+  fixture.emit(projects.alpha.id, 'created', 'HS2-ALPHA2');
+  await expect(page.locator('[data-ticket-slug="HS2-ALPHA2"]')).toBeVisible();
+  const applied = { alpha: fixture.cursor.get(projects.alpha.id)!, beta: fixture.cursor.get(projects.beta.id)! };
+
+  await crashWorker(streamWorkers(workers)[0]);
+  // A change published while the worker is down must be replayed by its replacement.
+  fixture.rows[projects.beta.id] = [...fixture.rows[projects.beta.id], row('BETA02', 'Beta second')];
+  fixture.emit(projects.beta.id, 'created', 'HS2-BETA02');
+  await expect.poll(() => streamWorkers(workers).length).toBe(2);
+  const sinceOf = (projectId: string) =>
+    fixture.polls
+      .filter((poll) => poll.startsWith(`${projectId}?`))
+      .map((poll) => new URLSearchParams(poll.slice(poll.indexOf('?') + 1)).get('since'));
+  // The restarted worker resumes each project from what the main thread already applied.
+  await expect.poll(() => sinceOf(projects.alpha.id)).toContain(String(applied.alpha));
+  await expect.poll(() => sinceOf(projects.beta.id)).toContain(String(applied.beta));
+  await page.getByRole('tab', { name: 'Beta' }).click();
+  await expect(page.locator('[data-ticket-slug="HS2-BETA02"]')).toHaveCount(1);
+  await page.getByRole('tab', { name: 'Alpha' }).click();
+  await expect(page.locator('[data-ticket-slug="HS2-ALPHA2"]')).toHaveCount(1);
+  // Replay repeats nothing: one new change costs at most one ticket reload.
+  const alphaLoads = fixture.ticketLoads.get(projects.alpha.id) ?? 0;
+  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], row('ALPHA3', 'Alpha third')];
+  fixture.emit(projects.alpha.id, 'created', 'HS2-ALPHA3');
+  await expect(page.locator('[data-ticket-slug="HS2-ALPHA3"]')).toBeVisible();
+  await page.waitForTimeout(500);
+  expect((fixture.ticketLoads.get(projects.alpha.id) ?? 0) - alphaLoads).toBeLessThanOrEqual(1);
+  // Still worker-owned: the main thread never opened its own change socket.
+  expect([...fixture.sockets.values()].flat()).toEqual([]);
+});
+
+test('a crash-looping worker falls back to main-thread streams for both projects', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 800 });
+  await enableWorker(page);
+  const workers: Worker[] = [];
+  page.on('worker', (worker) => workers.push(worker));
+  const fixture = await installProjects(page);
+  await openBothProjects(page);
+  // Four crashes inside the restart window exceed the three allowed restarts.
+  for (let crash = 1; crash <= 4; crash += 1) {
+    await expect.poll(() => streamWorkers(workers).length).toBe(crash);
+    await crashWorker(streamWorkers(workers)[crash - 1]);
+  }
+  await fixture.socketFor(projects.alpha.id);
+  await fixture.socketFor(projects.beta.id);
+  await page.waitForTimeout(1_000);
+  expect(streamWorkers(workers)).toHaveLength(4);
+  fixture.rows[projects.beta.id] = [...fixture.rows[projects.beta.id], row('BETA02', 'Beta second')];
+  fixture.emit(projects.beta.id, 'created', 'HS2-BETA02');
+  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], row('ALPHA2', 'Alpha second')];
+  fixture.emit(projects.alpha.id, 'created', 'HS2-ALPHA2');
+  await expect(page.locator('[data-ticket-slug="HS2-ALPHA2"]')).toBeVisible();
+  await page.getByRole('tab', { name: 'Beta' }).click();
+  await expect(page.locator('[data-ticket-slug="HS2-BETA02"]')).toBeVisible();
+});
+
+test('a version-skewed worker falls back to main-thread streams for both projects', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await enableWorker(page);
+  await page.addInitScript(() => {
+    // Simulate a stale cached worker bundle: its ready message advertises another protocol.
+    const NativeWorker = window.Worker;
+    window.Worker = class extends NativeWorker {
+      override addEventListener(
+        type: string,
+        listener: EventListenerOrEventListenerObject | null,
+        options?: boolean | AddEventListenerOptions,
+      ) {
+        if (type !== 'message' || typeof listener !== 'function') {
+          super.addEventListener(type, listener, options);
+          return;
+        }
+        super.addEventListener(
+          type,
+          (event) => {
+            const data = (event).data as { type?: string } | undefined;
+            listener.call(
+              this,
+              data?.type === 'ready' ? new MessageEvent('message', { data: { ...data, protocol: 999 } }) : event,
+            );
+          },
+          options,
+        );
+      }
+    };
+  });
+  const workers: Worker[] = [];
+  page.on('worker', (worker) => workers.push(worker));
+  const fixture = await installProjects(page);
+  await openBothProjects(page);
+  await fixture.socketFor(projects.alpha.id);
+  await fixture.socketFor(projects.beta.id);
+  expect(streamWorkers(workers)).toHaveLength(1);
+  fixture.rows[projects.alpha.id] = [...fixture.rows[projects.alpha.id], row('ALPHA2', 'Alpha second')];
+  fixture.emit(projects.alpha.id, 'created', 'HS2-ALPHA2');
+  await expect(page.locator('[data-ticket-slug="HS2-ALPHA2"]')).toBeVisible();
+  fixture.rows[projects.beta.id] = [...fixture.rows[projects.beta.id], row('BETA02', 'Beta second')];
+  fixture.emit(projects.beta.id, 'created', 'HS2-BETA02');
+  await page.getByRole('tab', { name: 'Beta' }).click();
+  await expect(page.locator('[data-ticket-slug="HS2-BETA02"]')).toBeVisible();
 });

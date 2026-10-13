@@ -329,5 +329,6 @@ wall time rose to 3.5 s. In this fixture the worker's socket upgrade is
 refused, so events wait for the next long-poll window. This measures
 fixture delivery lag, not the real WebSocket path. Real-server delivery lag
 and retained memory are still unmeasured; `HS2-MH5PWD` covers them and the
-default-on decision. `HS2-9XF60G` adds browser coverage for crash recovery
-and the skew fallback, which unit tests cover today.
+default-on decision. `HS2-9XF60G` covers crash restart with cursor replay,
+the crash-loop fallback, and the skew fallback in real-browser tests
+(`clients/web/tests/change-stream-worker.spec.ts`).
