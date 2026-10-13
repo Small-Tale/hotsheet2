@@ -327,12 +327,13 @@ export function createCommandsController({
       setCommandSettingsMessage(projectId, validation);
       return;
     }
-    setCommandSettingsMessage(projectId, 'Saving…');
+    // Autosave reports like ticket editing (HS2-MTBMH8): the shared server-busy indicator covers the
+    // in-flight write, success is silent, and the status line only carries a validation or save error.
+    setCommandSettingsMessage(projectId, '');
     try {
       const saved = await new Api(current.apiPath).saveCommands(definitions, options);
       if (!projects.value.some((item) => item.id === projectId)) return;
       if (selectedProjectId.value === projectId) commandDefinitions.value = saved;
-      setCommandSettingsMessage(projectId, 'Saved.');
     } catch (reason) {
       setCommandSettingsMessage(projectId, reason instanceof Error ? reason.message : String(reason));
     }

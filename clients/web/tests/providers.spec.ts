@@ -12503,8 +12503,11 @@ test('runs grouped local commands, confirms stop, exposes history, and saves set
   const commandDialog = page.locator('#command-editor-dialog');
   await commandDialog.getByLabel('Button label').fill('Review');
   await commandDialog.getByRole('textbox', { name: 'Program' }).fill('/usr/bin/true');
+  const commandsSaved0 = page.waitForResponse(
+    (response) => response.url().endsWith('/commands') && response.request().method() === 'PUT',
+  );
   await commandDialog.getByRole('button', { name: 'Done' }).click();
-  await expect(editor.getByRole('status')).toContainText('Saved.');
+  await commandsSaved0;
   await page.getByLabel('List view').click();
   await expect(page.getByRole('button', { name: 'Review' })).toBeVisible();
 });
@@ -12855,7 +12858,6 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
     { kind: 'ai', prompt: 'Review the current changes', tool: 'claude', model: 'opus', effort: 'high' },
     { kind: 'shell', command: 'npm run lint' },
   ]);
-  await expect(editor.getByRole('status')).toContainText('Saved.');
   await page.locator('.app-shell__workspace').evaluate((node) => {
     node.scrollTop = 0;
   });
@@ -12943,11 +12945,14 @@ test('keeps an empty command group across reloads, populating, and emptying it (
   await expect.poll(() => groupWrites.at(-1)).toEqual(['Ideas', 'Quality']);
   // 4. Remove the command: the group stays, empty again, and survives another reload.
   await runChecks.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
+  const commandsSaved2 = page.waitForResponse(
+    (response) => response.url().endsWith('/commands') && response.request().method() === 'PUT',
+  );
   await runChecks.locator('[data-action="delete-command-setting"]').dispatchEvent('click');
   await expect(editor.locator('.command-settings-editor__row')).toHaveCount(0);
   await expect(ideas.locator('.command-settings-editor__group-empty')).toBeVisible();
   // The command list itself autosaves on its debounce; let it land before reloading.
-  await expect(editor.getByRole('status')).toContainText('Saved.');
+  await commandsSaved2;
   await page.reload();
   await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
   await page.getByLabel('Settings view').click();
@@ -13107,7 +13112,6 @@ test('multi-selects command rows and drags the whole selection to reorder (HS2-V
   await expect
     .poll(() => writes.at(-1)?.map((command) => command.title))
     .toEqual(['Run checks', 'Alpha', 'Gamma', 'Beta']);
-  await expect(editor.getByRole('status')).toContainText('Saved.');
 });
 
 test('collapses individual project command groups independently and remembers each project state', async ({ page }) => {
@@ -25596,8 +25600,11 @@ test('applies a saved command color and icon to the sidebar command button (HS2-
   await expect(
     commandDialog.locator('[data-action="select-command-icon"][data-icon-name="circle-check-big"]'),
   ).toHaveAttribute('aria-pressed', 'true');
+  const commandsSaved4 = page.waitForResponse(
+    (response) => response.url().endsWith('/commands') && response.request().method() === 'PUT',
+  );
   await commandDialog.getByRole('button', { name: 'Done' }).click();
-  await expect(editor.getByRole('status')).toContainText('Saved.');
+  await commandsSaved4;
   await page.getByLabel('List view').click();
   await expect(command).toBeVisible();
   await expect(command).toHaveAttribute('data-command-color', '#22c55e');
@@ -25636,8 +25643,11 @@ test('searches the full Lucide catalog to assign an arbitrary command icon (HS2-
   await picker.screenshot({ path: 'target/visual-captures/hs2-5vsnv3-icon-picker-search.png' });
   await compass.click();
   await expect(compass).toHaveAttribute('aria-pressed', 'true');
+  const commandsSaved5 = page.waitForResponse(
+    (response) => response.url().endsWith('/commands') && response.request().method() === 'PUT',
+  );
   await commandDialog.getByRole('button', { name: 'Done' }).click();
-  await expect(editor.getByRole('status')).toContainText('Saved.');
+  await commandsSaved5;
   await page.getByLabel('List view').click();
   await expect(command.locator('[data-lucide="compass"]')).toHaveCount(1);
 });
@@ -26434,9 +26444,14 @@ test('preserves feature-controller command editing and run-dialog parity across 
   await openEditor();
   await dialog.getByLabel('Button label').fill('Feature parity');
   await dialog.getByRole('textbox', { name: 'Program' }).fill('/usr/bin/true');
+  const commandsSaved6 = page.waitForResponse(
+    (response) => response.url().endsWith('/commands') && response.request().method() === 'PUT',
+  );
   await dialog.getByRole('button', { name: 'Done' }).click();
-  await expect(editor.getByRole('status')).toContainText('Saved.');
+  await commandsSaved6;
   await expect(editor).toContainText('Feature parity');
+  // A successful autosave is silent, like ticket editing: no bespoke "Saved." status text (HS2-MTBMH8).
+  await expect(editor.getByRole('status')).toHaveText('');
   await page.screenshot({
     path: 'target/visual-captures/hs2-dhygxj-command-settings-wide.png',
     animations: 'disabled',
@@ -26456,8 +26471,11 @@ test('preserves feature-controller command editing and run-dialog parity across 
   await openEditor();
   await expect(dialog.getByLabel('Button label')).toHaveValue('Feature parity');
   await dialog.getByLabel('Button label').fill('After return');
+  const commandsSaved7 = page.waitForResponse(
+    (response) => response.url().endsWith('/commands') && response.request().method() === 'PUT',
+  );
   await dialog.getByRole('button', { name: 'Done' }).click();
-  await expect(editor.getByRole('status')).toContainText('Saved.');
+  await commandsSaved7;
   await expect(editor).toContainText('After return');
   await page.screenshot({
     path: 'target/visual-captures/hs2-dhygxj-command-settings-narrow.png',

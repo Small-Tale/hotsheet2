@@ -91,7 +91,7 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     pending.resolve(json(owner.commandSettingsDefinitions('a')));
     await vi.advanceTimersByTimeAsync(0);
     expect(owner.commandDefinitions.value.map((item) => item.id)).toEqual(['b-command']);
-    expect(owner.commandSettingsMessage('a')).toBe('Saved.');
+    expect(owner.commandSettingsMessage('a')).toBe('');
     owner.commandSettingsDraftsByProject.value = {};
     expect(owner.commandSettingsDefinitions()).toEqual([command('b-command')]);
     fetchMock.mockImplementation(async (_input, init) => {
@@ -101,7 +101,7 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     owner.updateCommandSetting('b', 'b-command', 'title', 'After replacement');
     await vi.advanceTimersByTimeAsync(600);
     expect(owner.commandDefinitions.value[0].title).toBe('After replacement');
-    expect(owner.commandSettingsMessage('b')).toBe('Saved.');
+    expect(owner.commandSettingsMessage('b')).toBe('');
   });
 
   it('keeps a pending command save per project and flushes every one on page hide (HS2-25HAK3)', async () => {
@@ -139,7 +139,7 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     await vi.advanceTimersByTimeAsync(600);
     expect(saves).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(0);
-    expect(owner.commandSettingsMessage('a')).toBe('Saved.');
+    expect(owner.commandSettingsMessage('a')).toBe('');
 
     // Flushing with nothing pending is a no-op, and later edits debounce normally again.
     owner.flushCommandAutosaves();
