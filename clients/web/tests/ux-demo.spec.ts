@@ -468,11 +468,49 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['connection-state-banner', 5],
     ['app-shell', 1],
   ];
+  // HS2-P83X5X: under the full mixed suite this matrix has intermittently found an empty catalog page.
+  // Record what the page saw, so a failure carries its own diagnosis instead of a bare count mismatch.
+  const events: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning')
+      events.push(`console.${message.type()}: ${message.text()}`);
+  });
+  page.on('pageerror', (error) => events.push(`pageerror: ${error.message}`));
+  page.on('requestfailed', (request) => events.push(`requestfailed: ${request.url()} ${request.failure()?.errorText}`));
+  page.on('response', (response) => {
+    if (response.status() >= 400) events.push(`http ${response.status()}: ${response.url()}`);
+  });
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) events.push(`navigated: ${frame.url()}`);
+  });
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     for (const [component, count] of examples) {
+      events.length = 0;
+      const started = Date.now();
       await page.goto(`/ux-demo?component=${component}`);
-      await expect(page.locator('[data-catalog-example-label]'), component).toHaveCount(count);
+      const loadedMs = Date.now() - started;
+      try {
+        await expect(page.locator('[data-catalog-example-label]'), component).toHaveCount(count);
+      } catch (failure) {
+        const state = await page
+          .evaluate(() => ({
+            url: location.href,
+            readyState: document.readyState,
+            catalog: document.querySelector('[data-component="catalog"]')?.outerHTML.slice(0, 600) ?? null,
+            examples: document.querySelectorAll('[data-catalog-example]').length,
+            labels: document.querySelectorAll('[data-catalog-example-label]').length,
+            heading: document.querySelector('h1')?.textContent ?? null,
+            body: document.body.innerText.slice(0, 800),
+          }))
+          .catch((reason: unknown) => ({ evaluateFailed: String(reason) }));
+        await test.info().attach(`hs2-p83x5x-${component}-${width}.json`, {
+          body: JSON.stringify({ component, width, loadedMs, state, events }, null, 2),
+          contentType: 'application/json',
+        });
+        await page.screenshot({ path: `target/visual-captures/hs2-p83x5x-${component}-${width}.png`, fullPage: true });
+        throw failure;
+      }
       await expect(page.locator('[data-catalog-example]').first(), component).toBeVisible();
       await expect(page.locator('.component-stage, .collection-demo, .inspector-panel-demo')).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
