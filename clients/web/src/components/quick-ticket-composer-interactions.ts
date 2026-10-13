@@ -2,10 +2,11 @@ import { wireFilePickers } from '@kerfjs/ui/wire-file-pickers';
 import { delegate, delegateCapture } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
+import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
 import { NEW_TICKET_ATTACHMENT_PICKER } from './quick-ticket-composer';
 
-const COMPOSER = '[data-component="quick-ticket-composer"]';
-const DROP_TARGET = '[data-new-ticket-drop-target="true"]';
+const COMPOSER = SEARCH_AND_COMPOSER_TARGETS.quickTicketComposer.selector;
+const DROP_TARGET = SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.selector;
 type Control = HTMLElement & { value: string };
 
 /**
@@ -39,13 +40,12 @@ export interface QuickTicketComposerBindings {
 /** Wire every QuickTicketComposer under `root`. */
 export function wireQuickTicketComposer(root: HTMLElement, bindings: QuickTicketComposerBindings): () => void {
   const lifetime = createScope(),
-    on = (event: string, selector: string, handle: (event: Event, target: Element) => void) => {
-      lifetime.add(delegate(root, event, selector, handle));
-    },
     draggingTickets = () => bindings.draggingTickets?.() ?? false;
-  on('click', '[data-action="expand-ticket-composer"]', (_event, target) => {
-    bindings.expand(target as HTMLElement);
-  });
+  lifetime.add(
+    delegate(root, 'click', SEARCH_AND_COMPOSER_ACTIONS.expandTicketComposer.selector, (_event, target) => {
+      bindings.expand(target as HTMLElement);
+    }),
+  );
   lifetime.add(
     delegateCapture(root, 'wa-hide', COMPOSER, (event, target) => {
       if (event.target === target && !bindings.canHide()) event.preventDefault();
@@ -56,26 +56,43 @@ export function wireQuickTicketComposer(root: HTMLElement, bindings: QuickTicket
       if (event.target === target && bindings.expanded()) bindings.dismissed();
     }),
   );
-  on('input', '[name="new-ticket-title"]', (_event, target) => {
-    bindings.setTitle((target as Control).value);
-  });
-  on('input', '[name="new-ticket-details"]', (_event, target) => {
-    bindings.setDetails((target as Control).value);
-  });
-  on('change', '[name="new-ticket-category"]', (_event, target) => {
-    bindings.setCategory((target as Control).value);
-  });
-  on('change', '[name="new-ticket-source"]', (_event, target) => {
-    bindings.setSource((target as Control).value || undefined);
-  });
-  on('click', '[data-action="toggle-new-ticket-up-next"]', () => {
-    bindings.toggleUpNext();
-  });
-  on('change', '.quick-ticket-composer__drop input[name="new-ticket-attachments"]', (_event, target) => {
-    const input = target as HTMLInputElement;
-    if (input.files?.length) bindings.addFiles(input.files);
-    input.value = '';
-  });
+  lifetime.add(
+    delegate(root, 'input', SEARCH_AND_COMPOSER_TARGETS.newTicketTitleField.selector, (_event, target) => {
+      bindings.setTitle((target as Control).value);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'input', SEARCH_AND_COMPOSER_TARGETS.newTicketDetailsField.selector, (_event, target) => {
+      bindings.setDetails((target as Control).value);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'change', SEARCH_AND_COMPOSER_TARGETS.newTicketCategoryField.selector, (_event, target) => {
+      bindings.setCategory((target as Control).value);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'change', SEARCH_AND_COMPOSER_TARGETS.newTicketSourceField.selector, (_event, target) => {
+      bindings.setSource((target as Control).value || undefined);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', SEARCH_AND_COMPOSER_ACTIONS.toggleNewTicketUpNext.selector, () => {
+      bindings.toggleUpNext();
+    }),
+  );
+  lifetime.add(
+    delegate(
+      root,
+      'change',
+      `.quick-ticket-composer__drop ${SEARCH_AND_COMPOSER_TARGETS.newTicketAttachmentsField.selector}`,
+      (_event, target) => {
+        const input = target as HTMLInputElement;
+        if (input.files?.length) bindings.addFiles(input.files);
+        input.value = '';
+      },
+    ),
+  );
   // The header's Kerf FilePickerTrigger reports through its documented wiring contract (HS2-ZWRCAZ).
   lifetime.add(
     wireFilePickers(root, {
@@ -84,34 +101,46 @@ export function wireQuickTicketComposer(root: HTMLElement, bindings: QuickTicket
       },
     }),
   );
-  on('click', '[data-action="remove-new-ticket-attachment"]', (_event, target) => {
-    bindings.removeAttachment((target as HTMLElement).dataset.pendingAttachmentId);
-  });
-  on('click', '[data-action="clear-new-ticket-attachments"]', () => {
-    bindings.clearAttachments();
-  });
-  on('dragover', DROP_TARGET, (event, target) => {
-    if (draggingTickets()) return;
-    event.preventDefault();
-    (target as HTMLElement).dataset.dragging = 'true';
-  });
-  on('dragleave', DROP_TARGET, (_event, target) => {
-    delete (target as HTMLElement).dataset.dragging;
-  });
-  on('drop', DROP_TARGET, (event, target) => {
-    if (draggingTickets()) return;
-    event.preventDefault();
-    event.stopPropagation();
-    delete (target as HTMLElement).dataset.dragging;
-    const files = (event as DragEvent).dataTransfer?.files;
-    if (!files?.length) return;
-    if (!bindings.expanded()) bindings.expand(target as HTMLElement);
-    bindings.addFiles(files);
-  });
-  on('submit', '[data-action="create-ticket-form"]', (event) => {
-    event.preventDefault();
-    bindings.submit();
-  });
+  lifetime.add(
+    delegate(root, 'click', SEARCH_AND_COMPOSER_ACTIONS.removeNewTicketAttachment.selector, (_event, target) => {
+      bindings.removeAttachment((target as HTMLElement).dataset.pendingAttachmentId);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', SEARCH_AND_COMPOSER_ACTIONS.clearNewTicketAttachments.selector, () => {
+      bindings.clearAttachments();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'dragover', DROP_TARGET, (event, target) => {
+      if (draggingTickets()) return;
+      event.preventDefault();
+      (target as HTMLElement).dataset.dragging = 'true';
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'dragleave', DROP_TARGET, (_event, target) => {
+      delete (target as HTMLElement).dataset.dragging;
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'drop', DROP_TARGET, (event, target) => {
+      if (draggingTickets()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      delete (target as HTMLElement).dataset.dragging;
+      const files = (event as DragEvent).dataTransfer?.files;
+      if (!files?.length) return;
+      if (!bindings.expanded()) bindings.expand(target as HTMLElement);
+      bindings.addFiles(files);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'submit', SEARCH_AND_COMPOSER_ACTIONS.createTicketForm.selector, (event) => {
+      event.preventDefault();
+      bindings.submit();
+    }),
+  );
   return () => {
     lifetime.dispose();
   };

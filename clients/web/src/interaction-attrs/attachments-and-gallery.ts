@@ -50,4 +50,8 @@ export const ATTACHMENTS_AND_GALLERY_TARGETS = {
   galleryAnnotationSurface: attr('data-gallery-annotation-surface', 'true'),
   galleryCropSurface: attr('data-gallery-crop-surface', 'true'),
   attachmentGallery: attr('data-component', 'attachment-gallery'),
+  galleryPlayheadField: attr('name', 'gallery-playhead'),
+  galleryVolumeField: attr('name', 'gallery-volume'),
+  ticketAttachmentsField: attr('name', 'ticket-attachments'),
+  attachmentDropTarget: attr('data-attachment-drop-target', 'true'),
 } as const;

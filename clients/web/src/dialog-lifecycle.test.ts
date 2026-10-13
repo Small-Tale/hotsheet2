@@ -60,7 +60,9 @@ describe('dialog lifecycle event contracts', () => {
     expect(source).toMatchSource(
       /wireQuickTicketComposer\(document\.body,\{expand:openTicketComposer,expanded:\(\)=>composerExpanded\.value,canHide:\(\)=>!composerSubmitting\.value,dismissed:resetTicketComposer/,
     );
-    expect(helper).toMatchSource(/'expand-ticket-composer"\]',\(_event,target\)=>\{bindings\.expand\(/);
+    expect(helper).toMatchSource(
+      /SEARCH_AND_COMPOSER_ACTIONS\.expandTicketComposer\.selector,\(_event,target\)=>\{bindings\.expand\(/,
+    );
     expect(helper).toMatchSource(
       /delegateCapture\(root,'wa-hide',COMPOSER,[^\n]*!bindings\.canHide\(\)\)event\.preventDefault\(\)/,
     );

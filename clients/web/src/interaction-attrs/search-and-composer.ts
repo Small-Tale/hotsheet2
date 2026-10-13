@@ -27,4 +27,5 @@ export const SEARCH_AND_COMPOSER_TARGETS = {
   newTicketCategoryField: attr('name', 'new-ticket-category'),
   newTicketSourceField: attr('name', 'new-ticket-source'),
   newTicketDropTarget: attr('data-new-ticket-drop-target', 'true'),
+  newTicketAttachmentsField: attr('name', 'new-ticket-attachments'),
 } as const;

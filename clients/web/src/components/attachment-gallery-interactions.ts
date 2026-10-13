@@ -1,6 +1,10 @@
 import { delegate, delegateCapture } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
+import {
+  ATTACHMENTS_AND_GALLERY_ACTIONS,
+  ATTACHMENTS_AND_GALLERY_TARGETS,
+} from '../interaction-attrs/attachments-and-gallery';
 import { attachmentGalleryKeyboardAction } from './attachment-gallery';
 
 export type GalleryRangeEndpoint = 'start' | 'end';
@@ -50,81 +54,110 @@ export function wireAttachmentGalleryControls(
   root: HTMLElement,
   bindings: AttachmentGalleryControlBindings,
 ): () => void {
-  const lifetime = createScope(),
-    on = (event: string, selector: string, handle: (event: Event, target: Element) => void) => {
-      lifetime.add(delegate(root, event, selector, handle));
-    };
-  on('click', '[data-action="close-attachment-gallery"]', () => {
-    bindings.close();
-  });
-  on('click', '[data-action="previous-gallery-image"]', () => {
-    bindings.shift(-1);
-  });
-  on('click', '[data-action="next-gallery-image"]', () => {
-    bindings.shift(1);
-  });
-  on('click', '[data-action="zoom-gallery-image"]', (_event, target) => {
-    bindings.zoom((target as HTMLElement).dataset.zoomDirection === 'out' ? 'out' : 'in');
-  });
-  on('click', '[data-action="toggle-gallery-markup"]', () => {
-    bindings.toggleMarkup();
-  });
-  on('click', '[data-action="toggle-gallery-draw"]', () => {
-    bindings.toggleDraw();
-  });
-  on('click', '[data-action="toggle-gallery-playback"]', () => {
-    bindings.togglePlayback();
-  });
-  on('keydown', '[data-component="attachment-gallery"]', (event) => {
-    const keyboard = event as KeyboardEvent,
-      origin = event.target as Element,
-      playheadControl = origin.matches('input[name="gallery-playhead"]');
-    if (
-      !root.querySelector('.attachment-gallery video') ||
-      (!playheadControl && origin.closest('button,input,textarea,select,[contenteditable="true"]'))
-    )
-      return;
-    const { playheadMs, durationMs } = bindings.playback(),
-      action = attachmentGalleryKeyboardAction(keyboard.key, playheadMs, durationMs, keyboard.shiftKey);
-    if (!action) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (action.kind === 'toggle-playback') bindings.togglePlayback();
-    else bindings.seek(action.playheadMs, 'keyboard');
-  });
-  on('input', 'input[name="gallery-playhead"]', (_event, target) => {
-    bindings.seek(Number((target as HTMLInputElement).value), 'scrub');
-  });
-  on('change', 'input[name="gallery-playhead"]', (_event, target) => {
-    bindings.seek(Number((target as HTMLInputElement).value), 'commit');
-  });
-  on('click', '[data-action="seek-gallery-annotation"]', (_event, target) => {
-    const element = target as HTMLElement;
-    bindings.seekAnnotation(element.dataset.annotationId, Number(element.dataset.annotationTime));
-  });
+  const lifetime = createScope();
+  lifetime.add(
+    delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.closeAttachmentGallery.selector, () => {
+      bindings.close();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.previousGalleryImage.selector, () => {
+      bindings.shift(-1);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.nextGalleryImage.selector, () => {
+      bindings.shift(1);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.zoomGalleryImage.selector, (_event, target) => {
+      bindings.zoom((target as HTMLElement).dataset.zoomDirection === 'out' ? 'out' : 'in');
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMarkup.selector, () => {
+      bindings.toggleMarkup();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryDraw.selector, () => {
+      bindings.toggleDraw();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryPlayback.selector, () => {
+      bindings.togglePlayback();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'keydown', ATTACHMENTS_AND_GALLERY_TARGETS.attachmentGallery.selector, (event) => {
+      const keyboard = event as KeyboardEvent,
+        origin = event.target as Element,
+        playheadControl = origin.matches(ATTACHMENTS_AND_GALLERY_TARGETS.galleryPlayheadField.selector);
+      if (
+        !root.querySelector('.attachment-gallery video') ||
+        (!playheadControl && origin.closest('button,input,textarea,select,[contenteditable="true"]'))
+      )
+        return;
+      const { playheadMs, durationMs } = bindings.playback(),
+        action = attachmentGalleryKeyboardAction(keyboard.key, playheadMs, durationMs, keyboard.shiftKey);
+      if (!action) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (action.kind === 'toggle-playback') bindings.togglePlayback();
+      else bindings.seek(action.playheadMs, 'keyboard');
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'input', ATTACHMENTS_AND_GALLERY_TARGETS.galleryPlayheadField.selector, (_event, target) => {
+      bindings.seek(Number((target as HTMLInputElement).value), 'scrub');
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'change', ATTACHMENTS_AND_GALLERY_TARGETS.galleryPlayheadField.selector, (_event, target) => {
+      bindings.seek(Number((target as HTMLInputElement).value), 'commit');
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.seekGalleryAnnotation.selector, (_event, target) => {
+      const element = target as HTMLElement;
+      bindings.seekAnnotation(element.dataset.annotationId, Number(element.dataset.annotationTime));
+    }),
+  );
   const volumeOf = (target: Element) => Math.max(0, Math.min(1, Number((target as HTMLInputElement).value)));
-  on('input', 'input[name="gallery-volume"]', (_event, target) => {
-    bindings.setVolume(volumeOf(target), false);
-  });
-  on('change', 'input[name="gallery-volume"]', (_event, target) => {
-    bindings.setVolume(volumeOf(target), true);
-  });
-  on('click', '[data-action="toggle-gallery-volume"]', (event) => {
-    event.stopPropagation();
-    bindings.toggleVolume();
-  });
-  on('click', '[data-action="toggle-gallery-muted"]', (event) => {
-    event.stopPropagation();
-    bindings.toggleMuted();
-  });
-  on('keydown', '[data-gallery-range-handle]', (event, target) => {
-    const key = (event as KeyboardEvent).key;
-    if (key !== 'ArrowLeft' && key !== 'ArrowRight') return;
-    event.preventDefault();
-    const endpoint = endpointOf(target);
-    if (endpoint)
-      bindings.nudgeRange((target as HTMLElement).dataset.annotationId, endpoint, key === 'ArrowLeft' ? -100 : 100);
-  });
+  lifetime.add(
+    delegate(root, 'input', ATTACHMENTS_AND_GALLERY_TARGETS.galleryVolumeField.selector, (_event, target) => {
+      bindings.setVolume(volumeOf(target), false);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'change', ATTACHMENTS_AND_GALLERY_TARGETS.galleryVolumeField.selector, (_event, target) => {
+      bindings.setVolume(volumeOf(target), true);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryVolume.selector, (event) => {
+      event.stopPropagation();
+      bindings.toggleVolume();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMuted.selector, (event) => {
+      event.stopPropagation();
+      bindings.toggleMuted();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'keydown', '[data-gallery-range-handle]', (event, target) => {
+      const key = (event as KeyboardEvent).key;
+      if (key !== 'ArrowLeft' && key !== 'ArrowRight') return;
+      event.preventDefault();
+      const endpoint = endpointOf(target);
+      if (endpoint)
+        bindings.nudgeRange((target as HTMLElement).dataset.annotationId, endpoint, key === 'ArrowLeft' ? -100 : 100);
+    }),
+  );
   let gesture:
     { pointerId: number; annotationId: string | undefined; endpoint: GalleryRangeEndpoint; track: DOMRect } | undefined;
   lifetime.add(
