@@ -23763,6 +23763,29 @@ test('reorders project and terminal tabs while preserving project order and comp
   await expect(terminalTabs.getByRole('tab', { name: 'Tests' })).toBeFocused();
 });
 
+test('copies selected ticket ids to the local pasteboard without the async Clipboard API (HS2-B68KPQ)', async ({
+  page,
+}) => {
+  const shortcut = process.platform === 'darwin' ? 'Meta' : 'Control';
+  // A remote device on a plain-HTTP LAN origin is not a secure context: navigator.clipboard is absent.
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'clipboard', { configurable: true, get: () => undefined });
+    (window as typeof window & { copied?: string[] }).copied = [];
+    document.addEventListener('copy', () => {
+      (window as typeof window & { copied: string[] }).copied.push(String(document.getSelection() ?? ''));
+    });
+  });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
+  await page.keyboard.press(`${shortcut}+c`);
+  await expect
+    .poll(() => page.evaluate(() => (window as typeof window & { copied: string[] }).copied.at(-1) ?? ''))
+    .toMatch(/^HS2-DEMO01: /);
+});
+
 test('scopes ticket clipboard shortcuts to the focused work area and preserves native text copy and paste', async ({
   page,
   context,

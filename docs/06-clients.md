@@ -22,7 +22,9 @@ transactions per open checkout and drops that history when the checkout closes, 
 retained patches and undo callbacks during long sessions.
 
 Following HS1, Cmd/Ctrl+C and X retain structured selected-ticket data while writing
-readable text to the system clipboard. Cmd/Ctrl+V copies the ticket content and uses
+readable text to the system clipboard. A browser without the async Clipboard API (a remote
+device on a plain-HTTP LAN origin) still receives the ticket ids, titles, and loaded content
+on its local pasteboard through a synchronous selection copy (HS2-B68KPQ). Cmd/Ctrl+V copies the ticket content and uses
 ` (Copy)`, ` (Copy 2)`, and so on for case-insensitive title collisions. Every pasted or
 cross-project-dropped copy starts in Not Started regardless of its source status while
 retaining its source Up Next choice; cut originals

@@ -29,6 +29,7 @@ import type { TicketCloseDialogState } from '../components/ticket-close-dialog';
 import type { InspectorTab } from '../components/ticket-inspector';
 import type { TicketLinkChoice } from '../components/ticket-link-choice-dialog';
 import { isPlainTicketReselection, updateTicketSelection } from '../components/ticket-selection';
+import { copyWithSelection } from '../copy-text';
 import { createDebouncedAutosave, createFocusLossAutosave, type DebouncedAutosave } from '../debounced-autosave';
 import { presentedNoteKind } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
@@ -98,7 +99,7 @@ import {
 } from '../ticket-reader-stack';
 import { ticketTimelineEntries } from '../ticket-timeline-data';
 import type { TicketTitleEditSurface } from '../ticket-title-editing';
-import { copiedTicketPlacement } from '../ticket-transfer';
+import { copiedTicketPlacement, ticketClipboardText } from '../ticket-transfer';
 import {
   createdTicketVisibleInView,
   isTrashedTicket,
@@ -1288,6 +1289,11 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     };
     state.clipboard = snapshot;
     selectedTicketSlugs.value = [...selectedTicketSlugs.value];
+    // Plain-HTTP LAN origins (a remote device) have no async Clipboard API, and the full-text write
+    // below runs after a fetch, outside the shortcut's user gesture. Copy what is already known
+    // synchronously so the local pasteboard still receives the ticket ids (HS2-B68KPQ).
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Absent on insecure origins despite its static type.
+    if (!navigator.clipboard) copyWithSelection(ticketClipboardText(snapshot.tickets));
     void Promise.all(
       rows.map((ticket) =>
         api()
@@ -1298,13 +1304,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       .then((full) => {
         if (state.clipboard !== snapshot) return;
         snapshot.tickets = full.map((ticket) => clipboardTicket(ticket));
-        const text = full
-          .map((ticket) =>
-            [`${ticket.slug}: ${ticket.title}`, ticket.details, ...ticket.notes.map((note) => `- ${note.text}`)]
-              .filter(Boolean)
-              .join('\n\n'),
-          )
-          .join('\n\n');
+        const text = ticketClipboardText(full);
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
         void navigator.clipboard?.writeText(text).catch(() => undefined);
       })
