@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ToolConnection } from './api';
 import {
   compatibleAiEffort,
+  keptEffort,
   prepareProjectConversation,
   projectChatConnectionId,
   projectDriveConnection,
@@ -86,6 +87,13 @@ describe('production project drive control', () => {
     expect(compatibleAiEffort([], 'medium')).toBeUndefined();
     expect(compatibleAiEffort(['low', 'high'], 'medium', 'high')).toBe('high');
     expect(compatibleAiEffort(['low', 'high'], 'medium')).toBe('low');
+  });
+  it('keeps the previous effort across a model change when the new model supports it (HS2-M0HWPH)', () => {
+    expect(keptEffort(['low', 'medium', 'high'], 'high')).toBe('high');
+    expect(keptEffort(['low', 'medium'], 'high')).toBe('low');
+    expect(keptEffort(['low', 'medium'], undefined)).toBe('low');
+    expect(keptEffort([], 'high')).toBeUndefined();
+    expect(keptEffort(undefined, 'high')).toBeUndefined();
   });
   it('restores eligible server-side chats with connection metadata and stable tab identities', () => {
     const plain = connection({

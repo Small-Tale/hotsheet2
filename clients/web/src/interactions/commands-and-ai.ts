@@ -710,7 +710,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
           current,
           id,
           choice.kind === 'model'
-            ? normalizedAiSelection({ tool: active.tool, model: choice.value })
+            ? normalizedAiSelection({ tool: active.tool, model: choice.value, effort: active.effort })
             : { ...active, effort: choice.value },
         );
       },

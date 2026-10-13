@@ -39,6 +39,14 @@ export function compatibleAiEffort(
   );
 }
 
+/**
+ * The effort to keep after switching to a model with `levels`: the previous effort when the new model
+ * supports it, else the model's first level, else none (HS2-M0HWPH).
+ */
+export function keptEffort(levels: readonly string[] | undefined, previous: string | undefined): string | undefined {
+  return levels?.length ? compatibleAiEffort(levels, previous) : undefined;
+}
+
 export function sidebarDriveConnectionId(checkout: string, tool: ProjectDriveTool): string {
   return `${SIDEBAR_DRIVE_CONNECTION_ID}-${tool}-${checkout}`;
 }

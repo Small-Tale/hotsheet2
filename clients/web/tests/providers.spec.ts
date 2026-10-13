@@ -5735,6 +5735,8 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
   await claudeModel.click();
   await claudeModel.locator('wa-option[value="opus"]').click();
   await expect(page.locator('[data-component="ai-tool-settings"]')).toContainText('Saved for this project');
+  // Opus supports Claude's previous (default) medium effort, so the model change keeps it (HS2-M0HWPH).
+  await expect(page.locator('wa-select[name="ai-provider-effort-claude"]')).toHaveJSProperty('value', 'medium');
   await page.getByLabel('List view').click();
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
@@ -5764,7 +5766,7 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
     await expect(item.locator('[data-lucide="bot"]')).toBeAttached();
   await page.screenshot({ path: test.info().outputPath('ai-shell-submenu-wide.png') });
   await shell('claude').click();
-  await expect.poll(() => created.at(-1)).toMatchObject({ connect: 'claude', model: 'opus', effort: 'low' });
+  await expect.poll(() => created.at(-1)).toMatchObject({ connect: 'claude', model: 'opus', effort: 'medium' });
   await openSubmenu();
   await shell().click();
   await expect.poll(() => created.at(-1)).toMatchObject({ connect: 'codex', model: 'gpt-6-astra', effort: 'medium' });

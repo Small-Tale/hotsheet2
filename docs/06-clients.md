@@ -1319,7 +1319,9 @@ preview/download, server directory browser) are separate design work.
   HS2-SW5S13; a project without a choice inherits the machine-wide fallback), validated against
   the drivable plugin manifests. That panel lists one Model/Effort pair per installed provider
   under the default-provider Select, so each provider keeps its own default model and effort
-  (HS2-EK24KF); the pair sits side by side and stacks below a 416px panel width. The arrow opens
+  (HS2-EK24KF); the pair sits side by side and stacks below a 416px panel width. Changing a model
+  (here, in a command, a Drive override, or a conversation) keeps the previous effort when the new
+  model supports it, else uses the model's first effort (HS2-M0HWPH). The arrow opens
   hierarchical Default/provider/model/effort overrides without a client-owned provider table.
   Project activation starts catalog discovery without blocking the rest of project startup, and the
   server prewarms the catalog in a background task at start so the first client typically finds it

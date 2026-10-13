@@ -9,7 +9,7 @@ import { type ManualModelDialogState } from '../components/manual-model-dialog';
 import { conversationTranscriptMarkdown } from '../conversation-export';
 import { syncConversationScroll } from '../conversation-scroll';
 import type { Control, Project } from '../interactions/types';
-import { compatibleAiEffort, type DrawerAIChat } from '../project-drive';
+import { compatibleAiEffort, type DrawerAIChat, keptEffort } from '../project-drive';
 
 export interface AiConfigurationDependencies {
   selectedProjectId: Signal<string>;
@@ -104,18 +104,22 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     if (!current || !model) return;
     const active = effectiveDriveSelection(current.id),
       descriptor = aiTools.value.find((item) => item.id === active.tool),
-      effort = descriptor?.models.find((item) => item.id === model)?.effort_levels?.[0];
+      effort = keptEffort(descriptor?.models.find((item) => item.id === model)?.effort_levels, active.effort);
     driveOverridesByProject.value = {
       ...driveOverridesByProject.value,
       [current.id]: { tool: active.tool, model, ...(effort ? { effort } : {}) },
     };
   }
 
-  /** Save one provider's default model (its first supported effort) for this project (HS2-EK24KF). */
+  /**
+   * Save one provider's default model for this project (HS2-EK24KF), keeping its previous effort when
+   * the new model supports it, else the model's first supported effort (HS2-M0HWPH).
+   */
   function selectDefaultModel(model: string, tool = aiDefaults.value.tool) {
     if (!model) return;
     const descriptor = aiTools.value.find((item) => item.id === tool),
-      effort = descriptor?.models.find((item) => item.id === model)?.effort_levels?.[0];
+      previous = providerSelection(aiDefaults.value, aiTools.value, tool).effort,
+      effort = keptEffort(descriptor?.models.find((item) => item.id === model)?.effort_levels, previous);
     void saveAiDefaults(withProviderSelection(aiDefaults.value, tool, { model, ...(effort ? { effort } : {}) }));
   }
 
@@ -135,7 +139,10 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
       connectionId = conversationConnectionId.value;
     if (!current || !connectionId || !model) return;
     const selection = conversationAiSelection(connectionId),
-      effort = selection.descriptor?.models.find((item) => item.id === model)?.effort_levels?.[0];
+      effort = keptEffort(
+        selection.descriptor?.models.find((item) => item.id === model)?.effort_levels,
+        selection.effort,
+      );
     conversationSelections.value = {
       ...conversationSelections.value,
       [connectionId]: { model, ...(effort ? { effort } : {}) },
