@@ -340,6 +340,10 @@ enum Cmd {
         /// Override the project's shared trash_cleanup_days setting for this run.
         #[arg(long)]
         older_than_days: Option<u32>,
+        /// List how many (and which) Trash tickets would be purged, without removing any
+        /// (headless parity with the Lifecycle retention purge preview, HS2-1APM9K).
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Set up an AI tool to work with this project, headless (writes its instruction
     /// section, worklist skill, and MCP config). No server or client required.

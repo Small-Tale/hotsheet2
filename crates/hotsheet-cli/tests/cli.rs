@@ -972,6 +972,26 @@ fn trash_restore_and_purge_have_headless_cli_parity() {
             "must be a positive whole number of days",
         ));
 
+    // --dry-run previews the same selection without removing anything (HS2-1APM9K).
+    hs(p)
+        .args(["purge-trash", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Would purge 0 Trash ticket(s) deleted 7+ days ago",
+        ));
+    hs(p)
+        .args(["purge-trash", "--older-than-days", "0", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Would purge 1 Trash ticket(s) deleted 0+ days ago",
+        ))
+        .stdout(predicate::str::contains(format!(
+            "Would purge {slug} Recoverable"
+        )));
+    hs(p).args(["show", &slug]).assert().success();
+
     hs(p)
         .args(["purge-trash", "--older-than-days", "0"])
         .assert()

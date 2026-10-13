@@ -80,7 +80,10 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::Doctor { project } => cmd_doctor(path, &project),
         Cmd::Reindex { index } => cmd_reindex(path, index),
         Cmd::Worklist => cmd_worklist(path, &ctx.cwd),
-        Cmd::PurgeTrash { older_than_days } => cmd_purge_trash(path, &ctx.cwd, older_than_days),
+        Cmd::PurgeTrash {
+            older_than_days,
+            dry_run,
+        } => cmd_purge_trash(path, &ctx.cwd, older_than_days, dry_run),
         Cmd::MergeDriver { base, ours, theirs } => cmd_merge_driver(&base, &ours, &theirs),
         _ => misrouted("store"),
     }
@@ -624,11 +627,23 @@ pub(crate) fn cmd_purge_trash(
     path: &PathBuf,
     cwd: &Path,
     older_than_days: Option<u32>,
+    dry_run: bool,
 ) -> Result<()> {
     let store = FsStore::open(path)?;
     let older_than_days = older_than_days
         .map(Ok)
         .unwrap_or_else(|| settings_for_cli(path, cwd).trash_cleanup_days())?;
+    if dry_run {
+        let due = ops::trash_due_for_purge(&store, &now_ts(), i64::from(older_than_days))?;
+        println!(
+            "Would purge {} Trash ticket(s) deleted {older_than_days}+ days ago",
+            due.len()
+        );
+        for ticket in &due {
+            println!("Would purge {} {}", ticket.slug, ticket.title);
+        }
+        return Ok(());
+    }
     let purged = ops::purge_trash(&store, &now_ts(), i64::from(older_than_days))?;
     if purged.is_empty() {
         println!("Trash has no tickets deleted {older_than_days}+ days ago");
