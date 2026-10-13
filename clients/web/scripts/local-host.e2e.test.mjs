@@ -148,7 +148,7 @@ it('serves the production client and the local bridge without Vite', async () =>
     expect(requests.filter((path) => path.startsWith('/assets/')).length).toBeLessThanOrEqual(6);
     // Development-only surfaces are absent; client routes resolve to the document.
     expect((await fetch(`${origin}/ux-demo`)).status).toBe(404);
-    expect(await (await fetch(`${origin}/settings/anything`)).text()).toContain('<main id="app" class="kui-app-root">');
+    expect(await (await fetch(`${origin}/settings/anything`)).text()).toContain('<main id="app" class="kui-app-root" data-viewport="locked">');
     // The bridge is live: it supervises a real machine server under the isolated home.
     const checkouts = await fetch(`${origin}/__hotsheet/checkouts`);
     expect(checkouts.status).toBe(200);
