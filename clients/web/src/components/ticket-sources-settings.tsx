@@ -341,20 +341,8 @@ export function AccountsSettings({
                           {account.managed ? 'Signed in with Hot Sheet' : `Keychain credential ${account.id}`}
                         </Detail>
                       </span>
-                      {(account.provider === 'github' && account.managed && !account.identity) ||
-                      account.sources.length === 0 ? (
+                      {account.sources.length === 0 ? (
                         <span class="ticket-provider-settings__account-actions">
-                          {account.provider === 'github' && account.managed && !account.identity && (
-                            <wa-button
-                              size="small"
-                              appearance="outlined"
-                              type="button"
-                              {...COMMANDS_AND_AI_ACTIONS.identifyGithubAccount.attrs}
-                              data-item-id={account.id}
-                            >
-                              Show username
-                            </wa-button>
-                          )}
                           {account.sources.length === 0 && (
                             <wa-button
                               size="small"

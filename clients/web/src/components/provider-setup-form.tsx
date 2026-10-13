@@ -4,7 +4,6 @@ import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
 import { rem } from '@kerfjs/ui/css-values';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
-import { ListActionRow } from '@kerfjs/ui/list-action-row';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
@@ -257,18 +256,11 @@ export function ProviderSetupForm({
                             </span>
                           ),
                         };
-                        return account.identity ? (
+                        // Usernames are fetched automatically; a row never needs a lookup action (HS2-NRTH1N).
+                        return (
                           <ListItem
                             {...shared}
                             trailing={<LucideIcon icon={ChevronRight} name="chevron-right" size={16} />}
-                          />
-                        ) : (
-                          <ListActionRow
-                            {...shared}
-                            trailingAction="identify-github-account"
-                            trailingActionLabel={`Show username for ${account.host || 'GitHub'} sign-in ${account.id.slice(-6)}`}
-                            trailingActionTitle="Show username"
-                            trailingActionIcon={<LucideIcon icon={RefreshCw} name="refresh-cw" />}
                           />
                         );
                       })}

@@ -1067,30 +1067,30 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       providerAccountsError.value = '';
     } catch (reason) {
       providerAccountsError.value = reason instanceof Error ? reason.message : String(reason);
+      return;
     }
+    for (const account of providerAccounts.value)
+      if (account.provider === 'github' && account.managed && !account.identity) void identifyGithubAccount(account.id);
   }
 
-  /** An explicit lookup for a legacy GitHub sign-in whose username was never saved. */
-  const identifyingAccounts = new Set<string>();
+  /**
+   * Fetch and save the username of a GitHub sign-in that never stored one, automatically whenever the
+   * account list shows it (HS2-NRTH1N): there is no Show username action. Each account is looked up at
+   * most once per app session, whether the lookup succeeds or fails, so an unreachable GitHub or a
+   * login the server cannot save never turns into a request loop.
+   */
+  const identifiedAccounts = new Set<string>();
   async function identifyGithubAccount(id: string) {
     const current = dependencies.project();
-    if (
-      !current ||
-      identifyingAccounts.has(id) ||
-      !providerAccounts.value.some((account) => account.id === id && account.provider === 'github' && !account.identity)
-    )
-      return;
-    identifyingAccounts.add(id);
-    providerAccountsError.value = '';
+    if (!current || identifiedAccounts.has(id)) return;
+    identifiedAccounts.add(id);
     try {
-      await new Api(current.apiPath).identifyAccount(id);
-      await refreshProviderAccounts(current);
-    } catch (reason) {
-      providerAccountsError.value = reason instanceof Error ? reason.message : String(reason);
-      dependencies.showToast(`Could not show username: ${providerAccountsError.value}`);
-    } finally {
-      identifyingAccounts.delete(id);
+      await new Api(current.apiPath, '', { trackBusy: false }).identifyAccount(id);
+    } catch {
+      // The row keeps its credential suffix until the app reloads.
+      return;
     }
+    await refreshProviderAccounts(current);
   }
 
   /** Sign out of an account no ticket source uses; the server refuses one still in use. */
@@ -1234,7 +1234,6 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     unusedAccountSourceChoice,
     removingUnusedAccountSource,
     refreshProviderAccounts,
-    identifyGithubAccount,
     signOutProviderAccount,
     requestUnusedAccountSourceRemoval,
     cancelUnusedAccountSourceRemoval,

@@ -3509,6 +3509,11 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Reused' })).toBeVisible();
 
   // App Settings → Accounts lists sign-ins with the projects using each; only an unused one signs out.
+  const identityLookups: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/identity'))
+      identityLookups.push(new URL(request.url()).pathname);
+  });
   await sourcesPanel.getByRole('button', { name: 'App Settings → Accounts' }).click();
   const accounts = page.locator('[data-component="accounts-settings"]');
   await expect(page.locator('[data-component="settings-workspace"]')).toHaveAttribute(
@@ -3521,7 +3526,13 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(used.locator('[data-action="sign-out-account"]')).toHaveCount(0);
   const unused = accounts.locator('[data-account-id="github-app-abandoned"]');
   await expect(unused).toContainText('No ticket source uses this sign-in.');
-  await page.screenshot({ path: test.info().outputPath('legacy-account-before-lookup.png'), fullPage: true });
+  // A legacy sign-in without a saved login fetches its username automatically; there is never a
+  // Show username action (HS2-NRTH1N).
+  await expect(unused).toContainText('legacy-user');
+  await expect(page.getByRole('button', { name: /Show username/ })).toHaveCount(0);
+  // The lookup ran once; refreshing the saved account list never re-requests it.
+  expect(identityLookups.filter((path) => path.includes('github-app-abandoned')).length).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: test.info().outputPath('legacy-account-auto-username.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 760 });
   const accountsFitPhone = () =>
     accounts.evaluate((node) => {
@@ -3536,11 +3547,6 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
       );
     });
   await expect(page.locator('[data-component="app-shell"]')).toHaveAttribute('data-mobile', 'true');
-  await expect.poll(accountsFitPhone).toBe(true);
-  await page.screenshot({ path: test.info().outputPath('legacy-account-before-lookup-narrow.png'), fullPage: true });
-  await unused.getByRole('button', { name: 'Show username' }).click();
-  await expect(unused).toContainText('legacy-user');
-  await expect(unused.getByRole('button', { name: 'Show username' })).toHaveCount(0);
   await expect.poll(accountsFitPhone).toBe(true);
   await page.screenshot({ path: test.info().outputPath('legacy-account-narrow.png'), fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
@@ -3586,8 +3592,9 @@ for (const width of [1280, 390])
       form = setup.locator('[data-action="save-provider-connection"]');
     await expect(setup).toHaveJSProperty('open', true);
     await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
-    // The only account on this machine is an earlier sign-in no project uses yet.
-    const reuse = form.getByRole('button', { name: 'Use GitHub · sign-in ndoned, not used by any project yet' });
+    // The only account on this machine is an earlier sign-in no project uses yet; its username is
+    // looked up automatically (HS2-NRTH1N).
+    const reuse = form.getByRole('button', { name: 'Use legacy-user on GitHub, not used by any project yet' });
     await expect(reuse).toBeVisible();
     await setup.evaluate(async (node) => {
       const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];

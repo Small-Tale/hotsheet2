@@ -681,9 +681,12 @@ describe('ticket source surfaces', () => {
       }),
     );
     expect(older).toContain('github.com · sign-in 1older');
-    expect(older).toContain('data-action="identify-github-account"');
-    expect(older).toContain('aria-label="Show username for github.com sign-in 1older"');
-    expect(older).toMatch(/data-action="identify-github-account"[^>]*data-item-id="github-app-01older"/);
+    // The username is fetched automatically, so the row is a plain reusable account (HS2-NRTH1N).
+    expect(older).not.toContain('identify-github-account');
+    expect(older).not.toContain('Show username');
+    expect(older).toMatch(
+      /data-action="use-github-account"[^>]*data-item-id="github-app-01older"|data-item-id="github-app-01older"[^>]*data-action="use-github-account"/,
+    );
     const none = String(ProviderSetupForm({ kind: 'github' }));
     expect(none).not.toContain('use-github-account');
     expect(none).toContain('Sign in to choose a repository.');
