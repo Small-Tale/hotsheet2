@@ -3,8 +3,14 @@ import { createScope } from 'kerfjs/scope';
 
 import { Api, type CodeReview, type FullTicket } from '../api';
 import { boardColumnStatus, isPerColumnBoardView } from '../board-pagination';
-import { TAG_CHIP_REMOVE_ACTION } from '../components/tag-chip';
 import { codeReviewTarget } from '../components/ticket-code-review';
+import {
+  type FeedbackChoiceModifiers,
+  wireBlockedReasonEditor,
+  wireFeedbackChoices,
+  wireTicketTagEditor,
+  wireTicketTitleEditor,
+} from '../components/ticket-field-editor-interactions';
 import { type InspectorTab } from '../components/ticket-inspector';
 import { type TicketReaderDialogElement } from '../components/ticket-reader';
 import { statusMenuAnchorY } from '../components/ticket-status-menu';
@@ -25,12 +31,7 @@ import { manuallyResizedTicketEditorHeight, saveTicketEditorSize, ticketEditorKi
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
 import { type TicketPatch } from '../ticket-operations';
 import { type TicketReaderFrame } from '../ticket-reader-stack';
-import {
-  normalizeTicketTitleField,
-  type TicketTitleEditSurface,
-  ticketTitleEditSurfaceOf,
-  ticketTitleKeyFinishesEdit,
-} from '../ticket-title-editing';
+import { type TicketTitleEditSurface, ticketTitleEditSurfaceOf } from '../ticket-title-editing';
 import { type TicketView } from '../ticket-views';
 import { data } from './dom';
 import { type Control, type DetailsFinishTask, type Project } from './types';
@@ -369,22 +370,18 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     queueMicrotask(() => activeTicketSurface().querySelector<HTMLElement>('[name="ticket-title"]')?.focus());
   }
   lifetime.add(
-    delegate(document.body, 'dblclick', INSPECTOR_AND_EDITOR_ACTIONS.editTicketTitle.selector, (_event, target) => {
-      beginTitleEdit(target);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_ACTIONS.editTicketTitle.selector, (event, target) => {
-      if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
-      event.preventDefault();
-      beginTitleEdit(target);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'input', INSPECTOR_AND_EDITOR_TARGETS.ticketTitleField.selector, (_event, target) => {
-      // The wrapping editor is a textarea, but a title stays one line: pasted breaks collapse (HS2-98ZVPE).
-      titleDraft.value = normalizeTicketTitleField(target as HTMLTextAreaElement);
-      if (titleDraft.value.trim()) titleAutosave.schedule(titleDraft.value);
+    wireTicketTitleEditor(document.body, {
+      begin: beginTitleEdit,
+      input: (value) => {
+        titleDraft.value = value;
+        if (titleDraft.value.trim()) titleAutosave.schedule(titleDraft.value);
+      },
+      finish: () => {
+        if (!titleDraft.value.trim()) return;
+        void titleAutosave.flush().then((saved) => {
+          if (saved) titleEditingSurface.value = undefined;
+        });
+      },
     }),
   );
   // Escape in an inline editor finishes that edit (its focusout autosaves) and stops there, so the
@@ -417,51 +414,22 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       finishInlineEditOnEscape,
     ),
   );
-  lifetime.add(
-    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_TARGETS.ticketTitleField.selector, (event, target) => {
-      // Enter finishes the edit through the focusout autosave instead of inserting a newline.
-      if (!ticketTitleKeyFinishesEdit(event as KeyboardEvent)) return;
-      event.preventDefault();
-      (target as HTMLTextAreaElement).blur();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.ticketTitleField.selector, () => {
-      if (!titleDraft.value.trim()) return;
-      void titleAutosave.flush().then((saved) => {
-        if (saved) titleEditingSurface.value = undefined;
-      });
-    }),
-  );
   function setSelectedTags(tags: string[]) {
     if (!selectedTicket.value || !canUpdateSelected()) return;
     selectedTicket.value = { ...selectedTicket.value, tags };
     tagsAutosave.schedule(tags);
   }
-  function addTagFromInput(target: HTMLInputElement) {
-    const next = addTicketTag(selectedTicket.value?.tags ?? [], target.value);
-    target.value = '';
-    setSelectedTags(next);
-  }
   lifetime.add(
-    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_TARGETS.ticketTagInputField.selector, (event, target) => {
-      const keyboard = event as KeyboardEvent;
-      if (!['Enter', ','].includes(keyboard.key)) return;
-      event.preventDefault();
-      addTagFromInput(target as HTMLInputElement);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.ticketTagInputField.selector, (_event, target) => {
-      if ((target as HTMLInputElement).value.trim()) addTagFromInput(target as HTMLInputElement);
-      void tagsAutosave.flush();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', `[data-action="${TAG_CHIP_REMOVE_ACTION}"]`, (_event, target) => {
-      const chip = target.closest<HTMLElement>('[data-component="chip"]'),
-        tag = chip ? data(chip).itemId : undefined;
-      if (tag) setSelectedTags(removeTicketTag(selectedTicket.value?.tags ?? [], tag));
+    wireTicketTagEditor(document.body, {
+      add: (value) => {
+        setSelectedTags(addTicketTag(selectedTicket.value?.tags ?? [], value));
+      },
+      flush: () => {
+        void tagsAutosave.flush();
+      },
+      remove: (tag) => {
+        setSelectedTags(removeTicketTag(selectedTicket.value?.tags ?? [], tag));
+      },
     }),
   );
   lifetime.add(
@@ -759,10 +727,8 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       },
     ),
   );
-  function toggleFeedbackChoice(event: MouseEvent | KeyboardEvent, target: Element) {
-    const noteId = data(target).noteId!,
-      choiceId = data(target).choiceId!,
-      source = feedbackSource(noteId),
+  function toggleFeedbackChoice(noteId: string, choiceId: string, modifiers: FeedbackChoiceModifiers) {
+    const source = feedbackSource(noteId),
       group = source && parseFeedbackChoices(source);
     if (!group) return;
     const next = updateFeedbackChoiceSelection(
@@ -770,29 +736,13 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       readerFeedbackChoiceSelections.value[noteId] ?? [],
       choiceId,
       readerFeedbackChoiceAnchors.get(noteId),
-      { additive: event.metaKey || event.ctrlKey, range: event.shiftKey },
+      modifiers,
     );
     readerFeedbackChoiceSelections.value = { ...readerFeedbackChoiceSelections.value, [noteId]: next.selected };
     if (next.anchor) readerFeedbackChoiceAnchors.set(noteId, next.anchor);
     scheduleProjectSessionPersistence();
   }
-  lifetime.add(
-    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.toggleFeedbackChoice.selector, (event, target) => {
-      if ((event.target as Element).closest('a,[data-action="open-attachment-gallery"]')) return;
-      toggleFeedbackChoice(event as MouseEvent, target);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_ACTIONS.toggleFeedbackChoice.selector, (event, target) => {
-      if (
-        !['Enter', ' '].includes((event as KeyboardEvent).key) ||
-        (event.target as Element).closest('a,[data-action="open-attachment-gallery"]')
-      )
-        return;
-      event.preventDefault();
-      toggleFeedbackChoice(event as KeyboardEvent, target);
-    }),
-  );
+  lifetime.add(wireFeedbackChoices(document.body, { toggle: toggleFeedbackChoice }));
   lifetime.add(
     delegate(document.body, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.noteBodyField.selector, (_event, target) => {
       if (data(target).noteResponse === 'true') return;
@@ -927,62 +877,48 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     queueMicrotask(() => activeTicketSurface().querySelector<HTMLElement>('[name="blocked-reason"]')?.focus());
   }
   lifetime.add(
-    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.editBlockedReason.selector, (_event, target) => {
-      beginBlockedReasonEdit(isReaderSurface(target), linkedReaderFrame(target));
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'dblclick', INSPECTOR_AND_EDITOR_TARGETS.editBlockedReason.selector, (_event, target) => {
-      beginBlockedReasonEdit(isReaderSurface(target), linkedReaderFrame(target));
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_TARGETS.editBlockedReason.selector, (event, target) => {
-      if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
-      event.preventDefault();
-      beginBlockedReasonEdit(isReaderSurface(target));
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'input', INSPECTOR_AND_EDITOR_TARGETS.blockedReasonField.selector, (_event, target) => {
-      const frame = linkedReaderFrame(target),
-        value = (target as HTMLTextAreaElement).value;
-      if (frame) {
-        replaceLinkedReaderFrame(frame.id, (current) => ({
-          ...current,
-          edit: { ...current.edit, blockedReasonDraft: value },
-        }));
-        linkedReaderSaves(frame.id).blocked.schedule(value);
-        return;
-      }
-      const reader = isReaderSurface(target),
-        draft = reader ? readerBlockedReasonDraft : blockedReasonDraft,
-        autosave = reader ? readerBlockedReasonAutosave : blockedReasonAutosave;
-      draft.value = value;
-      autosave.schedule(draft.value);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.blockedReasonField.selector, (_event, target) => {
-      const frame = linkedReaderFrame(target);
-      if (frame) {
-        void linkedReaderSaves(frame.id)
-          .blocked.flush()
-          .then((saved) => {
-            if (saved)
-              replaceLinkedReaderFrame(frame.id, (current) => ({
-                ...current,
-                edit: { ...current.edit, blockedReasonEditing: false },
-              }));
-          });
-        return;
-      }
-      const reader = isReaderSurface(target),
-        editing = reader ? readerBlockedReasonEditing : blockedReasonEditing,
-        autosave = reader ? readerBlockedReasonAutosave : blockedReasonAutosave;
-      void autosave.flush().then((saved) => {
-        if (saved) editing.value = false;
-      });
+    wireBlockedReasonEditor(document.body, {
+      begin: (target, trigger) => {
+        // The keyboard path has always opened the inline editor even inside a linked reader frame.
+        beginBlockedReasonEdit(isReaderSurface(target), trigger === 'key' ? undefined : linkedReaderFrame(target));
+      },
+      input: (value, target) => {
+        const frame = linkedReaderFrame(target);
+        if (frame) {
+          replaceLinkedReaderFrame(frame.id, (current) => ({
+            ...current,
+            edit: { ...current.edit, blockedReasonDraft: value },
+          }));
+          linkedReaderSaves(frame.id).blocked.schedule(value);
+          return;
+        }
+        const reader = isReaderSurface(target),
+          draft = reader ? readerBlockedReasonDraft : blockedReasonDraft,
+          autosave = reader ? readerBlockedReasonAutosave : blockedReasonAutosave;
+        draft.value = value;
+        autosave.schedule(draft.value);
+      },
+      finish: (target) => {
+        const frame = linkedReaderFrame(target);
+        if (frame) {
+          void linkedReaderSaves(frame.id)
+            .blocked.flush()
+            .then((saved) => {
+              if (saved)
+                replaceLinkedReaderFrame(frame.id, (current) => ({
+                  ...current,
+                  edit: { ...current.edit, blockedReasonEditing: false },
+                }));
+            });
+          return;
+        }
+        const reader = isReaderSurface(target),
+          editing = reader ? readerBlockedReasonEditing : blockedReasonEditing,
+          autosave = reader ? readerBlockedReasonAutosave : blockedReasonAutosave;
+        void autosave.flush().then((saved) => {
+          if (saved) editing.value = false;
+        });
+      },
     }),
   );
   lifetime.add(

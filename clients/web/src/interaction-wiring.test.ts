@@ -53,6 +53,10 @@ const registrations = new Set([
   'wireCommandSettingsEditor',
   'wireBulkTicketDialog',
   'wireAiConversation',
+  'wireTicketTitleEditor',
+  'wireTicketTagEditor',
+  'wireFeedbackChoices',
+  'wireBlockedReasonEditor',
   'window.addEventListener',
   'document.addEventListener',
 ]);
@@ -125,7 +129,7 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
           .join('\t'),
       );
     expect(actual).toEqual(baseline);
-    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(394);
+    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(379);
     expect(
       actual
         .filter((line) => /\tdelegate(?:Capture)?\t/.test(line))

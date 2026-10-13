@@ -8,13 +8,17 @@ import { MarkdownEditor, type MarkdownEditorMode } from '../components/markdown-
 import { MarkdownPreview, type MarkdownPreviewProps } from '../components/markdown-preview';
 import { NoteCard, type NoteCardProps, type NoteKind } from '../components/note-card';
 import { NoteComposer } from '../components/note-composer';
-import { TAG_CHIP_REMOVE_ACTION } from '../components/tag-chip';
+import {
+  wireBlockedReasonEditor,
+  wireFeedbackChoices,
+  wireTicketTagEditor,
+  wireTicketTitleEditor,
+} from '../components/ticket-field-editor-interactions';
 import type { InspectorTab } from '../components/ticket-inspector';
 import { showTicketReaderDialog, TicketReader } from '../components/ticket-reader';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { clickBeginsMarkdownEdit, keyBeginsMarkdownEdit, repeatPressWouldLeaveNewEditor } from '../markdown-click-edit';
-import { normalizeTicketTitleField, ticketTitleKeyFinishesEdit } from '../ticket-title-editing';
 import { DemoEvent } from './components/demo-event';
 import { selectDemo, selectedId } from './components/demo-state';
 import { DEMO_ACTIONS, DEMO_COMPONENTS, DEMO_FIELDS, DEMO_MARKERS } from './demo-actions';
@@ -486,65 +490,35 @@ function wireContentComponentsDemo(root: HTMLElement): () => void {
     queueMicrotask(() => host.querySelector<HTMLElement>('[name="ticket-title"]')?.focus());
   };
   demoListeners.add(
-    delegate(root, 'dblclick', DEMO_ACTIONS.editTicketTitle.selector, (_event, target) => {
-      beginTitleEdit(target);
+    wireTicketTitleEditor(root, {
+      begin: beginTitleEdit,
+      input: (value, field) => {
+        const surface = titleSurface(field);
+        surface.draft.value = value;
+        if (value.trim()) surface.autosave.schedule(value);
+      },
+      finish: (field) => {
+        const surface = titleSurface(field);
+        if (!surface.draft.value.trim()) return;
+        void surface.autosave.flush().then(() => {
+          surface.editing.value = false;
+        });
+      },
     }),
   );
   demoListeners.add(
-    delegate(root, 'keydown', DEMO_ACTIONS.editTicketTitle.selector, (event, target) => {
-      if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
-      event.preventDefault();
-      beginTitleEdit(target);
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'input', DEMO_FIELDS.ticketTitle.selector, (_event, target) => {
-      const surface = titleSurface(target);
-      // The wrapping title editor keeps a title on one line: pasted breaks collapse (HS2-98ZVPE).
-      surface.draft.value = normalizeTicketTitleField(target as HTMLTextAreaElement);
-      if (surface.draft.value.trim()) surface.autosave.schedule(surface.draft.value);
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'keydown', DEMO_FIELDS.ticketTitle.selector, (event, target) => {
-      if (!ticketTitleKeyFinishesEdit(event as KeyboardEvent)) return;
-      event.preventDefault();
-      (target as HTMLTextAreaElement).blur();
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'focusout', DEMO_FIELDS.ticketTitle.selector, (_event, target) => {
-      const surface = titleSurface(target);
-      if (!surface.draft.value.trim()) return;
-      void surface.autosave.flush().then(() => {
-        surface.editing.value = false;
-      });
-    }),
-  );
-  const addInspectorTag = (target: HTMLInputElement) => {
-    inspectorTags.value = addTicketTag(inspectorTags.value, target.value);
-    target.value = '';
-    tagsAutosave.schedule(inspectorTags.value);
-  };
-  demoListeners.add(
-    delegate(root, 'keydown', DEMO_FIELDS.ticketTagInput.selector, (event, target) => {
-      if (!['Enter', ','].includes((event as KeyboardEvent).key)) return;
-      event.preventDefault();
-      addInspectorTag(target as HTMLInputElement);
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'focusout', DEMO_FIELDS.ticketTagInput.selector, (_event, target) => {
-      if ((target as HTMLInputElement).value.trim()) addInspectorTag(target as HTMLInputElement);
-      void tagsAutosave.flush();
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', `[data-action="${TAG_CHIP_REMOVE_ACTION}"]`, (_event, target) => {
-      const tag = target.closest<HTMLElement>('[data-component="chip"]')?.dataset.itemId;
-      if (!tag) return;
-      inspectorTags.value = removeTicketTag(inspectorTags.value, tag);
-      tagsAutosave.schedule(inspectorTags.value);
+    wireTicketTagEditor(root, {
+      add: (value) => {
+        inspectorTags.value = addTicketTag(inspectorTags.value, value);
+        tagsAutosave.schedule(inspectorTags.value);
+      },
+      flush: () => {
+        void tagsAutosave.flush();
+      },
+      remove: (tag) => {
+        inspectorTags.value = removeTicketTag(inspectorTags.value, tag);
+        tagsAutosave.schedule(inspectorTags.value);
+      },
     }),
   );
   const beginBlockedReasonEdit = () => {
@@ -552,27 +526,19 @@ function wireContentComponentsDemo(root: HTMLElement): () => void {
     inspectorBlockedReasonEditing.value = true;
     queueMicrotask(() => root.querySelector<HTMLElement>('[name="blocked-reason"]')?.focus());
   };
-  demoListeners.add(delegate(root, 'click', DEMO_ACTIONS.editBlockedReason.selector, beginBlockedReasonEdit));
-  demoListeners.add(delegate(root, 'dblclick', DEMO_MARKERS.editBlockedReason.selector, beginBlockedReasonEdit));
   demoListeners.add(
-    delegate(root, 'keydown', DEMO_MARKERS.editBlockedReason.selector, (event) => {
-      if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
-      event.preventDefault();
-      beginBlockedReasonEdit();
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'input', DEMO_FIELDS.blockedReason.selector, (_event, target) => {
-      inspectorBlockedReasonDraft.value = (target as FormControl).value;
-      blockedReasonAutosave.schedule(inspectorBlockedReasonDraft.value);
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'focusout', DEMO_FIELDS.blockedReason.selector, () => {
-      void blockedReasonAutosave.flush().then(() => {
-        inspectorBlockedReasonEditing.value = false;
-        recordCollectionEvent('Blocked reason autosaved');
-      });
+    wireBlockedReasonEditor(root, {
+      begin: beginBlockedReasonEdit,
+      input: (value) => {
+        inspectorBlockedReasonDraft.value = value;
+        blockedReasonAutosave.schedule(value);
+      },
+      finish: () => {
+        void blockedReasonAutosave.flush().then(() => {
+          inspectorBlockedReasonEditing.value = false;
+          recordCollectionEvent('Blocked reason autosaved');
+        });
+      },
     }),
   );
   demoListeners.add(
@@ -644,24 +610,24 @@ function wireContentComponentsDemo(root: HTMLElement): () => void {
   );
   let demoFeedbackChoiceAnchor: string | undefined = 'choice-1';
   demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.toggleFeedbackChoice.selector, (event, target) => {
-      if ((event.target as Element).closest('a,[data-action="open-attachment-gallery"]')) return;
-      const noteId = (target as HTMLElement).dataset.noteId!,
-        choiceId = (target as HTMLElement).dataset.choiceId!;
-      const note = readerNotes.value.find((item) => item.id === noteId),
-        group = note && parseFeedbackChoices(note.body);
-      if (!group) return;
-      const pointer = event as MouseEvent,
-        next = updateFeedbackChoiceSelection(
+    wireFeedbackChoices(root, {
+      toggle: (noteId, choiceId, modifiers) => {
+        const note = readerNotes.value.find((item) => item.id === noteId),
+          group = note && parseFeedbackChoices(note.body);
+        if (!group) return;
+        const next = updateFeedbackChoiceSelection(
           group.choices.map((choice) => choice.id),
           readerFeedbackChoiceSelections.value[noteId] ?? [],
           choiceId,
           demoFeedbackChoiceAnchor,
-          { additive: pointer.metaKey || pointer.ctrlKey, range: pointer.shiftKey },
+          modifiers,
         );
-      readerFeedbackChoiceSelections.value = { ...readerFeedbackChoiceSelections.value, [noteId]: next.selected };
-      demoFeedbackChoiceAnchor = next.anchor;
-      recordCollectionEvent(`${next.selected.length} feedback choice${next.selected.length === 1 ? '' : 's'} selected`);
+        readerFeedbackChoiceSelections.value = { ...readerFeedbackChoiceSelections.value, [noteId]: next.selected };
+        demoFeedbackChoiceAnchor = next.anchor;
+        recordCollectionEvent(
+          `${next.selected.length} feedback choice${next.selected.length === 1 ? '' : 's'} selected`,
+        );
+      },
     }),
   );
   demoListeners.add(
