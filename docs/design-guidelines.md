@@ -967,8 +967,9 @@ The single source for this table is the command registry (HS2-80VPPW, HS2-KTHGVE
 **Hot Sheet application.** The project's cursor rule (pointer for clickable
 controls and selectable rows, text for editable text, not-allowed for disabled,
 grab/resize for direct manipulation, default otherwise) is the web translation and is
-kept deliberately even though AppKit shows an arrow over buttons. `cursor-semantics.css`
-already covers native and Web Awesome controls; extend `dropEffect` to `copy` under
+kept deliberately even though AppKit shows an arrow over buttons. Kerf's document
+baseline covers native controls and disabled `wa-button`s, and `cursor-semantics.css` adds
+only delegated option rows and the resize-drag cursors (HS2-CYSE1W); extend `dropEffect` to `copy` under
 Option/Alt and `none` over invalid targets. Splitter handles keep a ~12 px hit area
 around a 1 px line.
 
@@ -1123,7 +1124,7 @@ the "gap" column are tracked by the tickets in §11.
 | Color and appearance  | Semantic Web Awesome tokens, `--hs-*` aliases limited to domain states, literal-token lint                                                                     | Light-only; no `prefers-color-scheme`, `prefers-contrast`, `prefers-reduced-motion`, `prefers-reduced-transparency` (HS2-DKZG9S) |
 | Typography            | Token-based sizes                                                                                                                                              | Inter-first stack instead of system font; scale not mapped to macOS text styles (HS2-PS29TA)                                     |
 | Icons                 | Lucide only through a shared component with the icon-policy test                                                                                               | Native decision pending (HS2-0P83KD); standard-action map in §4.13 to enforce                                                    |
-| Cursors               | `cursor-semantics.css` for native and Web Awesome parts, splitter cursors                                                                                      | `dropEffect` copy/none semantics                                                                                                 |
+| Cursors               | Kerf document cursor baseline; `cursor-semantics.css` for option rows and splitter cursors                                                                     | `dropEffect` copy/none semantics                                                                                                 |
 | Notifications         | Permission events, history view, "Decision made outside Hot Sheet"                                                                                             | Interruption-level policy and coalescing once native/Tauri notifications ship                                                    |
 | AI content            | Attributed activity timeline; Attempt AI repair creates a ticket instead of editing files                                                                      | Persistent AI labels, feedback, undo/retry affordances (HS2-WBW3Z9)                                                              |
 | Help                  | Tooltips on icon actions                                                                                                                                       | 60–75 character verb-first audit; contextual tips; Help menu content                                                             |

@@ -1,28 +1,9 @@
-/* App cursor policy (CLAUDE.md): browsers draw the default arrow on native controls, and neither Kerf's
-   document baseline nor Web Awesome sets these cursors (a Kerf baseline is requested in KF-C336VV). */
-button:not(:disabled),
-a[href],
-[role='button']:not([aria-disabled='true']),
-[role='option'][data-action],
-input:is([type='checkbox'], [type='radio'], [type='button'], [type='submit']):not(:disabled) {
+/* App cursor policy (CLAUDE.md): Kerf's document baseline gives native controls, links, role buttons,
+   and disabled wa-buttons their semantic cursors (KF-C336VV, HS2-CYSE1W). The app adds only what that
+   baseline does not cover. */
+/* Delegated option rows (listbox options carrying a data-action) are clickable. */
+[role='option'][data-action] {
   cursor: pointer;
-}
-
-button:disabled,
-input:disabled {
-  cursor: not-allowed;
-}
-
-input:not([type]),
-input:is([type='text'], [type='search'], [type='email'], [type='url'], [type='password'], [type='number']),
-textarea {
-  cursor: text;
-}
-
-/* Web Awesome keeps a pointer on a disabled wa-button's base part; every other Web Awesome control
-   owns its pointer, text, and not-allowed cursors, so the app no longer restyles them (HS2-SAMFX0). */
-wa-button[disabled]::part(base) {
-  cursor: not-allowed;
 }
 
 /* The shell's pointer-drag resize (interactions/shell-and-global.ts) keeps its cursor while the pointer

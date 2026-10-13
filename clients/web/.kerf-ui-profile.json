@@ -38,12 +38,6 @@
       "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
     },
     {
-      "id": "web-awesome-cursor-semantics-parts",
-      "rules": ["KUI-L011"],
-      "target": "src/components/cursor-semantics.css",
-      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
-    },
-    {
       "id": "web-awesome-not-working-parts",
       "rules": ["KUI-L011"],
       "target": "src/components/not-working-dialog.css",
