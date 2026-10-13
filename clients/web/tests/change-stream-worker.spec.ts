@@ -375,7 +375,7 @@ test('a version-skewed worker falls back to main-thread streams for both project
         super.addEventListener(
           type,
           (event) => {
-            const data = (event).data as { type?: string } | undefined;
+            const data = event.data as { type?: string } | undefined;
             listener.call(
               this,
               data?.type === 'ready' ? new MessageEvent('message', { data: { ...data, protocol: 999 } }) : event,
