@@ -11,6 +11,9 @@ export interface DemoEntry {
   /** The demo renders Kerf `CatalogExample`s, so a component entry gets Kerf's
    *  `CatalogExampleStack`; unconverted demos keep their own layout (HS2-Z3FMEZ). */
   catalogExamples?: boolean;
+  /** Let an application-width component (a tab strip or resizable region) span the stage like a
+   *  composition instead of Kerf's reading-width stack (HS2-9564VE). */
+  stackWidth?: 'full';
 }
 
 /**

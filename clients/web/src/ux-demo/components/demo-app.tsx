@@ -65,7 +65,7 @@ export function DemoApp() {
           ) : (
             <CatalogExampleStack
               label={`${selected.name} examples`}
-              width={demoKind(selected.id) === 'composition' ? 'full' : undefined}
+              width={entry.stackWidth ?? (demoKind(selected.id) === 'composition' ? 'full' : undefined)}
             >
               {Demo && <Demo />}
             </CatalogExampleStack>

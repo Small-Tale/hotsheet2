@@ -450,7 +450,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['ticket-sources-settings', 1],
     ['accounts-settings', 2],
     ['settings-workspace', 1],
-    ['trash-settings', 1],
+    ['trash-settings', 2],
     ['project-sidebar', 1],
     ['command-settings-editor', 1],
     ['ai-tool-settings', 1],
@@ -459,6 +459,11 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['project-dialog', 1],
     ['terminal-visibility-dialog', 1],
     ['ai-conversation', 1],
+    ['project-tab', 1],
+    ['project-tabs', 5],
+    ['resizable-region', 2],
+    ['connection-state-banner', 5],
+    ['app-shell', 1],
   ];
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
@@ -1954,7 +1959,7 @@ test('round-trips the AppShell phone view header and its Empty Trash action (HS2
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=app-shell');
   const shell = page.locator('[data-component="app-shell"]'),
-    demo = page.getByRole('region', { name: 'AppShell demo' }),
+    demo = page.getByRole('region', { name: 'AppShell examples' }),
     header = shell.locator('.app-shell__mobile-view-header'),
     viewSelect = header.locator('wa-select[name="mobile-view"]'),
     emptyTrash = header.getByRole('button', { name: 'Empty Trash' });
@@ -2208,7 +2213,7 @@ test('switches the TicketInspector live-claim header through every claim state (
 
 test('projects phone project attention through selection and reset (HS2-34VG07)', async ({ page }) => {
   await page.goto('/ux-demo?component=project-tabs');
-  const frame = page.locator('[aria-label="Phone project picker"]'),
+  const frame = page.getByRole('region', { name: 'Phone project picker' }),
     picker = frame.locator('wa-select[name="mobile-project"]'),
     selected = picker.locator('.project-tab-bar__selected-project'),
     attention = selected.locator('[data-lucide="circle-alert"]');
@@ -6309,14 +6314,16 @@ test('catalogs project-tab states, progress, activity, and responsive geometry',
   }
   await page.setViewportSize({ width: 1280, height: 720 });
   await page
-    .locator('.project-tab-demo__surface')
+    .getByRole('tablist', { name: 'ProjectTab states' })
     .screenshot({ path: 'target/visual-captures/hs2-9b7z7j-project-tab-segments-wide.png' });
   await page.setViewportSize({ width: 560, height: 844 });
   await expect
-    .poll(() => page.locator('.project-tab-demo__surface').evaluate((node) => node.scrollWidth <= node.clientWidth))
+    .poll(() =>
+      page.getByRole('tablist', { name: 'ProjectTab states' }).evaluate((node) => node.scrollWidth <= node.clientWidth),
+    )
     .toBe(true);
   await page
-    .locator('.project-tab-demo__surface')
+    .getByRole('tablist', { name: 'ProjectTab states' })
     .screenshot({ path: 'target/visual-captures/hs2-9b7z7j-project-tab-segments-narrow.png' });
 });
 
@@ -6700,7 +6707,7 @@ test('resizes ResizableRegion demos through Kerf wireResizableRegions pointer an
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=resizable-region');
-  const demo = page.getByRole('region', { name: 'ResizableRegion demo' });
+  const demo = page.getByRole('region', { name: 'ResizableRegion examples' });
   const horizontal = page.getByRole('separator', { name: 'Resize Example sidebar' });
   const vertical = page.getByRole('separator', { name: 'Resize Example drawer' });
   await expect(horizontal).toHaveAttribute('aria-valuenow', '260');
@@ -6777,13 +6784,13 @@ test('reorders demo project tabs through Kerf wireTabBars by keyboard and drag (
     )
     .toEqual(['website', 'hotsheet', 'api', 'archive']);
   // The shell-column variant shares the column surface and draws no bottom rule (HS2-DR549A).
-  const shellColumn = page.locator('.project-tab-bar-demo .project-tab-bar').filter({
+  const shellColumn = page.locator('[data-catalog-example] .project-tab-bar').filter({
     has: page.getByRole('navigation', { name: 'Open projects in the shell column' }),
   });
   await expect(shellColumn).toHaveAttribute('data-surface', 'default');
   await expect(shellColumn).toHaveAttribute('data-divider', 'false');
   await expect(shellColumn).toHaveCSS('border-bottom-width', '0px');
-  await expect(page.locator('.project-tab-bar-demo .project-tab-bar').first()).toHaveCSS('border-bottom-width', '1px');
+  await expect(page.locator('[data-catalog-example] .project-tab-bar').first()).toHaveCSS('border-bottom-width', '1px');
   await expect
     .poll(() =>
       shellColumn
@@ -6791,16 +6798,12 @@ test('reorders demo project tabs through Kerf wireTabBars by keyboard and drag (
         .evaluateAll((tabs) => tabs.map((tab) => (tab as HTMLElement).dataset.tabId)),
     )
     .toEqual(['website', 'hotsheet', 'api', 'archive']);
-  await expect(page.locator('.project-tab-bar-demo [data-demo-event]')).toHaveText(
-    'Moved hotsheet after website by keyboard.',
-  );
+  await expect(page.locator('[data-demo-event]')).toHaveText('Moved hotsheet after website by keyboard.');
   await bar
     .locator('[data-component="app-tab"][data-tab-id="archive"]')
     .dragTo(bar.locator('[data-component="app-tab"][data-tab-id="website"]'), { targetPosition: { x: 4, y: 10 } });
   await expect.poll(names).toEqual(['archive', 'website', 'hotsheet', 'api']);
-  await expect(page.locator('.project-tab-bar-demo [data-demo-event]')).toHaveText(
-    'Moved archive before website by pointer.',
-  );
+  await expect(page.locator('[data-demo-event]')).toHaveText('Moved archive before website by pointer.');
   // Delete closes the focused tab through the same wiring.
   await bar.getByRole('tab', { name: /Internal API/ }).focus();
   await page.keyboard.press('Delete');

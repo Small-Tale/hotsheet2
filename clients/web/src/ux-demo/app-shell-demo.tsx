@@ -1,6 +1,12 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
+import { px } from '@kerfjs/ui/css-values';
+import { Grid } from '@kerfjs/ui/grid';
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { clampRegionSize, ResizableRegion } from '@kerfjs/ui/resizable-region';
+import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
+import { Text } from '@kerfjs/ui/text';
 import { wireResizableRegions } from '@kerfjs/ui/wire-resizable-regions';
 import { reorderTabs, wireTabBars } from '@kerfjs/ui/wire-tab-bars';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
@@ -218,79 +224,82 @@ export function addDemoProject(): void {
 
 export function ProjectTabDemo() {
   return (
-    <section class="project-tab-demo" aria-label="ProjectTab demo">
-      <div class="project-tab-demo__surface" role="tablist" aria-label="ProjectTab states">
-        <ProjectTab id="selected" name="Selected local" location="local" selected />
-        <ProjectTab id="remote" name="Remote project" location="remote" />
-        <ProjectTab id="busy" name="Busy project" location="local" busy />
-        <ProjectTab id="pending" name="Still opening" location="local" pending />
-        <ProjectTab id="active" name="Active queue" location="local" upNextCount={3} activeTicketCount={2} />
-        <ProjectTab id="working" name="Active work" location="local" activeTicketCount={1} />
-        <ProjectTab id="three" name="Three active" location="local" activeTicketCount={3} />
-        <ProjectTab id="four" name="Four active" location="local" activeTicketCount={4} />
-        <ProjectTab id="capped" name="Capped active" location="local" upNextCount={7} activeTicketCount={12} />
-        <ProjectTab
-          id="migration"
-          name="Copying database"
-          location="local"
-          upNextCount={3}
-          operation={{ label: 'Copying database, 50 percent', state: 'running', percent: 50 }}
-        />
-        <ProjectTab
-          id="migration-unknown"
-          name="Opening database"
-          location="local"
-          operation={{ label: 'Opening database', state: 'running' }}
-        />
-        <ProjectTab
-          id="migration-retry"
-          name="Import failed"
-          location="local"
-          operation={{ label: 'Import needs attention', state: 'failed' }}
-        />
-        <ProjectTab
-          id="migration-complete"
-          name="Imported"
-          location="local"
-          operation={{ label: 'Import complete, connect backup', state: 'succeeded' }}
-        />
-        <ProjectTab id="attention" name="Needs attention" location="remote" attention />
-        <ProjectTab id="offline" name="Disconnected" location="remote" disconnected />
-        <ProjectTab id="fixed" name="Not closable" location="local" closable={false} upNextCount={100} />
+    <CatalogExample
+      label="States"
+      viewport={{ width: 'full', frame: 'solid', surface: 'lowered' }}
+      note="Selected, remote, busy, still opening, active queue, active work, attention, disconnected, and fixed states."
+    >
+      <div role="tablist" aria-label="ProjectTab states">
+        <Grid minColumnWidth={px(240)} gap="xs" controlInsets="trbl">
+          <ProjectTab id="selected" name="Selected local" location="local" selected />
+          <ProjectTab id="remote" name="Remote project" location="remote" />
+          <ProjectTab id="busy" name="Busy project" location="local" busy />
+          <ProjectTab id="pending" name="Still opening" location="local" pending />
+          <ProjectTab id="active" name="Active queue" location="local" upNextCount={3} activeTicketCount={2} />
+          <ProjectTab id="working" name="Active work" location="local" activeTicketCount={1} />
+          <ProjectTab id="three" name="Three active" location="local" activeTicketCount={3} />
+          <ProjectTab id="four" name="Four active" location="local" activeTicketCount={4} />
+          <ProjectTab id="capped" name="Capped active" location="local" upNextCount={7} activeTicketCount={12} />
+          <ProjectTab
+            id="migration"
+            name="Copying database"
+            location="local"
+            upNextCount={3}
+            operation={{ label: 'Copying database, 50 percent', state: 'running', percent: 50 }}
+          />
+          <ProjectTab
+            id="migration-unknown"
+            name="Opening database"
+            location="local"
+            operation={{ label: 'Opening database', state: 'running' }}
+          />
+          <ProjectTab
+            id="migration-retry"
+            name="Import failed"
+            location="local"
+            operation={{ label: 'Import needs attention', state: 'failed' }}
+          />
+          <ProjectTab
+            id="migration-complete"
+            name="Imported"
+            location="local"
+            operation={{ label: 'Import complete, connect backup', state: 'succeeded' }}
+          />
+          <ProjectTab id="attention" name="Needs attention" location="remote" attention />
+          <ProjectTab id="offline" name="Disconnected" location="remote" disconnected />
+          <ProjectTab id="fixed" name="Not closable" location="local" closable={false} upNextCount={100} />
+        </Grid>
       </div>
-      <DemoEvent live={false}>
-        Selected, remote, busy, still opening, active queue, active work, attention, disconnected, and fixed states.
-      </DemoEvent>
-    </section>
+    </CatalogExample>
   );
 }
 
 export function ProjectTabBarDemo() {
   return (
-    <section class="project-tab-bar-demo" aria-label="ProjectTabBar demo">
-      <div class="project-tab-bar-demo__frame">
+    <>
+      <CatalogExample label="Default" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
         <ProjectTabBar tabs={projectTabs.value} mode={shellMode.value} />
-      </div>
-      <div class="project-tab-bar-demo__frame">
+      </CatalogExample>
+      <CatalogExample label="With workspace action" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
         <ProjectTabBar
           tabs={projectTabs.value}
           label="Open projects with workspace action"
           mode={shellMode.value}
           workspaceAction={{ kind: 'new-ticket' }}
         />
-      </div>
+      </CatalogExample>
       {/* The Trash view swaps the far-edge action for the outlined danger Empty Trash button (HS2-PNCDAE). */}
-      <div class="project-tab-bar-demo__frame">
+      <CatalogExample label="Trash view action" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
         <ProjectTabBar
           tabs={projectTabs.value}
           label="Open projects with the Trash view action"
           mode={shellMode.value}
           workspaceAction={{ kind: 'empty-trash' }}
         />
-      </div>
+      </CatalogExample>
       {/* The shell-column presentation (HS2-DR549A): the strip shares the column surface and leaves the
           separator to the content below it, as AppShell composes it in project mode. */}
-      <div class="project-tab-bar-demo__frame">
+      <CatalogExample label="Shell column" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
         <ProjectTabBar
           tabs={projectTabs.value}
           label="Open projects in the shell column"
@@ -298,19 +307,39 @@ export function ProjectTabBarDemo() {
           surface="default"
           divider={false}
         />
-      </div>
-      <div class="project-tab-bar-demo__frame" aria-label="Phone project picker">
+      </CatalogExample>
+      <CatalogExample label="Phone project picker" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
         <ProjectTabBar tabs={projectTabs.value} mode={shellMode.value} mobile />
-      </div>
-      <DemoEvent>{shellEvent.value}</DemoEvent>
-    </section>
+        <DemoEvent>{shellEvent.value}</DemoEvent>
+      </CatalogExample>
+    </>
   );
 }
 
 export function ResizableRegionDemo() {
+  const tokens = { '--kui-resizable-region-background': 'var(--wa-color-neutral-fill-quiet)' };
+  const panel = (title: string, size: number) => (
+    <List fill hAlign="center" vAlign="middle" gap="xs">
+      <Text variant="span">
+        <strong>{title}</strong>
+      </Text>
+      <Text variant="span" size="compact" tone="quiet">{`${size}px`}</Text>
+    </List>
+  );
+  const remainder = (copy: string) => (
+    <Row flex hAlign="center" vAlign="middle">
+      <Text variant="span" tone="quiet">
+        {copy}
+      </Text>
+    </Row>
+  );
   return (
-    <section class="resizable-region-demo" aria-label="ResizableRegion demo">
-      <div class="resizable-region-demo__controls">
+    <>
+      <CatalogExample
+        label="Horizontal, collapsible"
+        note="Drag either handle or use arrow keys while it is focused."
+        align="inline-control"
+      >
         <wa-button appearance="outlined" data-action="toggle-resizable-collapse">
           <LucideIcon
             size="s"
@@ -320,8 +349,10 @@ export function ResizableRegionDemo() {
           />
           {resizeDemoCollapsed.value ? 'Restore horizontal region' : 'Collapse horizontal region'}
         </wa-button>
-      </div>
-      <div class="resizable-region-demo__horizontal">
+      </CatalogExample>
+      <CatalogExample
+        viewport={{ width: 'full', height: 'short', layout: 'flex', frame: 'solid', overflow: 'hidden', tokens }}
+      >
         <ResizableRegion
           id="resize-demo-horizontal"
           label="Example sidebar"
@@ -330,14 +361,14 @@ export function ResizableRegionDemo() {
           max={420}
           collapsed={resizeDemoCollapsed.value}
         >
-          <div class="resizable-region-demo__panel">
-            <strong>Horizontal region</strong>
-            <span>{resizeDemoWidth.value}px</span>
-          </div>
+          {panel('Horizontal region', resizeDemoWidth.value)}
         </ResizableRegion>
-        <div class="resizable-region-demo__remainder">Remaining workspace</div>
-      </div>
-      <div class="resizable-region-demo__vertical">
+        {remainder('Remaining workspace')}
+      </CatalogExample>
+      <CatalogExample
+        label="Vertical"
+        viewport={{ width: 'full', height: 'tall', layout: 'flex-column', frame: 'solid', overflow: 'hidden', tokens }}
+      >
         <ResizableRegion
           id="resize-demo-vertical"
           label="Example drawer"
@@ -346,28 +377,34 @@ export function ResizableRegionDemo() {
           max={260}
           axis="vertical"
         >
-          <div class="resizable-region-demo__panel">
-            <strong>Vertical region</strong>
-            <span>{resizeDemoHeight.value}px</span>
-          </div>
+          {panel('Vertical region', resizeDemoHeight.value)}
         </ResizableRegion>
-        <div class="resizable-region-demo__remainder">Remaining height</div>
-      </div>
-      <DemoEvent>Drag either handle or use arrow keys while it is focused.</DemoEvent>
-    </section>
+        {remainder('Remaining height')}
+      </CatalogExample>
+    </>
   );
 }
 
 export function ConnectionStateBannerDemo() {
   return (
-    <section class="connection-banner-demo" aria-label="ConnectionStateBanner demo">
-      <ConnectionStateBanner state="connecting" detail="Establishing a secure session." />
-      <ConnectionStateBanner state="reconnecting" detail="Showing the latest cached project state." />
-      <ConnectionStateBanner state="offline" detail="Changes will remain local until reconnection." />
-      <ConnectionStateBanner state="incompatible" detail="This client requires Hot Sheet Server 2.4 or later." />
-      <ConnectionStateBanner state="authentication" detail="Your saved credential is no longer accepted." />
-      <DemoEvent>{shellEvent.value}</DemoEvent>
-    </section>
+    <>
+      <CatalogExample label="Connecting">
+        <ConnectionStateBanner state="connecting" detail="Establishing a secure session." />
+      </CatalogExample>
+      <CatalogExample label="Reconnecting">
+        <ConnectionStateBanner state="reconnecting" detail="Showing the latest cached project state." />
+      </CatalogExample>
+      <CatalogExample label="Offline">
+        <ConnectionStateBanner state="offline" detail="Changes will remain local until reconnection." />
+      </CatalogExample>
+      <CatalogExample label="Incompatible">
+        <ConnectionStateBanner state="incompatible" detail="This client requires Hot Sheet Server 2.4 or later." />
+      </CatalogExample>
+      <CatalogExample label="Authentication">
+        <ConnectionStateBanner state="authentication" detail="Your saved credential is no longer accepted." />
+        <DemoEvent>{shellEvent.value}</DemoEvent>
+      </CatalogExample>
+    </>
   );
 }
 
@@ -471,7 +508,7 @@ export function AppShellDemo() {
   })();
   const toolbarTitle = globalMode ? projectName : projectSettings ? 'Project Settings' : viewName;
   return (
-    <section class="app-shell-demo" aria-label="AppShell demo">
+    <CatalogExample label="Interactive" viewport={{ width: 'full' }} rootAttributes={{ 'data-app-shell-demo': '' }}>
       <AppShell
         presentation={appShellSettings.presentation.value}
         workAreaFocusRing={!appShellSettings.overlayOpen.value}
@@ -550,7 +587,7 @@ export function AppShellDemo() {
         providerName="Hot Sheet git"
       />
       <DemoEvent>{shellEvent.value}</DemoEvent>
-    </section>
+    </CatalogExample>
   );
 }
 
@@ -701,14 +738,14 @@ function wireAppShellDemo(root: HTMLElement): () => void {
     }),
   );
   demoListeners.add(
-    delegate(root, 'change', '[aria-label="AppShell demo"] wa-select[name="mobile-view"]', (_event, target) => {
+    delegate(root, 'change', '[data-app-shell-demo] wa-select[name="mobile-view"]', (_event, target) => {
       const value = (target as FormControl).value;
       appShellSettings.mobileViewValue.value = value;
       shellEvent.value = `${value === 'all' ? 'Queue' : value.charAt(0).toUpperCase() + value.slice(1)} view selected.`;
     }),
   );
   demoListeners.add(
-    delegate(root, 'click', '[aria-label="AppShell demo"] [data-action="open-empty-trash"]', () => {
+    delegate(root, 'click', '[data-app-shell-demo] [data-action="open-empty-trash"]', () => {
       shellEvent.value = 'Empty Trash confirmation requested.';
     }),
   );
@@ -720,11 +757,11 @@ function wireAppShellDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'project-tab': { Demo: ProjectTabDemo },
-    'project-tabs': { Demo: ProjectTabBarDemo },
-    'resizable-region': { Demo: ResizableRegionDemo },
-    'connection-state-banner': { Demo: ConnectionStateBannerDemo },
-    'app-shell': { Demo: AppShellDemo, Settings: AppShellSettings, reset: resetAppShellDemo },
+    'project-tab': { catalogExamples: true, stackWidth: 'full', Demo: ProjectTabDemo },
+    'project-tabs': { catalogExamples: true, stackWidth: 'full', Demo: ProjectTabBarDemo },
+    'resizable-region': { catalogExamples: true, stackWidth: 'full', Demo: ResizableRegionDemo },
+    'connection-state-banner': { catalogExamples: true, Demo: ConnectionStateBannerDemo },
+    'app-shell': { catalogExamples: true, Demo: AppShellDemo, Settings: AppShellSettings, reset: resetAppShellDemo },
   },
   wire: wireAppShellDemo,
 };
