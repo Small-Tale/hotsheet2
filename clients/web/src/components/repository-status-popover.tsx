@@ -427,11 +427,12 @@ function RepositoryFileRows({
     );
   return (
     <div role="list" aria-label={label}>
-      {files.map((file) => (
+      {files.map((file, index) => (
         <ListActionRow
           action="select-repository-file"
           itemId={file.path}
-          divider="after"
+          // Dividers only between rows, so Kerf rounds the last/only row's outer corners (KF-AQN4H7).
+          divider={index < files.length - 1 ? 'after' : 'none'}
           state={file.change}
           pressed={selectedFiles.includes(file.path)}
           multiline

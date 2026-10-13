@@ -18,3 +18,5 @@
 /clients/web/ai/component-catalog-extension.json
 /clients/web/ai/component-composition.generated.json
 **/dist-host/
+# Machine-local AI-tool MCP config written by Hot Sheet setup (git-excluded).
+/opencode.json
