@@ -9372,7 +9372,7 @@ test('shows every host-only control disabled in the remote-device demo states (H
       await expect.poll(() => reasonsIn(remote), component).toMatch(remoteReason);
     } else if (component === 'ticket-attachments') {
       await remote.locator('[data-action="open-attachment-menu"]').first().click();
-      const menu = page.locator('[data-component="attachment-context-menu"]');
+      const menu = page.locator('[data-context-menu="attachment"]');
       await expect.poll(() => reasonsIn(menu), component).toMatch(remoteReason);
       await page.keyboard.press('Escape');
       await expect(menu).toHaveCount(0);
