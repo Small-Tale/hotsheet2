@@ -33,6 +33,7 @@ const handler = (event: string, selector: string) =>
 const cancelable = (extra: Record<string, unknown> = {}) => ({
   preventDefault: vi.fn(),
   stopPropagation: vi.fn(),
+  target: { closest: () => null },
   ...extra,
 });
 
@@ -99,18 +100,13 @@ describe('wireQuickTicketComposer (HS2-NRW5ZR)', () => {
     expect(bindings.dismissed).toHaveBeenCalledTimes(1);
   });
 
-  it('stages picked files from the input and the header picker, ignoring other pickers and empty picks', () => {
+  it('stages files the Kerf trigger and drop zone report, ignoring other pickers and empty picks', () => {
     bindings.addFiles.mockClear();
-    const files = { length: 1 } as FileList,
-      input = { files, value: 'a' };
-    handler('change', 'new-ticket-attachments')({}, input);
-    handler('change', 'new-ticket-attachments')({}, { files: { length: 0 }, value: '' });
     const picked = [{ name: 'b' } as File];
     pickers[0]({ id: NEW_TICKET_ATTACHMENT_PICKER, files: picked });
     pickers[0]({ id: 'other', files: picked });
     pickers[0]({ id: NEW_TICKET_ATTACHMENT_PICKER, files: [] });
-    expect(bindings.addFiles.mock.calls).toEqual([[files], [picked]]);
-    expect(input.value).toBe('');
+    expect(bindings.addFiles.mock.calls).toEqual([[picked]]);
   });
 
   it('drops files onto a collapsed composer by expanding it first, and ignores ticket drags', () => {
@@ -134,6 +130,12 @@ describe('wireQuickTicketComposer (HS2-NRW5ZR)', () => {
     handler('drop', 'new-ticket-drop-target')(cancelable({ dataTransfer: { files } }), target);
     expect(bindings.expand).toHaveBeenCalledTimes(1);
     expect(bindings.addFiles.mock.calls).toEqual([[files], [files]]);
+    // A drop on the Kerf FileDropZone is staged by its own wiring, never twice (HS2-RB7KXZ).
+    handler('drop', 'new-ticket-drop-target')(
+      cancelable({ dataTransfer: { files }, target: { closest: () => ({}) } }),
+      target,
+    );
+    expect(bindings.addFiles).toHaveBeenCalledTimes(2);
     handler('click', 'expand-ticket-composer')({}, target);
     expect(bindings.expand).toHaveBeenCalledTimes(2);
   });

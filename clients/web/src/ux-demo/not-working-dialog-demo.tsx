@@ -3,7 +3,8 @@ import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { NotWorkingDialog } from '../components/not-working-dialog';
-import { PendingAttachmentPicker } from '../components/pending-attachment-picker';
+import { PENDING_ATTACHMENT_PICKER, PendingAttachmentPicker } from '../components/pending-attachment-picker';
+import { routeFilePicker } from '../file-picker-routes';
 import { DemoEvent } from './components/demo-event';
 import { DEMO_ACTIONS, DEMO_COMPONENTS, DEMO_FIELDS, DEMO_MARKERS } from './demo-actions';
 import type { DemoModule } from './demo-module';
@@ -59,17 +60,14 @@ function wireNotWorkingDialogDemo(root: HTMLElement): () => void {
     }),
   );
   demoListeners.add(
-    delegate(root, 'change', 'input[name="not-working-attachments"]', (_event, target) => {
-      const input = target as HTMLInputElement;
-      if (input.files?.length)
-        notWorkingDemoFiles.value = [
-          ...notWorkingDemoFiles.value,
-          ...Array.from(input.files).map((file, index) => ({
-            id: `demo-${Date.now()}-${index}`,
-            name: file.name,
-          })),
-        ];
-      input.value = '';
+    routeFilePicker(root, PENDING_ATTACHMENT_PICKER, (files) => {
+      notWorkingDemoFiles.value = [
+        ...notWorkingDemoFiles.value,
+        ...files.map((file, index) => ({
+          id: `demo-${Date.now()}-${index}`,
+          name: file.name,
+        })),
+      ];
     }),
   );
   demoListeners.add(

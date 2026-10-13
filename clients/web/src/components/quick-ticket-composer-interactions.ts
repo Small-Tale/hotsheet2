@@ -1,11 +1,13 @@
-import { wireFilePickers } from '@kerfjs/ui/wire-file-pickers';
 import { delegate, delegateCapture } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
+import { routeFilePicker } from '../file-picker-routes';
 import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
 import { NEW_TICKET_ATTACHMENT_PICKER } from './quick-ticket-composer';
 
 const COMPOSER = SEARCH_AND_COMPOSER_TARGETS.quickTicketComposer.selector;
+/** Kerf's FileDropZone stages its own drops through `wireFilePickers` (see `routeFilePicker`). */
+const FILE_DROP_ZONE = '[data-component="file-drop-zone"]';
 const DROP_TARGET = SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.selector;
 type Control = HTMLElement & { value: string };
 
@@ -81,24 +83,11 @@ export function wireQuickTicketComposer(root: HTMLElement, bindings: QuickTicket
       bindings.toggleUpNext();
     }),
   );
+  // The header's Kerf FilePickerTrigger and the FileDropZone report through Kerf's wiring contract
+  // (HS2-ZWRCAZ, HS2-RB7KXZ); the zone's own drops are left to it so files are staged once.
   lifetime.add(
-    delegate(
-      root,
-      'change',
-      `.quick-ticket-composer__drop ${SEARCH_AND_COMPOSER_TARGETS.newTicketAttachmentsField.selector}`,
-      (_event, target) => {
-        const input = target as HTMLInputElement;
-        if (input.files?.length) bindings.addFiles(input.files);
-        input.value = '';
-      },
-    ),
-  );
-  // The header's Kerf FilePickerTrigger reports through its documented wiring contract (HS2-ZWRCAZ).
-  lifetime.add(
-    wireFilePickers(root, {
-      onFiles: ({ id, files }) => {
-        if (id === NEW_TICKET_ATTACHMENT_PICKER && files.length) bindings.addFiles([...files]);
-      },
+    routeFilePicker(root, NEW_TICKET_ATTACHMENT_PICKER, (files) => {
+      bindings.addFiles([...files]);
     }),
   );
   lifetime.add(
@@ -125,7 +114,7 @@ export function wireQuickTicketComposer(root: HTMLElement, bindings: QuickTicket
   );
   lifetime.add(
     delegate(root, 'drop', DROP_TARGET, (event, target) => {
-      if (draggingTickets()) return;
+      if (draggingTickets() || (event.target as Element).closest(FILE_DROP_ZONE)) return;
       event.preventDefault();
       event.stopPropagation();
       delete (target as HTMLElement).dataset.dragging;

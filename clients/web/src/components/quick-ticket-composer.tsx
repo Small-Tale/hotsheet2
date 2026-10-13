@@ -6,7 +6,7 @@ import '@awesome.me/webawesome/dist/styles/utilities/visually-hidden.css';
 import './quick-ticket-composer.css';
 
 import { foregroundColorVar } from '@kerfjs/ui/css-values';
-import { FilePickerTrigger } from '@kerfjs/ui/file-picker';
+import { FileDropZone, FilePickerTrigger } from '@kerfjs/ui/file-picker';
 import { IconButton } from '@kerfjs/ui/icon-button';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
@@ -259,16 +259,14 @@ export function QuickTicketComposer({
               </div>
             )}
             {attachmentsEnabled ? (
-              <label class="quick-ticket-composer__drop">
-                <LucideIcon size={14.4} icon={Upload} name="upload" />
-                <span>Drop attachment files anywhere in this area or browse</span>
-                <input
-                  type="file"
-                  multiple
-                  name="new-ticket-attachments"
-                  aria-label="Drop or browse attachments for new ticket"
-                />
-              </label>
+              <FileDropZone
+                title="Drop attachment files anywhere in this area or browse"
+                accessibleLabel="Drop or browse attachments for new ticket"
+                icon={<LucideIcon icon={Upload} name="upload" />}
+                multiple
+                name="new-ticket-attachments"
+                pickerId={NEW_TICKET_ATTACHMENT_PICKER}
+              />
             ) : strandedAttachments ? (
               <Text
                 variant="p"

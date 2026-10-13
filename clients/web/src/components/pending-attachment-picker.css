@@ -1,49 +1,7 @@
-/* Kerf has no file-picker trigger or file-drop component (KF-RDV6V9), so these rules style only the
-   app-owned native file labels and drop target. */
-/* The app-owned root may shrink inside a grid or flex parent so long file names truncate. */
+/* The app-owned root may shrink inside a grid or flex parent so long file names truncate. The Add
+   trigger and drop target are Kerf FilePickerTrigger and FileDropZone (HS2-RB7KXZ). */
 .pending-attachment-picker {
+  /* The Kerf FileDropZone aligns with the evidence rows through its public inline-margin token. */
+  --kui-layout-inline-margin: 0;
   min-width: 0;
-}
-/* The native file inputs stay in the label for activation and drop, visually hidden but accessible. */
-.pending-attachment-picker input[type='file'] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-}
-/* The compact "Add" browse trigger: a link-toned label around the hidden file input. */
-.pending-attachment-picker__add {
-  display: inline-flex;
-  min-height: remify(32px);
-  padding: 0 remify(8px);
-  border-radius: var(--kui-radius-pill);
-  color: var(--wa-color-text-link);
-  cursor: pointer;
-  align-items: center;
-  gap: remify(4px);
-  font-size: var(--wa-font-size-xs);
-  font-weight: 650;
-}
-.pending-attachment-picker__add:hover {
-  background: var(--wa-color-brand-fill-quiet);
-}
-/* The dashed drop target, highlighted on hover and while files are dragged over the picker. */
-.pending-attachment-picker__drop {
-  display: grid;
-  min-height: remify(80px);
-  padding: remify(12px);
-  border: 1px dashed var(--wa-color-neutral-border-loud);
-  border-radius: remify(8px);
-  color: var(--wa-color-neutral-on-quiet);
-  cursor: pointer;
-  place-items: center;
-  align-content: center;
-  gap: remify(4px);
-  font-size: var(--wa-font-size-xs);
-}
-.pending-attachment-picker__drop:hover,
-[data-dragging='true'].pending-attachment-picker .pending-attachment-picker__drop {
-  border-color: var(--wa-color-focus);
-  background: var(--wa-color-brand-fill-quiet);
 }

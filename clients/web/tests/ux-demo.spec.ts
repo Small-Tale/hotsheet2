@@ -4449,7 +4449,7 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
         textarea = getComputedStyle(node.querySelector('textarea')!),
         attachments = getComputedStyle(node.querySelector('.quick-ticket-composer__attachments')!),
         headerLabel = getComputedStyle(node.querySelector('[data-component="file-picker-trigger"]')!),
-        drop = getComputedStyle(node.querySelector('.quick-ticket-composer__drop')!),
+        drop = getComputedStyle(node.querySelector('[data-component="file-drop-zone"]')!),
         footer = getComputedStyle(node.querySelector('.quick-ticket-composer__footer')!),
         actions = getComputedStyle(node.querySelector('.quick-ticket-composer__actions')!),
         source = getComputedStyle(node.querySelector('.quick-ticket-composer__source')!);
@@ -4476,8 +4476,9 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
     textareaPadding: ['8px', '16px'],
     attachmentsGap: '8px',
     headerLabelGap: '4px',
-    dropPadding: ['8px', '16px'],
-    dropGap: '8px',
+    // The Kerf FileDropZone owns its geometry (HS2-RB7KXZ).
+    dropPadding: ['12px', '12px'],
+    dropGap: '4px',
     footerGap: '16px',
     actionGap: '8px',
     sourceGap: '8px',

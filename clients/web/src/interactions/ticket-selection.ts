@@ -4,11 +4,13 @@ import { createScope } from 'kerfjs/scope';
 import { type FullTicket, type TicketCloseReason, type TicketRow as WireTicketRow } from '../api';
 import { type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
 import { wireBulkTicketDialog } from '../components/bulk-ticket-dialog-interactions';
+import { PENDING_ATTACHMENT_PICKER } from '../components/pending-attachment-picker';
 import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import { wireTicketCollection } from '../components/ticket-collection-interactions';
 import { isPlainTicketReselection, selectAllTickets } from '../components/ticket-selection';
 import { wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
+import { routeFilePicker } from '../file-picker-routes';
 import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
 import { shouldAutoOpenInspectorOnTap } from '../mobile-layout';
@@ -369,10 +371,9 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', 'input[name="not-working-attachments"]', (_event, target) => {
-      const input = target as HTMLInputElement;
-      if (input.files?.length) void addNotWorkingFiles(input.files);
-      input.value = '';
+    // The Kerf FilePickerTrigger and FileDropZone report browsed and zone-dropped files (HS2-RB7KXZ).
+    routeFilePicker(document.body, PENDING_ATTACHMENT_PICKER, (files) => {
+      void addNotWorkingFiles(files);
     }),
   );
   lifetime.add(
@@ -398,6 +399,8 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     delegate(document.body, 'drop', TICKET_SELECTION_TARGETS.notWorkingDropzone.selector, (event, target) => {
       event.preventDefault();
       delete (target as HTMLElement).dataset.dragging;
+      // A drop on the Kerf FileDropZone is staged once, by its own wiring.
+      if ((event.target as Element).closest('[data-component="file-drop-zone"]')) return;
       const files = (event as DragEvent).dataTransfer?.files;
       if (files?.length) void addNotWorkingFiles(files);
     }),

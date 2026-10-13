@@ -122,7 +122,6 @@ ticket-selection	delegate	document.body	'click'	'[data-action="cancel-ticket-clo
 ticket-selection	delegate	document.body	'wa-hide'	'[data-component="ticket-close-dialog"]'
 ticket-selection	delegate	document.body	'click'	'[data-action="open-duplicate-target"]'
 ticket-selection	delegate	document.body	'input'	'[name="not-working-note"]'
-ticket-selection	delegate	document.body	'change'	'input[name="not-working-attachments"]'
 ticket-selection	delegate	document.body	'click'	'[data-action="remove-not-working-attachment"]'
 ticket-selection	delegate	document.body	'dragover'	'[data-not-working-dropzone="true"]'
 ticket-selection	delegate	document.body	'dragleave'	'[data-not-working-dropzone="true"]'

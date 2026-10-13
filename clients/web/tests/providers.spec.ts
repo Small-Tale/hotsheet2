@@ -17829,6 +17829,14 @@ test('stages safe attachment drops from the collapsed and expanded new-ticket co
     node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
   });
   await expect(form.getByText('second-proof.txt')).toBeVisible();
+  // A drop on the Kerf FileDropZone stages once, through Kerf's wiring, not again by the form (HS2-RB7KXZ).
+  await form.locator('[data-component="file-drop-zone"]').evaluate((node) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['zone proof'], 'zone-proof.txt', { type: 'text/plain' }));
+    node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  });
+  await expect(form.getByText('zone-proof.txt')).toHaveCount(1);
+  await form.getByRole('button', { name: 'Remove zone-proof.txt' }).click();
   await form.getByRole('button', { name: 'Remove first-proof.txt' }).click();
   await expect(form.getByText('first-proof.txt')).toHaveCount(0);
   await page.setViewportSize({ width: 940, height: 844 });

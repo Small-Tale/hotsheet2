@@ -127,7 +127,9 @@
   background: var(--wa-color-brand-fill-quiet);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--wa-color-focus) 22%, transparent);
 }
+/* The Kerf FileDropZone aligns with the form fields through its public inline-margin token. */
 .quick-ticket-composer__attachments {
+  --kui-layout-inline-margin: 0;
   display: grid;
   grid-column: 1 / -1;
   gap: var(--kui-space-xs);
@@ -143,13 +145,6 @@
   gap: var(--kui-space-2xs);
   font-size: var(--wa-font-size-xs);
   font-weight: 650;
-}
-.quick-ticket-composer__drop input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
 }
 .quick-ticket-composer__attachment-list {
   display: grid;
@@ -172,23 +167,6 @@
   flex: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.quick-ticket-composer__drop {
-  display: flex;
-  min-height: remify(43.2px);
-  padding: var(--kui-space-xs) var(--kui-space-m);
-  border: 1px dashed var(--wa-color-neutral-border-loud);
-  border-radius: remify(8px);
-  color: var(--wa-color-neutral-on-quiet);
-  cursor: pointer;
-  align-items: center;
-  justify-content: center;
-  gap: var(--kui-space-xs);
-  font-size: var(--wa-font-size-xs);
-}
-.quick-ticket-composer__drop:hover {
-  border-color: var(--wa-color-focus);
-  background: var(--wa-color-brand-fill-quiet);
 }
 .quick-ticket-composer__footer {
   display: flex;

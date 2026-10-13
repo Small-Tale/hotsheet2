@@ -2,6 +2,7 @@ import './pending-attachment-picker.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 
 import { flex, px, uiColor } from '@kerfjs/ui/css-values';
+import { FileDropZone, FilePickerTrigger } from '@kerfjs/ui/file-picker';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
@@ -11,6 +12,9 @@ import { Paperclip, Plus, Trash2, Upload } from 'lucide';
 
 import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
 
+/** `wireFilePickers` id shared by the picker's Add trigger and drop zone. */
+export const PENDING_ATTACHMENT_PICKER = 'pending-attachments';
+
 export interface PendingAttachment {
   id: string;
   name: string;
@@ -18,8 +22,8 @@ export interface PendingAttachment {
 
 /**
  * Evidence files chosen before submission (HS2-0NGK56): the header, rows, and remove controls compose
- * Kerf List/Row/Text/SunkenPanel and a plain Web Awesome button; only the file-picker labels and the drop target
- * keep app CSS, since Kerf has no file-drop or file-picker trigger component yet (KF-RDV6V9).
+ * Kerf List/Row/Text/SunkenPanel and a plain Web Awesome button; the Add trigger and drop target are Kerf
+ * FilePickerTrigger and FileDropZone (HS2-RB7KXZ), reported through `wireFilePickers`.
  */
 export function PendingAttachmentPicker({
   attachments,
@@ -40,11 +44,14 @@ export function PendingAttachmentPicker({
           <Text variant="h3" size="compact" flush>
             Attachments
           </Text>
-          <label class="pending-attachment-picker__add">
-            <LucideIcon size={14.4} icon={Plus} name="plus" />
-            <span>Add</span>
-            <input type="file" multiple name="not-working-attachments" aria-label="Browse evidence attachments" />
-          </label>
+          <FilePickerTrigger
+            label="Add"
+            accessibleLabel="Browse evidence attachments"
+            icon={<LucideIcon icon={Plus} name="plus" />}
+            multiple
+            name="not-working-attachments"
+            pickerId={PENDING_ATTACHMENT_PICKER}
+          />
         </Row>
         {attachments.length > 0 ? (
           <List gap="2xs">
@@ -73,16 +80,14 @@ export function PendingAttachmentPicker({
         ) : (
           <></>
         )}
-        <label class="pending-attachment-picker__drop">
-          <LucideIcon size={14.4} icon={Upload} name="upload" />
-          <span>Drop attachments here or browse</span>
-          <input
-            type="file"
-            multiple
-            name="not-working-attachments"
-            aria-label="Add evidence by dropping or choosing files"
-          />
-        </label>
+        <FileDropZone
+          title="Drop attachments here or browse"
+          accessibleLabel="Add evidence by dropping or choosing files"
+          icon={<LucideIcon icon={Upload} name="upload" />}
+          multiple
+          name="not-working-attachments"
+          pickerId={PENDING_ATTACHMENT_PICKER}
+        />
       </List>
     </section>
   );
