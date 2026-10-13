@@ -277,7 +277,9 @@ export function AppShell({
               divider={mode === 'terminals'}
             />
             {overlay}
-            {banner}
+            {/* State banners belong to the header: they sit on its default surface and keep a gap above
+                the work-area separator (HS2-STTE4M). */}
+            {banner && <div class="app-shell__banner">{banner}</div>}
             {mobileView ? <AppShellMobileViewHeader {...mobileView} /> : pageHeader}
             {/* Stable data-keys so the morph matches the scroll container by identity, not position.
           The overlay/banner/pageHeader siblings above are conditional (HS2-H4MWDB: opening the

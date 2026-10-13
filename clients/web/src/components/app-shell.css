@@ -44,6 +44,17 @@
 }
 /* The work area is the focusable ticket region: a clipped column under the page header whose
    focus ring fades in (the outline and the ::after border keep the ring visible above children). */
+/* The header's state banners (HS2-STTE4M): the header's default surface rather than the sunken
+   main pane, with 8px between the last banner and the work-area separator. A banner slot whose
+   conditions all rendered nothing takes no space. */
+.app-shell__banner {
+  display: grid;
+  padding-bottom: var(--kui-space-xs);
+  background: var(--wa-color-surface-default);
+}
+.app-shell__banner:not(:has(> *)) {
+  display: none;
+}
 .app-shell__work-area {
   position: relative;
   display: flex;

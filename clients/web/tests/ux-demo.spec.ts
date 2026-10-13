@@ -9074,3 +9074,23 @@ test('rounds the AppShell list surface with its first row in list mode (HS2-3239
     await page.screenshot({ path: `target/visual-captures/hs2-3239ms-list-mode-${width}.png` });
   }
 });
+
+test('places AppShell state banners on the header surface above the separator (HS2-STTE4M)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=app-shell');
+  const banner = page.locator('.app-shell__banner').first();
+  await expect(banner).toBeVisible();
+  const placement = await banner.evaluate((node) => {
+    const separator = node.parentElement!.querySelector('.app-shell__work-area')!.getBoundingClientRect().top;
+    return {
+      background: getComputedStyle(node).backgroundColor,
+      surface: getComputedStyle(
+        node.parentElement!.querySelector('[data-component="project-tab-bar"], .project-tab-bar')!,
+      ).backgroundColor,
+      gap: Math.round(separator - node.firstElementChild!.getBoundingClientRect().bottom),
+    };
+  });
+  expect(placement.background).toBe(placement.surface);
+  expect(placement.gap).toBe(8);
+  await page.screenshot({ path: 'target/visual-captures/hs2-stte4m-app-shell-banner.png' });
+});
