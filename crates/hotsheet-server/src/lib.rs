@@ -79,10 +79,11 @@ use routes::checkout_tickets::{
     delete_checkout_ticket_note, empty_checkout_trash, get_checkout_ticket,
     get_checkout_ticket_attachment, get_checkout_ticket_attachment_by_name,
     get_checkout_ticket_attachment_original, get_checkout_ticket_attachment_thumbnail,
-    get_checkout_ticket_duplicate_backlinks, put_checkout_ticket_attachment_thumbnail,
-    rename_checkout_ticket_attachment, restore_checkout_ticket, update_checkout_ticket,
-    update_checkout_ticket_attachment_annotations, update_checkout_ticket_attachment_markup,
-    update_checkout_ticket_attachment_metadata, update_ticket_attachment_annotations,
+    get_checkout_ticket_duplicate_backlinks, preview_checkout_trash_purge,
+    put_checkout_ticket_attachment_thumbnail, rename_checkout_ticket_attachment,
+    restore_checkout_ticket, update_checkout_ticket, update_checkout_ticket_attachment_annotations,
+    update_checkout_ticket_attachment_markup, update_checkout_ticket_attachment_metadata,
+    update_ticket_attachment_annotations,
 };
 use routes::checkouts::{
     add_checkout_source, checkout_repository_commits, checkout_repository_file_action,
@@ -1092,6 +1093,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/trash-settings",
             get(get_checkout_trash_settings).put(put_checkout_trash_settings),
+        )
+        .route(
+            "/checkouts/{reference}/trash/purge-preview",
+            get(preview_checkout_trash_purge),
         )
         .route(
             "/checkouts/{reference}/sources/{connection_id}",

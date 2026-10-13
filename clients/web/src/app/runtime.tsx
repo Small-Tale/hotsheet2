@@ -60,6 +60,7 @@ import { type InspectorTab } from '../components/ticket-inspector';
 import { type TicketLinkChoice } from '../components/ticket-link-choice-dialog';
 import { showTicketReaderDialog, type TicketReaderDialogElement } from '../components/ticket-reader';
 import type { TicketPriority, TicketRowProps } from '../components/ticket-row';
+import { type TrashRetentionDraft } from '../components/trash-settings';
 import { SavedViewContextMenu } from '../components/view-navigation';
 import {
   type WorkspaceSort,
@@ -333,7 +334,8 @@ export async function startHotSheetWebClient() {
   const inheritGlobalShellHistory = signal(false),
     terminalSettingsMessage = signal(''),
     trashCleanupDaysByProject = signal<Record<string, number>>({}),
-    trashSettingsMessagesByProject = signal<Record<string, string>>({});
+    trashSettingsMessagesByProject = signal<Record<string, string>>({}),
+    trashRetentionDraftsByProject = signal<Record<string, TrashRetentionDraft>>({});
   const terminalDashboardSize = signal({ width: 1200, height: 601 }),
     terminalFitAcross = signal(
       Number(localStorage.getItem('hotsheet.terminals.fit-across')) || TERMINAL_GRID_DEFAULT_ACROSS,
@@ -3258,6 +3260,7 @@ export async function startHotSheetWebClient() {
     commandSettingsMessage,
     trashCleanupDaysByProject,
     trashSettingsMessagesByProject,
+    trashRetentionDraftsByProject,
     inheritGlobalShellHistory,
     terminalSettingsMessage,
     permissionAutomation,
@@ -4147,6 +4150,7 @@ export async function startHotSheetWebClient() {
     terminalSettingsMessage,
     trashSettingsMessagesByProject,
     trashCleanupDaysByProject,
+    trashRetentionDraftsByProject,
     resetProgressiveTicketRendering,
     viewMode,
     setSettingsCategory,

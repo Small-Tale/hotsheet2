@@ -1,6 +1,7 @@
 import type { ProviderConnection } from '../api';
 import type { SettingsCategory } from '../components/settings-navigation';
 import { SettingsWorkspace, type SettingsWorkspaceProps } from '../components/settings-workspace';
+import type { TrashRetentionDraft } from '../components/trash-settings';
 import type { Project } from '../interactions/types';
 import type { ProjectTicketSources } from '../new-ticket-source';
 import { PERMISSION_DELAYS } from '../permission-notifications';
@@ -35,6 +36,7 @@ export interface SettingsSurfaceDependencies {
   commandSettingsMessage: (projectId: string) => Props['commands']['message'];
   trashCleanupDaysByProject: Readable<Record<string, number>>;
   trashSettingsMessagesByProject: Readable<Record<string, string>>;
+  trashRetentionDraftsByProject: Readable<Record<string, TrashRetentionDraft>>;
   inheritGlobalShellHistory: Readable<boolean>;
   terminalSettingsMessage: Readable<string>;
   permissionAutomation: (projectId: string) => Props['permissions']['automation'];
@@ -75,6 +77,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     commandSettingsMessage,
     trashCleanupDaysByProject,
     trashSettingsMessagesByProject,
+    trashRetentionDraftsByProject,
     inheritGlobalShellHistory,
     terminalSettingsMessage,
     permissionAutomation,
@@ -141,6 +144,7 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
         lifecycle={{
           days: trashCleanupDaysByProject.value[current.id] ?? 30,
           message: trashSettingsMessagesByProject.value[current.id] ?? '',
+          draft: trashRetentionDraftsByProject.value[current.id],
         }}
         terminals={{
           inheritGlobalShellHistory: inheritGlobalShellHistory.value,

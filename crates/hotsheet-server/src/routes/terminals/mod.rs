@@ -153,6 +153,12 @@ pub(crate) async fn put_checkout_trash_settings(
             hotsheet_ticketing::Scope::Shared,
         )
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    // "Apply now" (HS2-KPD942): a shorter retention purges what it newly covers immediately.
+    crate::routes::checkout_tickets::purge_checkout_trash_past(
+        &state,
+        &reference,
+        value.trash_cleanup_days,
+    )?;
     Ok(Json(value))
 }
 

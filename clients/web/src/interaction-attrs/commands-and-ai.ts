@@ -49,6 +49,8 @@ export const COMMANDS_AND_AI_ACTIONS = {
   toggleLoadingActivity: action('toggle-loading-activity'),
   toggleGlobalShellHistory: action('toggle-global-shell-history'),
   saveTrashSettings: action('save-trash-settings'),
+  revertTrashSettings: action('revert-trash-settings'),
+  applyLeavingTrashSettings: action('apply-leaving-trash-settings'),
   setViewMode: action('set-view-mode'),
   selectSettingsCategory: action('select-settings-category'),
   editShortcut: action('edit-shortcut'),
@@ -96,6 +98,8 @@ export const COMMANDS_AND_AI_TARGETS = {
   commandIconSearchField: attr('name', 'command-icon-search'),
   manualModelDialog: attr('data-component', 'manual-model-dialog'),
   aiFeedbackDialog: attr('data-component', 'ai-feedback-dialog'),
+  trashRetentionDaysField: attr('name', 'trash-cleanup-days'),
+  trashRetentionLeaveDialog: attr('data-component', 'trash-retention-leave-dialog'),
 } as const;
 
 /**

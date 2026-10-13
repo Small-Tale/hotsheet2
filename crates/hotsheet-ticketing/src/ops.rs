@@ -1050,6 +1050,29 @@ pub fn restore(store: &FsStore, id: &Ulid, now: Timestamp) -> Result<Ticket, OpE
     )?)
 }
 
+/// The Trash tickets a purge at `now` with `retention_days` would remove, without removing
+/// them: the same selection [`purge_trash`] uses, so a settings preview can say how many
+/// tickets a shorter retention would purge (HS2-KPD942).
+pub fn trash_due_for_purge(
+    store: &FsStore,
+    now: &Timestamp,
+    retention_days: i64,
+) -> Result<Vec<Ticket>, OpError> {
+    let Some(cutoff) = now.plus_minutes(-retention_days * 24 * 60).instant() else {
+        return Ok(Vec::new());
+    };
+    Ok(store
+        .list_tickets()?
+        .into_iter()
+        .filter(|ticket| {
+            ticket.status == Status::Deleted
+                && deleted_since(ticket)
+                    .instant()
+                    .is_some_and(|deleted| deleted <= cutoff)
+        })
+        .collect())
+}
+
 /// Trash retention before automatic purge (HS2-MWDR19).
 pub const TRASH_RETENTION_DAYS: i64 = crate::DEFAULT_TRASH_CLEANUP_DAYS as i64;
 
@@ -1061,19 +1084,9 @@ pub fn purge_trash(
     now: &Timestamp,
     retention_days: i64,
 ) -> Result<Vec<Ticket>, OpError> {
-    let Some(cutoff) = now.plus_minutes(-retention_days * 24 * 60).instant() else {
-        return Ok(Vec::new());
-    };
     let mut purged = Vec::new();
     let mut paths = Vec::new();
-    for ticket in store.list_tickets()? {
-        if ticket.status != Status::Deleted
-            || !deleted_since(&ticket)
-                .instant()
-                .is_some_and(|deleted| deleted <= cutoff)
-        {
-            continue;
-        }
+    for ticket in trash_due_for_purge(store, now, retention_days)? {
         let file = store.ticket_path(&ticket.id);
         let attachments = store.attachment_dir(&ticket.id);
         std::fs::remove_file(&file).map_err(StoreError::from)?;
@@ -2716,6 +2729,31 @@ mod tests {
         assert_eq!(deleted_since(&legacy), &legacy.updated_at);
         let restored = restore(&store, &legacy.id, ts("2026-07-04T00:00:00Z")).unwrap();
         assert_eq!(restored.status, Status::NotStarted);
+    }
+
+    #[test]
+    fn trash_due_for_purge_previews_without_removing() {
+        let (_d, store) = store();
+        let old = trashed(&store, "Old", Status::NotStarted, "2026-07-01T12:00:00Z");
+        let recent = trashed(&store, "Recent", Status::NotStarted, "2026-07-20T00:00:00Z");
+        let now = ts("2026-08-01T00:00:00Z");
+        let ids = |days| {
+            trash_due_for_purge(&store, &now, days)
+                .unwrap()
+                .into_iter()
+                .map(|t| t.id)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(30), vec![old.id]);
+        let mut both = ids(7);
+        both.sort();
+        let mut expected = vec![old.id, recent.id];
+        expected.sort();
+        assert_eq!(both, expected);
+        assert!(ids(60).is_empty());
+        // Previewing never removes anything.
+        assert!(store.read_ticket(&old.id).is_ok());
+        assert!(store.read_ticket(&recent.id).is_ok());
     }
 
     #[test]

@@ -170,9 +170,15 @@ export function SettingsWorkspaceDemo() {
 
 export function TrashSettingsDemo() {
   return (
-    <CatalogExample label="Default">
-      <TrashSettings days={14} />
-    </CatalogExample>
+    <>
+      <CatalogExample label="Default">
+        <TrashSettings days={14} />
+      </CatalogExample>
+      {/* An unapplied shorter window enables "Apply now" and previews the purge (HS2-KPD942). */}
+      <CatalogExample label="Unapplied change">
+        <TrashSettings days={14} draft={{ value: '7', purgeCount: 3 }} />
+      </CatalogExample>
+    </>
   );
 }
 

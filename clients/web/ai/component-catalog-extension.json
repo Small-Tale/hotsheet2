@@ -2218,7 +2218,7 @@
       "id": "trash-settings",
       "name": "TrashSettings",
       "kind": "component",
-      "purpose": "Trash retention window and empty-trash entry point.",
+      "purpose": "Trash retention window with an inline Apply now action, purge-count preview, and unapplied-change warning.",
       "useWhen": [
         "Hot Sheet needs trash retention window and empty-trash entry point."
       ],

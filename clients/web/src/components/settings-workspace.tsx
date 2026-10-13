@@ -22,7 +22,7 @@ import {
   TicketSourcesSettings,
   type TicketSourcesSettingsProps,
 } from './ticket-sources-settings';
-import { TrashSettings } from './trash-settings';
+import { type TrashRetentionDraft, TrashSettings } from './trash-settings';
 
 export interface SettingsWorkspaceProps {
   category: SettingsCategory;
@@ -30,7 +30,7 @@ export interface SettingsWorkspaceProps {
   accounts: AccountsSettingsProps;
   ai: { tools: readonly AiToolDescriptor[]; selection: AiToolDefaults; loading: boolean; message: string };
   commands: CommandSettingsEditorProps;
-  lifecycle: { days: number; message: string };
+  lifecycle: { days: number; message: string; draft?: TrashRetentionDraft };
   terminals: { inheritGlobalShellHistory: boolean; message: string };
   permissions: { automation: PermissionAutomation; delays: readonly number[] };
   columns: { hideVerified: boolean };
@@ -64,7 +64,9 @@ export function SettingsWorkspace({
         <AiToolSettings tools={ai.tools} selection={ai.selection} loading={ai.loading} message={ai.message} />
       )}
       {category === 'commands' && <CommandSettingsEditor {...commands} />}
-      {category === 'lifecycle' && <TrashSettings days={lifecycle.days} message={lifecycle.message} />}
+      {category === 'lifecycle' && (
+        <TrashSettings days={lifecycle.days} message={lifecycle.message} draft={lifecycle.draft} />
+      )}
       {category === 'terminals' && (
         <List gap="xs">
           <wa-checkbox

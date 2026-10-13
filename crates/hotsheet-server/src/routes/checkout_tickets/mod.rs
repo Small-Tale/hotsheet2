@@ -828,6 +828,45 @@ pub(crate) async fn empty_checkout_trash(
     })))
 }
 
+#[derive(Deserialize)]
+pub(crate) struct TrashPurgePreviewQuery {
+    days: u32,
+}
+
+/// How many Trash tickets applying a `days` retention would purge right now, across the
+/// checkout's git ticket sources (HS2-KPD942). A checkout without git Trash previews zero.
+pub(crate) async fn preview_checkout_trash_purge(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Query(query): Query<TrashPurgePreviewQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut count = 0;
+    for (_, entry) in checkout_entries(&state, &reference)? {
+        count += ops::trash_due_for_purge(&entry.store, &now(), i64::from(query.days))?.len();
+    }
+    Ok(Json(serde_json::json!({
+        "trash_cleanup_days": query.days,
+        "purge_count": count,
+    })))
+}
+
+/// Purge every checkout Trash ticket past `days`, announcing each removal, so a retention
+/// applied from Settings takes effect now instead of on the next background sweep.
+pub(crate) fn purge_checkout_trash_past(
+    state: &AppState,
+    reference: &str,
+    days: u32,
+) -> Result<usize, ApiError> {
+    let mut purged = 0;
+    for (_, entry) in checkout_entries(state, reference)? {
+        for ticket in ops::purge_trash(&entry.store, &now(), i64::from(days))? {
+            state.removed_in(&entry, &ticket);
+            purged += 1;
+        }
+    }
+    Ok(purged)
+}
+
 pub(crate) async fn assign_checkout_ticket(
     State(state): State<AppState>,
     Path((reference, id)): Path<(String, String)>,

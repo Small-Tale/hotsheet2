@@ -24178,8 +24178,15 @@ test('offers 0 seconds only for Auto-allow and keeps both selects in sync (HS2-E
 
 test('shows and persists the shared Trash retention period in Lifecycle settings', async ({ page }) => {
   const writes: unknown[] = [],
-    requests: string[] = [];
+    requests: string[] = [],
+    previews: string[] = [];
   await mockProject(page);
+  // A shorter window previews how many Trash tickets it would purge right away (HS2-KPD942).
+  await page.route('**/trash/purge-preview?*', (route) => {
+    const days = Number(new URL(route.request().url()).searchParams.get('days'));
+    previews.push(String(days));
+    return route.fulfill({ json: { trash_cleanup_days: days, purge_count: days < 10 ? 3 : 0 } });
+  });
   page.on('request', (request) => {
     const path = new URL(request.url()).pathname;
     if (path.endsWith('/trash-settings')) requests.push(`${request.method()} ${path}`);
@@ -24192,27 +24199,75 @@ test('shows and persists the shared Trash retention period in Lifecycle settings
   await page.getByLabel('Settings view').click();
   await page.getByRole('button', { name: 'Lifecycle' }).click();
   const settings = page.locator('[data-component="trash-settings"]'),
-    input = settings.locator('wa-input[name="trash-cleanup-days"]');
+    input = settings.locator('wa-input[name="trash-cleanup-days"]'),
+    apply = settings.getByRole('button', { name: 'Apply now' }),
+    hint = settings.locator('[data-role="trash-purge-hint"]'),
+    leave = page.locator('[data-component="trash-retention-leave-dialog"]');
   await expect(settings).toContainText('Git history keeps every purged ticket file');
   await expect(input).toHaveJSProperty('value', '30');
-  await input.evaluate((node: HTMLElement & { value: string }) => {
-    node.value = '14';
-  });
-  await settings.getByRole('button', { name: 'Save retention' }).click();
-  await expect(settings.getByRole('status')).toContainText('Saved for this project.');
+  // "Apply now" shares the field's line and stays disabled until the value changes.
+  await expect(apply).toHaveJSProperty('disabled', true);
+  const fieldBox = await input.locator('input').boundingBox(),
+    applyBox = await apply.boundingBox();
+  expect(fieldBox && applyBox && Math.abs(fieldBox.y + fieldBox.height - (applyBox.y + applyBox.height))).toBeLessThan(
+    2,
+  );
+  await input.locator('input').fill('7');
+  await expect(hint).toHaveText('3 tickets in Trash will be purged');
+  await expect(apply).toHaveJSProperty('disabled', false);
+  await page.screenshot({ path: 'target/visual-captures/hs2-kpd942-apply-now-wide.png' });
+  await input.locator('input').fill('14');
+  await expect(hint).toHaveCount(0);
+  await apply.click();
+  await expect(page.locator('wa-toast-item .app-toast')).toHaveText('Trash retention applied.');
   expect(writes).toEqual([{ trash_cleanup_days: 14 }]);
+  expect(previews).toContain('7');
   expect(requests).toEqual([
     'GET /__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/trash-settings',
     'PUT /__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/trash-settings',
   ]);
-  await expect(page.locator('wa-toast-item .app-toast')).toHaveText('Trash retention saved.');
-  await page.screenshot({ path: 'target/visual-captures/hs2-ew2wxa-trash-retention-wide.png', fullPage: true });
+  await expect(apply).toHaveJSProperty('disabled', true);
+  await expect(settings.getByRole('status')).toHaveText('');
   await page.getByLabel('List view').click();
   await page.getByLabel('Settings view').click();
   await page.getByRole('button', { name: 'Lifecycle' }).click();
   await expect(input).toHaveJSProperty('value', '14');
-  await page.setViewportSize({ width: 760, height: 720 });
-  await page.screenshot({ path: 'target/visual-captures/hs2-ew2wxa-trash-retention-narrow.png', fullPage: true });
+
+  // Leaving with an unapplied value asks to apply or revert it (HS2-F55956). Revert continues.
+  await input.locator('input').fill('5');
+  await expect(hint).toHaveText('3 tickets in Trash will be purged');
+  await page.getByLabel('List view').click();
+  await expect(leave).toHaveJSProperty('open', true);
+  await expect(leave).toContainText('You changed Trash retention to 5 days but did not apply it.');
+  await expect(leave).toContainText('3 tickets in Trash will be purged');
+  await expect(settings).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-f55956-leave-warning-wide.png' });
+  await leave.getByRole('button', { name: 'Revert to 14 days' }).click();
+  await expect(settings).toHaveCount(0);
+  expect(writes).toHaveLength(1);
+  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Lifecycle' }).click();
+  await expect(input).toHaveJSProperty('value', '14');
+
+  // Escape keeps the user on Lifecycle with the draft; Apply saves and then continues.
+  await input.locator('input').fill('21');
+  await page.getByRole('button', { name: 'Terminals' }).click();
+  await expect(leave).toHaveJSProperty('open', true);
+  await page.keyboard.press('Escape');
+  await expect(leave).toHaveCount(0);
+  await expect(input).toHaveJSProperty('value', '21');
+  await page.getByRole('button', { name: 'Terminals' }).click();
+  await leave.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect.poll(() => writes).toEqual([{ trash_cleanup_days: 14 }, { trash_cleanup_days: 21 }]);
+  await expect(settings).toHaveCount(0);
+  await expect(page.locator('[data-component="settings-workspace"]')).toContainText('Use my global shell history');
+
+  await page.getByRole('button', { name: 'Lifecycle' }).click();
+  await expect(input).toHaveJSProperty('value', '21');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await input.locator('input').fill('6');
+  await expect(hint).toHaveText('3 tickets in Trash will be purged');
+  await page.screenshot({ path: 'target/visual-captures/hs2-kpd942-apply-now-narrow.png' });
 });
 
 test('shares the settings category across projects but scopes command drafts to each project (HS2-4J50K3, HS2-G9FMQJ)', async ({

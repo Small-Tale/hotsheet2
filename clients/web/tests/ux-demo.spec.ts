@@ -591,8 +591,12 @@ test('uses Kerf layout primitives across migrated settings and dialog surfaces (
 
   await page.goto('/ux-demo?component=trash-settings');
   const trash = page.locator('[data-component="trash-settings"]');
-  await expect(trash.locator('[data-component="list"]')).toHaveCount(2);
-  await expect(trash.locator('[data-component="row"]')).toHaveCount(1);
+  await expect(trash).toHaveCount(2);
+  await expect(trash.first().locator('[data-component="list"]')).toHaveCount(3);
+  await expect(trash.first().locator('[data-component="row"]')).toHaveCount(1);
+  await expect(trash.first().getByRole('button', { name: 'Apply now' })).toHaveJSProperty('disabled', true);
+  await expect(trash.last().getByRole('button', { name: 'Apply now' })).toHaveJSProperty('disabled', false);
+  await expect(trash.last().locator('[data-role="trash-purge-hint"]')).toHaveText('3 tickets in Trash will be purged');
 
   await page.goto('/ux-demo?component=keyboard-settings');
   const keyboard = page.locator('[data-component="keyboard-settings"]');

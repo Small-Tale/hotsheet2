@@ -6314,6 +6314,79 @@ async fn empty_trash_purges_all_deleted_checkout_tickets_and_is_idempotent() {
 }
 
 #[tokio::test]
+async fn trash_purge_preview_counts_without_purging_and_apply_keeps_recent_trash() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap();
+    for title in ["Trash one", "Trash two"] {
+        let created = body_json(
+            router
+                .clone()
+                .oneshot(authed(
+                    "POST",
+                    &format!("/checkouts/{checkout_id}/tickets"),
+                    Some(&serde_json::json!({"title":title}).to_string()),
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        router
+            .clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!(
+                    "/checkouts/{checkout_id}/tickets/{}",
+                    created["id"].as_str().unwrap()
+                ),
+                Some(r#"{"status":"deleted"}"#),
+            ))
+            .await
+            .unwrap();
+    }
+    let preview = |days: u32| {
+        let router = router.clone();
+        let uri = format!("/checkouts/{checkout_id}/trash/purge-preview?days={days}");
+        async move { body_json(router.oneshot(authed("GET", &uri, None)).await.unwrap()).await }
+    };
+    // Tickets deleted just now are only due under a zero-day window.
+    assert_eq!(preview(1).await["purge_count"], 0);
+    let all = preview(0).await;
+    assert_eq!(all["purge_count"], 2, "{all}");
+    assert_eq!(all["trash_cleanup_days"], 0);
+    // Previewing removed nothing, and applying a one-day retention keeps recent Trash.
+    let applied = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/checkouts/{checkout_id}/trash-settings"),
+            Some(r#"{"trash_cleanup_days":1}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(applied.status(), StatusCode::OK);
+    assert_eq!(preview(0).await["purge_count"], 2);
+}
+
+#[tokio::test]
 async fn empty_trash_rejects_a_checkout_without_a_git_ticket_source() {
     let (_primary, st) = state();
     let checkout = tempfile::tempdir().unwrap();

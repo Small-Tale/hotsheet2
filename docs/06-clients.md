@@ -830,7 +830,15 @@ preview/download, server directory browser) are separate design work.
   from a project that is no longer selected.
   Lifecycle exposes the shared Trash retention period as a positive whole-day field, shows
   the 30-day default, explains that git history remains available after cleanup, and saves
-  through the checkout-scoped core settings API.
+  through the checkout-scoped core settings API. Edits stay a per-project draft until the
+  inline **Apply now** button beside the field applies them; applying purges any Trash ticket
+  the new window already covers. While a draft differs, a debounced
+  `GET /checkouts/{id}/trash/purge-preview?days=N` hint says how many Trash tickets would be
+  purged (HS2-KPD942). Leaving Lifecycle (settings category, view mode, or project tab) or the
+  page with an unapplied draft is held behind a dialog that applies or reverts it, then
+  continues; dismissing the dialog stays on Lifecycle with the draft (HS2-F55956). Command
+  settings autosave silently on success like ticket editing; their status line only carries
+  validation or save errors (HS2-MTBMH8).
   Right-sidebar toolbars are divider-free in every state—ticket, loading, multi-selection,
   Settings, and Notifications—so content sections, not the shell toolbar, own separators.
   The ticket inspector uses an 8px horizontal content gutter. Details, Tags, Notes,

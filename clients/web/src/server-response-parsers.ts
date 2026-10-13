@@ -36,6 +36,7 @@ import type {
   TicketRow,
   ToolConnection,
   ToolSession,
+  TrashPurgePreview,
   TrashSettings,
 } from './api';
 import type { CompatibilityRange, ServerCompatibility } from './compatibility';
@@ -491,6 +492,10 @@ export const parseTerminalSettings = shape<TerminalSettings>('terminal settings'
 });
 
 export const parseTrashSettings = shape<TrashSettings>('trash settings', { trash_cleanup_days: isNumber });
+export const parseTrashPurgePreview = shape<TrashPurgePreview>('trash purge preview', {
+  trash_cleanup_days: isNumber,
+  purge_count: isNumber,
+});
 
 export const parseCommandDefinition = shape<CommandDefinition>(
   'command',

@@ -797,6 +797,20 @@ describe('checkout Trash transport', () => {
     );
     fetchMock.mockRestore();
   });
+  it('previews how many Trash tickets a retention would purge (HS2-KPD942)', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response('{"trash_cleanup_days":7,"purge_count":3}', { status: 200 }));
+    await expect(new Api('/api').trashPurgePreview('folder with spaces', 7)).resolves.toEqual({
+      trash_cleanup_days: 7,
+      purge_count: 3,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/checkouts/folder%20with%20spaces/trash/purge-preview?days=7',
+      expect.any(Object),
+    );
+    fetchMock.mockRestore();
+  });
   it('reads and writes the shared Trash retention setting', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')

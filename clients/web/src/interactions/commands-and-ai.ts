@@ -20,11 +20,13 @@ import { type ConversationExportDialogState } from '../components/conversation-e
 import { type ManualModelDialogState } from '../components/manual-model-dialog';
 import { type ExternalProviderKind, type GithubAuthState } from '../components/provider-setup-form';
 import { type SettingsCategory } from '../components/settings-navigation';
+import { trashDraftIsDirty, type TrashRetentionDraft } from '../components/trash-settings';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
 import { type ConversationExportDraft } from '../conversation-export';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
+import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
 import { beginInteractionTiming } from '../interaction-performance';
 import { chordFromEvent, saveShortcutOverrides, type ShortcutChord, shortcutDef } from '../keyboard-shortcuts';
 import { loadLucideCatalog } from '../lucide-catalog';
@@ -119,6 +121,7 @@ export interface CommandAndAiInteractionsDependencies {
   readonly terminalSettingsMessage: Signal<string>;
   readonly trashSettingsMessagesByProject: Signal<Record<string, string>>;
   readonly trashCleanupDaysByProject: Signal<Record<string, number>>;
+  readonly trashRetentionDraftsByProject: Signal<Record<string, TrashRetentionDraft>>;
   readonly resetProgressiveTicketRendering: () => void;
   readonly viewMode: Signal<WorkspaceViewMode>;
   readonly refreshProject: (options?: { showLoading?: boolean }) => Promise<unknown>;
@@ -239,6 +242,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     terminalSettingsMessage,
     trashSettingsMessagesByProject,
     trashCleanupDaysByProject,
+    trashRetentionDraftsByProject,
     resetProgressiveTicketRendering,
     viewMode,
     refreshProject,
@@ -745,43 +749,152 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
         });
     }),
   );
+  // Trash retention (HS2-KPD942, HS2-F55956): edits stay a per-project draft until "Apply now";
+  // a debounced server preview says how many Trash tickets the new window would purge, and
+  // leaving the page with an unapplied draft is held until the user applies or reverts it.
+  let trashPreviewTimer: ReturnType<typeof setTimeout> | undefined, heldNavigation: HTMLElement | undefined;
+  const trashDraft = (projectId: string): TrashRetentionDraft | undefined =>
+    trashRetentionDraftsByProject.value[projectId];
+  function setTrashDraft(projectId: string, draft: TrashRetentionDraft | undefined) {
+    const rest = Object.fromEntries(
+      Object.entries(trashRetentionDraftsByProject.value).filter(([id]) => id !== projectId),
+    );
+    trashRetentionDraftsByProject.value = draft ? { ...rest, [projectId]: draft } : rest;
+  }
+  function setTrashMessage(projectId: string, message: string) {
+    trashSettingsMessagesByProject.value = { ...trashSettingsMessagesByProject.value, [projectId]: message };
+  }
+  const trashDays = (value: string) => {
+    const days = Number(value.trim());
+    return value.trim() !== '' && Number.isSafeInteger(days) && days >= 1 ? days : undefined;
+  };
+  function previewTrashPurge(current: Project, value: string) {
+    clearTimeout(trashPreviewTimer);
+    const days = trashDays(value);
+    if (days === undefined || days === trashCleanupDaysByProject.value[current.id]) return;
+    trashPreviewTimer = setTimeout(() => {
+      void new Api(current.apiPath)
+        .trashPurgePreview(current.id, days)
+        .then((preview) => {
+          const draft = trashDraft(current.id);
+          if (draft && trashDays(draft.value) === preview.trash_cleanup_days)
+            setTrashDraft(current.id, { ...draft, purgeCount: preview.purge_count });
+        })
+        // A missing preview only hides the hint; applying still validates on the server.
+        .catch(() => undefined);
+    }, 250);
+  }
+  /** Continue the navigation that an unapplied draft held, once it was applied or reverted. */
+  function releaseHeldNavigation() {
+    const target = heldNavigation;
+    heldNavigation = undefined;
+    if (target?.isConnected) target.click();
+  }
+  function applyTrashSettings(current: Project, value: string): void {
+    const days = trashDays(value);
+    if (days === undefined) {
+      setTrashMessage(current.id, 'Enter a positive whole number of days.');
+      return;
+    }
+    setTrashMessage(current.id, '');
+    void new Api(current.apiPath)
+      .saveTrashSettings(current.id, { trash_cleanup_days: days })
+      .then((saved) => {
+        if (project()?.id !== current.id) return;
+        trashCleanupDaysByProject.value = {
+          ...trashCleanupDaysByProject.value,
+          [current.id]: saved.trash_cleanup_days,
+        };
+        setTrashDraft(current.id, undefined);
+        showToast('Trash retention applied.');
+        releaseHeldNavigation();
+      })
+      .catch((reason: unknown) => {
+        if (project()?.id === current.id)
+          setTrashMessage(current.id, reason instanceof Error ? reason.message : String(reason));
+      });
+  }
+  lifetime.add(
+    delegate(document.body, 'input', COMMANDS_AND_AI_TARGETS.trashRetentionDaysField.selector, (_event, target) => {
+      const current = project();
+      if (!current) return;
+      const value = (target as Control).value;
+      setTrashDraft(current.id, { value });
+      setTrashMessage(current.id, '');
+      previewTrashPurge(current, value);
+    }),
+  );
   lifetime.add(
     delegate(document.body, 'submit', COMMANDS_AND_AI_ACTIONS.saveTrashSettings.selector, (event, target) => {
       event.preventDefault();
-      const current = project(),
-        raw = target.querySelector<Control>('[name="trash-cleanup-days"]')?.value ?? '',
-        days = Number(raw);
+      const current = project();
       if (!current) return;
-      if (!Number.isSafeInteger(days) || days < 1) {
-        trashSettingsMessagesByProject.value = {
-          ...trashSettingsMessagesByProject.value,
-          [current.id]: 'Enter a positive whole number of days.',
-        };
-        return;
-      }
-      trashSettingsMessagesByProject.value = { ...trashSettingsMessagesByProject.value, [current.id]: 'Saving…' };
-      void new Api(current.apiPath)
-        .saveTrashSettings(current.id, { trash_cleanup_days: days })
-        .then((value) => {
-          if (project()?.id !== current.id) return;
-          trashCleanupDaysByProject.value = {
-            ...trashCleanupDaysByProject.value,
-            [current.id]: value.trash_cleanup_days,
-          };
-          trashSettingsMessagesByProject.value = {
-            ...trashSettingsMessagesByProject.value,
-            [current.id]: 'Saved for this project.',
-          };
-          showToast('Trash retention saved.');
-        })
-        .catch((reason: unknown) => {
-          if (project()?.id === current.id)
-            trashSettingsMessagesByProject.value = {
-              ...trashSettingsMessagesByProject.value,
-              [current.id]: reason instanceof Error ? reason.message : String(reason),
-            };
-        });
+      applyTrashSettings(
+        current,
+        trashDraft(current.id)?.value ?? target.querySelector<Control>('[name="trash-cleanup-days"]')?.value ?? '',
+      );
     }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.applyLeavingTrashSettings.selector, () => {
+      const current = project(),
+        draft = current && trashDraft(current.id);
+      if (current && draft) applyTrashSettings(current, draft.value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.revertTrashSettings.selector, () => {
+      const current = project();
+      if (!current) return;
+      clearTimeout(trashPreviewTimer);
+      setTrashDraft(current.id, undefined);
+      setTrashMessage(current.id, '');
+      releaseHeldNavigation();
+    }),
+  );
+  // Closing the warning (Escape or its close button) stays on Lifecycle with the draft intact.
+  lifetime.add(
+    delegateCapture(document.body, 'wa-hide', COMMANDS_AND_AI_TARGETS.trashRetentionLeaveDialog.selector, (event) => {
+      if (event.target !== event.currentTarget && !(event.target as Element).matches('wa-dialog')) return;
+      const current = project(),
+        draft = current && trashDraft(current.id);
+      heldNavigation = undefined;
+      if (current && draft?.leaving) setTrashDraft(current.id, { ...draft, leaving: false });
+    }),
+  );
+  // Navigation that leaves Lifecycle with an unapplied retention draft is held (HS2-F55956).
+  const heldNavigationSelector = [
+    COMMANDS_AND_AI_ACTIONS.setViewMode.selector,
+    COMMANDS_AND_AI_ACTIONS.selectSettingsCategory.selector,
+    NAVIGATION_AND_TABS_ACTIONS.selectProjectTab.selector,
+  ].join(', ');
+  const unappliedTrashDraft = () => {
+    const current = project();
+    if (!current || !document.querySelector('[data-component="trash-settings"]')) return undefined;
+    const draft = trashDraft(current.id);
+    return trashDraftIsDirty(trashCleanupDaysByProject.value[current.id] ?? 30, draft) ? { current, draft } : undefined;
+  };
+  lifetime.add(
+    delegateCapture(document.body, 'click', heldNavigationSelector, (event, target) => {
+      const pending = unappliedTrashDraft();
+      if (!pending?.draft || heldNavigation === target) return;
+      if (
+        target.matches(COMMANDS_AND_AI_ACTIONS.selectSettingsCategory.selector) &&
+        data(target).itemId === 'lifecycle'
+      )
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      heldNavigation = target as HTMLElement;
+      setTrashDraft(pending.current.id, { ...pending.draft, leaving: true });
+    }),
+  );
+  document.defaultView?.addEventListener(
+    'beforeunload',
+    (event) => {
+      if (unappliedTrashDraft()) event.preventDefault();
+    },
+    { signal: lifetime.signal },
   );
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.setViewMode.selector, (_event, target) => {

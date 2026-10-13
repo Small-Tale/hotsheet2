@@ -48,6 +48,7 @@ import {
   parseToolConnection,
   parseToolSession,
   parseTrashPurge,
+  parseTrashPurgePreview,
   parseTrashSettings,
   type ResponseParser,
 } from './server-response-parsers';
@@ -685,6 +686,11 @@ export interface TerminalSettings {
 }
 export interface TrashSettings {
   trash_cleanup_days: number;
+}
+/** How many Trash tickets a retention of `trash_cleanup_days` would purge right now (HS2-KPD942). */
+export interface TrashPurgePreview {
+  trash_cleanup_days: number;
+  purge_count: number;
 }
 export interface TerminalRead extends TerminalInfo {
   scrollback: string;
@@ -1350,6 +1356,11 @@ export class Api {
     this.parsed(parseTerminalSettings, '/terminal-settings', { method: 'PUT', body: JSON.stringify(value) });
   trashSettings = (checkoutId: string) =>
     this.parsed(parseTrashSettings, `/checkouts/${encodeURIComponent(checkoutId)}/trash-settings`);
+  trashPurgePreview = (checkoutId: string, days: number) =>
+    this.parsed(
+      parseTrashPurgePreview,
+      `/checkouts/${encodeURIComponent(checkoutId)}/trash/purge-preview?days=${encodeURIComponent(days)}`,
+    );
   saveTrashSettings = (checkoutId: string, value: TrashSettings) =>
     this.parsed(parseTrashSettings, `/checkouts/${encodeURIComponent(checkoutId)}/trash-settings`, {
       method: 'PUT',

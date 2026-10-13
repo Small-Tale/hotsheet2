@@ -1,0 +1,5 @@
+/* Keep the retention field short beside its "Apply now" action; a narrow screen wraps the action below. */
+.trash-settings .trash-settings__days {
+  flex: 0 1 remify(320px);
+  min-inline-size: 0;
+}
