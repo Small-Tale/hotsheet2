@@ -47,6 +47,9 @@ vi.mock('kerfjs', async (original) => {
       register({ root, event, selector, handle, capture: true }),
   };
 });
+// Kerf's ContentItem keyboard wiring binds native listeners on its root; the fake document body has
+// none, and these transition tests cover the app's own delegated handlers.
+vi.mock('@kerfjs/ui/wire-content-items', () => ({ wireContentItems: () => () => undefined }));
 /** Deliver an event to every still-attached delegate registered for it, as the delegated root would. */
 function dispatchDelegated(event: Event, selector: string, element: Element) {
   for (const registration of registrations)
