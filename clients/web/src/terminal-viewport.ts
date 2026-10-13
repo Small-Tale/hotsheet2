@@ -58,6 +58,12 @@ export const terminalReconnectDelay = (attempt: number) => Math.min(8_000, 250 *
 export const TERMINAL_VIEWPORT_PARK_EVENT = 'hs-terminal-viewport-park';
 /** Sent when a parked viewport returns to the page; `detail.focus` requests input focus. */
 export const TERMINAL_VIEWPORT_RESUME_EVENT = 'hs-terminal-viewport-resume';
+/**
+ * Sent to a live viewport its owner moved into a freshly rendered placeholder elsewhere in the page
+ * (a grid-mode or full-screen change re-rendered its container), so it re-observes its new frame
+ * instead of being disposed and recreated (HS2-AMNNBR, HS2-TBQQ00).
+ */
+export const TERMINAL_VIEWPORT_REPARENT_EVENT = 'hs-terminal-viewport-reparent';
 /** Dispatched by a parked viewport whose socket closed, so its owner evicts it. */
 export const TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT = 'hs-terminal-viewport-parked-closed';
 /** How long an automatic initial focus waits for a second attempt, after layout and mounts settle. */

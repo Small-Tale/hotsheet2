@@ -49,6 +49,7 @@ import {
   TERMINAL_PREVIEW_NATURAL_WIDTH,
   TERMINAL_VIEWPORT_PARK_EVENT,
   TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT,
+  TERMINAL_VIEWPORT_REPARENT_EVENT,
   TERMINAL_VIEWPORT_RESUME_EVENT,
   terminalDedicatedGridSize,
   terminalFittedFontSize,
@@ -335,7 +336,8 @@ function initializeTerminalViewport(
     fixedDashboardGrid = element.dataset.gridPolicy === 'dashboard-80x24',
     magnified = Boolean(element.closest('[data-fixed-aspect-terminal-card="magnified"]')),
     settledResize = element.classList.contains('terminal-viewport--dedicated'),
-    insideDrawer = Boolean(element.closest('[data-region-id="app-bottom-drawer"]')),
+    // Live, because a reparented viewport can leave or enter the drawer (HS2-AMNNBR).
+    insideDrawer = () => Boolean(element.closest('[data-region-id="app-bottom-drawer"]')),
     // A non-claiming preview (no grid policy) mirrors the borrowed PTY's grid at the dashboard font
     // and scales it to fill the canvas, so its glyphs stay legible (HS2-XHBDRV).
     mirrorPtyGrid = scaledPreview && !fixedDashboardGrid,
@@ -389,7 +391,7 @@ function initializeTerminalViewport(
       isMobileViewport(window.innerWidth),
       fixedDashboardGrid || element.dataset.mobileGridPolicy === '80xm',
       scaledPreview,
-      settledResize && insideDrawer,
+      settledResize && insideDrawer(),
     );
   const loadWebgl = () => {
     if (
@@ -651,7 +653,7 @@ function initializeTerminalViewport(
     reconcileScale();
     claim();
   };
-  const drawerResizeActive = () => insideDrawer && document.body.dataset.resizingRegion === 'vertical';
+  const drawerResizeActive = () => insideDrawer() && document.body.dataset.resizingRegion === 'vertical';
   // One geometry pass per frame of layout change. The ResizeObserver reports every later size
   // change, so no delayed re-settle is needed; a second pass only re-resized the PTY and made
   // TUIs redraw after mount (HS2-GSRZX6).
@@ -664,7 +666,7 @@ function initializeTerminalViewport(
     });
   };
   const finishDrawerResize = () => {
-    if (!insideDrawer) return;
+    if (!insideDrawer()) return;
     if (settledResize && automaticInputFocusAllowed(window.innerWidth)) terminal.focus();
     applySettledGeometry();
   };
@@ -797,20 +799,35 @@ function initializeTerminalViewport(
   own(() => {
     resize.disconnect();
   });
-  resize.observe(scaledPreview ? (element.parentElement ?? element) : element);
+  // A scaled preview fits its frame (the parent); other viewports fit themselves.
+  const observedTarget = () => (scaledPreview ? (element.parentElement ?? element) : element);
+  resize.observe(observedTarget());
   fitAndClaim();
-  const visibilityTarget = scaledPreview ? (element.parentElement ?? element) : element,
-    intersection = new IntersectionObserver((entries) => {
-      const next = entries[0]?.isIntersecting ?? false;
-      if (next !== visible) {
-        visible = next;
-        claim();
-      }
-    });
+  const intersection = new IntersectionObserver((entries) => {
+    const next = entries[0]?.isIntersecting ?? false;
+    if (next !== visible) {
+      visible = next;
+      claim();
+    }
+  });
   own(() => {
     intersection.disconnect();
   });
-  intersection.observe(visibilityTarget);
+  intersection.observe(observedTarget());
+  // The owner moved this live viewport into a new frame: keep the emulator, socket, and scrollback,
+  // and re-observe the new frame so the next geometry pass fits it (HS2-AMNNBR, HS2-TBQQ00).
+  const reparent = () => {
+    resize.disconnect();
+    intersection.disconnect();
+    resize.observe(observedTarget());
+    intersection.observe(observedTarget());
+    fitAndClaim();
+    scheduleDashboardFill();
+  };
+  element.addEventListener(TERMINAL_VIEWPORT_REPARENT_EVENT, reparent);
+  own(() => {
+    element.removeEventListener(TERMINAL_VIEWPORT_REPARENT_EVENT, reparent);
+  });
   const focus = () => {
       if (fixedDashboardGrid && element.dataset.geometryReady !== 'true') return;
       focusRequested = false;

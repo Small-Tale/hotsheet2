@@ -2861,6 +2861,18 @@ the available frame, keeping glyph proportions, pointer hit-testing, selection, 
 aligned with the input surface
 (HS2-2DW829).
 
+**Reused grid terminals (HS2-AMNNBR, HS2-TBQQ00).** Switching from a project's drawer grid
+into the workspace grid, toggling the workspace grid's full screen, and returning to the project
+grid all re-render the tiles' containers, but never recreate a mounted terminal. When a re-render
+leaves a fresh viewport placeholder with the same project, terminal, and mount-time configuration
+(display mode, mount and grid policies, presentation class, magnified card) as a live viewport it
+removed in the same pass, the live element moves into the placeholder's place and is told to
+re-observe its new frame (`hs-terminal-viewport-reparent`); its emulator, scrollback, and attach
+socket survive, and only its scale is refitted. A workspace-grid refresh also keeps the last
+snapshot's tiles on screen instead of swapping them for the loading state, which would otherwise
+unmount every live tile. A placeholder with a different configuration (for example the magnified
+view of a previewed terminal) still mounts its own viewer.
+
 **Kept-alive drawer terminals (HS2-WGTQ6X).** Switching projects, hiding the drawer, or
 leaving a dedicated tab for the project grid or an AI chat takes a dedicated drawer terminal
 out of the page. Its viewport (`data-mount-policy="keep-alive"`) is parked instead of disposed:

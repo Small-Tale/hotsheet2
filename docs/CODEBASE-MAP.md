@@ -108,7 +108,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       project-lifecycle.ts    # Project open/restore, HS1 migration, source/provider setup, and lifecycle dialog state
       ticket-workflows.ts     # Ticket mutation/autosave, selection, bulk/clipboard, reader, attachment, creation, close, and Not Working workflows
       ai-configuration.tsx    # Project AI defaults, tool/model/effort and manual-model lifecycle
-      terminal-viewports.ts   # Observed viewport identity, progressive mount/disposal, pending focus, and early kept-alive parking across project switches (HS2-WGTQ6X, HS2-DM2SK3)
+      terminal-viewports.ts   # Observed viewport identity, progressive mount/disposal, pending focus, and early kept-alive parking across project switches (HS2-WGTQ6X, HS2-DM2SK3), and reparenting live grid viewports into re-rendered placeholders (HS2-AMNNBR)
       terminal-presentation.tsx # Live workspace/drawer/conversation props projected during root render
       controllers.test.ts     # Project replacement, delayed response, rollback, reset/refill transition matrix
       terminal-viewports.test.ts # Viewport focus, mount/disposal, cancellation, refill, and park/restore/evict transitions
@@ -263,6 +263,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/browser-ids-lan.spec.ts # LAN WebKit draft/attachment persistence, visibility and chat identity transitions
     tests/terminal-safari.spec.ts # Real WebKit on ordinary HTTP origin: real PTY glyph pixels across preview/magnified/drawer, resize/reconnect and visible startup failures
     tests/terminal-dashboard-startup.spec.ts # Atomic remembered-project/terminal restoration and operations-sidebar composition
+    tests/terminal-grid-reuse.spec.ts # Project grid -> workspace grid -> full screen -> exit -> project grid keeps every xterm and socket (HS2-AMNNBR, HS2-TBQQ00)
     tests/terminal-project-switch.spec.ts # Kept-alive drawer terminals: same emulator/socket and first-frame content after a project round trip, eviction on project close (HS2-WGTQ6X)
     src/components/*.tsx     #   Production web components; each imports its colocated component CSS
     src/components/*.css     #   Production styles exercised unchanged by /ux-demo and the real app

@@ -740,7 +740,9 @@ export function TerminalDashboard({
         data-terminal-grid-measure="true"
         data-ticket-scroll-owner="terminal-grid"
       >
-        {loading ? (
+        {/* A refresh keeps the last snapshot's tiles on screen: replacing them with a loading state
+            would unmount every live terminal and remount it once the refresh lands (HS2-AMNNBR). */}
+        {loading && sessions.length + chats.length === 0 ? (
           <div class="terminal-dashboard__empty" role="status">
             Loading workspace items…
           </div>

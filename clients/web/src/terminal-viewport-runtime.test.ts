@@ -6,6 +6,7 @@ import {
   TERMINAL_DRAWER_RESIZE_END_EVENT,
   TERMINAL_VIEWPORT_PARK_EVENT,
   TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT,
+  TERMINAL_VIEWPORT_REPARENT_EVENT,
   TERMINAL_VIEWPORT_RESUME_EVENT,
 } from './terminal-viewport';
 import { mountStaticTerminalViewportRuntime, mountTerminalViewportRuntime } from './terminal-viewport-runtime';
@@ -152,11 +153,13 @@ beforeEach(() => {
     'ResizeObserver',
     class {
       disconnect = vi.fn();
+      observed: unknown[] = [];
       constructor(readonly callback: () => void) {
         resize.push(this);
       }
-      observe() {
+      observe(target: unknown) {
         if (throwObservation) throw new Error('observe failed');
+        this.observed.push(target);
       }
     },
   );
@@ -203,6 +206,31 @@ function element() {
   };
 }
 
+describe('reparented live viewports (HS2-AMNNBR, HS2-TBQQ00)', () => {
+  it("re-observes a scaled preview's new frame instead of recreating the emulator", () => {
+    const { viewport, listeners } = element();
+    const frames = [
+      { clientWidth: 400, clientHeight: 240 },
+      { clientWidth: 800, clientHeight: 480 },
+    ];
+    Object.assign(viewport.dataset, { displayMode: 'scaled-preview', gridPolicy: 'dashboard-80x24' });
+    Object.defineProperty(viewport, 'parentElement', { configurable: true, get: () => frames[0] });
+    const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'one' });
+    const observer = resize.at(-1) as unknown as { observed: unknown[]; disconnect: ReturnType<typeof vi.fn> };
+    expect(observer.observed).toEqual([frames[0]]);
+    const reparent = listeners.mock.calls.find(
+      ([name]) => name === TERMINAL_VIEWPORT_REPARENT_EVENT,
+    )?.[1] as () => void;
+    frames.shift();
+    reparent();
+    expect(observer.disconnect).toHaveBeenCalledTimes(1);
+    expect(observer.observed).toEqual([{ clientWidth: 400, clientHeight: 240 }, frames[0]]);
+    expect(allocated.terminals.at(-1)?.dispose).not.toHaveBeenCalled();
+    expect(allocated.terminals).toHaveLength(1);
+    dispose();
+  });
+});
+
 describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
   it('disposes allocations after socket setup throws, then mounts and disposes a fresh viewer exactly once', () => {
     const { viewport, removed } = element();
@@ -234,6 +262,7 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
         'hotsheet-terminal-paste',
         'hotsheet-terminal-read-text',
         TERMINAL_VIEWPORT_PARK_EVENT,
+        TERMINAL_VIEWPORT_REPARENT_EVENT,
         TERMINAL_VIEWPORT_RESUME_EVENT,
         'pointerdown',
         'touchcancel',

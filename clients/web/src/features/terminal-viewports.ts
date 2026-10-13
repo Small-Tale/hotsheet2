@@ -7,6 +7,7 @@ import {
   mountTerminalViewport,
   TERMINAL_VIEWPORT_PARK_EVENT,
   TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT,
+  TERMINAL_VIEWPORT_REPARENT_EVENT,
   TERMINAL_VIEWPORT_RESUME_EVENT,
   terminalBrowserWebSocketUrl,
   type TerminalFocusRequest,
@@ -37,6 +38,23 @@ export interface TerminalViewportParking {
   park: (element: HTMLElement) => void;
   /** Put a parked viewport back in the page in place of its freshly rendered placeholder. */
   restore: (placeholder: HTMLElement, parked: HTMLElement) => void;
+}
+
+/**
+ * What a live viewport fixed at mount: its display mode, policies, presentation class, and whether it
+ * sits in a magnified card. A re-rendered placeholder with the same identity and configuration can
+ * adopt the live viewport instead of mounting a new emulator and socket (HS2-AMNNBR).
+ */
+export function terminalViewportConfiguration(element: HTMLElement): string {
+  return [
+    element.dataset.displayMode ?? '',
+    element.dataset.mountPolicy ?? '',
+    element.dataset.gridPolicy ?? '',
+    element.dataset.mobileGridPolicy ?? '',
+    element.classList.contains('terminal-viewport--dedicated') ? 'dedicated' : '',
+    element.classList.contains('terminal-viewport--scaled-preview') ? 'scaled' : '',
+    element.closest('[data-fixed-aspect-terminal-card="magnified"]') ? 'magnified' : '',
+  ].join('|');
 }
 
 /** How many kept-alive viewports stay warm out of the page, most recently parked first. */
@@ -193,10 +211,40 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
       ),
       replacementIdentities = new Set(Array.from(elements, terminalViewportIdentity).filter(Boolean)),
       openProjects = new Set(projects.value.map((item) => item.id));
+    // A re-render that moved a live viewport's container (a grid-mode switch, full screen) leaves a
+    // fresh placeholder with the same identity: move the live viewport into it rather than disposing
+    // and recreating its emulator and socket (HS2-AMNNBR, HS2-TBQQ00). Keep-alive viewports already
+    // survive this through parking.
+    const placeholders = new Map<string, HTMLElement>();
+    for (const element of elements) {
+      const identity = terminalViewportIdentity(element);
+      if (
+        !identity ||
+        element.dataset.mountPolicy === 'keep-alive' ||
+        terminalViewportMounts.has(element) ||
+        terminalViewportCandidates.has(element)
+      )
+        continue;
+      placeholders.set(`${identity}\u0000${terminalViewportConfiguration(element)}`, element);
+    }
     for (const [element, dispose] of terminalViewportMounts)
       if (!elements.has(element)) {
         terminalViewportMounts.delete(element);
         const identity = terminalViewportIdentity(element);
+        const adoptKey =
+            identity && element.dataset.mountPolicy !== 'keep-alive'
+              ? `${identity}\u0000${terminalViewportConfiguration(element)}`
+              : undefined,
+          placeholder = adoptKey ? placeholders.get(adoptKey) : undefined;
+        if (adoptKey && placeholder) {
+          placeholders.delete(adoptKey);
+          elements.delete(placeholder);
+          placeholder.replaceWith(element);
+          elements.add(element);
+          terminalViewportMounts.set(element, dispose);
+          element.dispatchEvent(new CustomEvent(TERMINAL_VIEWPORT_REPARENT_EVENT));
+          continue;
+        }
         if (
           identity &&
           element.dataset.mountPolicy === 'keep-alive' &&

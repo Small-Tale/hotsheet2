@@ -107,6 +107,17 @@ project transition under that load. The before/after interaction windows,
 wide/narrow traces, and live-terminal return screenshots are attached to
 `HS2-DM2SK3`. Trace categories are inclusive and should not be summed.
 
+### Grid mode and full-screen switches
+
+`clients/web/tests/terminal-grid-reuse.spec.ts` walks six mounted terminals
+from a project's drawer grid into the workspace grid, into and out of full
+screen, and back, timing each step until all six previews are settled with
+their output. Before `HS2-AMNNBR`/`HS2-TBQQ00` every step disposed and
+recreated all six emulators and sockets (503, 364, 374, and 750 ms with
+instant fake sockets; a real PTY adds attach and scrollback replay per
+terminal). After, no step creates an emulator or socket (208, 160, 168, and
+220 ms, mostly Playwright polling), and the spec fails if one is recreated.
+
 ## Real local-server PTY transport
 
 `npm run profile:pty:real` builds the local CLI and server binaries, starts

@@ -6,10 +6,15 @@ import {
   mountTerminalViewport,
   TERMINAL_VIEWPORT_PARK_EVENT,
   TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT,
+  TERMINAL_VIEWPORT_REPARENT_EVENT,
   TERMINAL_VIEWPORT_RESUME_EVENT,
   type TerminalFocusRequest,
 } from '../terminal-viewport';
-import { createTerminalViewportsController, MAX_PARKED_TERMINAL_VIEWPORTS } from './terminal-viewports';
+import {
+  createTerminalViewportsController,
+  MAX_PARKED_TERMINAL_VIEWPORTS,
+  terminalViewportConfiguration,
+} from './terminal-viewports';
 
 vi.mock('../terminal-viewport', async (original) => ({
   ...(await original<typeof import('../terminal-viewport')>()),
@@ -34,6 +39,7 @@ function viewport(projectId: string, terminalId: string, progressive = false) {
       displayMode: 'interactive',
       mountPolicy: progressive ? 'visible-progressive' : '',
     },
+    classList: { contains: () => false },
     closest: () => null,
   } as unknown as HTMLElement;
 }
@@ -381,5 +387,139 @@ describe('kept-alive terminal viewports across project switches (HS2-WGTQ6X)', (
     await paint();
     expect(parked).toEqual([]);
     expect(disposals.get(preview)).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('live grid viewports survive a re-rendered container (HS2-AMNNBR, HS2-TBQQ00)', () => {
+  type Grid = HTMLElement & { events: string[]; replacedBy?: HTMLElement; replacing?: HTMLElement };
+  /** A scaled grid preview as the dashboard and drawer grid render it, in a (possibly magnified) card. */
+  function gridViewport(terminalId: string, mode: 'preview' | 'magnified' = 'preview', projectId = 'a'): Grid {
+    const target = new EventTarget() as unknown as Grid;
+    const dispatch = target.dispatchEvent.bind(target);
+    const preview = mode === 'preview';
+    Object.assign(target, {
+      isConnected: true,
+      events: [] as string[],
+      dataset: {
+        projectId,
+        terminalId,
+        displayMode: preview ? 'scaled-preview' : 'interactive',
+        mountPolicy: preview ? 'visible-progressive' : 'immediate',
+        gridPolicy: preview ? 'dashboard-80x24' : undefined,
+        mobileGridPolicy: preview ? undefined : '80xm',
+      },
+      classList: { contains: (name: string) => preview && name === 'terminal-viewport--scaled-preview' },
+      closest: (selector: string) =>
+        !preview && selector === '[data-fixed-aspect-terminal-card="magnified"]' ? target : null,
+      replaceWith(live: Grid) {
+        target.replacedBy = live;
+        live.replacing = target;
+      },
+      dispatchEvent(event: Event) {
+        target.events.push(event.type);
+        return dispatch(event);
+      },
+    });
+    return target;
+  }
+  function setup() {
+    const disposals = new Map<HTMLElement, ReturnType<typeof vi.fn>>();
+    mount.mockImplementation((element) => {
+      const dispose = vi.fn();
+      disposals.set(element, dispose);
+      return dispose;
+    });
+    const owner = createTerminalViewportsController({
+      projects: signal([project('a'), project('b')]),
+      pendingTerminalFocus: undefined,
+      openTicketReference: vi.fn(),
+    });
+    const show = async (...next: HTMLElement[]) => {
+      elements = next;
+      owner.syncTerminalViewportMounts();
+      // Progressive work mounts two per turn; drain it.
+      for (let turn = 0; turn < 4; turn += 1) await paint();
+    };
+    const live = () => [...disposals].filter(([, dispose]) => dispose.mock.calls.length === 0).map(([e]) => e);
+    return { disposals, show, live };
+  }
+
+  it('keys adoption by display mode, policies, presentation class and magnified card', () => {
+    expect(terminalViewportConfiguration(gridViewport('one'))).toBe(
+      'scaled-preview|visible-progressive|dashboard-80x24|||scaled|',
+    );
+    expect(terminalViewportConfiguration(gridViewport('one', 'magnified'))).toBe(
+      'interactive|immediate||80xm|||magnified',
+    );
+  });
+
+  it('walks mount -> workspace grid -> full screen -> exit -> project grid without recreating a terminal', async () => {
+    const { disposals, show, live } = setup();
+    // Six mounted previews in one project's grid.
+    const ids = ['1', '2', '3', '4', '5', '6'];
+    let current = ids.map((id) => gridViewport(id));
+    await show(...current);
+    expect(mount).toHaveBeenCalledTimes(6);
+    const originals = [...current];
+    // Each later step re-renders every tile's container, leaving fresh placeholders.
+    for (const step of ['workspace grid', 'full screen', 'exit full screen', 'project grid']) {
+      const placeholders = ids.map((id) => gridViewport(id));
+      await show(...placeholders);
+      expect(mount, step).toHaveBeenCalledTimes(6);
+      for (const [index, placeholder] of placeholders.entries()) {
+        expect(placeholder.replacedBy, step).toBe(originals[index]);
+        expect(originals[index].events.at(-1), step).toBe(TERMINAL_VIEWPORT_REPARENT_EVENT);
+      }
+      current = placeholders;
+    }
+    expect(live()).toEqual(originals);
+    // The adopted viewport now owns the slot: a re-sync with it in the page keeps it, and removing it
+    // finally disposes the same emulator once.
+    await show(...originals);
+    expect(mount).toHaveBeenCalledTimes(6);
+    await show();
+    for (const original of originals) expect(disposals.get(original)).toHaveBeenCalledTimes(1);
+    expect(current).toHaveLength(6);
+  });
+
+  it('adopts only a placeholder with the same identity and configuration', async () => {
+    const { disposals, show } = setup();
+    const preview = gridViewport('one');
+    await show(preview);
+    // A different terminal, another project's same id, and the magnified view do not adopt it.
+    const other = gridViewport('two'),
+      otherProject = gridViewport('one', 'preview', 'b'),
+      magnified = gridViewport('one', 'magnified');
+    await show(other, otherProject, magnified);
+    expect(other.replacedBy ?? otherProject.replacedBy ?? magnified.replacedBy).toBeUndefined();
+    expect(disposals.get(preview)).toHaveBeenCalledTimes(1);
+    expect(mount).toHaveBeenCalledWith(magnified, expect.any(Object));
+    // Dismissing the magnified view mounts a fresh preview (HS2-ACMRF6), which a later re-render adopts.
+    const restored = gridViewport('one');
+    await show(restored);
+    expect(disposals.get(magnified)).toHaveBeenCalledTimes(1);
+    const rerendered = gridViewport('one');
+    await show(rerendered);
+    expect(rerendered.replacedBy).toBe(restored);
+    expect(disposals.get(restored)).not.toHaveBeenCalled();
+  });
+
+  it('adopts each live viewport at most once and mounts duplicates or late refills fresh', async () => {
+    const { disposals, show } = setup();
+    const preview = gridViewport('one');
+    await show(preview);
+    // Two placeholders for one terminal: one adopts, the other mounts its own viewer.
+    const first = gridViewport('one'),
+      second = gridViewport('one');
+    await show(first, second);
+    expect([first.replacedBy, second.replacedBy].filter(Boolean)).toEqual([preview]);
+    expect(mount).toHaveBeenCalledTimes(2);
+    // Empty then refill across two syncs: the emptied viewport is disposed, the refill mounts fresh.
+    await show();
+    const refill = gridViewport('one');
+    await show(refill);
+    expect(refill.replacedBy).toBeUndefined();
+    expect(disposals.get(preview)).toHaveBeenCalledTimes(1);
+    expect(mount).toHaveBeenCalledTimes(3);
   });
 });
