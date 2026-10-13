@@ -2,12 +2,13 @@
    and ref tags (HS2-GQXT52). These rules style the app-owned change-evidence button, compare banner,
    commit graph list, and notice, which no Kerf component expresses. */
 /* App-owned wrapper: the heading Toolbar drops its inset through the public gap token; its texts keep
-   their own inline padding (HS2-VABS08). The 1px transparent border puts the title and the trailing
-   diff tool label on the same 9px text/icon edges as the evidence, bundle, and commit rows
-   (HS2-XZTWTY, HS2-PB0VY5). */
+   their own inline padding (HS2-VABS08). The 1px transparent border + 8px padding aligns the heading to
+   the inspector's 17px text column (HS2-EQEGGG); the evidence, bundle, and commit rows inset their
+   content to the same 17px left and right edges (HS2-XZTWTY, HS2-PB0VY5). */
 .ticket-code-review__header {
   --kui-toolbar-gap: 0px;
   display: grid;
+  padding-inline: var(--kui-space-xs);
   border-inline: 1px solid transparent;
 }
 /* As an inspector tab panel (not embedded), the section stacks its parts on the 8px rhythm. */
@@ -27,7 +28,7 @@
   height: auto;
   min-height: max-content;
   margin-bottom: var(--kui-space-m);
-  padding: var(--kui-space-xs);
+  padding: var(--kui-space-xs) var(--kui-space-m);
   overflow: hidden;
   border-inline: 1px solid transparent;
   border-radius: var(--wa-border-radius-m);
@@ -127,7 +128,7 @@
   display: flex;
   width: 100%;
   min-height: remify(38.4px);
-  padding: var(--kui-space-xs);
+  padding: var(--kui-space-xs) var(--kui-space-m);
   border: 1px solid var(--wa-color-brand-border-normal);
   border-radius: remify(8px);
   color: var(--wa-color-brand-on-quiet);
@@ -176,9 +177,9 @@
   min-width: 0;
   min-height: remify(68px);
   margin-inline-start: 0;
-  /* The same 1px + 8px inline inset as the evidence and bundle buttons, so the commit icon and the
-     open icon share their left and right edges (HS2-XZTWTY, HS2-PB0VY5). */
-  padding: var(--kui-space-xs) calc(var(--kui-space-xs) + 1px);
+  /* The same 1px + 16px inline inset as the evidence and bundle buttons, so the commit icon and the
+     open icon share the 17px left and right edges (HS2-XZTWTY, HS2-PB0VY5). */
+  padding: var(--kui-space-xs) calc(var(--kui-space-m) + 1px);
   border-bottom: 1px solid var(--wa-color-neutral-border-quiet);
   grid-template-columns: remify(20.8px) minmax(0, 1fr) remify(32px);
   align-items: start;

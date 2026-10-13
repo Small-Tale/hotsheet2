@@ -4908,17 +4908,17 @@ test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9
     // The heading Toolbar drops its gap token; each ToolbarText keeps its own inline padding.
     headingGap: '0px',
     evidenceMargin: '16px',
-    evidencePadding: '8px',
+    evidencePadding: '8px 16px',
     evidenceItemGap: '4px',
-    rangePadding: '8px',
+    rangePadding: '8px 16px',
     rangeGap: '8px',
     rangeItemMargin: '8px 0px 4px',
-    commitPadding: '8px 9px',
+    commitPadding: '8px 17px',
     commitGap: '8px',
     summaryGap: '4px',
   });
   await review.screenshot({ path: 'target/visual-captures/hs2-737h3x-ticket-code-review-wide.png' });
-  // One left text/icon edge and one right edge for the title, evidence, bundles, and commits
+  // One 17px left text/icon edge and one right edge for the title, evidence, bundles, and commits
   // (HS2-XZTWTY), with the diff tool label on the trailing edge (HS2-PB0VY5).
   const edges = () =>
     review.evaluate((node) => {
@@ -4948,9 +4948,9 @@ test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9
         labelText: label.textContent,
       };
     });
-  await expect.poll(edges).toEqual({ left: [9, 9, 9, 9, 9], right: [9, 9, 9], labelText: 'Opens in Glassbox' });
+  await expect.poll(edges).toEqual({ left: [17, 17, 17, 17, 17], right: [17, 17, 17], labelText: 'Opens in Glassbox' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect.poll(edges).toEqual({ left: [9, 9, 9, 9, 9], right: [9, 9, 9], labelText: 'Opens in Glassbox' });
+  await expect.poll(edges).toEqual({ left: [17, 17, 17, 17, 17], right: [17, 17, 17], labelText: 'Opens in Glassbox' });
   await expect
     .poll(() =>
       review.evaluate((node) => {
