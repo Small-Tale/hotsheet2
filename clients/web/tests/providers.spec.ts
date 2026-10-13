@@ -24466,7 +24466,6 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
 
 test('remembers scroll per project, mode and view through delayed loading and shrinking contents (HS2-PDYXYJ)', async ({
   page,
-  browserName,
 }) => {
   test.setTimeout(60000);
   const makeRows = (prefix: string) =>
