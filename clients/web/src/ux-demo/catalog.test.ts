@@ -58,7 +58,7 @@ describe('UX demo catalog', () => {
   it('has unique routes and the implemented component set', () => {
     const entries = flattenCatalog(demoCatalog);
     expect(new Set(entries.map((entry) => entry.id)).size).toBe(entries.length);
-    expect(entries.filter((entry) => entry.implemented).map((entry) => entry.id)).toEqual([
+    expect(entries.map((entry) => entry.id)).toEqual([
       'app-shell',
       'app-loading-indicator',
       'project-sidebar',
@@ -164,8 +164,8 @@ describe('UX demo catalog', () => {
       'trash-settings',
     ]);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');
-    expect(findDemo('list-item')).toMatchObject({ name: 'ListItem', implemented: true });
-    expect(findDemo('list-header')).toMatchObject({ name: 'ListHeader', implemented: true });
+    expect(findDemo('list-item')).toMatchObject({ name: 'ListItem' });
+    expect(findDemo('list-header')).toMatchObject({ name: 'ListHeader' });
     expect(findDemo('menu-item')).toBeUndefined();
     expect(findDemo('menu-header')).toBeUndefined();
     expect(findDemo('ticket-row')?.uses).toEqual(['status-badge', 'confidence-badge', 'tag-chip', 'loading-spinner']);
@@ -283,11 +283,10 @@ describe('UX demo catalog', () => {
         .find((section) => section.category === 'Ticket inspector · Notes and activity')
         ?.entries.map((entry) => entry.id),
     ).toContain('note-card');
-    expect(
-      sections
-        .find((section) => section.category === 'Setup and settings')
-        ?.entries.find((entry) => entry.id === 'welcome-screen')?.tags,
-    ).toContain('Planned');
+    // Unbuilt placeholder entries are not cataloged (HS2-EGHCRQ).
+    expect(sections.flatMap((section) => section.entries).every((entry) => !entry.tags?.includes('Planned'))).toBe(
+      true,
+    );
   });
 
   it('publishes every implemented app-owned catalog surface with the Kerf consumer metadata contract', () => {
@@ -320,11 +319,7 @@ describe('UX demo catalog', () => {
     expect(extension.entries.length).toBeGreaterThan(60);
     expect(new Set(extension.entries.map((entry) => entry.id)).size).toBe(extension.entries.length);
     const owners = new Set(schema.$defs.geometryOwner.enum),
-      implemented = new Map(
-        flattenCatalog()
-          .filter((entry) => entry.implemented)
-          .map((entry) => [entry.id, entry]),
-      );
+      implemented = new Map(flattenCatalog().map((entry) => [entry.id, entry]));
     // kerf-component-catalog (KF-K1SY5X) also publishes the composition-only toolbar wrappers, which have
     // no catalog demo of their own (HS2-HMVBZW).
     const wrappers = new Set(

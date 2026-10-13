@@ -17,7 +17,7 @@ describe('ProviderIcon UX demo (HS2-PK8THJ)', () => {
   });
 
   it('is catalogued as an implemented component used by the provider surfaces', () => {
-    expect(findDemo('provider-icon')).toMatchObject({ name: 'ProviderIcon', implemented: true });
+    expect(findDemo('provider-icon')).toMatchObject({ name: 'ProviderIcon' });
     expect(demosUsing('provider-icon').map((entry) => entry.id)).toEqual([
       'ticket-source-setup-dialog',
       'provider-setup-form',

@@ -2164,7 +2164,7 @@ development feed were removed (HS2-HMVBZW).
 The demo loads the same shared global sheets as the app entry (`cursor-semantics.css` and
 `hot-sheet-tokens.css`, which carries the coarse-pointer textarea tokens), so touch textarea
 auto-grow is representable in the catalog without duplicating component CSS (HS2-YBBJEN).
-Planned entries retain an explicit Planned tag.
+The catalog lists only built components; unbuilt placeholder entries are not cataloged (HS2-EGHCRQ).
 
 - a searchable component index grouped by the sections above
 - isolated examples plus composed screen scenarios

@@ -374,7 +374,6 @@ test('renders the canonical ListItem and ListHeader demo routes (HS2-YGWNY7)', a
   await expect(listItemDemo.getByRole('heading', { name: 'Standard' })).toBeVisible();
   await expect(listItemDemo.locator('[data-component="list-item"]')).toHaveCount(7);
   await expect(listItemDemo.locator('.list-item-demo__copy small')).toHaveCSS('display', 'block');
-  await expect(page.getByRole('region', { name: 'ListItem planned demo' })).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-ygwny7-list-item-wide.png', fullPage: true });
 
   await page.goto('/ux-demo?component=list-header');
@@ -383,7 +382,6 @@ test('renders the canonical ListItem and ListHeader demo routes (HS2-YGWNY7)', a
   await expect(listHeaderDemo).toBeVisible();
   await expect(listHeaderDemo.locator('[data-component="list-header"]')).toHaveCount(2);
   await expect(listHeaderDemo.getByRole('button', { name: 'Add view' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'ListHeader planned demo' })).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-ygwny7-list-header-wide.png', fullPage: true });
 
   await page.setViewportSize({ width: 390, height: 844 });

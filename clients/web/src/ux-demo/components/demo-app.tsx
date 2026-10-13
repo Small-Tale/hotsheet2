@@ -1,10 +1,9 @@
 import { Catalog, CatalogExample, CatalogExampleStack } from '@kerfjs/ui/catalog';
-import { EmptyState } from '@kerfjs/ui/empty-state';
 import { Text } from '@kerfjs/ui/text';
 
 import { ProjectTabContextMenu } from '../../components/project-tab-context-menu';
 import { TicketRowContextMenu } from '../../components/ticket-row-context-menu';
-import { demoCatalog, type DemoDefinition, demoKind, findDemo, kerfCatalogSections } from '../catalog';
+import { demoCatalog, demoKind, findDemo, kerfCatalogSections } from '../catalog';
 import { demoEntry } from '../registry';
 import { collectionTickets } from '../ticket-collections-demo';
 import { TICKET_ROW_DEMO_SLUG, ticketRowSettings } from '../ticket-row-demo';
@@ -21,17 +20,6 @@ import {
   theme,
   uxReviewProject,
 } from './demo-state';
-
-function PlannedDemo({ item }: { item: DemoDefinition }) {
-  return (
-    <CatalogExample label={`${item.name} planned demo`}>
-      <EmptyState
-        title="Planned component"
-        detail="The catalog entry and navigation are ready. Its real component demo will be added in a later slice."
-      />
-    </CatalogExample>
-  );
-}
 
 export function DemoApp() {
   const selected = findDemo(selectedId.value) ?? findDemo(DEFAULT_DEMO)!;
@@ -73,19 +61,17 @@ export function DemoApp() {
           // for application-width compositions (KF-HKVT5S). Demos not yet converted get one
           // full-width CatalogExample (HS2-Z3FMEZ).
           !entry?.catalogExamples ? (
-            <CatalogExample viewport={{ width: 'full' }}>
-              {Demo ? <Demo /> : <PlannedDemo item={selected} />}
-            </CatalogExample>
+            <CatalogExample viewport={{ width: 'full' }}>{Demo && <Demo />}</CatalogExample>
           ) : (
             <CatalogExampleStack
               label={`${selected.name} examples`}
               width={demoKind(selected.id) === 'composition' ? 'full' : undefined}
             >
-              {Demo ? <Demo /> : <PlannedDemo item={selected} />}
+              {Demo && <Demo />}
             </CatalogExampleStack>
           )
         }
-        // Each entry's phase and Planned state are Catalog tags on its sidebar row (HS2-HMVBZW).
+        // Each entry's phase is a Catalog tag on its sidebar row (HS2-HMVBZW).
         status={
           <Text variant="span" size="compact" tone="quiet">
             Production components · deterministic fixtures

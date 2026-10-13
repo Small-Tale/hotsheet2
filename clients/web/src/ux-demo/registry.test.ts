@@ -4,11 +4,11 @@ import { flattenCatalog } from './catalog';
 import { demoEntry, demoModules, registeredDemoIds, wireDemoModules } from './registry';
 
 describe('UX demo registry (HS2-HMVBZW)', () => {
-  it('registers a demo for every implemented catalog entry and nothing outside the catalog', () => {
+  it('registers a demo for every catalog entry and nothing outside the catalog', () => {
     const catalog = flattenCatalog();
     const ids = new Set(catalog.map((item) => item.id));
     expect(registeredDemoIds().filter((id) => !ids.has(id))).toEqual([]);
-    expect(catalog.filter((item) => item.implemented && !demoEntry(item.id)).map((item) => item.id)).toEqual([]);
+    expect(catalog.filter((item) => !demoEntry(item.id)).map((item) => item.id)).toEqual([]);
   });
 
   it('offers Settings with a Reset for every entry that has adjustable settings', () => {
