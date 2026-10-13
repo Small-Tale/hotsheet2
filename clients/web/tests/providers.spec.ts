@@ -4509,7 +4509,7 @@ test('paints terminal dashboard transitions immediately and progressively mounts
   expect(projectTransition.projectVisible).toBe(true);
   expect(projectTransition.terminalVisible).toBe(false);
   expect(projectTransition.elapsed).toBeLessThan(100);
-  const dashboardTransition = await page.getByRole('button', { name: 'Workspace grid' }).evaluate((button) => {
+  const dashboardTransition = await page.getByRole('button', { name: 'Workspace grid' }).evaluate(async (button) => {
     const start = performance.now();
     (button as HTMLElement).click();
     return {
@@ -9284,7 +9284,7 @@ test('browses repository files and commits with host-native actions', async ({ p
   const repositoryNavigation = popover.getByRole('navigation', { name: 'Repository views' });
   // Re-push the same detail key while the popped view is still animating out. Kerf beta.77
   // cancels the old removal timer before the live detail can be reused (KF-8ESDJD, HS2-BED455).
-  await repositoryNavigation.getByRole('button', { name: /Commits 24/ }).evaluate((button) => {
+  await repositoryNavigation.getByRole('button', { name: /Commits 24/ }).evaluate(async (button) => {
     (button as HTMLButtonElement).click();
   });
   await expect(back).toBeInViewport({ ratio: 1 });
@@ -19716,6 +19716,32 @@ test('loads each board column independently, 100 rows at a time in the active so
   await page.setViewportSize({ width: 1100, height: 800 });
   await page.screenshot({ path: 'target/visual-captures/claude/hs2-hnzzhc-board-columns-narrow.png' });
   await page.setViewportSize({ width: 1440, height: 900 });
+
+  // Scrolled to the end, the Load more button keeps the column's end padding below it instead of
+  // collapsing its grid row and hanging over the bottom edge (HS2-9VXR7H).
+  const scroller = column('Not Started').locator('[data-ticket-scroll-owner]');
+  await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  const endGap = await column('Not Started')
+    .locator('wa-button.ticket-page-more')
+    .evaluate((host) => {
+      const owner = host.closest('[data-ticket-scroll-owner]')!,
+        button = host.shadowRoot!.querySelector('[part~="base"]')!;
+      return {
+        host: host.getBoundingClientRect().height,
+        base: button.getBoundingClientRect().height,
+        below: owner.getBoundingClientRect().bottom - button.getBoundingClientRect().bottom,
+      };
+    });
+  expect(endGap.host).toBe(endGap.base);
+  expect(endGap.below).toBeGreaterThanOrEqual(16);
+  await page.screenshot({ path: 'target/visual-captures/claude/hs2-9vxr7h-board-column-end-wide.png' });
+  await page.setViewportSize({ width: 390, height: 800 });
+  await expect(columnMore('Not Started')).toBeAttached();
+  await page.waitForTimeout(500);
+  await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  await page.screenshot({ path: 'target/visual-captures/claude/hs2-9vxr7h-board-column-end-narrow.png' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(columnMore('Not Started')).toBeVisible();
 
   // Loading Not Started pages only its own status stream from its own cursor.
   const before = boardRequests.length;

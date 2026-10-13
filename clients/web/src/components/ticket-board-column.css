@@ -55,7 +55,9 @@
 }
 /* The vertical-only ticket scroller (Kerf's kui-scroll-owner would also capture and contain the
    horizontal wheel the paged board needs); its end pads by the shell's scroll-end inset so the last
-   ticket clears the phone home indicator (HS2-4A29RR). */
+   ticket clears the phone home indicator (HS2-4A29RR). Rows size to max-content: an overflowing grid
+   has no free space, so an auto track holding a min-height: 0 child (the Load more Row) would collapse
+   to that child's padding and its button would hang over the end padding (HS2-9VXR7H). */
 .ticket-board-column__tickets {
   position: relative;
   z-index: 1;
@@ -66,6 +68,7 @@
   padding: var(--kui-space-none) var(--kui-space-xs) calc(var(--kui-space-m) + var(--hotsheet-scroll-end-inset, 0px));
   overflow-anchor: none;
   align-content: start;
+  grid-auto-rows: max-content;
   gap: var(--kui-space-xs);
   scroll-padding-bottom: var(--hotsheet-scroll-end-inset, 0px);
   scrollbar-color: var(--wa-color-neutral-border-loud) transparent;
