@@ -4214,6 +4214,7 @@
         "zones": [
           {
             "id": "controls",
+            "jsx": { "prop": "controls" },
             "accepts": ["KerfUiContent"],
             "cardinality": {
               "min": 0,
@@ -4974,6 +4975,7 @@
         "wiring": {
           "required": true,
           "helpers": ["wireTokenSearchFields", "wireTicketSearchFields"],
+          "sources": [{ "export": "wireTicketSearchFields", "source": "src/interactions/ticket-search-field.ts" }],
           "obligations": [
             "Wire Kerf's wireTokenSearchFields for editor chrome, submit, and collapsible behavior.",
             "Wire wireTicketSearchFields once per root and route every callback by the field id it receives."
@@ -6001,6 +6003,7 @@
         "zones": [
           {
             "id": "headerActions",
+            "jsx": { "prop": "headerActions" },
             "accepts": ["KerfUiContent"],
             "cardinality": {
               "min": 0,
@@ -6435,6 +6438,10 @@
         "wiring": {
           "required": true,
           "helpers": ["wireTokenSearchFields", "wireTicketSearchFields", "wireWorkspaceOverflowKeyboard"],
+          "sources": [
+            { "export": "wireTicketSearchFields", "source": "src/interactions/ticket-search-field.ts" },
+            { "export": "wireWorkspaceOverflowKeyboard", "source": "src/components/workspace-controls.tsx" }
+          ],
           "obligations": [
             "Wire the workspace search, sort, overflow, and selection actions once at the application root."
           ]

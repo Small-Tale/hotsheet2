@@ -13,7 +13,7 @@
         "schemaVersion": 1
       },
       "composition": {
-        "path": "ai/component-composition-extension.json",
+        "path": "ai/component-composition.generated.json",
         "schemaVersion": 1
       }
     }

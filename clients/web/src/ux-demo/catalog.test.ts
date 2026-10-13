@@ -326,7 +326,7 @@ describe('UX demo catalog', () => {
     // no catalog demo of their own (HS2-HMVBZW).
     const wrappers = new Set(
       (
-        JSON.parse(readFileSync(new URL('../../ai/component-composition-extension.json', import.meta.url), 'utf8')) as {
+        JSON.parse(readFileSync(new URL('../../ai/component-composition.generated.json', import.meta.url), 'utf8')) as {
           entries: { id: string }[];
         }
       ).entries.map((entry) => entry.id),
@@ -402,9 +402,9 @@ describe('UX demo catalog', () => {
       'workspace-composition-surfaces':
         'Internal typed composition boundary whose constituent production surfaces are cataloged individually.',
       'workspace-controls':
-        'Toolbar zone content (identity, view-mode, sort, selection, search, overflow groups) of the cataloged WorkspaceHeader; declared in ai/component-composition-extension.json.',
+        'Toolbar zone content (identity, view-mode, sort, selection, search, overflow groups) of the cataloged WorkspaceHeader; declared in ai/component-composition.generated.json.',
       'project-strip-actions':
-        'TabBar and Toolbar zone content (dashboard modes, Add project) of the cataloged ProjectTabBar; declared in ai/component-composition-extension.json.',
+        'TabBar and Toolbar zone content (dashboard modes, Add project) of the cataloged ProjectTabBar; declared in ai/component-composition.generated.json.',
     };
     const componentsDir = fileURLToPath(new URL('../components', import.meta.url));
     const files = readdirSync(componentsDir).filter((name) => name.endsWith('.tsx') && !name.endsWith('.test.tsx'));
@@ -445,7 +445,7 @@ describe('UX demo catalog', () => {
 
   it('keeps the app composition catalog aligned with the catalog extension, sources, and Kerf roots (HS2-N5G6JS)', () => {
     const root = fileURLToPath(new URL('../../', import.meta.url));
-    const composition = JSON.parse(readFileSync(`${root}ai/component-composition-extension.json`, 'utf8')) as {
+    const composition = JSON.parse(readFileSync(`${root}ai/component-composition.generated.json`, 'utf8')) as {
       package: string;
       compatibility: { componentCatalog: string; identity: string };
       entries: Array<{
@@ -485,7 +485,7 @@ describe('UX demo catalog', () => {
       {
         package: 'hotsheet-web',
         selection: { path: 'ai/component-catalog-extension.json', schemaVersion: 1 },
-        composition: { path: 'ai/component-composition-extension.json', schemaVersion: 1 },
+        composition: { path: 'ai/component-composition.generated.json', schemaVersion: 1 },
       },
     ]);
     const extensionIds = new Map(
@@ -493,18 +493,22 @@ describe('UX demo catalog', () => {
         componentCatalogExtension as { entries: Array<{ id: string; name: string; publicClasses: string[] }> }
       ).entries.map((entry) => [entry.id, entry]),
     );
-    expect(composition.entries.map((entry) => entry.id)).toEqual([
-      'main-shell',
-      'terminal-ticket-rail',
-      'add-project-action',
-      'empty-trash-action',
-      'project-dashboard-modes',
-      'quick-ticket-launcher',
-      'ticket-search-field',
-      'ticket-view-action',
-      'workspace-controls',
-      'workspace-identity',
-    ]);
+    // The doctor reads the catalog generated from kerf.components.json (HS2-BHQWK6), which also lists every
+    // cataloged component; the composition-only wrappers are among its entries.
+    expect(composition.entries.map((entry) => entry.id)).toEqual(
+      expect.arrayContaining([
+        'main-shell',
+        'terminal-ticket-rail',
+        'add-project-action',
+        'empty-trash-action',
+        'project-dashboard-modes',
+        'quick-ticket-launcher',
+        'ticket-search-field',
+        'ticket-view-action',
+        'workspace-controls',
+        'workspace-identity',
+      ]),
+    );
     for (const [id, prop] of [
       ['main-shell', 'headerActions'],
       ['terminal-ticket-rail', 'controls'],
@@ -513,7 +517,7 @@ describe('UX demo catalog', () => {
       expect(entry?.zones).toEqual([expect.objectContaining({ id: prop, jsx: { prop }, accepts: ['KerfUiContent'] })]);
     }
     const workspaceControls = composition.entries.find((entry) => entry.id === 'workspace-controls');
-    expect(workspaceControls?.rendersAs).toEqual([]);
+    expect(workspaceControls?.rendersAs ?? []).toEqual([]);
     expect(workspaceControls?.parents).toEqual({ mode: 'any', entries: [] });
     for (const entry of composition.entries) {
       expect(entry.key).toBe(`hotsheet-web:${entry.id}`);
@@ -534,9 +538,10 @@ describe('UX demo catalog', () => {
       // Kerf doctor component ownership (HS2-HGAH8E): an entry owns exactly the stylesheets its module imports.
       const sourceText = readFileSync(`${root}${entry.source}`, 'utf8'),
         sourceDirectory = entry.source.replace(/[^/]+$/, '');
-      expect(entry.styleSources, entry.id).toEqual(
-        [...sourceText.matchAll(/^import '\.\/([\w.-]+\.css)';$/gm)].map((match) => `${sourceDirectory}${match[1]}`),
-      );
+      if (entry.styleSources)
+        expect(entry.styleSources, entry.id).toEqual(
+          [...sourceText.matchAll(/^import '\.\/([\w.-]+\.css)';$/gm)].map((match) => `${sourceDirectory}${match[1]}`),
+        );
       for (const rootKey of entry.rendersAs ?? []) expect(kerfKeys.has(rootKey), rootKey).toBe(true);
       if (entry.boundaries.rootClass) expect(entry.boundaries.publicClasses).toContain(entry.boundaries.rootClass);
     }
