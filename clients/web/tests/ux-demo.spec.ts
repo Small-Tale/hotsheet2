@@ -450,6 +450,9 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['accounts-settings', 2],
     ['settings-workspace', 1],
     ['trash-settings', 1],
+    ['project-sidebar', 1],
+    ['command-settings-editor', 1],
+    ['ai-tool-settings', 1],
   ];
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });

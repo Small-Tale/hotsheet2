@@ -47,9 +47,6 @@ body[data-resizing-project-sidebar='true'] {
   cursor: row-resize;
   user-select: none;
 }
-.command-settings-editor-demo {
-  width: 100%;
-}
 /* The form is the content of Kerf's Catalog settings pane, which leaves its content inset to the app. */
 .settings-form {
   display: grid;
@@ -139,14 +136,6 @@ body[data-resizing-project-sidebar='true'] {
   border-radius: remify(14px);
   background: var(--wa-color-surface-default);
   box-shadow: var(--wa-shadow-l);
-}
-.project-sidebar-demo {
-  display: grid;
-  min-height: remify(672px);
-  margin: auto;
-  align-content: center;
-  justify-items: center;
-  gap: remify(20px);
 }
 .project-sidebar-demo__resizer {
   display: grid;

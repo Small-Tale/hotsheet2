@@ -281,7 +281,7 @@ export function addCommandEditorSetting() {
 }
 export function CommandSettingsEditorDemo() {
   return (
-    <section class="command-settings-editor-demo" aria-label="CommandSettingsEditor demo">
+    <CatalogExample label="Interactive" viewport={{ width: 'full' }}>
       <CommandSettingsEditor
         commands={commandEditorCommands.value}
         extraGroups={commandEditorExtraGroups.value}
@@ -290,7 +290,7 @@ export function CommandSettingsEditorDemo() {
         iconSearch={commandEditorIconSearch.value}
         message={commandEditorMessage.value}
       />
-    </section>
+    </CatalogExample>
   );
 }
 export function DriveControlDemo() {
@@ -318,16 +318,18 @@ export function DriveOptionsMenuDemo() {
 }
 export function AiToolSettingsDemo() {
   return (
-    <AiToolSettings
-      tools={demoAiTools}
-      selection={{ tool: 'codex', model: 'gpt-5.6', effort: 'high' }}
-      message="Saved locally."
-    />
+    <CatalogExample label="Interactive">
+      <AiToolSettings
+        tools={demoAiTools}
+        selection={{ tool: 'codex', model: 'gpt-5.6', effort: 'high' }}
+        message="Saved locally."
+      />
+    </CatalogExample>
   );
 }
 export function ProjectSidebarDemo() {
   return (
-    <section class="project-sidebar-demo">
+    <CatalogExample label="Resizable" note="Drag or use the arrow keys on the grip to resize the sidebar.">
       <div
         class="project-sidebar-demo__resizer"
         style={`--project-sidebar-demo-height:${projectSidebarHeight.value}px`}
@@ -376,7 +378,7 @@ export function ProjectSidebarDemo() {
         </div>
       </div>
       <DemoEvent>{sidebarEvent.value}</DemoEvent>
-    </section>
+    </CatalogExample>
   );
 }
 export function SettingsNavigationDemo() {
@@ -567,6 +569,7 @@ export const demoModule: DemoModule = {
   entries: {
     'project-summary': { catalogExamples: true, Demo: ProjectSummaryDemo },
     'project-sidebar': {
+      catalogExamples: true,
       Demo: ProjectSidebarDemo,
       Settings: ProjectSidebarSettings,
       reset: resetProjectSidebarDemo,
@@ -576,10 +579,10 @@ export const demoModule: DemoModule = {
     'notification-navigation': { catalogExamples: true, Demo: NotificationNavigationDemo },
     'view-navigation': { catalogExamples: true, Demo: ViewNavigationDemo },
     'command-navigation': { catalogExamples: true, Demo: CommandNavigationDemo },
-    'command-settings-editor': { Demo: CommandSettingsEditorDemo },
+    'command-settings-editor': { catalogExamples: true, Demo: CommandSettingsEditorDemo },
     'drive-control': { catalogExamples: true, Demo: DriveControlDemo },
     'drive-options-menu': { catalogExamples: true, Demo: DriveOptionsMenuDemo },
-    'ai-tool-settings': { Demo: AiToolSettingsDemo },
+    'ai-tool-settings': { catalogExamples: true, Demo: AiToolSettingsDemo },
     'terminal-operations-sidebar': { catalogExamples: true, Demo: TerminalOperationsSidebarDemo },
   },
   wire: wireProjectSidebarDemo,
