@@ -3,27 +3,11 @@
 .not-working-dialog {
   --width: min(remify(512px), calc(100vw - remify(32px)));
 }
-/* Native textarea chrome: the note keeps a native textarea so touch screens auto-grow it through the shared
-   field-sizing tokens (HS2-6PC150); Kerf offers no native-textarea primitive to configure instead. */
+/* The note takes the shared native textarea chrome (native-textarea.css, HS2-FXSMB4); this module owns
+   only its minimum height and type size. */
 .not-working-dialog__note textarea {
-  box-sizing: border-box;
-  width: 100%;
   min-height: remify(112px);
-  padding: remify(8px);
-  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
-  resize: var(--hotsheet-textarea-resize, vertical);
-  border: 1px solid var(--wa-color-neutral-border-loud);
-  border-radius: var(--wa-border-radius-m);
-  color: var(--wa-color-text-normal);
-  background: var(--wa-color-surface-default);
-  font: inherit;
   font-size: var(--wa-font-size-s);
-  line-height: 1.45;
-}
-/* The native textarea has no Web Awesome focus ring of its own; match the themed controls. */
-.not-working-dialog__note textarea:focus {
-  outline: var(--wa-focus-ring);
-  outline-offset: 1px;
 }
 /* The alert live region stays mounted so errors announce, but takes no List gap while empty. */
 .not-working-dialog__error:empty {

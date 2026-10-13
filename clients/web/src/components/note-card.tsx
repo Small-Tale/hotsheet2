@@ -1,4 +1,5 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
+import './native-textarea.css';
 import './note-card.css';
 
 import { foregroundColor, rem, uiColor } from '@kerfjs/ui/css-values';
@@ -111,7 +112,8 @@ function FeedbackBlocks({
           {segment.reply && (
             <div class="note-card__inline-reply-row">
               <textarea
-                class="note-card__inline-reply"
+                class="native-textarea note-card__inline-reply"
+                data-tone="brand"
                 name="inline-feedback-response"
                 data-note-id={noteId}
                 data-offset={sourceStart + segment.reply.offset}
@@ -238,6 +240,7 @@ export function NoteEditor({
   return (
     <div class="note-card__editor">
       <textarea
+        class="native-textarea"
         name="note-body"
         data-note-id={id}
         data-note-response={response ? 'true' : undefined}

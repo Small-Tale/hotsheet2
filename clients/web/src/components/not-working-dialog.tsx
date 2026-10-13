@@ -1,5 +1,6 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
+import './native-textarea.css';
 import './not-working-dialog.css';
 
 import { List } from '@kerfjs/ui/list';
@@ -54,6 +55,7 @@ export function NotWorkingDialog({
             <div class="not-working-dialog__note">
               <FieldLabel id="not-working-note-label">{prompt}</FieldLabel>
               <textarea
+                class="native-textarea"
                 name="not-working-note"
                 aria-labelledby="not-working-note-label"
                 rows={5}

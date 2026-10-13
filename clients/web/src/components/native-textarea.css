@@ -1,0 +1,29 @@
+/* Shared native textarea chrome (HS2-FXSMB4). Note, note-composer, inline-feedback, and Not Working
+   fields keep a native textarea so touch screens auto-grow it through the shared field-sizing tokens
+   (HS2-6PC150); Kerf offers no native-textarea primitive to configure instead. Consumers import this
+   file, add `class="native-textarea"`, and own only layout (minimum height, font size);
+   `data-tone="brand"` marks an inline reply. */
+.native-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--kui-space-xs);
+  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
+  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  resize: var(--hotsheet-textarea-resize, vertical);
+  border: 1px solid var(--wa-color-neutral-border-loud);
+  border-radius: var(--wa-border-radius-m);
+  color: var(--wa-color-text-normal);
+  background: var(--wa-color-surface-default);
+  font: inherit;
+  line-height: 1.5;
+}
+.native-textarea[data-tone='brand'] {
+  border-color: var(--wa-color-brand-border-normal);
+}
+/* The native textarea has no Web Awesome focus ring of its own; match the themed controls. */
+.native-textarea:focus {
+  outline: var(--wa-focus-ring);
+  outline-offset: 1px;
+}

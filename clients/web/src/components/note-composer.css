@@ -1,21 +1,5 @@
-/* Native textarea chrome: the composer keeps a native textarea so touch screens auto-grow it through the
-   shared field-sizing tokens (HS2-6PC150); Kerf offers no native-textarea primitive to configure instead. */
+/* The composer's textarea takes the shared native chrome (native-textarea.css, HS2-FXSMB4); this module
+   owns only its minimum height. */
 .note-composer textarea {
-  box-sizing: border-box;
-  width: 100%;
   min-height: remify(96px);
-  padding: remify(8px);
-  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
-  resize: var(--hotsheet-textarea-resize, vertical);
-  border: 1px solid var(--wa-color-neutral-border-loud);
-  border-radius: var(--wa-border-radius-m);
-  color: inherit;
-  background: var(--wa-color-surface-default);
-  font: inherit;
-  line-height: 1.5;
-}
-/* The native textarea has no Web Awesome focus ring of its own; match the themed controls. */
-.note-composer textarea:focus {
-  outline: var(--wa-focus-ring);
-  outline-offset: 1px;
 }

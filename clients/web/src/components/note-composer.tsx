@@ -1,4 +1,5 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
+import './native-textarea.css';
 import './note-composer.css';
 
 import { ContentItem } from '@kerfjs/ui/content-item';
@@ -12,7 +13,13 @@ export function NoteComposer({ value = '' }: { value?: string }) {
     <ContentItem appearance="surface" frame="framed">
       <form class="note-composer" data-component="note-composer" {...INSPECTOR_AND_EDITOR_ACTIONS.createNoteForm.attrs}>
         <List gap="xs">
-          <textarea name="new-note-body" aria-label="New note" placeholder="Write a note…" autofocus>
+          <textarea
+            class="native-textarea"
+            name="new-note-body"
+            aria-label="New note"
+            placeholder="Write a note…"
+            autofocus
+          >
             {value}
           </textarea>
           <Row hAlign="right" vAlign="middle" gap="xs">

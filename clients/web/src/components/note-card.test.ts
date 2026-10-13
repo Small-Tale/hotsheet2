@@ -126,7 +126,7 @@ describe('NoteCard', () => {
     );
     expect(responding).toContain('aria-label="Feedback response"');
     expect(responding).toContain(
-      '<textarea name="note-body" data-note-id="feedback-response" data-note-response="true" aria-label="Feedback response"></textarea>',
+      '<textarea class="native-textarea" name="note-body" data-note-id="feedback-response" data-note-response="true" aria-label="Feedback response"></textarea>',
     );
   });
 

@@ -94,30 +94,17 @@
 .note-card:not(.note-card--editing) {
   cursor: text;
 }
-/* Inline note editor: native textarea (touch field-sizing tokens, HS2-6PC150) above its action row. */
+/* Inline note editor: the shared native textarea (native-textarea.css, HS2-FXSMB4) above its action row. */
 .note-card__editor {
   display: grid;
   min-width: 0;
   gap: var(--kui-space-xs);
 }
 .note-card__editor textarea {
-  width: 100%;
   /* A host that persists the editor height sets it through this public token (HS2-DYAR0S). */
   height: var(--note-card-editor-height, auto);
-  min-width: 0;
-  max-width: 100%;
   min-height: remify(80px);
-  padding: var(--kui-space-xs);
-  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
-  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
-  resize: var(--hotsheet-textarea-resize, vertical);
-  border: 1px solid var(--wa-color-neutral-border-loud);
-  border-radius: remify(7.2px);
-  color: inherit;
-  background: var(--wa-color-surface-default);
-  font: inherit;
   font-size: calc(var(--hotsheet-reading-scale, 1) * 1em);
-  line-height: 1.5;
 }
 .note-card__editor textarea[data-note-response='true'] {
   min-height: remify(40px);
@@ -180,19 +167,7 @@
   gap: var(--kui-space-2xs);
 }
 .note-card__inline-reply {
-  width: 100%;
-  min-width: 0;
   min-height: remify(64px);
-  padding: var(--kui-space-xs);
-  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
-  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
-  resize: var(--hotsheet-textarea-resize, vertical);
-  border: 1px solid var(--wa-color-brand-border-normal);
-  border-radius: var(--wa-border-radius-s);
-  color: inherit;
-  background: var(--wa-color-surface-default);
-  font: inherit;
-  line-height: 1.5;
 }
 /* Selectable feedback choices rendered as pressed toggle cards. */
 .note-card__choices {
