@@ -61,7 +61,8 @@
   height: remify(44px);
   padding: 0;
   border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-m);
+  /* The same form-control radius as the category select beside it (HS2-8JYMCK). */
+  border-radius: var(--wa-form-control-border-radius);
   color: var(--wa-color-neutral-on-quiet);
   background: var(--wa-color-surface-default);
   cursor: pointer;

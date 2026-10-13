@@ -4221,6 +4221,15 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
     node.dispatchEvent(new Event('change', { bubbles: true }));
   });
   await expect(form.locator('.kui-select__icon--selected [data-lucide="bug"]')).toBeVisible();
+  // The Up Next toggle shares the category select's form-control radius (HS2-8JYMCK).
+  const starRadius = await form
+    .getByRole('button', { name: 'Add new ticket to Up Next' })
+    .evaluate((node) => getComputedStyle(node).borderTopLeftRadius);
+  expect(starRadius).toBe(
+    await form
+      .locator('.quick-ticket-composer__metadata wa-select')
+      .evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="combobox"]')!).borderTopLeftRadius),
+  );
   await form.getByRole('button', { name: 'Add new ticket to Up Next' }).click();
   await expect(form.getByRole('button', { name: 'Remove new ticket from Up Next' })).toHaveAttribute(
     'aria-pressed',
