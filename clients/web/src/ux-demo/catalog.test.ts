@@ -72,7 +72,6 @@ describe('UX demo catalog', () => {
       'drive-control',
       'drive-options-menu',
       'workspace-header',
-      'page-header',
       'project-tab',
       'project-tabs',
       'resizable-region',
@@ -147,7 +146,6 @@ describe('UX demo catalog', () => {
       'toolbar-control-group',
       'toolbar-text',
       'ticket-search-field',
-      'dialog-header',
       'value-table',
       'pending-attachment-picker',
       'hs1-migration-dialog',
@@ -178,7 +176,6 @@ describe('UX demo catalog', () => {
       'toolbar-text',
       'toolbar-control-group',
       'ticket-search-field',
-      'page-header',
       'ticket-list',
       'ticket-board',
       'notification-center',
@@ -192,7 +189,6 @@ describe('UX demo catalog', () => {
       'toolbar',
       'floating-toolbar',
       'ticket-search-field',
-      'dialog-header',
     ]);
     expect(demosUsing('floating-toolbar').map((entry) => entry.id)).toEqual(['app-shell', 'terminal-dashboard']);
     expect(findDemo('project-tabs')?.uses).toEqual(['project-tab', 'select']);
@@ -233,14 +229,14 @@ describe('UX demo catalog', () => {
     expect(findDemo('ticket-info-panel')?.uses).toContain('list-header');
     expect(findDemo('ticket-reader')?.uses).toEqual(['ticket-inspector']);
     expect(findDemo('repository-status-popover')?.uses).toEqual([
-      'dialog-header',
+      'toolbar',
       'value-table',
       'list-item',
       'list-header',
       'ticket-code-review',
     ]);
-    expect(findDemo('change-evidence-dialog')?.uses).toEqual(['dialog-header', 'list-item', 'list-header']);
-    expect(findDemo('connection-details-dialog')?.uses).toEqual(['dialog-header', 'value-table']);
+    expect(findDemo('change-evidence-dialog')?.uses).toEqual(['toolbar', 'list-item', 'list-header']);
+    expect(findDemo('connection-details-dialog')?.uses).toEqual(['toolbar', 'value-table']);
     expect(demosUsing('note-card').map((entry) => entry.id)).toEqual(['ticket-inspector', 'ticket-info-panel']);
     expect(
       entries

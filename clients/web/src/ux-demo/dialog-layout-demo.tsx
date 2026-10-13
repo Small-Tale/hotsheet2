@@ -10,33 +10,13 @@ import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
-import { AppWindow, ServerCog } from 'lucide';
+import { AppWindow } from 'lucide';
 
 import { Hs1CleanupBanner, Hs1JobBanner, Hs1MigrationBanner, Hs1MigrationDialog } from '../components/hs1-migration';
 import { NotificationsPausedBanner } from '../components/notifications-paused-banner';
 import { DEMO_ACTIONS, DEMO_COMPONENTS } from './demo-actions';
 import type { DemoModule } from './demo-module';
 
-export function DialogHeaderDemo() {
-  return (
-    <section class="dialog-layout-demo dialog-surface">
-      <div class="app-heading" data-component="heading" data-has-icon="true">
-        <Toolbar
-          dividerSides=""
-          leading={
-            <>
-              <ToolbarControlGroup single tileTone="brand">
-                <LucideIcon color={uiColor('brand-on-quiet')} icon={ServerCog} name="server-cog" />
-              </ToolbarControlGroup>
-              <ToolbarText text="Dialog title" id="dialog-header-demo-title" size="xlarge" />
-            </>
-          }
-        />
-        <p class="app-heading__summary">A concise explanation of the current dialog state.</p>
-      </div>
-    </section>
-  );
-}
 export function ValueTableDemo() {
   return (
     <section class="dialog-layout-demo dialog-surface">
@@ -167,7 +147,6 @@ function wireDialogLayoutDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'dialog-header': { Demo: DialogHeaderDemo },
     'value-table': { Demo: ValueTableDemo },
     'hs1-migration-dialog': { catalogExamples: true, Demo: Hs1MigrationDialogDemo },
     'hs1-migration-banner': { Demo: Hs1MigrationBannerDemo },

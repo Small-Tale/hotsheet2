@@ -478,20 +478,6 @@ export function WorkspaceHeaderDemo() {
   );
 }
 
-export function PageHeaderDemo() {
-  return (
-    <section class="workspace-component-demo" aria-label="PageHeader demo">
-      <div class="app-heading" data-component="heading" data-has-icon="false">
-        <Toolbar
-          dividerSides=""
-          leading={<ToolbarText text="Queue" id="page-header-demo-title" size="xlarge" headingLevel={1} />}
-        />
-      </div>
-      <DemoEvent live={false}>View identity remains separate from project-level controls.</DemoEvent>
-    </section>
-  );
-}
-
 /** Restore the canonical composer settings and sync the live controls (HS2-X1SM48). */
 export function resetQuickTicketComposerDemo(root?: ParentNode): void {
   composerMultipleSources.value = true;
@@ -1101,7 +1087,6 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
 export const demoModule: DemoModule = {
   entries: {
     'workspace-header': { Demo: WorkspaceHeaderDemo },
-    'page-header': { Demo: PageHeaderDemo },
     'quick-ticket-composer': {
       Demo: QuickTicketComposerDemo,
       Settings: QuickTicketComposerSettings,
