@@ -32,7 +32,7 @@ function row(dataset: Record<string, string>, options: { ticket?: boolean; rows?
     dataset,
     closest: (selector: string) => {
       if (selector.includes('change-evidence-dialog')) return options.ticket ? {} : null;
-      if (selector.includes('repository-status-popover__files')) return { querySelectorAll: () => options.rows ?? [] };
+      if (selector === '[data-repository-file-list]') return { querySelectorAll: () => options.rows ?? [] };
       if (selector.includes('select-repository-file')) return element;
       return null;
     },
@@ -102,6 +102,20 @@ describe('wireRepositoryBrowser (HS2-RWY78R)', () => {
     toggle(new Event('click'), row({}));
     expect(state.comparison.value).toEqual({ active: false, side: 'a' });
     expect(state.onComparisonStarted).toHaveBeenCalledOnce();
+  });
+
+  it('extends a shift-click range from the anchor across the visible rows (HS2-2Y02T1)', () => {
+    const state = bindings();
+    wireRepositoryBrowser(root, state);
+    const click = handler('click', '[data-action="select-repository-file"]'),
+      rows = ['a', 'b', 'c', 'd'].map((itemId) => ({ dataset: { itemId } }) as unknown as Element),
+      file = (itemId: string) => row({ itemId }, { rows });
+    click(Object.assign(new Event('click'), { shiftKey: false }), file('b'));
+    expect(state.selectedFiles.value).toEqual(['b']);
+    click(Object.assign(new Event('click'), { shiftKey: true }), file('d'));
+    expect(state.selectedFiles.value).toEqual(['b', 'c', 'd']);
+    click(Object.assign(new Event('click'), { shiftKey: true }), file('a'));
+    expect(state.selectedFiles.value).toEqual(['a', 'b']);
   });
 
   it('opens a staged file menu with the selection, then routes each action to its callback', () => {

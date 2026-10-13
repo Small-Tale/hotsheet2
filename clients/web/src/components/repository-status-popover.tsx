@@ -426,7 +426,7 @@ function RepositoryFileRows({
       <></>
     );
   return (
-    <div role="list" aria-label={label}>
+    <div role="list" aria-label={label} data-repository-file-list>
       {files.map((file, index) => (
         <ListActionRow
           action="select-repository-file"

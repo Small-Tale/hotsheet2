@@ -168,6 +168,8 @@ describe('RepositoryStatusPopover', () => {
     expect(markup.match(/data-component="list-item"/g)).toHaveLength(5);
     expect(markup.match(/data-component="list-action-row"/g)).toHaveLength(2);
     expect(markup).toContain('data-action="select-repository-file" data-item-id="src/staged.ts"');
+    // Shift-range selection reads the visible rows from this container (HS2-2Y02T1).
+    expect(markup).toMatch(/role="list"[^>]*data-repository-file-list/);
     expect(markup).toContain('data-action="open-repository-file-menu-trigger" data-item-id="src/staged.ts"');
     expect(markup).toContain('data-lucide="ellipsis"');
     expect(markup).toContain('data-state="renamed"');

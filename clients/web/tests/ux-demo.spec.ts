@@ -871,6 +871,26 @@ test('represents the ticket change-evidence master-detail dialog in the UX catal
   await dialog.screenshot({ path: 'target/visual-captures/hs2-s7x4sb-change-evidence-demo-narrow.png' });
 });
 
+test('shift-click selects a contiguous range of repository files (HS2-2Y02T1)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=repository-status-popover');
+  const repository = page.locator('[data-component="repository-status-popover"]');
+  await repository.getByRole('button', { name: /Staged 2/ }).click();
+  const rows = repository.locator('[data-action="select-repository-file"]');
+  await expect(rows).toHaveCount(2);
+  await rows.nth(0).click();
+  await rows.nth(1).click({ modifiers: ['Shift'] });
+  await expect(rows.nth(0)).toHaveAttribute('aria-pressed', 'true');
+  await expect(rows.nth(1)).toHaveAttribute('aria-pressed', 'true');
+  await rows.nth(1).click();
+  await expect(rows.nth(0)).toHaveAttribute('aria-pressed', 'false');
+  await rows.nth(0).click({ modifiers: ['Shift'] });
+  await expect(rows.nth(0)).toHaveAttribute('aria-pressed', 'true');
+  await expect(rows.nth(1)).toHaveAttribute('aria-pressed', 'true');
+  await page.mouse.move(0, 0);
+  await repository.screenshot({ path: 'target/visual-captures/hs2-2y02t1-repository-range-selected.png' });
+});
+
 test('keeps repository file action menus visible at wide and narrow sizes', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=repository-status-popover');

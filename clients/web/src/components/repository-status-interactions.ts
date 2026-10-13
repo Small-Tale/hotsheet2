@@ -122,7 +122,7 @@ export function wireRepositoryBrowser(root: HTMLElement, bindings: RepositoryBro
     ),
   );
   function visibleFilePaths(target: Element) {
-    return [...(target.closest('.repository-status-popover__files')?.querySelectorAll<HTMLElement>(fileSelector) ?? [])]
+    return [...(target.closest('[data-repository-file-list]')?.querySelectorAll<HTMLElement>(fileSelector) ?? [])]
       .map((item) => item.dataset.itemId!)
       .filter(Boolean);
   }
