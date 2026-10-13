@@ -214,6 +214,12 @@ describe('application shell components', () => {
     const without = render({ pageHeader: '<p class="desktop-only">Page</p>' as never });
     expect(without).toContain('desktop-only');
     expect(without).not.toContain('app-shell__mobile-view-header');
+    // Both page headers sit on the header's default surface, not the sunken main pane (HS2-YKB7HS).
+    expect(markup).toContain('app-shell__page-header');
+    expect(without).toContain('app-shell__page-header');
+    expect(render({})).not.toContain('app-shell__page-header');
+    const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/\.app-shell__page-header \{\s*background: var\(--wa-color-surface-default\);/);
   });
   it('fills the window only in the viewport presentation the application root uses (HS2-DR549A)', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');

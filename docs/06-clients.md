@@ -748,7 +748,8 @@ preview/download, server directory browser) are separate design work.
   delegated event wiring and passes typed render data into those surfaces (HS2-HTB5RR).
   The workspace toolbar (or the mobile page header) titles the selected settings category, so
   settings pages never repeat that title as an in-page heading (HS2-FV538C, HS2-QEQ1YB,
-  HS2-MF9D1K). Settings page copy keeps Kerf `Text` item geometry (not `flush`), so descriptions,
+  HS2-MF9D1K). The mobile page header belongs to the header area and sits on its default
+  (white) surface, not the sunken work area (HS2-YKB7HS). Settings page copy keeps Kerf `Text` item geometry (not `flush`), so descriptions,
   help text, and footnotes share one text edge with field labels, inline group headers, command
   row grips, shortcut row text, and account card icons (HS2-N2ZG5N, HS2-1711Z5, HS2-4JXTS8,
   HS2-1JSPX7, HS2-V8YYXA).

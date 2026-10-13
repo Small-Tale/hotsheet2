@@ -12923,6 +12923,39 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   });
   await expect(editor.locator('.command-settings-editor__row', { hasText: 'Review changes' })).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-656xj2-command-editor-narrow.png', fullPage: true });
+  // On a phone the Commands page header (title + compact pills) sits on the header's default
+  // surface, matching the tab bar above it, not the sunken work area (HS2-YKB7HS).
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.reload();
+  await page.getByRole('button', { name: 'Show settings sidebar' }).click();
+  await page.getByRole('button', { name: 'Commands', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: 'Ticket sources', exact: true })).not.toBeInViewport();
+  await page.mouse.move(200, 600);
+  await page.waitForTimeout(800);
+  console.log(
+    await page.evaluate(() =>
+      [...document.querySelectorAll('*')]
+        .filter((n) => n.scrollLeft > 0)
+        .map((n) => `${n.tagName}.${n.className}:${n.scrollLeft}`)
+        .join(' | '),
+    ),
+  );
+  const pageHeader = page.locator('.app-shell__page-header');
+  await expect(pageHeader).toContainText('Commands');
+  await expect
+    .poll(() => pageHeader.evaluate((node) => getComputedStyle(node).backgroundColor))
+    .toBe(
+      await page.evaluate(() => {
+        const probe = document.createElement('div');
+        probe.style.background = 'var(--wa-color-surface-default)';
+        document.body.append(probe);
+        const color = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return color;
+      }),
+    );
+  await page.screenshot({ path: 'target/visual-captures/hs2-ykb7hs-commands-390.png' });
 });
 
 test('keeps an empty command group across reloads, populating, and emptying it (HS2-EZ5KMC)', async ({ page }) => {
@@ -12976,7 +13009,17 @@ test('keeps an empty command group across reloads, populating, and emptying it (
   await page.getByRole('button', { name: 'Show settings sidebar' }).click();
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   await page.getByRole('button', { name: 'Hide settings sidebar' }).click();
-  await expect(page.getByRole('button', { name: 'Show settings sidebar' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ticket sources', exact: true })).not.toBeInViewport();
+  await page.mouse.move(200, 600);
+  await page.waitForTimeout(800);
+  console.log(
+    await page.evaluate(() =>
+      [...document.querySelectorAll('*')]
+        .filter((n) => n.scrollLeft > 0)
+        .map((n) => `${n.tagName}.${n.className}:${n.scrollLeft}`)
+        .join(' | '),
+    ),
+  );
   await expect(ideas.locator('.command-settings-editor__group-empty')).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect.poll(() => editor.evaluate((node) => Math.round(node.getBoundingClientRect().left))).toBeLessThan(40);

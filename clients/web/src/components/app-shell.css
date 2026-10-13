@@ -52,6 +52,10 @@
   padding-bottom: var(--kui-space-xs);
   background: var(--wa-color-surface-default);
 }
+/* The page header (title + page action) shares the header's default surface (HS2-YKB7HS). */
+.app-shell__page-header {
+  background: var(--wa-color-surface-default);
+}
 .app-shell__banner:not(:has(> *)) {
   display: none;
 }

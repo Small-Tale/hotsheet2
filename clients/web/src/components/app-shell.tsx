@@ -280,7 +280,13 @@ export function AppShell({
             {/* State banners belong to the header: they sit on its default surface and keep a gap above
                 the work-area separator (HS2-STTE4M). */}
             {banner && <div class="app-shell__banner">{banner}</div>}
-            {mobileView ? <AppShellMobileViewHeader {...mobileView} /> : pageHeader}
+            {/* The page header belongs to the header area, so it sits on the header's default surface
+                rather than the sunken main pane (HS2-YKB7HS). */}
+            {(mobileView || pageHeader) && (
+              <div class="app-shell__page-header">
+                {mobileView ? <AppShellMobileViewHeader {...mobileView} /> : pageHeader}
+              </div>
+            )}
             {/* Stable data-keys so the morph matches the scroll container by identity, not position.
           The overlay/banner/pageHeader siblings above are conditional (HS2-H4MWDB: opening the
           ticket context menu toggles the overlay); without a key the shift rebuilds this subtree
