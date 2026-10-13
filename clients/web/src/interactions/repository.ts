@@ -12,6 +12,7 @@ import {
 } from '../components/repository-status-popover';
 import { type CodeReviewComparison, codeReviewTarget } from '../components/ticket-code-review';
 import { copyText } from '../copy-text';
+import { HostOnlyActionError } from '../host-only-actions';
 import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
 import { data } from './dom';
 import { type Control, type Project, type RepositoryDetailState } from './types';
@@ -243,7 +244,11 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
         }
       })
       .catch((reason: unknown) => {
-        if (project()?.id === current.id && selectedTicket.value?.id === ticket.id)
+        if (reason instanceof HostOnlyActionError) {
+          // The inline message can sit below the fold of a long commit list (HS2-F78B1S).
+          codeReviewMessage.value = '';
+          showToast(reason.message);
+        } else if (project()?.id === current.id && selectedTicket.value?.id === ticket.id)
           codeReviewMessage.value = reason instanceof Error ? reason.message : String(reason);
       });
   }

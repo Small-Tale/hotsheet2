@@ -9573,6 +9573,41 @@ test('shows Blocked only when the ticket has a visible blocked reason', async ({
   await ticket.screenshot({ path: 'target/visual-captures/hs2-e3c530-visible-blocked-reason.png' });
 });
 
+test('explains instead of launching host-only diff and file actions from a remote device (HS2-F78B1S)', async ({
+  page,
+}) => {
+  const actions = await mockProject(page);
+  await page.route('**/__hotsheet/checkouts', (route) =>
+    route.fulfill({ json: [{ id: project.id, alias: 'demo', root: project.root, stores: project.stores }] }),
+  );
+  const hostRequests: string[] = [];
+  page.on('request', (request) => {
+    if (
+      /\/(code-review|repository\/review|repository\/files\/action|folders\/choose)$/.test(request.url()) &&
+      request.method() === 'POST'
+    )
+      hostRequests.push(request.url());
+  });
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/?device=remote&store=demo-checkout&ticket=HS2-DEMO01');
+    const inspector = page.locator('[data-component="ticket-reader"][data-reader-active="true"]');
+    await inspector.getByRole('tab', { name: 'Code Review' }).click();
+    const review = inspector.locator('[data-component="ticket-code-review"]');
+    await review.getByRole('button', { name: 'Open commit bbb2222 in Glassbox' }).click();
+    await expect(page.locator('.app-toast')).toContainText(
+      "The diff tool opens on the computer running Hot Sheet, so it isn't available from this device.",
+    );
+    await expect(review.locator('.ticket-code-review__message')).toHaveCount(0);
+    await page.screenshot({
+      path: `target/visual-captures/hs2-f78b1s-remote-diff-${width}.png`,
+      animations: 'disabled',
+    });
+  }
+  expect(hostRequests).toEqual([]);
+  expect(actions.some((action) => action.operation === 'code-review')).toBe(false);
+});
+
 test('lists associated commits and opens a validated commit or range in the configured diff tool', async ({ page }) => {
   const actions = await mockProject(page);
   await page.goto('/');

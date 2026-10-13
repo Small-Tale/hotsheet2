@@ -175,6 +175,20 @@ still recreate it. Current registry entries carry the project-derived channel id
 live entries that explicitly identify another project do not block cleanup, while matching
 and identity-less legacy entries remain conservatively blocking.
 
+**Host-only actions on remote clients (HS2-F78B1S).** Some actions launch a process or
+native dialog on the machine running the server: the configured `git difftool` (ticket
+commits/Code Review, repository status ranges and worktree files), attachment and
+repository-file Open/Reveal, corrupt-ticket Reveal, and the native folder chooser
+(project path, HS1 ticket store, git ticket-store location, conversation export
+destination and saved-conversation open). A web client loaded from a non-loopback origin
+(or `?device=remote`) refuses these before any request with the explanation "… on the
+computer running Hot Sheet, so it isn't available from this device." Code Review shows it
+as a toast because its inline message can sit below a long commit list; other surfaces use
+their existing error display. Open Project keeps its remote checkout picker, and an
+attachment's host **Path** stays available because terminals run on that machine. The
+inventory is in HS2-E0HC6J; browser-native replacements (in-page diff, attachment
+preview/download, server directory browser) are separate design work.
+
 ## 6.3 Web client and Tauri desktop host
 
 - **Web first.** Build and iterate on the Kerf web client in a normal browser before

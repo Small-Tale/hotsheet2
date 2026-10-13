@@ -1,4 +1,5 @@
 import { browserRandomId } from './browser-id';
+import { assertHostAction, type HostOnlyAction } from './host-only-actions';
 import { errorMessageOf, responseJson, responseJsonBody } from './json-value';
 import { prioritiesToWire } from './priority-wire';
 import { beginServerRequest, describeServerRequest, endServerRequest } from './server-busy';
@@ -831,6 +832,8 @@ export function withHumanActor(path: string, init: RequestInit): RequestInit {
   return { ...init, body: JSON.stringify({ ...body, actor: { role: 'human' } }) };
 }
 
+type HostParsedRequest = <T>(parse: ResponseParser<T>, path: string, requested?: RequestInit) => Promise<T>;
+
 export class ApiHttpError extends Error {
   constructor(
     message: string,
@@ -864,6 +867,20 @@ export class Api {
     onResponse?: (response: Response) => void,
   ): Promise<T> {
     return parse(await this.requestBody(path, requested, trackRequest, onResponse));
+  }
+  /**
+   * Requests that launch something on the server's machine reject with an explanation on a remote
+   * client instead of acting on a screen nobody is looking at (HS2-F78B1S). A host file path stays
+   * available: it can still be pasted into a terminal that runs on that machine.
+   */
+  private hostAction(action: 'open' | 'reveal' | 'path' | HostOnlyAction): { parsed: HostParsedRequest } {
+    const kind = action === 'open' ? 'open-file' : action === 'reveal' ? 'reveal-file' : action;
+    return {
+      parsed: async (parse, path, requested) => {
+        if (kind !== 'path') assertHostAction(kind);
+        return this.parsed(parse, path, requested);
+      },
+    };
   }
   private async requestBody(
     path: string,
@@ -1202,7 +1219,7 @@ export class Api {
   checkoutAttachmentByNameUrl = (checkout: string, id: string, filename: string) =>
     `${this.origin}/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments/by-name/${encodeURIComponent(filename)}`;
   checkoutAttachmentAction = (checkout: string, id: string, attachmentId: string, action: 'open' | 'reveal' | 'path') =>
-    this.parsed(
+    this.hostAction(action).parsed(
       parseFilePath,
       `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}/action`,
       { method: 'POST', body: JSON.stringify({ action }) },
@@ -1213,7 +1230,7 @@ export class Api {
     filename: string,
     action: 'open' | 'reveal' | 'path',
   ) =>
-    this.parsed(
+    this.hostAction(action).parsed(
       parseFilePath,
       `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments/by-name/${encodeURIComponent(filename)}/action`,
       { method: 'POST', body: JSON.stringify({ action }) },
@@ -1274,12 +1291,12 @@ export class Api {
       `/checkouts/${encodeURIComponent(checkout)}/repository/commits?cursor=${cursor}&limit=${limit}`,
     );
   repositoryFileAction = (checkout: string, path: string, action: 'open' | 'reveal') =>
-    this.parsed(ignoreBody, `/checkouts/${encodeURIComponent(checkout)}/repository/files/action`, {
+    this.hostAction(action).parsed(ignoreBody, `/checkouts/${encodeURIComponent(checkout)}/repository/files/action`, {
       method: 'POST',
       body: JSON.stringify({ path, action }),
     });
   openRepositoryReview = (checkout: string, target: CodeReviewTarget) =>
-    this.parsed(ignoreBody, `/checkouts/${encodeURIComponent(checkout)}/repository/review`, {
+    this.hostAction('diff-tool').parsed(ignoreBody, `/checkouts/${encodeURIComponent(checkout)}/repository/review`, {
       method: 'POST',
       body: JSON.stringify(target),
     });
@@ -1289,7 +1306,7 @@ export class Api {
       `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/code-review`,
     );
   openCodeReview = (checkout: string, id: string, target: CodeReviewTarget) =>
-    this.parsed(
+    this.hostAction('diff-tool').parsed(
       ignoreBody,
       `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/code-review`,
       {
@@ -1415,6 +1432,7 @@ export class Api {
 }
 
 export async function revealCorruptTicketFile(project: string, path: string): Promise<void> {
+  assertHostAction('reveal-file');
   const response = await fetch(`/__hotsheet/projects/${encodeURIComponent(project)}/corrupt-tickets/reveal`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

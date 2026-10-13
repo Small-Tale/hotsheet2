@@ -30,7 +30,7 @@ beforeEach(() => {
     getItem: (key: string) => stored.get(key) ?? null,
     setItem: (key: string, value: string) => stored.set(key, value),
   });
-  vi.stubGlobal('window', { setTimeout, clearTimeout });
+  vi.stubGlobal('window', { setTimeout, clearTimeout, location: { hostname: 'localhost', search: '' } });
 });
 afterEach(() => {
   vi.useRealTimers();

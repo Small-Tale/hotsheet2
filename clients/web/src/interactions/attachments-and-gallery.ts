@@ -469,7 +469,9 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
   lifetime.add(
     delegate(document.body, 'dblclick', ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentRow.selector, (event, target) => {
       if ((event.target as Element).closest('button, input, a')) return;
-      void openSelectedAttachment(data(target).attachmentActionId!);
+      openSelectedAttachment(data(target).attachmentActionId!).catch((reason: unknown) => {
+        error.value = reason instanceof Error ? reason.message : String(reason);
+      });
     }),
   );
   lifetime.add(

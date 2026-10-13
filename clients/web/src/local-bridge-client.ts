@@ -5,6 +5,7 @@ import type {
   ConversationExportOpenResult,
   ConversationExportWriteResult,
 } from './conversation-export';
+import { assertHostAction, type HostOnlyAction } from './host-only-actions';
 import type { Project, UnhealthyServerRecovery } from './interactions/types';
 import { isRecord } from './json-value';
 
@@ -223,15 +224,23 @@ export function parseConversationExportOpen(value: unknown): { conversation?: Co
 
 // ---- Endpoints ----
 
+/** Native dialogs open on the server's machine, so a remote client is refused with an explanation (HS2-F78B1S). */
+async function hostOnly<T>(action: HostOnlyAction, run: () => Promise<T>): Promise<T> {
+  assertHostAction(action);
+  return run();
+}
+
 export const localBridge = {
   chooseFolder: (fallbackError = 'Could not open the folder chooser.', request?: typeof fetch) =>
-    localBridgeRequest('/__hotsheet/folders/choose', {
-      method: 'POST',
-      parse: parseFolderChoice,
-      fallbackError,
-      request,
-      responder: 'folder chooser',
-    }),
+    hostOnly('choose-folder', () =>
+      localBridgeRequest('/__hotsheet/folders/choose', {
+        method: 'POST',
+        parse: parseFolderChoice,
+        fallbackError,
+        request,
+        responder: 'folder chooser',
+      }),
+    ),
   checkouts: (fallbackError = 'Could not find registered Hot Sheet projects.', request?: typeof fetch) =>
     localBridgeRequest('/__hotsheet/checkouts', { parse: parseCheckouts, fallbackError, request }),
   openProject: (
@@ -279,13 +288,15 @@ export const localBridge = {
       request,
     }),
   chooseConversationExportDestination: (suggestedName: string, request?: typeof fetch) =>
-    localBridgeRequest('/__hotsheet/conversation-exports/destination', {
-      method: 'POST',
-      body: { suggestedName },
-      parse: parseConversationExportDestination,
-      fallbackError: 'Could not choose a conversation export destination.',
-      request,
-    }),
+    hostOnly('conversation-export', () =>
+      localBridgeRequest('/__hotsheet/conversation-exports/destination', {
+        method: 'POST',
+        body: { suggestedName },
+        parse: parseConversationExportDestination,
+        fallbackError: 'Could not choose a conversation export destination.',
+        request,
+      }),
+    ),
   writeConversationExport: (payload: unknown, request?: typeof fetch) =>
     localBridgeRequest('/__hotsheet/conversation-exports/write', {
       method: 'POST',
@@ -295,10 +306,12 @@ export const localBridge = {
       request,
     }),
   openConversationExport: (request?: typeof fetch) =>
-    localBridgeRequest('/__hotsheet/conversation-exports/open', {
-      method: 'POST',
-      parse: parseConversationExportOpen,
-      fallbackError: 'Could not open the saved conversation.',
-      request,
-    }),
+    hostOnly('conversation-open', () =>
+      localBridgeRequest('/__hotsheet/conversation-exports/open', {
+        method: 'POST',
+        parse: parseConversationExportOpen,
+        fallbackError: 'Could not open the saved conversation.',
+        request,
+      }),
+    ),
 };

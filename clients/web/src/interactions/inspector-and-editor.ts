@@ -16,6 +16,7 @@ import { type DebouncedAutosave } from '../debounced-autosave';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
 import { combineFeedbackReply, type InlineFeedbackReply, sourceOffsetForVisibleOffset } from '../feedback-replies';
+import { HostOnlyActionError } from '../host-only-actions';
 import { inlineEditorEscape } from '../inline-editor-escape';
 import { ATTACHMENTS_AND_GALLERY_TARGETS } from '../interaction-attrs/attachments-and-gallery';
 import { INSPECTOR_AND_EDITOR_ACTIONS, INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
@@ -1096,7 +1097,11 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
           }
         })
         .catch((reason: unknown) => {
-          if (project()?.id === current.id && selectedTicket.value?.id === ticket.id)
+          if (reason instanceof HostOnlyActionError) {
+            // The inline message can sit below the fold of a long commit list (HS2-F78B1S).
+            codeReviewMessage.value = '';
+            showToast(reason.message);
+          } else if (project()?.id === current.id && selectedTicket.value?.id === ticket.id)
             codeReviewMessage.value = reason instanceof Error ? reason.message : String(reason);
         });
     }),
