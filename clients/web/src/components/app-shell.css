@@ -139,6 +139,9 @@
 .app-shell[data-mobile='true'] {
   position: relative;
   min-width: 0;
+  /* The desktop floor does not apply to phones: a short phone window keeps the shell inside the locked
+     viewport, so its Panes rather than the clipped root scroll (HS2-4TN9GK). */
+  min-height: 0;
 }
 /* The mobile main column reaches the bottom screen edge whenever the terminal drawer is collapsed
    or absent (AppShell computes `data-bottom-edge`). Its ticket scrollers keep reaching that edge and

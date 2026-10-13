@@ -3692,9 +3692,10 @@ The [source CSS audit](CSS-OWNERSHIP-AUDIT.md) records every original stylesheet
 rationale, remaining migration ticket, and exact upstream API blocker.
 
 The client opts into Kerf's document baseline and marks its single mount container with
-`kui-app-root`. Application CSS owns viewport clipping/dynamic viewport height and the
+`kui-app-root` with `data-viewport="locked"`, Kerf's opt-in dynamic-viewport lock that clips
+the document so only Panes scroll (HS2-4TN9GK). Application CSS owns only the
 physical-to-logical safe-area bridge. Kerf owns document font metrics, surface, box sizing,
-body margin, and the definite height chain.
+body margin, the viewport lock, and the definite height chain.
 
 Startup, restoration, action-free messages, and inspector selection placeholders compose
 `EmptyState` with a centered filling `List`. Connection feedback uses `StateBanner` and

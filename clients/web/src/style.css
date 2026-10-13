@@ -17,11 +17,3 @@ html:root {
   --kui-safe-area-inline-start: var(--hotsheet-safe-area-left);
   --kui-safe-area-inline-end: var(--hotsheet-safe-area-right);
 }
-/* Lock the document to the dynamic viewport so only Panes scroll; Kerf's document baseline sizes the
-   root to 100% and does not clip (KF-1XNQYP, HS2-4TN9GK). */
-html,
-body,
-#app {
-  height: 100dvh;
-  overflow: clip;
-}

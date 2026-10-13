@@ -35,7 +35,10 @@ describe('global stylesheet ownership', () => {
     expect(global).toContain("@import '@kerfjs/ui/document.css'");
     expect(global).not.toContain('font-family:');
     expect(global).not.toContain('box-sizing:');
-    for (const selector of [':root', 'html, body, #app']) expect(global).toContainSource(selector);
+    expect(global).toContainSource(':root');
+    // Kerf's opt-in viewport lock owns the dynamic-viewport clip (KF-1XNQYP, HS2-4TN9GK).
+    expect(global).not.toContain('100dvh');
+    expect(read('../index.html')).toContain('<main id="app" class="kui-app-root" data-viewport="locked">');
     expect(global).not.toContain('.app-toast');
     // The application root's edge-to-edge shell is AppShell's own `viewport` presentation (HS2-DR549A).
     expect(global).not.toContain('.app-shell');

@@ -57,7 +57,9 @@ describe('application shell components', () => {
     // (HS2-P289N2); focus mode lifts the drawer through the public popup-layer token.
     expect(css).not.toContain('kui-resizable-region');
     expect(css).toContainSource(".app-shell[data-terminal-focus-mode='true'] { --kui-workbench-popup-z: 200; }");
-    expect(productionCss).toMatchSource(/html, body, #app \{[^}]*height: 100dvh;/);
+    // Kerf's opt-in viewport lock sizes and clips the root to the dynamic viewport (HS2-4TN9GK).
+    expect(productionCss).not.toContain('100dvh');
+    expect(readFileSync(new URL('../../index.html', import.meta.url), 'utf8')).toContain('data-viewport="locked"');
     expect(productionCss).toContain('--hotsheet-safe-area-top: env(safe-area-inset-top, 0px)');
     expect(productionCss).toContain('--hotsheet-safe-area-bottom: env(safe-area-inset-bottom, 0px)');
     expect(productionCss).toContain('--hotsheet-safe-area-left: env(safe-area-inset-left, 0px)');
@@ -135,7 +137,9 @@ describe('application shell components', () => {
     const productionCss = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
     expect(css).toMatch(/\.app-shell \{[^}]*min-width: remify\(1024px\)/);
     expect(css).toMatch(/\.app-shell \{[^}]*min-height: remify\(600px\)/);
-    expect(productionCss).toMatch(/html,\s*body,\s*#app \{[^}]*overflow: clip/);
+    expect(productionCss).not.toContain('overflow: clip');
+    // Phones are exempt from the desktop floor, so a short phone window stays inside the locked viewport.
+    expect(css).toMatch(/\.app-shell\[data-mobile='true'\] \{[^}]*min-width: 0;[^}]*min-height: 0;/);
     expect(productionCss).not.toContain('.app-shell');
     expect(css).not.toMatch(/\.app-shell\[data-presentation='viewport'\] \{[^}]*(?:min-width|min-height):/);
     expect(css).not.toMatch(
