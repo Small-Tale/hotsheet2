@@ -1,3 +1,5 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
+import { Row } from '@kerfjs/ui/row';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -9,22 +11,26 @@ export const appLoadingDemoProgress = signal<BulkUpdateProgress | undefined>(und
 
 export function AppLoadingIndicatorDemo() {
   return (
-    <section aria-label="App loading indicator states">
-      <p>Choose a loading state; the app indicator appears in the viewport corner.</p>
-      <wa-button type="button" data-app-loading-demo="project">
-        Project load
-      </wa-button>
-      <wa-button type="button" data-app-loading-demo="start">
-        Update start
-      </wa-button>
-      <wa-button type="button" data-app-loading-demo="progress">
-        Update progress
-      </wa-button>
-      <wa-button type="button" data-app-loading-demo="complete">
-        Update complete
-      </wa-button>
+    <CatalogExample
+      label="App loading indicator states"
+      note="Choose a loading state; the app indicator appears in the viewport corner."
+    >
+      <Row gap="xs" wrap>
+        <wa-button type="button" data-app-loading-demo="project">
+          Project load
+        </wa-button>
+        <wa-button type="button" data-app-loading-demo="start">
+          Update start
+        </wa-button>
+        <wa-button type="button" data-app-loading-demo="progress">
+          Update progress
+        </wa-button>
+        <wa-button type="button" data-app-loading-demo="complete">
+          Update complete
+        </wa-button>
+      </Row>
       <AppLoadingIndicator progress={appLoadingDemoProgress.value} />
-    </section>
+    </CatalogExample>
   );
 }
 
@@ -53,6 +59,7 @@ function wireAppLoadingIndicatorDemo(root: HTMLElement): () => void {
 export const demoModule: DemoModule = {
   entries: {
     'app-loading-indicator': {
+      catalogExamples: true,
       Demo: AppLoadingIndicatorDemo,
       reset: () => {
         appLoadingDemoProgress.value = undefined;
