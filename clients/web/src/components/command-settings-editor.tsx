@@ -155,12 +155,13 @@ function AiCommandSelection({
       : 'Project Default';
   return (
     <List gap="2xs" className="command-settings-editor__ai-selection">
-      {/* A settings row: the field label is the toolbar's identity and the PopupMenu's group is its
-          trailing control, the cataloged composition for a menu trigger (HS2-CSRJ9Y). */}
+      {/* A stacked field: the ListHeader label matches the Web Awesome field labels above and below,
+          and the PopupMenu's group (the cataloged menu-trigger composition, HS2-CSRJ9Y) gets the full
+          row width so the label never truncates at phone width (HS2-XZ6Q5A). */}
+      <ListHeader label="AI configuration" headingLevel={3} density="compact" inline />
       <Toolbar
         dividerSides=""
-        leading={<ToolbarText text="AI configuration" />}
-        trailing={
+        leading={
           <ToolbarControlGroup single nestedDropdown>
             <PopupMenu
               text={summary}

@@ -8962,3 +8962,22 @@ test('drives every ChoiceCard presentation from its demo settings (HS2-V7PCS6)',
     await page.screenshot({ path: `target/visual-captures/hs2-v7pcs6-choice-card-checkbox-${width}.png` });
   }
 });
+
+test('stacks the AI command configuration label above its menu at phone width', async ({ page }) => {
+  // The label used to share a Toolbar row with the menu trigger and truncate to "AI config…" (HS2-XZ6Q5A).
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/ux-demo?component=command-settings-editor');
+  const editor = page.locator('[data-component="command-settings-editor"]');
+  const publishRow = editor.locator('.command-settings-editor__row', { hasText: 'Publish preview' });
+  await publishRow.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
+  await publishRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
+  const dialog = page.locator('#command-editor-dialog');
+  const label = dialog.getByRole('heading', { name: 'AI configuration', exact: true });
+  await expect(label).toBeVisible();
+  expect(await label.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  const trigger = dialog.locator('[data-command-ai-menu="true"]');
+  await expect(trigger).toBeVisible();
+  const labelBox = await label.boundingBox(),
+    triggerBox = await trigger.boundingBox();
+  expect(triggerBox!.y).toBeGreaterThanOrEqual(labelBox!.y + labelBox!.height);
+});
