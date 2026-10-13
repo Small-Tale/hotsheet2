@@ -197,6 +197,10 @@ pub(crate) struct TerminalInfo {
     /// Most recent trusted hook report, even if that session later ended.
     #[serde(skip_serializing_if = "Option::is_none")]
     last_hook_report: Option<TerminalAiConnection>,
+    /// A live `hotsheet-mcp` lease names this terminal (HS2-HNXE38). Separate from
+    /// `ai_connection`, which means permission prompts are routed to Hot Sheet.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) mcp_connected: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -288,6 +292,7 @@ pub(crate) fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> Termin
         question: None,
         ai_connection: None,
         last_hook_report: None,
+        mcp_connected: false,
     }
 }
 
@@ -308,6 +313,7 @@ pub(crate) fn broker_info(bi: hotsheet_terminals::BrokerTermInfo) -> TerminalInf
         question: None,
         ai_connection: None,
         last_hook_report: None,
+        mcp_connected: false,
     }
 }
 

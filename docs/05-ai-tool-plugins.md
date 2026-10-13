@@ -971,6 +971,22 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > object. The serverless and HTTP backends use the same checkout routes; external sources
 > cannot use these git store operations. Repeating a rename or metadata replacement with unchanged
 > values does not advance `updated_at` or create a git commit (HS2-31NJFQ).
+>
+> **MCP presence (HS2-HNXE38).** When the shim knows its project's server (`--server`, or
+> the `HOTSHEET_SERVER`/`HOTSHEET_SECRET` route-back environment a Hot Sheet terminal gives
+> a serverless shim), the MCP `initialize` request starts a background lease: it
+> `POST /mcp-presence` with a per-process `lease_id`, `pid`, `tool` (`HOTSHEET_AGENT`), `cwd`,
+> and `terminal_id` (`HOTSHEET_TERMINAL_ID`), renews every 15 s, and `DELETE
+/mcp-presence/{lease}` when stdin closes. Registration is an idempotent upsert, so a
+> heartbeat after a server restart rebuilds the lease. The server keeps a lease for 45 s
+> (three heartbeats) after its last renewal and drops it sooner when its pid is gone,
+> using a server-local timer. `GET /mcp-presence` lists live leases with a project-level
+> `connected`; `TerminalInfo.mcp_connected` marks terminals a lease names. Only scope
+> transitions (project or terminal becoming connected/disconnected) emit an
+> `mcp_presence` change event (`id` = terminal id, empty for the project; `message` =
+> `connected`/`disconnected`), so heartbeats add no change-stream traffic. This is separate
+> from the hook-reported `ai_connection`, which means permission prompts are routed.
+> A serverless shim with no known server reports nothing.
 
 AI tools reach tickets two ways, both over the one core:
 

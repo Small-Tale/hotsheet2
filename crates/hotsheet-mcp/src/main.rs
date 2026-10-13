@@ -8,6 +8,7 @@ use std::path::PathBuf;
 
 use anyhow::{Result, bail};
 use clap::Parser;
+use hotsheet_mcp::presence::{self, HttpPresence, Presence, PresenceTarget};
 use hotsheet_mcp::{Backend, CoreBackend, HttpBackend, handle_message};
 
 #[derive(Parser)]
@@ -31,6 +32,27 @@ struct Cli {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    // HS2-HNXE38: the server this shim reports presence to, if any.
+    let pid = std::process::id();
+    let lease_id = format!(
+        "mcp-{pid}-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos())
+    );
+    let presence_target = PresenceTarget::resolve(
+        cli.server.as_deref(),
+        cli.secret.as_deref(),
+        |key| std::env::var(key).ok(),
+        pid,
+        std::env::current_dir()
+            .ok()
+            .map(|dir| dir.display().to_string()),
+        lease_id,
+    );
+    let mut presence_target = presence_target;
+    let mut _presence: Option<Presence> = None;
+
     let backend: Box<dyn Backend> = match (cli.path, cli.server) {
         (Some(path), None) => Box::new(CoreBackend::open(&path)?),
         (None, Some(server)) => {
@@ -53,10 +75,21 @@ fn main() -> Result<()> {
         let Ok(msg) = serde_json::from_str::<serde_json::Value>(&line) else {
             continue; // ignore un-parseable input rather than crashing the shim
         };
+        if presence::is_initialize(&msg)
+            && let Some(target) = presence_target.take()
+        {
+            _presence = Some(Presence::start(
+                target,
+                HttpPresence::default(),
+                presence::HEARTBEAT,
+            ));
+        }
         if let Some(response) = handle_message(&msg, backend.as_ref()) {
             writeln!(stdout, "{}", serde_json::to_string(&response)?)?;
             stdout.flush()?;
         }
     }
+    // stdin closed: dropping the presence handle releases the lease.
+    drop(_presence);
     Ok(())
 }

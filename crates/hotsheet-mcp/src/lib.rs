@@ -10,6 +10,8 @@
 //! - [`HttpBackend`] — proxies a running `hotsheet-server` over HTTP, for
 //!   index-backed reads + instant broadcast when a server is up.
 
+pub mod presence;
+
 use serde_json::{Value, json};
 
 /// The MCP protocol revision we speak.

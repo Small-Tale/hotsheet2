@@ -51,6 +51,7 @@ fn with_terminal_names(state: &AppState, mut infos: Vec<TerminalInfo>) -> Vec<Te
     let mut questions = state.terminal_questions.lock_or_recover();
     let connections = state.terminal_ai_connections.lock_or_recover().clone();
     let mut last_reports = state.terminal_ai_last_reports.lock_or_recover();
+    let mcp = state.mcp_presence.lock_or_recover().clone();
     for info in &mut infos {
         if !info.alive {
             last_reports.remove(&info.id);
@@ -68,6 +69,7 @@ fn with_terminal_names(state: &AppState, mut infos: Vec<TerminalInfo>) -> Vec<Te
             .then(|| connections.get(&info.id).cloned())
             .flatten();
         info.last_hook_report = last_reports.get(&info.id).cloned();
+        info.mcp_connected = info.alive && mcp.terminal_connected(&info.id);
     }
     infos
 }

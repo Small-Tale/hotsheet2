@@ -21,6 +21,7 @@ mod health_scan;
 mod hosting;
 mod image_crop_cache;
 pub mod lifecycle;
+pub mod mcp_presence;
 pub mod media;
 pub mod multistore;
 pub mod notifications;
@@ -199,6 +200,8 @@ pub struct AppState {
     watchers: Arc<Mutex<std::collections::HashMap<String, WatchHandle>>>,
     /// Which checkouts some client has open, from live change-stream leases (HS2-ARJ9J1).
     presence: presence::Presence,
+    /// Live `hotsheet-mcp` leases (HS2-HNXE38), separate from hook-reported AI connections.
+    mcp_presence: Arc<Mutex<mcp_presence::McpPresenceRegistry>>,
     /// Stores hosted because a project opened them: the only ones unhosted again once no open
     /// checkout references them. The default and startup-configured stores stay hosted.
     project_hosted: Arc<Mutex<std::collections::HashSet<String>>>,
@@ -456,6 +459,7 @@ impl AppState {
             managed_secrets: ManagedSecretCache::default(),
             watchers: Arc::default(),
             presence: presence::Presence::default(),
+            mcp_presence: Arc::default(),
             project_hosted: Arc::default(),
             unhost_sweep: Arc::default(),
             repository_watchers: Arc::new(Mutex::new(std::collections::HashMap::new())),
@@ -1427,6 +1431,16 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/terminals/{id}/ai-connection",
             post(connect_terminal_ai).delete(disconnect_terminal_ai),
+        )
+        // Live hotsheet-mcp presence leases (HS2-HNXE38).
+        .route(
+            "/mcp-presence",
+            get(routes::mcp_presence::list_mcp_presence)
+                .post(routes::mcp_presence::put_mcp_presence),
+        )
+        .route(
+            "/mcp-presence/{lease}",
+            delete(routes::mcp_presence::delete_mcp_presence),
         )
         // Activity timeline (HS2-KP31ZE): ingest a tool's activity event, and read the
         // per-ticket/session "what happened" window (docs/15). The Announcer/timeline consumer.

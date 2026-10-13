@@ -19592,3 +19592,119 @@ async fn client_drive_failure_diagnostics_survive_real_routes_and_clear_on_retry
         );
     }
 }
+
+#[tokio::test]
+async fn mcp_presence_lease_registers_renews_silently_lists_marks_terminal_and_unregisters() {
+    // HS2-HNXE38: hotsheet-mcp's lease is announced only when a scope's connected state changes.
+    let (_dir, state) = state();
+    let router = app(state);
+    let send = |method: &'static str, path: String, body: Option<String>| {
+        let router = router.clone();
+        async move {
+            router
+                .oneshot(authed(method, &path, body.as_deref()))
+                .await
+                .unwrap()
+        }
+    };
+    let cursor = || async {
+        body_json(send("GET", "/ws/poll?timeout_ms=0".into(), None).await).await["cursor"]
+            .as_u64()
+            .unwrap()
+    };
+    let announced_since = |cursor: u64| {
+        let router = router.clone();
+        async move {
+            let events = body_json(
+                router
+                    .oneshot(authed(
+                        "GET",
+                        &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+                        None,
+                    ))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            events["events"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|event| event["kind"] == "mcp_presence")
+                .map(|event| {
+                    format!(
+                        "{}:{}",
+                        event["id"].as_str().unwrap(),
+                        event["message"].as_str().unwrap()
+                    )
+                })
+                .collect::<Vec<_>>()
+        }
+    };
+    let opened = send(
+        "POST",
+        "/terminals".into(),
+        Some(r#"{"command":"cat","id":"mcp-term"}"#.into()),
+    )
+    .await;
+    assert_eq!(opened.status(), StatusCode::OK);
+    let pid = std::process::id();
+    let lease =
+        format!(r#"{{"lease_id":"lease-1","pid":{pid},"tool":"claude","terminal_id":"mcp-term"}}"#);
+
+    // Bad leases are rejected and change nothing.
+    for bad in [
+        format!(r#"{{"lease_id":" ","pid":{pid}}}"#),
+        r#"{"lease_id":"x","pid":0}"#.to_owned(),
+    ] {
+        assert_eq!(
+            send("POST", "/mcp-presence".into(), Some(bad))
+                .await
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+    let before = cursor().await;
+    let registered = send("POST", "/mcp-presence".into(), Some(lease.clone())).await;
+    assert_eq!(registered.status(), StatusCode::OK);
+    let registered = body_json(registered).await;
+    assert_eq!(registered["lease_id"], "lease-1");
+    assert_eq!(registered["heartbeat_ms"], 15_000);
+    assert_eq!(registered["ttl_ms"], 45_000);
+    assert_eq!(
+        announced_since(before).await,
+        vec![":connected", "mcp-term:connected"]
+    );
+
+    // A heartbeat is silent.
+    let before = cursor().await;
+    send("POST", "/mcp-presence".into(), Some(lease.clone())).await;
+    assert!(announced_since(before).await.is_empty());
+
+    let listed = body_json(send("GET", "/mcp-presence".into(), None).await).await;
+    assert_eq!(listed["connected"], true);
+    assert_eq!(listed["leases"][0]["lease_id"], "lease-1");
+    assert_eq!(listed["leases"][0]["tool"], "claude");
+    let terminals = body_json(send("GET", "/terminals".into(), None).await).await;
+    assert_eq!(terminals[0]["mcp_connected"], true);
+    assert!(terminals[0].get("ai_connection").is_none());
+
+    // Unregister announces both scopes once; repeating is a silent no-op.
+    let before = cursor().await;
+    for _ in 0..2 {
+        assert_eq!(
+            send("DELETE", "/mcp-presence/lease-1".into(), None)
+                .await
+                .status(),
+            StatusCode::NO_CONTENT
+        );
+    }
+    assert_eq!(
+        announced_since(before).await,
+        vec![":disconnected", "mcp-term:disconnected"]
+    );
+    let listed = body_json(send("GET", "/mcp-presence".into(), None).await).await;
+    assert_eq!(listed["connected"], false);
+    let terminals = body_json(send("GET", "/terminals".into(), None).await).await;
+    assert!(terminals[0].get("mcp_connected").is_none());
+}
