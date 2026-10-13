@@ -187,7 +187,8 @@ Two other local environment effects look like regressions but are not:
   `--revision-status` tests accept that shape; unset the variable to exercise the
   source-root comparison.
 - `terminal_ws` drives the workspace `hs-fake-agent` binary, which `-p hotsheet-server`
-  alone does not build; run nextest with `--workspace` or build that package first.
+  alone does not build; run nextest with `--workspace` or first run
+  `cargo build -p hotsheet-terminals --bin hs-fake-agent`.
 
 ### 12.6.2 Isolated Clippy artifacts
 
