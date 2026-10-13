@@ -414,6 +414,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['ticket-search-field', 7],
     ['ticket-code-review', 5],
     ['ticket-attachments', 4],
+    ['attachment-gallery', 1],
     ['ticket-info-panel', 2],
     ['list', 3],
     ['list-header', 2],

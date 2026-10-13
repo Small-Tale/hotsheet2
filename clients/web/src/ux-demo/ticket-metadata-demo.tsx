@@ -384,27 +384,35 @@ export function AttachmentGalleryDemo() {
       : timed
         ? galleryDemoVideoAnnotations.value
         : imageAnnotations;
-  return galleryDemoUrl.value ? (
-    <AttachmentGallery
-      images={demoImages}
-      activeUrl={galleryDemoUrl.value}
-      geometry={galleryDemoGeometry()}
-      selectedScale={galleryDemoScale.value}
-      annotations={annotations}
-      markup={galleryDemoMarkup.value}
-      drawMode={galleryDemoDrawMode.value}
-      selectedAnnotation={showcase ? 'insert' : galleryDemoSelectedAnnotation.value}
-      playheadMs={timed ? galleryDemoPlayhead.value : 0}
-      durationMs={video ? 6000 : animatedSvg ? 4000 : 0}
-      playing={galleryDemoPlaying.value}
-      volume={galleryDemoVolume.value}
-      muted={galleryDemoMuted.value}
-      volumeOpen={galleryDemoVolumeOpen.value}
-    />
-  ) : (
-    <button type="button" data-action="open-gallery-demo">
-      Open gallery
-    </button>
+  return (
+    <CatalogExample
+      align={galleryDemoUrl.value ? undefined : 'inline-control'}
+      label="Interactive"
+      note="The gallery is a full-screen overlay; closing it leaves a control that reopens it."
+    >
+      {galleryDemoUrl.value ? (
+        <AttachmentGallery
+          images={demoImages}
+          activeUrl={galleryDemoUrl.value}
+          geometry={galleryDemoGeometry()}
+          selectedScale={galleryDemoScale.value}
+          annotations={annotations}
+          markup={galleryDemoMarkup.value}
+          drawMode={galleryDemoDrawMode.value}
+          selectedAnnotation={showcase ? 'insert' : galleryDemoSelectedAnnotation.value}
+          playheadMs={timed ? galleryDemoPlayhead.value : 0}
+          durationMs={video ? 6000 : animatedSvg ? 4000 : 0}
+          playing={galleryDemoPlaying.value}
+          volume={galleryDemoVolume.value}
+          muted={galleryDemoMuted.value}
+          volumeOpen={galleryDemoVolumeOpen.value}
+        />
+      ) : (
+        <button type="button" data-action="open-gallery-demo">
+          Open gallery
+        </button>
+      )}
+    </CatalogExample>
   );
 }
 export function TicketCodeReviewDemo() {
@@ -676,7 +684,7 @@ export const demoModule: DemoModule = {
     'ticket-timeline': { catalogExamples: true, Demo: TicketTimelineDemo },
     'ticket-code-review': { catalogExamples: true, Demo: TicketCodeReviewDemo },
     'ticket-attachments': { catalogExamples: true, Demo: TicketAttachmentsDemo },
-    'attachment-gallery': { Demo: AttachmentGalleryDemo },
+    'attachment-gallery': { catalogExamples: true, Demo: AttachmentGalleryDemo },
   },
   wire: wireTicketMetadataDemo,
 };
