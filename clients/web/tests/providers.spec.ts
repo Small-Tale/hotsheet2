@@ -16377,13 +16377,15 @@ test('adapts the production AppShell below the former 1024 by 600 desktop floor'
   const shell = page.locator('[data-component="app-shell"]'),
     bounds = await shell.boundingBox();
   expect(bounds?.width).toBe(800);
-  expect(bounds?.height).toBeGreaterThanOrEqual(600);
+  // A mobile shell is exempt from the desktop height floor and stays inside the locked viewport (HS2-4TN9GK, HS2-YRYG7G).
+  expect(bounds?.height).toBe(500);
   await expect(shell).toHaveAttribute('data-mobile', 'true');
   await expect(shell.locator('#app-left-rail')).toHaveAttribute('data-collapsed', 'true');
   await expect(shell.locator('#app-right-rail')).toHaveAttribute('data-collapsed', 'true');
   await expect(page.locator('wa-select[name="mobile-project"]')).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.waitForTimeout(300);
+  expect((await shell.boundingBox())?.height).toBe(600);
   await page.screenshot({ path: 'target/visual-captures/hs2-501eph-production-shell-floor.png', fullPage: true });
 });
 
