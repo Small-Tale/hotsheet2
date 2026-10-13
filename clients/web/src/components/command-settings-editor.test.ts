@@ -122,8 +122,10 @@ describe('CommandSettingsEditor', () => {
       }),
     );
     expect(markup).toContain('name="color"');
-    expect(markup).toContain('--swatch:#22c55e');
-    expect(markup).toMatch(/name="color"[^>]*value="#22c55e"[^>]*checked/);
+    // Kerf ChoiceChips renders the wrapping color-dot radios (KF-EJPYWD, HS2-EBY4E3).
+    expect(markup).toContain('data-component="choice-chips"');
+    expect(markup).toContain('data-action="select-command-color"');
+    expect(markup).toMatch(/value="#22c55e"[^>]*checked|checked[^>]*value="#22c55e"/);
     // The icon field is the reusable searchable picker, not a fixed radio grid.
     expect(markup).toContain('data-component="lucide-icon-picker"');
     expect(markup).toContain('name="command-icon-search"');
@@ -226,7 +228,7 @@ describe('CommandSettingsEditor', () => {
     expect(program).toContain('wa-input label="Confirmation message" name="confirmation"');
     expect(program).toMatch(/<wa-select[^>]*name="kind"/);
     expect(program).toContain('data-component="grid"');
-    // Every command field is a Web Awesome control; only the color swatches remain native radios.
+    // Every command field is a Web Awesome control; only Kerf ChoiceChips' color radios are native.
     const nativeFields = [...program.matchAll(/<(input|textarea|select)[\s>][^>]*/g)]
       .map((match) => match[0])
       .filter((field) => !field.includes('type="radio"'));

@@ -41,6 +41,7 @@ export const COMMANDS_AND_AI_ACTIONS = {
   addCommandGroup: action('add-command-group'),
   deleteCommandGroup: action('delete-command-group'),
   selectCommandIcon: action('select-command-icon'),
+  selectCommandColor: action('select-command-color'),
   selectCommandAiDefault: action('select-command-ai-default'),
   selectCommandAiTool: action('select-command-ai-tool'),
   selectCommandAiModel: action('select-command-ai-model'),
@@ -104,7 +105,8 @@ export const COMMANDS_AND_AI_TARGETS = {
 
 /**
  * The edit-command fields whose `input` events autosave: Web Awesome fields mark themselves with
- * `data-command-field`, and the Kerf Type Select is addressed by its name (HS2-WNXRG3).
+ * `data-command-field`, the Kerf Type Select is addressed by its name (HS2-WNXRG3), and the Kerf
+ * ChoiceChips color radios by their action (HS2-EBY4E3).
  */
 export const COMMAND_FIELD_SELECTOR =
-  '[data-command-field], [data-command-editor-dialog] wa-select[name="kind"]';
+  '[data-command-field], [data-command-editor-dialog] wa-select[name="kind"], [data-action="select-command-color"]';

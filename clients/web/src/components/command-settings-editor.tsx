@@ -4,7 +4,8 @@ import '@awesome.me/webawesome/dist/components/textarea/textarea.js';
 import '@kerfjs/ui/surface-scaffold.css';
 import './command-settings-editor.css';
 
-import { foregroundColorVar, px, uiColor } from '@kerfjs/ui/css-values';
+import { ChoiceChips } from '@kerfjs/ui/choice-chips';
+import { foregroundColor, foregroundColorVar, px, uiColor } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
@@ -297,27 +298,23 @@ function CommandDetailFields({
         value={command.confirmation ?? ''}
         placeholder="Optional confirmation before running"
       />
-      <fieldset class="command-settings-editor__swatches">
-        <legend class="command-settings-editor__legend">Button color</legend>
-        {COMMAND_CUSTOMIZATION_COLORS.map((option) => (
-          <label
-            class="command-settings-editor__swatch"
-            data-transparent={option.value === 'transparent' ? 'true' : undefined}
-            style={`--swatch:${option.value}`}
-            title={option.label}
-          >
-            <input
-              type="radio"
-              name="color"
-              data-command-field
-              value={option.value}
-              checked={resolveCommandColor(command.color) === option.value}
-            />
-            <span aria-hidden="true" />
-            <span class="command-settings-editor__swatch-label">{option.label}</span>
-          </label>
-        ))}
-      </fieldset>
+      {/* Kerf ChoiceChips: a wrapping radio set of color-dot pills, including the struck-through
+          transparent swatch (KF-EJPYWD, HS2-EBY4E3). */}
+      <div class="command-settings-editor__legend" id="command-color-label">
+        Button color
+      </div>
+      <ChoiceChips
+        name="color"
+        labelledBy="command-color-label"
+        action={COMMANDS_AND_AI_ACTIONS.selectCommandColor.value}
+        size="compact"
+        value={resolveCommandColor(command.color)}
+        choices={COMMAND_CUSTOMIZATION_COLORS.map((option) => ({
+          value: option.value as string,
+          label: option.label,
+          swatch: option.value === 'transparent' ? 'transparent' : foregroundColor(option.value),
+        }))}
+      />
       <fieldset class="command-settings-editor__icons">
         <legend class="command-settings-editor__legend">Button icon</legend>
         <LucideIconPicker

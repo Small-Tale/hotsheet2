@@ -7850,16 +7850,18 @@ test('edits custom command color and icon in the command settings editor', async
     });
   const wideIconInset = await iconInset();
   expect(Math.abs(wideIconInset.left - wideIconInset.right)).toBeLessThan(1);
-  await expect(dialog.locator('.command-settings-editor__swatch')).toHaveCount(9);
+  await expect(dialog.getByRole('radiogroup', { name: 'Button color' }).getByRole('radio')).toHaveCount(9);
   // The icon field is the reusable searchable Lucide picker (HS2-5VSNV3), not a fixed radio grid.
   await expect(dialog.locator('[data-component="lucide-icon-picker"]')).toBeVisible();
   // The editor styles only its own buttons, so the nested picker keeps its 18px grid icons (HS2-JSSMFY).
   const pickerIcon = dialog.locator('[data-action="select-command-icon"]').first();
   await expect(pickerIcon).toHaveCSS('display', 'grid');
   await expect(pickerIcon.locator('svg')).toHaveCSS('width', '18px');
-  await dialog.getByTitle('Blue', { exact: true }).click();
+  await dialog.getByRole('radio', { name: 'Blue', exact: true }).check();
   await dialog.locator('[data-action="select-command-icon"][data-icon-name="wand"]').click();
-  await expect(dialog.locator('.command-settings-editor__swatch input:checked')).toHaveValue('#3b82f6');
+  await expect(dialog.getByRole('radiogroup', { name: 'Button color' }).locator('input:checked')).toHaveValue(
+    '#3b82f6',
+  );
   await expect(dialog.locator('[data-action="select-command-icon"][data-icon-name="wand"]')).toHaveAttribute(
     'aria-pressed',
     'true',

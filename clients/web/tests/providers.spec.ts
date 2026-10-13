@@ -25707,9 +25707,11 @@ test('applies a saved command color and icon to the sidebar command button (HS2-
   await runChecksRow.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
   await runChecksRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const commandDialog = page.locator('#command-editor-dialog');
-  await commandDialog.getByTitle('Green', { exact: true }).click();
+  await commandDialog.getByRole('radio', { name: 'Green', exact: true }).check();
   await commandDialog.getByTitle('circle-check-big', { exact: true }).click();
-  await expect(commandDialog.locator('.command-settings-editor__swatch input:checked')).toHaveValue('#22c55e');
+  await expect(commandDialog.getByRole('radiogroup', { name: 'Button color' }).locator('input:checked')).toHaveValue(
+    '#22c55e',
+  );
   await expect(
     commandDialog.locator('[data-action="select-command-icon"][data-icon-name="circle-check-big"]'),
   ).toHaveAttribute('aria-pressed', 'true');
