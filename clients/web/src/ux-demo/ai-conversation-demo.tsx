@@ -1,4 +1,5 @@
 import { CatalogExample } from '@kerfjs/ui/catalog';
+import { List } from '@kerfjs/ui/list';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -7,6 +8,7 @@ import { type ConversationActivity, type ConversationMessage, conversationUsage 
 import { AIConversation } from '../components/ai-conversation';
 import { wireAiConversation } from '../components/ai-conversation-interactions';
 import type { PermissionItem } from '../permission-notifications';
+import { DemoEvent } from './components/demo-event';
 import { type DemoDevice, DeviceSetting } from './components/device-setting';
 import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
@@ -142,55 +144,65 @@ function scenarioState() {
 
 export function AIConversationDemo() {
   const state = scenarioState();
+  const embedded = aiConversationPresentation.value === 'embedded';
+  // Embedded, the Kerf app-height viewport is the definite height the conversation fills; the List
+  // stack owns the status row and the flexing conversation (HS2-H1DRJB), so no demo stage CSS remains.
   return (
-    <CatalogExample label="Interactive" viewport={{ width: 'full' }}>
-      <section
-        aria-label="AIConversation demo"
-        class="ai-conversation-demo"
-        data-presentation={aiConversationPresentation.value}
+    <CatalogExample label="Interactive" viewport={embedded ? { width: 'full', height: 'app' } : { width: 'full' }}>
+      <List
+        fill={embedded}
+        gap="xs"
+        className="ai-conversation-demo"
+        rootAttributes={{
+          role: 'region',
+          'aria-label': 'AIConversation demo',
+          'data-presentation': aiConversationPresentation.value,
+        }}
       >
         {aiConversationPresentation.value === 'dialog' && (
           <wa-button appearance="accent" data-action="open-ai-conversation-demo">
             Open conversation
           </wa-button>
         )}
-        <output role="status">
+        <DemoEvent>
           {aiConversationSaveCount.value
             ? `Prepared ${aiConversationSaveCount.value} conversation export${aiConversationSaveCount.value === 1 ? '' : 's'}.`
             : ''}
-        </output>
-        <AIConversation
-          presentation={aiConversationPresentation.value}
-          open={aiConversationDemoOpen.value}
-          tool={aiConversationProviderLabel()}
-          sessionId="019-demo-session"
-          messages={state.messages}
-          draft={aiConversationDraft.value}
-          busy={state.busy}
-          progress={state.progress}
-          interruptible={state.interruptible}
-          permissions={state.permissions}
-          activity={state.activity}
-          totalUsage={conversationUsage({ messages: state.messages })}
-          error={state.error}
-          feedbackAvailable
-          providerId={aiConversationProvider.value}
-          providers={AI_CONVERSATION_PROVIDERS}
-          canChangeProvider
-          model="gpt-5.6"
-          effort="high"
-          models={[
-            { id: 'gpt-5.6', label: 'GPT-5.6' },
-            { id: 'gpt-5.6-codex', label: 'GPT-5.6 Codex' },
-          ]}
-          efforts={['medium', 'high', 'xhigh']}
-          canChangeModel
-          canChangeEffort
-          readOnly={aiConversationScenario.value === 'saved'}
-          savedSource={aiConversationScenario.value === 'saved' ? 'client-review.hotsheet-chat' : undefined}
-          hostActionsAvailable={aiConversationDevice.value === 'host'}
-        />
-      </section>
+        </DemoEvent>
+        <List flex={embedded}>
+          <AIConversation
+            presentation={aiConversationPresentation.value}
+            open={aiConversationDemoOpen.value}
+            tool={aiConversationProviderLabel()}
+            sessionId="019-demo-session"
+            messages={state.messages}
+            draft={aiConversationDraft.value}
+            busy={state.busy}
+            progress={state.progress}
+            interruptible={state.interruptible}
+            permissions={state.permissions}
+            activity={state.activity}
+            totalUsage={conversationUsage({ messages: state.messages })}
+            error={state.error}
+            feedbackAvailable
+            providerId={aiConversationProvider.value}
+            providers={AI_CONVERSATION_PROVIDERS}
+            canChangeProvider
+            model="gpt-5.6"
+            effort="high"
+            models={[
+              { id: 'gpt-5.6', label: 'GPT-5.6' },
+              { id: 'gpt-5.6-codex', label: 'GPT-5.6 Codex' },
+            ]}
+            efforts={['medium', 'high', 'xhigh']}
+            canChangeModel
+            canChangeEffort
+            readOnly={aiConversationScenario.value === 'saved'}
+            savedSource={aiConversationScenario.value === 'saved' ? 'client-review.hotsheet-chat' : undefined}
+            hostActionsAvailable={aiConversationDevice.value === 'host'}
+          />
+        </List>
+      </List>
     </CatalogExample>
   );
 }

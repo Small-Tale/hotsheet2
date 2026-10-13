@@ -170,16 +170,3 @@ body[data-resizing-project-sidebar='true'] {
     min-width: 0;
   }
 }
-
-/* The embedded conversation takes the remaining stage height below the export status output. */
-.ai-conversation-demo[data-presentation='embedded'] {
-  display: grid;
-  width: min(100%, remify(768px));
-  height: min(remify(608px), calc(100vh - remify(160px)));
-  min-height: remify(320px);
-  grid-template-rows: auto minmax(0, 1fr);
-}
-/* Embedded, the empty status output keeps its zero-height first grid row. */
-.ai-conversation-demo:not([data-presentation='embedded']) > output:empty {
-  display: none;
-}

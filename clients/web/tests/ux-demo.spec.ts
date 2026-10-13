@@ -8461,7 +8461,9 @@ for (const theme of ['light', 'dark'] as const) {
     await save.focus();
     await save.press('Enter');
     await page.keyboard.press('Escape');
-    await expect(page.locator('.ai-conversation-demo > output')).toContainText('Prepared 1 conversation export.');
+    await expect(page.locator('.ai-conversation-demo > [data-demo-event]')).toContainText(
+      'Prepared 1 conversation export.',
+    );
     await page.locator('[data-action="toggle-settings"]').first().click();
     const settings = page.locator('[data-settings="ai-conversation"]');
     await settings.locator('[name="presentation"]').evaluate((node: HTMLElement & { value: string }) => {
@@ -8489,7 +8491,9 @@ for (const theme of ['light', 'dark'] as const) {
     await stop.click();
     await expect(save).toBeEnabled();
     await save.click();
-    await expect(page.locator('.ai-conversation-demo > output')).toContainText('Prepared 2 conversation exports.');
+    await expect(page.locator('.ai-conversation-demo > [data-demo-event]')).toContainText(
+      'Prepared 2 conversation exports.',
+    );
   });
 }
 
