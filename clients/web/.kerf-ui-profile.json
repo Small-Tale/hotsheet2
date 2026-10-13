@@ -143,7 +143,7 @@
       "id": "intentional-nested-inset-command-settings-editor",
       "rules": ["KUI-L004"],
       "target": "src/components/command-settings-editor.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: command-settings-editor__dialog-body, command-settings-editor__swatch, command-settings-editor__swatches."
+      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: command-settings-editor__dialog-body."
     },
     {
       "id": "intentional-nested-inset-connection-details-dialog",

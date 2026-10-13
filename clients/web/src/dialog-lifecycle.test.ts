@@ -13,6 +13,7 @@ describe('dialog lifecycle event contracts', () => {
     './interactions/inspector-and-editor.ts',
     './interactions/search-and-composer.ts',
     './features/saved-views.ts',
+    './features/project-teardown.ts',
   ]
     .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
     .join('\n');
@@ -54,12 +55,17 @@ describe('dialog lifecycle event contracts', () => {
   });
 
   it('lets the persistent quick-ticket dialog own modality and Escape ordering', () => {
-    expect(source).toMatchSource(/expandTicketComposer[^\n]*openTicketComposer/);
+    // HS2-NRW5ZR moved the composer gestures into the shared wireQuickTicketComposer helper.
+    const helper = readFileSync(new URL('./components/quick-ticket-composer-interactions.ts', import.meta.url), 'utf8');
     expect(source).toMatchSource(
-      /delegateCapture\(document\.body,'wa-hide',SEARCH_AND_COMPOSER_TARGETS\.quickTicketComposer\.selector[^\n]*composerSubmitting\.value[^\n]*event\.preventDefault\(\)/,
+      /wireQuickTicketComposer\(document\.body,\{expand:openTicketComposer,expanded:\(\)=>composerExpanded\.value,canHide:\(\)=>!composerSubmitting\.value,dismissed:resetTicketComposer/,
     );
-    expect(source).toMatchSource(
-      /delegateCapture\(document\.body,'wa-after-hide',SEARCH_AND_COMPOSER_TARGETS\.quickTicketComposer\.selector[^\n]*resetTicketComposer\(\)/,
+    expect(helper).toMatchSource(/'expand-ticket-composer"\]',\(_event,target\)=>\{bindings\.expand\(/);
+    expect(helper).toMatchSource(
+      /delegateCapture\(root,'wa-hide',COMPOSER,[^\n]*!bindings\.canHide\(\)\)event\.preventDefault\(\)/,
+    );
+    expect(helper).toMatchSource(
+      /delegateCapture\(root,'wa-after-hide',COMPOSER,[^\n]*bindings\.expanded\(\)\)bindings\.dismissed\(\)/,
     );
     expect(source).not.toMatch(/if\(composerExpanded\.value\)resetTicketComposer\(\).*ticketContextMenu/);
     expect(source).toMatchSource(/function closeProjectIds\([^\n]*resetTicketComposer\(\)/);

@@ -343,19 +343,17 @@ export function AccountsSettings({
                       </span>
                       {account.sources.length === 0 ? (
                         <span class="ticket-provider-settings__account-actions">
-                          {account.sources.length === 0 && (
-                            <wa-button
-                              size="small"
-                              appearance="outlined"
-                              type="button"
-                              {...COMMANDS_AND_AI_ACTIONS.signOutAccount.attrs}
-                              data-item-id={account.id}
-                              disabled={busy}
-                            >
-                              <LucideIcon slot="start" icon={LogOut} name="log-out" />
-                              {busy ? 'Signing out…' : 'Sign out'}
-                            </wa-button>
-                          )}
+                          <wa-button
+                            size="small"
+                            appearance="outlined"
+                            type="button"
+                            {...COMMANDS_AND_AI_ACTIONS.signOutAccount.attrs}
+                            data-item-id={account.id}
+                            disabled={busy}
+                          >
+                            <LucideIcon slot="start" icon={LogOut} name="log-out" />
+                            {busy ? 'Signing out…' : 'Sign out'}
+                          </wa-button>
                         </span>
                       ) : null}
                     </header>

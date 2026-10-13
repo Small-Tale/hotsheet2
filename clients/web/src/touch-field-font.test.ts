@@ -13,7 +13,7 @@ describe('touch text fields stay at 16px or larger (HS2-8JPRRC)', () => {
   it.each([
     ['components/quick-ticket-composer.css', '.quick-ticket-composer__details textarea'],
     ['components/markdown-editor.css', '.markdown-editor__source'],
-    ['components/ticket-tag-editor.css', '.ticket-tag-editor__popover input'],
+    ['components/ticket-tag-editor.css', '.ticket-tag-editor__input'],
     ['components/ticket-attachments.css', '.ticket-attachments__batch > header select'],
     ['components/provider-setup-form.css', '.provider-setup-form__field-control'],
     ['components/not-working-dialog.css', '.not-working-dialog__note textarea'],
