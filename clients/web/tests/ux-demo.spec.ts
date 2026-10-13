@@ -411,7 +411,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['ticket-list', 4],
     ['ticket-board', 3],
     ['ticket-board-column', 1],
-    ['ticket-search-field', 7],
+    ['ticket-search-field', 6],
     ['ticket-code-review', 5],
     ['ticket-attachments', 5],
     ['attachment-gallery', 1],
@@ -1012,7 +1012,7 @@ test('represents every server-build details state with shared dialog geometry', 
   const dialog = page.locator('[data-component="connection-details-dialog"]'),
     header = dialog.locator('[data-component="toolbar"]:has(.kui-toolbar-text__description)');
   await expect(dialog).toBeVisible();
-  await expect(dialog).toHaveAttribute('data-presentation', 'embedded');
+  await expect(dialog).toHaveAttribute('data-embedded', 'true');
   await expect(header).toBeVisible();
   await expect(header.locator('[data-component="toolbar-control-group"]')).toHaveAttribute('data-tile-tone', 'brand');
   await expect(header).toHaveCSS('border-bottom-width', '0px');
@@ -5084,7 +5084,9 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
     page.getByRole('button', { name: 'Edit batch label System · Batch 1 · Problem evidence' }),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Edit batch label Legacy / Uncategorized' })).toBeVisible();
-  const annotatedCard = page.getByRole('button', { name: 'Open wide-layout.svg in media gallery, 2 annotations' });
+  const annotatedCard = page
+    .getByRole('region', { name: 'Editable' })
+    .getByRole('button', { name: 'Open wide-layout.svg in media gallery, 2 annotations' });
   await expect(annotatedCard.locator('.ticket-attachments__annotation-marker [data-lucide="pencil"]')).toBeVisible();
   await page
     .locator('.kui-workbench__main')
