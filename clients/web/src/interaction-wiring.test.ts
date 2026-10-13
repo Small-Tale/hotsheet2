@@ -65,6 +65,7 @@ const registrations = new Set([
   'wireAttachmentGalleryControls',
   'wireTicketAttachmentActions',
   'wireQuickTicketComposer',
+  'wireTrashSettings',
   'wireTicketRowUpNextToggle',
   'wireTerminalDashboardMenu',
   'wireTerminalTextSizeControl',
@@ -143,7 +144,7 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
           .join('\t'),
       );
     expect(actual).toEqual(baseline);
-    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(301);
+    expect(actual.filter((line) => /\tdelegate(?:Capture)?\t/.test(line))).toHaveLength(296);
     expect(
       actual
         .filter((line) => /\tdelegate(?:Capture)?\t/.test(line))

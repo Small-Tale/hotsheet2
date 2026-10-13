@@ -177,11 +177,7 @@ commands-and-ai	delegate	document.body	'click'	'[data-action="confirm-stop-comma
 commands-and-ai	wireCommandSettingsEditor	document.body
 commands-and-ai	delegate	document.body	'change'	'[data-action="toggle-loading-activity"]'
 commands-and-ai	delegate	document.body	'change'	'[data-action="toggle-global-shell-history"]'
-commands-and-ai	delegate	document.body	'input'	'[name="trash-cleanup-days"]'
-commands-and-ai	delegate	document.body	'submit'	'[data-action="save-trash-settings"]'
-commands-and-ai	delegate	document.body	'click'	'[data-action="apply-leaving-trash-settings"]'
-commands-and-ai	delegate	document.body	'click'	'[data-action="revert-trash-settings"]'
-commands-and-ai	delegateCapture	document.body	'wa-hide'	'[data-component="trash-retention-leave-dialog"]'
+commands-and-ai	wireTrashSettings	document.body
 commands-and-ai	delegateCapture	document.body	'click'	heldNavigationSelector
 commands-and-ai	delegate	document.body	'click'	'[data-action="set-view-mode"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="select-settings-category"]'

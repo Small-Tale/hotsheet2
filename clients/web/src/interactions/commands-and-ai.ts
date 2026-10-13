@@ -21,6 +21,7 @@ import { type ManualModelDialogState } from '../components/manual-model-dialog';
 import { type ExternalProviderKind, type GithubAuthState } from '../components/provider-setup-form';
 import { type SettingsCategory } from '../components/settings-navigation';
 import { trashDraftIsDirty, type TrashRetentionDraft } from '../components/trash-settings';
+import { wireTrashSettings } from '../components/trash-settings-interactions';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
 import { type ConversationExportDraft } from '../conversation-export';
@@ -812,52 +813,44 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
           setTrashMessage(current.id, reason instanceof Error ? reason.message : String(reason));
       });
   }
+  // The Trash retention gestures share the UX demo's wire helper (HS2-WFFDAA).
   lifetime.add(
-    delegate(document.body, 'input', COMMANDS_AND_AI_TARGETS.trashRetentionDaysField.selector, (_event, target) => {
-      const current = project();
-      if (!current) return;
-      const value = (target as Control).value;
-      setTrashDraft(current.id, { value });
-      setTrashMessage(current.id, '');
-      previewTrashPurge(current, value);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'submit', COMMANDS_AND_AI_ACTIONS.saveTrashSettings.selector, (event, target) => {
-      event.preventDefault();
-      const current = project();
-      if (!current) return;
-      applyTrashSettings(
-        current,
-        trashDraft(current.id)?.value ?? target.querySelector<Control>('[name="trash-cleanup-days"]')?.value ?? '',
-      );
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.applyLeavingTrashSettings.selector, () => {
-      const current = project(),
-        draft = current && trashDraft(current.id);
-      if (current && draft) applyTrashSettings(current, draft.value);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.revertTrashSettings.selector, () => {
-      const current = project();
-      if (!current) return;
-      clearTimeout(trashPreviewTimer);
-      setTrashDraft(current.id, undefined);
-      setTrashMessage(current.id, '');
-      releaseHeldNavigation();
-    }),
-  );
-  // Closing the warning (Escape or its close button) stays on Lifecycle with the draft intact.
-  lifetime.add(
-    delegateCapture(document.body, 'wa-hide', COMMANDS_AND_AI_TARGETS.trashRetentionLeaveDialog.selector, (event) => {
-      if (event.target !== event.currentTarget && !(event.target as Element).matches('wa-dialog')) return;
-      const current = project(),
-        draft = current && trashDraft(current.id);
-      heldNavigation = undefined;
-      if (current && draft?.leaving) setTrashDraft(current.id, { ...draft, leaving: false });
+    wireTrashSettings(document.body, {
+      input: (value) => {
+        const current = project();
+        if (!current) return;
+        setTrashDraft(current.id, { value });
+        setTrashMessage(current.id, '');
+        previewTrashPurge(current, value);
+      },
+      submit: (form) => {
+        const current = project();
+        if (!current) return;
+        applyTrashSettings(
+          current,
+          trashDraft(current.id)?.value ?? form.querySelector<Control>('[name="trash-cleanup-days"]')?.value ?? '',
+        );
+      },
+      applyLeaving: () => {
+        const current = project(),
+          draft = current && trashDraft(current.id);
+        if (current && draft) applyTrashSettings(current, draft.value);
+      },
+      revert: () => {
+        const current = project();
+        if (!current) return;
+        clearTimeout(trashPreviewTimer);
+        setTrashDraft(current.id, undefined);
+        setTrashMessage(current.id, '');
+        releaseHeldNavigation();
+      },
+      // Closing the warning (Escape or its close button) stays on Lifecycle with the draft intact.
+      dismissLeaving: () => {
+        const current = project(),
+          draft = current && trashDraft(current.id);
+        heldNavigation = undefined;
+        if (current && draft?.leaving) setTrashDraft(current.id, { ...draft, leaving: false });
+      },
     }),
   );
   // Navigation that leaves Lifecycle with an unapplied retention draft is held (HS2-F55956).

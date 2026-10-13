@@ -451,7 +451,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['ticket-sources-settings', 1],
     ['accounts-settings', 2],
     ['settings-workspace', 1],
-    ['trash-settings', 2],
+    ['trash-settings', 3],
     ['project-sidebar', 1],
     ['command-settings-editor', 1],
     ['ai-tool-settings', 1],
@@ -597,7 +597,9 @@ test('uses Kerf layout primitives across migrated settings and dialog surfaces (
   });
 
   await page.goto('/ux-demo?component=trash-settings');
-  const trash = page.locator('[data-component="trash-settings"]');
+  const trash = page
+    .locator('[data-demo-trash="default"], [data-demo-trash="unapplied"]')
+    .locator('[data-component="trash-settings"]');
   await expect(trash).toHaveCount(2);
   await expect(trash.first().locator('[data-component="list"]')).toHaveCount(3);
   await expect(trash.first().locator('[data-component="row"]')).toHaveCount(1);
@@ -628,6 +630,57 @@ test('uses Kerf layout primitives across migrated settings and dialog surfaces (
   expect(narrowBox!.x).toBeGreaterThanOrEqual(0);
   expect(narrowBox!.x + narrowBox!.width).toBeLessThanOrEqual(390);
   await provider.screenshot({ path: 'target/visual-captures/hs2-s3bxc0-provider-narrow.png', animations: 'disabled' });
+});
+
+test('demos the unapplied Trash retention leave warning through the production wire helper (HS2-WFFDAA)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=trash-settings');
+  const example = page.locator('[data-demo-trash="leaving"]'),
+    dialog = page.locator('[data-component="trash-retention-leave-dialog"]'),
+    leave = example.getByRole('button', { name: 'Leave Lifecycle', exact: true });
+  await expect(dialog).toHaveCount(0);
+  await leave.click();
+  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toContainText('You changed Trash retention to 7 days but did not apply it.');
+  await expect(dialog).toContainText('3 tickets in Trash will be purged');
+  await page.screenshot({ path: 'target/visual-captures/hs2-wffdaa-trash-leave-wide.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-wffdaa-trash-leave-narrow.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  // Escape keeps the draft and closes the warning.
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(example.locator('wa-input[name="trash-cleanup-days"]')).toHaveJSProperty('value', '7');
+
+  // Revert restores the applied window; leaving again with a clean value raises nothing.
+  await leave.click();
+  await dialog.getByRole('button', { name: 'Revert to 14 days' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(example.locator('wa-input[name="trash-cleanup-days"]')).toHaveJSProperty('value', '14');
+  await leave.click();
+  await expect(dialog).toHaveCount(0);
+
+  // A new edit previews its purge; Apply in the warning applies it.
+  const field = example.locator('wa-input[name="trash-cleanup-days"]');
+  await field.locator('input').fill('3');
+  await expect(example.locator('[data-role="trash-purge-hint"]')).toHaveText('5 tickets in Trash will be purged');
+  await leave.click();
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(field).toHaveJSProperty('value', '3');
+  await expect(example.getByRole('button', { name: 'Apply now' })).toHaveJSProperty('disabled', true);
+  await leave.click();
+  await expect(dialog).toHaveCount(0);
+
+  // "Apply now" in another example applies through the same helper's submit binding.
+  const unapplied = page.locator('[data-demo-trash="unapplied"]');
+  await unapplied.getByRole('button', { name: 'Apply now' }).click();
+  await expect(unapplied.locator('wa-input[name="trash-cleanup-days"]')).toHaveJSProperty('value', '7');
+  await expect(unapplied.getByRole('button', { name: 'Apply now' })).toHaveJSProperty('disabled', true);
+  await expect(unapplied.locator('[data-role="trash-purge-hint"]')).toHaveCount(0);
 });
 
 test('renders keyboard shortcut rows edge-to-edge without a transparent left gutter (HS2-186WJT)', async ({ page }) => {

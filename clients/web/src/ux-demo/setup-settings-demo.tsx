@@ -1,5 +1,7 @@
 import { CatalogExample } from '@kerfjs/ui/catalog';
-import { delegate, signal } from 'kerfjs';
+import { List } from '@kerfjs/ui/list';
+import { Row } from '@kerfjs/ui/row';
+import { attr, delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { KeyboardSettings } from '../components/keyboard-settings';
@@ -8,7 +10,8 @@ import { type SettingsCategory } from '../components/settings-navigation';
 import { SettingsWorkspace } from '../components/settings-workspace';
 import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialog';
 import { AccountsSettings, TicketSourcesSettings } from '../components/ticket-sources-settings';
-import { TrashSettings } from '../components/trash-settings';
+import { trashDraftIsDirty, type TrashRetentionDraft, TrashSettings } from '../components/trash-settings';
+import { wireTrashSettings } from '../components/trash-settings-interactions';
 import { type PermissionAutomationAction } from '../permission-notifications';
 import { type DemoDevice, DeviceSetting } from './components/device-setting';
 import type { DemoModule, FormControl } from './demo-module';
@@ -192,15 +195,70 @@ export function SettingsWorkspaceDemo() {
   );
 }
 
+type TrashDemoExample = 'default' | 'unapplied' | 'leaving';
+interface TrashDemoState {
+  days: number;
+  draft?: TrashRetentionDraft;
+  message: string;
+}
+const TRASH_DEMO_INITIAL: Record<TrashDemoExample, TrashDemoState> = {
+  default: { days: 14, message: '' },
+  unapplied: { days: 14, draft: { value: '7', purgeCount: 3 }, message: '' },
+  leaving: { days: 14, draft: { value: '7', purgeCount: 3 }, message: '' },
+};
+/** Per-example fixture retention state, driven through production's wireTrashSettings helper (HS2-WFFDAA). */
+const trashDemo = signal<Record<TrashDemoExample, TrashDemoState>>(TRASH_DEMO_INITIAL);
+const TRASH_DEMO_EXAMPLE = attr<'data-demo-trash', TrashDemoExample>('data-demo-trash');
+const TRASH_DEMO_LEAVE = attr('data-action', 'demo-leave-trash-settings');
+
+function trashDemoExample(element: Element): TrashDemoExample | undefined {
+  return element.closest<HTMLElement>('[data-demo-trash]')?.dataset.demoTrash as TrashDemoExample | undefined;
+}
+function updateTrashDemo(element: Element, update: (state: TrashDemoState) => TrashDemoState) {
+  const example = trashDemoExample(element);
+  if (example) trashDemo.value = { ...trashDemo.value, [example]: update(trashDemo.value[example]) };
+}
+/** Fixture purge preview: the demo Trash holds 3 tickets older than 7 days and 5 older than 3. */
+function trashDemoPurgeCount(value: string): number {
+  const days = Number(value.trim());
+  return !Number.isInteger(days) || days <= 0 ? 0 : days <= 3 ? 5 : days <= 7 ? 3 : 0;
+}
+function applyTrashDemo(state: TrashDemoState, value: string): TrashDemoState {
+  const days = Number(value.trim());
+  return Number.isInteger(days) && days > 0
+    ? { days, message: '' }
+    : { ...state, message: 'Enter a positive whole number of days.' };
+}
+
+export function resetTrashSettingsDemo() {
+  trashDemo.value = TRASH_DEMO_INITIAL;
+}
+
 export function TrashSettingsDemo() {
+  const state = trashDemo.value;
   return (
     <>
-      <CatalogExample label="Default">
-        <TrashSettings days={14} />
+      <CatalogExample label="Default" rootAttributes={TRASH_DEMO_EXAMPLE('default')}>
+        <TrashSettings {...state.default} />
       </CatalogExample>
       {/* An unapplied shorter window enables "Apply now" and previews the purge (HS2-KPD942). */}
-      <CatalogExample label="Unapplied change">
-        <TrashSettings days={14} draft={{ value: '7', purgeCount: 3 }} />
+      <CatalogExample label="Unapplied change" rootAttributes={TRASH_DEMO_EXAMPLE('unapplied')}>
+        <TrashSettings {...state.unapplied} />
+      </CatalogExample>
+      {/* Leaving Lifecycle with an unapplied value asks to apply or revert it (HS2-F55956, HS2-WFFDAA). */}
+      <CatalogExample
+        label="Leaving with an unapplied change"
+        note="Leave Lifecycle stands in for choosing another settings category or project tab."
+        rootAttributes={TRASH_DEMO_EXAMPLE('leaving')}
+      >
+        <List gap="s">
+          <TrashSettings {...state.leaving} />
+          <Row gap="xs">
+            <wa-button appearance="outlined" type="button" {...TRASH_DEMO_LEAVE.attrs}>
+              Leave Lifecycle
+            </wa-button>
+          </Row>
+        </List>
       </CatalogExample>
     </>
   );
@@ -209,6 +267,41 @@ export function TrashSettingsDemo() {
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireSetupSettingsDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
+  demoListeners.add(
+    wireTrashSettings(root, {
+      input: (value, field) => {
+        updateTrashDemo(field, (state) => ({
+          ...state,
+          draft: { value, purgeCount: trashDemoPurgeCount(value) },
+          message: '',
+        }));
+      },
+      submit: (form) => {
+        updateTrashDemo(form, (state) => applyTrashDemo(state, state.draft?.value ?? String(state.days)));
+      },
+      applyLeaving: (control) => {
+        updateTrashDemo(control, (state) => applyTrashDemo(state, state.draft?.value ?? String(state.days)));
+      },
+      revert: (control) => {
+        updateTrashDemo(control, (state) => ({ days: state.days, message: '' }));
+      },
+      dismissLeaving: (dialog) => {
+        updateTrashDemo(dialog, (state) =>
+          state.draft ? { ...state, draft: { ...state.draft, leaving: false } } : state,
+        );
+      },
+    }),
+  );
+  // The stand-in for production's held navigation: leaving with a dirty draft raises the warning.
+  demoListeners.add(
+    delegate(root, 'click', TRASH_DEMO_LEAVE.selector, (_event, target) => {
+      updateTrashDemo(target, (state) =>
+        trashDraftIsDirty(state.days, state.draft) && state.draft
+          ? { ...state, draft: { ...state.draft, leaving: true } }
+          : state,
+      );
+    }),
+  );
   demoListeners.add(
     delegate(root, 'change', '[data-settings="ticket-source-setup-dialog"] [name="device"]', (_event, target) => {
       ticketSourceDevice.value = (target as FormControl).value as DemoDevice;
@@ -258,7 +351,7 @@ export const demoModule: DemoModule = {
       Settings: SettingsWorkspaceSettings,
       reset: resetSettingsWorkspaceDemo,
     },
-    'trash-settings': { catalogExamples: true, Demo: TrashSettingsDemo },
+    'trash-settings': { catalogExamples: true, Demo: TrashSettingsDemo, reset: resetTrashSettingsDemo },
   },
   wire: wireSetupSettingsDemo,
 };
