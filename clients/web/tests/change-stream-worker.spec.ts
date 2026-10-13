@@ -367,6 +367,7 @@ test('a version-skewed worker falls back to main-thread streams for both project
         listener: EventListenerOrEventListenerObject | null,
         options?: boolean | AddEventListenerOptions,
       ) {
+        if (!listener) return;
         if (type !== 'message' || typeof listener !== 'function') {
           super.addEventListener(type, listener, options);
           return;
