@@ -4,6 +4,7 @@ import './attachment-gallery.css';
 import { px } from '@kerfjs/ui/css-values';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { List } from '@kerfjs/ui/list';
+import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { StateBanner } from '@kerfjs/ui/state-banner';
@@ -664,15 +665,14 @@ export function AttachmentGallery({
               <List gap="2xs">
                 {annotations.length === 0 && <p>No annotations yet. Draw a mark to add a note.</p>}
                 {annotations.map((annotation, annotationIndex) => (
-                  <button
-                    type="button"
-                    {...ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryAnnotation.attrs}
-                    data-annotation-id={annotation.id}
-                    aria-pressed={String(annotation.id === selectedAnnotation)}
-                  >
-                    <span>Annotation {annotationNumberOffset + annotationIndex + 1}</span>
-                    <span>{annotation.text || 'No note'}</span>
-                  </button>
+                  <ListItem
+                    action={ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryAnnotation.value}
+                    label={`Annotation ${annotationNumberOffset + annotationIndex + 1}`}
+                    description={annotation.text || 'No note'}
+                    density="compact"
+                    pressed={annotation.id === selectedAnnotation}
+                    rootAttributes={{ 'data-annotation-id': annotation.id }}
+                  />
                 ))}
               </List>
             </div>

@@ -89,32 +89,18 @@
 .attachment-gallery__notes > p {
   margin: 0;
 }
-/* Annotation note rows: pressed toggle buttons with an ellipsized note. */
-.attachment-gallery__notes-list button {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  padding: var(--kui-space-xs);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-s);
-  color: inherit;
-  background: transparent;
-  text-align: start;
-  gap: var(--kui-space-2xs);
-}
-.attachment-gallery__notes-list button[aria-pressed='true'] {
-  border-color: var(--wa-color-brand-border-loud);
-  background: color-mix(in srgb, var(--wa-color-brand-fill-loud) 30%, transparent);
-}
-.attachment-gallery__notes-list button span:first-child {
-  flex: none;
-}
-.attachment-gallery__notes-list button span:last-child {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* Annotation note rows are Kerf pressed ListItems (HS2-RSBVSZ). The rail is the gallery's inverse dark
+   chrome, so it sets ListItem's public color tokens rather than restyling the rows. */
+.attachment-gallery__notes-list {
+  /* Rows run flush with the rail editor above them. */
+  --kui-layout-inline-margin: 0;
+  --kui-list-item-color: var(--wa-color-neutral-on-loud);
+  --kui-list-item-border: var(--wa-color-neutral-border-normal);
+  --kui-list-item-selected-color: var(--wa-color-neutral-on-loud);
+  --kui-list-item-selected-border: var(--wa-color-brand-border-loud);
+  --kui-list-item-selected-background: color-mix(in srgb, var(--wa-color-brand-fill-loud) 30%, transparent);
+  /* The quiet note text reads on the dark rail through Kerf's public quiet-foreground token. */
+  --kui-color-neutral-on-quiet: color-mix(in srgb, var(--wa-color-neutral-on-loud) 72%, transparent);
 }
 .attachment-gallery__stage {
   width: 100%;

@@ -390,6 +390,14 @@ describe('AttachmentGallery', () => {
       }),
     );
     expect(deselected).not.toContain('data-gallery-range-handle=');
+    // The notes rail lists each annotation as a Kerf pressed ListItem (HS2-RSBVSZ).
+    const rail = selected.slice(selected.indexOf('attachment-gallery__notes-list'));
+    expect(rail.match(/data-component="list-item"/g)).toHaveLength(2);
+    expect(rail).toMatch(/data-annotation-id="second"[^>]*>|aria-pressed="true"[^>]*data-annotation-id="second"/);
+    expect(rail).toMatch(/aria-pressed="false"/);
+    const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
+    expect(css).not.toContain('.attachment-gallery__notes-list button');
+    expect(css).toMatch(/\.attachment-gallery__notes-list \{[^}]*--kui-list-item-selected-background:/);
   });
   it('uses a duration-scaled review tolerance around timed rectangles', () => {
     const range = { id: 'range', x: 0, y: 0, width: 1, height: 1, start_ms: 10_000, end_ms: 20_000, text: '' };
