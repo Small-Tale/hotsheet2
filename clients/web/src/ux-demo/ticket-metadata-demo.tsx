@@ -450,6 +450,13 @@ export function TicketCodeReviewDemo() {
             ],
             commits: [
               {
+                sha: 'eee5555',
+                short_sha: 'eee5555',
+                subject: 'HS2-DEMO: follow-up still in a worktree',
+                committed_at: '2026-09-02T11:00:00Z',
+                unmerged: { branch: 'worktree-review-follow-up', worktree: '/repo/.worktrees/review-follow-up' },
+              },
+              {
                 sha: 'ddd4444',
                 short_sha: 'ddd4444',
                 subject: 'HS2-DEMO: complete the later review bundle',

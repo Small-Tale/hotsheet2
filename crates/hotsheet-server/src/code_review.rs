@@ -5,8 +5,13 @@
 //! commonly cross-references tickets whose code the commit did not implement. Launch
 //! requests are checked against a fresh discovery result, then passed to `git difftool`
 //! as an argument array (never a shell).
+//!
+//! Ticket discovery also scans commits that are not yet on the checkout's `HEAD`: local
+//! branches and other worktrees' detached `HEAD`s (worktrees share one ref namespace), so
+//! work done in another worktree is visible, marked [`UnmergedSource`], before it is merged
+//! (HS2-0WZRK5).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -28,8 +33,24 @@ pub struct CodeReviewCommit {
     /// as `git log --decorate` reports them. Empty for commits with no refs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub refs: Vec<CommitRef>,
+    /// Set when the commit is not reachable from the checkout's `HEAD`: where it lives
+    /// instead (HS2-0WZRK5). Absent for merged commits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unmerged: Option<UnmergedSource>,
     #[serde(skip_serializing)]
     parents: Vec<String>,
+}
+
+/// The local branch and/or worktree an unmerged ticket commit was found on (HS2-0WZRK5).
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, Hash)]
+pub struct UnmergedSource {
+    /// The local branch whose history holds the commit, e.g. `feature-x`. `None` for a
+    /// detached worktree `HEAD`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    /// The worktree directory that has this branch (or detached commit) checked out, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worktree: Option<String>,
 }
 
 /// One git ref pointing at a commit, classified so clients can style each kind (HS2-SFJ5TE).
@@ -282,7 +303,8 @@ pub fn slugs_with_commits(
     root: &Path,
     ticket_slugs: &[String],
 ) -> Result<HashSet<String>, CodeReviewError> {
-    let (commits, _, _) = discover_commits(root)?;
+    let (mut commits, _, _) = discover_commits(root)?;
+    commits.extend(discover_unmerged_commits(root).0);
     Ok(ticket_slugs
         .iter()
         .filter(|slug| {
@@ -300,12 +322,21 @@ pub fn discover_with_classification(
     classification: &CodeReviewClassification,
 ) -> Result<CodeReview, CodeReviewError> {
     let (all, difftool, truncated) = discover_commits(root)?;
-    let commits = all
-        .iter()
-        .filter(|commit| commit_mentions_ticket(commit, ticket_slug))
-        .cloned()
-        .collect::<Vec<_>>();
-    let ranges = contiguous_ranges(&all, &commits);
+    let (unmerged, unmerged_truncated) = discover_unmerged_commits(root);
+    let matching = |commits: &[CodeReviewCommit]| {
+        commits
+            .iter()
+            .filter(|commit| commit_mentions_ticket(commit, ticket_slug))
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let merged = matching(&all);
+    let pending = matching(&unmerged);
+    let mut ranges = unmerged_ranges(&pending);
+    ranges.extend(contiguous_ranges(&all, &merged));
+    // Unmerged work is listed first: it is the newest, not-yet-integrated part of the ticket.
+    let commits = pending.into_iter().chain(merged).collect::<Vec<_>>();
+    let truncated = truncated || unmerged_truncated;
     let files = discover_ticket_files(root, &commits, classification);
     Ok(CodeReview {
         summary: summarize_changes(&files),
@@ -338,7 +369,7 @@ fn discover_ticket_files(
     commits: &[CodeReviewCommit],
     classification: &CodeReviewClassification,
 ) -> Vec<CodeReviewFile> {
-    let (Some(newest), Some(oldest)) = (commits.first(), commits.last()) else {
+    let Some((newest, oldest)) = file_span(commits) else {
         return Vec::new();
     };
     let old = oldest.parents.first().cloned().or_else(|| {
@@ -557,9 +588,150 @@ fn discover_commits(
     Ok((all, difftool, truncated))
 }
 
+/// The newest and oldest commit of the ticket's changed-files span: its merged commits
+/// when it has any, otherwise the unmerged commits from the newest commit's source branch
+/// (HS2-0WZRK5), so a file diff never mixes trees from unrelated branches.
+fn file_span(commits: &[CodeReviewCommit]) -> Option<(&CodeReviewCommit, &CodeReviewCommit)> {
+    let source = if commits.iter().any(|commit| commit.unmerged.is_none()) {
+        None
+    } else {
+        commits.first()?.unmerged.clone()
+    };
+    let mut span = commits.iter().filter(|commit| commit.unmerged == source);
+    let newest = span.next()?;
+    Some((newest, span.next_back().unwrap_or(newest)))
+}
+
+/// Commits reachable from a local branch or another worktree's detached `HEAD` but not
+/// from this checkout's `HEAD`, each tagged with where it was found (HS2-0WZRK5). Best
+/// effort: an unreadable repository, an unborn `HEAD`, or a failing scan yields none.
+/// Returns whether the scan hit the log limit.
+fn discover_unmerged_commits(root: &Path) -> (Vec<CodeReviewCommit>, bool) {
+    if !git_success(root, &["rev-parse", "--verify", "HEAD"]) {
+        return (Vec::new(), false);
+    }
+    let worktrees = git_output(root, &["worktree", "list", "--porcelain"])
+        .map(|output| parse_worktrees(&output))
+        .unwrap_or_default();
+    let limit = LOG_LIMIT.to_string();
+    let format = format!(
+        "{}{FIELD_SEPARATOR}%S{RECORD_SEPARATOR}",
+        log_format_fields()
+    );
+    let mut args = vec![
+        "log",
+        "-n",
+        &limit,
+        "--decorate=short",
+        "--source",
+        &format,
+        "--branches",
+    ];
+    // Detached worktree HEADs are not branches; name them as extra tips.
+    args.extend(
+        worktrees
+            .keys()
+            .filter(|tip| !tip.starts_with("refs/"))
+            .map(String::as_str),
+    );
+    args.extend(["--not", "HEAD"]);
+    let Ok(output) = git_output(root, &args) else {
+        return (Vec::new(), false);
+    };
+    let mut commits = parse_log(&output);
+    for commit in &mut commits {
+        let source = commit.unmerged.take().and_then(|source| source.branch);
+        commit.unmerged = Some(unmerged_source(source.as_deref(), &worktrees));
+    }
+    let truncated = commits.len() == LOG_LIMIT;
+    (commits, truncated)
+}
+
+/// Map each worktree's checked-out tip (`refs/heads/<branch>`, or a detached commit sha)
+/// to its directory, from `git worktree list --porcelain`.
+fn parse_worktrees(output: &str) -> HashMap<String, String> {
+    let mut tips = HashMap::new();
+    for block in output.split("\n\n") {
+        let mut path = None;
+        let mut head = None;
+        let mut branch = None;
+        for line in block.lines() {
+            if let Some(value) = line.strip_prefix("worktree ") {
+                path = Some(value.to_owned());
+            } else if let Some(value) = line.strip_prefix("HEAD ") {
+                head = Some(value.to_owned());
+            } else if let Some(value) = line.strip_prefix("branch ") {
+                branch = Some(value.to_owned());
+            }
+        }
+        if let (Some(path), Some(tip)) = (path, branch.or(head)) {
+            tips.insert(tip, path);
+        }
+    }
+    tips
+}
+
+/// Describe a `git log --source` source (`refs/heads/<branch>` or a commit sha).
+fn unmerged_source(source: Option<&str>, worktrees: &HashMap<String, String>) -> UnmergedSource {
+    let source = source.unwrap_or_default();
+    // `--branches` reports short branch names; a detached tip is the 40-hex sha we passed.
+    let detached = source.len() == 40 && source.bytes().all(|byte| byte.is_ascii_hexdigit());
+    if detached {
+        return UnmergedSource {
+            branch: None,
+            worktree: worktrees.get(source).cloned(),
+        };
+    }
+    let branch = source.strip_prefix("refs/heads/").unwrap_or(source);
+    UnmergedSource {
+        branch: (!branch.is_empty()).then(|| branch.to_owned()),
+        worktree: worktrees.get(&format!("refs/heads/{branch}")).cloned(),
+    }
+}
+
+/// Reviewable runs among unmerged ticket commits: adjacent commits from the same source
+/// whose first parent is the next (older) commit in the run, newest run first.
+fn unmerged_ranges(matched: &[CodeReviewCommit]) -> Vec<CodeReviewRange> {
+    let mut ranges = Vec::new();
+    let mut run: Vec<&CodeReviewCommit> = Vec::new();
+    let flush = |run: &mut Vec<&CodeReviewCommit>, ranges: &mut Vec<CodeReviewRange>| {
+        if let (Some(newest), Some(oldest)) = (run.first(), run.last()) {
+            ranges.push(CodeReviewRange {
+                from: oldest.sha.clone(),
+                to: newest.sha.clone(),
+                count: run.len(),
+            });
+        }
+        run.clear();
+    };
+    let mut sources: Vec<&Option<UnmergedSource>> = Vec::new();
+    for commit in matched {
+        if !sources.contains(&&commit.unmerged) {
+            sources.push(&commit.unmerged);
+        }
+    }
+    for source in sources {
+        for commit in matched.iter().filter(|commit| &commit.unmerged == source) {
+            let linked = run
+                .last()
+                .is_some_and(|previous| previous.parents.first() == Some(&commit.sha));
+            if !linked {
+                flush(&mut run, &mut ranges);
+            }
+            run.push(commit);
+        }
+        flush(&mut run, &mut ranges);
+    }
+    ranges
+}
+
 fn log_format() -> String {
+    format!("{}{RECORD_SEPARATOR}", log_format_fields())
+}
+
+fn log_format_fields() -> String {
     format!(
-        "--format=%H{FIELD_SEPARATOR}%h{FIELD_SEPARATOR}%P{FIELD_SEPARATOR}%cI{FIELD_SEPARATOR}%s{FIELD_SEPARATOR}%b{FIELD_SEPARATOR}%D{RECORD_SEPARATOR}"
+        "--format=%H{FIELD_SEPARATOR}%h{FIELD_SEPARATOR}%P{FIELD_SEPARATOR}%cI{FIELD_SEPARATOR}%s{FIELD_SEPARATOR}%b{FIELD_SEPARATOR}%D"
     )
 }
 
@@ -772,8 +944,7 @@ fn launch_revisions(
             {
                 return Err(CodeReviewError::InvalidTarget);
             }
-            let (Some(newest), Some(oldest)) = (review.commits.first(), review.commits.last())
-            else {
+            let Some((newest, oldest)) = file_span(&review.commits) else {
                 return Err(CodeReviewError::InvalidTarget);
             };
             let old = match oldest.parents.first() {
@@ -822,7 +993,7 @@ fn parse_log(output: &str) -> Vec<CodeReviewCommit> {
             if record.is_empty() {
                 return None;
             }
-            let mut fields = record.splitn(7, FIELD_SEPARATOR);
+            let mut fields = record.splitn(8, FIELD_SEPARATOR);
             Some(CodeReviewCommit {
                 sha: fields.next()?.to_owned(),
                 short_sha: fields.next()?.to_owned(),
@@ -835,6 +1006,16 @@ fn parse_log(output: &str) -> Vec<CodeReviewCommit> {
                 subject: fields.next()?.to_owned(),
                 body: fields.next()?.trim_end_matches(['\r', '\n']).to_owned(),
                 refs: parse_decorations(fields.next().unwrap_or("").trim_matches(['\r', '\n'])),
+                // A `--source` scan appends the reaching ref; carried here until
+                // `discover_unmerged_commits` resolves it.
+                unmerged: fields
+                    .next()
+                    .map(|source| source.trim_matches(['\r', '\n']))
+                    .filter(|source| !source.is_empty())
+                    .map(|source| UnmergedSource {
+                        branch: Some(source.to_owned()),
+                        worktree: None,
+                    }),
             })
         })
         .collect()
@@ -924,11 +1105,122 @@ mod tests {
             body: String::new(),
             committed_at: "2026-09-02T00:00:00Z".into(),
             refs: Vec::new(),
+            unmerged: None,
             parents: (!parent.is_empty())
                 .then(|| parent.into())
                 .into_iter()
                 .collect(),
         }
+    }
+
+    fn on(mut commit: CodeReviewCommit, branch: Option<&str>) -> CodeReviewCommit {
+        commit.unmerged = Some(UnmergedSource {
+            branch: branch.map(str::to_owned),
+            worktree: None,
+        });
+        commit
+    }
+
+    #[test]
+    fn worktree_porcelain_maps_branch_and_detached_tips_to_directories() {
+        let sha = "a".repeat(40);
+        let porcelain = format!(
+            "worktree /repo\nHEAD {b}\nbranch refs/heads/main\n\n\
+             worktree /wt/feature\nHEAD {c}\nbranch refs/heads/feature\n\n\
+             worktree /wt/detached\nHEAD {sha}\ndetached\n\n\
+             worktree /wt/bare\nbare\n",
+            b = "b".repeat(40),
+            c = "c".repeat(40),
+        );
+        let tips = parse_worktrees(&porcelain);
+        assert_eq!(tips.get("refs/heads/feature").unwrap(), "/wt/feature");
+        assert_eq!(tips.get(&sha).unwrap(), "/wt/detached");
+        assert_eq!(tips.len(), 3);
+
+        let feature = unmerged_source(Some("feature"), &tips);
+        assert_eq!(feature.branch.as_deref(), Some("feature"));
+        assert_eq!(feature.worktree.as_deref(), Some("/wt/feature"));
+        let full = unmerged_source(Some("refs/heads/feature"), &tips);
+        assert_eq!(full, feature);
+        let detached = unmerged_source(Some(&sha), &tips);
+        assert_eq!(
+            (detached.branch, detached.worktree.as_deref()),
+            (None, Some("/wt/detached"))
+        );
+        let plain = unmerged_source(Some("topic"), &tips);
+        assert_eq!(
+            (plain.branch.as_deref(), plain.worktree),
+            (Some("topic"), None)
+        );
+        assert_eq!(unmerged_source(None, &tips).branch, None);
+    }
+
+    #[test]
+    fn unmerged_ranges_follow_parent_links_within_one_source_even_when_interleaved() {
+        // Date-ordered log interleaving two branches: a3 → a2 → a1 on `a`, b2 → b1 on `b`,
+        // and a gap on `a` (a1's parent a0 is not a ticket commit, a-1 skips it).
+        let matched = vec![
+            on(commit("a3", "x", "a2"), Some("a")),
+            on(commit("b2", "x", "b1"), Some("b")),
+            on(commit("a2", "x", "a1"), Some("a")),
+            on(commit("b1", "x", "base"), Some("b")),
+            on(commit("a1", "x", "a0"), Some("a")),
+            on(commit("am", "x", "zz"), Some("a")),
+        ];
+        let ranges = unmerged_ranges(&matched);
+        let spans = ranges
+            .iter()
+            .map(|range| (range.from.as_str(), range.to.as_str(), range.count))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            spans,
+            vec![("a1", "a3", 3), ("am", "am", 1), ("b1", "b2", 2)]
+        );
+        assert!(unmerged_ranges(&[]).is_empty());
+    }
+
+    #[test]
+    fn file_span_prefers_merged_commits_then_the_newest_unmerged_source() {
+        let merged_new = commit("m2", "x", "m1");
+        let merged_old = commit("m1", "x", "m0");
+        let mixed = vec![
+            on(commit("u1", "x", "m2"), Some("feature")),
+            merged_new.clone(),
+            merged_old.clone(),
+        ];
+        let (newest, oldest) = file_span(&mixed).unwrap();
+        assert_eq!((newest.sha.as_str(), oldest.sha.as_str()), ("m2", "m1"));
+
+        let only_unmerged = vec![
+            on(commit("f2", "x", "f1"), Some("feature")),
+            on(commit("o1", "x", "base"), Some("other")),
+            on(commit("f1", "x", "base"), Some("feature")),
+        ];
+        let (newest, oldest) = file_span(&only_unmerged).unwrap();
+        assert_eq!((newest.sha.as_str(), oldest.sha.as_str()), ("f2", "f1"));
+        let single = vec![on(commit("s1", "x", "base"), None)];
+        let (newest, oldest) = file_span(&single).unwrap();
+        assert_eq!((newest.sha.as_str(), oldest.sha.as_str()), ("s1", "s1"));
+        assert!(file_span(&[]).is_none());
+    }
+
+    #[test]
+    fn source_field_parses_only_from_source_scans() {
+        let plain = format!(
+            "{sha}\x1fabc\x1f\x1f2026-01-01T00:00:00Z\x1fs\x1f\x1f\x1e",
+            sha = "1".repeat(40)
+        );
+        assert_eq!(parse_log(&plain)[0].unmerged, None);
+        let sourced = format!(
+            "{sha}\x1fabc\x1f\x1f2026-01-01T00:00:00Z\x1fs\x1f\x1ffeature\x1ffeature\n\x1e",
+            sha = "1".repeat(40)
+        );
+        let parsed = parse_log(&sourced);
+        assert_eq!(
+            parsed[0].unmerged.as_ref().unwrap().branch.as_deref(),
+            Some("feature")
+        );
+        assert_eq!(parsed[0].refs.len(), 1);
     }
 
     #[test]

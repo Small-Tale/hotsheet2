@@ -19804,3 +19804,183 @@ async fn mcp_presence_lease_registers_renews_silently_lists_marks_terminal_and_u
     let terminals = body_json(send("GET", "/terminals".into(), None).await).await;
     assert_eq!(terminals[0]["mcp_connected"], false);
 }
+
+#[tokio::test]
+async fn code_review_shows_unmerged_worktree_commits_until_they_are_merged() {
+    let (store, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let worktrees = tempfile::tempdir().unwrap();
+    let git = |dir: &std::path::Path, args: &[&str]| {
+        let output = hotsheet_ticketing::git::command()
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    let main = checkout.path();
+    git(main, &["init", "-q", "-b", "main"]);
+    git(main, &["config", "user.name", "Test"]);
+    git(main, &["config", "user.email", "test@example.com"]);
+    git(main, &["config", "diff.tool", "hs2-test"]);
+    git(main, &["config", "difftool.hs2-test.cmd", "true"]);
+    std::fs::write(main.join("code.txt"), "base\n").unwrap();
+    git(main, &["add", "code.txt"]);
+    git(main, &["commit", "-qm", "initial"]);
+
+    let registry_home = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry_home.path().join("checkouts.json")));
+    let registration =
+        serde_json::json!({"root":main,"alias":"wt","stores":[store.path()]}).to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/wt/tickets",
+                Some(r#"{"title":"Worktree work"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_owned();
+    let slug = created["slug"].as_str().unwrap().to_owned();
+    let commit = |dir: &std::path::Path, file: &str, message: &str| {
+        std::fs::write(dir.join(file), message).unwrap();
+        git(dir, &["add", file]);
+        git(dir, &["commit", "-qm", message]);
+        git(dir, &["rev-parse", "HEAD"])
+    };
+    let merged = commit(main, "code.txt", &format!("{slug}: merged part"));
+
+    // A branch worktree with a two-commit ticket run, and a detached worktree.
+    let feature = worktrees.path().join("feature");
+    git(
+        main,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "feature",
+            feature.to_str().unwrap(),
+        ],
+    );
+    let wt_first = commit(&feature, "feature.txt", &format!("{slug}: worktree first"));
+    let wt_second = commit(&feature, "feature.txt", &format!("{slug}: worktree second"));
+    let detached = worktrees.path().join("detached");
+    git(
+        main,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "--detach",
+            detached.to_str().unwrap(),
+        ],
+    );
+    let loose = commit(
+        &detached,
+        "loose.txt",
+        &format!("{slug}: detached experiment"),
+    );
+    commit(&detached, "loose.txt", "unrelated detached work");
+
+    let review = |app: axum::Router| {
+        let id = id.clone();
+        async move {
+            let response = app
+                .oneshot(authed(
+                    "GET",
+                    &format!("/checkouts/wt/tickets/{id}/code-review"),
+                    None,
+                ))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            body_json(response).await
+        }
+    };
+    let found = review(app.clone()).await;
+    let commits = found["commits"].as_array().unwrap();
+    assert_eq!(commits.len(), 4, "{found:#}");
+    let by_sha = |sha: &str| {
+        commits
+            .iter()
+            .find(|commit| commit["sha"] == sha)
+            .unwrap_or_else(|| panic!("{sha} missing from {found:#}"))
+            .clone()
+    };
+    let canonical = |path: &serde_json::Value| {
+        std::path::Path::new(path.as_str().unwrap())
+            .canonicalize()
+            .unwrap()
+    };
+    assert!(by_sha(&merged).get("unmerged").is_none());
+    assert_eq!(commits.last().unwrap()["sha"], merged.as_str());
+    for sha in [&wt_first, &wt_second] {
+        let unmerged = by_sha(sha)["unmerged"].clone();
+        assert_eq!(unmerged["branch"], "feature");
+        assert_eq!(
+            canonical(&unmerged["worktree"]),
+            feature.canonicalize().unwrap()
+        );
+    }
+    let loose_source = by_sha(&loose)["unmerged"].clone();
+    assert!(loose_source.get("branch").is_none());
+    assert_eq!(
+        canonical(&loose_source["worktree"]),
+        detached.canonicalize().unwrap()
+    );
+    // The two-commit worktree run is a reviewable range.
+    let ranges = found["ranges"].as_array().unwrap();
+    assert!(ranges.iter().any(|range| range["from"] == wt_first.as_str()
+        && range["to"] == wt_second.as_str()
+        && range["count"] == 2));
+    // Changed files keep summarizing the merged span.
+    assert_eq!(found["files"][0]["path"], "code.txt");
+
+    for target in [
+        serde_json::json!({"mode":"commit","commit":wt_second}),
+        serde_json::json!({"mode":"commit","commit":loose}),
+        serde_json::json!({"mode":"range","from":wt_first,"to":wt_second}),
+    ] {
+        let launched = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/wt/tickets/{id}/code-review"),
+                Some(&target.to_string()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(launched.status(), StatusCode::NO_CONTENT, "{target}");
+    }
+
+    // Merging the branch makes its commits ordinary merged history.
+    git(main, &["merge", "-q", "--no-edit", "feature"]);
+    let after = review(app.clone()).await;
+    let after_commits = after["commits"].as_array().unwrap();
+    for sha in [&wt_first, &wt_second] {
+        let commit = after_commits
+            .iter()
+            .find(|commit| commit["sha"] == sha.as_str())
+            .unwrap();
+        assert!(commit.get("unmerged").is_none(), "{commit:#}");
+    }
+    assert!(
+        after_commits
+            .iter()
+            .any(|commit| commit["sha"] == loose.as_str() && commit.get("unmerged").is_some())
+    );
+}

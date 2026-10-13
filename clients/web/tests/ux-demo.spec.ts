@@ -4948,6 +4948,31 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(page.locator('[data-component="ticket-reader"]')).toBeVisible();
 });
 
+test('shows the unmerged worktree commit state in the TicketCodeReview demo (HS2-0WZRK5)', async ({ page }) => {
+  for (const [width, name] of [
+    [1280, 'wide'],
+    [390, 'narrow'],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=ticket-code-review');
+    const review = page.locator('[data-component="ticket-code-review"]').first();
+    await expect(review.locator('[data-unmerged-notice]')).toHaveText(
+      '1 commit is not merged into this checkout yet (worktree-review-follow-up in review-follow-up).',
+    );
+    const chip = review.locator('li[data-commit-sha="eee5555"] .ticket-code-review__unmerged');
+    await expect(chip).toContainText('Unmerged · worktree-review-follow-up in review-follow-up');
+    await expect(chip.locator('[data-lucide="folder-git-2"]')).toBeVisible();
+    const fits = await chip.evaluate((node) => {
+      const box = node.getBoundingClientRect(),
+        row = node.closest('li')!.getBoundingClientRect();
+      return box.right <= row.right + 0.5 && box.left >= row.left - 0.5;
+    });
+    await review.screenshot({ path: `target/visual-captures/hs2-0wzrk5-demo-${name}.png` });
+    expect(fits).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  }
+});
+
 test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9, HS2-737H3X)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-code-review');

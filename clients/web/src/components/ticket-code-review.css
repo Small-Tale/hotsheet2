@@ -194,6 +194,7 @@
 }
 .ticket-code-review__commit-summary {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   gap: var(--kui-space-2xs);
   cursor: pointer;
@@ -290,4 +291,10 @@
   flex-wrap: wrap;
   gap: var(--kui-space-2xs);
   margin-top: var(--kui-space-2xs);
+}
+/* The Unmerged chip's row: a long branch or worktree label truncates inside the commit row
+   instead of overflowing it (HS2-0WZRK5). */
+.ticket-code-review__unmerged {
+  display: flex;
+  min-width: 0;
 }

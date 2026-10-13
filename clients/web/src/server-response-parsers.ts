@@ -383,7 +383,7 @@ const repositoryFile = shape<RepositoryFile>(
 const commit = shape<CodeReviewCommit>(
   'commit',
   { sha: isString, short_sha: isString, subject: isString },
-  { body: isString, committed_at: isString, refs: listOf(isObject) },
+  { body: isString, committed_at: isString, refs: listOf(isObject), unmerged: isObject },
 );
 
 /** `repository/status|init|remote`: an uninitialized repository omits the counts, so every field is optional. */

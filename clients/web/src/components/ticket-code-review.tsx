@@ -14,6 +14,7 @@ import {
   FileCode2,
   FileText,
   FlaskConical,
+  FolderGit2,
   GitBranch,
   GitCommitHorizontal,
   GitCompare,
@@ -21,7 +22,7 @@ import {
   Tag,
 } from 'lucide';
 
-import type { CodeReview, CodeReviewTarget, CommitRef } from '../api';
+import type { CodeReview, CodeReviewTarget, CommitRef, UnmergedSource } from '../api';
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
 import { MarkdownPreview } from './markdown-preview';
@@ -183,6 +184,7 @@ export function TicketCodeReview({
               </button>
             </div>
           )}
+          {unmergedNotice(review)}
           <ol class="ticket-code-review__commits">
             {review.commits.flatMap((commit) => {
               const expanded = expandedCommits.includes(commit.sha),
@@ -241,6 +243,7 @@ export function TicketCodeReview({
                     aria-expanded={body ? String(expanded) : undefined}
                   >
                     <strong>{commit.subject}</strong>
+                    {unmergedChip(commit.unmerged)}
                     {commitRefs(commit.refs)}
                     {body && (
                       <div class="ticket-code-review__commit-body">
@@ -372,6 +375,45 @@ const REF_TONES = {
   remote: 'neutral',
   tag: 'warning',
 } as const satisfies Record<CommitRef['kind'], string>;
+
+/** How many ticket commits are not on this checkout's branch yet, and where (HS2-0WZRK5). */
+function unmergedNotice(review: CodeReview) {
+  const unmerged = review.commits.filter((commit) => commit.unmerged);
+  if (!unmerged.length) return undefined;
+  const places = [...new Set(unmerged.map((commit) => unmergedLabel(commit.unmerged!)))];
+  const count = unmerged.length === 1 ? '1 commit is' : `${unmerged.length} commits are`;
+  return (
+    <p class="ticket-code-review__notice" data-unmerged-notice="true" role="status">
+      {count} not merged into this checkout yet ({places.join(', ')}).
+    </p>
+  );
+}
+
+/** A short place name for unmerged work: the worktree folder, else the branch. */
+function unmergedLabel(source: UnmergedSource): string {
+  const folder = source.worktree?.split(/[\\/]/).filter(Boolean).pop();
+  if (folder && source.branch && folder !== source.branch) return `${source.branch} in ${folder}`;
+  return folder ?? source.branch ?? 'another worktree';
+}
+
+function unmergedTitle(source: UnmergedSource): string {
+  const parts = ['Not merged into this checkout yet'];
+  if (source.branch) parts.push(`branch ${source.branch}`);
+  if (source.worktree) parts.push(`worktree ${source.worktree}`);
+  return parts.join(' · ');
+}
+
+/** The Unmerged chip for a commit that is only on another branch or worktree (HS2-0WZRK5). */
+function unmergedChip(unmerged: UnmergedSource | undefined) {
+  if (!unmerged) return undefined;
+  return (
+    <span class="ticket-code-review__unmerged" title={unmergedTitle(unmerged)}>
+      <Chip tone="pop" size="compact" truncate icon={<LucideIcon icon={FolderGit2} name="folder-git-2" />}>
+        {`Unmerged · ${unmergedLabel(unmerged)}`}
+      </Chip>
+    </span>
+  );
+}
 
 /** Git ref decorations (HEAD/branches/remotes/tags) for a commit, toned by kind (HS2-SFJ5TE). */
 function commitRefs(refs: readonly CommitRef[] | undefined) {

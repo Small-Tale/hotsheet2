@@ -139,6 +139,53 @@ describe('TicketCodeReview', () => {
     expect(markup.match(/ticket-code-review__refs"/g)).toHaveLength(1);
   });
 
+  it('marks unmerged worktree commits with a chip and a summary notice (HS2-0WZRK5)', () => {
+    const pending: CodeReview = {
+      ...review,
+      commits: [
+        {
+          sha: 'fff6666',
+          short_sha: 'fff6666',
+          subject: 'Worktree tip',
+          committed_at: '2026-09-03T10:00:00Z',
+          unmerged: { branch: 'feature', worktree: '/repo/.claude/worktrees/agent-1' },
+        },
+        {
+          sha: 'eee5555',
+          short_sha: 'eee5555',
+          subject: 'Detached experiment',
+          committed_at: '2026-09-03T09:00:00Z',
+          unmerged: { worktree: 'C:\\work\\detached' },
+        },
+        {
+          sha: 'ddd4444',
+          short_sha: 'ddd4444',
+          subject: 'Branch only',
+          committed_at: '2026-09-03T08:00:00Z',
+          unmerged: { branch: 'topic' },
+        },
+        { sha: 'aaa1111', short_sha: 'aaa1111', subject: 'Merged', committed_at: '2026-09-01T08:00:00Z' },
+      ],
+    };
+    const markup = String(TicketCodeReview({ review: pending }));
+    expect(markup.match(/ticket-code-review__unmerged"/g)).toHaveLength(3);
+    expect(markup).toContain('Unmerged · feature in agent-1');
+    expect(markup).toContain('Unmerged · detached');
+    expect(markup).toContain('Unmerged · topic');
+    expect(markup).toContain('data-lucide="folder-git-2"');
+    expect(markup).toContain(
+      'title="Not merged into this checkout yet · branch feature · worktree /repo/.claude/worktrees/agent-1"',
+    );
+    expect(markup).toContain('3 commits are not merged into this checkout yet (feature in agent-1, detached, topic).');
+    // None of these commits carries git refs, so no ref row renders.
+    expect(markup).not.toContain('ticket-code-review__refs"');
+
+    const one = String(TicketCodeReview({ review: { ...pending, commits: pending.commits.slice(2) } }));
+    expect(one).toContain('1 commit is not merged into this checkout yet (topic).');
+    const none = String(TicketCodeReview({ review: { ...pending, commits: pending.commits.slice(3) } }));
+    expect(none).not.toContain('data-unmerged-notice');
+  });
+
   it('summarizes classified changes and calls out modified existing tests', () => {
     const markup = String(
       TicketCodeReview({

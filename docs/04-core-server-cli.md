@@ -245,6 +245,16 @@ newest 2,000 reachable commits, returns each commit's subject and full message b
 associates a commit when the ticket slug is a bounded token in its subject or an explicit
 `Refs:`/`Refs …` line containing one or more ticket slugs. Ordinary body mentions remain
 cross-references, not ownership.
+Ticket discovery also makes a second bounded scan of commits on local branches and other
+worktrees' detached `HEAD`s that the checkout's `HEAD` does not contain (worktrees share
+one ref namespace), so ticket work done in another worktree is visible before it is merged
+(HS2-0WZRK5). Each such commit carries `unmerged: { branch?, worktree? }` naming the local
+branch and the worktree directory that has it checked out; unmerged commits are listed
+first. Their ranges join only parent-linked commits from the same source, and the
+changed-files summary stays on the merged commits when any exist (otherwise the newest
+unmerged source's run). Launch validation accepts them exactly like merged commits. The
+ticket-list commit indicator counts unmerged work too; the repository browser stays on
+`HEAD` history.
 Adjacent matching commits form reviewable ranges without spanning unrelated work. The
 response also reports the checkout's Git `diff.tool`. The matching `POST` accepts only a
 single commit or adjacent range returned by a fresh discovery, rejects arbitrary refs,

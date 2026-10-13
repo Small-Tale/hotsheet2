@@ -534,6 +534,13 @@ export interface CodeReviewCommit {
   body?: string;
   committed_at: string;
   refs?: CommitRef[];
+  /** Present when the commit is not on this checkout's branch yet (HS2-0WZRK5). */
+  unmerged?: UnmergedSource;
+}
+/** Where an unmerged ticket commit lives: a local branch and/or another worktree. */
+export interface UnmergedSource {
+  branch?: string;
+  worktree?: string;
 }
 export interface CodeReviewRange {
   from: string;

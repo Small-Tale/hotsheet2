@@ -9785,6 +9785,75 @@ test('lists associated commits and opens a validated commit or range in the conf
   await page.screenshot({ path: 'target/visual-captures/hs2-ggjed1-code-review-floor.png', fullPage: true });
 });
 
+test('marks unmerged worktree commits and opens them before they are merged (HS2-0WZRK5)', async ({ page }) => {
+  const actions = await mockProject(page);
+  await page.route(/\/tickets\/(git-local%3A)?01\/code-review$/i, (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({
+          json: {
+            difftool: 'Glassbox',
+            truncated: false,
+            ranges: [{ from: 'eee5555', to: 'fff6666', count: 2 }],
+            commits: [
+              {
+                sha: 'fff6666',
+                short_sha: 'fff6666',
+                subject: 'HS2-DEMO01: finish the worktree follow-up',
+                committed_at: '2026-09-03T10:00:00Z',
+                unmerged: { branch: 'worktree-agent-1', worktree: '/repo/.claude/worktrees/agent-1' },
+              },
+              {
+                sha: 'eee5555',
+                short_sha: 'eee5555',
+                subject: 'HS2-DEMO01: start the worktree follow-up',
+                committed_at: '2026-09-03T09:00:00Z',
+                unmerged: { branch: 'worktree-agent-1', worktree: '/repo/.claude/worktrees/agent-1' },
+              },
+              {
+                sha: 'aaa1111',
+                short_sha: 'aaa1111',
+                subject: 'HS2-DEMO01: discover associated commits',
+                committed_at: '2026-09-02T07:00:00Z',
+                refs: [{ label: 'HEAD → main', kind: 'head' }],
+              },
+            ],
+          },
+        })
+      : route.fallback(),
+  );
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const inspector = page.locator('#app-right-rail');
+  await inspector.getByRole('tab', { name: 'Code Review' }).click();
+  const review = inspector.locator('[data-component="ticket-code-review"]');
+  await expect(review.locator('[data-unmerged-notice]')).toHaveText(
+    '2 commits are not merged into this checkout yet (worktree-agent-1 in agent-1).',
+  );
+  const pending = review.locator('li[data-commit-sha="fff6666"] .ticket-code-review__unmerged');
+  await expect(pending).toContainText('Unmerged · worktree-agent-1 in agent-1');
+  await expect(pending.locator('[data-lucide="folder-git-2"]')).toBeVisible();
+  await expect(pending).toHaveAttribute('title', /worktree \/repo\/\.claude\/worktrees\/agent-1/);
+  await expect(review.locator('li[data-commit-sha="aaa1111"] .ticket-code-review__unmerged')).toHaveCount(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-0wzrk5-unmerged-wide.png', fullPage: true });
+  await review.getByRole('button', { name: 'Open commit fff6666 in Glassbox' }).click();
+  await review.getByRole('button', { name: 'Open 2 commit bundle eee5555 through fff6666 in Glassbox' }).click();
+  await expect
+    .poll(() =>
+      [
+        actions.some((a) => a.operation === 'code-review' && a.mode === 'commit' && a.commit === 'fff6666'),
+        actions.some((a) => a.operation === 'code-review' && a.mode === 'range' && a.from === 'eee5555'),
+      ].join(),
+    )
+    .toBe('true,true');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(pending).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.screenshot({ path: 'target/visual-captures/hs2-0wzrk5-unmerged-narrow.png', fullPage: true });
+});
+
 test('renders the exact shared Code Review component in the inspector and reader', async ({ page }) => {
   await page.setViewportSize({ width: 2048, height: 1000 });
   await mockProject(page);
