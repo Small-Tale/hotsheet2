@@ -63,7 +63,8 @@ describe('TerminalEditMenu (HS2-KKP8YJ)', () => {
     const markup = String(TerminalEditMenu({ state: { x: 120, y: 340 } }));
     expect(markup).toContain('data-context-menu="terminal-edit"');
     expect(markup).toContain('aria-label="Terminal edit actions"');
-    expect(markup).toContain('--kui-popup-menu-context-x:120px;--kui-popup-menu-context-y:340px');
+    // Kerf PopupMenu positions the context anchor through its own inline coordinates.
+    expect(markup).toMatch(/popup-menu-context-x:120px;[^"]*popup-menu-context-y:340px/);
     expect(markup).toContain('data-context-menu="terminal-edit"');
     expect(markup.match(/<wa-dropdown-item/g)).toHaveLength(2);
     expect(markup).toContain('data-action="copy-terminal-text"');
