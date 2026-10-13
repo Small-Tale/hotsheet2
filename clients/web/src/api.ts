@@ -644,6 +644,9 @@ export interface TerminalInfo {
   ai_connection?: TerminalAiConnection;
   /** Last trusted hook report for this live terminal, retained after SessionEnd. */
   last_hook_report?: TerminalAiConnection;
+  /** A live `hotsheet-mcp` shim launched from this terminal holds a presence lease (HS2-HNXE38).
+   * Separate from `ai_connection`: MCP reachability does not prove hooks route permission prompts. */
+  mcp_connected?: boolean;
 }
 /** An AI session's `SessionStart` hook report (`POST /terminals/{id}/ai-connection`). */
 export interface TerminalAiConnection {

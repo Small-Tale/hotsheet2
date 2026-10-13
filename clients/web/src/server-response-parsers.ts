@@ -469,6 +469,7 @@ const terminalOptional: Record<string, Check> = {
   question: isObject,
   ai_connection: isObject,
   last_hook_report: isObject,
+  mcp_connected: isBoolean,
 };
 
 export const parseTerminalInfo = shape<TerminalInfo>(

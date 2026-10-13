@@ -207,7 +207,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             for (const event of response.events)
               if (event.kind === 'terminal_renamed') applyTerminalRenamed(current, event.id, event.message);
             // A terminal's AI session halted or resumed (HS2-HJ4D1H), or connected to or left Hot Sheet
-            // (HS2-EV1XK3): refetch so its tab marks it. A visible permission ask independently
+            // (HS2-EV1XK3), or a terminal's hotsheet-mcp
+            // presence changed (HS2-670ADP): refetch so its tab marks it. A visible permission ask independently
             // proves a live hook and must refresh the terminal even if its connection event was
             // missed or arrived on another change-stream page (HS2-XYSXVT).
             if (
@@ -217,6 +218,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
                   event.kind === 'terminal_question' ||
                   event.kind === 'terminal_ai_connection' ||
                   event.kind === 'terminal_hook_report' ||
+                  event.kind === 'mcp_presence' ||
                   event.kind === 'permission_asked',
               )
             )
