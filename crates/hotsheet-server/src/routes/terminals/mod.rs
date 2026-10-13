@@ -204,8 +204,9 @@ pub(crate) struct TerminalInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     last_hook_report: Option<TerminalAiConnection>,
     /// A live `hotsheet-mcp` lease names this terminal (HS2-HNXE38). Separate from
-    /// `ai_connection`, which means permission prompts are routed to Hot Sheet.
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    /// `ai_connection`, which means permission prompts are routed to Hot Sheet. Always
+    /// serialized, so a client can tell `false` from a server that predates the field
+    /// (HS2-670ADP).
     pub(crate) mcp_connected: bool,
 }
 

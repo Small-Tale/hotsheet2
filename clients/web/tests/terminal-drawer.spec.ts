@@ -79,7 +79,13 @@ for (const width of [1280, 390]) {
     await expect(tab('connected').locator('.terminal-drawer__busy-dot')).toBeVisible();
     await expect(tab('connected').locator('.terminal-drawer__ai-connection')).toHaveAttribute(
       'title',
-      /Last trusted hook report: SessionStart at 2026-10-05T08:00:00Z.*MCP connectivity is separate/,
+      /connected to Hot Sheet: its permission prompts come to the app and its hotsheet-mcp tools are connected\. Last trusted hook report: SessionStart at 2026-10-05T08:00:00Z/,
+    );
+    // HS2-670ADP: hooks without hotsheet-mcp are not fully connected, so the same badge shows unplug.
+    await expect(tab('mcp-missing').locator('[data-ai-connection="mcp_missing"] [data-lucide="unplug"]')).toBeVisible();
+    await expect(tab('mcp-missing').locator('.terminal-drawer__ai-connection')).toHaveAttribute(
+      'aria-label',
+      /^Claude is not fully connected to Hot Sheet: MCP not connected\./,
     );
     await expect(tab('missing').locator('[data-ai-connection="missing"] [data-lucide="unplug"]')).toBeVisible();
     await expect(tab('missing').locator('.terminal-drawer__ai-connection')).toHaveAttribute(
@@ -95,6 +101,7 @@ for (const width of [1280, 390]) {
     for (const [id, name] of [
       ['connected', 'Connected'],
       ['missing', 'Not connected'],
+      ['mcp-missing', 'MCP not connected'],
     ] as const) {
       const [label, icon] = await Promise.all([
         tab(id).getByText(name, { exact: true }).boundingBox(),

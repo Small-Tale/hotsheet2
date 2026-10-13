@@ -1064,13 +1064,23 @@ test('represents the production terminal dashboard and its shared context menu i
   await expect(dashboard).toBeVisible();
   await expect(dashboard).toHaveAttribute('data-basis', 'high');
   await expect(dashboard).toHaveAttribute('data-fit', '3');
-  await expect(dashboard.locator('[data-fixed-aspect-terminal-card="preview"]')).toHaveCount(3);
+  await expect(dashboard.locator('[data-fixed-aspect-terminal-card="preview"]')).toHaveCount(4);
   await expect(dashboard.locator('[data-ai-connection="connected"] [data-lucide="plug"]')).toBeVisible();
   await expect(dashboard.locator('[data-ai-connection="connected"]')).toHaveAttribute(
     'title',
-    /Last trusted hook report: SessionStart at 2026-10-05T08:00:00Z.*MCP connectivity is separate/,
+    /hotsheet-mcp tools are connected\. Last trusted hook report: SessionStart at 2026-10-05T08:00:00Z/,
   );
   await expect(dashboard.locator('[data-ai-connection="missing"] [data-lucide="unplug"]')).toBeVisible();
+  // HS2-670ADP: a tile whose hooks route but whose hotsheet-mcp is absent shows the same unplug badge.
+  await expect(
+    dashboard.locator(
+      '[data-terminal-key="demo:mcp-missing"] [data-ai-connection="mcp_missing"] [data-lucide="unplug"]',
+    ),
+  ).toBeVisible();
+  await expect(dashboard.locator('[data-terminal-key="demo:mcp-missing"] [data-ai-connection]')).toHaveAttribute(
+    'title',
+    /MCP not connected/,
+  );
   await expect(dashboard.locator('[data-terminal-key="demo:halted"] .terminal-tile__halt')).toBeVisible();
   await expect(dashboard.locator('[data-terminal-key="demo:halted"] [data-ai-connection]')).toHaveCount(0);
   const chat = dashboard.locator('[data-component="workspace-chat-tile"]');

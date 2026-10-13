@@ -255,12 +255,14 @@ export function TerminalDrawer({
                         session.ai_connection?.agent,
                         session.tool,
                         session.last_hook_report ?? session.ai_connection,
+                        session.mcp_connected,
                       )}
                       title={aiConnectionLabel(
                         session.aiConnection,
                         session.ai_connection?.agent,
                         session.tool,
                         session.last_hook_report ?? session.ai_connection,
+                        session.mcp_connected,
                       )}
                     >
                       {session.aiConnection === 'connected' ? (

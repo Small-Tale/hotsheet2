@@ -1498,9 +1498,9 @@
       "id": "terminal-dashboard",
       "name": "TerminalDashboard",
       "kind": "composition",
-      "purpose": "Responsive workspace grid for terminals and AI chats, including connected, missing-hook, and halted session states with manual clearing.",
+      "purpose": "Responsive workspace grid for terminals and AI chats, including connected, missing-hook, missing-MCP, and halted session states with manual clearing.",
       "useWhen": [
-        "Hot Sheet needs responsive workspace grid for terminals and AI chats, including connected, missing-hook, and halted session states with manual clearing."
+        "Hot Sheet needs responsive workspace grid for terminals and AI chats, including connected, missing-hook, missing-MCP, and halted session states with manual clearing."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TerminalDashboard behavior."
@@ -1524,9 +1524,9 @@
       "id": "terminal-drawer",
       "name": "TerminalDrawer",
       "kind": "composition",
-      "purpose": "Project grid, terminal, and embedded AI-chat tabs with a typed creation menu, and tab states for busy, halted terminals, failed or recovered driven chats, and Hot Sheet-connected or unconnected AI sessions.",
+      "purpose": "Project grid, terminal, and embedded AI-chat tabs with a typed creation menu, and tab states for busy, halted terminals, failed or recovered driven chats, Hot Sheet-connected or unconnected AI sessions, and hook-only sessions whose hotsheet-mcp is not connected.",
       "useWhen": [
-        "Hot Sheet needs project grid, terminal, and embedded AI-chat tabs with a typed creation menu, and tab states for busy, halted terminals, failed or recovered driven chats, and Hot Sheet-connected or unconnected AI sessions."
+        "Hot Sheet needs project grid, terminal, and embedded AI-chat tabs with a typed creation menu, and tab states for busy, halted terminals, failed or recovered driven chats, Hot Sheet-connected or unconnected AI sessions, and hook-only sessions whose hotsheet-mcp is not connected."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TerminalDrawer behavior."

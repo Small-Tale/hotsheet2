@@ -69,6 +69,8 @@ export interface TerminalDashboardSession {
   /** The session's own `SessionStart` report (HS2-EV1XK3). */
   ai_connection?: TerminalAiConnection;
   last_hook_report?: TerminalAiConnection;
+  /** Live `hotsheet-mcp` presence for this terminal (HS2-670ADP). */
+  mcp_connected?: boolean;
   /** Whether the terminal's AI session reaches Hot Sheet, derived by `deriveAiConnectionStates`. */
   aiConnection?: AiConnectionState;
   scrollback: string;
@@ -353,12 +355,14 @@ function TerminalCard({
                         session.ai_connection?.agent,
                         session.tool,
                         session.last_hook_report ?? session.ai_connection,
+                        session.mcp_connected,
                       )}
                       title={aiConnectionLabel(
                         session.aiConnection,
                         session.ai_connection?.agent,
                         session.tool,
                         session.last_hook_report ?? session.ai_connection,
+                        session.mcp_connected,
                       )}
                     >
                       {session.aiConnection === 'connected' ? (

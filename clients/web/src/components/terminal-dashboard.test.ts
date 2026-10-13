@@ -477,7 +477,7 @@ describe('halted AI sessions on dashboard tiles (HS2-HJ4D1H)', () => {
       scrollback: '',
       tool: 'codex',
     };
-    for (const aiConnection of ['connected', 'missing'] as const) {
+    for (const aiConnection of ['connected', 'missing', 'mcp_missing'] as const) {
       const markup = String(FixedAspectTerminalCard({ session: { ...session, aiConnection } }));
       expect(markup).toContain(`data-ai-connection="${aiConnection}"`);
       expect(markup).toContain(`data-lucide="${aiConnection === 'connected' ? 'plug' : 'unplug'}"`);
@@ -485,7 +485,11 @@ describe('halted AI sessions on dashboard tiles (HS2-HJ4D1H)', () => {
         /class="terminal-tile__state" title="Busy"><span class="kui-badge"[^>]*data-tone="success"[^>]*aria-label="Busy"/,
       );
       expect(markup).toContain(
-        aiConnection === 'connected' ? 'its permission prompts come to the app' : 'Run /hooks in Codex',
+        aiConnection === 'connected'
+          ? 'its permission prompts come to the app'
+          : aiConnection === 'missing'
+            ? 'Run /hooks in Codex'
+            : 'MCP not connected',
       );
       const halted = String(
         FixedAspectTerminalCard({

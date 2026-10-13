@@ -97,5 +97,51 @@ describe('terminal AI connection state (HS2-EV1XK3)', () => {
     );
     expect(aiConnectionLabel('missing')).toContain('MCP connection does not prove terminal hooks');
     expect(aiConnectionLabel('missing')).toContain('hotsheet-cli hook-diagnose');
+    expect(aiConnectionLabel('missing', undefined, 'codex', undefined, true)).toContain(
+      'Its hotsheet-mcp tools are connected, but an MCP connection does not prove terminal hooks are active.',
+    );
+    expect(aiConnectionLabel('connected', 'claude', undefined, undefined, true)).toContain(
+      'come to the app and its hotsheet-mcp tools are connected.',
+    );
+    expect(aiConnectionLabel('connected', 'claude')).not.toContain('hotsheet-mcp');
+    expect(aiConnectionLabel('mcp_missing', 'claude', undefined, connection, false)).toMatch(
+      /^Claude is not fully connected to Hot Sheet: MCP not connected\. .*Last trusted hook report: SessionStart .*setup --refresh/,
+    );
+    expect(aiConnectionLabel('mcp_missing')).toMatch(/^The AI session is not fully connected/);
+  });
+
+  it('folds hotsheet-mcp presence into one combined state (HS2-670ADP)', () => {
+    const hooked = { id: 'a', kind: 'ai' as const, alive: true, ai_connection: connection };
+    // Fully connected only when both the hook and hotsheet-mcp report in.
+    expect(aiConnectionState({ ...hooked, mcp_connected: true }, 0, 0)).toBe('connected');
+    // A server that predates MCP presence omits the field: the hook verdict stands (version skew).
+    expect(aiConnectionState(hooked, 0, 0)).toBe('connected');
+    // Hooks without MCP get the same startup grace, then count as not fully connected.
+    expect(aiConnectionState({ ...hooked, mcp_connected: false }, 0, AI_CONNECTION_GRACE_MS - 1)).toBe('pending');
+    expect(aiConnectionState({ ...hooked, mcp_connected: false }, 0, AI_CONNECTION_GRACE_MS)).toBe('mcp_missing');
+    // MCP alone never proves hooks route prompts.
+    expect(
+      aiConnectionState({ id: 'b', kind: 'ai', alive: true, mcp_connected: true }, 0, AI_CONNECTION_GRACE_MS),
+    ).toBe('missing');
+  });
+
+  it('walks MCP presence transitions across derivations (HS2-670ADP)', () => {
+    const firstSeen = new Map<string, number>(),
+      state = (session: object, now: number) =>
+        (
+          deriveAiConnectionStates(
+            [{ projectId: 'p', sessions: [{ id: 'a', kind: 'ai' as const, alive: true, ...session }] }],
+            firstSeen,
+            now,
+          ).groups[0].sessions[0] as { aiConnection?: string }
+        ).aiConnection;
+    expect(state({ ai_connection: connection, mcp_connected: false }, 0)).toBeUndefined();
+    expect(state({ ai_connection: connection, mcp_connected: false }, AI_CONNECTION_GRACE_MS)).toBe('mcp_missing');
+    expect(state({ ai_connection: connection, mcp_connected: true }, 20_000)).toBe('connected');
+    // MCP disconnects after the grace period: straight back to not fully connected.
+    expect(state({ ai_connection: connection, mcp_connected: false }, 21_000)).toBe('mcp_missing');
+    // The hook goes away too: plain missing.
+    expect(state({ mcp_connected: false }, 22_000)).toBe('missing');
+    expect(state({ ai_connection: connection, mcp_connected: true }, 23_000)).toBe('connected');
   });
 });

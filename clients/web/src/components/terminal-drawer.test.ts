@@ -539,6 +539,18 @@ describe('AI connection to Hot Sheet (HS2-EV1XK3)', () => {
     expect(missing).toContain('data-lucide="unplug"');
     expect(missing).toContain('Run /hooks in Codex');
     expect(missing).not.toContain('terminal-drawer__busy-dot');
+    // HS2-670ADP: hooks without hotsheet-mcp fold into the same badge as not fully connected.
+    const mcpMissing = markup({
+      busy: false,
+      tool: 'claude',
+      aiConnection: 'mcp_missing',
+      ai_connection: { agent: 'claude', at: '2026-10-05T08:00:00Z' },
+      mcp_connected: false,
+    });
+    expect(mcpMissing).toContain('data-ai-connection="mcp_missing"');
+    expect(mcpMissing).toContain('data-lucide="unplug"');
+    expect(mcpMissing).not.toContain('data-lucide="plug"');
+    expect(mcpMissing).toContain('Claude is not fully connected to Hot Sheet: MCP not connected.');
     const plain = markup({ busy: false });
     expect(plain).not.toContain('terminal-drawer__status');
     expect(plain).not.toContain('data-ai-connection');

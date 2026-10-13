@@ -19779,5 +19779,5 @@ async fn mcp_presence_lease_registers_renews_silently_lists_marks_terminal_and_u
     let listed = body_json(send("GET", "/mcp-presence".into(), None).await).await;
     assert_eq!(listed["connected"], false);
     let terminals = body_json(send("GET", "/terminals".into(), None).await).await;
-    assert!(terminals[0].get("mcp_connected").is_none());
+    assert_eq!(terminals[0]["mcp_connected"], false);
 }

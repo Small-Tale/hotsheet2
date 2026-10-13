@@ -6983,9 +6983,12 @@ test('shows a real terminal hook report separately from MCP and bridge reachabil
     const tab = page.locator('[data-tab-kind="terminal"][data-terminal-id="codex-session"]');
     await expect(tab).toBeVisible();
     hook('SessionStart');
-    await expect(tab.locator('[data-ai-connection="connected"]')).toHaveAttribute(
+    // No hotsheet-mcp connects for this terminal, so once the grace period ends the hook-only
+    // session shows the combined badge as not fully connected (HS2-670ADP).
+    await expect(tab.locator('[data-ai-connection="mcp_missing"]')).toHaveAttribute(
       'title',
-      /Last trusted hook report: SessionStart at .*MCP connectivity is separate/,
+      /MCP not connected\..*Last trusted hook report: SessionStart at /,
+      { timeout: 25_000 },
     );
     const diagnosis = spawnSync(cli, ['hook-diagnose', '--json'], { env: hookEnv, encoding: 'utf8' });
     expect(diagnosis.status, diagnosis.stderr).toBe(0);
@@ -6996,7 +6999,7 @@ test('shows a real terminal hook report separately from MCP and bridge reachabil
       last_hook_report: { source: 'session_start' },
     });
     hook('SessionEnd');
-    await expect(tab.locator('[data-ai-connection="connected"]')).toHaveCount(0);
+    await expect(tab.locator('[data-ai-connection="mcp_missing"]')).toHaveCount(0);
     expect(
       (
         await server.request<Array<{ ai_connection?: unknown; last_hook_report?: { source: string } }>>('/terminals')
@@ -7176,6 +7179,7 @@ test('recovers a missing Codex connection when its interactive permission hook r
     // A SessionStart hook's output would become model context, so it prints nothing.
     expect(result.stdout).toBe('');
   };
+  let mcpHeartbeat: ReturnType<typeof setInterval> | undefined;
   try {
     await server.request('/terminals', 'POST', {
       id: 'codex-shell',
@@ -7184,6 +7188,19 @@ test('recovers a missing Codex connection when its interactive permission hook r
       args: ['-c', 'printf "\\033]7;file://localhost/work/demo\\007"; exec cat'],
       cwd: server.root,
     });
+    // A live hotsheet-mcp lease names this terminal, as the shim registers it (HS2-670ADP): the
+    // badge shows fully connected only once the hook also reports in. Renew it like the shim's
+    // heartbeat so it outlives the server's 45 s TTL.
+    const registerMcp = () =>
+      server.request('/mcp-presence', 'POST', {
+        lease_id: 'codex-shell-mcp',
+        pid: process.pid,
+        tool: 'codex',
+        cwd: server.root,
+        terminal_id: 'codex-shell',
+      });
+    await registerMcp();
+    mcpHeartbeat = setInterval(() => void registerMcp().catch(() => undefined), 10_000);
     await expect
       .poll(async () => (await server.request<Array<{ id: string; cwd?: string }>>('/terminals'))[0]?.cwd)
       .toBe('/work/demo');
@@ -7268,7 +7285,7 @@ test('recovers a missing Codex connection when its interactive permission hook r
     await expect(connection).toHaveAttribute('data-ai-connection', 'connected');
     await expect(connection).toHaveAttribute(
       'title',
-      /Codex is connected to Hot Sheet: its permission prompts come to the app\. Last trusted hook report: PermissionRequest at .*\. MCP connectivity is separate\./,
+      /Codex is connected to Hot Sheet: its permission prompts come to the app and its hotsheet-mcp tools are connected\. Last trusted hook report: PermissionRequest at .*\./,
     );
     await expect(connection.locator('[data-lucide="plug"]')).toBeVisible();
     await expect(tileConnection).toHaveAttribute('data-ai-connection', 'connected');
@@ -7327,6 +7344,7 @@ test('recovers a missing Codex connection when its interactive permission hook r
     await expect(tileConnection).toHaveAttribute('data-ai-connection', 'missing');
     expect((await server.request<Array<{ ai_connection?: unknown }>>('/terminals'))[0].ai_connection).toBeUndefined();
   } finally {
+    clearInterval(mcpHeartbeat);
     await server.stop();
   }
 });
@@ -7353,6 +7371,7 @@ test('warns when an AI tab never connects to Hot Sheet, and clears once it does 
               alive: true,
               busy: false,
               cwd: '/work/demo',
+              mcp_connected: connected,
               ...(connected ? { ai_connection: { agent: 'codex', at: '2026-10-05T08:00:00Z' } } : {}),
             },
           ],

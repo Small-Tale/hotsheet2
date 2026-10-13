@@ -10,14 +10,21 @@ import type { TerminalAiConnection } from './api';
 /** How long an AI terminal may run before a missing hook report counts as not connected. */
 export const AI_CONNECTION_GRACE_MS = 15_000;
 
-/** `connected`: the session's hook reported in. `missing`: an AI terminal never did. */
-export type AiConnectionState = 'connected' | 'missing';
+/**
+ * One combined state per terminal (HS2-670ADP): the AI connection is either fully connected or
+ * it is not. `connected`: the session's hook reported in and its `hotsheet-mcp` is connected (or
+ * the server predates MCP presence and did not say). `missing`: an AI terminal's hook never
+ * reported in. `mcp_missing`: hooks route permission prompts but no `hotsheet-mcp` is connected.
+ */
+export type AiConnectionState = 'connected' | 'missing' | 'mcp_missing';
 
 interface ConnectableSession {
   id: string;
   kind?: 'shell' | 'ai';
   alive: boolean;
   ai_connection?: TerminalAiConnection;
+  /** Live `hotsheet-mcp` presence; absent from servers that predate it (HS2-HNXE38). */
+  mcp_connected?: boolean;
   aiConnection?: AiConnectionState;
 }
 
@@ -32,10 +39,15 @@ export function aiConnectionState(
   firstSeenAt: number,
   now: number,
 ): AiConnectionState | 'pending' | undefined {
-  if (session.ai_connection) return 'connected';
+  const graceOver = now - firstSeenAt >= AI_CONNECTION_GRACE_MS;
+  if (session.ai_connection) {
+    // Only an explicit `false` counts: an older server that omits the field keeps the hook verdict.
+    if (session.mcp_connected !== false || !session.alive) return 'connected';
+    return graceOver ? 'mcp_missing' : 'pending';
+  }
   // A plain shell may never run an AI tool, and an exited terminal has nothing left to connect.
   if (session.kind !== 'ai' || !session.alive) return undefined;
-  return now - firstSeenAt >= AI_CONNECTION_GRACE_MS ? 'missing' : 'pending';
+  return graceOver ? 'missing' : 'pending';
 }
 
 /**
@@ -63,8 +75,8 @@ export function deriveAiConnectionStates<S extends ConnectableSession, G extends
         nextCheckInMs = nextCheckInMs === undefined ? remaining : Math.min(nextCheckInMs, remaining);
       }
       const next: S = { ...session };
-      if (state === 'connected' || state === 'missing') next.aiConnection = state;
-      else delete next.aiConnection;
+      if (state === undefined || state === 'pending') delete next.aiConnection;
+      else next.aiConnection = state;
       return next;
     }),
   }));
@@ -78,18 +90,22 @@ export function aiConnectionLabel(
   agent?: string,
   tool?: string,
   lastReport?: TerminalAiConnection,
+  mcpConnected?: boolean,
 ): string {
   const report = lastReport
     ? ` Last trusted hook report: ${lastReport.source === 'permission_request' ? 'PermissionRequest' : 'SessionStart'} at ${lastReport.at}.`
     : ' No trusted hook report has reached this server.';
   if (state === 'connected')
-    return `${agentName(agent ?? tool) ?? 'The AI session'} is connected to Hot Sheet: its permission prompts come to the app.${report} MCP connectivity is separate.`;
+    return `${agentName(agent ?? tool) ?? 'The AI session'} is connected to Hot Sheet: its permission prompts come to the app${mcpConnected === true ? ' and its hotsheet-mcp tools are connected' : ''}.${report}`;
+  if (state === 'mcp_missing')
+    return `${agentName(agent ?? tool) ?? 'The AI session'} is not fully connected to Hot Sheet: MCP not connected. Its permission prompts come to the app, but no hotsheet-mcp server is connected for this terminal.${report} Run hotsheet-cli setup --refresh for this project to configure the MCP integration, then restart the session.`;
+  const mcp = mcpConnected === true ? ' Its hotsheet-mcp tools are connected, but' : '';
   const name = agentName(tool) ?? 'This AI session';
   const fix =
     tool === 'codex'
       ? 'Run /hooks in Codex to review and trust Hot Sheet’s hooks, then restart the session.'
       : 'Run hotsheet-cli setup --refresh for this project, then restart the session.';
-  return `${name} is not connected to Hot Sheet: its permission prompts stay in this terminal.${report} An MCP connection does not prove terminal hooks are active. Run hotsheet-cli hook-diagnose inside this terminal to test the local permission bridge. ${fix}`;
+  return `${name} is not connected to Hot Sheet: its permission prompts stay in this terminal.${report}${mcp ? `${mcp} an MCP connection does not prove terminal hooks are active.` : ' An MCP connection does not prove terminal hooks are active.'} Run hotsheet-cli hook-diagnose inside this terminal to test the local permission bridge. ${fix}`;
 }
 
 function agentName(agent?: string): string | undefined {
