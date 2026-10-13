@@ -8981,3 +8981,27 @@ test('stacks the AI command configuration label above its menu at phone width', 
     triggerBox = await trigger.boundingBox();
   expect(triggerBox!.y).toBeGreaterThanOrEqual(labelBox!.y + labelBox!.height);
 });
+
+test('aligns TicketAttachments group titles, chips, rows, and thumbnails on one left edge (HS2-KRFY2H)', async ({
+  page,
+}) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 1200 });
+    await page.goto('/ux-demo?component=ticket-attachments');
+    const root = page.locator('[data-component="ticket-attachments"]').first();
+    await expect(root).toBeVisible();
+    const edges = await root.evaluate((node) => {
+      const base = node.getBoundingClientRect().left,
+        left = (selector: string) => Math.round(node.querySelector(selector)!.getBoundingClientRect().left - base),
+        range = document.createRange();
+      range.selectNodeContents(node.querySelector('.ticket-attachments__batch-title')!);
+      return [
+        Math.round(range.getClientRects()[0].left - base),
+        left('.ticket-attachments__batch > header select'),
+        left('.ticket-attachments__item svg'),
+        left('.ticket-attachments__image-grid button'),
+      ];
+    });
+    expect(new Set(edges).size).toBe(1);
+  }
+});

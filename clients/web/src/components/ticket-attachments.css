@@ -65,6 +65,9 @@
 }
 .ticket-attachments__batch > header {
   display: flex;
+  /* Group titles, purpose chips, and thumbnails start on the rows' icon edge (1px + 8px row inset),
+     which is also the section header's label edge (HS2-KRFY2H). */
+  padding-inline: calc(var(--kui-space-xs) + 1px);
   margin-bottom: var(--kui-space-2xs);
   align-items: flex-start;
   flex-direction: column;
@@ -193,6 +196,7 @@
 }
 .ticket-attachments__image-grid {
   display: flex;
+  padding-inline: calc(var(--kui-space-xs) + 1px);
   flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--kui-space-xs);
