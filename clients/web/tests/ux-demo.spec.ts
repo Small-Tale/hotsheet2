@@ -3181,8 +3181,10 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(emptyExamples.getByText('No tickets yet')).toBeVisible();
   await expect(emptyExamples.getByText('No tickets in Backlog')).toBeVisible();
   await expect(emptyExamples.getByText('No tickets match “parser”')).toBeVisible();
-  // The rows round the section's edges themselves; the list adds no clipping radius (HS2-5G16WK).
-  await expect(list.locator('..')).toHaveCSS('border-radius', '0px');
+  // The rows round the section's edges themselves; the list surface matches their radius so no square
+  // corner shows behind them (HS2-3239MS) but never clips its rows (HS2-5G16WK).
+  await expect(list.locator('..')).toHaveCSS('border-radius', '10.4px');
+  await expect(list.locator('..')).toHaveCSS('overflow', 'visible');
   const listRow = listRows.first();
   await expect(listRow).toHaveAttribute('data-presentation', 'list');
   const listIdentity = listRow.locator('.ticket-list-row__identity');
