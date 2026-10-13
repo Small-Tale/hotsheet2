@@ -19,7 +19,7 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
   if (state.kind === 'empty-trash')
     return (
       <div data-key="bulk-ticket-dialog">
-        <DialogSurface size="small" bodyInset="comfortable" footerInset="comfortable">
+        <DialogSurface size="small">
           <wa-dialog data-key="bulk-ticket-dialog" open data-component="empty-trash-dialog" label="Empty Trash?">
             <List gap="m">
               <Text flush>
@@ -51,7 +51,7 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
   if (state.kind === 'delete')
     return (
       <div data-key="bulk-ticket-dialog-2">
-        <DialogSurface size="small" bodyInset="comfortable" footerInset="comfortable">
+        <DialogSurface size="small">
           <wa-dialog
             data-key="bulk-ticket-dialog-2"
             open
@@ -76,7 +76,7 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
   const adding = state.mode === 'add';
   return (
     <div data-key="bulk-ticket-dialog-3">
-      <DialogSurface size="small" bodyInset="comfortable" footerInset="comfortable">
+      <DialogSurface size="small">
         <wa-dialog
           data-key="bulk-ticket-dialog-3"
           open

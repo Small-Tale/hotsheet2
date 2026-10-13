@@ -22,7 +22,7 @@ export function TicketLinkChoiceDialog({ choice }: { choice?: TicketLinkChoice }
   if (!choice) return <></>;
   return (
     <div data-key="ticket-link-choice-dialog">
-      <DialogSurface bodyInset="comfortable" footerInset="comfortable">
+      <DialogSurface>
         <wa-dialog
           data-key="ticket-link-choice-dialog"
           {...NOTIFICATIONS_AND_LINKS_TARGETS.ticketLinkChoiceDialog.attrs}
