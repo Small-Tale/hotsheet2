@@ -31,7 +31,7 @@ function row(dataset: Record<string, string>, options: { ticket?: boolean; rows?
   const element = {
     dataset,
     closest: (selector: string) => {
-      if (selector.includes('change-evidence-dialog')) return options.ticket ? {} : null;
+      if (selector.includes('change-evidence')) return options.ticket ? {} : null;
       if (selector === '[data-repository-file-list]') return { querySelectorAll: () => options.rows ?? [] };
       if (selector.includes('select-repository-file')) return element;
       return null;

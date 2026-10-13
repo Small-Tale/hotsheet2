@@ -5,11 +5,10 @@ import '@kerfjs/ui/list-action-row.css';
 import '@kerfjs/ui/nav-stack.css';
 import '@kerfjs/ui/split-view.css';
 import '@kerfjs/ui/state-banner.css';
-import './repository-status-popover.css';
-import './native-popover-dialog.css';
+import '@kerfjs/ui/surface-scaffold.css';
 
 import { Badge } from '@kerfjs/ui/badge';
-import { uiColor } from '@kerfjs/ui/css-values';
+import { remify, space, uiColor } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { ListActionRow } from '@kerfjs/ui/list-action-row';
 import { ListHeader } from '@kerfjs/ui/list-header';
@@ -19,6 +18,8 @@ import { Pane } from '@kerfjs/ui/pane';
 import { PopupMenu, type PopupMenuItem } from '@kerfjs/ui/popup-menu';
 import { SplitView } from '@kerfjs/ui/split-view';
 import { StateBanner } from '@kerfjs/ui/state-banner';
+import { PopoverDialogSurface } from '@kerfjs/ui/surface-scaffold';
+import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -323,24 +324,30 @@ export function RepositoryStatusPopover({
   const compactSplit = compact && Boolean(status) && !recoveryStep;
   const viewLabel = viewDefinitions.find((item) => item.id === view)?.label ?? 'Changes';
   return (
-    <section
-      popover={embedded ? undefined : 'auto'}
+    // Kerf's PopoverDialogSurface owns the chrome, viewport-bounded size, fill, and embedded flow
+    // (KF-XHECB9, HS2-5242DR).
+    <PopoverDialogSurface
       id={embedded ? undefined : 'repository-status-popover'}
-      class="dialog-surface repository-status-popover"
-      data-component="repository-status-popover"
-      data-state={state}
-      data-view={view}
-      data-setup-step={recoveryStep}
-      data-embedded={embedded ? 'true' : undefined}
-      role="dialog"
-      aria-labelledby={compactSplit ? undefined : 'repository-status-title'}
-      aria-label={compactSplit ? 'Repository Status' : undefined}
+      className="repository-status-popover"
+      presentation={embedded ? 'embedded' : 'overlay'}
+      preferredWidth={remify(1024)}
+      height={remify(640)}
+      viewportGutter={space('xs')}
+      bodyLayout="fill"
+      rootAttributes={{
+        'data-repository-surface': 'repository-status',
+        'data-state': state,
+        'data-view': view,
+        ...(recoveryStep ? { 'data-setup-step': recoveryStep } : {}),
+      }}
+      {...(compactSplit ? { label: 'Repository Status' } : { labelledBy: 'repository-status-title' })}
     >
       {status && !recoveryStep ? (
         <SplitView
           id="repository-status-split"
           label="Repository status"
           className="repository-status-popover__split"
+          listWidth={{ size: 432, maxFraction: 0.5 }}
           compact={compact}
           detailActive={detailActive}
           listTitle={compact ? 'Repository Status' : 'Repository'}
@@ -398,7 +405,7 @@ export function RepositoryStatusPopover({
           hostActionsAvailable={hostActionsAvailable}
         />
       )}
-    </section>
+    </PopoverDialogSurface>
   );
 }
 
@@ -537,15 +544,16 @@ export function ChangeEvidenceDialog({
     </>
   );
   return (
-    <section
-      popover={embedded ? undefined : 'auto'}
+    <PopoverDialogSurface
       id={embedded ? undefined : 'change-evidence-dialog'}
-      class="dialog-surface repository-status-popover change-evidence-dialog"
-      data-component="change-evidence-dialog"
-      data-view={view}
-      data-embedded={embedded ? 'true' : undefined}
-      role="dialog"
-      aria-labelledby="change-evidence-title"
+      className="change-evidence-dialog"
+      presentation={embedded ? 'embedded' : 'overlay'}
+      preferredWidth={remify(832)}
+      height={remify(512)}
+      viewportGutter={space('xs')}
+      bodyLayout="fill"
+      rootAttributes={{ 'data-repository-surface': 'change-evidence', 'data-view': view }}
+      labelledBy="change-evidence-title"
     >
       {compact ? (
         <Pane label="Change evidence" header={heading} contentLabel={`${view} change evidence`}>
@@ -556,6 +564,7 @@ export function ChangeEvidenceDialog({
         <SplitView
           id="change-evidence-split"
           label="Change evidence"
+          listWidth={{ size: 240, maxFraction: 0.4 }}
           list={
             <Pane
               label="Change evidence views"
@@ -574,7 +583,7 @@ export function ChangeEvidenceDialog({
       {fileMenu?.source === 'ticket' && (
         <RepositoryFileContextMenu menu={fileMenu} platform={platform} hostActionsAvailable={hostActionsAvailable} />
       )}
-    </section>
+    </PopoverDialogSurface>
   );
 }
 
@@ -694,13 +703,11 @@ function fileChangeLabel(change: RepositoryFileChange): string {
   return change === 'type_changed' ? 'Type changed' : change[0].toUpperCase() + change.slice(1);
 }
 
+/** A path truncated in the middle, keeping its file name visible (Kerf Text, KF-XYA6VR). */
 function middleEllipsisPath(path: string) {
-  const suffixLength = Math.min(20, Math.floor(path.length / 2)),
-    splitAt = path.length - suffixLength;
   return (
-    <span class="repository-status-popover__path" aria-label={path}>
-      <span>{path.slice(0, splitAt)}</span>
-      <span>{path.slice(splitAt)}</span>
-    </span>
+    <Text variant="span" border="none" wrap="truncate" truncate="middle" truncateKeep="segment">
+      {path}
+    </Text>
   );
 }

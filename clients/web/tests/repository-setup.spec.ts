@@ -169,7 +169,7 @@ test('recovers a project folder without Git and optionally connects origin', asy
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-action="open-repository-status"]').click();
-  const dialog = page.locator('[data-component="repository-status-popover"]');
+  const dialog = page.locator('[data-repository-surface="repository-status"]');
   await expect(dialog).toHaveAttribute('data-state', 'uninitialized');
   await expect(dialog.locator('#repository-status-title')).toHaveText('This folder is not a Git repository');
   await expect(dialog.getByText('Repository Status', { exact: true })).toHaveCount(0);

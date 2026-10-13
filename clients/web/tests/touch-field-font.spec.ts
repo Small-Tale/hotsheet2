@@ -262,7 +262,7 @@ async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
   // Repository setup: the not-a-repository state, then the remote URL field after initializing.
   await sidebar();
   await page.locator('[data-action="open-repository-status"]').first().click();
-  const repository = page.locator('[data-component="repository-status-popover"]');
+  const repository = page.locator('[data-repository-surface="repository-status"]');
   await expect(repository).toHaveAttribute('data-state', 'uninitialized');
   await repository.getByRole('button', { name: 'Initialize Git repository' }).click();
   await expect(repository.getByRole('textbox', { name: 'Remote URL' })).toBeVisible();

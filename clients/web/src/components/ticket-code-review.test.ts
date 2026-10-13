@@ -58,9 +58,6 @@ describe('TicketCodeReview', () => {
     expect(css).toMatch(
       /\.ticket-code-review\[data-embedded='true'\] \.ticket-code-review__header \{[^}]*margin-bottom: var\(--kui-space-m\)/,
     );
-    expect(readFileSync(resolve(import.meta.dirname, 'repository-status-popover.css'), 'utf8')).not.toContain(
-      'ticket-code-review',
-    );
     expect(css).toMatchSource(
       /__evidence \{[^}]*margin-bottom: var\(--kui-space-m\); padding: var\(--kui-space-xs\) var\(--kui-space-m\)/,
     );

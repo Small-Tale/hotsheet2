@@ -739,7 +739,7 @@ test('uses canonical spacing in the HS1 migration dialog (HS2-4Y6SM9, HS2-0KZJ2S
 test('represents the shared repository-status composition in the UX catalog', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/ux-demo?component=repository-status-popover');
-  const dialog = page.locator('[data-component="repository-status-popover"]');
+  const dialog = page.locator('[data-repository-surface="repository-status"]');
   await expect(dialog).toBeVisible();
   const compare = dialog.getByRole('button', { name: 'Compare two commits' }),
     refresh = dialog.getByRole('button', { name: 'Refresh repository status' }),
@@ -762,7 +762,7 @@ test('represents the shared repository-status composition in the UX catalog', as
       return groups[1].left - groups[0].right;
     }),
   ).toBe(8);
-  await expect(dialog).toHaveAttribute('data-embedded', 'true');
+  await expect(dialog).toHaveAttribute('data-presentation', 'embedded');
   // A list-detail SplitView (HS2-3B8345): each Pane's content owns its scrolling, and the detail
   // column carries the heading.
   await expect(dialog.locator('[data-component="split-view"]')).toHaveCount(1);
@@ -882,7 +882,7 @@ test('represents the shared repository-status composition in the UX catalog', as
 test('contains the embedded repository status dialog and header actions (HS2-MCHTAW)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=repository-status-popover');
-  const dialog = page.locator('[data-component="repository-status-popover"]');
+  const dialog = page.locator('[data-repository-surface="repository-status"]');
   const compare = dialog.getByRole('button', { name: 'Compare two commits' });
   const refresh = dialog.getByRole('button', { name: 'Refresh repository status' });
   await expect(dialog).toBeVisible();
@@ -923,9 +923,9 @@ test('contains the embedded repository status dialog and header actions (HS2-MCH
 test('represents the ticket change-evidence master-detail dialog in the UX catalog', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=change-evidence-dialog');
-  const dialog = page.locator('[data-component="change-evidence-dialog"]');
+  const dialog = page.locator('[data-repository-surface="change-evidence"]');
   await expect(dialog).toBeVisible();
-  await expect(dialog).toHaveAttribute('data-embedded', 'true');
+  await expect(dialog).toHaveAttribute('data-presentation', 'embedded');
   await expect(dialog).toHaveAttribute('data-view', 'tests');
   await expect(dialog.getByRole('button', { name: /Tests 1/ })).toHaveAttribute('aria-current', 'page');
   const file = dialog.locator('[data-action="open-repository-file-menu-trigger"]');
@@ -945,7 +945,7 @@ test('represents the ticket change-evidence master-detail dialog in the UX catal
 test('shift-click selects a contiguous range of repository files (HS2-2Y02T1)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=repository-status-popover');
-  const repository = page.locator('[data-component="repository-status-popover"]');
+  const repository = page.locator('[data-repository-surface="repository-status"]');
   await repository.getByRole('button', { name: /Staged 2/ }).click();
   const rows = repository.locator('[data-action="select-repository-file"]');
   await expect(rows).toHaveCount(2);
@@ -965,7 +965,7 @@ test('shift-click selects a contiguous range of repository files (HS2-2Y02T1)', 
 test('keeps repository file action menus visible at wide and narrow sizes', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=repository-status-popover');
-  const repository = page.locator('[data-component="repository-status-popover"]');
+  const repository = page.locator('[data-repository-surface="repository-status"]');
   await repository.getByRole('button', { name: /Staged 2/ }).click();
   await repository.locator('[data-action="open-repository-file-menu-trigger"]').first().click();
   // A context-mode Kerf PopupMenu owns the menu surface, item geometry, and placement (HS2-HBFXQY).
@@ -994,7 +994,7 @@ test('keeps repository file action menus visible at wide and narrow sizes', asyn
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=change-evidence-dialog');
-  const evidence = page.locator('[data-component="change-evidence-dialog"]');
+  const evidence = page.locator('[data-repository-surface="change-evidence"]');
   await evidence.locator('[data-action="open-repository-file-menu-trigger"]').click();
   await expect(evidence.getByRole('menuitem', { name: 'Show Diff' })).toBeEnabled();
   await evidence.screenshot({ path: 'target/visual-captures/hs2-3yzn0s-change-evidence-file-menu-wide.png' });
@@ -1006,7 +1006,7 @@ test('represents every server-build details state with shared dialog geometry', 
   const dialog = page.locator('[data-component="connection-details-dialog"]'),
     header = dialog.locator('[data-component="toolbar"]:has(.kui-toolbar-text__description)');
   await expect(dialog).toBeVisible();
-  await expect(dialog).toHaveAttribute('data-embedded', 'true');
+  await expect(dialog).toHaveAttribute('data-presentation', 'embedded');
   await expect(header).toBeVisible();
   await expect(header.locator('[data-component="toolbar-control-group"]')).toHaveAttribute('data-tile-tone', 'brand');
   await expect(header).toHaveCSS('border-bottom-width', '0px');
@@ -4225,7 +4225,7 @@ test('shows the reader text push state at exactly one and a half times normal si
 test('shows repository comparison as a shared pressed toolbar control', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=repository-status-popover');
-  const dialog = page.locator('[data-component="repository-status-popover"]');
+  const dialog = page.locator('[data-repository-surface="repository-status"]');
   await dialog.getByRole('button', { name: /Commits/ }).click();
   const compare = dialog.getByRole('button', { name: 'Compare two commits' });
   const group = compare.locator('..');

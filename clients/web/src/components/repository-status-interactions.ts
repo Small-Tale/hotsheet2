@@ -141,7 +141,7 @@ export function wireRepositoryBrowser(root: HTMLElement, bindings: RepositoryBro
     const row = target.closest<HTMLElement>(fileSelector) ?? (target as HTMLElement),
       path = row.dataset.itemId;
     if (!path) return;
-    const source: RepositoryFileSource = target.closest('[data-component="change-evidence-dialog"]')
+    const source: RepositoryFileSource = target.closest('[data-repository-surface="change-evidence"]')
         ? 'ticket'
         : 'repository',
       selected = selectedFiles.value.includes(path) ? selectedFiles.value : [path];
@@ -163,7 +163,7 @@ export function wireRepositoryBrowser(root: HTMLElement, bindings: RepositoryBro
         width,
         height,
       }),
-      bounds = row.closest('.dialog-surface')?.getBoundingClientRect(),
+      bounds = row.closest('[data-repository-surface]')?.getBoundingClientRect(),
       position = bounds
         ? {
             x: Math.max(bounds.left + 8, Math.min(viewportPosition.x, bounds.right - width - 8)),

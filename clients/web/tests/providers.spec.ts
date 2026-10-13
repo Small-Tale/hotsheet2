@@ -9168,7 +9168,7 @@ test('browses repository files and commits with host-native actions', async ({ p
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const summary = page.locator('[data-component="repository-summary"]');
   await summary.getByRole('button').click();
-  const popover = page.locator('[data-component="repository-status-popover"]');
+  const popover = page.locator('[data-repository-surface="repository-status"]');
   await expect(popover).toHaveAttribute('data-state', 'conflicted');
   await expect(popover.locator('dt', { hasText: 'Branch' }).locator('..')).toContainText('feature/repository-dialog');
   await expect(popover.getByRole('navigation', { name: 'Repository views' })).toContainText('24');
@@ -9189,7 +9189,7 @@ test('browses repository files and commits with host-native actions', async ({ p
   ).toBeVisible();
   expect(
     await renamed
-      .locator('.repository-status-popover__path > span')
+      .locator('.kui-text__truncate-head')
       .first()
       .evaluate((element) => element.scrollWidth > element.clientWidth),
   ).toBe(true);
@@ -9656,7 +9656,7 @@ test('lists associated commits and opens a validated commit or range in the conf
   await expectFlushCommit();
   await review.screenshot({ path: 'target/visual-captures/hs2-0jv72t-code-review-evidence.png' });
   await evidence.click();
-  const evidenceDialog = page.locator('[data-component="change-evidence-dialog"]');
+  const evidenceDialog = page.locator('[data-repository-surface="change-evidence"]');
   await expect(evidenceDialog).toBeVisible();
   await expect(evidenceDialog).toHaveAttribute('data-view', 'docs');
   await evidenceDialog.getByRole('button', { name: /Tests 1/ }).click();
@@ -9789,7 +9789,7 @@ test('opens every selected ticket file in one difftool launch (HS2-J7HQ5E)', asy
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('tab', { name: 'Code Review' }).click();
   await inspector.getByRole('button', { name: 'Open change evidence' }).click();
-  const evidenceDialog = page.locator('[data-component="change-evidence-dialog"]');
+  const evidenceDialog = page.locator('[data-repository-surface="change-evidence"]');
   await expect(evidenceDialog).toHaveAttribute('data-view', 'docs');
   const files = evidenceDialog.locator('[data-action="select-repository-file"]');
   await expect(files).toHaveCount(2);
@@ -9820,7 +9820,7 @@ test('keeps change evidence interactive when launched from the modal ticket read
   await reader.getByRole('tab', { name: 'Code Review' }).click();
   const review = reader.locator('[data-component="ticket-code-review"]');
   await review.getByRole('button', { name: 'Open change evidence' }).click();
-  const evidenceDialog = page.locator('[data-component="change-evidence-dialog"]');
+  const evidenceDialog = page.locator('[data-repository-surface="change-evidence"]');
   await expect(evidenceDialog).toBeVisible();
   // The reader is a modal wa-dialog; a native popover launched from inside it must stay interactive, not sit inert beneath the modal top layer (HS2-EZ10RS / HS2-6EV2ES).
   await expect(evidenceDialog).toHaveAttribute('data-view', 'docs');

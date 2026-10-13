@@ -50,7 +50,6 @@ const status = (patch: Partial<RepositoryStatus> = {}): RepositoryStatus => ({
 describe('RepositoryStatusPopover', () => {
   it('lays Repository Status out as a list-detail SplitView whose detail column owns the heading (HS2-3B8345)', () => {
     const markup = String(RepositoryStatusPopover({ status: status() }));
-    const css = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.css'), 'utf8');
     expect(markup).toContain('data-component="split-view"');
     expect(markup).not.toContain('data-component="nav-stack"');
     // The list Pane has its own quiet toolbar title; the heading follows inside the detail column.
@@ -65,9 +64,14 @@ describe('RepositoryStatusPopover', () => {
     expect(markup).toContain('aria-labelledby="repository-status-title"');
     // Panes own scrolling, insets, and the content stack; SplitView draws the divider (HS2-HBFXQY).
     expect(markup).not.toContain('repository-status-popover__navigation');
-    expect(css).not.toContain('__navigation');
-    expect(css).toMatch(/--kui-split-view-list-width: min\(remify\(432px\), 50%\)/);
-    expect(css).toMatch(/:is\(:popover-open, \[data-embedded='true'\]\)/);
+    // Kerf PopoverDialogSurface and SplitView listWidth own sizing and fill (KF-XHECB9, KF-7R5NWM, HS2-5242DR).
+    expect(markup).toContain('data-component="popover-dialog-surface"');
+    expect(markup).toContain('data-body-layout="fill"');
+    expect(markup).toContain('data-repository-surface="repository-status"');
+    expect(markup).toContain('popover="auto"');
+    expect(String(RepositoryStatusPopover({ status: status(), embedded: true }))).toContain(
+      'data-presentation="embedded"',
+    );
   });
 
   it('drills from the repository list into the selected view on compact devices (HS2-3B8345)', () => {
@@ -173,12 +177,12 @@ describe('RepositoryStatusPopover', () => {
     expect(markup).toContain('data-action="open-repository-file-menu-trigger" data-item-id="src/staged.ts"');
     expect(markup).toContain('data-lucide="ellipsis"');
     expect(markup).toContain('data-state="renamed"');
-    expect(markup).toContain('aria-label="src/old name.ts"');
+    expect(markup).toContain('title="src/old name.ts"');
     expect(markup).toContain('data-lucide="square-pen"');
     expect(markup).toContain('data-component="badge" data-tone="success"');
     expect(markup).toMatch(/data-component="badge"[^>]*aria-hidden="true">A<\/span>/);
     expect(markup).toMatch(/data-component="badge"[^>]*aria-hidden="true">R<\/span>/);
-    expect(markup).toContain('repository-status-popover__path');
+    expect(markup).toContain('kui-text__truncate-middle');
     expect(markup).toContain('data-action="refresh-repository-status"');
     const shared = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.tsx'), 'utf8');
     expect(shared).toContain('dividerSides=""');
@@ -186,18 +190,15 @@ describe('RepositoryStatusPopover', () => {
   });
 
   it('composes Kerf components instead of restyling them, keeping only popover sizing and path ellipsis (HS2-HBFXQY)', () => {
-    const css = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.css'), 'utf8'),
-      source = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.tsx'), 'utf8');
-    expect(css).not.toContain('--wa-space-');
-    expect(css).not.toMatch(/\.kui-/);
-    expect(css.match(/\{/g)?.length ?? 0).toBeLessThanOrEqual(7);
-    expect(css).toMatch(/\.repository-status-popover \{[^}]*2 \* var\(--kui-space-xs\)/);
+    const source = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.tsx'), 'utf8');
+    // No stylesheet remains: Kerf owns the surface size, fill, list width, and path truncation (HS2-5242DR).
+    expect(source).not.toMatch(/import '\.\/[a-z-]+\.css'/);
+    expect(source).toContain('<PopoverDialogSurface');
+    expect(source).toContain('truncate="middle"');
     // The file menu is a context-mode Kerf PopupMenu; rows, badges, and empty states are Kerf components.
     expect(source).toContain('<PopupMenu');
     expect(source).toContain('<ListActionRow');
     expect(source).toContain('<EmptyState');
-    expect(css).not.toContain('__context-menu');
-    expect(css).not.toContain('__empty');
   });
 
   it('uses the canonical Git status letter for every file change kind', () => {
@@ -226,7 +227,7 @@ describe('RepositoryStatusPopover', () => {
         },
       }),
     );
-    expect(markup).toContain('data-component="change-evidence-dialog"');
+    expect(markup).toContain('data-repository-surface="change-evidence"');
     expect(markup).toContain('aria-label="Change evidence views"');
     expect(markup).toContain('data-action="select-repository-file" data-item-id="clients/web/src/dialog.test.ts"');
     expect(markup).toContain('data-file-menu-source="ticket"');
@@ -270,8 +271,6 @@ describe('RepositoryStatusPopover', () => {
     );
     expect(markup).not.toMatch(/kui-toolbar__trailing"><div[^>]*data-component="toolbar-control-group"[^>]*><div/);
     expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(3);
-    const popoverCss = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.css'), 'utf8');
-    expect(popoverCss).not.toMatch(/repository-status-popover__refresh[^}]*color:/);
   });
 
   it('keeps the comparison selector compact and separated from its open action', () => {
