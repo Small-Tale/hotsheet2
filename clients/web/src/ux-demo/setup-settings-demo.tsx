@@ -251,7 +251,7 @@ export function TrashSettingsDemo() {
         note="Leave Lifecycle stands in for choosing another settings category or project tab."
         rootAttributes={TRASH_DEMO_EXAMPLE('leaving')}
       >
-        <List gap="s">
+        <List gap="m">
           <TrashSettings {...state.leaving} />
           <Row gap="xs">
             <wa-button appearance="outlined" type="button" {...TRASH_DEMO_LEAVE.attrs}>

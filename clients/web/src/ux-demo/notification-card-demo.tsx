@@ -81,7 +81,7 @@ export function NotificationCardDemo() {
         <DemoCard elevation="list" footerLayout="stack" />
       </CatalogExample>
       <CatalogExample label="Details: prose, bounded code, and custom content">
-        <List gap="s">
+        <List gap="m">
           <NotificationCard
             identity="Codex"
             projectName="Hot Sheet demo"
