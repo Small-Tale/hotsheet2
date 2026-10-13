@@ -2666,8 +2666,9 @@ HS2-WP69TD removed the four sibling-class entries by composing the owner instead
   `action`, so the remote-backup screen composes it with its own action. Since HS2-WJ4JDW it
   renders the shared `FlowBackButton` instead of a plain Web Awesome button.
 - **The terminal initialization error** is created by the imperative runtime in
-  `terminal-viewport.ts`. It renders its own `.terminal-viewport-error` block from
-  `terminal-viewport-error.css`, and TerminalDashboard's error viewport still centers it.
+  `terminal-viewport.ts`. It renders a centered, compact, wrapping Kerf `Text` alert in the
+  terminal foreground color with no stylesheet (HS2-JEJTAD), and TerminalDashboard's error
+  viewport still centers it.
 
 Before/after captures of every affected state at 1280 and 390 have identical geometry, computed
 styles, and element pixels.

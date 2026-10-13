@@ -1,4 +1,6 @@
-import './terminal-viewport-error.css';
+import { foregroundColorVar } from '@kerfjs/ui/css-values';
+import { Text } from '@kerfjs/ui/text';
+import { toElement } from 'kerfjs';
 
 import { browserRandomId } from './browser-id';
 import { isRecord, parseJson } from './json-value';
@@ -242,7 +244,7 @@ function mountTerminalRuntime(element: HTMLElement, load: () => Promise<() => ()
   let disposed = false,
     disposeRuntime: (() => void) | undefined;
   if (element.dataset.connection === 'error') {
-    element.querySelector('.terminal-viewport-error')?.remove();
+    element.querySelector('[data-terminal-viewport-error]')?.remove();
     if (element.dataset.displayMode === 'scaled-preview') element.setAttribute('aria-hidden', 'true');
   }
   element.dataset.connection = 'loading';
@@ -257,10 +259,20 @@ function mountTerminalRuntime(element: HTMLElement, load: () => Promise<() => ()
       element.style.width = '';
       element.style.height = '';
       element.style.transform = '';
-      const message = element.ownerDocument.createElement('p');
-      message.className = 'terminal-viewport-error';
-      message.setAttribute('role', 'alert');
-      message.textContent = 'Terminal could not start. Reload the page to try again.';
+      // Kerf Text owns the centered, wrapping, compact copy (KF-MMAWEG, HS2-JEJTAD); the viewport
+      // (TerminalDashboard) centers the block.
+      const message = toElement(
+        Text({
+          variant: 'p',
+          role: 'alert',
+          'data-terminal-viewport-error': '',
+          color: foregroundColorVar('--hs-terminal-foreground'),
+          size: 'compact',
+          wrap: 'anywhere',
+          align: 'center',
+          children: 'Terminal could not start. Reload the page to try again.',
+        }),
+      );
       element.replaceChildren(message);
     });
   return () => {

@@ -9,13 +9,19 @@ const runtime = vi.hoisted(() => ({
 }));
 vi.mock('./terminal-viewport-runtime', () => runtime);
 vi.mock('./browser-id', () => ({ browserRandomId: runtime.browserRandomId }));
+// The node test environment has no DOM: capture the Kerf Text markup and hand back the fake message.
+const kerf = vi.hoisted((): { next: unknown; markup: string[] } => ({ next: undefined, markup: [] as string[] }));
+vi.mock('kerfjs', async (original) => ({
+  ...(await original<typeof import('kerfjs')>()),
+  toElement: vi.fn((html: unknown) => {
+    kerf.markup.push(String(html));
+    return kerf.next;
+  }),
+}));
 
 function viewport() {
   const children: unknown[] = [];
   const message = {
-      className: '',
-      textContent: '',
-      setAttribute: vi.fn(),
       remove: vi.fn(() => {
         children.splice(children.indexOf(message), 1);
       }),
@@ -23,7 +29,6 @@ function viewport() {
     element = {
       dataset: {} as Record<string, string>,
       style: { width: '1280px', height: '768px', transform: 'scale(0.3)' },
-      ownerDocument: { createElement: () => message },
       replaceChildren: vi.fn((child) => {
         children.splice(0, children.length, child);
       }),
@@ -31,6 +36,7 @@ function viewport() {
       setAttribute: vi.fn(),
       removeAttribute: vi.fn(),
     };
+  kerf.next = message;
   return {
     element: element as unknown as HTMLElement,
     message,
@@ -102,9 +108,13 @@ describe('terminal lazy mount transitions (HS2-3ZBQDG)', () => {
       const failed = mount();
       await vi.dynamicImportSettled();
       expect(element.dataset.connection).toBe('error');
-      expect(message.setAttribute).toHaveBeenCalledWith('role', 'alert');
+      const markup = kerf.markup.at(-1)!;
+      expect(markup).toContain('role="alert"');
+      expect(markup).toContain('data-terminal-viewport-error');
+      expect(markup).toContain('data-align="center"');
+      expect(markup).toContain('var(--hs-terminal-foreground)');
       expect(removed).toHaveBeenCalledWith('aria-hidden');
-      expect(message.textContent).toContain('Terminal could not start');
+      expect(markup).toContain('Terminal could not start');
       expect(replaced).toHaveBeenCalledWith(message);
       expect(element.style).toEqual({ width: '', height: '', transform: '' });
       failed();

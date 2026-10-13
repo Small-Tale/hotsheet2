@@ -7,7 +7,6 @@ const sourceRoot = import.meta.dirname;
 const tokenPath = resolve(sourceRoot, 'hot-sheet-tokens.css');
 const productionCss = [
   resolve(sourceRoot, 'style.css'),
-  resolve(sourceRoot, 'terminal-viewport-error.css'),
   ...readdirSync(resolve(sourceRoot, 'components'))
     .filter((file) => file.endsWith('.css'))
     .map((file) => resolve(sourceRoot, 'components', file)),
@@ -134,8 +133,10 @@ describe('shared client theme', () => {
     expect(css(tokenPath)).toContain('--hs-terminal-background: light-dark(var(--wa-color-surface-default), #000);');
     expect(css(tokenPath)).toContain('--hs-terminal-foreground: var(--wa-color-text-normal);');
     expect(css(tokenPath)).toContain('--hs-command-on: #fff;');
-    const viewport = css(resolve(sourceRoot, 'terminal-viewport-error.css'));
-    expect(viewport).toMatch(/\.terminal-viewport-error\s*\{[^}]*color: var\(--hs-terminal-foreground\)/);
+    // The start-failure message is Kerf Text colored with the terminal foreground (HS2-JEJTAD).
+    expect(css(resolve(sourceRoot, 'terminal-viewport.ts'))).toContain(
+      "color: foregroundColorVar('--hs-terminal-foreground')",
+    );
   });
 
   it('keeps every client-owned stylesheet on the shared semantic color palette', () => {
