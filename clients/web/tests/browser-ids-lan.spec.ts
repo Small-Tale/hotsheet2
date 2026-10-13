@@ -1,7 +1,6 @@
 import { expect, test, webkit } from '@playwright/test';
 
 import type { FullTicket, ToolConnection } from '../src/api';
-import type { ConversationExportOpenResult } from '../src/conversation-export';
 import { insecureOriginProxy, remoteOrigin } from './insecure-origin';
 import { realTicketServer } from './real-ticket-server';
 
@@ -73,38 +72,14 @@ for (const width of [390, 1280]) {
           },
         }),
       );
-      // Only external AI tool execution/native folder selection are faked. Ticket
+      // Only external AI tool execution is faked. Ticket
       // creation and attachment upload/readback use the real isolated Rust store.
-      await page.route('**/__hotsheet/conversation-exports/open', (route) =>
-        route.fulfill({
-          json: {
-            conversation: {
-              displayPath: '/exports/LAN saved chat',
-              manifest: {
-                format: 'hotsheet-conversation-export',
-                manifestVersion: 1,
-                exportId: 'saved-export',
-                revision: 1,
-                exportedAt: '2026-09-23T00:00:00Z',
-                selectedMessageIds: ['saved-message'],
-                bundle: { includeAttachments: false, includeMedia: false, includeSummary: false },
-                entries: [],
-                assets: [],
-                source: { tool: 'codex', projectId: server.checkoutId, conversationId: 'saved' },
-                reopen: {
-                  conversationId: 'saved',
-                  tool: 'codex',
-                  firstMessageId: 'saved-message',
-                  lastMessageId: 'saved-message',
-                  resumesOriginalSession: false,
-                },
-              },
-              messages: [{ id: 'saved-message', role: 'assistant', content: 'Saved LAN result' }],
-              activity: [],
-            } satisfies ConversationExportOpenResult,
-          },
-        }),
-      );
+      // A remote client must refuse the saved-conversation dialog before it reaches the bridge.
+      let openRequests = 0;
+      await page.route('**/__hotsheet/conversation-exports/open', (route) => {
+        openRequests++;
+        return route.fulfill({ json: {} });
+      });
       await page.route(`**${apiPath}/**`, async (route) => {
         const request = route.request(),
           url = new URL(request.url()),
@@ -241,13 +216,16 @@ for (const width of [390, 1280]) {
       }
       expect(new Set(connections.map((connection) => connection.id)).size).toBe(2);
       expect(turns).toEqual(['LAN turn 1', 'LAN turn 2']);
-      for (let index = 0; index < 2; index++) {
-        await create.click();
-        await drawer.getByRole('menuitem', { name: 'Saved conversation…' }).click();
-        await expect(drawer.locator('[data-component="ai-conversation"]')).toContainText('Saved LAN result');
-      }
-      await expect(drawer.getByRole('tab', { name: 'Codex saved chat' })).toHaveCount(2);
-      await expect(page.locator('.app-toast')).toBeHidden();
+      // Opening a saved conversation shows a native file dialog on the server's machine, so a
+      // LAN client is refused with an explanation instead (HS2-F78B1S, HS2-PR6N58). The
+      // insecure-context saved-chat id path stays covered by the browser-id unit tests.
+      await create.click();
+      await drawer.getByRole('menuitem', { name: 'Saved conversation…' }).click();
+      await expect(
+        page.getByText('Opening a saved conversation happens on the computer running Hot Sheet'),
+      ).toBeVisible();
+      expect(openRequests).toBe(0);
+      await expect(drawer.getByRole('tab', { name: 'Codex saved chat' })).toHaveCount(0);
       await drawer
         .locator('[data-component="ai-conversation"]')
         .screenshot({ path: testInfo.outputPath(`LAN-saved-conversation-${width}.png`) });
