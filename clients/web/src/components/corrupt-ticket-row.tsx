@@ -11,6 +11,7 @@ import { Text } from '@kerfjs/ui/text';
 import { Bot, FileWarning, FolderOpen, RefreshCw } from 'lucide';
 
 import type { CorruptTicket } from '../api';
+import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
 import { inspectorToggle, SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 import { type TicketRowListEdge, ticketRowShellAttributes } from './ticket-row';
@@ -33,7 +34,15 @@ export function revealFileLabel(platform = typeof navigator === 'undefined' ? ''
   return 'Show file location';
 }
 
-function RecoveryActions({ ticket, recovery }: { ticket: CorruptTicket; recovery?: CorruptTicketRecoveryState }) {
+function RecoveryActions({
+  ticket,
+  recovery,
+  hostActionsAvailable,
+}: {
+  ticket: CorruptTicket;
+  recovery?: CorruptTicketRecoveryState;
+  hostActionsAvailable: boolean;
+}) {
   const key = corruptTicketKey(ticket);
   return (
     <>
@@ -44,7 +53,8 @@ function RecoveryActions({ ticket, recovery }: { ticket: CorruptTicket; recovery
         type="button"
         {...NAVIGATION_AND_TABS_ACTIONS.revealCorruptTicket.attrs}
         data-corrupt-key={key}
-        disabled={Boolean(recovery?.pending)}
+        disabled={Boolean(recovery?.pending) || !hostActionsAvailable}
+        title={hostOnlyDisabledReason('reveal-file', hostActionsAvailable)}
       >
         <LucideIcon slot="start" icon={FolderOpen} name="folder-open" size="s" />
         {recovery?.pending === 'reveal' ? 'Showing…' : revealFileLabel()}
@@ -131,9 +141,12 @@ export function CorruptTicketRow({
 export function corruptTicketInspectorPanel({
   ticket,
   recovery,
+  hostActionsAvailable = hostActionsAvailableHere(),
 }: {
   ticket: CorruptTicket;
   recovery?: CorruptTicketRecoveryState;
+  /** False on a remote client: host-only controls render disabled with an explanation (HS2-TYS5SS). */
+  hostActionsAvailable?: boolean;
 }): SidebarPanelParts {
   const identity = corruptTicketIdentity(ticket),
     upgradeRequired = ticket.error_code === 'upgrade_required';
@@ -175,7 +188,7 @@ export function corruptTicketInspectorPanel({
         </section>
         <div class="corrupt-ticket-inspector__actions">
           <List gap="xs">
-            <RecoveryActions ticket={ticket} recovery={recovery} />
+            <RecoveryActions ticket={ticket} recovery={recovery} hostActionsAvailable={hostActionsAvailable} />
           </List>
         </div>
         {recovery?.message && (

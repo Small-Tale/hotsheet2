@@ -11,6 +11,7 @@ import { Text } from '@kerfjs/ui/text';
 import { ChevronRight, GitBranch, Power, PowerOff, Trash2 } from 'lucide';
 
 import type { ProviderAccount, ProviderConnection } from '../api';
+import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
 import { ContentTransition } from './content-transition';
@@ -78,6 +79,8 @@ export interface TicketSourceSetupDialogProps {
   chosenAccount?: string;
   /** Demo-only state picker, rendered within the modal so its controls remain reachable. */
   previewScenario?: string;
+  /** False on a remote client: host-only controls render disabled with an explanation (HS2-TYS5SS). */
+  hostActionsAvailable?: boolean;
 }
 
 export function TicketSourceSetupDialog({
@@ -101,6 +104,7 @@ export function TicketSourceSetupDialog({
   accounts = [],
   chosenAccount,
   previewScenario,
+  hostActionsAvailable = hostActionsAvailableHere(),
 }: TicketSourceSetupDialogProps) {
   const editing = providerConnections.find((item) => item.id === editingProviderId),
     editingGit = editingGitSource?.connectionId === editingProviderId ? editingGitSource : undefined,
@@ -189,6 +193,9 @@ export function TicketSourceSetupDialog({
           'Create a Hot Sheet 2 git ticket repository in a custom location',
           'Choose another folder; multiple git ticket repositories are supported.',
           <LucideIcon icon={GitBranch} name="git-branch" />,
+          undefined,
+          !hostActionsAvailable,
+          hostOnlyDisabledReason('choose-folder', hostActionsAvailable),
         )}
         {option(
           'select-provider-kind',

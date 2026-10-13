@@ -217,13 +217,17 @@ for (const width of [390, 1280]) {
       expect(new Set(connections.map((connection) => connection.id)).size).toBe(2);
       expect(turns).toEqual(['LAN turn 1', 'LAN turn 2']);
       // Opening a saved conversation shows a native file dialog on the server's machine, so a
-      // LAN client is refused with an explanation instead (HS2-F78B1S, HS2-PR6N58). The
-      // insecure-context saved-chat id path stays covered by the browser-id unit tests.
+      // LAN client sees the menu item disabled with the reason (HS2-F78B1S, HS2-PR6N58,
+      // HS2-TYS5SS). The insecure-context saved-chat id path stays covered by browser-id unit tests.
       await create.click();
-      await drawer.getByRole('menuitem', { name: 'Saved conversation…' }).click();
-      await expect(
-        page.getByText('Opening a saved conversation happens on the computer running Hot Sheet'),
-      ).toBeVisible();
+      const saved = drawer.getByRole('menuitem', { name: 'Saved conversation…' });
+      await expect(saved).toHaveAttribute('disabled', /.*/);
+      await expect(saved).toHaveAttribute(
+        'title',
+        "Opening a saved conversation happens on the computer running Hot Sheet, so it isn't available from this device.",
+      );
+      await saved.click({ force: true });
+      await page.keyboard.press('Escape');
       expect(openRequests).toBe(0);
       await expect(drawer.getByRole('tab', { name: 'Codex saved chat' })).toHaveCount(0);
       await drawer

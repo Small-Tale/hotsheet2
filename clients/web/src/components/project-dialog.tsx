@@ -11,6 +11,7 @@ import { Text } from '@kerfjs/ui/text';
 import { Ellipsis } from 'lucide';
 
 import type { Checkout } from '../api';
+import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
 import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
 
@@ -28,12 +29,15 @@ export function ProjectDialog({
   error,
   recovery,
   recoveryBusy = false,
+  hostActionsAvailable = hostActionsAvailableHere(),
 }: {
   open: boolean;
   root: string;
   error: string;
   recovery?: UnhealthyServerRecoveryView;
   recoveryBusy?: boolean;
+  /** False on a remote client: host-only controls render disabled with an explanation (HS2-TYS5SS). */
+  hostActionsAvailable?: boolean;
 }) {
   // Keyed so the render morph never repurposes this dialog for a sibling DialogSurface: opening a project
   // waits for this exact element's wa-after-hide before presenting ticket setup or HS1 import.
@@ -54,7 +58,8 @@ export function ProjectDialog({
                   type="button"
                   {...PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.attrs}
                   aria-label="Browse for project folder"
-                  title="Browse for project folder"
+                  title={hostOnlyDisabledReason('choose-folder', hostActionsAvailable) ?? 'Browse for project folder'}
+                  disabled={!hostActionsAvailable}
                 >
                   <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
                 </wa-button>
@@ -70,7 +75,8 @@ export function ProjectDialog({
                   type="button"
                   {...PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.attrs}
                   aria-label="Browse for ticket store"
-                  title="Browse for ticket store"
+                  title={hostOnlyDisabledReason('choose-folder', hostActionsAvailable) ?? 'Browse for ticket store'}
+                  disabled={!hostActionsAvailable}
                 >
                   <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
                 </wa-button>

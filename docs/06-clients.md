@@ -187,7 +187,11 @@ computer running Hot Sheet, so it isn't available from this device." Code Review
 as a toast because its inline message can sit below a long commit list; other surfaces use
 their existing error display. Open Project keeps its remote checkout picker, and an
 attachment's host **Path** stays available because terminals run on that machine. The
-inventory is in HS2-E0HC6J; browser-native replacements (in-page diff, attachment
+inventory is in HS2-E0HC6J. Since HS2-TYS5SS those controls also render disabled up
+front, with the same explanation as their tooltip (or the menu item's disabled reason):
+the components take a `hostActionsAvailable` prop that defaults to
+`hostActionsAvailableHere()` (`clients/web/src/host-only-actions.ts`), and the click-time
+refusal stays as a backstop. Browser-native replacements (in-page diff, attachment
 preview/download, server directory browser) are separate design work.
 
 ## 6.3 Web client and Tauri desktop host

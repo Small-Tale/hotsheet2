@@ -459,6 +459,27 @@ export function TicketCodeReviewDemo() {
         />
       </CatalogExample>
       <CatalogExample
+        label="Remote device"
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
+        <TicketCodeReview
+          hostActionsAvailable={false}
+          review={{
+            difftool: 'Meld',
+            truncated: false,
+            ranges: [],
+            commits: [
+              {
+                sha: 'bbb',
+                short_sha: 'bbbbbbb',
+                subject: 'HS2-DEMO: diff tool opens only on the host',
+                committed_at: '2026-09-02T07:00:00Z',
+              },
+            ],
+          }}
+        />
+      </CatalogExample>
+      <CatalogExample
         label="Not configured"
         viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
       >

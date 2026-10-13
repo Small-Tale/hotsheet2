@@ -49,6 +49,7 @@ import {
 } from 'lucide';
 
 import type { CodeReview, RepositoryFile, RepositoryFileChange, RepositoryStatus } from '../api';
+import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
 import { ContextMenuAnchor } from './context-menu-anchor';
 import { RepositorySetup, type RepositorySetupStep } from './repository-setup';
@@ -129,6 +130,7 @@ export function RepositoryStatusPopover({
   detailHasMore = false,
   compact = false,
   detailActive = false,
+  hostActionsAvailable = hostActionsAvailableHere(),
 }: {
   status: RepositoryStatus | null;
   error?: string;
@@ -152,6 +154,8 @@ export function RepositoryStatusPopover({
   compact?: boolean;
   /** In compact mode, whether the selected view's detail is pushed over the list. */
   detailActive?: boolean;
+  /** False on a remote client: open, reveal, and diff-tool actions render disabled (HS2-TYS5SS). */
+  hostActionsAvailable?: boolean;
 }) {
   const recoveryStep = error ? undefined : (setupStep ?? (!initialized ? 'initialize' : undefined)),
     state = repositoryStatusState(status, error, initialized),
@@ -299,6 +303,7 @@ export function RepositoryStatusPopover({
           review={review}
           comparison={comparison}
           expandedCommits={expandedCommits}
+          hostActionsAvailable={hostActionsAvailable}
           loading={detailLoading && review?.commits.length === 0}
         />
       ) : (
@@ -390,7 +395,11 @@ export function RepositoryStatusPopover({
         </Pane>
       )}
       {fileMenu && fileMenu.source !== 'ticket' && (
-        <RepositoryFileContextMenu menu={fileMenu} platform={status?.platform} />
+        <RepositoryFileContextMenu
+          menu={fileMenu}
+          platform={status?.platform}
+          hostActionsAvailable={hostActionsAvailable}
+        />
       )}
     </section>
   );
@@ -470,6 +479,7 @@ export function ChangeEvidenceDialog({
   selectedFiles = [],
   platform,
   compact = false,
+  hostActionsAvailable = hostActionsAvailableHere(),
 }: {
   review?: CodeReview;
   view?: ChangeEvidenceView;
@@ -479,6 +489,8 @@ export function ChangeEvidenceDialog({
   fileMenu?: RepositoryFileMenu;
   selectedFiles?: readonly string[];
   platform?: RepositoryStatus['platform'];
+  /** False on a remote client: open, reveal, and diff-tool actions render disabled (HS2-TYS5SS). */
+  hostActionsAvailable?: boolean;
 }) {
   const files = review?.files ?? [],
     visible = files.filter((file) => file.category === view);
@@ -560,7 +572,9 @@ export function ChangeEvidenceDialog({
           }
         />
       )}
-      {fileMenu?.source === 'ticket' && <RepositoryFileContextMenu menu={fileMenu} platform={platform} />}
+      {fileMenu?.source === 'ticket' && (
+        <RepositoryFileContextMenu menu={fileMenu} platform={platform} hostActionsAvailable={hostActionsAvailable} />
+      )}
     </section>
   );
 }
@@ -572,9 +586,11 @@ const fileMenuItem = (
   icon: Parameters<typeof LucideIcon>[0]['icon'],
   iconName: string,
   disabled = false,
+  disabledReason?: string,
 ): PopupMenuItem => ({
   label,
-  disabled,
+  disabled: disabled || Boolean(disabledReason),
+  ...(disabledReason ? { disabledReason } : {}),
   icon: <LucideIcon size="s" icon={icon} name={iconName} />,
   attributes: { 'data-repository-file-action': action, 'data-repository-file-path': path },
 });
@@ -582,9 +598,11 @@ const fileMenuItem = (
 function RepositoryFileContextMenu({
   menu,
   platform,
+  hostActionsAvailable,
 }: {
   menu: RepositoryFileMenu;
   platform?: RepositoryStatus['platform'];
+  hostActionsAvailable: boolean;
 }) {
   const multiple = (menu.paths?.length ?? 1) > 1;
   const reveal =
@@ -597,8 +615,24 @@ function RepositoryFileContextMenu({
         rootAttributes={{ 'data-context-menu': 'repository-file' }}
         items={[
           fileMenuItem('show-diff', menu.path, 'Show Diff', GitCompare, 'git-compare', !menu.diff),
-          fileMenuItem('open', menu.path, 'Open', ExternalLink, 'external-link', multiple),
-          fileMenuItem('reveal', menu.path, reveal, FolderOpen, 'folder-open', multiple),
+          fileMenuItem(
+            'open',
+            menu.path,
+            'Open',
+            ExternalLink,
+            'external-link',
+            multiple,
+            hostOnlyDisabledReason('open-file', hostActionsAvailable),
+          ),
+          fileMenuItem(
+            'reveal',
+            menu.path,
+            reveal,
+            FolderOpen,
+            'folder-open',
+            multiple,
+            hostOnlyDisabledReason('reveal-file', hostActionsAvailable),
+          ),
           { kind: 'divider' },
           fileMenuItem('copy-path', menu.path, 'Copy Relative Path', Clipboard, 'clipboard'),
           ...(menu.absolutePath

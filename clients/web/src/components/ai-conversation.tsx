@@ -37,6 +37,7 @@ import {
   formatConversationCost,
   formatConversationTokens,
 } from '../ai-conversation';
+import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import type { PermissionItem } from '../permission-notifications';
 import { AIContentFeedback, AIContentLabel } from './ai-content-label';
@@ -74,6 +75,8 @@ export interface AIConversationProps {
   readOnly?: boolean;
   readOnlyContext?: 'saved' | 'preview';
   savedSource?: string;
+  /** False on a remote client: host-only controls render disabled with an explanation (HS2-TYS5SS). */
+  hostActionsAvailable?: boolean;
 }
 
 export function isConversationSurfaceLifecycleEvent(event: Pick<Event, 'target'>, surface: Element) {
@@ -225,6 +228,7 @@ export function AIConversation({
   readOnly = false,
   readOnlyContext = 'saved',
   savedSource,
+  hostActionsAvailable = hostActionsAvailableHere(),
 }: AIConversationProps) {
   const previewOnly = readOnly && readOnlyContext === 'preview',
     previewConfiguration = [model && `Model ${model}`, effort && `Effort ${effort}`].filter(Boolean).join(' · '),
@@ -242,9 +246,12 @@ export function AIConversation({
       type="button"
       class="ai-conversation__header-action"
       {...COMMANDS_AND_AI_ACTIONS.saveConversation.attrs}
-      disabled={busy || messages.length === 0}
+      disabled={busy || messages.length === 0 || !hostActionsAvailable}
       aria-label="Save conversation"
-      title={busy ? 'Wait for the active response before saving' : 'Save conversation'}
+      title={
+        hostOnlyDisabledReason('conversation-export', hostActionsAvailable) ??
+        (busy ? 'Wait for the active response before saving' : 'Save conversation')
+      }
     >
       <LucideIcon icon={Download} name="download" />
     </button>

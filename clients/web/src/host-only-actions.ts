@@ -26,6 +26,18 @@ export function hostOnlyActionMessage(action: HostOnlyAction): string {
   return `${ACTION_LABELS[action]} on the computer running Hot Sheet, so it isn't available from this device.`;
 }
 
+/** Whether host-only controls can act from this client (HS2-TYS5SS). Components take it as their
+ * `hostActionsAvailable` prop default, so remote clients render those controls disabled with the
+ * {@link hostOnlyActionMessage} tooltip before anyone clicks. */
+export function hostActionsAvailableHere(): boolean {
+  return !(typeof window !== 'undefined' && isRemoteClient());
+}
+
+/** The disabled-control tooltip for a host-only action, or undefined when the action is available. */
+export function hostOnlyDisabledReason(action: HostOnlyAction, available: boolean): string | undefined {
+  return available ? undefined : hostOnlyActionMessage(action);
+}
+
 /** Throw a {@link HostOnlyActionError} when the client is on a different device than the server.
  * `window`-free contexts (Node tests, workers) count as same-device. */
 export function assertHostAction(

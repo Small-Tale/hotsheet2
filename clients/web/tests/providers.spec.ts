@@ -9580,7 +9580,7 @@ test('shows Blocked only when the ticket has a visible blocked reason', async ({
   await ticket.screenshot({ path: 'target/visual-captures/hs2-e3c530-visible-blocked-reason.png' });
 });
 
-test('explains instead of launching host-only diff and file actions from a remote device (HS2-F78B1S)', async ({
+test('disables host-only diff actions with an explanation on a remote device (HS2-F78B1S, HS2-TYS5SS)', async ({
   page,
 }) => {
   const actions = await mockProject(page);
@@ -9601,10 +9601,15 @@ test('explains instead of launching host-only diff and file actions from a remot
     const inspector = page.locator('[data-component="ticket-reader"][data-reader-active="true"]');
     await inspector.getByRole('tab', { name: 'Code Review' }).click();
     const review = inspector.locator('[data-component="ticket-code-review"]');
-    await review.getByRole('button', { name: 'Open commit bbb2222 in Glassbox' }).click();
-    await expect(page.locator('.app-toast')).toContainText(
+    // Host-only controls are disabled up front with the reason as their tooltip (HS2-TYS5SS).
+    const open = review.getByRole('button', { name: 'Open commit bbb2222 in Glassbox' });
+    await expect(open).toBeDisabled();
+    await expect(open).toHaveAttribute(
+      'title',
       "The diff tool opens on the computer running Hot Sheet, so it isn't available from this device.",
     );
+    await expect(review.getByText('No Git diff tool is configured')).toHaveCount(0);
+    await open.click({ force: true });
     await expect(review.locator('.ticket-code-review__message')).toHaveCount(0);
     await page.screenshot({
       path: `target/visual-captures/hs2-f78b1s-remote-diff-${width}.png`,

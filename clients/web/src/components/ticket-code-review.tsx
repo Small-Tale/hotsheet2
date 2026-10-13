@@ -22,6 +22,7 @@ import {
 } from 'lucide';
 
 import type { CodeReview, CodeReviewTarget, CommitRef } from '../api';
+import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
 import { MarkdownPreview } from './markdown-preview';
 import { TicketInspectorPanel, type TicketInspectorPanelPresentation } from './ticket-inspector-panel';
@@ -47,6 +48,8 @@ export interface TicketCodeReviewProps {
   presentation?: TicketInspectorPanelPresentation;
   comparison?: CodeReviewComparison;
   expandedCommits?: readonly string[];
+  /** False on a remote client: diff-tool actions render disabled with an explanation (HS2-TYS5SS). */
+  hostActionsAvailable?: boolean;
 }
 
 export function TicketCodeReview({
@@ -61,8 +64,10 @@ export function TicketCodeReview({
   presentation = 'sidebar',
   comparison,
   expandedCommits = [],
+  hostActionsAvailable = hostActionsAvailableHere(),
 }: TicketCodeReviewProps) {
-  const enabled = Boolean(review?.difftool);
+  const enabled = Boolean(review?.difftool) && hostActionsAvailable,
+    hostReason = hostOnlyDisabledReason('diff-tool', hostActionsAvailable);
   const compareReady = Boolean(comparison?.a && comparison.b && comparison.a !== comparison.b);
   // The diff tool label sits on the trailing edge, aligned with the rows' open icons (HS2-PB0VY5).
   const heading = <ToolbarText text={title} size="xlarge" headingLevel={2} />,
@@ -120,7 +125,7 @@ export function TicketCodeReview({
               </p>
             </button>
           )}
-          {!enabled && <DiffToolMissingNotice />}
+          {!review.difftool && <DiffToolMissingNotice />}
           {comparison?.active && (
             <div class="ticket-code-review__compare-banner" role="status">
               <div class="ticket-code-review__compare-prompt">
@@ -170,6 +175,7 @@ export function TicketCodeReview({
                 data-review-from={comparison.a}
                 data-review-to={comparison.b}
                 disabled={!enabled || !compareReady}
+                title={hostReason}
                 aria-label={`Open comparison in ${review.difftool ?? 'configured diff tool'}`}
               >
                 <LucideIcon size={14.4} icon={ExternalLink} name="external-link" />
@@ -196,6 +202,7 @@ export function TicketCodeReview({
                       data-review-from={range.from}
                       data-review-to={range.to}
                       disabled={!enabled}
+                      title={hostReason}
                       aria-label={`Open ${range.count} commit bundle ${shortSha(range.from)} through ${shortSha(range.to)} in ${review.difftool ?? 'configured diff tool'}`}
                     >
                       <LucideIcon size={14.4} icon={GitCompareArrows} name="git-compare-arrows" />
@@ -259,6 +266,7 @@ export function TicketCodeReview({
                     data-review-mode="commit"
                     data-review-commit={commit.sha}
                     disabled={!enabled}
+                    title={hostReason}
                     aria-label={`Open commit ${commit.short_sha} in ${review.difftool ?? 'configured diff tool'}`}
                   >
                     <LucideIcon size={14.4} icon={ExternalLink} name="external-link" />

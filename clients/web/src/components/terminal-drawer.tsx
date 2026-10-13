@@ -28,6 +28,7 @@ import {
 } from 'lucide';
 
 import { orderedDrawerTabIds } from '../drawer-tab-order';
+import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
 import { aiConnectionLabel } from '../terminal-ai-connection';
@@ -88,6 +89,8 @@ export interface TerminalDrawerProps {
    * Paste for the selected terminal, and a magnified grid tile's toolbar carries them too.
    */
   touchClipboard?: boolean;
+  /** False on a remote client: host-only controls render disabled with an explanation (HS2-TYS5SS). */
+  hostActionsAvailable?: boolean;
 }
 export const TERMINAL_DRAWER_TAB_BAR_ID = 'terminal-drawer';
 // Terminal visibility is scoped to the workspace dashboard, so the drawer grid offers Open only.
@@ -166,6 +169,7 @@ export function TerminalDrawer({
   defaultAiProvider,
   mobile = false,
   touchClipboard = false,
+  hostActionsAvailable = hostActionsAvailableHere(),
 }: TerminalDrawerProps) {
   const selected =
       sessions.some((session) => session.id === selectedId) || chatTabs.some((chat) => chat.id === selectedId)
@@ -359,6 +363,12 @@ export function TerminalDrawer({
                       {
                         label: 'Saved conversation…',
                         action: 'open-saved-conversation',
+                        ...(hostActionsAvailable
+                          ? {}
+                          : {
+                              disabled: true,
+                              disabledReason: hostOnlyDisabledReason('conversation-open', false),
+                            }),
                         icon: <LucideIcon icon={FolderOpen} name="folder-open" />,
                       },
                     ]}

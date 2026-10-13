@@ -10,6 +10,7 @@ import { Text } from '@kerfjs/ui/text';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { ArchiveRestore, Database, Trash2 } from 'lucide';
 
+import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { PROJECT_LIFECYCLE_ACTIONS, PROJECT_LIFECYCLE_TARGETS } from '../interaction-attrs/project-lifecycle';
 import { migrationCounter, type MigrationJob, migrationPercent, migrationPhaseLabel } from '../migration-progress';
 import { ShellBanner } from './shell-banner';
@@ -33,6 +34,8 @@ export interface Hs1MigrationDialogProps {
   open: boolean;
   busy: boolean;
   error?: string;
+  /** False on a remote client: host-only controls render disabled with an explanation (HS2-TYS5SS). */
+  hostActionsAvailable?: boolean;
 }
 
 export function Hs1MigrationDialog({
@@ -45,6 +48,7 @@ export function Hs1MigrationDialog({
   open,
   busy,
   error,
+  hostActionsAvailable = hostActionsAvailableHere(),
 }: Hs1MigrationDialogProps) {
   return (
     <wa-dialog
@@ -88,7 +92,8 @@ export function Hs1MigrationDialog({
               appearance="outlined"
               type="button"
               {...PROJECT_LIFECYCLE_ACTIONS.browseHs1TicketStore.attrs}
-              disabled={busy}
+              disabled={busy || !hostActionsAvailable}
+              title={hostOnlyDisabledReason('choose-folder', hostActionsAvailable)}
             >
               Choose…
             </wa-button>
