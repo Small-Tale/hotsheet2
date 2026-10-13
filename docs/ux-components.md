@@ -479,7 +479,7 @@ closes, so the field takes the row. The rail's view switcher fills its own row t
 `sizing="fill"`. The header asks `TicketSearchField` for `layout="inline"` and the rail for
 `layout="row"`, so no stylesheet reads the field's rendered state or styles it from outside
 (HS2-8FS5BJ, HS2-DAMHD1). Both wrappers are declared to Kerf's composition rule (`rendersAs`) in
-`clients/web/ai/component-composition-extension.json`. The mode selector composes Kerf
+`clients/web/kerf.components.json`. The mode selector composes Kerf
 `SegmentedControl` inside `ToolbarControlGroup`, with
 one accessible View mode group and native sequentially focusable buttons. Kerf owns
 selection, hover, focus, and segment geometry. Hot Sheet supplies Lucide icons, the
@@ -641,7 +641,7 @@ owner of editor normalization before the controlled query state rerenders (HS2-H
   | `trailing` | `AddProjectAction`: one native icon button in a single borderless, compact `ToolbarControlGroup`                                                                      |
   | `end`      | `TicketViewAction`: renders `QuickTicketLauncher` (a brand `wa-button` pill, `size="small"` for compact headings) or `EmptyTrashAction` (outlined danger `wa-button`) |
   - The strip owns no control chrome. Those components live in `project-strip-actions.tsx` and
-    `workspace-controls.tsx`, and `ai/component-composition-extension.json` declares them
+    `workspace-controls.tsx`, and `kerf.components.json` declares them
     `rendersAs` `@kerfjs/ui:toolbar-control-group` or `@kerfjs/ui:wa-button`.
   - `workspaceAction` and AppShell's `projectTabAction` are a `TicketViewActionSpec`
     (`{ kind: 'new-ticket' }` or `{ kind: 'empty-trash' }`), not markup. The demo shows both.
@@ -1027,7 +1027,7 @@ stacked below it in an app-owned `.ticket-search-form-field` wrapper that carrie
 the shared wiring. Its chips keep Kerf's default tint (see above). The saved-view dialog uses it
 (HS2-E40KC0); the TicketSearchField demo's "Form field" example exposes it. The remaining field
 radius and required-marker color differences from `wa-input` are Kerf's (`KF-6P4NAV`). The wrapper is declared to Kerf's composition rule through
-`clients/web/ai/component-composition-extension.json` (`rendersAs`
+`clients/web/kerf.components.json` (`rendersAs`
 `@kerfjs/ui:toolbar-control-group`), loaded via `.kerf-ui-profile.json` `catalogs`, so a
 Toolbar zone accepts it as the group it renders.
 
@@ -2153,10 +2153,10 @@ hooks, documentation, and explicit margin/border/padding owner. Since Kerf beta.
 (KF-K1SY5X, HS2-HMVBZW) the selection catalog is generated from the author metadata in
 `clients/web/kerf.components.json` (`package.json#kerfComponentCatalog`):
 `npm run catalog:generate` runs `kerf-component-catalog --write` and `npm run catalog:check`
-prevents drift. The generator also writes `ai/component-composition.generated.json`, but the
-doctor profile still reads the hand-kept `ai/component-composition-extension.json`, because the
-author schema cannot yet express its `wiring.sources` helper locations or JSX-prop zones; adopting
-the generated composition output would add KUI-L401 warnings. AI and human consumers
+prevents drift. The generator also writes `ai/component-composition.generated.json`, which the
+doctor profile reads directly: `kerf.components.json` declares `wiring.sources` helper locations
+and JSX-prop zones (create-kerf-component beta.98), so the hand-kept composition extension is gone
+(HS2-BHQWK6). AI and human consumers
 must search this extension before the installed Kerf component catalog, retain the source
 package identity, and use the ownership fields to avoid duplicate wrappers or insets.
 
@@ -2240,7 +2240,7 @@ examples using the package component unchanged, including explicit edge dividers
 HS2-MYVVK3 moves `clients/web` and `spikes/kerf-webawesome` to Kerf 5.0.0-beta.59 (`kerfjs`,
 `@kerfjs/ui`, `eslint-plugin-kerfjs`). Beta.59 fixes the duplicated `KUI-L201` report for a
 `rendersAs` wrapper (`KF-KV08Y0`), so `TicketSearchField` and `WorkspaceControls` now declare
-their Toolbar parent directly in `clients/web/ai/component-composition-extension.json`
+their Toolbar parent directly in `clients/web/kerf.components.json`
 (HS2-N0R5W0). Its composition catalog still omits the FloatingToolbar → ToolbarControlGroup
 edge, so the version-pinned adapter in `clients/web/scripts/check-kerf-ui-doctor.mjs` now
 covers beta.58 and beta.59 (HS2-10KEHN remains the upstream tracker). Beta.59 also adds an
@@ -2549,7 +2549,7 @@ Since Kerf 5.0.0-beta.69 (`KF-5X1TWD`) the doctor runs with `"ownership": "compo
 `.kerf-ui-doctor.json` (HS2-HGAH8E). In that mode a catalog entry owns only the stylesheets in its
 `styleSources` and its `source` module, so the doctor's ownership rules (`KUI-L019`–`KUI-L023`)
 also apply between Hot Sheet's own cataloged components. The three composition entries in
-`ai/component-composition-extension.json` declare their `styleSources`. Since HS2-1GWX47 the config
+`kerf.components.json` declare their `styleSources`. Since HS2-1GWX47 the config
 also sets `"ownershipContext": "any"` (`KF-WMMDDW`), so a cataloged sibling's class used as selector
 context or inside `:has()` fails the doctor too.
 
@@ -2998,7 +2998,7 @@ adapted, not counted). The workspace-grid rail still places those groups in its 
 (`HS2-K9KWJJ` tracks composing it through a Toolbar).
 
 The profile's `catalogs` entry points the doctor at Hot Sheet's own catalog extension and
-composition extension (`clients/web/ai/component-composition-extension.json`), so an
+composition extension (`clients/web/kerf.components.json`), so an
 app-owned wrapper that renders a cataloged Kerf root (`rendersAs`) is checked as that root
 inside Toolbar zones and parent checks instead of counting as an unknown element. The
 wrapper's own `parents` stay `any`: the rendered root already carries the listed-parent
