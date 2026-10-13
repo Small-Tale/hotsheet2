@@ -94,8 +94,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
       }
     | undefined;
   let attachmentRangeGesture:
-    | { pointerId: number; annotationId: string; endpoint: 'start' | 'end'; track: DOMRect; before: MediaAnnotation[] }
-    | undefined;
+    { annotationId: string; endpoint: 'start' | 'end'; before: MediaAnnotation[] } | undefined;
   let attachmentSwipeGesture: AttachmentGallerySwipeGesture | undefined;
   let attachmentAnnotationSession:
     | {

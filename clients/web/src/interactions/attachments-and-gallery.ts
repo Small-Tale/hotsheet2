@@ -19,13 +19,14 @@ import {
   type AttachmentGalleryGeometry,
   type AttachmentGalleryImage,
   attachmentGalleryImageIndex,
-  attachmentGalleryKeyboardAction,
   attachmentGallerySelectionUrl,
   attachmentGallerySwipeDirection,
   type AttachmentGallerySwipeGesture,
   attachmentGallerySwipeGesture,
   attachmentGalleryZoomModel,
 } from '../components/attachment-gallery';
+import { wireAttachmentGalleryControls } from '../components/attachment-gallery-interactions';
+import { wireTicketAttachmentActions } from '../components/ticket-attachments-interactions';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { copyText } from '../copy-text';
 import {
@@ -47,12 +48,11 @@ import { ticketDraftKey } from '../ticket-draft-store';
 import { data } from './dom';
 import { type AttachmentMenu, type GallerySource, type Project } from './types';
 
-/** Live application bindings used by this handler group. */
-const ATTACHMENT_DROP_TARGET = '[data-attachment-drop-target="true"]';
 /** The shell's right rail while its panel shows the ticket inspector (not the terminal rail's list). */
 export const INSPECTOR_RAIL_DROP_TARGET =
   '#app-right-rail:has(> .kui-workbench__panel-content > .kui-pane > .kui-pane__header [data-component="ticket-inspector-header"])';
 
+/** Live application bindings used by this handler group. */
 export interface AttachmentAndGalleryInteractionsDependencies {
   readonly selectedTicket: Signal<FullTicket | null>;
   /**
@@ -70,7 +70,6 @@ export interface AttachmentAndGalleryInteractionsDependencies {
   readonly attachmentLabelEditing: Signal<AttachmentLabelEditing | undefined>;
   readonly showToast: (message: string) => void;
   readonly refreshProject: ({ showLoading }?: { showLoading?: boolean }) => Promise<void>;
-  draggedGroupedAttachmentId: string | undefined;
   readonly galleryImages: (ticket?: FullTicket | null, project?: Project) => AttachmentGalleryImage[];
   readonly resetAttachmentGallery: (url?: string, source?: GallerySource) => void;
   /** The stacked reader's ticket and project owning a gallery opener, if it is not the workspace reader (HS2-97E0QR). */
@@ -101,9 +100,7 @@ export interface AttachmentAndGalleryInteractionsDependencies {
   readonly attachmentGalleryAnnotations: Signal<MediaAnnotation[]>;
   readonly updateGalleryPlaybackPresentation: (milliseconds: number) => void;
   readonly attachmentGalleryPlayhead: Signal<number>;
-  attachmentRangeGesture:
-    | { pointerId: number; annotationId: string; endpoint: 'start' | 'end'; track: DOMRect; before: MediaAnnotation[] }
-    | undefined;
+  attachmentRangeGesture: { annotationId: string; endpoint: 'start' | 'end'; before: MediaAnnotation[] } | undefined;
   attachmentAnnotationGesture:
     | {
         kind: 'draw' | 'move' | 'resize';
@@ -187,40 +184,6 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     (selectedTicket.value?.slug === slug ? selectedTicket.value.qualified_id : undefined) ??
     tickets.value.find((ticket) => ticket.slug === slug)?.qualified_id ??
     slug;
-  lifetime.add(
-    delegate(document.body, 'change', 'input[name="ticket-attachments"]', (_event, target) => {
-      const input = target as HTMLInputElement,
-        slug = input.closest<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug ?? selectedTicket.value?.slug;
-      if (slug && input.files?.length) void addAttachments(slug, input.files);
-      input.value = '';
-    }),
-  );
-  // The shell's right rail is a Workbench panel whose toolbar and padding Kerf owns (HS2-QQW6CT), so a
-  // drop anywhere on the rail while it shows a ticket inspector attaches to that ticket; the app-owned
-  // header and body wrappers carry the highlight.
-  const dropTargets = `${ATTACHMENT_DROP_TARGET}, ${INSPECTOR_RAIL_DROP_TARGET}`;
-  lifetime.add(
-    delegate(document.body, 'dragover', dropTargets, (event, target) => {
-      event.preventDefault();
-      if ((target as HTMLElement).matches(ATTACHMENT_DROP_TARGET))
-        (target as HTMLElement).dataset.draggingAttachment = 'true';
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'dragleave', ATTACHMENT_DROP_TARGET, (_event, target) => {
-      delete (target as HTMLElement).dataset.draggingAttachment;
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'drop', dropTargets, (event, target) => {
-      event.preventDefault();
-      const element = target as HTMLElement;
-      delete element.dataset.draggingAttachment;
-      const slug = element.closest<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug ?? selectedTicket.value?.slug,
-        files = (event as DragEvent).dataTransfer?.files;
-      if (slug && files?.length) void addAttachments(slug, files);
-    }),
-  );
   async function openSelectedAttachment(id: string) {
     const current = project(),
       ticket = selectedTicket.value;
@@ -281,9 +244,6 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       persistAttachmentMetadata(edit.ids ?? [], { ...edit.metadata, batch_label: label || undefined }),
     notify: showToast,
   });
-  // The in-flight write of the most recently blurred label editor, so Enter can restore focus to the
-  // title only after the editor closes.
-  let labelFinish: Promise<boolean> | undefined;
   const flushLabelOnHide = () => {
     void labelEditor.flush();
   };
@@ -295,159 +255,24 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     },
     { signal: lifetime.signal },
   );
+  // The shell's right rail is a Workbench panel whose toolbar and padding Kerf owns (HS2-QQW6CT), so a
+  // drop anywhere on the rail while it shows a ticket inspector attaches to that ticket; the app-owned
+  // header and body wrappers carry the highlight.
   lifetime.add(
-    delegate(
-      document.body,
-      'change',
-      ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchPurposeField.selector,
-      (_event, target) => {
-        const batch = target.closest<HTMLElement>('[data-attachment-ids]'),
-          ids = batch?.dataset.attachmentIds?.split(',').filter(Boolean);
-        if (batch && ids?.length) void persistAttachmentMetadata(ids, metadataForBatch(batch));
+    wireTicketAttachmentActions(document.body, {
+      addFiles: (files, origin) => {
+        const slug =
+          origin.closest<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug ?? selectedTicket.value?.slug;
+        if (slug) void addAttachments(slug, files);
       },
-    ),
-  );
-  lifetime.add(
-    delegate(
-      document.body,
-      'input',
-      ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchLabelField.selector,
-      (_event, target) => {
-        labelEditor.input(target as HTMLInputElement);
+      extraDropTargets: INSPECTOR_RAIL_DROP_TARGET,
+      labelEditor,
+      changePurpose: (batch, ids) => {
+        void persistAttachmentMetadata(ids, metadataForBatch(batch));
       },
-    ),
-  );
-  lifetime.add(
-    delegate(
-      document.body,
-      'dblclick',
-      ATTACHMENTS_AND_GALLERY_ACTIONS.editAttachmentBatchLabel.selector,
-      (_event, target) => {
-        const input = labelEditor.begin(target);
-        if (!input) return;
-        queueMicrotask(() => {
-          input.focus();
-          input.select();
-        });
-      },
-    ),
-  );
-  lifetime.add(
-    delegate(
-      document.body,
-      'keydown',
-      ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchLabelField.selector,
-      (event, target) => {
-        const input = target as HTMLInputElement,
-          key = (event as KeyboardEvent).key;
-        if (key !== 'Escape' && key !== 'Enter') return;
-        const ids = input.closest<HTMLElement>('[data-attachment-ids]')?.dataset.attachmentIds;
-        if (key === 'Escape') labelEditor.escape(input);
-        input.blur();
-        // The title button replaces the editor only once the blur's save settles, which can take
-        // longer than a couple of frames under load; restore focus after that, not on a frame count
-        // (HS2-VRBDPV).
-        const settled = labelFinish ?? Promise.resolve(true);
-        const restore = () =>
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() => {
-              if (ids)
-                document.body
-                  .querySelector<HTMLElement>(
-                    `[data-component="ticket-attachments"] [data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`,
-                  )
-                  ?.focus();
-            }),
-          );
-        settled.then(restore, restore);
-      },
-    ),
-  );
-  lifetime.add(
-    delegateCapture(
-      document.body,
-      'blur',
-      ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchLabelField.selector,
-      (_event, target) => {
-        const pending = labelEditor.finish(target);
-        labelFinish = pending;
-        const clear = () => {
-          if (labelFinish === pending) labelFinish = undefined;
-        };
-        pending.then(clear, clear);
-      },
-    ),
-  );
-  function clearGroupedAttachmentDrag(surface?: HTMLElement) {
-    dependencies.draggedGroupedAttachmentId = undefined;
-    if (surface) {
-      delete surface.dataset.draggingGroupAttachment;
-      for (const target of surface.querySelectorAll<HTMLElement>('[data-drag-over]')) delete target.dataset.dragOver;
-    }
-  }
-  lifetime.add(
-    delegate(document.body, 'dragstart', '[data-drag-attachment-id]', (event, target) => {
-      dependencies.draggedGroupedAttachmentId = data(target).dragAttachmentId;
-      const transfer = (event as DragEvent).dataTransfer;
-      if (transfer && dependencies.draggedGroupedAttachmentId) {
-        transfer.effectAllowed = 'move';
-        transfer.setData('application/x-hotsheet-attachment', dependencies.draggedGroupedAttachmentId);
-      }
-      const surface = target.closest<HTMLElement>('[data-component="ticket-attachments"]');
-      if (surface) surface.dataset.draggingGroupAttachment = 'true';
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'dragend', '[data-drag-attachment-id]', (_event, target) => {
-      clearGroupedAttachmentDrag(target.closest<HTMLElement>('[data-component="ticket-attachments"]') ?? undefined);
-    }),
-  );
-  lifetime.add(
-    delegate(
-      document.body,
-      'dragover',
-      '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]',
-      (event, target) => {
-        if (!dependencies.draggedGroupedAttachmentId) return;
-        event.preventDefault();
-        event.stopPropagation();
-        (target as HTMLElement).dataset.dragOver = 'true';
-        const transfer = (event as DragEvent).dataTransfer;
-        if (transfer) transfer.dropEffect = 'move';
-      },
-    ),
-  );
-  lifetime.add(
-    delegate(
-      document.body,
-      'dragleave',
-      '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]',
-      (event, target) => {
-        const related = (event as DragEvent).relatedTarget;
-        if (related instanceof Node && target.contains(related)) return;
-        delete (target as HTMLElement).dataset.dragOver;
-      },
-    ),
-  );
-  lifetime.add(
-    delegate(
-      document.body,
-      'drop',
-      '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]',
-      (event, target) => {
-        if (!dependencies.draggedGroupedAttachmentId) return;
-        event.preventDefault();
-        event.stopPropagation();
-        const id = dependencies.draggedGroupedAttachmentId,
-          surface = target.closest<HTMLElement>('[data-component="ticket-attachments"]'),
-          source = surface
-            ?.querySelector<HTMLElement>(`[data-drag-attachment-id="${CSS.escape(id)}"]`)
-            ?.closest<HTMLElement>('[data-attachment-ids]'),
-          destination = target.closest<HTMLElement>('[data-attachment-group-drop-target]'),
-          newGroup = target.matches('[data-attachment-new-group-drop-target]');
-        clearGroupedAttachmentDrag(surface ?? undefined);
+      regroup: (id, source, destination) => {
         if (!source) return;
-        if (newGroup) {
+        if (!destination) {
           const role = source.dataset.attachmentActorRole as 'human' | 'ai' | 'system' | 'unknown' | undefined;
           void persistAttachmentMetadata([id], {
             batch_id: browserRandomId(),
@@ -462,9 +287,9 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
           });
           return;
         }
-        if (destination && destination !== source) void persistAttachmentMetadata([id], metadataForBatch(destination));
+        if (destination !== source) void persistAttachmentMetadata([id], metadataForBatch(destination));
       },
-    ),
+    }),
   );
   lifetime.add(
     delegate(document.body, 'dblclick', ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentRow.selector, (event, target) => {
@@ -492,30 +317,6 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         if (url) resetAttachmentGallery(url, source);
       },
     ),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.closeAttachmentGallery.selector, () => {
-      resetAttachmentGallery();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.previousGalleryImage.selector, () => {
-      shiftGallery(-1);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.nextGalleryImage.selector, () => {
-      shiftGallery(1);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.zoomGalleryImage.selector, (_event, target) => {
-      const model = attachmentGalleryZoomModel(attachmentGalleryGeometry.value, attachmentGalleryScale.value),
-        direction = data(target).zoomDirection === 'out' ? -1 : 1,
-        next = model.stops[model.index + direction];
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      if (next !== undefined) attachmentGalleryScale.value = next;
-    }),
   );
   lifetime.add(
     delegate(
@@ -748,22 +549,6 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     };
   }
   lifetime.add(
-    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMarkup.selector, () => {
-      if (attachmentGallerySaveState?.value === 'saving') return;
-      if (attachmentGalleryMarkup.value) {
-        attachmentGalleryMarkup.value = false;
-        finishGalleryAnnotationSession();
-      } else {
-        beginGalleryAnnotationSession();
-        attachmentGalleryMarkup.value = true;
-        undoAnnotations.length = 0;
-        redoAnnotations.length = 0;
-      }
-      setGalleryTool('select');
-      attachmentGallerySelectedAnnotation.value = undefined;
-    }),
-  );
-  lifetime.add(
     delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.retryGallerySave.selector, () => {
       finishGalleryAnnotationSession();
     }),
@@ -850,12 +635,6 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       cropGesture = undefined;
     },
     { signal: lifetime.signal },
-  );
-  lifetime.add(
-    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryDraw.selector, () => {
-      setGalleryTool(attachmentGalleryTool.value === 'rect' ? 'select' : 'rect');
-      attachmentGallerySelectedAnnotation.value = undefined;
-    }),
   );
   lifetime.add(
     delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryTool.selector, (_event, target) => {
@@ -968,68 +747,6 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         : { ...item, end_ms: Math.max(start, next) };
     });
   }
-  lifetime.add(
-    delegate(
-      document.body,
-      'click',
-      ATTACHMENTS_AND_GALLERY_ACTIONS.seekGalleryAnnotation.selector,
-      (_event, target) => {
-        const annotationId = data(target).annotationId,
-          milliseconds = Number(data(target).annotationTime);
-        if (!annotationId || !Number.isFinite(milliseconds)) return;
-        setGalleryPlayhead(milliseconds);
-        if (attachmentGalleryMarkup.value) attachmentGallerySelectedAnnotation.value = annotationId;
-      },
-    ),
-  );
-  lifetime.add(
-    delegateCapture(document.body, 'pointerdown', '[data-gallery-range-handle]', (event, target) => {
-      const pointer = event as PointerEvent,
-        track = target.closest<HTMLElement>('.attachment-gallery__timeline-track')?.getBoundingClientRect(),
-        annotationId = data(target).annotationId,
-        endpoint = data(target).galleryRangeHandle;
-      if (
-        !track ||
-        !annotationId ||
-        annotationId !== attachmentGallerySelectedAnnotation.value ||
-        (endpoint !== 'start' && endpoint !== 'end')
-      )
-        return;
-      event.preventDefault();
-      event.stopPropagation();
-      dependencies.attachmentRangeGesture = {
-        pointerId: pointer.pointerId,
-        annotationId,
-        endpoint,
-        track,
-        before: snapshotAnnotations(),
-      };
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'keydown', '[data-gallery-range-handle]', (event, target) => {
-      const keyboard = event as KeyboardEvent;
-      if (keyboard.key !== 'ArrowLeft' && keyboard.key !== 'ArrowRight') return;
-      event.preventDefault();
-      const annotationId = data(target).annotationId,
-        endpoint = data(target).galleryRangeHandle,
-        annotation = attachmentGalleryAnnotations.value.find((item) => item.id === annotationId);
-      if (
-        !annotation ||
-        annotation.id !== attachmentGallerySelectedAnnotation.value ||
-        (endpoint !== 'start' && endpoint !== 'end')
-      )
-        return;
-      const current = endpoint === 'start' ? annotation.start_ms : annotation.end_ms;
-      const before = snapshotAnnotations();
-      setGalleryAnnotationEndpoint(
-        annotation.id,
-        endpoint,
-        (current ?? 0) + (keyboard.key === 'ArrowLeft' ? -100 : 100),
-      );
-      recordAnnotationChange(before, `range:${annotation.id}:${endpoint}`);
-    }),
-  );
   lifetime.add(
     delegateCapture(
       document.body,
@@ -1148,20 +865,6 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       }
       attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) =>
         item.id === base.id ? next : item,
-      );
-    },
-    { signal: lifetime.signal },
-  );
-  document.addEventListener(
-    'pointermove',
-    (event) => {
-      const gesture = dependencies.attachmentRangeGesture;
-      if (!gesture || event.pointerId !== gesture.pointerId) return;
-      event.preventDefault();
-      setGalleryAnnotationEndpoint(
-        gesture.annotationId,
-        gesture.endpoint,
-        ((event.clientX - gesture.track.left) * attachmentGalleryDuration.value) / gesture.track.width,
       );
     },
     { signal: lifetime.signal },
@@ -1394,27 +1097,6 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     },
     { capture: true, signal: lifetime.signal },
   );
-  document.addEventListener(
-    'pointerup',
-    (event) => {
-      const gesture = dependencies.attachmentRangeGesture;
-      if (!gesture || event.pointerId !== gesture.pointerId) return;
-      dependencies.attachmentRangeGesture = undefined;
-      event.preventDefault();
-      recordAnnotationChange(gesture.before);
-    },
-    { signal: lifetime.signal },
-  );
-  document.addEventListener(
-    'pointercancel',
-    (event) => {
-      const gesture = dependencies.attachmentRangeGesture;
-      if (!gesture || event.pointerId !== gesture.pointerId) return;
-      attachmentGalleryAnnotations.value = gesture.before;
-      dependencies.attachmentRangeGesture = undefined;
-    },
-    { signal: lifetime.signal },
-  );
   function toggleGalleryPlayback() {
     const video = document.querySelector<HTMLVideoElement>('.attachment-gallery video');
     if (video) {
@@ -1432,82 +1114,105 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     }
   }
   lifetime.add(
-    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryPlayback.selector, () => {
-      toggleGalleryPlayback();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'keydown', ATTACHMENTS_AND_GALLERY_TARGETS.attachmentGallery.selector, (event) => {
-      const keyboard = event as KeyboardEvent,
-        origin = event.target as Element,
-        playheadControl = origin.matches('input[name="gallery-playhead"]');
-      if (
-        !document.querySelector('.attachment-gallery video') ||
-        (!playheadControl && origin.closest('button,input,textarea,select,[contenteditable="true"]'))
-      )
-        return;
-      const action = attachmentGalleryKeyboardAction(
-        keyboard.key,
-        dependencies.attachmentGalleryLivePlayhead,
-        attachmentGalleryDuration.value,
-        keyboard.shiftKey,
-      );
-      if (!action) return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (action.kind === 'toggle-playback') {
-        toggleGalleryPlayback();
-        return;
-      }
-      document.querySelector<HTMLVideoElement>('.attachment-gallery video')?.pause();
-      setGalleryPlayhead(action.playheadMs);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'input', 'input[name="gallery-playhead"]', (_event, target) => {
-      setGalleryPlayhead(Number((target as HTMLInputElement).value), false);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'change', 'input[name="gallery-playhead"]', (_event, target) => {
-      setGalleryPlayhead(Number((target as HTMLInputElement).value));
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryVolume.selector, (event) => {
-      event.stopPropagation();
-      attachmentGalleryVolumeOpen.value = !attachmentGalleryVolumeOpen.value;
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'input', 'input[name="gallery-volume"]', (_event, target) => {
-      const video = document.querySelector<HTMLVideoElement>('.attachment-gallery video'),
-        volume = Math.max(0, Math.min(1, Number((target as HTMLInputElement).value)));
-      dependencies.attachmentGalleryLiveVolume = volume;
-      if (attachmentGalleryMuted.value) attachmentGalleryMuted.value = false;
-      if (video) {
-        video.volume = volume;
-        video.muted = false;
-      }
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'change', 'input[name="gallery-volume"]', (_event, target) => {
-      attachmentGalleryVolume.value = Math.max(0, Math.min(1, Number((target as HTMLInputElement).value)));
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMuted.selector, (event) => {
-      event.stopPropagation();
-      const video = document.querySelector<HTMLVideoElement>('.attachment-gallery video'),
-        unmute = attachmentGalleryMuted.value || dependencies.attachmentGalleryLiveVolume === 0;
-      if (unmute && dependencies.attachmentGalleryLiveVolume === 0) {
-        dependencies.attachmentGalleryLiveVolume = 0.5;
-        attachmentGalleryVolume.value = 0.5;
-        if (video) video.volume = 0.5;
-      }
-      attachmentGalleryMuted.value = !unmute;
-      if (video) video.muted = !unmute;
+    wireAttachmentGalleryControls(document.body, {
+      close: () => {
+        resetAttachmentGallery();
+      },
+      shift: shiftGallery,
+      zoom: (direction) => {
+        const model = attachmentGalleryZoomModel(attachmentGalleryGeometry.value, attachmentGalleryScale.value),
+          next = model.stops[model.index + (direction === 'out' ? -1 : 1)];
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        if (next !== undefined) attachmentGalleryScale.value = next;
+      },
+      toggleMarkup: () => {
+        if (attachmentGallerySaveState?.value === 'saving') return;
+        if (attachmentGalleryMarkup.value) {
+          attachmentGalleryMarkup.value = false;
+          finishGalleryAnnotationSession();
+        } else {
+          beginGalleryAnnotationSession();
+          attachmentGalleryMarkup.value = true;
+          undoAnnotations.length = 0;
+          redoAnnotations.length = 0;
+        }
+        setGalleryTool('select');
+        attachmentGallerySelectedAnnotation.value = undefined;
+      },
+      toggleDraw: () => {
+        setGalleryTool(attachmentGalleryTool.value === 'rect' ? 'select' : 'rect');
+        attachmentGallerySelectedAnnotation.value = undefined;
+      },
+      togglePlayback: toggleGalleryPlayback,
+      playback: () => ({
+        playheadMs: dependencies.attachmentGalleryLivePlayhead,
+        durationMs: attachmentGalleryDuration.value,
+      }),
+      seek: (milliseconds, source) => {
+        if (source === 'keyboard') document.querySelector<HTMLVideoElement>('.attachment-gallery video')?.pause();
+        setGalleryPlayhead(milliseconds, source !== 'scrub');
+      },
+      seekAnnotation: (annotationId, milliseconds) => {
+        if (!annotationId || !Number.isFinite(milliseconds)) return;
+        setGalleryPlayhead(milliseconds);
+        if (attachmentGalleryMarkup.value) attachmentGallerySelectedAnnotation.value = annotationId;
+      },
+      setVolume: (volume, commit) => {
+        if (commit) {
+          attachmentGalleryVolume.value = volume;
+          return;
+        }
+        const video = document.querySelector<HTMLVideoElement>('.attachment-gallery video');
+        dependencies.attachmentGalleryLiveVolume = volume;
+        if (attachmentGalleryMuted.value) attachmentGalleryMuted.value = false;
+        if (video) {
+          video.volume = volume;
+          video.muted = false;
+        }
+      },
+      toggleVolume: () => {
+        attachmentGalleryVolumeOpen.value = !attachmentGalleryVolumeOpen.value;
+      },
+      toggleMuted: () => {
+        const video = document.querySelector<HTMLVideoElement>('.attachment-gallery video'),
+          unmute = attachmentGalleryMuted.value || dependencies.attachmentGalleryLiveVolume === 0;
+        if (unmute && dependencies.attachmentGalleryLiveVolume === 0) {
+          dependencies.attachmentGalleryLiveVolume = 0.5;
+          attachmentGalleryVolume.value = 0.5;
+          if (video) video.volume = 0.5;
+        }
+        attachmentGalleryMuted.value = !unmute;
+        if (video) video.muted = !unmute;
+      },
+      beginRange: (annotationId, endpoint) => {
+        if (!annotationId || annotationId !== attachmentGallerySelectedAnnotation.value) return false;
+        dependencies.attachmentRangeGesture = { annotationId, endpoint, before: snapshotAnnotations() };
+        return true;
+      },
+      dragRange: (_annotationId, _endpoint, fraction) => {
+        const gesture = dependencies.attachmentRangeGesture;
+        if (gesture)
+          setGalleryAnnotationEndpoint(
+            gesture.annotationId,
+            gesture.endpoint,
+            fraction * attachmentGalleryDuration.value,
+          );
+      },
+      finishRange: (cancelled) => {
+        const gesture = dependencies.attachmentRangeGesture;
+        dependencies.attachmentRangeGesture = undefined;
+        if (!gesture) return;
+        if (cancelled) attachmentGalleryAnnotations.value = gesture.before;
+        else recordAnnotationChange(gesture.before);
+      },
+      nudgeRange: (annotationId, endpoint, deltaMs) => {
+        const annotation = attachmentGalleryAnnotations.value.find((item) => item.id === annotationId);
+        if (!annotation || annotation.id !== attachmentGallerySelectedAnnotation.value) return;
+        const current = endpoint === 'start' ? annotation.start_ms : annotation.end_ms;
+        const before = snapshotAnnotations();
+        setGalleryAnnotationEndpoint(annotation.id, endpoint, (current ?? 0) + deltaMs);
+        recordAnnotationChange(before, `range:${annotation.id}:${endpoint}`);
+      },
     }),
   );
   lifetime.add(

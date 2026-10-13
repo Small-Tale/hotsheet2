@@ -25,8 +25,7 @@ type InteractionDependencies = Parameters<typeof wireProjectLifecycleInteraction
   Parameters<typeof wireInspectorAndEditorInteractions>[0] &
   Parameters<typeof wireShellAndGlobalInteractions>[0];
 
-type OwnedInteractionState =
-  'commandLongPressFired' | 'commandLongPressTimer' | 'draggedGroupedAttachmentId' | 'draggedTickets';
+type OwnedInteractionState = 'commandLongPressFired' | 'commandLongPressTimer' | 'draggedTickets';
 
 /** Live application dependencies consumed by the interaction registration groups. */
 export type InteractionBindingsPort = Omit<InteractionDependencies, OwnedInteractionState>;
@@ -39,7 +38,6 @@ export type InteractionBindingsPort = Omit<InteractionDependencies, OwnedInterac
 export function createHotSheetInteractionBindings(port: InteractionBindingsPort): HotSheetInteractionRegistrations {
   let commandLongPressTimer: number | undefined;
   let commandLongPressFired = false;
-  let draggedGroupedAttachmentId: InteractionDependencies['draggedGroupedAttachmentId'];
   let draggedTickets: InteractionDependencies['draggedTickets'];
 
   const dependencies = Object.create(port) as InteractionDependencies;
@@ -54,12 +52,6 @@ export function createHotSheetInteractionBindings(port: InteractionBindingsPort)
       get: () => commandLongPressTimer,
       set: (value: number | undefined) => {
         commandLongPressTimer = value;
-      },
-    },
-    draggedGroupedAttachmentId: {
-      get: () => draggedGroupedAttachmentId,
-      set: (value: InteractionDependencies['draggedGroupedAttachmentId']) => {
-        draggedGroupedAttachmentId = value;
       },
     },
     draggedTickets: {
