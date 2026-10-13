@@ -9005,3 +9005,28 @@ test('aligns TicketAttachments group titles, chips, rows, and thumbnails on one 
     expect(new Set(edges).size).toBe(1);
   }
 });
+
+test('never wraps workspace toolbar siblings while the search is opening (HS2-9XJ2BD)', async ({ page }) => {
+  // Kerf leaves expanded-search fit to apps (KF-BV3AFZ): sibling groups yield, so the header keeps one row
+  // through every frame of the opening transition, not just at rest.
+  for (const width of [390, 520, 640, 760, 900, 1100, 1280]) {
+    await page.setViewportSize({ width, height: 700 });
+    await page.goto('/ux-demo?component=workspace-header');
+    const header = page.locator('.workspace-header').first();
+    await header.getByRole('button', { name: 'Search tickets' }).click();
+    const heights = await header.evaluate(
+      (node) =>
+        new Promise<number[]>((resolve) => {
+          const samples: number[] = [],
+            start = performance.now();
+          const sample = () => {
+            samples.push(Math.round(node.getBoundingClientRect().height));
+            if (performance.now() - start < 600) requestAnimationFrame(sample);
+            else resolve(samples);
+          };
+          requestAnimationFrame(sample);
+        }),
+    );
+    expect(new Set(heights), `header heights at ${width}px`).toEqual(new Set([60]));
+  }
+});
