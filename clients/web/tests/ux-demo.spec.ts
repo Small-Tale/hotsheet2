@@ -9051,3 +9051,23 @@ test('never wraps workspace toolbar siblings while the search is opening (HS2-9X
     expect(new Set(heights), `header heights at ${width}px`).toEqual(new Set([60]));
   }
 });
+
+test('aligns TicketCloseDialog copy with its field labels (HS2-0CTEP7)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=ticket-close-dialog');
+    const form = page.locator('wa-dialog.ticket-close-dialog form');
+    await expect(form.locator('wa-select')).toBeVisible();
+    const edges = await form.evaluate((node) => {
+      const textLeft = (element: Element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return Math.round(range.getClientRects()[0].left);
+      };
+      const label = node.querySelector('wa-select')!.shadowRoot!.querySelector('[part~="form-control-label"]')!;
+      return [...node.querySelectorAll('p'), label].map(textLeft);
+    });
+    expect(edges.length).toBe(4);
+    expect(new Set(edges).size).toBe(1);
+  }
+});

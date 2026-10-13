@@ -53,7 +53,7 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
         >
           <form {...TICKET_SELECTION_ACTIONS.submitTicketClose.attrs}>
             <List gap="m">
-              <Text flush tone="quiet">
+              <Text tone="quiet">
                 Record why this ticket is being closed so the outcome remains searchable and unambiguous.
               </Text>
               <Select
@@ -129,7 +129,7 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
                         {!state.searching && candidates.length === 0 && <Text tone="quiet">No matching tickets.</Text>}
                       </div>
                     )}
-                    <Text flush size="compact" tone="quiet">
+                    <Text size="compact" tone="quiet">
                       The selected ticket becomes the canonical target. This relationship is stored as structured
                       duplicate metadata.
                     </Text>
@@ -138,7 +138,7 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
               )}
               <div class="ticket-close-dialog__error" role="alert">
                 {(state.error || validation) && (
-                  <Text flush size="compact" tone="danger">
+                  <Text size="compact" tone="danger">
                     {state.error || validation}
                   </Text>
                 )}
