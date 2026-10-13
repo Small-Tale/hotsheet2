@@ -338,7 +338,7 @@ shell-and-global	delegate	document.body	'drop'	'[data-ticket-drop-project]'
 shell-and-global	delegate	document.body	'dragend'	'[data-action="select-ticket-row"]'
 shell-and-global	document.addEventListener	'pointerdown'
 shell-and-global	document.addEventListener	'keydown'
-shell-and-global	document.addEventListener	'pointerdown'
+shell-and-global	wireContextMenuDismissal	document.body
 shell-and-global	document.addEventListener	'pointerdown'
 shell-and-global	document.addEventListener	eventName
 shell-and-global	document.addEventListener	'keydown'

@@ -3,6 +3,7 @@ import { Row } from '@kerfjs/ui/row';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
+import { wireContextMenuDismissal } from '../components/context-menu-dismissal';
 import {
   TerminalCopyDialog,
   type TerminalCopyState,
@@ -36,7 +37,6 @@ import {
 import { DemoEvent } from './components/demo-event';
 import { onDemoSelected } from './components/demo-state';
 import type { DemoModule } from './demo-module';
-import { listen } from './demo-module';
 import { TERMINAL_DRAWER_DEMO_PROVIDERS } from './fixtures';
 import { syncTerminalDemoViewports } from './terminal-demo';
 
@@ -487,37 +487,28 @@ export function TerminalRenameDialogDemo() {
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireTerminalComponentsDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
-  // Dashboard and long-press menus close with Web Awesome's own hide, an outside press, or Escape.
+  // Dashboard and long-press menus close with Web Awesome's own hide, an outside press, or Escape,
+  // through the dismissal helper production's shell uses (HS2-AFCWNG).
   demoListeners.add(
-    delegate(root, 'wa-hide', '[data-context-menu]', (event, target) => {
-      if (event.target !== target) return;
-      const surface = (target as HTMLElement).dataset.contextMenu;
-      window.setTimeout(() => {
-        if (surface === 'terminal') terminalDashboardContextMenu.value = undefined;
-        else if (surface === 'terminal-edit') editMenuDemo.value = undefined;
-      }, 0);
-    }),
-  );
-  demoListeners.add(
-    listen(
-      window,
-      'pointerdown',
-      (event) => {
-        if (
-          terminalDashboardContextMenu.value &&
-          !(event.target as Element).closest(
-            '[data-context-menu="terminal"], [data-action="open-terminal-context-menu"]',
-          )
-        )
+    wireContextMenuDismissal(root, [
+      {
+        surface: 'terminal',
+        isOpen: () => Boolean(terminalDashboardContextMenu.value),
+        close: () => {
           terminalDashboardContextMenu.value = undefined;
+        },
+        ignore: '[data-action="open-terminal-context-menu"]',
+        hide: true,
       },
-      { capture: true },
-    ),
-  );
-  demoListeners.add(
-    listen(window, 'keydown', (event) => {
-      if (event.key === 'Escape') terminalDashboardContextMenu.value = undefined;
-    }),
+      {
+        surface: 'terminal-edit',
+        isOpen: () => Boolean(editMenuDemo.value),
+        close: () => {
+          editMenuDemo.value = undefined;
+        },
+        hide: true,
+      },
+    ]),
   );
   demoListeners.add(
     onDemoSelected(() => {

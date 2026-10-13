@@ -14,6 +14,7 @@ import { browserRandomId } from '../browser-id';
 import { AttachmentContextMenu } from '../components/attachment-context-menu';
 import { AttachmentGallery, attachmentGalleryZoomModel } from '../components/attachment-gallery';
 import { wireAttachmentGalleryControls } from '../components/attachment-gallery-interactions';
+import { wireContextMenuDismissal } from '../components/context-menu-dismissal';
 import { type TicketAttachmentItem, TicketAttachments } from '../components/ticket-attachments';
 import { wireTicketAttachmentActions } from '../components/ticket-attachments-interactions';
 import { TicketCategorySelect } from '../components/ticket-category-select';
@@ -543,30 +544,17 @@ export function TicketCodeReviewDemo() {
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireTicketMetadataDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
+  // The attachment menu closes through the dismissal helper production's shell uses (HS2-AFCWNG).
   demoListeners.add(
-    delegate(root, 'wa-hide', '[data-context-menu]', (event, target) => {
-      if (event.target !== target || (target as HTMLElement).dataset.contextMenu !== 'attachment') return;
-      window.setTimeout(closeAttachmentDemoMenu, 0);
-    }),
-  );
-  demoListeners.add(
-    listen(
-      window,
-      'pointerdown',
-      (event) => {
-        if (
-          attachmentDemoMenu.value &&
-          !(event.target as Element).closest('[data-context-menu="attachment"], [data-action="open-attachment-menu"]')
-        )
-          closeAttachmentDemoMenu();
+    wireContextMenuDismissal(root, [
+      {
+        surface: 'attachment',
+        isOpen: () => Boolean(attachmentDemoMenu.value),
+        close: closeAttachmentDemoMenu,
+        ignore: '[data-action="open-attachment-menu"]',
+        hide: true,
       },
-      { capture: true },
-    ),
-  );
-  demoListeners.add(
-    listen(window, 'keydown', (event) => {
-      if (event.key === 'Escape') closeAttachmentDemoMenu();
-    }),
+    ]),
   );
   // The production attachment gestures with fixture effects (HS2-1KM6MB).
   demoListeners.add(

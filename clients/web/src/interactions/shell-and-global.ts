@@ -8,11 +8,11 @@ import { createScope } from 'kerfjs/scope';
 
 import { type TicketRow as WireTicketRow } from '../api';
 import { type AppRegionId, normalizeAppRegionSize, terminalDrawerDragDecision } from '../app-region-resize';
+import { type DismissibleContextMenu, wireContextMenuDismissal } from '../components/context-menu-dismissal';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
 import { type AppTabKind } from '../components/project-tab-context-menu';
 import { type RepositoryFileMenu } from '../components/repository-status-popover';
 import { type TerminalEditMenuState } from '../components/terminal-clipboard-dialogs';
-import { eventTargetsContextMenu } from '../components/ticket-row-context-menu';
 import { type SavedViewContextMenuState } from '../components/view-navigation';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import {
@@ -21,7 +21,6 @@ import {
   revealContextPopupMenu,
 } from '../context-menu-position';
 import { SHELL_AND_GLOBAL_ACTIONS, SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
-import { TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
 import { acceptsProjectTabFileDrag, projectTabDroppedFiles } from '../project-tab-file-drop';
@@ -647,27 +646,30 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       observer.disconnect();
     });
   }
-  document.addEventListener(
-    'pointerdown',
-    (event) => {
-      if (ticketContextMenu.value && !eventTargetsContextMenu(event)) ticketContextMenu.value = undefined;
-      if (appTabContextMenu.value && !(event.target as Element).closest('[data-context-menu="app-tab"]'))
-        appTabContextMenu.value = undefined;
-      if (terminalContextMenu.value && !(event.target as Element).closest('[data-context-menu="terminal"]'))
-        terminalContextMenu.value = undefined;
-      if (terminalEditMenu.value && !(event.target as Element).closest(TERMINALS_TARGETS.terminalEditMenu.selector))
-        terminalEditMenu.value = undefined;
-      if (
-        terminalVisibilityContextMenu.value &&
-        !(event.target as Element).closest('[data-context-menu="terminal-visibility-group"]')
-      )
-        terminalVisibilityContextMenu.value = undefined;
-      if (repositoryFileMenu.value && !(event.target as Element).closest('[data-context-menu="repository-file"]'))
-        repositoryFileMenu.value = undefined;
-      if (attachmentMenu.value && !(event.target as Element).closest('[data-context-menu="attachment"]'))
-        attachmentMenu.value = undefined;
+  // Outside presses and Escape close the shell's context menus through the helper the UX demos
+  // share (HS2-AFCWNG); the visibility-group menu keeps Escape for its dialog.
+  const dismissible = (
+    surface: string,
+    menu: { value: unknown },
+    options: { escape?: boolean } = {},
+  ): DismissibleContextMenu => ({
+    surface,
+    isOpen: () => Boolean((menu as typeof menu | undefined)?.value),
+    close: () => {
+      menu.value = undefined;
     },
-    { capture: true, signal: lifetime.signal },
+    ...options,
+  });
+  lifetime.add(
+    wireContextMenuDismissal(document.body, [
+      dismissible('ticket', ticketContextMenu),
+      dismissible('app-tab', appTabContextMenu),
+      dismissible('terminal', terminalContextMenu),
+      dismissible('terminal-edit', terminalEditMenu),
+      dismissible('terminal-visibility-group', terminalVisibilityContextMenu, { escape: false }),
+      dismissible('repository-file', repositoryFileMenu),
+      dismissible('attachment', attachmentMenu),
+    ]),
   );
   document.addEventListener(
     'pointerdown',
@@ -711,12 +713,6 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       }
       if (event.key === 'Escape') {
         const galleryOpen = Boolean(attachmentGalleryUrl.value);
-        ticketContextMenu.value = undefined;
-        appTabContextMenu.value = undefined;
-        terminalContextMenu.value = undefined;
-        terminalEditMenu.value = undefined;
-        repositoryFileMenu.value = undefined;
-        attachmentMenu.value = undefined;
         resetAttachmentGallery();
         magnifiedTerminalKey.value = undefined;
         if (galleryOpen) {
