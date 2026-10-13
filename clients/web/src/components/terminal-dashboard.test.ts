@@ -129,9 +129,10 @@ describe('TerminalDashboard', () => {
     const grouped = String(
       TerminalDashboard({ groups, width: 1200, height: 700, fitAcross: 4, fitHigh: 2, grouping: 'project' }),
     );
-    expect(grouped).toMatch(
-      /<h2 class="terminal-dashboard__project-title">Project One<span class="terminal-dashboard__project-count">2<\/span>/,
-    );
+    // Kerf ListHeader names each project section with its item count (HS2-GWDD1Z).
+    expect(grouped).toContain('data-component="list-header"');
+    expect(grouped).toContain('Project One');
+    expect(grouped).toContain('2 workspace items');
     const hidden = String(
       TerminalDashboard({
         groups,
@@ -380,9 +381,13 @@ describe('TerminalDashboard', () => {
     expect(css).not.toContain('.terminal-dashboard__zoom button');
     // HS2-KKP8YJ: iOS must not raise its own callout over a long-pressed interactive terminal.
     expect(css).toContainSource(".terminal-viewport[data-display-mode='interactive'] { -webkit-touch-callout: none; }");
+    // The identity button's reset is merged into its one rule (HS2-GWDD1Z).
     expect(css).toContainSource(
-      '.terminal-tile__identity { border: 0; color: var(--wa-color-neutral-on-quiet); background: transparent; }',
+      '.terminal-tile__identity { display: flex; min-width: 0; padding: 0; border: 0; border-radius: var(--wa-border-radius-s); color: var(--wa-color-neutral-on-quiet); background: transparent; flex: 1; flex-direction: column; text-align: left; }',
     );
+    expect(css.match(/^\.terminal-tile__identity \{/gm)).toHaveLength(1);
+    expect(css.match(/^\.terminal-dashboard-controls__visibility-select \{/gm)).toHaveLength(1);
+    expect(css).not.toContain('terminal-dashboard__project-title');
     // The tile's icon actions sit in Kerf borderless ToolbarControlGroups, which own their chrome (HS2-XHA5QA).
     for (const action of ['menu', 'open', 'close', 'text-size', 'clipboard'])
       expect(css, action).not.toContain(`.terminal-tile__${action}`);

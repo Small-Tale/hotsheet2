@@ -5,6 +5,7 @@ import './terminal-dashboard.css';
 import { Badge } from '@kerfjs/ui/badge';
 import { uiColor } from '@kerfjs/ui/css-values';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
+import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Select } from '@kerfjs/ui/select';
@@ -766,10 +767,12 @@ export function TerminalDashboard({
         ) : (
           visibleGroups.map((group) => (
             <section class="terminal-dashboard__project" data-key={group.projectId} data-project-id={group.projectId}>
-              <h2 class="terminal-dashboard__project-title">
-                {group.projectName}
-                <span class="terminal-dashboard__project-count">{group.sessions.length + group.chats.length}</span>
-              </h2>
+              <ListHeader
+                label={group.projectName}
+                count={group.sessions.length + group.chats.length}
+                countLabel={`${group.sessions.length + group.chats.length} workspace items`}
+                density="compact"
+              />
               <Grid
                 sessions={group.sessions}
                 chats={group.chats}

@@ -1,3 +1,4 @@
+/* Root: a positioned, clipped column so the zoom anchor and the scrolling content share one box. */
 .terminal-dashboard {
   position: relative;
   display: flex;
@@ -7,6 +8,7 @@
   overflow: hidden;
   flex-direction: column;
 }
+/* App-owned row that hosts the visibility controls beside workspace header actions. */
 .terminal-dashboard-controls {
   display: flex;
   align-items: center;
@@ -24,6 +26,7 @@
   align-items: center;
   gap: var(--wa-space-xs);
 }
+/* App-owned hidden-item count dot over the native Eye button (a corner indicator, not a Badge). */
 .terminal-dashboard-controls__count {
   position: absolute;
   top: remify(-4px);
@@ -42,30 +45,20 @@
   place-items: center;
 }
 .terminal-dashboard-controls__visibility {
+  /* Positions the count dot against the native button. */
   position: relative;
 }
+/* App-owned wrapper that bounds the group Select's width and tunes its public selected-value tokens. */
 .terminal-dashboard-controls__visibility-select {
   display: flex;
   width: max-content;
   min-width: remify(88px);
   max-width: remify(160px);
-}
-.terminal-dashboard-controls__visibility-select {
   --kui-select-selected-color: var(--wa-color-neutral-on-quiet);
   --kui-select-selected-font-size: var(--wa-font-size-xs);
   --kui-select-selected-font-weight: var(--wa-font-weight-semibold);
 }
-/* The tile identity is the footer's one app-owned native button; its icon actions sit in Kerf
-   borderless ToolbarControlGroups that own their chrome (HS2-XHA5QA, HS2-DR549A). */
-.terminal-tile__identity {
-  border: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  background: transparent;
-}
-.terminal-tile__identity:focus-visible {
-  outline: var(--wa-focus-ring);
-  outline-offset: 1px;
-}
+/* Scroll owner for the grid; its 12px inset matches the grid gap. */
 .terminal-dashboard__content {
   min-width: 0;
   min-height: 0;
@@ -77,29 +70,12 @@
 .terminal-dashboard[data-layout-mode='drawer'] .terminal-dashboard__content {
   padding-top: var(--kui-space-xs);
 }
+/* Project-grouped sections: a Kerf ListHeader names each one with its count (HS2-GWDD1Z); the app
+   spaces only the sections themselves. */
 .terminal-dashboard__project + .terminal-dashboard__project {
   margin-top: remify(16px);
 }
-.terminal-dashboard__project-title {
-  display: flex;
-  margin: 0 0 remify(7.2px);
-  color: var(--wa-color-neutral-on-normal);
-  font-size: var(--wa-font-size-s);
-  font-weight: 700;
-  align-items: center;
-  gap: remify(7.2px);
-}
-.terminal-dashboard__project-count {
-  display: grid;
-  min-width: remify(21.6px);
-  height: remify(21.6px);
-  padding: 0 remify(4px);
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-neutral-on-quiet);
-  background: var(--wa-color-neutral-fill-quiet);
-  font-size: var(--wa-font-size-xs);
-  place-items: center;
-}
+/* App-owned fixed-aspect tile grid; the basis/fit variants below come from terminal-grid-layout. */
 .terminal-grid {
   display: grid;
   min-width: min-content;
@@ -122,6 +98,7 @@
   grid-template-rows: var(--terminal-tile-height);
   grid-auto-columns: var(--terminal-tile-width);
 }
+/* A single height-fit row fills the content height so tiles take the full band. */
 .terminal-dashboard[data-basis='high'] .terminal-dashboard__content,
 .terminal-dashboard[data-basis='high'][data-fit='1'] .terminal-dashboard__project {
   height: 100%;
@@ -142,12 +119,14 @@
   box-shadow: var(--wa-shadow-s);
   flex-direction: column;
 }
+/* Cursor semantics: a terminal preview magnifies, a chat preview opens. */
 .terminal-tile[data-preview-only='true'] {
   cursor: zoom-in;
 }
 .workspace-chat-tile[data-preview-only='true'] {
   cursor: pointer;
 }
+/* Focus rings: the preview card itself, or an inset ring while focus is inside an interactive card. */
 .terminal-tile[data-preview-only='true']:focus-visible {
   outline: var(--wa-focus-ring);
   outline-offset: 2px;
@@ -165,6 +144,7 @@
   pointer-events: none;
   inset: 0;
 }
+/* The tile's terminal surface, with a text fallback until a live viewport attaches. */
 .terminal-tile__preview {
   position: relative;
   display: block;
@@ -177,6 +157,8 @@
   text-align: left;
   flex: 1;
 }
+/* Chat preview: an app-owned scaled summary card on the default surface, drawn at a
+   natural size and scaled to the tile like a terminal preview. */
 .workspace-chat-tile__preview {
   padding: var(--terminal-tile-frame-inset);
   color: var(--wa-color-neutral-on-normal);
@@ -228,6 +210,7 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }
+/* Plain-text scrollback fallback shown before the emulator connects. */
 .terminal-tile__preview pre {
   height: 100%;
   margin: 0;
@@ -238,6 +221,7 @@
   line-height: 1.4;
   white-space: pre-wrap;
 }
+/* Inset frame that clips the scaled 1280×768 preview canvas. */
 .terminal-tile__viewport-frame {
   position: absolute;
   inset: var(--terminal-tile-frame-inset);
@@ -245,6 +229,7 @@
   background: var(--hs-terminal-background);
   pointer-events: none;
 }
+/* A paused preview keeps the terminal surface without mounting an emulator. */
 .terminal-tile__preview-placeholder {
   position: absolute;
   inset: 0;
@@ -287,6 +272,7 @@
   .terminal-preview__fallback {
   display: none;
 }
+/* xterm host: hidden until connected so a blank emulator never flashes. */
 .terminal-viewport {
   position: absolute;
   inset: var(--wa-space-s);
@@ -313,6 +299,7 @@
 [data-fixed-aspect-terminal-card='magnified'] .terminal-viewport[data-geometry-ready='false'] .terminal {
   visibility: hidden;
 }
+/* Connection states: show a live viewport, center the error copy over the frame. */
 .terminal-viewport[data-connection='connected'],
 .terminal-viewport[data-connection='reconnecting'] {
   display: block;
@@ -324,6 +311,7 @@
   width: auto;
   height: auto;
 }
+/* Hide the text fallback once a viewport (or a paused placeholder) owns the surface. */
 .terminal-tile__preview:has(
     .terminal-viewport[data-connection='connected'],
     .terminal-viewport[data-connection='reconnecting'],
@@ -333,6 +321,7 @@
   > pre {
   visibility: hidden;
 }
+/* xterm fills its host and scales from the top-left corner the runtime measures from. */
 .terminal-viewport .xterm {
   height: 100%;
 }
@@ -360,18 +349,29 @@
   --kui-toolbar-group-size: remify(40px);
   --kui-toolbar-inset: remify(1.6px);
 }
+/* The halted-process indicator keeps its icon size inside the footer row. */
 .terminal-tile__halt {
   display: inline-flex;
   flex: none;
 }
+/* The tile identity is the footer's one app-owned native button; its icon actions sit in Kerf
+   borderless ToolbarControlGroups that own their chrome (HS2-XHA5QA, HS2-DR549A). It resets the
+   native button to a truncating, left-aligned name with a link-like hover and its own focus ring. */
 .terminal-tile__identity {
   display: flex;
   min-width: 0;
   padding: 0;
+  border: 0;
   border-radius: var(--wa-border-radius-s);
+  color: var(--wa-color-neutral-on-quiet);
+  background: transparent;
   flex: 1;
   flex-direction: column;
   text-align: left;
+}
+.terminal-tile__identity:focus-visible {
+  outline: var(--wa-focus-ring);
+  outline-offset: 1px;
 }
 .terminal-tile__identity:hover strong {
   text-decoration: underline;
@@ -379,12 +379,10 @@
 .terminal-tile__identity strong {
   width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.terminal-tile__identity strong {
   color: var(--wa-color-neutral-on-normal);
   font-size: var(--wa-font-size-s);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* Phone toolbar subtitle under the terminal name (HS2-8NQRJB). */
 .terminal-tile__identity-project {
@@ -395,6 +393,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Busy progress text beside the identity. */
 .terminal-tile__progress {
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
@@ -416,6 +415,7 @@
 .terminal-dashboard[data-layout-mode='drawer'] .terminal-dashboard__zoom {
   inset-block-end: 0;
 }
+/* Desktop magnified overlay: a scrim that centers one enlarged, interactive tile. */
 .terminal-dashboard__magnified {
   position: fixed;
   z-index: 1000;
@@ -436,6 +436,8 @@
   backdrop-filter: blur(2px);
   place-items: center;
 }
+/* Inside it the tile is width-capped and fills the height; its viewport frame becomes in-flow and
+   interactive instead of an inset preview. */
 .terminal-dashboard__magnified .terminal-tile {
   width: min(100%, remify(1152px));
   height: 100%;
@@ -489,6 +491,8 @@
 .terminal-dashboard__magnified[data-mobile='true'][data-keyboard-visible='true'] {
   padding-bottom: 0;
 }
+/* Phone magnified chrome: the card is flush on the terminal surface, and the footer (now a top bar)
+   takes the terminal's identity colours so it reads as part of the terminal. */
 .terminal-tile[data-mobile-chrome='true'] {
   width: 100%;
   height: 100%;
@@ -544,10 +548,12 @@
   place-content: center;
   gap: remify(5.6px);
 }
+/* The empty state's title line. */
 .terminal-dashboard__empty strong {
   color: var(--wa-color-neutral-on-normal);
   font-size: var(--wa-font-size-s);
 }
+/* Reduced motion also drops the costly backdrop blur. */
 @media (prefers-reduced-motion: reduce) {
   .terminal-dashboard__magnified {
     backdrop-filter: none;
@@ -565,9 +571,11 @@
   overflow: hidden;
   background: var(--hs-terminal-background);
 }
+/* The hidden attribute must win over the session's display. */
 .terminal-session[hidden] {
   display: none;
 }
+/* Inset focus ring drawn over the terminal while it has focus. */
 .terminal-session:focus-within::after {
   position: absolute;
   z-index: 1;
@@ -577,6 +585,7 @@
   pointer-events: none;
   inset: 0;
 }
+/* The dedicated viewport is in flow and fills the session with a small inset. */
 .terminal-session .terminal-viewport {
   position: relative;
   inset: auto;
@@ -597,6 +606,7 @@
 .terminal-session[data-mobile='true'] .terminal-viewport {
   overflow: clip;
 }
+/* Match xterm's own surface to the terminal background token. */
 .terminal-session .xterm {
   background: var(--hs-terminal-background);
 }
