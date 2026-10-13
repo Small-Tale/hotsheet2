@@ -36,10 +36,11 @@ describe('touch textarea sizing (HS2-6PC150)', () => {
         .filter(({ body }) => /\bresize:/.test(body) && !/\bresize: none;/.test(body))
         .map((rule) => ({ path, ...rule })),
     );
-    // The details editor, notes, note replies, the composer, blocked reason, conflict merges,
-    // command settings, the not-working note, and dev review. The field-conflict merge now uses a
-    // Web Awesome textarea that owns its own sizing (HS2-4GBYYZ), as does the command editor (HS2-WNXRG3).
-    expect(resizable.length).toBeGreaterThanOrEqual(8);
+    // The details editor, the quick-ticket composer, blocked reason, the attachment gallery, and the
+    // shared native-textarea chrome that notes, note replies, inline feedback, and the Not Working
+    // note now share (HS2-FXSMB4); Dev Review was removed (HS2-03PV1C). The field-conflict merge and
+    // command editor use Web Awesome textareas that own their sizing (HS2-4GBYYZ, HS2-WNXRG3).
+    expect(resizable.length).toBeGreaterThanOrEqual(5);
     for (const { path, selector, body } of resizable) {
       expect({ path, selector, resize: body.match(/resize: [^;]+;/)?.[0] }).toEqual({
         path,
