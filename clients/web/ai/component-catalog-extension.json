@@ -557,6 +557,32 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "corrupt-ticket-inspector",
+      "name": "CorruptTicketInspector",
+      "kind": "component",
+      "purpose": "Right-rail recovery panel for an unreadable ticket file: the parse or update-required error, the file path, Reveal and AI repair actions, and the host-only disabled state on remote devices.",
+      "useWhen": [
+        "Hot Sheet needs the inspector recovery flow for a ticket file it could not read."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific CorruptTicketInspector behavior."
+      ],
+      "publicClasses": [
+        "corrupt-ticket-inspector__body"
+      ],
+      "publicTokens": [],
+      "source": "src/components/corrupt-ticket-row.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "Renders Workbench right-rail panel parts through SidebarPane; Kerf owns the pane frame (HS2-QQW6CT, HS2-6M6VM2)."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "drive-control",
       "name": "DriveControl",
       "kind": "component",

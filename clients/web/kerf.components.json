@@ -3794,6 +3794,75 @@
       }
     },
     {
+      "id": "corrupt-ticket-inspector",
+      "name": "CorruptTicketInspector",
+      "kind": "component",
+      "purpose": "Right-rail recovery panel for an unreadable ticket file: the parse or update-required error, the file path, Reveal and AI repair actions, and the host-only disabled state on remote devices.",
+      "source": "src/components/corrupt-ticket-row.tsx",
+      "publicExports": [
+        {
+          "name": "CorruptTicketInspector"
+        },
+        {
+          "name": "corruptTicketInspectorPanel"
+        }
+      ],
+      "sourceLinks": ["src/components/corrupt-ticket-row.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child",
+            "notes": [
+              "Renders Workbench right-rail panel parts through SidebarPane; Kerf owns the pane frame (HS2-QQW6CT, HS2-6M6VM2)."
+            ]
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["corrupt-ticket-inspector__body"],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/corrupt-ticket-row.tsx",
+        "composition": "src/components/corrupt-ticket-row.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet needs the inspector recovery flow for a ticket file it could not read."],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific CorruptTicketInspector behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "notification-card",
       "name": "NotificationCard",
       "kind": "component",

@@ -442,6 +442,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['manual-model-dialog', 1],
     ['connection-details-dialog', 1],
     ['notification-card', 5],
+    ['corrupt-ticket-inspector', 3],
     ['halted-session-popup', 1],
     ['content-transition', 2],
     ['repository-status-popover', 1],
@@ -631,6 +632,36 @@ test('uses Kerf layout primitives across migrated settings and dialog surfaces (
   expect(narrowBox!.x).toBeGreaterThanOrEqual(0);
   expect(narrowBox!.x + narrowBox!.width).toBeLessThanOrEqual(390);
   await provider.screenshot({ path: 'target/visual-captures/hs2-s3bxc0-provider-narrow.png', animations: 'disabled' });
+});
+
+test('demos the corrupt-ticket recovery panel in host and remote-device states (HS2-6M6VM2)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=corrupt-ticket-inspector');
+  const panels = page.locator('[data-component="corrupt-ticket-inspector"]');
+  await expect(panels).toHaveCount(3);
+  const [invalid, upgrade, remote] = [panels.nth(0), panels.nth(1), panels.nth(2)];
+  const reveal = (panel: typeof invalid) => panel.locator('[data-action="reveal-corrupt-ticket"]');
+  const repair = (panel: typeof invalid) => panel.locator('[data-action="repair-corrupt-ticket"]');
+  await expect(reveal(invalid)).toHaveJSProperty('disabled', false);
+  await expect(repair(invalid)).toHaveCount(1);
+  // An update-required file offers no AI repair.
+  await expect(repair(upgrade)).toHaveCount(0);
+  await expect(page.getByText('Hot Sheet 2 update required').first()).toBeVisible();
+  // The remote device keeps repair but disables the host-only reveal with its reason.
+  await expect(reveal(remote)).toHaveJSProperty('disabled', true);
+  await expect(reveal(remote)).toHaveAttribute('title', /.+/);
+  await expect(repair(remote)).toHaveJSProperty('disabled', false);
+
+  await reveal(invalid).click();
+  await expect(invalid).toContainText('Revealed the ticket file on the host.');
+  await repair(remote).click();
+  await expect(remote).toContainText('AI repair queued as a new ticket.');
+  await expect(upgrade).not.toContainText('AI repair queued');
+  await page.screenshot({ path: 'target/visual-captures/hs2-6m6vm2-corrupt-inspector-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(panels.first()).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-6m6vm2-corrupt-inspector-narrow.png', fullPage: true });
 });
 
 test('demos every NotificationCard elevation, footer layout, and details appearance (HS2-V2G3W1)', async ({ page }) => {

@@ -13,6 +13,7 @@ import { demoModule as confidenceCalibration } from './confidence-calibration-de
 import { demoModule as connectionDetails } from './connection-details-demo';
 import { demoModule as contentComponents } from './content-components-demo';
 import { demoModule as contentTransition } from './content-transition-demo';
+import { demoModule as corruptTicketInspector } from './corrupt-ticket-inspector-demo';
 import type { DemoEntry, DemoModule } from './demo-module';
 import { demoModule as dialogLayout } from './dialog-layout-demo';
 import { demoModule as haltedSession } from './halted-session-demo';
@@ -52,6 +53,7 @@ export const demoModules: readonly DemoModule[] = [
   workspaceComponents,
   ticketSearchField,
   notificationCard,
+  corruptTicketInspector,
   haltedSession,
   permissionComponents,
   appChrome,

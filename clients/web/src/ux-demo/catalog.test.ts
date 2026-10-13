@@ -87,6 +87,7 @@ describe('UX demo catalog', () => {
       'ticket-board-column',
       'ticket-inspector',
       'ticket-inspector-skeleton',
+      'corrupt-ticket-inspector',
       'ticket-info-panel',
       'ticket-timeline',
       'ticket-code-review',

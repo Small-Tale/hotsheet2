@@ -1639,6 +1639,78 @@
       }
     },
     {
+      "key": "hotsheet-web:corrupt-ticket-inspector",
+      "package": "hotsheet-web",
+      "id": "corrupt-ticket-inspector",
+      "name": "CorruptTicketInspector",
+      "kind": "component",
+      "purpose": "Right-rail recovery panel for an unreadable ticket file: the parse or update-required error, the file path, Reveal and AI repair actions, and the host-only disabled state on remote devices.",
+      "publicExports": [
+        {
+          "name": "CorruptTicketInspector"
+        },
+        {
+          "name": "corruptTicketInspectorPanel"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/corrupt-ticket-row.tsx"
+      ],
+      "source": "src/components/corrupt-ticket-row.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child",
+          "notes": [
+            "Renders Workbench right-rail panel parts through SidebarPane; Kerf owns the pane frame (HS2-QQW6CT, HS2-6M6VM2)."
+          ]
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "corrupt-ticket-inspector__body"
+        ],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/corrupt-ticket-row.tsx",
+        "composition": "src/components/corrupt-ticket-row.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:drive-control",
       "package": "hotsheet-web",
       "id": "drive-control",

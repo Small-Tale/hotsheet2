@@ -143,6 +143,7 @@ export const demoCatalog: DemoCategory[] = [
             'loading-spinner',
           ]),
           cataloged('ticket-inspector-skeleton'),
+          cataloged('corrupt-ticket-inspector', ['list-header', 'state-banner']),
           cataloged('ticket-info-panel', [
             'ticket-category-select',
             'ticket-priority-select',

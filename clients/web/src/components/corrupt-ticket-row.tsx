@@ -208,14 +208,17 @@ export function CorruptTicketInspector({
   ticket,
   recovery,
   collapseControl = false,
+  hostActionsAvailable,
 }: {
   ticket: CorruptTicket;
   recovery?: CorruptTicketRecoveryState;
   collapseControl?: boolean;
+  /** False on a remote client; omitted, the panel detects whether this client runs on the host (HS2-TYS5SS). */
+  hostActionsAvailable?: boolean;
 }) {
   return (
     <SidebarPane
-      parts={corruptTicketInspectorPanel({ ticket, recovery })}
+      parts={corruptTicketInspectorPanel({ ticket, recovery, hostActionsAvailable })}
       side="right"
       collapseControl={collapseControl}
     />

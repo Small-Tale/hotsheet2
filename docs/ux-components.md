@@ -13,6 +13,11 @@ sessions. Its `/ux-demo?component=notification-card` entry (HS2-V2G3W1) shows ev
 elevation (`popup`, `list`, `flat`), both footer layouts (`wrap`, `stack`), and the prose,
 code, and bounded details appearances, with consumer-supplied footer actions.
 
+`CorruptTicketInspector` (HS2-QQW6CT) is the right-rail recovery panel for an unreadable
+ticket file. Its `/ux-demo?component=corrupt-ticket-inspector` entry (HS2-6M6VM2) shows
+the unreadable and update-required states plus a remote device, where the host-only Reveal
+control is disabled with its reason (HS2-TYS5SS). Reveal and AI repair update fixture state.
+
 > **Status: initial inventory; implementation started.** The development-only Hono
 > `/ux-demo` catalog shell and production `TagChip`, `StatusBadge`, and initial
 > `TicketRow` components are built in `clients/web` (HS2-61XG15/HS2-H0T0MV/HS2-RP0FKP). This
