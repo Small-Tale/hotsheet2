@@ -131,7 +131,7 @@ describe('RepositoryStatusPopover', () => {
     expect(markup).toContain('data-state="uninitialized"');
     expect(markup).toContain('data-setup-step="initialize"');
     expect(markup).toMatch(
-      /kui-toolbar-text[^>]*id="repository-status-title"[^>]*><span class="kui-toolbar-text__text">This folder is not a Git repository</,
+      /<span class="kui-toolbar-text__text" id="repository-status-title"[^>]*>This folder is not a Git repository</,
     );
     expect(markup).not.toContain('>Repository Status<');
     expect(markup).toContain('data-action="initialize-repository"');

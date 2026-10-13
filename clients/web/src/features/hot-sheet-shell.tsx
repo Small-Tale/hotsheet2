@@ -1,6 +1,3 @@
-// The shell renders the shared app-heading presentation (main.tsx loads it first).
-import '../components/heading.css';
-
 import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -422,13 +419,11 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     // Heading Toolbars render the view action as literal `trailing` content: Kerf Toolbar accepts one
     // standalone primary wa-button there (KF-9N7K8S, HS2-F4P7ZA).
     const secondaryPageHeader = (
-      <div class="app-heading" data-component="heading" data-has-icon="false">
-        <Toolbar
-          dividerSides=""
-          leading={<ToolbarText text={workspaceTitle} id="workspace-page-title" size="xlarge" headingLevel={1} />}
-          trailing={headingAction && <TicketViewAction action={headingAction} />}
-        />
-      </div>
+      <Toolbar
+        dividerSides=""
+        leading={<ToolbarText text={workspaceTitle} id="workspace-page-title" size="xlarge" headingLevel={1} />}
+        trailing={headingAction && <TicketViewAction action={headingAction} />}
+      />
     );
     const mobileView: AppShellMobileView | undefined =
         viewportMobile.value && !['settings', 'notifications'].includes(viewMode.value)

@@ -1,4 +1,3 @@
-import './heading.css';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './ai-conversation.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
@@ -531,21 +530,18 @@ export function AIConversation({
       without-header
       with-footer={!readOnly}
     >
-      <div class="app-heading" data-component="heading" data-has-icon="true">
-        <Toolbar
-          dividerSides=""
-          leading={
-            <>
-              <ToolbarControlGroup single tileTone="brand">
-                <LucideIcon color={uiColor('brand-on-quiet')} icon={Bot} name="bot" />
-              </ToolbarControlGroup>
-              <ToolbarText text={`${tool} conversation`} id="ai-conversation-title" size="xlarge" />
-            </>
-          }
-          trailing={<ToolbarControlGroup label={`${tool} conversation actions`}>{actions}</ToolbarControlGroup>}
-        />
-        <p class="app-heading__summary">{summary}</p>
-      </div>
+      <Toolbar
+        dividerSides=""
+        leading={
+          <>
+            <ToolbarControlGroup single tileTone="brand">
+              <LucideIcon color={uiColor('brand-on-quiet')} icon={Bot} name="bot" />
+            </ToolbarControlGroup>
+            <ToolbarText text={`${tool} conversation`} id="ai-conversation-title" size="xlarge" description={summary} />
+          </>
+        }
+        trailing={<ToolbarControlGroup label={`${tool} conversation actions`}>{actions}</ToolbarControlGroup>}
+      />
       {foreground && <div class="ai-conversation__foreground">{foreground}</div>}
       {savedNotice}
       {sessionControls}

@@ -98,7 +98,8 @@ describe('AIConversation', () => {
     expect(markup).toContain('without-header');
     expect(markup).toContain('light-dismiss');
     expect(markup).not.toContain('data-action="close-conversation"');
-    expect(markup).toContain('data-component="heading"');
+    // The heading's supporting line is Kerf ToolbarText's description (HS2-XHC39W).
+    expect(markup).toMatch(/data-has-description="true"[\s\S]*kui-toolbar-text__description/);
     // The DialogHeader groups the conversation actions under a localized label (HS2-M4X0WS).
     expect(markup).toMatch(/kui-toolbar__trailing[\s\S]*aria-label="Codex conversation actions"/);
     expect(markup).toContain('Enter to send · Shift+Enter for a new line');

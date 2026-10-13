@@ -1,7 +1,6 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/components/textarea/textarea.js';
-import './heading.css';
 import './command-settings-editor.css';
 import './native-popover-dialog.css';
 
@@ -435,44 +434,46 @@ export function CommandSettingsEditor({
       >
         {editing && editingIcon ? (
           <>
-            <div class="app-heading" data-component="heading" data-has-icon="true">
-              <Toolbar
-                dividerSides=""
-                leading={
-                  <>
-                    <ToolbarControlGroup single appearance="borderless">
-                      <span
-                        class="command-settings-editor__dialog-icon"
-                        data-transparent={
-                          resolveCommandColor(editing.color) === TRANSPARENT_CUSTOMIZATION_COLOR ? 'true' : undefined
+            <Toolbar
+              dividerSides=""
+              leading={
+                <>
+                  <ToolbarControlGroup single appearance="borderless">
+                    <span
+                      class="command-settings-editor__dialog-icon"
+                      data-transparent={
+                        resolveCommandColor(editing.color) === TRANSPARENT_CUSTOMIZATION_COLOR ? 'true' : undefined
+                      }
+                      style={commandIconStyle(editing)}
+                    >
+                      <LucideIcon
+                        size="s"
+                        icon={editingIcon.icon}
+                        name={editingIcon.name}
+                        color={
+                          resolveCommandColor(editing.color) === TRANSPARENT_CUSTOMIZATION_COLOR
+                            ? uiColor('neutral-on-normal')
+                            : foregroundColorVar('--command-text-color')
                         }
-                        style={commandIconStyle(editing)}
-                      >
-                        <LucideIcon
-                          size="s"
-                          icon={editingIcon.icon}
-                          name={editingIcon.name}
-                          color={
-                            resolveCommandColor(editing.color) === TRANSPARENT_CUSTOMIZATION_COLOR
-                              ? uiColor('neutral-on-normal')
-                              : foregroundColorVar('--command-text-color')
-                          }
-                        />
-                      </span>
-                    </ToolbarControlGroup>
-                    <ToolbarText text="Edit command" id="command-editor-title" size="xlarge" />
-                  </>
-                }
-                trailing={
-                  <ToolbarControlGroup label="Command actions" appearance="borderless" single>
-                    <button type="button" {...COMMANDS_AND_AI_ACTIONS.closeCommandEditor.attrs}>
-                      Done
-                    </button>
+                      />
+                    </span>
                   </ToolbarControlGroup>
-                }
-              />
-              <p class="app-heading__summary">Changes save automatically.</p>
-            </div>
+                  <ToolbarText
+                    text="Edit command"
+                    id="command-editor-title"
+                    size="xlarge"
+                    description="Changes save automatically."
+                  />
+                </>
+              }
+              trailing={
+                <ToolbarControlGroup label="Command actions" appearance="borderless" single>
+                  <button type="button" {...COMMANDS_AND_AI_ACTIONS.closeCommandEditor.attrs}>
+                    Done
+                  </button>
+                </ToolbarControlGroup>
+              }
+            />
             <div class="command-settings-editor__dialog-body">
               <CommandDetailFields
                 command={editing}

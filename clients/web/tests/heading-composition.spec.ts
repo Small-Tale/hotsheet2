@@ -11,7 +11,8 @@ test('preserves page headings and dialog naming with direct Toolbar compositions
   await demo.getByRole('button', { name: 'List view' }).click();
   await expect(demo.getByRole('heading', { name: 'Queue', level: 1 })).toBeVisible();
   await demo
-    .locator('.app-heading')
+    .locator('[data-component="toolbar"]')
+    .first()
     .screenshot({ path: 'target/visual-captures/hs2-agdj6e-workspace-heading-wide.png' });
 
   for (const width of [1440, 390]) {
@@ -22,7 +23,9 @@ test('preserves page headings and dialog naming with direct Toolbar compositions
     await expect(dialog).toHaveAttribute('aria-describedby', 'connection-details-summary');
     const toolbar = dialog.locator('[data-component="toolbar"]');
     await expect(toolbar).not.toHaveAttribute('divider-sides');
-    await expect(toolbar.locator('[data-component="toolbar-text"]')).toHaveAttribute('id', 'connection-details-title');
+    // With a description, Kerf moves the title id onto the title span (KF-DXVMBN, HS2-XHC39W).
+    await expect(toolbar.locator('#connection-details-title')).toHaveText('Server build details');
+    await expect(toolbar.locator('#connection-details-summary')).toHaveClass('kui-toolbar-text__description');
     await expect(dialog.getByRole('heading', { name: 'Server build details' })).toHaveCount(0);
     await expect(dialog.locator('#connection-details-summary')).not.toHaveText('');
     // Kerf's icon tile: a 16px glyph centered in the group's control slot, like an icon button.
@@ -30,13 +33,20 @@ test('preserves page headings and dialog naming with direct Toolbar compositions
     await expect(iconTile).toHaveAttribute('data-tile-tone', 'brand');
     await expect(iconTile.locator(':scope > svg')).toHaveCSS('width', '16px');
     await expect(iconTile.locator(':scope > svg')).toHaveCSS('height', '16px');
-    expect(
-      await toolbar.evaluate((node) => {
-        const title = node.querySelector('[data-component="toolbar-text"]')!.getBoundingClientRect();
-        const icon = node.querySelector('[data-component="toolbar-control-group"]')!.getBoundingClientRect();
-        return Math.abs(title.y + title.height / 2 - icon.y - icon.height / 2);
-      }),
-    ).toBeLessThan(1);
+    // Kerf stacks the supporting line under the title text, starting where the title starts.
+    const lines = await toolbar.evaluate((node) => {
+      const title = node.querySelector('#connection-details-title')!.getBoundingClientRect();
+      const summary = node.querySelector('#connection-details-summary')!.getBoundingClientRect();
+      const icon = node.querySelector('[data-component="toolbar-control-group"]')!.getBoundingClientRect();
+      return {
+        startDelta: Math.abs(title.left - summary.left),
+        below: summary.top >= title.bottom - 1,
+        afterIcon: title.left > icon.right,
+      };
+    });
+    expect(lines.startDelta).toBeLessThan(1);
+    expect(lines.below).toBe(true);
+    expect(lines.afterIcon).toBe(true);
     await dialog.screenshot({ path: `target/visual-captures/hs2-agdj6e-dialog-heading-${width}.png` });
   }
 });

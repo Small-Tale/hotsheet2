@@ -1,4 +1,3 @@
-import './heading.css';
 import './connection-details-dialog.css';
 import './native-popover-dialog.css';
 
@@ -67,22 +66,23 @@ export function ConnectionDetailsDialog({
       aria-labelledby="connection-details-title"
       aria-describedby="connection-details-summary"
     >
-      <div class="app-heading" data-component="heading" data-has-icon="true">
-        <Toolbar
-          dividerSides=""
-          leading={
-            <>
-              <ToolbarControlGroup single tileTone="brand">
-                <LucideIcon color={uiColor('brand-on-quiet')} icon={ServerCog} name="server-cog" />
-              </ToolbarControlGroup>
-              <ToolbarText text="Server build details" id="connection-details-title" size="xlarge" />
-            </>
-          }
-        />
-        <p class="app-heading__summary" id="connection-details-summary">
-          {summary}
-        </p>
-      </div>
+      <Toolbar
+        dividerSides=""
+        leading={
+          <>
+            <ToolbarControlGroup single tileTone="brand">
+              <LucideIcon color={uiColor('brand-on-quiet')} icon={ServerCog} name="server-cog" />
+            </ToolbarControlGroup>
+            <ToolbarText
+              text="Server build details"
+              id="connection-details-title"
+              size="xlarge"
+              description={summary}
+              descriptionId="connection-details-summary"
+            />
+          </>
+        }
+      />
       <div class="connection-details-dialog__body">
         <ValueTable className="connection-details-dialog__metadata" label="Client and server build metadata">
           <ValueTableRow

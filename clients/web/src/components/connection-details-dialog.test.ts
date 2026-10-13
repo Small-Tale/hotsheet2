@@ -37,7 +37,7 @@ describe('ConnectionDetailsDialog', () => {
     expect(markup).toContain('source-sha256:client');
     expect(markup).toContain('Client 1–1 · Server 1–1');
     expect(markup).toContain('class="dialog-surface connection-details-dialog"');
-    expect(markup).toContain('data-component="heading"');
+    expect(markup).toContain('class="kui-toolbar-text__description" id="connection-details-summary"');
     expect(markup).toContain('data-component="value-table"');
     expect(markup.match(/class="kui-value-table__row"/g)).toHaveLength(6);
     expect(markup).not.toContain('>Close</button>');

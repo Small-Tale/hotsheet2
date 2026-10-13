@@ -607,9 +607,9 @@ holds native advisory locks until its stdin closes. `POST /__hotsheet/projects/m
 returns 202; `GET ?root=...&after=...` is a blocking revision watch. Legacy synchronous
 migration and backup routes retain their existing response contracts.
 
-Heading compositions use `clients/web/src/components/heading.css` for app-owned icon tone
-and supporting-copy alignment; the page and dialog owners compose canonical
-Kerf Toolbar/ToolbarText primitives directly (HS2-AGDJ6E).
+Heading compositions have no stylesheet: the page and dialog owners compose canonical
+Kerf Toolbar/ToolbarText primitives directly (HS2-AGDJ6E), and `ToolbarText description`
+carries the supporting line (HS2-XHC39W).
 
 - `docs/CSS-OWNERSHIP-AUDIT.md` — source stylesheet ownership inventory and Kerf migration boundaries (HS2-JMYRT3).
 

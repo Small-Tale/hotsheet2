@@ -228,9 +228,9 @@ Supporting components:
 - Dialog/page heading compositions and `ValueTable` — **demo built**: direct divider-free
   `Toolbar` rows put an optional icon `ToolbarControlGroup` and extra-large `ToolbarText`
   in the leading zone, with named grouped controls in the trailing zone. Supporting copy
-  is app-owned content below the toolbar; host `aria-labelledby`/`aria-describedby` point
-  to the retained title and summary ids. `heading.css` owns only the icon tone and summary
-  alignment, while Kerf owns row/control geometry.
+  is the `ToolbarText` `description` (with `descriptionId` where a host needs
+  `aria-describedby`), so Kerf owns its alignment, truncation, and the row/control geometry
+  and no heading stylesheet remains (HS2-XHC39W).
   `ValueTable` supplies the bordered metadata surface while `ValueTableRow` supplies aligned
   label/value geometry and inset separators; consumers do not hand-author raw definition-list
   rows; the connection-details, HS1 migration, and catalog compositions all use that row

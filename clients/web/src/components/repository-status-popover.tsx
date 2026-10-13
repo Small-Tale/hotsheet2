@@ -5,7 +5,6 @@ import '@kerfjs/ui/list-action-row.css';
 import '@kerfjs/ui/nav-stack.css';
 import '@kerfjs/ui/split-view.css';
 import '@kerfjs/ui/state-banner.css';
-import './heading.css';
 import './repository-status-popover.css';
 import './native-popover-dialog.css';
 
@@ -215,25 +214,23 @@ export function RepositoryStatusPopover({
           ? 'Git is ready; add an origin remote or skip for now'
           : stateCopy[state];
   const heading = (
-    <div class="app-heading" data-component="heading" data-has-icon="true">
-      <Toolbar
-        dividerSides=""
-        leading={
-          <>
-            <ToolbarControlGroup single tileTone={state === 'clean' ? 'success' : troubled ? 'danger' : 'brand'}>
-              <LucideIcon color={stateColor} icon={stateIcon} name={stateIconName} />
-            </ToolbarControlGroup>
-            <ToolbarText
-              text={recoveryStep === 'initialize' ? 'This folder is not a Git repository' : 'Repository Status'}
-              id="repository-status-title"
-              size="xlarge"
-            />
-          </>
-        }
-        trailing={actions}
-      />
-      <p class="app-heading__summary">{summary}</p>
-    </div>
+    <Toolbar
+      dividerSides=""
+      leading={
+        <>
+          <ToolbarControlGroup single tileTone={state === 'clean' ? 'success' : troubled ? 'danger' : 'brand'}>
+            <LucideIcon color={stateColor} icon={stateIcon} name={stateIconName} />
+          </ToolbarControlGroup>
+          <ToolbarText
+            text={recoveryStep === 'initialize' ? 'This folder is not a Git repository' : 'Repository Status'}
+            id="repository-status-title"
+            size="xlarge"
+            description={summary}
+          />
+        </>
+      }
+      trailing={actions}
+    />
   );
   const sidebar = (current: RepositoryStatus) => (
     <>
@@ -495,20 +492,22 @@ export function ChangeEvidenceDialog({
   const files = review?.files ?? [],
     visible = files.filter((file) => file.category === view);
   const heading = (
-    <div class="app-heading" data-component="heading" data-has-icon="true">
-      <Toolbar
-        dividerSides=""
-        leading={
-          <>
-            <ToolbarControlGroup single tileTone="brand">
-              <LucideIcon color={uiColor('brand-on-quiet')} icon={GitCompare} name="git-compare" />
-            </ToolbarControlGroup>
-            <ToolbarText text="Change evidence" id="change-evidence-title" size="xlarge" />
-          </>
-        }
-      />
-      <p class="app-heading__summary">Files changed across the ticket's complete commit range</p>
-    </div>
+    <Toolbar
+      dividerSides=""
+      leading={
+        <>
+          <ToolbarControlGroup single tileTone="brand">
+            <LucideIcon color={uiColor('brand-on-quiet')} icon={GitCompare} name="git-compare" />
+          </ToolbarControlGroup>
+          <ToolbarText
+            text="Change evidence"
+            id="change-evidence-title"
+            size="xlarge"
+            description="Files changed across the ticket's complete commit range"
+          />
+        </>
+      }
+    />
   );
   const navigation = (
     <nav aria-label="Change evidence views">

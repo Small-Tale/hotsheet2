@@ -741,7 +741,9 @@ test('represents the shared repository-status composition in the UX catalog', as
   await expect(dialog).toBeVisible();
   const compare = dialog.getByRole('button', { name: 'Compare two commits' }),
     refresh = dialog.getByRole('button', { name: 'Refresh repository status' }),
-    headingActions = dialog.locator('.app-heading .kui-toolbar__trailing');
+    headingActions = dialog.locator(
+      '[data-component="toolbar"]:has(.kui-toolbar-text__description) .kui-toolbar__trailing',
+    );
   expect(await refresh.evaluate((node) => getComputedStyle(node).color)).toBe(
     await compare.evaluate((node) => getComputedStyle(node).color),
   );
@@ -768,7 +770,9 @@ test('represents the shared repository-status composition in the UX catalog', as
   );
   expect(
     await dialog.evaluate((node) => {
-      const heading = node.querySelector('.app-heading')!.getBoundingClientRect(),
+      const heading = node
+          .querySelector('[data-component="toolbar"]:has(.kui-toolbar-text__description)')!
+          .getBoundingClientRect(),
         navigation = node.querySelector('nav[aria-label="Repository views"]')!.getBoundingClientRect();
       return heading.left >= navigation.right;
     }),
@@ -808,8 +812,12 @@ test('represents the shared repository-status composition in the UX catalog', as
       node.dispatchEvent(new Event('change', { bubbles: true }));
     }, value);
     await expect(dialog).toHaveAttribute('data-state', state);
-    await expect(dialog.locator('.app-heading__summary')).toHaveText(copy);
-    const iconTile = dialog.locator('.app-heading [data-component="toolbar-control-group"]').first();
+    await expect(dialog.locator('.kui-toolbar-text__description')).toHaveText(copy);
+    const iconTile = dialog
+      .locator(
+        '[data-component="toolbar"]:has(.kui-toolbar-text__description) [data-component="toolbar-control-group"]',
+      )
+      .first();
     await expect(iconTile.locator(`[data-lucide="${icon}"]`)).toHaveCount(1);
     await expect(iconTile).toHaveAttribute(
       'data-tile-tone',
@@ -820,7 +828,11 @@ test('represents the shared repository-status composition in the UX catalog', as
   await inspector.getByRole('button', { name: 'Reset' }).click();
   await expect(scenario).toHaveJSProperty('value', 'conflicted');
   await expect(dialog).toHaveAttribute('data-state', 'conflicted');
-  await expect(dialog.locator('.app-heading [data-tile-tone="danger"] [data-lucide="triangle-alert"]')).toHaveCount(1);
+  await expect(
+    dialog.locator(
+      '[data-component="toolbar"]:has(.kui-toolbar-text__description) [data-tile-tone="danger"] [data-lucide="triangle-alert"]',
+    ),
+  ).toHaveCount(1);
   await page.screenshot({ path: 'target/visual-captures/hs2-s6f817-repository-scenario-settings.png', fullPage: true });
   await page.locator('[data-action="toggle-settings"]').first().click();
   await dialog.getByRole('button', { name: /Unstaged 2/ }).click();
@@ -990,7 +1002,7 @@ test('represents every server-build details state with shared dialog geometry', 
   await page.setViewportSize({ width: 1728, height: 971 });
   await page.goto('/ux-demo?component=connection-details-dialog');
   const dialog = page.locator('[data-component="connection-details-dialog"]'),
-    header = dialog.locator('[data-component="heading"]');
+    header = dialog.locator('[data-component="toolbar"]:has(.kui-toolbar-text__description)');
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveAttribute('data-embedded', 'true');
   await expect(header).toBeVisible();
@@ -4223,7 +4235,7 @@ test('shows repository comparison as a shared pressed toolbar control', async ({
   await expect(compare).toHaveCSS('color', 'rgb(255, 255, 255)');
   await dialog.screenshot({ path: 'target/visual-captures/hs2-7cnf5b-compare-pressed-wide.png' });
   await dialog
-    .locator('[data-component="heading"]')
+    .locator('[data-component="toolbar"]:has(.kui-toolbar-text__description)')
     .screenshot({ path: 'target/visual-captures/hs2-7cnf5b-compare-pressed-header.png' });
   await page.addStyleTag({
     content:
@@ -5954,7 +5966,7 @@ test('keeps workspace spacing and the new-ticket action in the project tab bar',
     workspace = shell.locator('.app-shell__workspace'),
     header = shell.locator('.project-tab-bar');
   await expect(workArea).toHaveAttribute('data-has-composer', 'false');
-  await expect(shell.locator('[data-component="heading"]')).toHaveCount(0);
+  await expect(shell.locator('[data-component="toolbar"]:has(.kui-toolbar-text__description)')).toHaveCount(0);
   await expect(shell.locator('#app-shell-demo-page-title')).toHaveText('Queue');
   expect(
     await shell.evaluate((node) => {
@@ -6851,7 +6863,6 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   expect(shellHierarchy.tabsTop).toBeCloseTo(shellHierarchy.toolbarBottom, 0);
   expect(shellHierarchy.workAreaTop).toBeGreaterThanOrEqual(shellHierarchy.tabsBottom);
   expect(shellHierarchy.inspectorTop - shellHierarchy.shellTop).toBeLessThanOrEqual(1);
-  await expect(shell.locator('.app-shell__main > .app-heading')).toHaveCount(0);
   await expect(shell.locator('#app-shell-demo-page-title')).toHaveText('Queue');
   await expect(shell.locator('#app-shell-demo-page-title')).toHaveAttribute('data-size', 'large');
   await expect(shell.locator('.project-tab-bar [data-component="quick-ticket-composer-launcher"]')).toHaveCount(1);
@@ -7808,8 +7819,9 @@ test('edits custom command color and icon in the command settings editor', async
   await verifyRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const dialog = page.locator('#command-editor-dialog');
   await expect(dialog).toBeVisible();
-  const commandHeadingGroup = dialog.locator('.app-heading [data-component="toolbar-control-group"]').first();
-  await expect(commandHeadingGroup).not.toHaveClass(/app-heading__icon/);
+  const commandHeadingGroup = dialog
+    .locator('[data-component="toolbar"]:has(.kui-toolbar-text__description) [data-component="toolbar-control-group"]')
+    .first();
   await expect(commandHeadingGroup).toHaveAttribute('data-appearance', 'borderless');
   await expect(commandHeadingGroup.locator('.command-settings-editor__dialog-icon > svg')).toBeVisible();
   const iconInset = () =>

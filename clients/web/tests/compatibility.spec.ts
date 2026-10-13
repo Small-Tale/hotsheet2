@@ -142,7 +142,7 @@ test('tells development users to restart a server built from older local source'
   await expect(dialog).toContainText('source-sha256:client');
   await expect(dialog).toContainText('Client 1–1 · Server 1–1');
   await expect(dialog).toContainText('cargo build -p hotsheet-server');
-  await expect(dialog.locator('[data-component="heading"]')).toBeVisible();
+  await expect(dialog.locator('[data-component="toolbar"]:has(.kui-toolbar-text__description)')).toBeVisible();
   await expect(dialog.locator('[data-component="value-table"]')).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Close' })).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-xrs9s4-server-details-wide.png', fullPage: true });

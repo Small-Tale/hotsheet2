@@ -1,5 +1,3 @@
-import '../components/heading.css';
-
 import { openPopupMenuAt, type PopupMenuElement } from '@kerfjs/ui/popup-menu';
 import { Select } from '@kerfjs/ui/select';
 import { Toolbar } from '@kerfjs/ui/toolbar';
@@ -459,19 +457,17 @@ export function WorkspaceHeaderDemo() {
         sortDirection={workspaceSortDirection.value}
         notificationCount={workspaceDemoNotifications.value.pending.length}
       />
-      <div class="app-heading" data-component="heading" data-has-icon="false">
-        <Toolbar
-          dividerSides=""
-          leading={
-            <ToolbarText
-              text={workspaceHeadingTitle(workspaceMode.value)}
-              id="workspace-demo-page-title"
-              size="xlarge"
-              headingLevel={1}
-            />
-          }
-        />
-      </div>
+      <Toolbar
+        dividerSides=""
+        leading={
+          <ToolbarText
+            text={workspaceHeadingTitle(workspaceMode.value)}
+            id="workspace-demo-page-title"
+            size="xlarge"
+            headingLevel={1}
+          />
+        }
+      />
       <div class="workspace-component-demo__content">
         <WorkspaceContent />
       </div>

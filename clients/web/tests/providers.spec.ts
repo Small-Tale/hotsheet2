@@ -9255,10 +9255,13 @@ test('browses repository files and commits with host-native actions', async ({ p
   await compareToggle.click();
   await expect(compareToggle).toHaveAttribute('aria-pressed', 'true');
   await expect(popover.locator('.ticket-code-review__compare-banner')).toContainText('Select the A side');
-  await expect(popover.locator('.app-heading [data-component="toolbar-control-group"]').first()).toHaveAttribute(
-    'data-tile-tone',
-    'danger',
-  );
+  await expect(
+    popover
+      .locator(
+        '[data-component="toolbar"]:has(.kui-toolbar-text__description) [data-component="toolbar-control-group"]',
+      )
+      .first(),
+  ).toHaveAttribute('data-tile-tone', 'danger');
   const compareBanner = popover.locator('.ticket-code-review__compare-banner');
   await expect(
     compareBanner.locator('.ticket-code-review__compare-toolbar [data-component="toolbar-control-group"]'),
@@ -16748,7 +16751,7 @@ for (const viewport of [
     await page.screenshot({ path: `/tmp/claude/hs2-sh3dr7-foreground-popup-${viewport.width}.png` });
     const [insets, headingBox, popupBox] = await Promise.all([
       geometry(),
-      conversation.locator('.app-heading').boundingBox(),
+      conversation.locator('[data-component="toolbar"]').first().boundingBox(),
       popup.boundingBox(),
     ]);
     expect(insets.top).toBeGreaterThanOrEqual(0);
@@ -17518,7 +17521,6 @@ test('uses the compact workspace title and project-tab action on desktop while p
   await expect(title).toHaveText('Queue');
   await expect(title).toHaveAttribute('data-size', 'large');
   await expect(mainToolbar.locator('.workspace-header__identity')).toContainText('Queue');
-  await expect(shell.locator('.app-shell__main > .app-heading')).toHaveCount(0);
   await expect(projectTabs.locator('[data-component="quick-ticket-composer-launcher"]')).toHaveCount(1);
   const desktopGeometry = await projectTabs.evaluate((node) => {
     const bar = node.getBoundingClientRect(),
