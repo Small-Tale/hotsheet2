@@ -6,8 +6,11 @@
 //!
 //! The server is known in proxy mode (`--server`/`--secret`) or, for a serverless shim started
 //! inside a Hot Sheet terminal, from the `HOTSHEET_SERVER`/`HOTSHEET_SECRET` route-back
-//! environment. Without either the shim stays silent.
+//! environment. Otherwise a serverless shim (`--path`) looks the store up in the machine-local
+//! instance registry (`${HOTSHEET_HOME}/instances`, HS2-E4J72D) and reports to the live server
+//! recorded there. Without any of these the shim stays silent.
 
+use std::path::Path;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -28,11 +31,13 @@ pub struct PresenceTarget {
 
 impl PresenceTarget {
     /// The target for this shim, or `None` when no server is known. `server`/`secret` are the
-    /// proxy-mode flags; `env` reads the process environment.
+    /// proxy-mode flags; `env` reads the process environment; `discover` is consulted last,
+    /// for a serverless shim outside a Hot Sheet terminal (see [`discover_server`]).
     pub fn resolve(
         server: Option<&str>,
         secret: Option<&str>,
         env: impl Fn(&str) -> Option<String>,
+        discover: impl FnOnce() -> Option<(String, String)>,
         pid: u32,
         cwd: Option<String>,
         lease_id: String,
@@ -40,10 +45,13 @@ impl PresenceTarget {
         let non_empty = |v: Option<String>| v.filter(|v| !v.trim().is_empty());
         let (base, secret) = match (server, secret) {
             (Some(server), Some(secret)) => (server.to_owned(), secret.to_owned()),
-            _ => (
-                non_empty(env("HOTSHEET_SERVER"))?,
-                non_empty(env("HOTSHEET_SECRET"))?,
-            ),
+            _ => match (
+                non_empty(env("HOTSHEET_SERVER")),
+                non_empty(env("HOTSHEET_SECRET")),
+            ) {
+                (Some(server), Some(secret)) => (server, secret),
+                _ => discover()?,
+            },
         };
         Some(Self {
             base: base.trim_end_matches('/').to_owned(),
@@ -58,6 +66,50 @@ impl PresenceTarget {
             lease_id,
         })
     }
+}
+
+/// The `(url, secret)` of the server the machine-local instance registry records for
+/// `store` (HS2-E4J72D). Every `*.json` record under `instances_dir` is read; one whose
+/// `store_path` names the same canonical directory matches, and the most recently started
+/// match wins. Unreadable or foreign records are skipped, so a missing registry or a store
+/// no server hosts simply yields `None`. A stale record from a crashed server is harmless:
+/// its upserts fail and are retried silently, exactly like a server that went away.
+pub fn discover_server(instances_dir: &Path, store: &Path) -> Option<(String, String)> {
+    let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let wanted = canonical(store);
+    let mut best: Option<(String, String, String)> = None;
+    for entry in std::fs::read_dir(instances_dir).ok()?.flatten() {
+        let path = entry.path();
+        if path.extension().is_none_or(|ext| ext != "json") {
+            continue;
+        }
+        let Some(record) = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        else {
+            continue;
+        };
+        let field = |key: &str| {
+            record
+                .get(key)
+                .and_then(Value::as_str)
+                .filter(|v| !v.trim().is_empty())
+                .map(str::to_owned)
+        };
+        let (Some(url), Some(secret), Some(store_path)) =
+            (field("url"), field("secret"), field("store_path"))
+        else {
+            continue;
+        };
+        if canonical(Path::new(&store_path)) != wanted {
+            continue;
+        }
+        let started = field("started_at").unwrap_or_default();
+        if best.as_ref().is_none_or(|(_, _, seen)| started > *seen) {
+            best = Some((url, secret, started));
+        }
+    }
+    best.map(|(url, secret, _)| (url, secret))
 }
 
 /// The two calls the heartbeat makes; real over HTTP, faked in tests.
@@ -198,33 +250,115 @@ mod tests {
             ("HOTSHEET_TERMINAL_ID", "t1"),
             ("HOTSHEET_AGENT", "claude"),
         ]);
-        let from_env =
-            PresenceTarget::resolve(None, None, &terminal, 7, Some("/p".into()), "L".into())
-                .unwrap();
+        let from_env = PresenceTarget::resolve(
+            None,
+            None,
+            &terminal,
+            || None,
+            7,
+            Some("/p".into()),
+            "L".into(),
+        )
+        .unwrap();
         assert_eq!(from_env.base, "http://127.0.0.1:4175");
         assert_eq!(from_env.body["terminal_id"], "t1");
         assert_eq!(from_env.body["tool"], "claude");
         assert_eq!(from_env.body["pid"], 7);
         assert_eq!(from_env.body["lease_id"], "L");
 
-        let proxy =
-            PresenceTarget::resolve(Some("http://h"), Some("x"), &terminal, 7, None, "L".into())
-                .unwrap();
+        let proxy = PresenceTarget::resolve(
+            Some("http://h"),
+            Some("x"),
+            &terminal,
+            || None,
+            7,
+            None,
+            "L".into(),
+        )
+        .unwrap();
         assert_eq!(
             (proxy.base.as_str(), proxy.secret.as_str()),
             ("http://h", "x")
         );
 
-        assert!(PresenceTarget::resolve(None, None, env(&[]), 7, None, "L".into()).is_none());
+        assert!(
+            PresenceTarget::resolve(None, None, env(&[]), || None, 7, None, "L".into()).is_none()
+        );
         let blank = env(&[("HOTSHEET_SERVER", " "), ("HOTSHEET_SECRET", "s")]);
-        assert!(PresenceTarget::resolve(None, None, blank, 7, None, "L".into()).is_none());
+        assert!(PresenceTarget::resolve(None, None, blank, || None, 7, None, "L".into()).is_none());
+    }
+
+    #[test]
+    fn registry_discovery_is_the_last_resort_and_matches_the_canonical_store() {
+        let home = tempfile::tempdir().unwrap();
+        let instances = home.path().join("instances");
+        std::fs::create_dir(&instances).unwrap();
+        let store = home.path().join("store");
+        let other = home.path().join("other");
+        std::fs::create_dir(&store).unwrap();
+        std::fs::create_dir(&other).unwrap();
+        let record = |file: &str, url: &str, secret: &str, store: &Path, started: &str| {
+            std::fs::write(
+                instances.join(file),
+                json!({"pid": 1, "url": url, "secret": secret,
+                       "store_path": store.display().to_string(),
+                       "index_path": "", "started_at": started})
+                .to_string(),
+            )
+            .unwrap();
+        };
+        // No registry directory at all, then an empty one: silent.
+        assert_eq!(discover_server(&home.path().join("missing"), &store), None);
+        assert_eq!(discover_server(&instances, &store), None);
+        record("a.json", "http://old", "s1", &store, "2026-01-01T00:00:00Z");
+        record(
+            "b.json",
+            "http://new",
+            "s2",
+            &store.join("."),
+            "2026-02-01T00:00:00Z",
+        );
+        record(
+            "c.json",
+            "http://other",
+            "s3",
+            &other,
+            "2026-03-01T00:00:00Z",
+        );
+        std::fs::write(instances.join("broken.json"), "{").unwrap();
+        std::fs::write(instances.join("a.lock"), "1").unwrap();
+        // The newest record for the same canonical store wins; other stores are ignored.
+        assert_eq!(
+            discover_server(&instances, &store),
+            Some(("http://new".into(), "s2".into()))
+        );
+
+        // Terminal env still wins over discovery, and discovery fills in when env is absent.
+        let terminal = env(&[("HOTSHEET_SERVER", "http://t"), ("HOTSHEET_SECRET", "e")]);
+        let found = || discover_server(&instances, &store);
+        let from_env = PresenceTarget::resolve(None, None, terminal, found, 1, None, "L".into());
+        assert_eq!(from_env.unwrap().base, "http://t");
+        let discovered =
+            PresenceTarget::resolve(None, None, env(&[]), found, 1, None, "L".into()).unwrap();
+        assert_eq!(
+            (discovered.base.as_str(), discovered.secret.as_str()),
+            ("http://new", "s2")
+        );
+        assert!(discovered.body["terminal_id"].is_null());
     }
 
     #[test]
     fn heartbeat_registers_renews_and_releases_once_on_stop() {
-        let target =
-            PresenceTarget::resolve(Some("http://h"), Some("s"), env(&[]), 1, None, "L".into())
-                .unwrap();
+        let target = PresenceTarget::resolve(
+            Some("http://h"),
+            Some("s"),
+            env(&[]),
+            || None,
+            1,
+            None,
+            "L".into(),
+        )
+        .unwrap();
         let calls = Recorder::default();
         let presence = Presence::start(target, calls.clone(), Duration::from_millis(10));
         while calls.0.lock().unwrap().len() < 3 {
@@ -241,9 +375,16 @@ mod tests {
 
     #[test]
     fn dropping_the_handle_releases_the_lease() {
-        let target =
-            PresenceTarget::resolve(Some("http://h"), Some("s"), env(&[]), 1, None, "L".into())
-                .unwrap();
+        let target = PresenceTarget::resolve(
+            Some("http://h"),
+            Some("s"),
+            env(&[]),
+            || None,
+            1,
+            None,
+            "L".into(),
+        )
+        .unwrap();
         let calls = Recorder::default();
         drop(Presence::start(
             target,

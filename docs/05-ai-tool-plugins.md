@@ -974,7 +974,9 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 >
 > **MCP presence (HS2-HNXE38).** When the shim knows its project's server (`--server`, or
 > the `HOTSHEET_SERVER`/`HOTSHEET_SECRET` route-back environment a Hot Sheet terminal gives
-> a serverless shim), the MCP `initialize` request starts a background lease: it
+> a serverless shim, or else the server the machine-local instance registry
+> `${HOTSHEET_HOME}/instances` records for a serverless shim's `--path` store, newest
+> `started_at` first, HS2-E4J72D), the MCP `initialize` request starts a background lease: it
 > `POST /mcp-presence` with a per-process `lease_id`, `pid`, `tool` (`HOTSHEET_AGENT`), `cwd`,
 > and `terminal_id` (`HOTSHEET_TERMINAL_ID`), renews every 15 s, and `DELETE
 /mcp-presence/{lease}` when stdin closes. Registration is an idempotent upsert, so a

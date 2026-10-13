@@ -44,6 +44,16 @@ fn main() -> Result<()> {
         cli.server.as_deref(),
         cli.secret.as_deref(),
         |key| std::env::var(key).ok(),
+        // HS2-E4J72D: a serverless shim outside a Hot Sheet terminal finds the store's
+        // running server in the machine-local instance registry.
+        || {
+            cli.path.as_deref().and_then(|store| {
+                presence::discover_server(
+                    &hotsheet_plugins::hotsheet_home().join("instances"),
+                    store,
+                )
+            })
+        },
         pid,
         std::env::current_dir()
             .ok()

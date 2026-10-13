@@ -1126,6 +1126,7 @@ dependencies = [
  "clap",
  "hotsheet-extsync",
  "hotsheet-model",
+ "hotsheet-plugins",
  "hotsheet-ticketing",
  "serde",
  "serde_json",

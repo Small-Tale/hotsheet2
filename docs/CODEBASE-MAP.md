@@ -373,7 +373,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/lib.rs             #   JSON-RPC handle_message + hotsheet_* tools over a Backend
                              #     (provider-aware providers/query/get/create/update/close/assign plus annotation replacement/batch/exact-claim/claim-next/release/renew/copy/move):
                              #     CoreBackend (direct-to-disk, serverless) | HttpBackend (proxy a server)
-      src/presence.rs        #   MCP presence lease heartbeat started on `initialize`, released on stdin EOF (HS2-HNXE38)
+      src/presence.rs        #   MCP presence lease heartbeat started on `initialize`, released on stdin EOF (HS2-HNXE38); serverless shims find their server via the instance registry (`discover_server`, HS2-E4J72D)
+      tests/registry_presence.rs # real binary: registry-discovered presence upsert/release against a loopback fake server
       src/main.rs            #   stdio JSON-RPC loop; --path <store> (serverless) | --server <url> --secret
     hotsheet-tls/            # Tier-1 mTLS material (rcgen-only, no rustls; used by CLI + server) — docs/04 §4.6, HS2-VT3JMF
       src/lib.rs             #   per-project CA + explicit cert lifetimes; issue/renew/revoke device leaves; optional fingerprint-keyed acl.json roles; Paths (${HOTSHEET_HOME}/tls/<project-id>/); project_id matches lifecycle's path-hash
