@@ -327,8 +327,39 @@ Main-thread JavaScript time during the AI stream fell by about 60–70% and
 renderer task time by 22–49%; p95 click-to-paint did not regress. The worker's narrow `ai-stream`
 wall time rose to 3.5 s. In this fixture the worker's socket upgrade is
 refused, so events wait for the next long-poll window. This measures
-fixture delivery lag, not the real WebSocket path. Real-server delivery lag
-and retained memory are still unmeasured; `HS2-MH5PWD` covers them and the
-default-on decision. `HS2-9XF60G` covers crash restart with cursor replay,
+fixture delivery lag, not the real WebSocket path. `HS2-9XF60G` covers crash restart with cursor replay,
 the crash-loop fallback, and the skew fallback in real-browser tests
 (`clients/web/tests/change-stream-worker.spec.ts`).
+
+### Real-server profile and default-on decision
+
+`npm run profile:worker:real` (`clients/web/scripts/change-stream-worker-profile.mjs`,
+`HS2-MH5PWD`) builds the production client and local host, supervises a real
+machine server under an isolated `HOTSHEET_HOME`, and opens two projects in
+Chromium at 1440×900. It alternates main-thread and worker runs. Each run
+writes 40 visible-project tickets through the server while the background
+project receives 40 more. It then switches project tabs 30 times while both
+projects keep receiving writes. It reports:
+
+- delivery lag, from the server write to the rendered row;
+- click-to-paint, from Event Timing;
+- heap after a forced GC, for the page and the worker isolate.
+
+Both modes stayed on real WebSockets; each made only its four startup long
+polls. One run on the same build and machine gave:
+
+| Metric (two runs per mode)         |  Main thread |       Worker |
+| ---------------------------------- | -----------: | -----------: |
+| Delivery lag p50                   |   255–280 ms |   294–332 ms |
+| Delivery lag p95                   |   409–416 ms |   457–481 ms |
+| Click-to-paint p95                 |     72–96 ms |        80 ms |
+| GC heap after load (page + worker) | 10.4–11.3 MB | 11.3–12.2 MB |
+| Worker isolate heap                |            — |      0.36 MB |
+
+Server writes dominate delivery lag in both modes. The worker added about
+40–50 ms of delivery lag and about 0.9 MB of heap. Click-to-paint showed no
+consistent difference. At realistic two-project load, the main thread is not
+the bottleneck the worker was meant to relieve. **Decision:** the worker stays
+off by default (opt in with `hotsheet.change-stream-worker`). Revisit only if a
+profile of heavier concurrent AI output shows main-thread change processing
+dominating click-to-paint.
