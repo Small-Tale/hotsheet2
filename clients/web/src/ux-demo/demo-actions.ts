@@ -57,7 +57,6 @@ export const DEMO_ACTIONS = {
   renameTerminalVisibilityGroup: attr('data-action', 'rename-terminal-visibility-group'),
   resetSettings: attr('data-action', 'reset-settings'),
   resetWorkspaceNotifications: attr('data-action', 'reset-workspace-notifications'),
-  resizeProjectSidebar: attr('data-action', 'resize-project-sidebar'),
   retryConnection: attr('data-action', 'retry-connection'),
   runCommand: attr('data-action', 'run-command'),
   saveConversation: attr('data-action', 'save-conversation'),

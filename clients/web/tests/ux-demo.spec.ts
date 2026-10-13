@@ -6316,6 +6316,7 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
     expect(geometry.sidebarBottom - geometry.driveBottom).toBeLessThan(16);
   };
   await assertDrivePinned();
+  await handle.scrollIntoViewIfNeeded();
   const handleBox = await handle.boundingBox();
   expect(handleBox).not.toBeNull();
   await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2);
@@ -6336,10 +6337,11 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   expect(scrollState.contentScrollHeight).toBeGreaterThan(scrollState.contentClientHeight);
   expect(scrollState.sidebarBottom - scrollState.driveBottom).toBeLessThan(16);
   await handle.focus();
+  // Kerf's separator keyboard step is 16px (HS2-TH52Y3).
   await page.keyboard.press('ArrowDown');
-  await expect(handle).toHaveAttribute('aria-valuenow', '424');
+  await expect(handle).toHaveAttribute('aria-valuenow', '416');
   await assertDrivePinned();
-  for (let index = 0; index < 20; index += 1) await page.keyboard.press('ArrowDown');
+  for (let index = 0; index < 30; index += 1) await page.keyboard.press('ArrowDown');
   await expect(handle).toHaveAttribute('aria-valuenow', '768');
   await assertDrivePinned();
 });

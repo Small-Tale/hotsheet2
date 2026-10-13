@@ -44,6 +44,10 @@ import {
   collapsedCommandGroups,
   commandGroupExpanded,
   driveRunning,
+  PROJECT_SIDEBAR_MAX_HEIGHT,
+  PROJECT_SIDEBAR_MIN_HEIGHT,
+  PROJECT_SIDEBAR_REGION_ID,
+  projectSidebarHeight,
   runningCommandId,
   selectedViewId,
   sidebarCommands,
@@ -158,12 +162,14 @@ export const regionBounds: Record<string, { min: number; max: number }> = {
   'resize-demo-vertical': { min: 120, max: 260 },
   'app-left-rail': { min: 250, max: 360 },
   'app-right-rail': { min: 280, max: 520 },
+  [PROJECT_SIDEBAR_REGION_ID]: { min: PROJECT_SIDEBAR_MIN_HEIGHT, max: PROJECT_SIDEBAR_MAX_HEIGHT },
 };
 
 export function regionSize(id: string): number {
   if (id === 'resize-demo-horizontal') return resizeDemoWidth.value;
   if (id === 'resize-demo-vertical') return resizeDemoHeight.value;
   if (id === 'app-left-rail') return shellSidebarSize.value;
+  if (id === PROJECT_SIDEBAR_REGION_ID) return projectSidebarHeight.value;
   return shellInspectorSize.value;
 }
 
@@ -175,6 +181,7 @@ export function setRegionSize(id: string, size: number): void {
   if (id === 'resize-demo-horizontal') resizeDemoWidth.value = next;
   else if (id === 'resize-demo-vertical') resizeDemoHeight.value = next;
   else if (id === 'app-left-rail') shellSidebarSize.value = next;
+  else if (id === PROJECT_SIDEBAR_REGION_ID) projectSidebarHeight.value = next;
   else shellInspectorSize.value = next;
 }
 

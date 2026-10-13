@@ -102,42 +102,6 @@ body[data-resizing-project-sidebar='true'] {
   font-size: var(--wa-font-size-xs);
   font-weight: 700;
 }
-/* Stage card around the standalone sidebar Panes (in the shell the Workbench rail owns their box). */
-.sidebar-demo-card {
-  display: grid;
-  width: min(remify(272px), 100%);
-  min-width: 250px;
-  height: 100%;
-  overflow: hidden;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(14px);
-  background: var(--wa-color-surface-default);
-  box-shadow: var(--wa-shadow-l);
-}
-.project-sidebar-demo__resizer {
-  display: grid;
-  width: min(remify(272px), 100%);
-  height: var(--project-sidebar-demo-height);
-  min-height: remify(288px);
-  max-height: remify(768px);
-  grid-template-rows: minmax(0, 1fr) remify(20px);
-}
-.project-sidebar-demo__resize-handle {
-  display: grid;
-  color: var(--wa-color-neutral-on-quiet);
-  cursor: row-resize;
-  place-items: center;
-  touch-action: none;
-}
-.project-sidebar-demo__resize-handle:hover {
-  color: var(--wa-color-text-link);
-}
-.project-sidebar-demo__resize-handle:focus-visible {
-  border-radius: remify(5.6px);
-  outline: 2px solid var(--wa-color-focus);
-  outline-offset: 1px;
-}
-
 /* A phone-sized screen inside the framed CatalogExample: contain: paint makes it the containing
    block for the fixed focus surface and backdrop. */
 .terminal-drawer-focus-demo__stage {

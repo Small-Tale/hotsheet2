@@ -1,8 +1,7 @@
 import { CatalogExample } from '@kerfjs/ui/catalog';
-import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { ResizableRegion } from '@kerfjs/ui/resizable-region';
 import { delegate, type SafeHtml, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
-import { GripHorizontal } from 'lucide';
 
 import type { CommandDefinition } from '../api';
 import { type CommandDropTarget, keptCommandGroups, reorderCommandsMultiple } from '../command-order';
@@ -24,7 +23,6 @@ import { loadLucideCatalog } from '../lucide-catalog';
 import { DemoEvent } from './components/demo-event';
 import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
-import { listen } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
 export const selectedViewId = signal('all');
@@ -67,6 +65,8 @@ export function ProjectSidebarSettings() {
   );
 }
 export const projectSidebarHeight = signal(640);
+/** The demo's ResizableRegion id; the catalog's shared wireResizableRegions commit routes it here. */
+export const PROJECT_SIDEBAR_REGION_ID = 'project-sidebar-demo';
 export const PROJECT_SIDEBAR_MIN_HEIGHT = 288;
 export const PROJECT_SIDEBAR_MAX_HEIGHT = 768;
 export const clampProjectSidebarHeight = (height: number) =>
@@ -328,13 +328,23 @@ export function AiToolSettingsDemo() {
   );
 }
 export function ProjectSidebarDemo() {
+  // Kerf ResizableRegion owns the grip, pointer, and separator keyboard resizing (HS2-TH52Y3); the
+  // shared catalog wireResizableRegions commit mirrors the settled height into projectSidebarHeight.
   return (
-    <CatalogExample label="Resizable" note="Drag or use the arrow keys on the grip to resize the sidebar.">
-      <div
-        class="project-sidebar-demo__resizer"
-        style={`--project-sidebar-demo-height:${projectSidebarHeight.value}px`}
+    <>
+      <CatalogExample
+        label="Resizable"
+        note="Drag or use the arrow keys on the grip to resize the sidebar."
+        viewport={{ width: 'compact', layout: 'flex-column', frame: 'solid', surface: 'default', overflow: 'hidden' }}
       >
-        <div class="sidebar-demo-card">
+        <ResizableRegion
+          id={PROJECT_SIDEBAR_REGION_ID}
+          label="project sidebar"
+          size={projectSidebarHeight.value}
+          min={PROJECT_SIDEBAR_MIN_HEIGHT}
+          max={PROJECT_SIDEBAR_MAX_HEIGHT}
+          axis="vertical"
+        >
           <ProjectSidebar
             completedToday={6}
             inProgress={3}
@@ -362,23 +372,10 @@ export function ProjectSidebarDemo() {
             conversationOpen={projectSidebarSettings.conversationOpen.value}
             conversationDisabled={projectSidebarSettings.conversationDisabled.value}
           />
-        </div>
-        <div
-          class="project-sidebar-demo__resize-handle"
-          data-action="resize-project-sidebar"
-          role="separator"
-          aria-label="Resize project sidebar"
-          aria-orientation="horizontal"
-          aria-valuemin={PROJECT_SIDEBAR_MIN_HEIGHT}
-          aria-valuemax={PROJECT_SIDEBAR_MAX_HEIGHT}
-          aria-valuenow={projectSidebarHeight.value}
-          tabindex="0"
-        >
-          <LucideIcon size={18.4} icon={GripHorizontal} name="grip-horizontal" />
-        </div>
-      </div>
+        </ResizableRegion>
+      </CatalogExample>
       <DemoEvent>{sidebarEvent.value}</DemoEvent>
-    </CatalogExample>
+    </>
   );
 }
 export function SettingsNavigationDemo() {
@@ -424,7 +421,6 @@ export function TerminalOperationsSidebarDemo() {
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireProjectSidebarDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
-  let sidebarResizeDrag: { startY: number; startHeight: number } | undefined;
   // The production CommandSettingsEditor handlers over the fixture command list (HS2-RWY78R).
   demoListeners.add(
     wireCommandSettingsEditor(root, {
@@ -523,40 +519,6 @@ function wireProjectSidebarDemo(root: HTMLElement): () => void {
     delegate(root, 'click', DEMO_ACTIONS.toggleDrive.selector, () => {
       driveRunning.value = !driveRunning.value;
       sidebarEvent.value = driveRunning.value ? 'Codex drive started.' : 'Codex drive stopped.';
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'pointerdown', DEMO_ACTIONS.resizeProjectSidebar.selector, (event) => {
-      event.preventDefault();
-      sidebarResizeDrag = {
-        startY: (event as PointerEvent).clientY,
-        startHeight: projectSidebarHeight.value,
-      };
-      document.body.dataset.resizingProjectSidebar = 'true';
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'keydown', DEMO_ACTIONS.resizeProjectSidebar.selector, (event) => {
-      if ((event as KeyboardEvent).key !== 'ArrowUp' && (event as KeyboardEvent).key !== 'ArrowDown') return;
-      event.preventDefault();
-      projectSidebarHeight.value = clampProjectSidebarHeight(
-        projectSidebarHeight.value + ((event as KeyboardEvent).key === 'ArrowDown' ? 24 : -24),
-      );
-    }),
-  );
-  demoListeners.add(
-    listen(window, 'pointermove', (event) => {
-      if (!sidebarResizeDrag) return;
-      projectSidebarHeight.value = clampProjectSidebarHeight(
-        sidebarResizeDrag.startHeight + event.clientY - sidebarResizeDrag.startY,
-      );
-    }),
-  );
-  demoListeners.add(
-    listen(window, 'pointerup', () => {
-      if (!sidebarResizeDrag) return;
-      sidebarResizeDrag = undefined;
-      delete document.body.dataset.resizingProjectSidebar;
     }),
   );
   return () => {
