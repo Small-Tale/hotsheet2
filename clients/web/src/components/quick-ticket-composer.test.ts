@@ -94,7 +94,9 @@ describe('QuickTicketComposer', () => {
     expect(expanded).toContain('Browse attachments for new ticket');
     expect(expanded).toContain('Drop attachment files anywhere in this area or browse');
     expect(expanded).toContain('data-pending-attachment-id="proof"');
-    expect(expanded).toContain('aria-label="Remove proof.png" title="Remove proof.png"');
+    expect(expanded).toContain('data-component="icon-button" data-action="remove-new-ticket-attachment"');
+    expect(expanded).toContain('aria-label="Remove proof.png"');
+    expect(expanded).toContain('data-component="file-picker-trigger"');
     expect(expanded).not.toContain('data-lucide="x"');
     expect(expanded).toContain('data-dialog="close"');
     const disabled = String(

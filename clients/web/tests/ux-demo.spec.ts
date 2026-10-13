@@ -4254,7 +4254,7 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
         details = getComputedStyle(node.querySelector('.quick-ticket-composer__details')!),
         textarea = getComputedStyle(node.querySelector('textarea')!),
         attachments = getComputedStyle(node.querySelector('.quick-ticket-composer__attachments')!),
-        headerLabel = getComputedStyle(node.querySelector('.quick-ticket-composer__attachments header label')!),
+        headerLabel = getComputedStyle(node.querySelector('[data-component="file-picker-trigger"]')!),
         drop = getComputedStyle(node.querySelector('.quick-ticket-composer__drop')!),
         footer = getComputedStyle(node.querySelector('.quick-ticket-composer__footer')!),
         actions = getComputedStyle(node.querySelector('.quick-ticket-composer__actions')!),

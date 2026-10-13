@@ -6,6 +6,8 @@ import '@awesome.me/webawesome/dist/styles/utilities/visually-hidden.css';
 import './quick-ticket-composer.css';
 
 import { foregroundColorVar } from '@kerfjs/ui/css-values';
+import { FilePickerTrigger } from '@kerfjs/ui/file-picker';
+import { IconButton } from '@kerfjs/ui/icon-button';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
@@ -57,6 +59,9 @@ export interface QuickTicketDialogElement extends HTMLElement {
 /** The error a blocked submit reports; a later source switch clears it (HS2-8HHHK3). */
 export const STRANDED_ATTACHMENTS_MESSAGE =
   'Remove the staged attachments or choose a ticket source that supports attachments.';
+
+/** `wireFilePickers` id of the composer header's Add trigger. */
+export const NEW_TICKET_ATTACHMENT_PICKER = 'new-ticket-attachments';
 
 export function strandedNewTicketAttachments(attachmentCount: number, attachmentsEnabled: boolean): boolean {
   return !attachmentsEnabled && attachmentCount > 0;
@@ -210,16 +215,14 @@ export function QuickTicketComposer({
                 Attachments
               </span>
               {attachmentsEnabled && (
-                <label>
-                  <LucideIcon size={14.4} icon={Plus} name="plus" />
-                  Add
-                  <input
-                    type="file"
-                    multiple
-                    name="new-ticket-attachments"
-                    aria-label="Browse attachments for new ticket"
-                  />
-                </label>
+                <FilePickerTrigger
+                  label="Add"
+                  accessibleLabel="Browse attachments for new ticket"
+                  icon={<LucideIcon icon={Plus} name="plus" />}
+                  multiple
+                  name="new-ticket-attachments"
+                  pickerId={NEW_TICKET_ATTACHMENT_PICKER}
+                />
               )}
               {strandedAttachments && (
                 <wa-button
@@ -241,15 +244,16 @@ export function QuickTicketComposer({
                   <div class="quick-ticket-composer__attachment" data-pending-attachment-id={item.id}>
                     <LucideIcon size={14.4} icon={Paperclip} name="paperclip" />
                     <span title={item.name}>{item.name}</span>
-                    <button
-                      type="button"
-                      {...SEARCH_AND_COMPOSER_ACTIONS.removeNewTicketAttachment.attrs}
-                      data-pending-attachment-id={item.id}
-                      aria-label={`Remove ${item.name}`}
-                      title={`Remove ${item.name}`}
-                    >
-                      <LucideIcon size={14.4} icon={Trash2} name="trash-2" />
-                    </button>
+                    <IconButton
+                      icon={Trash2}
+                      iconName="trash-2"
+                      label={`Remove ${item.name}`}
+                      action={SEARCH_AND_COMPOSER_ACTIONS.removeNewTicketAttachment.value}
+                      appearance="plain"
+                      variant="danger"
+                      size="xs"
+                      rootAttributes={{ 'data-pending-attachment-id': item.id }}
+                    />
                   </div>
                 ))}
               </div>

@@ -1,11 +1,12 @@
 import { readTokenSearchField } from '@kerfjs/ui/token-search-field';
 import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
+import { wireFilePickers } from '@kerfjs/ui/wire-file-pickers';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
 import { attr, delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { type TicketRow as WireTicketRow } from '../api';
-import { STRANDED_ATTACHMENTS_MESSAGE } from '../components/quick-ticket-composer';
+import { NEW_TICKET_ATTACHMENT_PICKER, STRANDED_ATTACHMENTS_MESSAGE } from '../components/quick-ticket-composer';
 import {
   nextWorkspaceSort,
   type WorkspaceSort,
@@ -355,10 +356,23 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', 'input[name="new-ticket-attachments"]', (_event, target) => {
-      const input = target as HTMLInputElement;
-      if (input.files?.length) void addNewTicketFiles(input.files);
-      input.value = '';
+    delegate(
+      document.body,
+      'change',
+      '.quick-ticket-composer__drop input[name="new-ticket-attachments"]',
+      (_event, target) => {
+        const input = target as HTMLInputElement;
+        if (input.files?.length) void addNewTicketFiles(input.files);
+        input.value = '';
+      },
+    ),
+  );
+  // The header's Kerf FilePickerTrigger reports through its documented wiring contract (HS2-ZWRCAZ).
+  lifetime.add(
+    wireFilePickers(document.body, {
+      onFiles: ({ id, files }) => {
+        if (id === NEW_TICKET_ATTACHMENT_PICKER && files.length) void addNewTicketFiles(files);
+      },
     }),
   );
   lifetime.add(

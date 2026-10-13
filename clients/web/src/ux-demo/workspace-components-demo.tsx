@@ -4,6 +4,7 @@ import { openPopupMenuAt, type PopupMenuElement } from '@kerfjs/ui/popup-menu';
 import { Select } from '@kerfjs/ui/select';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
+import { wireFilePickers } from '@kerfjs/ui/wire-file-pickers';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
 import { delegate, delegateCapture, effect, signal } from 'kerfjs';
@@ -13,6 +14,7 @@ import type { CodeReview, DuplicateBacklink } from '../api';
 import type { LiveClaimNoticeProps } from '../components/active-claim';
 import { NotificationCenter } from '../components/notification-center';
 import {
+  NEW_TICKET_ATTACHMENT_PICKER,
   QuickTicketComposer,
   QuickTicketLauncher,
   showQuickTicketComposer,
@@ -977,14 +979,24 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
     }),
   );
   let demoAttachmentSequence = 0;
+  const stageDemoFiles = (files: readonly File[]) => {
+    composerAttachments.value = [
+      ...composerAttachments.value,
+      ...files.map((file) => ({ id: `demo-${demoAttachmentSequence++}`, name: file.name })),
+    ];
+  };
   demoListeners.add(
-    delegate(root, 'change', 'input[name="new-ticket-attachments"]', (_event, target) => {
+    delegate(root, 'change', '.quick-ticket-composer__drop input[name="new-ticket-attachments"]', (_event, target) => {
       const input = target as HTMLInputElement;
-      composerAttachments.value = [
-        ...composerAttachments.value,
-        ...Array.from(input.files ?? [], (file) => ({ id: `demo-${demoAttachmentSequence++}`, name: file.name })),
-      ];
+      stageDemoFiles(Array.from(input.files ?? []));
       input.value = '';
+    }),
+  );
+  demoListeners.add(
+    wireFilePickers(root, {
+      onFiles: ({ id, files }) => {
+        if (id === NEW_TICKET_ATTACHMENT_PICKER) stageDemoFiles(files);
+      },
     }),
   );
   demoListeners.add(

@@ -1,7 +1,7 @@
 /* QuickTicketComposer: Kerf Row and Text own the source cluster, footer copy, and attachment messages
    and notices (HS2-PZB8T3). These rules lay out the composer's own dialog (Web Awesome dialog parts
    under the existing L011 exception), form grid, Up Next toggle, auto-growing details textarea,
-   staged-attachment rows and header controls, drop zone, and mobile stacking, which no Kerf component
+   staged-attachment rows, drop zone, and mobile stacking, which no Kerf component
    expresses. */
 /* The launcher is a brand Web Awesome pill (HS2-PNCDAE): Web Awesome owns its size, fill, hover, and
    focus ring; `size="compact"` maps to the small button of a narrow heading such as the ticket rail's.
@@ -137,25 +137,14 @@
   align-items: center;
   justify-content: space-between;
 }
-.quick-ticket-composer__attachments header > span,
-.quick-ticket-composer__attachments header label {
+.quick-ticket-composer__attachments header > span {
   display: inline-flex;
   align-items: center;
   gap: var(--kui-space-2xs);
   font-size: var(--wa-font-size-xs);
   font-weight: 650;
 }
-.quick-ticket-composer__attachments header label {
-  min-height: remify(30.4px);
-  padding: 0 var(--kui-space-xs);
-  border-radius: remify(6.4px);
-  color: var(--wa-color-text-link);
-  cursor: pointer;
-}
-.quick-ticket-composer__attachments header label:hover {
-  background: var(--wa-color-brand-fill-quiet);
-}
-.quick-ticket-composer__attachments input {
+.quick-ticket-composer__drop input {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -183,23 +172,6 @@
   flex: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.quick-ticket-composer__attachment button {
-  display: inline-grid;
-  width: remify(27.2px);
-  height: remify(27.2px);
-  padding: 0;
-  border: 0;
-  border-radius: remify(5.6px);
-  background: transparent;
-  color: var(--wa-color-neutral-on-quiet);
-  cursor: pointer;
-  place-items: center;
-}
-.quick-ticket-composer__attachment button:hover,
-.quick-ticket-composer__attachment button:focus-visible {
-  background: var(--wa-color-danger-fill-quiet);
-  color: var(--wa-color-danger-on-quiet);
 }
 .quick-ticket-composer__drop {
   display: flex;
