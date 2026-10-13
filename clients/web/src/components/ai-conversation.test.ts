@@ -166,9 +166,10 @@ describe('AIConversation', () => {
     expect(markup).toContain(
       '<code>zsh -ic &#39;npm run test -- --project chromium --grep a-deliberately-long-filter&#39;</code>',
     );
-    expect(css).toMatch(
-      /\.ai-conversation__activity \{[^}]*width: 100%[^}]*min-width: 0[^}]*max-width: 100%[^}]*box-sizing: border-box/,
-    );
+    // A Kerf ContentItem frames the activity card; the app grid only lays out its own body (HS2-ADM62E).
+    expect(markup).toMatch(/data-component="content-item" data-appearance="neutral"[^>]*role="region"/);
+    expect(css).toMatch(/\.ai-conversation__activity-body \{[^}]*display: grid;[^}]*min-width: 0/);
+    expect(css).not.toMatch(/\.ai-conversation__activity \{/);
     expect(css).toMatchSource(
       /\.ai-conversation__activity-item \{[^}]*min-width: 0[^}]*max-width: 100%[^}]*grid-template-columns:minmax\(0,1fr\) auto/,
     );
@@ -304,13 +305,15 @@ describe('AIConversation', () => {
       /\.ai-conversation__composer textarea \{[^}]*field-sizing: content[^}]*max-height: remify\(144px\)[^}]*border: 0/,
     );
   });
-  it("sizes its own dialog panel over Web Awesome's default margin cap, with an 8px phone margin (HS2-MWMMCN)", () => {
-    expect(css).toMatch(
-      /\.ai-conversation::part\(dialog\) \{[^}]*width: min\(remify\(768px\), calc\(100vw - remify\(32px\)\)\);[^}]*max-width: none;[^}]*max-height: none;/,
+  it('sizes its dialog panel through Kerf DialogSurface with an 8px viewport gutter (HS2-MWMMCN, HS2-ADM62E)', () => {
+    const markup = String(
+      AIConversation({ open: true, tool: 'Codex', messages: [], draft: '', busy: false, interruptible: false }),
     );
-    expect(css).toMatch(
-      /@media \(max-width: remify\(640px\)\) \{\s*\.ai-conversation::part\(dialog\) \{[^}]*width: calc\(100vw - remify\(16px\)\);/,
-    );
+    expect(markup).toMatch(/data-component="dialog-surface"/);
+    expect(markup).toMatch(/data-preferred-width/);
+    expect(markup).toMatch(/data-viewport-gutter/);
+    expect(markup).toMatch(/data-body-inset="none"/);
+    expect(css).not.toMatch(/::part\(dialog\) \{[^}]*width:/);
   });
   it('scrolls a foreground taller than the dialog in the foreground itself, keeping the shadow room (HS2-VYM95K)', () => {
     expect(css).toMatch(

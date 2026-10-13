@@ -4,11 +4,12 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 
 import { Badge } from '@kerfjs/ui/badge';
 import { ContentItem } from '@kerfjs/ui/content-item';
-import { uiColor } from '@kerfjs/ui/css-values';
+import { remify, uiColor } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { StateBanner } from '@kerfjs/ui/state-banner';
+import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -181,29 +182,36 @@ function ConversationActivityGroup({
   feedbackAvailable: boolean;
 }) {
   return (
-    <section class="ai-conversation__activity" aria-label="AI-generated activity summaries; may contain errors">
-      <header>
-        <span>
-          <LucideIcon icon={Activity} name="activity" size={14.4} />
-          <strong>Activity</strong>
-        </span>
-        <span class="ai-conversation__activity-disclosure">
-          <AIContentLabel mayContainErrors />
-        </span>
-      </header>
-      <ol class="ai-conversation__activity-list">
-        {activity.map((item) => (
-          <li class="ai-conversation__activity-item" data-activity-id={item.id} data-importance={item.importance}>
-            <MarkdownPreview source={item.summary} density="flush" />
-            {feedbackAvailable && (
-              <span class="ai-conversation__activity-feedback">
-                <AIContentFeedback tool={item.tool} feedbackTarget={`activity:${item.id}`} />
-              </span>
-            )}
-          </li>
-        ))}
-      </ol>
-    </section>
+    // A Kerf ContentItem frames the activity card (HS2-ADM62E); the app lays out only its own header and list.
+    <ContentItem
+      appearance="neutral"
+      className="ai-conversation__activity"
+      ariaLabel="AI-generated activity summaries; may contain errors"
+    >
+      <div class="ai-conversation__activity-body">
+        <header>
+          <span>
+            <LucideIcon icon={Activity} name="activity" size={14.4} />
+            <strong>Activity</strong>
+          </span>
+          <span class="ai-conversation__activity-disclosure">
+            <AIContentLabel mayContainErrors />
+          </span>
+        </header>
+        <ol class="ai-conversation__activity-list">
+          {activity.map((item) => (
+            <li class="ai-conversation__activity-item" data-activity-id={item.id} data-importance={item.importance}>
+              <MarkdownPreview source={item.summary} density="flush" />
+              {feedbackAvailable && (
+                <span class="ai-conversation__activity-feedback">
+                  <AIContentFeedback tool={item.tool} feedbackTarget={`activity:${item.id}`} />
+                </span>
+              )}
+            </li>
+          ))}
+        </ol>
+      </div>
+    </ContentItem>
   );
 }
 
@@ -515,38 +523,54 @@ export function AIConversation({
         {composer}
       </section>
     );
+  // Kerf DialogSurface owns the panel geometry: a 768px x 608px panel capped to the viewport less an
+  // 8px gutter, with no body or footer inset (HS2-MWMMCN, HS2-ADM62E).
   return (
-    <wa-dialog
-      data-key="ai-conversation"
-      class="ai-conversation"
-      {...COMMANDS_AND_AI_TARGETS.aiConversation.attrs}
-      data-presentation="dialog"
-      data-read-only={String(readOnly)}
-      data-selection-id={selectionId}
-      label={`${tool} conversation`}
-      open={open || undefined}
-      data-controlled-open={String(open)}
-      light-dismiss
-      without-header
-      with-footer={!readOnly}
+    <DialogSurface
+      preferredWidth={remify(768)}
+      height={remify(608)}
+      viewportGutter={remify(8)}
+      bodyInset="none"
+      footerInset="none"
+      rootAttributes={{ 'data-key': 'ai-conversation-surface' }}
     >
-      <Toolbar
-        dividerSides=""
-        leading={
-          <>
-            <ToolbarControlGroup single tileTone="brand">
-              <LucideIcon color={uiColor('brand-on-quiet')} icon={Bot} name="bot" />
-            </ToolbarControlGroup>
-            <ToolbarText text={`${tool} conversation`} id="ai-conversation-title" size="xlarge" description={summary} />
-          </>
-        }
-        trailing={<ToolbarControlGroup label={`${tool} conversation actions`}>{actions}</ToolbarControlGroup>}
-      />
-      {foreground && <div class="ai-conversation__foreground">{foreground}</div>}
-      {savedNotice}
-      {sessionControls}
-      {transcript}
-      {composer}
-    </wa-dialog>
+      <wa-dialog
+        data-key="ai-conversation"
+        class="ai-conversation"
+        {...COMMANDS_AND_AI_TARGETS.aiConversation.attrs}
+        data-presentation="dialog"
+        data-read-only={String(readOnly)}
+        data-selection-id={selectionId}
+        label={`${tool} conversation`}
+        open={open || undefined}
+        data-controlled-open={String(open)}
+        light-dismiss
+        without-header
+        with-footer={!readOnly}
+      >
+        <Toolbar
+          dividerSides=""
+          leading={
+            <>
+              <ToolbarControlGroup single tileTone="brand">
+                <LucideIcon color={uiColor('brand-on-quiet')} icon={Bot} name="bot" />
+              </ToolbarControlGroup>
+              <ToolbarText
+                text={`${tool} conversation`}
+                id="ai-conversation-title"
+                size="xlarge"
+                description={summary}
+              />
+            </>
+          }
+          trailing={<ToolbarControlGroup label={`${tool} conversation actions`}>{actions}</ToolbarControlGroup>}
+        />
+        {foreground && <div class="ai-conversation__foreground">{foreground}</div>}
+        {savedNotice}
+        {sessionControls}
+        {transcript}
+        {composer}
+      </wa-dialog>
+    </DialogSurface>
   );
 }

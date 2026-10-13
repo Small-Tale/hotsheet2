@@ -1,24 +1,18 @@
-/* The conversation sizes its own panel: Web Awesome's default `max-width`/`max-height`
-   (`100% - --wa-space-2xl`) would otherwise cap the panel at a 20px margin and silently undo the
-   phone rule's 8px margin below (HS2-MWMMCN). */
+/* Kerf DialogSurface sizes the panel and clears the body and footer insets (HS2-ADM62E). The panel stays
+   the positioning context, the body lays out the heading, notices, and transcript rows, and the footer
+   floats the composer over the transcript: Kerf has no floating-footer dialog layout (KF-913AT2). */
 .ai-conversation::part(dialog) {
   position: relative;
-  width: min(remify(768px), calc(100vw - remify(32px)));
-  max-width: none;
-  height: min(remify(608px), calc(100vh - remify(48px)));
-  max-height: none;
 }
 .ai-conversation::part(body) {
   display: grid;
   min-height: 0;
-  padding: 0;
   grid-template-rows: auto auto minmax(0, 1fr);
 }
 .ai-conversation::part(footer) {
   position: absolute;
   z-index: 2;
   display: block;
-  padding: 0;
   border: 0;
   background: transparent;
   inset-inline: remify(16px);
@@ -217,32 +211,26 @@
   margin: 0 var(--wa-space-xs) 0 0;
   white-space: nowrap;
 }
-.ai-conversation__activity {
+/* The activity card's frame is a Kerf ContentItem; this lays out the app's own header and list. */
+.ai-conversation__activity-body {
   display: grid;
-  width: 100%;
   min-width: 0;
-  max-width: 100%;
-  padding: remify(11.2px) remify(12.8px);
-  box-sizing: border-box;
-  border: 1px solid var(--wa-color-neutral-border-quiet);
-  border-radius: remify(11.2px);
-  background: var(--wa-color-neutral-fill-quiet);
-  gap: remify(8px);
+  gap: var(--kui-space-xs);
 }
-.ai-conversation__activity > header,
-.ai-conversation__activity > header > span {
+.ai-conversation__activity-body > header,
+.ai-conversation__activity-body > header > span {
   display: flex;
   align-items: center;
 }
-.ai-conversation__activity > header {
+.ai-conversation__activity-body > header {
   justify-content: space-between;
   gap: remify(8px);
 }
 .ai-conversation__activity-disclosure {
   min-width: 0;
 }
-.ai-conversation__activity > header > span {
-  gap: remify(4.8px);
+.ai-conversation__activity-body > header > span {
+  gap: var(--kui-space-2xs);
 }
 .ai-conversation__activity-list {
   display: grid;
@@ -328,10 +316,6 @@
   gap: var(--wa-space-xs);
 }
 @media (max-width: remify(640px)) {
-  .ai-conversation::part(dialog) {
-    width: calc(100vw - remify(16px));
-    height: calc(100vh - remify(16px));
-  }
   .ai-conversation::part(footer) {
     inset-inline: remify(8px);
     bottom: remify(8px);
@@ -346,7 +330,7 @@
   .ai-conversation__header-usage {
     display: none;
   }
-  .ai-conversation__activity > header {
+  .ai-conversation__activity-body > header {
     align-items: flex-start;
     flex-direction: column;
   }
