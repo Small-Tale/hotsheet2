@@ -76,6 +76,7 @@ import { collectionEvent, collectionTickets, recordCollectionEvent } from './tic
 import { statusMenuDemoStartedPhase, statusMenuDemoStatus } from './ticket-metadata-demo';
 import { TICKET_ROW_CLAIM_ETA } from './ticket-row-demo';
 import {
+  savedViewDemoSearchModel,
   ticketSearchDemoCollapsibleOpen,
   ticketSearchDemoGrowOpen,
   ticketSearchDemoModel,
@@ -765,7 +766,11 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
   // chips, suggestions, chip edit/removal, and clear (HS2-5JXBQY).
   demoListeners.add(
     wireTokenSearchFields(root, {
-      models: { 'workspace-search': workspaceSearchModel, ...ticketSearchDemoModels },
+      models: {
+        'workspace-search': workspaceSearchModel,
+        ...ticketSearchDemoModels,
+        'saved-view-query': savedViewDemoSearchModel,
+      },
       // Enter commits a trailing filter through the model; the rebuilt editor gets its caret back at the end.
       onSubmit: ({ id }) => {
         restoreInlineSearchCaret(root, `[data-token-search-editor="${id}"]`);

@@ -22,7 +22,14 @@ export const ticketSearchDemoEvent = signal('');
 const ticketSearchDemoHelpOpen: Record<string, ReturnType<typeof signal<boolean>>> = {
   'ticket-search-demo': signal(false),
   'ticket-search-demo-form': signal(false),
+  // The SavedViewDialog catalog entry's query field shares the demo help routing (HS2-DF6N61).
+  'saved-view-query': signal(false),
 };
+
+/** Whether a demo search field's syntax help is open. */
+export function ticketSearchDemoHelpIsOpen(id: string): boolean {
+  return Object.hasOwn(ticketSearchDemoHelpOpen, id) ? ticketSearchDemoHelpOpen[id].value : false;
+}
 
 /**
  * A Kerf-managed demo model whose actions also narrate the catalog's event line, so the demo
@@ -82,6 +89,7 @@ export const ticketSearchDemoModels: Readonly<Record<string, TokenSearchModel>> 
 export const savedViewDemoSearchModel = demoModel('is:open tag:bug');
 
 export function ticketSearchDemoModel(id: string): TokenSearchModel | undefined {
+  if (id === 'saved-view-query') return savedViewDemoSearchModel;
   return Object.hasOwn(ticketSearchDemoModels, id) ? ticketSearchDemoModels[id] : undefined;
 }
 

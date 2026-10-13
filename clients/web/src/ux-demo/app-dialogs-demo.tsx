@@ -10,7 +10,7 @@ import { SavedViewDialog } from '../components/saved-view-dialog';
 import { TicketCloseDialog } from '../components/ticket-close-dialog';
 import { TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
 import type { DemoModule } from './demo-module';
-import { savedViewDemoSearchModel } from './ticket-search-field-demo';
+import { savedViewDemoSearchModel, ticketSearchDemoHelpIsOpen } from './ticket-search-field-demo';
 
 // The close dialog's selected running item, so the catalog shows both the chat and the live terminal
 // preview (HS2-148B5C).
@@ -157,7 +157,13 @@ export function ConversationExportDialogDemo() {
 export function SavedViewDialogDemo() {
   return (
     <CatalogExample label="Interactive">
-      <SavedViewDialog open mode="create" name="Blocked bugs" searchModel={savedViewDemoSearchModel} />
+      <SavedViewDialog
+        open
+        mode="create"
+        name="Blocked bugs"
+        searchModel={savedViewDemoSearchModel}
+        helpOpen={ticketSearchDemoHelpIsOpen('saved-view-query')}
+      />
     </CatalogExample>
   );
 }

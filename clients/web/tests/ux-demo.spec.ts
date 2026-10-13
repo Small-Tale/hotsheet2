@@ -9275,3 +9275,28 @@ test('shows every host-only control disabled in the remote-device demo states (H
   await page.locator('[data-action="show-project-dialog-demo"][data-variant="local"]').click();
   await expect(browse).toHaveJSProperty('disabled', false);
 });
+
+test('toggles search syntax help and applies dates in the SavedViewDialog demo (HS2-DF6N61)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=saved-view-dialog');
+    const dialog = page.locator('[data-catalog-example]').first();
+    const helpButton = dialog.getByRole('button', { name: 'Search syntax help' });
+    await helpButton.click();
+    const help = page.getByRole('dialog', { name: 'Search syntax' });
+    await expect(help).toBeVisible();
+    await page.screenshot({ path: `target/visual-captures/hs2-df6n61-saved-view-help-${width}.png` });
+    await helpButton.click();
+    await expect(help).toHaveCount(0);
+    const query = dialog.locator('[data-token-search-editor="saved-view-query"]');
+    await query.click();
+    await page.keyboard.press('End');
+    await page.keyboard.type(' updated-after:');
+    const helper = page.getByRole('group', { name: 'Date and time helper' });
+    await expect(helper).toBeVisible();
+    await helper.getByLabel('Date').fill('2026-09-01');
+    await helper.getByRole('button', { name: 'Apply' }).click();
+    await expect(helper).toHaveCount(0);
+    await expect(dialog.locator('input[name="saved-view-query"]')).toHaveValue(/updated-after:2026-09-01/);
+  }
+});
