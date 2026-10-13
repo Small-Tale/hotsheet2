@@ -1151,6 +1151,7 @@ dependencies = [
 name = "hotsheet-plugins"
 version = "0.0.0"
 dependencies = [
+ "hotsheet-ticketing",
  "include_dir",
  "serde",
  "serde_json",

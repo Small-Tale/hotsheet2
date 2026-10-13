@@ -3475,9 +3475,7 @@ args = []
         let main = root.path().join("main");
         let linked = root.path().join("linked");
         let git = |dir: &Path, args: &[&str]| {
-            let out = std::process::Command::new("git")
-                .arg("-C")
-                .arg(dir)
+            let out = hotsheet_ticketing::git::command_in(dir)
                 .args(args)
                 .output()
                 .unwrap();

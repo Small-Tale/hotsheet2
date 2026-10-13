@@ -17,4 +17,5 @@ include_dir.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
+hotsheet-ticketing.workspace = true
 tempfile.workspace = true
