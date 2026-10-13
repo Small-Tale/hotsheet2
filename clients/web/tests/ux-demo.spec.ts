@@ -401,6 +401,8 @@ test('renders the canonical ListItem and ListHeader demo routes (HS2-YGWNY7)', a
 test('labels converted demo specimens through Kerf CatalogExample, not app-owned stages (HS2-Z3FMEZ)', async ({
   page,
 }) => {
+  // Every converted entry is visited at two widths, so the matrix outgrows the default timeout.
+  test.setTimeout(300_000);
   const examples: [string, number][] = [
     ['status-badge', 1],
     ['provider-icon', 2],
@@ -441,6 +443,13 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['content-transition', 2],
     ['repository-status-popover', 1],
     ['change-evidence-dialog', 1],
+    ['keyboard-settings', 1],
+    ['ticket-source-setup-dialog', 1],
+    ['provider-setup-form', 1],
+    ['ticket-sources-settings', 1],
+    ['accounts-settings', 2],
+    ['settings-workspace', 1],
+    ['trash-settings', 1],
   ];
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });

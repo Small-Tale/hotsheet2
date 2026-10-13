@@ -1,3 +1,4 @@
+import { CatalogExample } from '@kerfjs/ui/catalog';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -33,7 +34,11 @@ export type TicketSourceScenario =
 export const ticketSourceScenario = signal<TicketSourceScenario>('root');
 
 export function KeyboardSettingsDemo() {
-  return <KeyboardSettings overrides={{}} apple={true} />;
+  return (
+    <CatalogExample label="Apple keyboard">
+      <KeyboardSettings overrides={{}} apple={true} />
+    </CatalogExample>
+  );
 }
 
 export function TicketSourceSetupDialogDemo() {
@@ -59,98 +64,116 @@ export function TicketSourceSetupDialogDemo() {
           : [{ id: 'demo', alias: 'Demo project' }],
     };
   return (
-    <TicketSourceSetupDialog
-      project={{ id: 'demo', root: '/work/demo', name: 'Demo project', stores: [], needsTicketSetup: true }}
-      providerKind={
-        scenario === 'root' || scenario === 'remote' ? undefined : scenario === 'jira-account' ? 'jira' : 'github'
-      }
-      providerConnections={editing ? [connection] : []}
-      editingProviderId={editing ? connection.id : undefined}
-      removingProviderId={scenario === 'removing' ? connection.id : undefined}
-      accounts={scenario === 'accounts' || scenario === 'jira-account' ? DEMO_ACCOUNTS : []}
-      chosenAccount={scenario === 'jira-account' ? 'jira-token' : undefined}
-      projectDefault
-      hasProjectDefault={scenario === 'authorized-existing-default'}
-      providerBusy={scenario === 'busy'}
-      githubAuth={
-        scenario === 'waiting'
-          ? {
-              session: 'demo',
-              userCode: 'ABCD-EFGH',
-              verificationUri: 'https://github.com/login/device',
-              state: 'waiting',
-              copied: true,
-            }
-          : scenario === 'authorized' || scenario === 'authorized-existing-default' || editing
+    <CatalogExample label="Interactive">
+      <TicketSourceSetupDialog
+        project={{ id: 'demo', root: '/work/demo', name: 'Demo project', stores: [], needsTicketSetup: true }}
+        providerKind={
+          scenario === 'root' || scenario === 'remote' ? undefined : scenario === 'jira-account' ? 'jira' : 'github'
+        }
+        providerConnections={editing ? [connection] : []}
+        editingProviderId={editing ? connection.id : undefined}
+        removingProviderId={scenario === 'removing' ? connection.id : undefined}
+        accounts={scenario === 'accounts' || scenario === 'jira-account' ? DEMO_ACCOUNTS : []}
+        chosenAccount={scenario === 'jira-account' ? 'jira-token' : undefined}
+        projectDefault
+        hasProjectDefault={scenario === 'authorized-existing-default'}
+        providerBusy={scenario === 'busy'}
+        githubAuth={
+          scenario === 'waiting'
             ? {
                 session: 'demo',
                 userCode: 'ABCD-EFGH',
                 verificationUri: 'https://github.com/login/device',
-                state: 'authorized',
-                repositories: ['small-tale/hotsheet2', 'small-tale/hotsheet-assets'],
-                installations: [{ account: 'small-tale', selection: 'all' }],
+                state: 'waiting',
+                copied: true,
               }
-            : undefined
-      }
-      createdGitTicketStore={scenario === 'remote' ? '/work/demo.hs2' : undefined}
-      previewScenario={scenario}
-      navigation="none"
-    />
+            : scenario === 'authorized' || scenario === 'authorized-existing-default' || editing
+              ? {
+                  session: 'demo',
+                  userCode: 'ABCD-EFGH',
+                  verificationUri: 'https://github.com/login/device',
+                  state: 'authorized',
+                  repositories: ['small-tale/hotsheet2', 'small-tale/hotsheet-assets'],
+                  installations: [{ account: 'small-tale', selection: 'all' }],
+                }
+              : undefined
+        }
+        createdGitTicketStore={scenario === 'remote' ? '/work/demo.hs2' : undefined}
+        previewScenario={scenario}
+        navigation="none"
+      />
+    </CatalogExample>
   );
 }
 
 export function ProviderSetupFormDemo() {
   return (
-    <ProviderSetupForm
-      kind="github"
-      defaultChoice
-      auth={{
-        session: 'demo',
-        userCode: 'ABCD-EFGH',
-        verificationUri: 'https://github.com/login/device',
-        state: 'authorized',
-        repositories: ['small-tale/hotsheet2'],
-      }}
-    />
+    <CatalogExample label="GitHub, authorized">
+      <ProviderSetupForm
+        kind="github"
+        defaultChoice
+        auth={{
+          session: 'demo',
+          userCode: 'ABCD-EFGH',
+          verificationUri: 'https://github.com/login/device',
+          state: 'authorized',
+          repositories: ['small-tale/hotsheet2'],
+        }}
+      />
+    </CatalogExample>
   );
 }
 
 export function TicketSourcesSettingsDemo() {
-  return <TicketSourcesSettings sources={DEMO_PROJECT_SOURCES} />;
+  return (
+    <CatalogExample label="Connected sources">
+      <TicketSourcesSettings sources={DEMO_PROJECT_SOURCES} />
+    </CatalogExample>
+  );
 }
 
 export function AccountsSettingsDemo() {
   return (
     <>
-      <AccountsSettings accounts={DEMO_ACCOUNTS} signingOut={undefined} />
-      <AccountsSettings accounts={[]} error="Could not reach the Hot Sheet server." />
+      <CatalogExample label="Signed-in accounts">
+        <AccountsSettings accounts={DEMO_ACCOUNTS} signingOut={undefined} />
+      </CatalogExample>
+      <CatalogExample label="Server unreachable">
+        <AccountsSettings accounts={[]} error="Could not reach the Hot Sheet server." />
+      </CatalogExample>
     </>
   );
 }
 
 export function SettingsWorkspaceDemo() {
   return (
-    <SettingsWorkspace
-      category={settingsWorkspaceSettings.category.value}
-      sources={{ sources: DEMO_PROJECT_SOURCES.slice(0, 1) }}
-      accounts={{ accounts: DEMO_ACCOUNTS }}
-      ai={{ tools: [], selection: { tool: 'codex' }, loading: false, message: '' }}
-      commands={{ commands: [] }}
-      lifecycle={{ days: 30, message: '' }}
-      terminals={{ inheritGlobalShellHistory: false, message: '' }}
-      permissions={{
-        automation: { action: settingsWorkspaceSettings.permissionAction.value, delayMs: 60_000 },
-        delays: [0, 15_000, 60_000, 120_000],
-      }}
-      columns={{ hideVerified: false }}
-      general={{ showLoadingActivity: true }}
-      keyboard={{ overrides: {}, apple: true }}
-    />
+    <CatalogExample label="Interactive" viewport={{ width: 'full' }}>
+      <SettingsWorkspace
+        category={settingsWorkspaceSettings.category.value}
+        sources={{ sources: DEMO_PROJECT_SOURCES.slice(0, 1) }}
+        accounts={{ accounts: DEMO_ACCOUNTS }}
+        ai={{ tools: [], selection: { tool: 'codex' }, loading: false, message: '' }}
+        commands={{ commands: [] }}
+        lifecycle={{ days: 30, message: '' }}
+        terminals={{ inheritGlobalShellHistory: false, message: '' }}
+        permissions={{
+          automation: { action: settingsWorkspaceSettings.permissionAction.value, delayMs: 60_000 },
+          delays: [0, 15_000, 60_000, 120_000],
+        }}
+        columns={{ hideVerified: false }}
+        general={{ showLoadingActivity: true }}
+        keyboard={{ overrides: {}, apple: true }}
+      />
+    </CatalogExample>
   );
 }
 
 export function TrashSettingsDemo() {
-  return <TrashSettings days={14} />;
+  return (
+    <CatalogExample label="Default">
+      <TrashSettings days={14} />
+    </CatalogExample>
+  );
 }
 
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
@@ -184,17 +207,18 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
 /** The catalog entries this file renders: ticket-source setup and settings surfaces over the demo connection fixtures (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {
-    'keyboard-settings': { Demo: KeyboardSettingsDemo },
-    'ticket-source-setup-dialog': { Demo: TicketSourceSetupDialogDemo },
-    'provider-setup-form': { Demo: ProviderSetupFormDemo },
-    'ticket-sources-settings': { Demo: TicketSourcesSettingsDemo },
-    'accounts-settings': { Demo: AccountsSettingsDemo },
+    'keyboard-settings': { catalogExamples: true, Demo: KeyboardSettingsDemo },
+    'ticket-source-setup-dialog': { catalogExamples: true, Demo: TicketSourceSetupDialogDemo },
+    'provider-setup-form': { catalogExamples: true, Demo: ProviderSetupFormDemo },
+    'ticket-sources-settings': { catalogExamples: true, Demo: TicketSourcesSettingsDemo },
+    'accounts-settings': { catalogExamples: true, Demo: AccountsSettingsDemo },
     'settings-workspace': {
+      catalogExamples: true,
       Demo: SettingsWorkspaceDemo,
       Settings: SettingsWorkspaceSettings,
       reset: resetSettingsWorkspaceDemo,
     },
-    'trash-settings': { Demo: TrashSettingsDemo },
+    'trash-settings': { catalogExamples: true, Demo: TrashSettingsDemo },
   },
   wire: wireSetupSettingsDemo,
 };
