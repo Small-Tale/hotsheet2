@@ -75,7 +75,7 @@
       "id": "app-loading-indicator",
       "name": "AppLoadingIndicator",
       "kind": "component",
-      "purpose": "Fixed app-level project loading and sequential ticket-update progress.",
+      "purpose": "Corner (Kerf CornerStatus) app-level project loading and sequential ticket-update progress.",
       "source": "src/components/app-loading-indicator.tsx",
       "publicExports": [
         {
@@ -116,9 +116,9 @@
       },
       "boundaries": {
         "rootClass": null,
-        "publicClasses": ["app-loading-indicator"],
+        "publicClasses": [],
         "publicTokens": [],
-        "placeableClasses": ["app-loading-indicator"]
+        "placeableClasses": []
       },
       "accessibility": {
         "obligations": []

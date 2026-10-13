@@ -190,16 +190,14 @@
       "id": "app-loading-indicator",
       "name": "AppLoadingIndicator",
       "kind": "component",
-      "purpose": "Fixed app-level project loading and sequential ticket-update progress.",
+      "purpose": "Corner (Kerf CornerStatus) app-level project loading and sequential ticket-update progress.",
       "useWhen": [
         "Hot Sheet needs fixed app-level project loading and sequential ticket-update progress."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific AppLoadingIndicator behavior."
       ],
-      "publicClasses": [
-        "app-loading-indicator"
-      ],
+      "publicClasses": [],
       "publicTokens": [],
       "source": "src/components/app-loading-indicator.tsx",
       "geometry": {

@@ -9,6 +9,7 @@ import '@kerfjs/ui/webawesome.css';
 import './hot-sheet-tokens.css';
 import './style.css';
 
+import { wireCornerStatus } from '@kerfjs/ui/wire-corner-status';
 import { wireResizableRegions } from '@kerfjs/ui/wire-resizable-regions';
 import { wireScrollDividers } from '@kerfjs/ui/wire-scroll-dividers';
 
@@ -21,6 +22,8 @@ installDocumentScrollRestore(window);
 // Kerf panes, NavStacks, TabScaffolds, and TabBar strips draw their chrome dividers only while content
 // scrolls beneath them; one page-lifetime instance at the application root (HS2-TAZJ0V, HS2-TF76Z2).
 void wireScrollDividers(appRoot);
+// Opens the corner loading status in the top layer whenever it renders (KF-PZCPHQ, HS2-5C4Y5Q).
+void wireCornerStatus(appRoot);
 // SplitView's documented wiring contract (Repository Status list-detail, HS2-3B8345). Its split is not
 // resizable today, so there is no size to persist; a future resizable region commits through here.
 void wireResizableRegions(appRoot, { onCommit: () => undefined });

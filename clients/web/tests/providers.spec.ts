@@ -13546,7 +13546,7 @@ test('renders exactly once when the long poll announces a permission request', a
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
-  await expect(page.locator('[data-component="app-loading-indicator"]')).toHaveCount(0);
+  await expect(page.locator('#app-loading-indicator')).toHaveCount(0);
   await expect.poll(() => polls.length).toBeGreaterThan(0);
   await resetRenderMetrics(page);
   expect(await renderMetrics(page)).toEqual({ passes: 0, mutations: 0 });
@@ -14277,7 +14277,7 @@ test('updates the open project after external ticket additions edits and deletio
   await emit('changed', '01', 'HS2-DEMO01');
   await page.waitForTimeout(200);
   await expect(original).toContainText('Use real project tickets');
-  await expect(page.locator('[data-component="app-loading-indicator"]')).toBeHidden();
+  await expect(page.locator('#app-loading-indicator')).toBeHidden();
   await expect(openSelect).toHaveJSProperty('open', true);
   await page.keyboard.press('Escape');
   await expect(original).toContainText('Externally edited ticket');
@@ -21579,7 +21579,7 @@ test('does not announce an empty project while its initial ticket collection is 
   await page.getByLabel('Columns view').click();
   await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
   await expect(loading).toBeVisible();
-  await expect(page.locator('[data-component="app-loading-indicator"]')).toHaveCount(0);
+  await expect(page.locator('#app-loading-indicator')).toHaveCount(0);
   await expect(page.getByText('No tickets yet')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-e2az2n-loading-board-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 640 });
@@ -22552,8 +22552,7 @@ test('shows non-atomic provider updates in the app loading indicator (HS2-TPF3EB
   await first.click();
   await second.click({ modifiers: ['Meta'] });
   await page.getByRole('button', { name: 'Toggle Up Next for selected tickets' }).click();
-  const loading = page.locator('[data-component="app-loading-indicator"]');
-  await expect(loading).toHaveAttribute('data-loading-kind', 'tickets');
+  const loading = page.locator('#app-loading-indicator');
   await expect(loading).toContainText(/Updating tickets… [01] of 2/);
   await expect(page.locator('.app-toast')).toHaveCount(0);
   await page.screenshot({ path: test.info().outputPath('hs2-967bwm-best-effort-progress.png'), fullPage: true });
@@ -22601,7 +22600,7 @@ test('keeps successful best-effort writes when another selected ticket fails (HS
   await expect(page.getByRole('alert')).toContainText(
     'Updated 1 of 2 tickets. 1 failed; HS2-START02: stale imported ticket',
   );
-  await expect(page.locator('[data-component="app-loading-indicator"]')).toHaveCount(0);
+  await expect(page.locator('#app-loading-indicator')).toHaveCount(0);
   await expect(page.locator('.app-toast')).toHaveCount(0);
   await expect.poll(() => patches.filter((patch) => patch.up_next === true).length).toBe(1);
   await expect(first.locator('[data-action="toggle-row-up-next"]')).toHaveAttribute(
@@ -23378,7 +23377,7 @@ test('switches already-open projects from cache within one frame and rejects sta
   expect(await switchWithinFrame('demo')).toBeLessThan(100);
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toHaveCount(0);
-  await expect(page.locator('[data-component="app-loading-indicator"]')).toHaveCount(0);
+  await expect(page.locator('#app-loading-indicator')).toHaveCount(0);
   await expect.poll(() => pending.has('demo')).toBe(true);
   expect(
     await page.evaluate(

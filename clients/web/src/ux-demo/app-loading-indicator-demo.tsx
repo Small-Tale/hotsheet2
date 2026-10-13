@@ -1,5 +1,6 @@
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Row } from '@kerfjs/ui/row';
+import { wireCornerStatus } from '@kerfjs/ui/wire-corner-status';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -37,6 +38,7 @@ export function AppLoadingIndicatorDemo() {
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireAppLoadingIndicatorDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
+  demoListeners.add(wireCornerStatus(root));
   demoListeners.add(
     delegate(root, 'click', '[data-app-loading-demo]', (_event, target) => {
       const state = (target as HTMLElement).dataset.appLoadingDemo;

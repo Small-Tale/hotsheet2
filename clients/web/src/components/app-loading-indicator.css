@@ -1,7 +1,0 @@
-/* Corner placement until Kerf ships a non-dismissible status surface (KF-PZCPHQ, HS2-5C4Y5Q); StateBanner owns border and padding. */
-.app-loading-indicator {
-  position: fixed;
-  z-index: 1000;
-  right: remify(16px);
-  bottom: remify(16px);
-}

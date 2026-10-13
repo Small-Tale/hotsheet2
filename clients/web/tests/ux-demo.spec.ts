@@ -59,16 +59,18 @@ test('clears the halted terminal example from its menu at wide and phone widths 
 
 test('previews project loading and ticket update progress in the app indicator (HS2-TPF3EB)', async ({ page }) => {
   await page.goto('/ux-demo?component=app-loading-indicator');
-  const indicator = page.locator('[data-component="app-loading-indicator"]');
-  await expect(indicator).toHaveAttribute('data-loading-kind', 'project');
+  const indicator = page.locator('#app-loading-indicator');
   await expect(indicator).toContainText('Loading…');
+  // Kerf CornerStatus opens it as a manual popover in the top layer, with no close control (HS2-5C4Y5Q).
+  await expect.poll(() => indicator.evaluate((node) => node.matches(':popover-open'))).toBe(true);
+  await expect(indicator.getByRole('button')).toHaveCount(0);
+  await expect(indicator.getByRole('status')).toHaveCount(1);
   for (const [action, text] of [
     ['start', 'Updating tickets… 0 of 2'],
     ['progress', 'Updating tickets… 1 of 2'],
     ['complete', 'Updating tickets… 2 of 2'],
   ]) {
     await page.locator(`[data-app-loading-demo="${action}"]`).click();
-    await expect(indicator).toHaveAttribute('data-loading-kind', 'tickets');
     await expect(indicator).toContainText(text);
     if (action === 'progress') {
       await page.screenshot({ path: test.info().outputPath('hs2-tpf3eb-progress-1280.png') });
@@ -78,7 +80,6 @@ test('previews project loading and ticket update progress in the app indicator (
     }
   }
   await page.locator('[data-app-loading-demo="project"]').click();
-  await expect(indicator).toHaveAttribute('data-loading-kind', 'project');
   await expect(indicator).toContainText('Loading…');
   await page.locator('[data-app-loading-demo="start"]').click();
   await expect(indicator).toContainText('Updating tickets… 0 of 2');
