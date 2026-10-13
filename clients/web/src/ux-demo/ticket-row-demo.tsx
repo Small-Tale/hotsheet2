@@ -89,7 +89,6 @@ export function resetTicketRowDemo(root?: ParentNode): void {
         confidence: ticketRowSettings.confidence.value,
         'category-color': ticketRowSettings.categoryColor.value,
         agent: ticketRowSettings.agentName.value,
-        updated: ticketRowSettings.updatedLabel.value,
       },
       checked: {
         'up-next': ticketRowSettings.upNext.value,
@@ -219,7 +218,6 @@ export function TicketRowSettings() {
       />
       <wa-input name="tags" label="Tags (comma separated)" value={ticketRowSettings.tags.value} />
       <wa-input name="agent" label="Active agent" value={ticketRowSettings.agentName.value} />
-      <wa-input name="updated" label="Updated label" value={ticketRowSettings.updatedLabel.value} />
       <wa-checkbox name="up-next" checked={ticketRowSettings.upNext.value}>
         Up Next
       </wa-checkbox>
@@ -290,7 +288,6 @@ function wireTicketRowDemo(root: HTMLElement): () => void {
       if (control.getAttribute('name') === 'category') ticketRowSettings.category.value = control.value;
       if (control.getAttribute('name') === 'tags') ticketRowSettings.tags.value = control.value;
       if (control.getAttribute('name') === 'agent') ticketRowSettings.agentName.value = control.value;
-      if (control.getAttribute('name') === 'updated') ticketRowSettings.updatedLabel.value = control.value;
     }),
   );
   demoListeners.add(

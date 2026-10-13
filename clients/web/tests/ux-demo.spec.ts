@@ -2298,7 +2298,6 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   const category = inspector.getByRole('textbox', { name: 'Category' });
   const tags = inspector.getByRole('textbox', { name: 'Tags (comma separated)' });
   const agent = inspector.getByRole('textbox', { name: 'Active agent' });
-  const updated = inspector.getByRole('textbox', { name: 'Updated label' });
   const status = inspector.locator('wa-select[name="status"]');
   const priority = inspector.locator('wa-select[name="priority"]');
   const categoryIcon = inspector.locator('wa-select[name="category-icon"]');
@@ -2326,7 +2325,6 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await category.fill('bug');
   await tags.fill('client, regression');
   await agent.fill('Codex');
-  await updated.fill('Now');
   await status.evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'verified';
     node.dispatchEvent(new Event('change', { bubbles: true }));
@@ -2408,7 +2406,6 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row).toContainText('regression');
   await expect(row.locator('[data-lucide="star"]')).toHaveCount(0);
   await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveCount(0);
-  await expect(row).toContainText('Now');
   await expect(row).toHaveAttribute('data-selected', 'true');
   await expect(row.locator('[data-lucide="chevrons-up"]')).toHaveCount(1);
   await expect(row.locator('.ticket-list-row__priority')).toHaveCSS('color', 'rgb(235, 0, 5)');
@@ -2425,7 +2422,6 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(category).toHaveJSProperty('value', 'feature');
   await expect(tags).toHaveJSProperty('value', 'client, ux');
   await expect(agent).toHaveJSProperty('value', 'Claude');
-  await expect(updated).toHaveJSProperty('value', '1h ago');
   await expect(upNext).toHaveJSProperty('checked', true);
   await expect(blocked).toHaveJSProperty('checked', false);
   await expect(needsReview).toHaveJSProperty('checked', false);
