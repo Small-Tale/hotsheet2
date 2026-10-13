@@ -24549,8 +24549,9 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   });
   expect(rowLayout.listDisplay).toBe('block');
   // WebKit restores the deep destination only after progressive contained rows settle.
-  expect(rowLayout.contentVisibility).toBe(browserName === 'chromium' || browserName === 'webkit' ? 'auto' : 'visible');
-  if (browserName === 'chromium' || browserName === 'webkit') expect(rowLayout.intrinsicSize).toBe('auto 72px');
+  // Rows always render; WebKit painted content-visibility rows late while scrolling (HS2-S3RGM8).
+  expect(rowLayout.contentVisibility).toBe('visible');
+  expect(rowLayout.intrinsicSize).toBe('none');
   const queueTop = await setScroll(4500);
   expect(queueTop).toBe(4500);
   await selectView('backlog');

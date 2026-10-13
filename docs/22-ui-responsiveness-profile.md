@@ -176,8 +176,11 @@ The 138-ticket transitions usually contain around 115–136 ms of inclusive
 lighter at 94 ms and 19 ms. Switches to the small project contain around
 55–66 ms of `FunctionCall` and 1–3 ms of `Layout`.
 The list's rendered row count is therefore a useful explanatory variable.
-Blink and WebKit list rows use `content-visibility: auto` with a 72px intrinsic
+Blink and WebKit list rows used `content-visibility: auto` with a 72px intrinsic
 estimate, and the list stack uses block layout (`HS2-WRY9Q2`, `HS2-AHRFBW`).
+`HS2-S3RGM8` removed that row `content-visibility` from lists and board columns,
+because Safari painted skipped rows late while scrolling. Rows now always render,
+so the layout figures below predate that change and may rise.
 WebKit waits for progressive rows to settle before restoring a saved deep scroll
 position, avoiding a clamp against the initial 40-row height.
 In the same 138-ticket Chromium desktop and narrow profile, warm-return

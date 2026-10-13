@@ -1,13 +1,11 @@
-/* Header row over a scroller that takes the remaining column height; the row-containment tokens let
-   long columns skip rendering off-screen TicketRows. */
+/* Header row over a scroller that takes the remaining column height. Rows are always rendered:
+   skipping off-screen rows made WebKit paint them late while scrolling (HS2-S3RGM8). */
 .ticket-board-column {
   display: grid;
   min-width: 0;
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr);
   gap: var(--kui-space-xs);
-  --hs-ticket-row-content-visibility: auto;
-  --hs-ticket-row-intrinsic-size: auto 72px;
 }
 /* Paged board (HS2-ZYJMDP): each column is a snap target. */
 .ticket-board-column[data-scroll-snap='start'] {

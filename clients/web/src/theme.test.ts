@@ -113,8 +113,6 @@ describe('shared client theme', () => {
       '--hs-annotation-halo',
       '--hs-reader-text-scale',
       '--hs-selected-row-overlap',
-      '--hs-ticket-row-content-visibility',
-      '--hs-ticket-row-intrinsic-size',
       '--hs-touch-field-min-font-size',
     ];
     // CommandNavigation sets its palette color inline (`--command-color: var(--hs-command-<palette>)`),
@@ -122,23 +120,14 @@ describe('shared client theme', () => {
     const inlineCommandPalette = (token: string) => token.startsWith('--hs-command-') && token !== '--hs-command-on';
     const cssReferences = required.filter(
       (token) =>
-        !token.startsWith('--hs-priority-') &&
-        !token.startsWith('--hs-ticket-row-') &&
-        !inlineCommandPalette(token) &&
-        token !== '--hs-category-fallback',
+        !token.startsWith('--hs-priority-') && !inlineCommandPalette(token) && token !== '--hs-category-fallback',
     );
 
     expect(new Set(definitions)).toEqual(new Set(required));
-    // Board rows and Blink list rows opt into containment in separate scopes.
-    const scopedRowTokens = ['--hs-ticket-row-content-visibility', '--hs-ticket-row-intrinsic-size'];
-    for (const token of required) {
-      expect(definitions.filter((definition) => definition === token)).toHaveLength(
-        scopedRowTokens.includes(token) ? 2 : 1,
-      );
-    }
+    for (const token of required) expect(definitions.filter((definition) => definition === token)).toHaveLength(1);
     expect(new Set(references.filter((token) => !inlineCommandPalette(token)))).toEqual(new Set(cssReferences));
-    expect(allCss).toContain('var(--hs-ticket-row-content-visibility,');
-    expect(allCss).toContain('var(--hs-ticket-row-intrinsic-size,');
+    // Rows always render; WebKit painted content-visibility rows late while scrolling (HS2-S3RGM8).
+    expect(allCss).not.toContain('content-visibility');
   });
 
   it('keeps terminal initialization errors readable on the light and dark terminal surfaces (HS2-QNSS9C)', () => {

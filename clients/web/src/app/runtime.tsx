@@ -173,7 +173,7 @@ import {
   ticketReaderEditState,
   type TicketReaderFrame,
 } from '../ticket-reader-stack';
-import { defersContainedListScrollRestore, supportsTicketRowContainment } from '../ticket-row-containment';
+import { defersContainedListScrollRestore } from '../ticket-row-containment';
 import { TicketScrollMemory } from '../ticket-scroll-state';
 import { replaceTicketSearch } from '../ticket-search-model';
 import type { TicketTitleEditSurface } from '../ticket-title-editing';
@@ -217,10 +217,6 @@ import { wireHotSheetInteractions } from './wire-interactions';
  */
 export async function startHotSheetWebClient() {
   const deferContainedListScrollRestore = defersContainedListScrollRestore(navigator.userAgent);
-  document.documentElement.toggleAttribute(
-    'data-hs-ticket-row-containment',
-    supportsTicketRowContainment(navigator.userAgent),
-  );
   await installDevelopmentDiagnostics();
   const turnStreamReplayGuard = new TurnStreamReplayGuard();
   const localTicketChangeAcknowledgements = new LocalTicketChangeAcknowledgements();

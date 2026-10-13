@@ -8,8 +8,3 @@
 .ticket-list[data-empty='true'] > .ticket-list__tickets {
   min-height: remify(288px);
 }
-/* Opt-in TicketRow containment tokens (content-visibility sizing) for long lists. */
-html[data-hs-ticket-row-containment] .ticket-list__tickets {
-  --hs-ticket-row-content-visibility: auto;
-  --hs-ticket-row-intrinsic-size: auto 72px;
-}

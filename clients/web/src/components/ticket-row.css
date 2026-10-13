@@ -1,13 +1,11 @@
 /* TicketRow (HS2-P5597T): a selectable responsive summary used by TicketList and TicketBoard.
    Kerf has no selectable summary-row/card component yet (KF-XCFMX8), so the row chrome below is
    app-owned; Kerf Badge, Chip, Row, and LucideIcon own the pills, tags, and icons inside it.
-   The container is the query container and opt-in content-visibility host for long lists. */
+   The container is the query container. */
 .ticket-list-row-container {
   width: 100%;
   min-width: 0;
   container-type: inline-size;
-  content-visibility: var(--hs-ticket-row-content-visibility, visible);
-  contain-intrinsic-size: var(--hs-ticket-row-intrinsic-size, none);
 }
 /* The row/card block; the shared shell (`ticket-row-shell.css`) owns its surface, divider, list-edge
    rounding, hover, and selected presentation (HS2-1FH8BG). */
