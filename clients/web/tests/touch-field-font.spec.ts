@@ -353,7 +353,7 @@ async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
     if (category === 'Commands') {
       await expect(page.getByRole('list', { name: 'Custom commands' })).toContainText('Run tests');
       const row = page.locator('[data-component="command-settings-editor"] .command-settings-editor__row').first();
-      await row.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
+      await row.locator('[data-component="popup-menu"] [slot="trigger"]').click();
       await row.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
       await expect(page.locator('#command-editor-dialog').getByLabel('Button label')).toHaveValue('Run tests');
       await audit('command editor');

@@ -59,7 +59,7 @@ function bindings(selected: string[] = []): CommandSettingsEditorBindings & Reco
 
 beforeEach(() => {
   registrations.length = 0;
-  for (const item of rows) delete item.dataset.commandDragging;
+  for (const item of rows) delete item.dataset.dragging;
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -80,7 +80,7 @@ describe('wireCommandSettingsEditor (HS2-RWY78R)', () => {
     const transfer = { setData: vi.fn(), effectAllowed: '' };
     handler('dragstart', rowSelector)(plainEvent({ dataTransfer: transfer }), rows[0]);
     expect(transfer.setData).toHaveBeenCalledWith('text/plain', 'a,c');
-    expect(rows[0].dataset.commandDragging).toBe('true');
+    expect(rows[0].dataset.dragging).toBe('true');
     expect(state.selectOnly).not.toHaveBeenCalled();
     const drop = handler('drop', '.command-settings-editor__list');
     drop(plainEvent({ clientY: 25, target: rows[1] }), rows[1]);

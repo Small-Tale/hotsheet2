@@ -4,11 +4,12 @@ import '@awesome.me/webawesome/dist/components/textarea/textarea.js';
 import '@kerfjs/ui/surface-scaffold.css';
 import './command-settings-editor.css';
 
-import { ChoiceChips } from '@kerfjs/ui/choice-chips';
+import { ChoiceChips, type ChoiceChipsChoice } from '@kerfjs/ui/choice-chips';
 import { foregroundColor, foregroundColorVar, px, uiColor } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
+import { ListActionRow } from '@kerfjs/ui/list-action-row';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
@@ -18,7 +19,7 @@ import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
-import { Bot, GripVertical, MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide';
+import { Bot, MoreHorizontal, Pencil, RotateCcw, Trash2 } from 'lucide';
 
 import type { AiToolDefaults, AiToolDescriptor, CommandDefinition } from '../api';
 import { commandGroupSections } from '../command-order';
@@ -74,53 +75,44 @@ function CommandRow({
   const icon = resolveCommandIcon(command.icon),
     transparent = resolveCommandColor(command.color) === TRANSPARENT_CUSTOMIZATION_COLOR,
     label = command.title || 'Untitled command';
+  // A draggable Kerf ListActionRow with a trailing overflow PopupMenu (KF-HWYE11, KF-VWTCYB, HS2-7BBRJT):
+  // Kerf owns the row geometry, hover/selected states, and the dragging and drop-position marks the
+  // reorder wiring paints; the colored icon tile is the app's own decorative content.
   return (
-    <li
-      class="command-settings-editor__row"
-      data-command-id={command.id}
-      data-editing={editing ? 'true' : undefined}
-      data-selected={selected ? 'true' : undefined}
-      aria-selected={selected ? 'true' : undefined}
-      draggable="true"
-    >
-      <span class="command-settings-editor__row-grip" aria-hidden="true">
-        <LucideIcon size="s" icon={GripVertical} name="grip-vertical" color={uiColor('neutral-on-quiet')} />
-      </span>
-      <span
-        class="command-settings-editor__row-icon"
-        data-transparent={transparent ? 'true' : undefined}
-        style={commandIconStyle(command)}
-        aria-hidden="true"
-      >
+    <ListActionRow
+      label={label}
+      description={TYPE_LABELS[kind(command)]}
+      // The glyph takes the button's color; Kerf's 24px icon slot has no colored-tile presentation
+      // yet (KF-77AVAJ), so the sidebar button's tile is not repeated here.
+      icon={
         <LucideIcon
-          size={18}
           icon={icon.icon}
           name={icon.name}
-          color={transparent ? uiColor('neutral-on-normal') : foregroundColorVar('--command-text-color')}
+          color={transparent ? uiColor('neutral-on-normal') : foregroundColor(resolveCommandColor(command.color))}
         />
-      </span>
-      <span class="command-settings-editor__row-text">
-        <strong>{label}</strong>
-        <small>{TYPE_LABELS[kind(command)]}</small>
-      </span>
-      <span class="command-settings-editor__row-menu">
-        <PopupMenu
-          label={`Actions for ${label}`}
-          icon={<LucideIcon icon={MoreHorizontal} name="more-horizontal" />}
-          caret={false}
-          placement="bottom-end"
-          items={[
-            { label: 'Edit', action: 'edit-command-setting', icon: <LucideIcon icon={Pencil} name="pencil" /> },
-            {
-              label: 'Delete',
-              action: 'delete-command-setting',
-              tone: 'danger',
-              icon: <LucideIcon icon={Trash2} name="trash-2" />,
-            },
-          ]}
-        />
-      </span>
-    </li>
+      }
+      action={COMMANDS_AND_AI_ACTIONS.selectCommandSetting.value}
+      itemId={command.id}
+      className="command-settings-editor__row"
+      // Multi-selection is a pressed toggle per row; the command open in the editor is the current row.
+      pressed={selected}
+      selected={editing}
+      draggable
+      rootAttributes={{ 'data-command-id': command.id, 'data-editing': editing ? 'true' : undefined }}
+      trailingMenu={{
+        label: `Actions for ${label}`,
+        icon: <LucideIcon icon={MoreHorizontal} name="more-horizontal" />,
+        items: [
+          { label: 'Edit', action: 'edit-command-setting', icon: <LucideIcon icon={Pencil} name="pencil" /> },
+          {
+            label: 'Delete',
+            action: 'delete-command-setting',
+            tone: 'danger',
+            icon: <LucideIcon icon={Trash2} name="trash-2" />,
+          },
+        ],
+      }}
+    />
   );
 }
 
@@ -309,8 +301,8 @@ function CommandDetailFields({
         action={COMMANDS_AND_AI_ACTIONS.selectCommandColor.value}
         size="compact"
         value={resolveCommandColor(command.color)}
-        choices={COMMAND_CUSTOMIZATION_COLORS.map((option) => ({
-          value: option.value as string,
+        choices={COMMAND_CUSTOMIZATION_COLORS.map((option): ChoiceChipsChoice => ({
+          value: option.value,
           label: option.label,
           swatch: option.value === 'transparent' ? 'transparent' : foregroundColor(option.value),
         }))}
@@ -363,16 +355,19 @@ function CommandGroup({
         ) : (
           <ListHeader label={group} inline />
         ))}
-      <ul class="command-settings-editor__group-items" data-command-group-drop={group}>
-        {commands.map((command) => (
-          <CommandRow command={command} editing={command.id === editingId} selected={selectedIds.has(command.id)} />
-        ))}
-        {empty && (
-          <li class="command-settings-editor__group-empty" aria-hidden="true">
+      <div class="command-settings-editor__group-items" data-command-group-drop={group}>
+        {empty ? (
+          <div class="command-settings-editor__group-empty" aria-hidden="true">
             Drag commands here
-          </li>
+          </div>
+        ) : (
+          <List selectionMode="multiple" ariaLabel={group ? `${group} commands` : 'Commands'}>
+            {commands.map((command) => (
+              <CommandRow command={command} editing={command.id === editingId} selected={selectedIds.has(command.id)} />
+            ))}
+          </List>
         )}
-      </ul>
+      </div>
     </li>
   );
 }

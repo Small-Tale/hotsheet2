@@ -42,7 +42,10 @@ export interface CommandSettingsEditorBindings {
   readonly openManualModel: (id: string) => void;
 }
 
+// Each command row is a Kerf ListActionRow with this hook class and its command id (HS2-7BBRJT).
 const rowSelector = '.command-settings-editor__row';
+/** The row's trailing overflow PopupMenu, which owns its own clicks. */
+const rowMenuSelector = '[data-component="popup-menu"]';
 const commandIdOf = (target: Element) => target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
 
 /** Wire the CommandSettingsEditor under `root`; drag state is private to this registration. */
@@ -50,9 +53,11 @@ export function wireCommandSettingsEditor(root: HTMLElement, bindings: CommandSe
   const lifetime = createScope();
   let draggedIds: string[] = [];
   function clearDropIndicators() {
+    // Kerf rows render `dropPosition`/`dragging` as these documented marks; the reorder wiring paints
+    // them during a pointer drag, as Kerf's own wireListReorder does (KF-HWYE11).
     root
-      .querySelectorAll<HTMLElement>('[data-command-drop-position]')
-      .forEach((element) => delete element.dataset.commandDropPosition);
+      .querySelectorAll<HTMLElement>(`${rowSelector}[data-drop-position]`)
+      .forEach((element) => delete element.dataset.dropPosition);
     root
       .querySelectorAll<HTMLElement>('[data-command-drop-active]')
       .forEach((element) => delete element.dataset.commandDropActive);
@@ -60,8 +65,8 @@ export function wireCommandSettingsEditor(root: HTMLElement, bindings: CommandSe
   function clearDrag() {
     draggedIds = [];
     root
-      .querySelectorAll<HTMLElement>('[data-command-dragging]')
-      .forEach((element) => delete element.dataset.commandDragging);
+      .querySelectorAll<HTMLElement>(`${rowSelector}[data-dragging]`)
+      .forEach((element) => delete element.dataset.dragging);
     clearDropIndicators();
   }
   /** Where a drag over `over` would land: before/after another row, or into a group. */
@@ -132,7 +137,7 @@ export function wireCommandSettingsEditor(root: HTMLElement, bindings: CommandSe
   );
   lifetime.add(
     delegate(root, 'dblclick', rowSelector, (event, target) => {
-      if ((event.target as Element).closest('.command-settings-editor__row-menu')) return;
+      if ((event.target as Element).closest(rowMenuSelector)) return;
       const id = (target as HTMLElement).dataset.commandId;
       if (id) bindings.openEditor(id);
     }),
@@ -140,9 +145,7 @@ export function wireCommandSettingsEditor(root: HTMLElement, bindings: CommandSe
   lifetime.add(
     delegate(root, 'contextmenu', rowSelector, (event, target) => {
       // Right-click opens the row's PopupMenu (a wa-dropdown root) in place of a separate context menu.
-      const menu = target.querySelector<HTMLElement & { open: boolean }>(
-        '.command-settings-editor__row-menu [data-component="popup-menu"]',
-      );
+      const menu = target.querySelector<HTMLElement & { open: boolean }>(rowMenuSelector);
       if (!menu) return;
       event.preventDefault();
       menu.open = true;
@@ -150,8 +153,7 @@ export function wireCommandSettingsEditor(root: HTMLElement, bindings: CommandSe
   );
   lifetime.add(
     delegate(root, 'click', rowSelector, (event, target) => {
-      if ((event.target as Element).closest('.command-settings-editor__row-menu, .command-settings-editor__row-grip'))
-        return;
+      if ((event.target as Element).closest(rowMenuSelector)) return;
       const id = (target as HTMLElement).dataset.commandId;
       if (!id) return;
       const mouse = event as MouseEvent;
@@ -169,7 +171,7 @@ export function wireCommandSettingsEditor(root: HTMLElement, bindings: CommandSe
           : [id];
       if (draggedIds.length <= 1) bindings.selectOnly(id);
       root.querySelectorAll<HTMLElement>(rowSelector).forEach((row) => {
-        if (draggedIds.includes(row.dataset.commandId ?? '')) row.dataset.commandDragging = 'true';
+        if (draggedIds.includes(row.dataset.commandId ?? '')) row.dataset.dragging = 'true';
       });
       const transfer = (event as DragEvent).dataTransfer;
       if (transfer) {
@@ -186,7 +188,7 @@ export function wireCommandSettingsEditor(root: HTMLElement, bindings: CommandSe
       clearDropIndicators();
       if (!drop) return;
       drag.preventDefault();
-      if (drop.target.kind === 'row') drop.element.dataset.commandDropPosition = drop.target.position;
+      if (drop.target.kind === 'row') drop.element.dataset.dropPosition = drop.target.position;
       else drop.element.dataset.commandDropActive = 'true';
       if (drag.dataTransfer) drag.dataTransfer.dropEffect = 'move';
     }),

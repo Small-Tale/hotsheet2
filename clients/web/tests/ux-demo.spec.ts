@@ -7834,7 +7834,7 @@ test('edits custom command color and icon in the command settings editor', async
   // exercises them in the real app.
   // Details, including the color and icon pickers, live in the Edit command dialog opened from the row menu.
   const verifyRow = editor.locator('.command-settings-editor__row', { hasText: 'Verify project' });
-  await verifyRow.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
+  await verifyRow.locator('[data-component="popup-menu"] [slot="trigger"]').click();
   await verifyRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const dialog = page.locator('#command-editor-dialog');
   await expect(dialog).toBeVisible();
@@ -9054,7 +9054,7 @@ test('stacks the AI command configuration label above its menu at phone width', 
   await page.goto('/ux-demo?component=command-settings-editor');
   const editor = page.locator('[data-component="command-settings-editor"]');
   const publishRow = editor.locator('.command-settings-editor__row', { hasText: 'Publish preview' });
-  await publishRow.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
+  await publishRow.locator('[data-component="popup-menu"] [slot="trigger"]').click();
   await publishRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const dialog = page.locator('#command-editor-dialog');
   const label = dialog.getByRole('heading', { name: 'AI configuration', exact: true });

@@ -1,6 +1,6 @@
-/* CommandSettingsEditor still hand-styles part of its surface. The command rows wait on Kerf
-   drag-to-reorder row states (KF-HWYE11) and a ListActionRow trailing menu (KF-VWTCYB) for HS2-7BBRJT.
-   The color picker is Kerf ChoiceChips (KF-EJPYWD, HS2-EBY4E3). Group headers
+/* CommandSettingsEditor composes Kerf: command rows are draggable ListActionRows with a trailing
+   PopupMenu (KF-HWYE11, KF-VWTCYB, HS2-7BBRJT), the color picker is ChoiceChips (KF-EJPYWD,
+   HS2-EBY4E3), group headers
    are Kerf ListHeaders (HS2-7BBRJT), the heading is a Kerf Toolbar (HS2-EBY4E3), the empty list is
    EmptyState (HS2-F9ECMZ), and the edit dialog's fields are Web Awesome controls (HS2-WNXRG3). */
 /* The editor root stacks its sections; the Kerf Toolbar heading wraps on its own (HS2-EBY4E3). */
@@ -19,7 +19,6 @@
 /* Web Awesome's native list styles indent every li by 1.125em; these grouped rows sit on the
    settings text edge instead (HS2-1711Z5). */
 .command-settings-editor__section,
-.command-settings-editor__row,
 .command-settings-editor__group-empty {
   margin: 0;
 }
@@ -48,73 +47,8 @@
   border-radius: var(--wa-border-radius-m);
 }
 
-.command-settings-editor__row {
-  display: flex;
-  align-items: center;
-  gap: var(--kui-space-xs);
-  /* The 8px inline padding plus a 1px transparent border match Kerf Text item geometry, so the grip
-     starts on the settings text edge and the "…" menu ends on its right edge (HS2-1711Z5). */
-  padding: var(--kui-space-2xs) var(--kui-space-xs);
-  border: 1px solid transparent;
-  border-radius: var(--wa-border-radius-m);
-  cursor: pointer;
-}
-.command-settings-editor__row:hover {
-  background: var(--wa-color-neutral-fill-quiet);
-}
-.command-settings-editor__row[data-selected='true'] {
-  background: var(--wa-color-brand-fill-quiet);
-  box-shadow: inset 0 0 0 1px var(--wa-color-brand-border-normal);
-}
-.command-settings-editor__row[data-editing='true'] {
-  color: var(--wa-color-brand-on-quiet);
-  background: var(--wa-color-brand-fill-quiet);
-}
-.command-settings-editor__row[data-command-dragging='true'] {
-  opacity: 0.4;
-}
-.command-settings-editor__row[data-command-drop-position='before'] {
-  box-shadow: inset 0 2px 0 var(--wa-color-brand-border-loud);
-}
-.command-settings-editor__row[data-command-drop-position='after'] {
-  box-shadow: inset 0 -2px 0 var(--wa-color-brand-border-loud);
-}
-.command-settings-editor__row-grip {
-  display: inline-flex;
-  flex: 0 0 auto;
-  cursor: grab;
-  opacity: 0.55;
-}
-.command-settings-editor__row-icon {
-  display: grid;
-  width: remify(32px);
-  height: remify(32px);
-  flex: 0 0 auto;
-  border-radius: var(--wa-border-radius-m);
-  background: var(--command-color);
-  place-items: center;
-}
-.command-settings-editor__row-icon[data-transparent='true'],
 .command-settings-editor__dialog-icon[data-transparent='true'] {
   background: var(--wa-color-neutral-fill-normal);
-}
-.command-settings-editor__row-text {
-  display: grid;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-.command-settings-editor__row-text strong {
-  overflow: hidden;
-  color: var(--wa-color-text-normal);
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.command-settings-editor__row-text small {
-  color: var(--wa-color-text-quiet);
-}
-.command-settings-editor__row-menu {
-  flex: 0 0 auto;
 }
 .command-settings-editor > footer {
   display: flex;

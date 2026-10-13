@@ -12553,7 +12553,7 @@ test('runs grouped local commands, confirms stop, exposes history, and saves set
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   const editor = page.locator('[data-component="command-settings-editor"]');
   const firstRow = editor.locator('.command-settings-editor__row').first();
-  await firstRow.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
+  await firstRow.locator('[data-component="popup-menu"] [slot="trigger"]').click();
   await firstRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const commandDialog = page.locator('#command-editor-dialog');
   await commandDialog.getByLabel('Button label').fill('Review');
@@ -12904,7 +12904,7 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   await lintRow.dispatchEvent('drop', { dataTransfer, clientX: lintBox.x + 24, clientY: lintBox.y + 3 });
   await reviewRow.dispatchEvent('dragend', { dataTransfer });
   const runChecksRow = editor.locator('.command-settings-editor__row', { hasText: 'Run checks' });
-  await runChecksRow.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
+  await runChecksRow.locator('[data-component="popup-menu"] [slot="trigger"]').click();
   await runChecksRow.locator('[data-action="delete-command-setting"]').dispatchEvent('click');
   await expect(editor.locator('.command-settings-editor__row', { hasText: 'Run checks' })).toHaveCount(0);
   // Autosave persists the final set (Review then Lint) with no explicit Save button; identifiers are auto-generated, so assert by title/kind.
@@ -12999,7 +12999,7 @@ test('keeps an empty command group across reloads, populating, and emptying it (
   await expect(editor.locator('[data-command-group="Quality"] .command-settings-editor__group-empty')).toBeVisible();
   await expect.poll(() => groupWrites.at(-1)).toEqual(['Ideas', 'Quality']);
   // 4. Remove the command: the group stays, empty again, and survives another reload.
-  await runChecks.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
+  await runChecks.locator('[data-component="popup-menu"] [slot="trigger"]').click();
   const commandsSaved2 = page.waitForResponse(
     (response) => response.url().endsWith('/commands') && response.request().method() === 'PUT',
   );
@@ -13152,9 +13152,11 @@ test('multi-selects command rows and drags the whole selection to reorder (HS2-V
   // Select Alpha, then Cmd/Ctrl-click Gamma to add it to the selection (Beta stays unselected).
   await rowFor('Alpha').click();
   await rowFor('Gamma').click({ modifiers: ['ControlOrMeta'] });
-  await expect(rowFor('Alpha')).toHaveAttribute('data-selected', 'true');
-  await expect(rowFor('Gamma')).toHaveAttribute('data-selected', 'true');
-  await expect(rowFor('Beta')).not.toHaveAttribute('data-selected', 'true');
+  // Each selected Kerf ListActionRow is pressed (HS2-7BBRJT).
+  const pressedRow = (title: string) => rowFor(title).locator('[data-action="select-command-setting"]');
+  await expect(pressedRow('Alpha')).toHaveAttribute('aria-pressed', 'true');
+  await expect(pressedRow('Gamma')).toHaveAttribute('aria-pressed', 'true');
+  await expect(pressedRow('Beta')).toHaveAttribute('aria-pressed', 'false');
   await page.screenshot({ path: 'target/visual-captures/hs2-vjyqhg-multi-select.png', fullPage: true });
   // Drag the whole selection (grabbing Alpha) above Beta; Alpha and Gamma move together.
   const betaBox = (await rowFor('Beta').boundingBox())!,
@@ -13509,7 +13511,9 @@ test('aligns settings page copy with field labels, group headers, row content, a
   const commandsCopy = await textLeft('[data-component="command-settings-editor"] > p.kui-text');
   expect(commandsCopy).toBe(sourcesCopy);
   expect(await textLeft('.command-settings-editor__section [data-component="list-header"]')).toBe(commandsCopy);
-  expect(await boxLeft('.command-settings-editor__row-grip')).toBe(commandsCopy);
+  // Kerf ListActionRow owns the row geometry: the row frame starts on the copy's text edge and insets
+  // its icon by the list item padding (HS2-7BBRJT).
+  expect(Math.abs((await boxLeft('.command-settings-editor__row')) - commandsCopy)).toBeLessThanOrEqual(1);
 
   await open('Permissions');
   await expect(page.locator('[data-permission-note]')).toBeVisible();
@@ -24373,7 +24377,7 @@ test('shares the settings category across projects but scopes command drafts to 
   const openFirstCommand = async (title: string) => {
     const row = page.locator('[data-component="command-settings-editor"] .command-settings-editor__row').first();
     await expect(row).toContainText(title);
-    await row.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
+    await row.locator('[data-component="popup-menu"] [slot="trigger"]').click();
     await row.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   };
   await openFirstCommand('Demo checks');
@@ -25704,7 +25708,7 @@ test('applies a saved command color and icon to the sidebar command button (HS2-
   const editor = page.locator('[data-component="command-settings-editor"]');
   await expect(editor).toBeVisible();
   const runChecksRow = editor.locator('.command-settings-editor__row', { hasText: 'Run checks' });
-  await runChecksRow.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
+  await runChecksRow.locator('[data-component="popup-menu"] [slot="trigger"]').click();
   await runChecksRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const commandDialog = page.locator('#command-editor-dialog');
   await commandDialog.getByRole('radio', { name: 'Green', exact: true }).check();
@@ -25741,7 +25745,7 @@ test('searches the full Lucide catalog to assign an arbitrary command icon (HS2-
   const editor = page.locator('[data-component="command-settings-editor"]');
   await expect(editor).toBeVisible();
   const runChecksRow = editor.locator('.command-settings-editor__row', { hasText: 'Run checks' });
-  await runChecksRow.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
+  await runChecksRow.locator('[data-component="popup-menu"] [slot="trigger"]').click();
   await runChecksRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const commandDialog = page.locator('#command-editor-dialog'),
     picker = commandDialog.locator('[data-component="lucide-icon-picker"]');
@@ -26552,7 +26556,7 @@ test('preserves feature-controller command editing and run-dialog parity across 
   const editor = page.locator('[data-component="command-settings-editor"]');
   const openEditor = async () => {
     const row = editor.locator('.command-settings-editor__row').first();
-    await row.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
+    await row.locator('[data-component="popup-menu"] [slot="trigger"]').click();
     await row.locator('[data-action="edit-command-setting"]').click();
   };
   const dialog = page.locator('#command-editor-dialog');

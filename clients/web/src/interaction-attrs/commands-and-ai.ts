@@ -35,6 +35,7 @@ export const COMMANDS_AND_AI_ACTIONS = {
   dismissCommandDialog: action('dismiss-command-dialog'),
   confirmStopCommand: action('confirm-stop-command'),
   editCommandSetting: action('edit-command-setting'),
+  selectCommandSetting: action('select-command-setting'),
   addCommandSetting: action('add-command-setting'),
   closeCommandEditor: action('close-command-editor'),
   deleteCommandSetting: action('delete-command-setting'),

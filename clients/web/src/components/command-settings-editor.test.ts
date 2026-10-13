@@ -8,13 +8,8 @@ const css = readFileSync(new URL('./command-settings-editor.css', import.meta.ur
 
 describe('CommandSettingsEditor', () => {
   it('puts the description, group headers, and row grips on one text edge (HS2-1711Z5)', () => {
-    // Web Awesome's native li indent is reset, and rows pad like Kerf Text item geometry.
-    expect(css).toMatch(
-      /\.command-settings-editor__section,\s*\.command-settings-editor__row,\s*\.command-settings-editor__group-empty \{\s*margin: 0;/,
-    );
-    expect(css).toMatch(
-      /\.command-settings-editor__row \{[^}]*padding: var\(--kui-space-2xs\) var\(--kui-space-xs\);[^}]*border: 1px solid transparent;/,
-    );
+    // Rows are Kerf ListActionRows that own their item geometry; no app row rule remains (HS2-7BBRJT).
+    expect(css).not.toMatch(/\.command-settings-editor__row[ ,:[{]/);
     const markup = String(
       CommandSettingsEditor({
         commands: [{ id: 'a', title: 'Lint', group: 'Quality', kind: 'shell', command: 'npm run lint' }],
@@ -39,10 +34,15 @@ describe('CommandSettingsEditor', () => {
     );
     expect(markup).toContain('data-component="command-settings-editor"');
     // Rows are draggable and carry their id; the group header renders once.
-    expect(markup).toMatch(/class="command-settings-editor__row" data-command-id="a"[^>]*draggable="true"/);
+    expect(markup).toMatch(
+      /data-component="list-action-row"[^>]*data-command-id="a"|data-command-id="a"[^>]*data-component="list-action-row"/,
+    );
+    expect(markup).toMatch(
+      /class="[^"]*command-settings-editor__row[^"]*"[^>]*draggable="true"|draggable="true"[^>]*class="[^"]*command-settings-editor__row/,
+    );
     expect(markup).toMatch(/data-component="list-header"[^]*Quality/);
     // Actions live in a per-row overflow menu (edit/delete), not inline arrow/delete icons.
-    expect(markup).toContain('command-settings-editor__row-menu');
+    expect(markup).toContain('Actions for Run tests');
     expect(markup).toContain('data-action="edit-command-setting"');
     expect(markup).toContain('data-action="delete-command-setting"');
     expect(markup).not.toContain('data-action="move-command-setting"');
@@ -71,9 +71,12 @@ describe('CommandSettingsEditor', () => {
         selectedIds: ['a', 'c'],
       }),
     );
-    expect(markup).toMatch(/data-command-id="a"[^>]*data-selected="true"[^>]*aria-selected="true"/);
-    expect(markup).toMatch(/data-command-id="c"[^>]*data-selected="true"/);
-    expect(markup).not.toMatch(/data-command-id="b"[^>]*data-selected="true"/);
+    // Each selected Kerf ListActionRow is pressed (HS2-7BBRJT).
+    const pressed = (id: string) =>
+      new RegExp(`data-command-id="${id}"[^>]*>\\s*<button[^>]*aria-pressed="true"`).test(markup);
+    expect(pressed('a')).toBe(true);
+    expect(pressed('c')).toBe(true);
+    expect(pressed('b')).toBe(false);
     expect(markup).toContain('aria-multiselectable="true"');
   });
 
