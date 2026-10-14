@@ -1,6 +1,7 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import './attachment-gallery.css';
 
+import { ChoiceChips } from '@kerfjs/ui/choice-chips';
 import { px } from '@kerfjs/ui/css-values';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { List } from '@kerfjs/ui/list';
@@ -35,7 +36,7 @@ import {
   X,
 } from 'lucide';
 
-import { annotationDefaultIntent, annotationIntentColor } from '../annotation-intents';
+import { ANNOTATION_INTENT_ORDER, annotationDefaultIntent, annotationIntentColor } from '../annotation-intents';
 import type { Attachment, MediaAnnotation } from '../api';
 import { isVideoAttachment } from '../attachment-references';
 import type { GalleryAnnotationTool } from '../gallery-annotation-editor';
@@ -395,6 +396,35 @@ const formatTime = (milliseconds: number) => {
 const timelinePercent = (milliseconds: number | undefined, durationMs: number) =>
   durationMs > 0 ? Math.max(0, Math.min(100, ((milliseconds ?? 0) * 100) / durationMs)) : 0;
 
+/**
+ * The volume popup's content. Kerf `openAnchoredSurface({ tone: 'dark' })` owns the popup chrome
+ * (KF-MN71AB); see `wireGalleryVolumeSurface` (HS2-HTRFDS).
+ */
+export function GalleryVolumePanel({ volume, muted }: { volume: number; muted: boolean }) {
+  const silent = muted || volume === 0;
+  return (
+    <div class="attachment-gallery__volume-panel">
+      <span>Volume</span>
+      <input
+        type="range"
+        name="gallery-volume"
+        min="0"
+        max="1"
+        step="0.05"
+        value={String(volume)}
+        aria-label="Video volume"
+      />
+      <ListItem
+        action={ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMuted.value}
+        label={silent ? 'Unmute' : 'Mute'}
+        accessibleLabel={silent ? 'Unmute video' : 'Mute video'}
+        icon={<LucideIcon icon={silent ? VolumeX : Volume2} name={silent ? 'volume-x' : 'volume-2'} />}
+        density="compact"
+      />
+    </div>
+  );
+}
+
 export function AttachmentGallery({
   images,
   activeUrl,
@@ -689,32 +719,23 @@ export function AttachmentGallery({
                     {selectedEditableAnnotation.text}
                   </textarea>
                 </label>
-                <div class="attachment-gallery__intent-list" role="group" aria-label="Annotation intents">
-                  <Row gap="2xs" wrap>
-                    {(['comment', 'bug', 'change', 'insert', 'remove', 'move', 'question'] as const).map((intent) => {
-                      const fallback = annotationDefaultIntent(selectedEditableAnnotation),
-                        chosen = selectedEditableAnnotation.intents?.length
-                          ? selectedEditableAnnotation.intents
-                          : [fallback];
-                      return (
-                        <button
-                          type="button"
-                          {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryIntent.attrs}
-                          data-intent={intent}
-                          aria-pressed={String(chosen.includes(intent))}
-                          title={
-                            intent === fallback && !selectedEditableAnnotation.intents?.length
-                              ? 'Default intent'
-                              : undefined
-                          }
-                        >
-                          {intent}
-                          {intent === fallback && !selectedEditableAnnotation.intents?.length ? ' (default)' : ''}
-                        </button>
-                      );
-                    })}
-                  </Row>
-                </div>
+                {(() => {
+                  const fallback = annotationDefaultIntent(selectedEditableAnnotation),
+                    implicit = !selectedEditableAnnotation.intents?.length;
+                  return ChoiceChips<string>({
+                    name: 'gallery-intents',
+                    label: 'Annotation intents',
+                    multiple: true,
+                    size: 'compact',
+                    action: ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryIntent.value,
+                    value: implicit ? [fallback] : (selectedEditableAnnotation.intents ?? []),
+                    choices: ANNOTATION_INTENT_ORDER.map((intent) => ({
+                      value: intent,
+                      label: intent === fallback && implicit ? `${intent} (default)` : intent,
+                      title: intent === fallback && implicit ? 'Default intent' : undefined,
+                    })),
+                  });
+                })()}
                 {selectedEditableAnnotation.shape?.type === 'freehand' && (
                   <label class="attachment-gallery__closed-toggle">
                     <input
@@ -837,38 +858,6 @@ export function AttachmentGallery({
                 </>
               }
             />
-            {/* The popup rises from the timeline's end, above the volume trigger, outside the Kerf Toolbar. */}
-            {video && (
-              <div
-                class="attachment-gallery__volume-popup"
-                role="group"
-                aria-label="Volume Controls"
-                hidden={!volumeOpen}
-              >
-                <span>Volume</span>
-                <input
-                  type="range"
-                  name="gallery-volume"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={String(volume)}
-                  aria-label="Video volume"
-                />
-                <ListItem
-                  action={ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMuted.value}
-                  label={muted || volume === 0 ? 'Unmute' : 'Mute'}
-                  accessibleLabel={muted || volume === 0 ? 'Unmute video' : 'Mute video'}
-                  icon={
-                    <LucideIcon
-                      icon={muted || volume === 0 ? VolumeX : Volume2}
-                      name={muted || volume === 0 ? 'volume-x' : 'volume-2'}
-                    />
-                  }
-                  density="compact"
-                />
-              </div>
-            )}
           </div>
         )}
         <div
@@ -985,9 +974,8 @@ export function AttachmentGallery({
                 tone: 'danger',
                 urgency: 'alert',
                 title: 'Markup was not saved. Retry or discard your changes.',
-                // Two actions do not fit beside the copy at phone width; the documented trailing row
-                // keeps them from overlapping the message (HS2-1FRWAJ).
-                actionPlacement: 'below',
+                // The default trailing placement wraps the actions onto their own row when the copy
+                // would fall below its readable width, such as at phone width (KF-PXCKVZ, HS2-HTRFDS).
                 action: (
                   <Row gap="xs" wrap>
                     <wa-button

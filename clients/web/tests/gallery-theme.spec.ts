@@ -15,8 +15,10 @@ for (const width of [1280, 390]) {
         [
           node,
           ...node.querySelectorAll(
-            '.attachment-gallery__toolbar, .attachment-gallery__filename, .attachment-gallery__footer, .attachment-gallery__annotation, .attachment-gallery__annotation-label, .attachment-gallery__volume-popup, .attachment-gallery__timeline input, [data-component="toolbar-control-group"]',
+            '.attachment-gallery__toolbar, .attachment-gallery__filename, .attachment-gallery__footer, .attachment-gallery__annotation, .attachment-gallery__annotation-label, .attachment-gallery__timeline input, [data-component="toolbar-control-group"]',
           ),
+          // The volume popup is a Kerf dark-tone AnchoredSurface hosted outside the gallery (HS2-HTRFDS).
+          ...document.querySelectorAll('[data-component="anchored-surface"]'),
         ].map((element) => {
           const style = getComputedStyle(element);
           return {
@@ -124,8 +126,8 @@ for (const width of [1280, 390]) {
       document.documentElement.dataset.theme = 'light';
     });
     await expect.poll(palette).toEqual(videoPalette);
-    await gallery.getByRole('button', { name: 'Mute video' }).click();
-    await expect(gallery.getByRole('button', { name: 'Unmute video' })).toBeVisible();
+    await page.getByRole('button', { name: 'Mute video' }).click();
+    await expect(page.getByRole('button', { name: 'Unmute video' })).toBeVisible();
     await gallery.getByRole('button', { name: 'Close video gallery' }).focus();
     await page.keyboard.press('Enter');
     await expect(gallery).toHaveCount(0);

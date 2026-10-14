@@ -12,8 +12,12 @@ import {
 } from '../attachment-label-editing';
 import { browserRandomId } from '../browser-id';
 import { AttachmentContextMenu } from '../components/attachment-context-menu';
-import { AttachmentGallery, attachmentGalleryZoomModel } from '../components/attachment-gallery';
-import { wireAttachmentGalleryControls } from '../components/attachment-gallery-interactions';
+import { AttachmentGallery, attachmentGalleryZoomModel, GalleryVolumePanel } from '../components/attachment-gallery';
+import {
+  type AttachmentGalleryControlBindings,
+  wireAttachmentGalleryControls,
+  wireGalleryVolumeSurface,
+} from '../components/attachment-gallery-interactions';
 import { wireContextMenuDismissal } from '../components/context-menu-dismissal';
 import { type TicketAttachmentItem, TicketAttachments } from '../components/ticket-attachments';
 import { wireTicketAttachmentActions } from '../components/ticket-attachments-interactions';
@@ -577,70 +581,68 @@ function wireTicketMetadataDemo(root: HTMLElement): () => void {
     }),
   );
   // The production gallery viewer controls with fixture effects (HS2-1KM6MB).
-  demoListeners.add(
-    wireAttachmentGalleryControls(root, {
-      close: () => {
-        setGalleryDemo(false);
-      },
-      shift: shiftGalleryDemo,
-      zoom: zoomGalleryDemo,
-      toggleMarkup: () => {
-        galleryDemoMarkup.value = !galleryDemoMarkup.value;
-        galleryDemoDrawMode.value = false;
-      },
-      toggleDraw: () => {
-        galleryDemoDrawMode.value = !galleryDemoDrawMode.value;
-      },
-      togglePlayback: () => {
-        galleryDemoPlaying.value = !galleryDemoPlaying.value;
-      },
-      playback: () => ({ playheadMs: galleryDemoPlayhead.value, durationMs: 6000 }),
-      seek: (milliseconds, source) => {
-        if (source === 'keyboard') galleryDemoPlaying.value = false;
-        galleryDemoPlayhead.value = milliseconds;
-      },
-      seekAnnotation: (annotationId, milliseconds) => {
-        galleryDemoPlayhead.value = Number.isFinite(milliseconds) ? milliseconds : 0;
-        if (galleryDemoMarkup.value && annotationId) galleryDemoSelectedAnnotation.value = annotationId;
-      },
-      setVolume: (volume, commit) => {
-        if (commit) return;
-        galleryDemoVolume.value = volume;
-        galleryDemoMuted.value = false;
-      },
-      toggleVolume: () => {
-        galleryDemoVolumeOpen.value = !galleryDemoVolumeOpen.value;
-      },
-      toggleMuted: () => {
-        galleryDemoMuted.value = !galleryDemoMuted.value;
-      },
-      beginRange: () => true,
-      dragRange: (_annotationId, endpoint, fraction) => {
-        setGalleryDemoAnnotationEndpoint(endpoint, fraction * 6000);
-      },
-      finishRange: () => undefined,
-      nudgeRange: (_annotationId, endpoint, deltaMs) => {
-        const annotation = galleryDemoVideoAnnotations.value[0];
-        setGalleryDemoAnnotationEndpoint(
-          endpoint,
-          (endpoint === 'start' ? annotation.start_ms : annotation.end_ms) + deltaMs,
-        );
-      },
-    }),
-  );
+  const galleryControls: AttachmentGalleryControlBindings = {
+    close: () => {
+      setGalleryDemo(false);
+    },
+    shift: shiftGalleryDemo,
+    zoom: zoomGalleryDemo,
+    toggleMarkup: () => {
+      galleryDemoMarkup.value = !galleryDemoMarkup.value;
+      galleryDemoDrawMode.value = false;
+    },
+    toggleDraw: () => {
+      galleryDemoDrawMode.value = !galleryDemoDrawMode.value;
+    },
+    togglePlayback: () => {
+      galleryDemoPlaying.value = !galleryDemoPlaying.value;
+    },
+    playback: () => ({ playheadMs: galleryDemoPlayhead.value, durationMs: 6000 }),
+    seek: (milliseconds, source) => {
+      if (source === 'keyboard') galleryDemoPlaying.value = false;
+      galleryDemoPlayhead.value = milliseconds;
+    },
+    seekAnnotation: (annotationId, milliseconds) => {
+      galleryDemoPlayhead.value = Number.isFinite(milliseconds) ? milliseconds : 0;
+      if (galleryDemoMarkup.value && annotationId) galleryDemoSelectedAnnotation.value = annotationId;
+    },
+    setVolume: (volume, commit) => {
+      if (commit) return;
+      galleryDemoVolume.value = volume;
+      galleryDemoMuted.value = false;
+    },
+    toggleVolume: () => {
+      galleryDemoVolumeOpen.value = !galleryDemoVolumeOpen.value;
+    },
+    toggleMuted: () => {
+      galleryDemoMuted.value = !galleryDemoMuted.value;
+    },
+    beginRange: () => true,
+    dragRange: (_annotationId, endpoint, fraction) => {
+      setGalleryDemoAnnotationEndpoint(endpoint, fraction * 6000);
+    },
+    finishRange: () => undefined,
+    nudgeRange: (_annotationId, endpoint, deltaMs) => {
+      const annotation = galleryDemoVideoAnnotations.value[0];
+      setGalleryDemoAnnotationEndpoint(
+        endpoint,
+        (endpoint === 'start' ? annotation.start_ms : annotation.end_ms) + deltaMs,
+      );
+    },
+  };
+  demoListeners.add(wireAttachmentGalleryControls(root, galleryControls));
   demoListeners.add(
     delegate(root, 'click', DEMO_ACTIONS.openGalleryDemo.selector, () => {
       setGalleryDemo(true);
     }),
   );
   demoListeners.add(
-    listen(root, 'click', (event) => {
-      if (
-        galleryDemoVolumeOpen.value &&
-        !(event.target as Element).closest('.attachment-gallery__volume-popup, [data-action="toggle-gallery-volume"]')
-      )
-        galleryDemoVolumeOpen.value = false;
-    }),
+    wireGalleryVolumeSurface(
+      root,
+      galleryDemoVolumeOpen,
+      () => GalleryVolumePanel({ volume: galleryDemoVolume.value, muted: galleryDemoMuted.value }),
+      galleryControls,
+    ),
   );
   demoListeners.add(
     delegateCapture(root, 'pointerdown', DEMO_MARKERS.galleryAnnotationSurface.selector, (event) => {

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   type AttachmentGalleryControlBindings,
   wireAttachmentGalleryControls,
+  wireGalleryVolumeSurface,
 } from './attachment-gallery-interactions';
 
 interface Registration {
@@ -20,6 +21,22 @@ vi.mock('kerfjs', async (original) => ({
   delegateCapture: (_root: unknown, event: string, selector: string, handle: Registration['handle']) => {
     registrations.push({ event: `capture:${event}`, selector, handle });
     return () => undefined;
+  },
+}));
+const surfaces = vi.hoisted(
+  () =>
+    [] as {
+      anchor: unknown;
+      options: { tone?: string; label: string; onDismiss?: () => void };
+      close: ReturnType<typeof vi.fn>;
+      el: object;
+    }[],
+);
+vi.mock('@kerfjs/ui/anchored-surface', () => ({
+  openAnchoredSurface: (anchor: unknown, _content: unknown, options: (typeof surfaces)[number]['options']) => {
+    const surface = { anchor, options, close: vi.fn(), el: {} };
+    surfaces.push(surface);
+    return surface;
   },
 }));
 const handler = (event: string, selector: string) =>
@@ -182,5 +199,59 @@ describe('wireAttachmentGalleryControls (HS2-1KM6MB)', () => {
     bindings.dragRange.mockClear();
     ownerDocument.dispatchEvent(pointer('pointermove', 3, 50));
     expect(bindings.dragRange).not.toHaveBeenCalled();
+  });
+});
+
+describe('wireGalleryVolumeSurface (HS2-HTRFDS)', () => {
+  it('opens one dark Kerf surface per open, closes on toggle/dispose, and syncs user dismissal', async () => {
+    const { signal } = await import('kerfjs');
+    const open = signal(false),
+      trigger = { id: 'volume' },
+      root = { querySelector: vi.fn(() => trigger) } as unknown as ParentNode,
+      bindings = { setVolume: vi.fn(), toggleMuted: vi.fn() };
+    surfaces.length = 0;
+    const dispose = wireGalleryVolumeSurface(root, open, () => '' as never, bindings);
+    expect(surfaces).toHaveLength(0);
+    open.value = true;
+    expect(surfaces).toHaveLength(1);
+    expect(surfaces[0].anchor).toBe(trigger);
+    expect(surfaces[0].options).toMatchObject({ tone: 'dark', label: 'Volume Controls' });
+    // Repeated true is not a second surface; false closes it; refill opens a fresh one.
+    open.value = true;
+    expect(surfaces).toHaveLength(1);
+    open.value = false;
+    expect(surfaces[0].close).toHaveBeenCalledTimes(1);
+    open.value = true;
+    expect(surfaces).toHaveLength(2);
+    // Escape/outside dismissal clears the open state without a second close.
+    surfaces[1].options.onDismiss?.();
+    expect(open.value).toBe(false);
+    expect(surfaces[1].close).not.toHaveBeenCalled();
+    // The slider and mute row on the surface reach the bindings and stop at the surface.
+    open.value = true;
+    const stop = vi.fn(),
+      latest = (event: string, selector: string) =>
+        [...registrations].reverse().find((item) => item.event === event && item.selector.includes(selector))!.handle;
+    latest('input', 'gallery-volume')({ stopPropagation: stop }, { value: '0.3' });
+    latest('change', 'gallery-volume')({ stopPropagation: stop }, { value: '2' });
+    latest('click', 'toggle-gallery-muted')({ stopPropagation: stop }, {});
+    expect(bindings.setVolume.mock.calls).toEqual([
+      [0.3, false],
+      [1, true],
+    ]);
+    expect(bindings.toggleMuted).toHaveBeenCalledTimes(1);
+    expect(stop).toHaveBeenCalledTimes(3);
+    dispose();
+    expect(surfaces[2].close).toHaveBeenCalledTimes(1);
+    // A missing trigger opens nothing.
+    const empty = signal(true);
+    surfaces.length = 0;
+    wireGalleryVolumeSurface(
+      { querySelector: () => null } as unknown as ParentNode,
+      empty,
+      () => '' as never,
+      bindings,
+    )();
+    expect(surfaces).toHaveLength(0);
   });
 });

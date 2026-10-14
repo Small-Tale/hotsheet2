@@ -1385,7 +1385,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   arrow/keyboard/swipe gallery
 - `AttachmentGallery` — **built**: square-cornered contained/covered image and video media,
   with a layout-owning playback footer, an initial video poster, custom play/scrub/time controls,
-  and a click-persistent volume popup containing its slider and mute action. Clickable wireframe-style
+  and a click-persistent volume popup containing its slider and mute action; the popup is a Kerf
+  `openAnchoredSurface({ tone: 'dark' })` surface (KF-MN71AB, HS2-HTRFDS) that owns its chrome and
+  Escape/outside dismissal, and annotation intent toggles are Kerf multi-select `ChoiceChips`
+  (KF-6VV36X). Clickable wireframe-style
   annotation ticks and draggable plus keyboard-adjustable bracket endpoints cover selected timed
   annotations. High-frequency playback and scrub updates stay inside the gallery DOM, and gallery
   teardown releases the video decoder/resource. Native video controls stay disabled so the component

@@ -385,6 +385,7 @@ it('keeps LAN annotation IDs distinct across repeated drawing and empty/refill (
     tool = signal<GalleryAnnotationTool>('rect');
   const bindings = {
     attachmentGalleryMarkup: markup,
+    attachmentGalleryVolumeOpen: signal(false),
     attachmentGalleryDrawMode: draw,
     attachmentGalleryTool: tool,
     attachmentGalleryAnnotations: annotations,
@@ -438,6 +439,7 @@ it('coalesces annotation-note keystrokes into one model update per pause or blur
     writes = 0;
     wireAttachmentAndGalleryInteractions({
       attachmentGalleryMarkup: signal(true),
+      attachmentGalleryVolumeOpen: signal(false),
       attachmentGalleryAnnotations: annotations,
       attachmentGallerySelectedAnnotation: selected,
       attachmentGalleryCrop: signal(undefined),
@@ -520,15 +522,18 @@ describe('interaction group teardown (HS2-NZT3MT)', () => {
       notificationsAndLinks: spy('notificationsAndLinks'),
       searchAndComposer: spy('searchAndComposer'),
       attachmentsAndGallery: () =>
-        wireAttachmentAndGalleryInteractions({} as AttachmentAndGalleryInteractionsDependencies),
+        wireAttachmentAndGalleryInteractions({
+          attachmentGalleryVolumeOpen: signal(false),
+        } as unknown as AttachmentAndGalleryInteractionsDependencies),
       inspectorAndEditor: spy('inspectorAndEditor'),
       shellAndGlobal: spy('shellAndGlobal'),
     });
     expect(registrations.length).toBeGreaterThan(50);
     expect(registrations.every((registration) => registration.attached)).toBe(true);
     // The gallery's native document listeners all carry the group's lifetime signal.
+    // HS2-HTRFDS: the volume popup's outside-click listener moved into Kerf AnchoredSurface dismissal.
     const signals = add.mock.calls.map(([, , options]) => (options as AddEventListenerOptions).signal);
-    expect(signals.length).toBe(13);
+    expect(signals.length).toBe(12);
     expect(signals.every((item) => item && !item.aborted)).toBe(true);
 
     // Before teardown the delegated project-dialog dismissal reaches its handler.

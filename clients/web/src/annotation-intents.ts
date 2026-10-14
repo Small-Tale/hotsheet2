@@ -1,5 +1,8 @@
 import type { MediaAnnotation } from './api';
 
+/** Every annotation intent in display and storage order. */
+export const ANNOTATION_INTENT_ORDER = ['comment', 'bug', 'change', 'insert', 'remove', 'move', 'question'] as const;
+
 /** Intent implied by geometry when the reviewer has not added an explicit intent. */
 export function annotationDefaultIntent(annotation: MediaAnnotation): string {
   switch (annotation.shape?.type) {

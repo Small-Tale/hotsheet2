@@ -1,7 +1,7 @@
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
-import { annotationDefaultIntent } from '../annotation-intents';
+import { ANNOTATION_INTENT_ORDER, annotationDefaultIntent } from '../annotation-intents';
 import {
   type Api,
   type AttachmentMetadata,
@@ -24,8 +24,13 @@ import {
   type AttachmentGallerySwipeGesture,
   attachmentGallerySwipeGesture,
   attachmentGalleryZoomModel,
+  GalleryVolumePanel,
 } from '../components/attachment-gallery';
-import { wireAttachmentGalleryControls } from '../components/attachment-gallery-interactions';
+import {
+  type AttachmentGalleryControlBindings,
+  wireAttachmentGalleryControls,
+  wireGalleryVolumeSurface,
+} from '../components/attachment-gallery-interactions';
 import { wireTicketAttachmentActions } from '../components/ticket-attachments-interactions';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { copyText } from '../copy-text';
@@ -713,26 +718,32 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     pendingNote = undefined;
   });
   lifetime.add(
-    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryIntent.selector, (_event, target) => {
-      const id = attachmentGallerySelectedAnnotation.value,
-        intent = data(target).intent,
-        order = ['comment', 'bug', 'change', 'insert', 'remove', 'move', 'question'];
-      if (!id || !intent || !order.includes(intent)) return;
-      const before = snapshotAnnotations();
-      attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) => {
-        if (item.id !== id) return item;
-        const fallback = annotationDefaultIntent(item),
-          selected = new Set(item.intents?.length ? item.intents : [fallback]);
-        if (selected.has(intent)) selected.delete(intent);
-        else selected.add(intent);
-        const intents = order.filter((candidate) => selected.has(candidate));
-        return {
-          ...item,
-          intents: intents.length === 0 || (intents.length === 1 && intents[0] === fallback) ? [] : intents,
-        };
-      });
-      recordAnnotationChange(before);
-    }),
+    // Kerf multi-select ChoiceChips: each intent is a native checkbox whose change toggles it (HS2-HTRFDS).
+    delegate(
+      document.body,
+      'change',
+      ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryIntent.selector,
+      (_event, target) => {
+        const id = attachmentGallerySelectedAnnotation.value,
+          intent = (target as HTMLInputElement).value,
+          order: readonly string[] = ANNOTATION_INTENT_ORDER;
+        if (!id || !intent || !order.includes(intent)) return;
+        const before = snapshotAnnotations();
+        attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) => {
+          if (item.id !== id) return item;
+          const fallback = annotationDefaultIntent(item),
+            selected = new Set(item.intents?.length ? item.intents : [fallback]);
+          if (selected.has(intent)) selected.delete(intent);
+          else selected.add(intent);
+          const intents = order.filter((candidate) => selected.has(candidate));
+          return {
+            ...item,
+            intents: intents.length === 0 || (intents.length === 1 && intents[0] === fallback) ? [] : intents,
+          };
+        });
+        recordAnnotationChange(before);
+      },
+    ),
   );
   lifetime.add(
     delegate(document.body, 'change', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryClosed.selector, (event) => {
@@ -1142,108 +1153,107 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       stopGallerySvgClock();
     }
   }
-  lifetime.add(
-    wireAttachmentGalleryControls(document.body, {
-      close: () => {
-        resetAttachmentGallery();
-      },
-      shift: shiftGallery,
-      zoom: (direction) => {
-        const model = attachmentGalleryZoomModel(attachmentGalleryGeometry.value, attachmentGalleryScale.value),
-          next = model.stops[model.index + (direction === 'out' ? -1 : 1)];
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-        if (next !== undefined) attachmentGalleryScale.value = next;
-      },
-      toggleMarkup: () => {
-        if (attachmentGallerySaveState?.value === 'saving') return;
-        if (attachmentGalleryMarkup.value) {
-          attachmentGalleryMarkup.value = false;
-          finishGalleryAnnotationSession();
-        } else {
-          beginGalleryAnnotationSession();
-          attachmentGalleryMarkup.value = true;
-          undoAnnotations.length = 0;
-          redoAnnotations.length = 0;
-        }
-        setGalleryTool('select');
-        attachmentGallerySelectedAnnotation.value = undefined;
-      },
-      toggleDraw: () => {
-        setGalleryTool(attachmentGalleryTool.value === 'rect' ? 'select' : 'rect');
-        attachmentGallerySelectedAnnotation.value = undefined;
-      },
-      togglePlayback: toggleGalleryPlayback,
-      playback: () => ({
-        playheadMs: dependencies.attachmentGalleryLivePlayhead,
-        durationMs: attachmentGalleryDuration.value,
-      }),
-      seek: (milliseconds, source) => {
-        if (source === 'keyboard') document.querySelector<HTMLVideoElement>('.attachment-gallery video')?.pause();
-        setGalleryPlayhead(milliseconds, source !== 'scrub');
-      },
-      seekAnnotation: (annotationId, milliseconds) => {
-        if (!annotationId || !Number.isFinite(milliseconds)) return;
-        setGalleryPlayhead(milliseconds);
-        if (attachmentGalleryMarkup.value) attachmentGallerySelectedAnnotation.value = annotationId;
-      },
-      setVolume: (volume, commit) => {
-        if (commit) {
-          attachmentGalleryVolume.value = volume;
-          return;
-        }
-        const video = document.querySelector<HTMLVideoElement>('.attachment-gallery video');
-        dependencies.attachmentGalleryLiveVolume = volume;
-        if (attachmentGalleryMuted.value) attachmentGalleryMuted.value = false;
-        if (video) {
-          video.volume = volume;
-          video.muted = false;
-        }
-      },
-      toggleVolume: () => {
-        attachmentGalleryVolumeOpen.value = !attachmentGalleryVolumeOpen.value;
-      },
-      toggleMuted: () => {
-        const video = document.querySelector<HTMLVideoElement>('.attachment-gallery video'),
-          unmute = attachmentGalleryMuted.value || dependencies.attachmentGalleryLiveVolume === 0;
-        if (unmute && dependencies.attachmentGalleryLiveVolume === 0) {
-          dependencies.attachmentGalleryLiveVolume = 0.5;
-          attachmentGalleryVolume.value = 0.5;
-          if (video) video.volume = 0.5;
-        }
-        attachmentGalleryMuted.value = !unmute;
-        if (video) video.muted = !unmute;
-      },
-      beginRange: (annotationId, endpoint) => {
-        if (!annotationId || annotationId !== attachmentGallerySelectedAnnotation.value) return false;
-        dependencies.attachmentRangeGesture = { annotationId, endpoint, before: snapshotAnnotations() };
-        return true;
-      },
-      dragRange: (_annotationId, _endpoint, fraction) => {
-        const gesture = dependencies.attachmentRangeGesture;
-        if (gesture)
-          setGalleryAnnotationEndpoint(
-            gesture.annotationId,
-            gesture.endpoint,
-            fraction * attachmentGalleryDuration.value,
-          );
-      },
-      finishRange: (cancelled) => {
-        const gesture = dependencies.attachmentRangeGesture;
-        dependencies.attachmentRangeGesture = undefined;
-        if (!gesture) return;
-        if (cancelled) attachmentGalleryAnnotations.value = gesture.before;
-        else recordAnnotationChange(gesture.before);
-      },
-      nudgeRange: (annotationId, endpoint, deltaMs) => {
-        const annotation = attachmentGalleryAnnotations.value.find((item) => item.id === annotationId);
-        if (!annotation || annotation.id !== attachmentGallerySelectedAnnotation.value) return;
-        const current = endpoint === 'start' ? annotation.start_ms : annotation.end_ms;
-        const before = snapshotAnnotations();
-        setGalleryAnnotationEndpoint(annotation.id, endpoint, (current ?? 0) + deltaMs);
-        recordAnnotationChange(before, `range:${annotation.id}:${endpoint}`);
-      },
+  const galleryControls: AttachmentGalleryControlBindings = {
+    close: () => {
+      resetAttachmentGallery();
+    },
+    shift: shiftGallery,
+    zoom: (direction) => {
+      const model = attachmentGalleryZoomModel(attachmentGalleryGeometry.value, attachmentGalleryScale.value),
+        next = model.stops[model.index + (direction === 'out' ? -1 : 1)];
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      if (next !== undefined) attachmentGalleryScale.value = next;
+    },
+    toggleMarkup: () => {
+      if (attachmentGallerySaveState?.value === 'saving') return;
+      if (attachmentGalleryMarkup.value) {
+        attachmentGalleryMarkup.value = false;
+        finishGalleryAnnotationSession();
+      } else {
+        beginGalleryAnnotationSession();
+        attachmentGalleryMarkup.value = true;
+        undoAnnotations.length = 0;
+        redoAnnotations.length = 0;
+      }
+      setGalleryTool('select');
+      attachmentGallerySelectedAnnotation.value = undefined;
+    },
+    toggleDraw: () => {
+      setGalleryTool(attachmentGalleryTool.value === 'rect' ? 'select' : 'rect');
+      attachmentGallerySelectedAnnotation.value = undefined;
+    },
+    togglePlayback: toggleGalleryPlayback,
+    playback: () => ({
+      playheadMs: dependencies.attachmentGalleryLivePlayhead,
+      durationMs: attachmentGalleryDuration.value,
     }),
-  );
+    seek: (milliseconds, source) => {
+      if (source === 'keyboard') document.querySelector<HTMLVideoElement>('.attachment-gallery video')?.pause();
+      setGalleryPlayhead(milliseconds, source !== 'scrub');
+    },
+    seekAnnotation: (annotationId, milliseconds) => {
+      if (!annotationId || !Number.isFinite(milliseconds)) return;
+      setGalleryPlayhead(milliseconds);
+      if (attachmentGalleryMarkup.value) attachmentGallerySelectedAnnotation.value = annotationId;
+    },
+    setVolume: (volume, commit) => {
+      if (commit) {
+        attachmentGalleryVolume.value = volume;
+        return;
+      }
+      const video = document.querySelector<HTMLVideoElement>('.attachment-gallery video');
+      dependencies.attachmentGalleryLiveVolume = volume;
+      if (attachmentGalleryMuted.value) attachmentGalleryMuted.value = false;
+      if (video) {
+        video.volume = volume;
+        video.muted = false;
+      }
+    },
+    toggleVolume: () => {
+      attachmentGalleryVolumeOpen.value = !attachmentGalleryVolumeOpen.value;
+    },
+    toggleMuted: () => {
+      const video = document.querySelector<HTMLVideoElement>('.attachment-gallery video'),
+        unmute = attachmentGalleryMuted.value || dependencies.attachmentGalleryLiveVolume === 0;
+      if (unmute && dependencies.attachmentGalleryLiveVolume === 0) {
+        dependencies.attachmentGalleryLiveVolume = 0.5;
+        attachmentGalleryVolume.value = 0.5;
+        if (video) video.volume = 0.5;
+      }
+      attachmentGalleryMuted.value = !unmute;
+      if (video) video.muted = !unmute;
+    },
+    beginRange: (annotationId, endpoint) => {
+      if (!annotationId || annotationId !== attachmentGallerySelectedAnnotation.value) return false;
+      dependencies.attachmentRangeGesture = { annotationId, endpoint, before: snapshotAnnotations() };
+      return true;
+    },
+    dragRange: (_annotationId, _endpoint, fraction) => {
+      const gesture = dependencies.attachmentRangeGesture;
+      if (gesture)
+        setGalleryAnnotationEndpoint(
+          gesture.annotationId,
+          gesture.endpoint,
+          fraction * attachmentGalleryDuration.value,
+        );
+    },
+    finishRange: (cancelled) => {
+      const gesture = dependencies.attachmentRangeGesture;
+      dependencies.attachmentRangeGesture = undefined;
+      if (!gesture) return;
+      if (cancelled) attachmentGalleryAnnotations.value = gesture.before;
+      else recordAnnotationChange(gesture.before);
+    },
+    nudgeRange: (annotationId, endpoint, deltaMs) => {
+      const annotation = attachmentGalleryAnnotations.value.find((item) => item.id === annotationId);
+      if (!annotation || annotation.id !== attachmentGallerySelectedAnnotation.value) return;
+      const current = endpoint === 'start' ? annotation.start_ms : annotation.end_ms;
+      const before = snapshotAnnotations();
+      setGalleryAnnotationEndpoint(annotation.id, endpoint, (current ?? 0) + deltaMs);
+      recordAnnotationChange(before, `range:${annotation.id}:${endpoint}`);
+    },
+  };
+  lifetime.add(wireAttachmentGalleryControls(document.body, galleryControls));
   lifetime.add(
     delegateCapture(document.body, 'timeupdate', '.attachment-gallery video', (event) => {
       const video = activeAttachmentGalleryVideo(event.target),
@@ -1265,16 +1275,13 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       }
     }),
   );
-  document.addEventListener(
-    'click',
-    (event) => {
-      if (
-        attachmentGalleryVolumeOpen.value &&
-        !(event.target as Element).closest('.attachment-gallery__volume-popup, [data-action="toggle-gallery-volume"]')
-      )
-        attachmentGalleryVolumeOpen.value = false;
-    },
-    { signal: lifetime.signal },
+  lifetime.add(
+    wireGalleryVolumeSurface(
+      document,
+      attachmentGalleryVolumeOpen,
+      () => GalleryVolumePanel({ volume: attachmentGalleryVolume.value, muted: attachmentGalleryMuted.value }),
+      galleryControls,
+    ),
   );
   lifetime.add(
     delegateCapture(

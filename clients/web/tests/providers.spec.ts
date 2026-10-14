@@ -9007,7 +9007,7 @@ test('selects feedback choices with platform modifiers and preserves a freeform 
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const note = page.getByRole('dialog').locator('article[data-note-id="N4"]'),
-    choices = note.getByRole('grid', { name: 'Feedback choices' }).locator('[data-component="content-item"]');
+    choices = note.getByRole('grid', { name: 'Feedback Choices' }).locator('[data-component="content-item"]');
   await expect(choices).toHaveCount(3);
   await choices.nth(0).click();
   await expect(choices.nth(0)).toHaveAttribute('aria-selected', 'true');
@@ -9068,7 +9068,7 @@ test('responds to feedback choices embedded in the ticket description', async ({
   const reader = page.getByRole('dialog'),
     readerSurface = reader.locator('.ticket-info-panel__details-surface[data-feedback-needed="true"]'),
     details = reader.locator('[data-details-feedback="true"]'),
-    choices = details.getByRole('grid', { name: 'Feedback choices' }).locator('[data-component="content-item"]');
+    choices = details.getByRole('grid', { name: 'Feedback Choices' }).locator('[data-component="content-item"]');
   await expect(details.locator('[data-details-feedback-header]')).toContainText('Feedback needed');
   await expect(details.locator('[data-details-feedback-header] [data-lucide="circle-alert"]')).toBeVisible();
   await expect(readerSurface).toHaveCSS('background-color', 'color(srgb 1 0.982 0.91)');
@@ -18047,8 +18047,13 @@ test('generates video posters in the browser for uploads and lazy backfills with
   await expect(unsupportedGallery.locator('video')).not.toHaveAttribute('controls', /.+/);
   await expect(unsupportedGallery.getByRole('button', { name: 'Play' })).toBeVisible();
   await unsupportedGallery.getByRole('button', { name: 'Volume Controls' }).click();
-  await expect(unsupportedGallery.getByRole('button', { name: 'Mute video' })).toBeVisible();
+  await expect(
+    page.getByRole('dialog', { name: 'Volume Controls' }).getByRole('button', { name: 'Mute video' }),
+  ).toBeVisible();
   await expect(page.locator('.app-error')).toHaveCount(0);
+  // Escape first dismisses the Kerf volume AnchoredSurface, then the gallery (HS2-HTRFDS).
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Volume Controls' })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(unsupportedGallery).toHaveCount(0);
   await page
@@ -18811,6 +18816,18 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   await gallery.screenshot({ path: 'target/visual-captures/hs2-jf94j1-long-note-wide.png' });
   await noteField.fill('Check the selected region');
   await gallery.screenshot({ path: test.info().outputPath('hs2-xrzmcp-notes-wide.png') });
+  // Intent toggles are Kerf multi-select ChoiceChips (KF-6VV36X, HS2-HTRFDS): adding Bug keeps the
+  // implicit Comment default checked, and removing it restores the default-only state.
+  const intents = gallery.getByRole('group', { name: 'Annotation intents' }),
+    bug = intents.getByRole('checkbox', { name: 'bug' }),
+    comment = intents.getByRole('checkbox', { name: 'comment (default)' });
+  await expect(comment).toBeChecked();
+  await bug.check();
+  await expect(bug).toBeChecked();
+  await expect(intents.getByRole('checkbox', { name: 'comment', exact: true })).toBeChecked();
+  await bug.uncheck();
+  await expect(comment).toBeChecked();
+  await expect(bug).not.toBeChecked();
   const annotation = gallery.getByRole('button', { name: /Annotation 1, rect, comment: Check the selected region/ });
   await expect(annotation).toBeVisible();
   await expect.poll(() => writes.length).toBe(0);
@@ -18901,8 +18918,9 @@ test('keeps failed gallery markup visible until retry succeeds (HS2-VXCSMZ) @ci-
   await gallery.getByRole('button', { name: 'Finish markup' }).click();
   await expect(gallery.getByRole('alert')).toContainText('Markup was not saved');
   await page.screenshot({ path: 'target/visual-captures/hs2-qz2eg3-save-banner-failed.png' });
-  await expect(gallery.getByRole('alert')).toHaveAttribute('data-action-placement', 'below');
-  // At phone width the failed-save StateBanner and its Retry action stay inside the viewport (HS2-1FRWAJ).
+  // The default trailing placement wraps the actions below the copy when it would get too narrow
+  // (KF-PXCKVZ, HS2-HTRFDS); at phone width the banner and its Retry action stay inside the viewport.
+  await expect(gallery.getByRole('alert')).toHaveAttribute('data-action-placement', 'trailing');
   const wide = page.viewportSize()!;
   await page.setViewportSize({ width: 390, height: 844 });
   await expect
@@ -19026,7 +19044,7 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
   await expect(noteField).toHaveValue('');
   await page.keyboard.press('Meta+Shift+z');
   await expect(noteField).toHaveValue('>Remove **old** copy');
-  await gallery.getByRole('button', { name: /bug/ }).click();
+  await gallery.getByRole('checkbox', { name: 'bug', exact: true }).check();
   await expect(gallery.locator('.attachment-gallery__annotation[data-shape="strike"]')).toHaveAttribute(
     'data-intent-color',
     'red',
@@ -19037,9 +19055,10 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
     animations: 'disabled',
   });
   await page.setViewportSize({ width: 1280, height: 720 });
-  await gallery.getByRole('button', { name: 'bug', exact: true }).focus();
+  // Multi-select ChoiceChips give every intent its own Tab stop (KF-6VV36X, HS2-HTRFDS).
+  await gallery.getByRole('checkbox', { name: 'bug', exact: true }).focus();
   await page.keyboard.press('Tab');
-  await expect(gallery.getByRole('button', { name: 'change', exact: true })).toBeFocused();
+  await expect(gallery.getByRole('checkbox', { name: 'change', exact: true })).toBeFocused();
   await drag('arrow', [0.4, 0.65], [0.7, 0.3]);
   const drawnArrow = gallery.locator('.attachment-gallery__annotation[data-shape="arrow"]');
   await expect(drawnArrow.locator('[data-annotation-handle^="point-"]')).toHaveCount(2);

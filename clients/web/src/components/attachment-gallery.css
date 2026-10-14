@@ -425,18 +425,6 @@
 .attachment-gallery__selected-note blockquote {
   color: white;
 }
-.attachment-gallery__intent-list button {
-  flex: none;
-  padding: var(--kui-space-2xs) var(--kui-space-xs);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-pill);
-  color: inherit;
-  background: transparent;
-}
-.attachment-gallery__intent-list button[aria-pressed='true'] {
-  color: var(--wa-color-brand-on-loud);
-  background: var(--wa-color-brand-fill-loud);
-}
 .attachment-gallery__closed-toggle {
   display: flex !important;
   align-items: center;
@@ -509,28 +497,18 @@
 .attachment-gallery__range-handle--end {
   text-align: left;
 }
-/* The Kerf ListItem mute row aligns with the label and slider through its public inline-margin token. */
-.attachment-gallery__volume-popup {
+/* Content of the volume popup; Kerf AnchoredSurface tone="dark" owns its chrome (KF-MN71AB, HS2-HTRFDS).
+   The Kerf ListItem mute row aligns with the label and slider through its public inline-margin token. */
+.attachment-gallery__volume-panel {
   --kui-layout-inline-margin: 0;
-  position: absolute;
-  right: 0;
-  bottom: 100%;
   display: grid;
-  width: remify(176px);
-  padding: var(--kui-space-m);
-  border-radius: var(--wa-border-radius-m);
-  color: var(--wa-color-neutral-on-loud);
-  background: var(--wa-color-neutral-fill-loud);
-  box-shadow: var(--wa-shadow-l);
+  width: remify(160px);
   gap: var(--kui-space-xs);
 }
-.attachment-gallery__volume-popup[hidden] {
-  display: none;
-}
-.attachment-gallery__volume-popup > span {
+.attachment-gallery__volume-panel > span {
   font-size: var(--wa-font-size-xs);
 }
-.attachment-gallery__volume-popup input {
+.attachment-gallery__volume-panel input {
   display: block;
   width: 100%;
 }

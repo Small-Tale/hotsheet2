@@ -1,4 +1,6 @@
-import { delegate, delegateCapture } from 'kerfjs';
+import { openAnchoredSurface } from '@kerfjs/ui/anchored-surface';
+import { delegate, delegateCapture, effect, type SafeHtml, type Signal } from 'kerfjs';
+import type { OverlayHandle } from 'kerfjs/overlay';
 import { createScope } from 'kerfjs/scope';
 
 import {
@@ -194,5 +196,74 @@ export function wireAttachmentGalleryControls(
   document.addEventListener('pointercancel', finish(true), { signal: lifetime.signal });
   return () => {
     lifetime.dispose();
+  };
+}
+
+/**
+ * Present the gallery volume popup in a Kerf dark-tone AnchoredSurface above the volume trigger while
+ * `open` is true (KF-MN71AB, HS2-HTRFDS). Kerf owns the chrome, positioning, Escape/outside dismissal,
+ * and top-layer hosting; `render` supplies the reactive content (`GalleryVolumePanel`). Kerf hosts the
+ * surface outside the gallery, so its slider and mute row are wired on the surface itself and stop
+ * propagation; production and the UX demo share this so the surface options cannot drift.
+ */
+export function wireGalleryVolumeSurface(
+  root: ParentNode,
+  open: Signal<boolean>,
+  render: () => SafeHtml,
+  bindings: Pick<AttachmentGalleryControlBindings, 'setVolume' | 'toggleMuted'>,
+): () => void {
+  let handle: OverlayHandle | undefined, surfaceScope: ReturnType<typeof createScope> | undefined;
+  const close = () => {
+    const current = handle;
+    handle = undefined;
+    surfaceScope?.dispose();
+    surfaceScope = undefined;
+    current?.close();
+  };
+  const volumeOf = (target: Element) => Math.max(0, Math.min(1, Number((target as HTMLInputElement).value)));
+  const dispose = effect(() => {
+    if (!open.value) {
+      close();
+      return;
+    }
+    if (handle) return;
+    const trigger = root.querySelector(ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryVolume.selector);
+    if (!trigger) return;
+    handle = openAnchoredSurface(trigger, render, {
+      label: 'Volume Controls',
+      tone: 'dark',
+      placement: 'top',
+      align: 'end',
+      dismiss: ['escape', 'outside'],
+      onDismiss: () => {
+        surfaceScope?.dispose();
+        surfaceScope = undefined;
+        handle = undefined;
+        open.value = false;
+      },
+    });
+    const surface = handle.el,
+      scope = createScope();
+    surfaceScope = scope;
+    for (const [type, commit] of [
+      ['input', false],
+      ['change', true],
+    ] as const)
+      scope.add(
+        delegate(surface, type, ATTACHMENTS_AND_GALLERY_TARGETS.galleryVolumeField.selector, (event, target) => {
+          event.stopPropagation();
+          bindings.setVolume(volumeOf(target), commit);
+        }),
+      );
+    scope.add(
+      delegate(surface, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMuted.selector, (event) => {
+        event.stopPropagation();
+        bindings.toggleMuted();
+      }),
+    );
+  });
+  return () => {
+    dispose();
+    close();
   };
 }

@@ -20,6 +20,7 @@ import {
   attachmentGallerySwipeGesture,
   attachmentGalleryZoomModel,
   attachmentGalleryZoomStops,
+  GalleryVolumePanel,
   releaseAttachmentGalleryVideo,
 } from './attachment-gallery';
 
@@ -136,7 +137,10 @@ describe('AttachmentGallery', () => {
       /__footer \{[^}]*padding:var\(--kui-space-xs\) calc\(var\(--kui-space-m\) \+ var\(--hotsheet-safe-area-right, 0px\)\) calc\(var\(--kui-space-m\) \+ var\(--hotsheet-safe-area-bottom, 0px\)\) calc\(var\(--kui-space-m\) \+ var\(--hotsheet-safe-area-left, 0px\)\)[^}]*gap:var\(--kui-space-xs\)/,
     );
     expect(css).not.toMatch(/__timeline \{[^}]*grid-template-columns/);
-    expect(css).toMatchSource(/__volume-popup \{[^}]*padding:var\(--kui-space-m\)[^}]*gap:var\(--kui-space-xs\)/);
+    // Kerf AnchoredSurface tone="dark" owns the volume popup chrome; the app styles only its content (HS2-HTRFDS).
+    expect(css).not.toContain('__volume-popup');
+    expect(css).toMatchSource(/__volume-panel \{[^}]*display:grid[^}]*gap:var\(--kui-space-xs\)/);
+    expect(css).not.toMatch(/__volume-panel \{[^}]*(padding|background|border-radius|box-shadow):/);
     // Media-control icons take their size from LucideIcon, not a gallery-wide svg rule that would reach
     // into Kerf's toolbars (HS2-PK1C1X).
     expect(css).not.toMatch(/\.attachment-gallery svg|\.attachment-gallery button|\.attachment-gallery video/);
@@ -148,8 +152,10 @@ describe('AttachmentGallery', () => {
     // Kerf ListItem, so Kerf owns their geometry and icon size (HS2-1FRWAJ).
     expect(video).toMatch(/aria-label="Playback"[^>]*data-tone="dark"[^>]*data-single="true"/);
     expect(video).toMatch(/aria-label="Volume"[^>]*data-tone="dark"[^>]*data-single="true"/);
-    expect(video).toMatch(/data-component="list-item" data-action="toggle-gallery-muted"/);
-    expect(css).not.toMatch(/__playback|__volume > button|__volume-popup > button/);
+    expect(String(GalleryVolumePanel({ volume: 1, muted: false }))).toMatch(
+      /data-component="list-item" data-action="toggle-gallery-muted"/,
+    );
+    expect(css).not.toMatch(/__playback|__volume > button|__volume-panel > button/);
     expect(css).toMatchSource(/__annotation i \{[^}]*width:remify\(12px\); height:remify\(12px\)/);
     expect(css).toMatchSource(/__range-handle \{[^}]*width:remify\(16px\); height:remify\(32px\)/);
   });
@@ -232,10 +238,13 @@ describe('AttachmentGallery', () => {
     expect(markup).not.toContain('poster=');
     expect(markup).not.toContain('data-video-poster-url');
     expect(markup).toContain('data-action="toggle-gallery-volume"');
-    expect(markup).toContain('data-action="toggle-gallery-muted"');
-    expect(markup).toContain('name="gallery-volume"');
-    expect(markup).toContain('class="attachment-gallery__volume-popup"');
-    expect(markup).toContain(' hidden');
+    // The popup content lives in a Kerf AnchoredSurface, not the gallery markup (HS2-HTRFDS).
+    expect(markup).not.toContain('name="gallery-volume"');
+    expect(markup).toContain('aria-expanded="false"');
+    const panel = String(GalleryVolumePanel({ volume: 0.4, muted: false }));
+    expect(panel).toContain('data-action="toggle-gallery-muted"');
+    expect(panel).toContain('name="gallery-volume"');
+    expect(panel).toContain('value="0.4"');
   });
   it('keeps the click-open volume popup rendered until an outside interaction closes it', () => {
     const markup = String(
@@ -247,10 +256,9 @@ describe('AttachmentGallery', () => {
       }),
     );
     expect(markup).toContain('aria-expanded="true"');
-    expect(markup).not.toContain(
-      'class="attachment-gallery__volume-popup" role="group" aria-label="Volume Controls" hidden',
-    );
-    expect(markup).toContain('aria-label="Unmute video"');
+    expect(markup).toContain('data-lucide="volume-x"');
+    expect(String(GalleryVolumePanel({ volume: 1, muted: true }))).toContain('aria-label="Unmute video"');
+    expect(String(GalleryVolumePanel({ volume: 0, muted: false }))).toContain('aria-label="Unmute video"');
     const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
     expect(css).not.toContain(':focus-within');
     expect(css).not.toContain(':hover,:focus-within');
@@ -284,6 +292,15 @@ describe('AttachmentGallery', () => {
     expect(markup).toContain('aria-label="Annotation note"');
     expect(markup).toContain('data-action="toggle-gallery-intent"');
     expect(markup).toContain('comment (default)');
+    // Intent toggles are Kerf multi-select ChoiceChips: native checkboxes, the implicit default checked
+    // (KF-6VV36X, HS2-HTRFDS).
+    expect(markup).toMatch(
+      /data-component="choice-chips"[^>]*aria-label="Annotation intents"|aria-label="Annotation intents"[^>]*data-component="choice-chips"/,
+    );
+    expect(
+      markup.match(/type="checkbox"[^>]*name="gallery-intents"|name="gallery-intents"[^>]*type="checkbox"/g),
+    ).toHaveLength(7);
+    expect(markup).toMatch(/value="comment"[^>]*checked|checked[^>]*value="comment"/);
     expect(markup).toContain('data-action="delete-gallery-annotation"');
     expect(markup).not.toContain('data-action="set-gallery-range-start"');
     expect(markup).toContain('data-gallery-range-handle="start"');

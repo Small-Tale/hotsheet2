@@ -1705,7 +1705,7 @@ preview/download, server directory browser) are separate design work.
   controls all use the shared dark ToolbarControlGroup tone so translucent backgrounds,
   borders, icons, and hover states retain contrast over arbitrary images. Gallery chrome
   uses canonical Kerf spacing: 24px between the media and viewport, 16px between peer
-  toolbar groups and around the volume popup, and 8px within toolbars, timeline controls,
+  toolbar groups, the volume popup's Kerf dark-tone AnchoredSurface chrome, and 8px within toolbars, timeline controls,
   footer controls, and connected popup actions; media-control dimensions remain explicit
   geometry rather than spacing tokens (HS2-4Y6SM9).
   Note-referenced images resolve to the same gallery identity as their attached-file
@@ -1739,7 +1739,8 @@ preview/download, server directory browser) are separate design work.
   overlapping marks choose the closest stroke, then smaller area, then newest mark.
   Markup mode keeps an annotation-notes panel beside the media on wider screens and in a
   fixed-height row below it on narrow screens. The panel lists every annotation and holds
-  the selected Markdown note field, effective-intent chips, and rendered note preview.
+  the selected Markdown note field, effective-intent chips (Kerf multi-select `ChoiceChips`,
+  one checkbox and Tab stop per intent, HS2-HTRFDS), and rendered note preview.
   Selecting or editing a note only scrolls panel content; it does not change the media
   stage or its fit scale. An implicit shape-default intent is labelled in the chips.
   While the annotation note has focus, its text-editing keys, including arrows and Escape,

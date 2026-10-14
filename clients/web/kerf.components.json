@@ -2731,8 +2731,10 @@
         "state": [],
         "wiring": {
           "required": false,
-          "helpers": [],
-          "obligations": []
+          "helpers": ["wireAttachmentGalleryControls", "wireGalleryVolumeSurface"],
+          "obligations": [
+            "Open the volume popup through wireGalleryVolumeSurface, which hosts GalleryVolumePanel in a Kerf dark-tone AnchoredSurface and wires its slider and mute row on the surface."
+          ]
         },
         "responsive": {
           "owner": "not-applicable",
@@ -3435,7 +3437,7 @@
         },
         "state": [],
         "wiring": {
-          "required": true,
+          "required": false,
           "helpers": ["wireContentItems", "wireFeedbackChoices"],
           "obligations": [
             "Feedback choices are Kerf multi-select ContentItems in a labeled List grid; wire wireContentItems once on the root for Enter/Space and wireFeedbackChoices for the modifier-aware toggle."

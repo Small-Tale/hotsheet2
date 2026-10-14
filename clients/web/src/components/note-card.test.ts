@@ -169,7 +169,7 @@ describe('NoteCard', () => {
     expect(markup).toContain('<strong>Keep</strong>');
     // Kerf multi-select ContentItems in a labeled List grid own the selection chrome (HS2-3XV34B).
     expect(markup).toMatch(
-      /role="grid"[^>]*aria-label="Feedback choices"|aria-label="Feedback choices"[^>]*role="grid"/,
+      /role="grid"[^>]*aria-label="Feedback Choices"|aria-label="Feedback Choices"[^>]*role="grid"/,
     );
     expect(markup).toContain('aria-selected="false"');
     expect(markup).toContain('aria-selected="true"');

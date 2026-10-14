@@ -180,7 +180,7 @@ export function FeedbackPrompt({
             replies={inlineReplies}
             attachmentContext={attachmentContext}
           />
-          <List selectionMode="multiple" ariaLabel="Feedback choices" gap="xs">
+          <List selectionMode="multiple" ariaLabel="Feedback Choices" gap="xs">
             {choiceGroup.choices.map((choice) => (
               <ContentItem
                 interactive

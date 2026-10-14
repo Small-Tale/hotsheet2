@@ -5624,23 +5624,25 @@ test('uses canonical spacing throughout the attachment gallery chrome (HS2-4Y6SM
   await volumeButton.click();
   await expect(volumeButton).toHaveAttribute('aria-expanded', 'true');
   const videoSpacing = await gallery.evaluate((node) => {
+    // The volume popup is a Kerf dark-tone AnchoredSurface that owns its chrome (KF-MN71AB, HS2-HTRFDS).
     const timeline = node.querySelector<HTMLElement>('.attachment-gallery__timeline')!,
-      popup = getComputedStyle(node.querySelector<HTMLElement>('.attachment-gallery__volume-popup')!);
+      surface = document.querySelector<HTMLElement>('[data-component="anchored-surface"]')!,
+      popup = getComputedStyle(surface.querySelector<HTMLElement>('.attachment-gallery__volume-panel')!);
     return {
       // Playback, the track, and volume sit in a Kerf Toolbar that owns their spacing (HS2-1FRWAJ).
       timelineToolbar: timeline.querySelectorAll(
         ':scope > [data-component="toolbar"] [data-component="toolbar-control-group"]',
       ).length,
-      popupPadding: popup.padding,
       popupGap: popup.gap,
+      popupHasOwnChrome: popup.backgroundColor !== 'rgba(0, 0, 0, 0)' || popup.padding !== '0px',
       // The mute row is a Kerf ListItem and owns its own geometry (HS2-1FRWAJ).
-      muteRow: node.querySelectorAll('.attachment-gallery__volume-popup [data-component="list-item"]').length,
+      muteRow: surface.querySelectorAll('.attachment-gallery__volume-panel [data-component="list-item"]').length,
     };
   });
   expect(videoSpacing).toEqual({
     timelineToolbar: 2,
-    popupPadding: '16px',
     popupGap: '8px',
+    popupHasOwnChrome: false,
     muteRow: 1,
   });
   await gallery.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-attachment-gallery-wide.png' });
@@ -5749,12 +5751,14 @@ test('previews and manipulates custom video and annotation timeline controls', a
   const volumeButton = gallery.getByRole('button', { name: 'Volume Controls' });
   await volumeButton.click();
   await expect(volumeButton).toHaveAttribute('aria-expanded', 'true');
-  await gallery.getByRole('button', { name: 'Mute video' }).click();
-  await expect(gallery.getByRole('button', { name: 'Unmute video' })).toBeVisible();
-  const volume = gallery.getByRole('slider', { name: 'Video volume' });
+  const volumeSurface = page.getByRole('dialog', { name: 'Volume Controls' });
+  await expect(volumeSurface).toHaveAttribute('data-component', 'anchored-surface');
+  await volumeSurface.getByRole('button', { name: 'Mute video' }).click();
+  await expect(volumeSurface.getByRole('button', { name: 'Unmute video' })).toBeVisible();
+  const volume = volumeSurface.getByRole('slider', { name: 'Video volume' });
   await volume.fill('0.4');
   await expect(volume).toHaveValue('0.4');
-  await gallery.screenshot({ path: 'target/visual-captures/hs2-35n9rs-volume-popup-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-35n9rs-volume-popup-wide.png' });
   await gallery.locator('.attachment-gallery__filename').click();
   await expect(volumeButton).toHaveAttribute('aria-expanded', 'false');
   await volumeButton.click();
@@ -5780,7 +5784,7 @@ test('previews and manipulates custom video and annotation timeline controls', a
   await gallery.screenshot({ path: 'target/visual-captures/hs2-hz0trg-video-annotations-wide.png' });
   await page.setViewportSize({ width: 760, height: 640 });
   await volumeButton.click();
-  await gallery.screenshot({ path: 'target/visual-captures/hs2-35n9rs-volume-popup-narrow.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-35n9rs-volume-popup-narrow.png' });
   await gallery.getByRole('button', { name: 'Close video gallery' }).click();
   await expect(gallery).toHaveCount(0);
   await page.getByRole('button', { name: 'Open Gallery' }).click();
