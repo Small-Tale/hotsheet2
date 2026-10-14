@@ -7,9 +7,10 @@ import { Badge } from '@kerfjs/ui/badge';
 import { Chip } from '@kerfjs/ui/chip';
 import { Composer } from '@kerfjs/ui/composer';
 import { ContentItem } from '@kerfjs/ui/content-item';
-import { remify, uiColor } from '@kerfjs/ui/css-values';
+import { flex, px, remify, uiColor } from '@kerfjs/ui/css-values';
 import { deviceClass } from '@kerfjs/ui/device-class';
 import { EmptyState } from '@kerfjs/ui/empty-state';
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { StateBanner } from '@kerfjs/ui/state-banner';
@@ -353,56 +354,67 @@ export function AIConversation({
   ) : null;
   const timeline = conversationTimeline(messages, activity),
     transcript = (
-      <section class="ai-conversation__transcript" aria-label="Conversation Transcript" aria-live="polite">
-        {messages.length === 0 && (
-          <EmptyState
-            className="ai-conversation__empty"
-            icon={<LucideIcon size={28} icon={MessageSquare} name="message-square" />}
-            title={readOnly ? 'No Conversation Messages Yet' : 'Start a Conversation'}
-            detail={
-              readOnly
-                ? 'This chat has not received any messages.'
-                : `Ask ${tool} about this project or send it a task.`
-            }
-          />
-        )}
-        {selectionStatus}
-        {timeline.map((group) =>
-          group.kind === 'message' ? (
-            <ConversationMessages
-              tool={tool}
-              messages={[group.message]}
-              feedbackAvailable={feedbackAvailable}
-              selectedIds={selectedIds}
-              selectionAction={selectionEnabled ? 'pick-conversation-message' : undefined}
+      // Kerf List is the transcript scroller: in the dialog its block-end scrollClearance lets messages
+      // scroll beneath the floating Composer footer while the last one still rests above it
+      // (KF-913AT2, HS2-HVZVEA). The app-owned content column inside keeps the transcript's own inset.
+      <List
+        scrollable
+        scrollClearance={presentation === 'dialog' ? 'block-end' : undefined}
+        flex={presentation === 'embedded' ? flex(1, 1, px(0)) : undefined}
+        className="ai-conversation__transcript"
+        rootAttributes={{ role: 'region', 'aria-label': 'Conversation Transcript', 'aria-live': 'polite' }}
+      >
+        <div class="ai-conversation__transcript-content">
+          {messages.length === 0 && (
+            <EmptyState
+              className="ai-conversation__empty"
+              icon={<LucideIcon size={28} icon={MessageSquare} name="message-square" />}
+              title={readOnly ? 'No Conversation Messages Yet' : 'Start a Conversation'}
+              detail={
+                readOnly
+                  ? 'This chat has not received any messages.'
+                  : `Ask ${tool} about this project or send it a task.`
+              }
             />
-          ) : (
-            <ConversationActivityGroup activity={group.activity} feedbackAvailable={feedbackAvailable} />
-          ),
-        )}
-        {inlinePermissions.map((item) => (
-          <div data-permission-key={item.key}>
-            <PermissionRequestCard item={item} presentation="list" />
-          </div>
-        ))}
-        {busy && progress && (
-          <p class="ai-conversation__progress" role="status">
-            <LucideIcon size="s" icon={Bot} name="bot" />
-            {progress}
-          </p>
-        )}
-        {error && (
-          <StateBanner
-            className="ai-conversation__error"
-            tone="danger"
-            urgency="alert"
-            copyLayout="stacked"
-            icon={<LucideIcon icon={CircleAlert} name="circle-alert" size={17.6} />}
-            title="Conversation Unavailable"
-            detail={error}
-          />
-        )}
-      </section>
+          )}
+          {selectionStatus}
+          {timeline.map((group) =>
+            group.kind === 'message' ? (
+              <ConversationMessages
+                tool={tool}
+                messages={[group.message]}
+                feedbackAvailable={feedbackAvailable}
+                selectedIds={selectedIds}
+                selectionAction={selectionEnabled ? 'pick-conversation-message' : undefined}
+              />
+            ) : (
+              <ConversationActivityGroup activity={group.activity} feedbackAvailable={feedbackAvailable} />
+            ),
+          )}
+          {inlinePermissions.map((item) => (
+            <div data-permission-key={item.key}>
+              <PermissionRequestCard item={item} presentation="list" />
+            </div>
+          ))}
+          {busy && progress && (
+            <p class="ai-conversation__progress" role="status">
+              <LucideIcon size="s" icon={Bot} name="bot" />
+              {progress}
+            </p>
+          )}
+          {error && (
+            <StateBanner
+              className="ai-conversation__error"
+              tone="danger"
+              urgency="alert"
+              copyLayout="stacked"
+              icon={<LucideIcon icon={CircleAlert} name="circle-alert" size={17.6} />}
+              title="Conversation Unavailable"
+              detail={error}
+            />
+          )}
+        </div>
+      </List>
     );
   const activeModel = models.find((item) => item.id === model),
     currentModelLabel = activeModel?.label ?? model ?? '',

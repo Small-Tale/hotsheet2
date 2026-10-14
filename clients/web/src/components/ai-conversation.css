@@ -17,9 +17,6 @@
 .ai-conversation--embedded > :not(.ai-conversation__transcript) {
   flex: none;
 }
-.ai-conversation--embedded > .ai-conversation__transcript {
-  flex: 1 1 0;
-}
 /* Compact current-model label + popup trigger for changing model/effort, mirroring the drive
    button (HS2-R5F7A5). */
 /* The read-only notice is a Kerf StateBanner; this app wrapper only spaces it below the header. */
@@ -84,17 +81,17 @@
     pointer-events: auto;
   }
 }
-.ai-conversation__transcript {
+/* The transcript scroller is a Kerf List (its flex and dialog scroll clearance are props,
+   HS2-HVZVEA); this app-owned column inside it keeps the messages' inset and rhythm. */
+.ai-conversation__transcript-content {
   display: flex;
-  min-height: 0;
   padding: remify(16px);
-  overflow-y: auto;
   box-sizing: border-box;
   flex-direction: column;
   gap: remify(12.8px);
 }
 /* The embedded drawer floats its own composer, so its transcript reserves room for it. */
-.ai-conversation--embedded[data-read-only='false'] .ai-conversation__transcript {
+.ai-conversation--embedded[data-read-only='false'] .ai-conversation__transcript-content {
   padding-bottom: remify(176px);
 }
 .ai-conversation__selection {

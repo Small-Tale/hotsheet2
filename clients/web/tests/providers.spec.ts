@@ -6158,7 +6158,10 @@ test('keeps the embedded chat composer usable while a long transcript scrolls', 
         transcriptBottom: transcriptBox.bottom,
         composerTop: composerBox.top,
         composerBottom: composerBox.bottom,
-        lastMessageBottom: transcript.lastElementChild?.getBoundingClientRect().bottom ?? transcriptBox.top,
+        // Messages live in the app-owned content column inside the Kerf List scroller (HS2-HVZVEA).
+        lastMessageBottom:
+          transcript.querySelector('.ai-conversation__transcript-content')!.lastElementChild?.getBoundingClientRect()
+            .bottom ?? transcriptBox.top,
         transcriptScrollable: transcript.scrollHeight > transcript.clientHeight,
         composerVisible: composerBox.top >= root.top && composerBox.bottom <= root.bottom + 1,
       };
@@ -17017,7 +17020,7 @@ test('keeps activity before the result that resumes after a permission pause', a
   await expect(permission).toHaveCount(0);
   await expect(transcript.getByText("It's 3:23 PM according to your system clock.", { exact: true })).toBeVisible();
   const order = await transcript.evaluate((node) =>
-    [...node.children].flatMap((child) =>
+    [...node.querySelector('.ai-conversation__transcript-content')!.children].flatMap((child) =>
       child.matches('.ai-conversation__message--user')
         ? ['user']
         : child.matches('.ai-conversation__activity')

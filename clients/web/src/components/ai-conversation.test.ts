@@ -298,10 +298,14 @@ describe('AIConversation', () => {
     expect(css).toMatch(
       /\.ai-conversation--embedded \{[^}]*display: flex[^}]*height: 100%[^}]*min-height: 0[^}]*overflow: clip[^}]*flex-direction: column/,
     );
-    expect(css).toMatch(/\.ai-conversation--embedded > \.ai-conversation__transcript \{[^}]*flex: 1 1 0/);
-    expect(css).toMatch(/\.ai-conversation__transcript \{[^}]*padding: remify\(16px\)[^}]*box-sizing: border-box/);
+    // The scroller is a Kerf List styled only through props; the app pads its own content column
+    // (HS2-HVZVEA).
+    expect(css).not.toMatch(/\.ai-conversation__transcript \{/);
     expect(css).toMatch(
-      /\.ai-conversation--embedded\[data-read-only='false'\] \.ai-conversation__transcript \{[^}]*padding-bottom: remify\(176px\)/,
+      /\.ai-conversation__transcript-content \{[^}]*padding: remify\(16px\)[^}]*box-sizing: border-box/,
+    );
+    expect(css).toMatch(
+      /\.ai-conversation--embedded\[data-read-only='false'\] \.ai-conversation__transcript-content \{[^}]*padding-bottom: remify\(176px\)/,
     );
     // Kerf owns the dialog body layout, floating footer, composer frame, and file chips.
     expect(css).not.toContain('::part(');

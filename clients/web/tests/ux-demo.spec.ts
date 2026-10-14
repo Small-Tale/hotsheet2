@@ -9567,3 +9567,36 @@ test('toggles search syntax help and applies dates in the SavedViewDialog demo (
     await expect(dialog.locator('input[name="saved-view-query"]')).toHaveValue(/updated-after:2026-09-01/);
   }
 });
+
+test('scrolls the AIConversation dialog transcript beneath its floating composer (HS2-HVZVEA)', async ({ page }) => {
+  for (const [width, height] of [
+    [1440, 900],
+    [390, 844],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await page.goto('/ux-demo?component=ai-conversation');
+    const dialog = page.locator('wa-dialog.ai-conversation[data-presentation="dialog"]').first();
+    const transcript = dialog.locator('.ai-conversation__transcript');
+    await expect(transcript).toBeVisible();
+    // Kerf's block-end scrollClearance (KF-913AT2): the scroller runs under the composer, and the last
+    // item still rests above it when scrolled to the end.
+    await expect
+      .poll(() =>
+        transcript.evaluate((node) => {
+          node.scrollTop = node.scrollHeight;
+          const composer = node
+              .closest('wa-dialog')!
+              .querySelector('[data-component="composer"]')!
+              .getBoundingClientRect(),
+            last = node
+              .querySelector('.ai-conversation__transcript-content')!
+              .lastElementChild!.getBoundingClientRect();
+          return {
+            beneath: node.getBoundingClientRect().bottom > composer.top + 1,
+            clear: last.bottom <= composer.top + 1,
+          };
+        }),
+      )
+      .toEqual({ beneath: true, clear: true });
+  }
+});
