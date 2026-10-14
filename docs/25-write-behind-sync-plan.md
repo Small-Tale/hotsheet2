@@ -230,11 +230,11 @@ page counts. Run `jira_live_pushdown_profile` (ignored, `HOTSHEET_JIRA_LIVE_*` p
 
 Live result on the `HS2T` site (2026-10-15, 2,003 issues, one run):
 
-| Read (live Jira Cloud)              | Rows | Search requests | Elapsed |
-| ----------------------------------- | ---: | --------------: | ------: |
-| Full project (nothing pushable)     | 2003 |              21 | 9.84 s  |
-| `tags=[hs2-bench-hot]` pushed down  |   20 |               1 | 0.46 s  |
-| Label plus open-only, pushed down   |   20 |               1 | 0.37 s  |
+| Read (live Jira Cloud)             | Rows | Search requests | Elapsed |
+| ---------------------------------- | ---: | --------------: | ------: |
+| Full project (nothing pushable)    | 2003 |              21 |  9.84 s |
+| `tags=[hs2-bench-hot]` pushed down |   20 |               1 |  0.46 s |
+| Label plus open-only, pushed down  |   20 |               1 |  0.37 s |
 
 A pushable 1% filter therefore costs one search request instead of one per
 100 issues, about 21x faster at this size; at 100,000 issues the full read
