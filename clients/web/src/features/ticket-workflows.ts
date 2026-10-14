@@ -702,6 +702,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   // keyed by project, ticket, and field, together with the value the edit started from.
   const draftStorage = (): Storage | undefined => (typeof localStorage === 'undefined' ? undefined : localStorage);
   function selectedDraftKey(field: TicketDraftField, noteId?: string): string | undefined {
+    // A top linked reader owns the edit, matching updateSelected's routing (HS2-KRVWKF).
+    const linked = linkedReaderStack.value.at(-1);
+    if (linked) return ticketDraftKey(linked.projectId, linked.ticket.qualified_id, field, noteId);
     const current = project(),
       ticket = selectedTicket.value;
     return current && ticket ? ticketDraftKey(current.id, ticket.qualified_id, field, noteId) : undefined;
@@ -916,10 +919,18 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     return saves;
   }
   async function flushLinkedReader(frameId: string) {
-    const saves = linkedReaderAutosaves.get(frameId);
-    if (!saves) return true;
-    const results = await Promise.all([saves.details.flush(), saves.note.flush(), saves.blocked.flush()]);
-    return results.every(Boolean);
+    const saves = linkedReaderAutosaves.get(frameId),
+      // Title and tag edits in the top linked reader share the reader's autosaves (HS2-KRVWKF); they
+      // must land on this frame's ticket before it closes, and a title editor must not leak below.
+      top = linkedReaderStack.value.at(-1)?.id === frameId,
+      fieldSaves = top ? [titleAutosave.flush(), tagsAutosave.flush()] : [];
+    const results = await Promise.all([
+      ...fieldSaves,
+      ...(saves ? [saves.details.flush(), saves.note.flush(), saves.blocked.flush()] : []),
+    ]);
+    const saved = results.every(Boolean);
+    if (saved && top && titleEditingSurface.value === 'reader') titleEditingSurface.value = undefined;
+    return saved;
   }
   function selectedRows() {
     const selected = new Set(selectedTicketSlugs.value);

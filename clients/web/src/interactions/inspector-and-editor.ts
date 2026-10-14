@@ -35,7 +35,7 @@ import { INSPECTOR_AND_EDITOR_ACTIONS, INSPECTOR_AND_EDITOR_TARGETS } from '../i
 import { manuallyResizedTicketEditorHeight, saveTicketEditorSize, ticketEditorKind } from '../ticket-editor-size';
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
 import { type TicketPatch } from '../ticket-operations';
-import { type TicketReaderFrame } from '../ticket-reader-stack';
+import { ticketEditTarget, type TicketReaderFrame } from '../ticket-reader-stack';
 import { type TicketTitleEditSurface, ticketTitleEditSurfaceOf } from '../ticket-title-editing';
 import { type TicketView } from '../ticket-views';
 import { data } from './dom';
@@ -210,6 +210,17 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     codeReviewMessage,
     codeReview,
   } = dependencies;
+  // Field edits target the top linked ticket reader when one is open, exactly like the workspace
+  // reader otherwise (HS2-KRVWKF): updateSelected/updateSelectedTracked already route patches there,
+  // so the ticket the control reads, its provider capability, and its optimistic value follow suit.
+  const editTarget = () => ticketEditTarget(linkedReaderStack.value, selectedTicket.value, canUpdateSelected);
+  const editTicket = (): FullTicket | null => editTarget().ticket;
+  const canUpdateEditTicket = () => editTarget().canUpdate;
+  function setEditTicket(ticket: FullTicket) {
+    const linked = editTarget().frame;
+    if (linked) replaceLinkedReaderFrame(linked.id, (frame) => ({ ...frame, ticket }));
+    else selectedTicket.value = ticket;
+  }
   const conflictResolutionInput = createCoalescedInput<string>((value) => {
     fieldConflictResolution.value = value;
   });
@@ -220,7 +231,8 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   lifetime.add(() => stopStatusMenuAnchor?.());
   lifetime.add(
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.toggleInspectorUpNext.selector, () => {
-      if (selectedTicket.value) void updateSelectedTracked({ up_next: !selectedTicket.value.up_next });
+      const ticket = editTicket();
+      if (ticket && canUpdateEditTicket()) void updateSelectedTracked({ up_next: !ticket.up_next });
     }),
   );
   lifetime.add(
@@ -278,7 +290,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   );
   lifetime.add(
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.setInspectorStatus.selector, (_event, target) => {
-      if (!canUpdateSelected()) return;
+      if (!canUpdateEditTicket()) return;
       const status = (target as HTMLElement).dataset.ticketStatus;
       if (status) void updateSelectedTracked({ status });
     }),
@@ -381,10 +393,11 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   function beginTitleEdit(trigger: Element) {
-    if (!selectedTicket.value || !canUpdateSelected()) return;
-    const restoredTitle = restoreTicketDraft('title', selectedTicket.value.title);
-    titleDraft.value = restoredTitle?.draft ?? selectedTicket.value.title;
-    dependencies.titleDraftBase = restoredTitle?.base ?? selectedTicket.value.title;
+    const ticket = editTicket();
+    if (!ticket || !canUpdateEditTicket()) return;
+    const restoredTitle = restoreTicketDraft('title', ticket.title);
+    titleDraft.value = restoredTitle?.draft ?? ticket.title;
+    dependencies.titleDraftBase = restoredTitle?.base ?? ticket.title;
     // Only the surface that started the edit shows the editor; the other keeps its heading (HS2-2M5BBN).
     titleEditingSurface.value = ticketTitleEditSurfaceOf(trigger);
     if (restoredTitle) titleAutosave.schedule(titleDraft.value);
@@ -436,8 +449,9 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     ),
   );
   function setSelectedTags(tags: string[]) {
-    if (!selectedTicket.value || !canUpdateSelected()) return;
-    selectedTicket.value = { ...selectedTicket.value, tags };
+    const ticket = editTicket();
+    if (!ticket || !canUpdateEditTicket()) return;
+    setEditTicket({ ...ticket, tags });
     tagsAutosave.schedule(tags);
   }
   // Kerf's AnchoredSurface owns the Add tag surface's chrome, position, focus, and dismissal; one
@@ -458,13 +472,13 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   lifetime.add(
     wireTicketTagEditor(document.body, {
       add: (value) => {
-        setSelectedTags(addTicketTag(selectedTicket.value?.tags ?? [], value));
+        setSelectedTags(addTicketTag(editTicket()?.tags ?? [], value));
       },
       flush: () => {
         void tagsAutosave.flush();
       },
       remove: (tag) => {
-        setSelectedTags(removeTicketTag(selectedTicket.value?.tags ?? [], tag));
+        setSelectedTags(removeTicketTag(editTicket()?.tags ?? [], tag));
       },
     }),
   );

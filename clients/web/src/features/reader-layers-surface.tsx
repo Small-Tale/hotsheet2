@@ -22,7 +22,7 @@ import { fullTicketFeedbackNeeded } from '../feedback-needed';
 import { type InlineFeedbackReply } from '../feedback-replies';
 import { type GallerySource, type Project } from '../interactions/types';
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
-import { type TicketReaderFrame } from '../ticket-reader-stack';
+import { linkedReaderCanUpdate, type TicketReaderFrame } from '../ticket-reader-stack';
 import { type TicketTitleEditSurface } from '../ticket-title-editing';
 import type { createInspectorSurface } from './inspector-surface';
 
@@ -181,14 +181,18 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
   }) {
     const linked = frame?.edit,
       capabilities = frame ? { ...frame.capabilities, notes: false, note_delete: false } : undefined,
-      canUpdate = editable && canUpdateSelected();
+      // The top linked reader edits its ticket's fields exactly like the workspace reader, gated only by
+      // its own provider's update capability (HS2-KRVWKF).
+      linkedWritable = frame ? linkedReaderCanUpdate(frame, active) : false,
+      canUpdate = frame ? linkedWritable : editable && canUpdateSelected(),
+      titleOwner = editable || linkedWritable;
     const readerScope = frame?.id ?? 'workspace-reader';
     return (
       <ReaderLayerSurface
         slug={ticket.slug}
         title={ticket.title}
-        titleEditing={editable && titleEditingSurface.value === 'reader'}
-        titleDraft={editable ? titleDraft.value : ticket.title}
+        titleEditing={titleOwner && titleEditingSurface.value === 'reader'}
+        titleDraft={titleOwner ? titleDraft.value : ticket.title}
         canUpdate={canUpdate}
         canEditText={frame ? capabilities!.update : canUpdate}
         canAddNotes={frame ? capabilities!.notes : editable && canAddNotes()}
@@ -200,7 +204,7 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
         priority={priority(ticket.priority)}
         category={ticket.category ?? 'issue'}
         tags={ticket.tags}
-        tagSuggestions={editable ? tagSuggestions() : undefined}
+        tagSuggestions={canUpdate ? tagSuggestions() : undefined}
         details={
           linked?.detailsMode === 'write'
             ? linked.detailsDraft
@@ -228,7 +232,7 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
         updatedLabel={`Updated ${ago(ticket.updated_at)}`}
         activeTab={activeTab}
         upNext={ticket.up_next}
-        upNextEligible={editable && (ticket.status === 'not_started' || ticket.status === 'started')}
+        upNextEligible={canUpdate && (ticket.status === 'not_started' || ticket.status === 'started')}
         feedbackNeeded={fullTicketFeedbackNeeded(ticket)}
         closeReason={ticket.close_reason}
         latestConfidence={ticket.latest_confidence}

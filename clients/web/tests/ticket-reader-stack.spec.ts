@@ -390,6 +390,47 @@ test('edits same-slug linked readers through their owning project and flushes be
   );
 });
 
+test('edits a link-opened reader title and up-next like any other reader (HS2-KRVWKF)', async ({ page }) => {
+  const mutations: Array<{ projectId: string; ticketId: string; patch: Record<string, unknown> }> = [];
+  await mockLayeredProjects(page, mutations);
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await openProjects(page);
+  await page.locator('#app-right-rail').getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
+  await expect(reader).toBeVisible();
+  const heading = reader.locator('[data-action="edit-ticket-title"]');
+  await expect(heading).toHaveAttribute('data-editable', 'true');
+  await heading.dblclick();
+  const title = reader.getByRole('textbox', { name: 'Ticket Title' });
+  await expect(title).toHaveValue('First linked reader');
+  await title.fill('Renamed from a link');
+  // Typing alone never writes; the single save happens when focus leaves the title.
+  await page.waitForTimeout(300);
+  expect(mutations).toEqual([]);
+  await title.blur();
+  await expect
+    .poll(() => mutations.map((item) => [item.projectId, item.ticketId, item.patch.title]))
+    .toEqual([['target-project', 'git-target:target', 'Renamed from a link']]);
+  await expect(heading).toContainText('Renamed from a link');
+  await page.screenshot({ path: 'target/visual-captures/hs2-krvwkf-linked-title-wide.png', fullPage: true });
+  await reader.locator('[data-action="toggle-inspector-up-next"]').click();
+  await expect.poll(() => mutations.at(-1)?.patch).toMatchObject({ up_next: true });
+  await page.setViewportSize({ width: 720, height: 760 });
+  await expect(reader).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-krvwkf-linked-title-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await reader.getByRole('button', { name: 'Close Ticket Reader' }).click();
+  await expect(reader).toHaveCount(0);
+  expect(mutations.every((item) => item.projectId === 'target-project')).toBe(true);
+  // The workspace selection was never edited and shows no leaked title editor.
+  const inspector = page.locator('#app-right-rail');
+  await expect(inspector.locator('[data-component="ticket-inspector-header"]')).toHaveAttribute(
+    'data-ticket-slug',
+    'KF-ROOT01',
+  );
+  await expect(inspector.getByRole('textbox', { name: 'Ticket Title' })).toHaveCount(0);
+});
+
 test('keeps linked reader attachment batches read-only even with an editable provider (HS2-QZFZA8)', async ({
   page,
 }) => {

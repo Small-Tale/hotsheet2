@@ -1637,7 +1637,7 @@ preview/download, server directory browser) are separate design work.
   (the code-formatted slug FEEDBACK NEEDED and other AI notes use) links the same way while
   keeping its code chip; code holding other text, code blocks, and existing links stay
   unlinked (HS2-5T33YV). Activating one searches exact slugs across every open project:
-  one match opens an exact, read-only reader layer above the current inspector or reader,
+  one match opens an exact reader layer above the current inspector or reader,
   no match reports a transient toast, and multiple matches open a compact source chooser
   rather than the advanced-search surface. The chooser separates its major regions by 16 px,
   keeps adjacent result rows connected at zero gap, uses 8 px row insets with a 72 px minimum
@@ -1646,6 +1646,12 @@ preview/download, server directory browser) are separate design work.
   makes cross-project links unambiguous. A linked reader identifies its owning project and
   stack depth, and links inside it may push further layers without changing the workspace's
   selected project, ticket, or list/column view. Only the top reader is modal and interactive.
+  A link-opened reader is read-write like a reader opened any other way (HS2-KRVWKF): when
+  its own provider grants `update`, the top layer edits title, category, priority, status, tags,
+  Up Next, details, blocked reason, and notes, routing every write to that layer's owning
+  project and qualified ticket identity. Title and tag edits flush before the layer closes; a
+  provider without `update` keeps the layer view-only. Adding or deleting notes, attachment
+  management, started-phase edits, and code review remain workspace-reader-only for now.
   Imported HS1 references resolve through each ticket's retained legacy number, including
   single-digit `HS-1` through `HS-9`; other one-character suffixes such as `AB-1` remain
   ordinary text so the legacy exception does not broaden the general slug grammar.

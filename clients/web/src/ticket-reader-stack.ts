@@ -129,3 +129,24 @@ export function disposeTicketReaderFrames(
   for (const frame of stack) (projectIds.has(frame.projectId) ? disposed : retained).push(frame);
   return { retained, disposed };
 }
+
+/**
+ * The ticket field edits apply to: the top linked reader when one is stacked, otherwise the workspace
+ * selection. A link-opened reader is editable exactly like any other reader, gated only by its own
+ * provider's update capability (HS2-KRVWKF).
+ */
+export function ticketEditTarget(
+  stack: readonly TicketReaderFrame[],
+  selected: FullTicket | null,
+  canUpdateSelected: () => boolean,
+): { ticket: FullTicket | null; canUpdate: boolean; frame?: TicketReaderFrame } {
+  const top = stack.at(-1);
+  return top
+    ? { ticket: top.ticket, canUpdate: top.capabilities.update, frame: top }
+    : { ticket: selected, canUpdate: Boolean(selected) && canUpdateSelected() };
+}
+
+/** Whether a linked reader layer offers field editing: only the interactive top layer does (HS2-KRVWKF). */
+export function linkedReaderCanUpdate(frame: TicketReaderFrame, active: boolean): boolean {
+  return active && frame.capabilities.update;
+}

@@ -5,9 +5,11 @@ import {
   activeTicketReaderProject,
   adoptCommittedReaderDrafts,
   disposeTicketReaderFrames,
+  linkedReaderCanUpdate,
   popTicketReaderFrame,
   pushTicketReaderFrame,
   reconcileTicketReaderFrame,
+  ticketEditTarget,
   ticketReaderEditState,
   type TicketReaderFrame,
 } from './ticket-reader-stack';
@@ -159,5 +161,36 @@ describe('layered ticket reader stack', () => {
     const result = disposeTicketReaderFrames([alpha, beta, again], new Set(['alpha']));
     expect(result.retained).toEqual([beta]);
     expect(result.disposed).toEqual([alpha, again]);
+  });
+
+  it('routes field edits to the top linked reader with its own provider capability (HS2-KRVWKF)', () => {
+    const selected = ticket('workspace', 'KF-ROOT01'),
+      first = frame('one', 'alpha', 'HS2-LINK01'),
+      second = frame('two', 'beta', 'HS2-LINK02');
+    expect(ticketEditTarget([], selected, () => true)).toEqual({ ticket: selected, canUpdate: true });
+    expect(ticketEditTarget([], selected, () => false).canUpdate).toBe(false);
+    expect(ticketEditTarget([], null, () => true)).toEqual({ ticket: null, canUpdate: false });
+    // A stacked reader wins even when the workspace selection is read-only, and the deepest frame owns it.
+    const stacked = pushTicketReaderFrame(pushTicketReaderFrame([], first), second);
+    expect(ticketEditTarget(stacked, selected, () => false)).toEqual({
+      ticket: second.ticket,
+      canUpdate: true,
+      frame: second,
+    });
+    const readOnlyProvider = { ...second, capabilities: { ...second.capabilities, update: false } };
+    expect(ticketEditTarget([first, readOnlyProvider], selected, () => true).canUpdate).toBe(false);
+    // Unwinding hands editing back to the remaining frame, then to the workspace selection.
+    const popped = popTicketReaderFrame(stacked).stack;
+    expect(ticketEditTarget(popped, selected, () => true).ticket).toBe(first.ticket);
+    expect(ticketEditTarget(popTicketReaderFrame(popped).stack, selected, () => true).ticket).toBe(selected);
+  });
+
+  it('offers linked reader field editing only on the active layer of a writable provider (HS2-KRVWKF)', () => {
+    const linked = frame('one', 'alpha', 'HS2-LINK01');
+    expect(linkedReaderCanUpdate(linked, true)).toBe(true);
+    expect(linkedReaderCanUpdate(linked, false)).toBe(false);
+    expect(linkedReaderCanUpdate({ ...linked, capabilities: { ...linked.capabilities, update: false } }, true)).toBe(
+      false,
+    );
   });
 });
