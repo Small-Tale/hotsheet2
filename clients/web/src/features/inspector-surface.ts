@@ -1,6 +1,5 @@
 import type { Signal } from 'kerfjs';
 
-import { phaseEstimatePresentation } from '../active-ticket-work';
 import type {
   Api,
   Capabilities,
@@ -70,7 +69,6 @@ export interface InspectorSurfaceDependencies {
   notes: (ticket: FullTicket) => {
     readonly id: string;
     readonly kind: 'regular' | 'activity' | 'feedback_needed' | 'feedback_draft' | 'status';
-    readonly feedbackPrompt: boolean;
     readonly author: string;
     readonly time: string;
     readonly body: string;
@@ -227,7 +225,6 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
       composerDraft: newNoteDraft.value,
       status: status(ticket.status),
       startedPhase: ticket.started_phase,
-      phaseEstimate: phaseEstimatePresentation(ticket),
       priority: priority(ticket.priority),
       category: ticket.category ?? 'issue',
       tags: ticket.tags,
@@ -287,7 +284,6 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
       canAddNotes: capabilities?.notes ?? true,
       status: status(row.status),
       startedPhase: row.started_phase,
-      phaseEstimate: phaseEstimatePresentation(row),
       priority: priority(row.priority),
       category: row.category ?? 'issue',
       tags: row.tags,

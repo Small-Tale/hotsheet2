@@ -27,7 +27,6 @@ import {
   X,
 } from 'lucide';
 
-import type { PhaseEstimatePresentation } from '../active-ticket-work';
 import type { CodeReview, DuplicateBacklink, ProviderOutboxOperation, StartedPhase, TicketCloseReason } from '../api';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import type { InlineFeedbackReply } from '../feedback-replies';
@@ -73,8 +72,6 @@ export interface TicketInspectorProps {
   composerDraft?: string;
   status: TicketStatus;
   startedPhase?: StartedPhase;
-  /** Estimated time left in the current testing phase (HS2-YDGM04). */
-  phaseEstimate?: PhaseEstimatePresentation;
   priority: TicketPriority;
   category: string;
   tags: string[];
@@ -164,7 +161,6 @@ export function ticketInspectorPanel({
   composerDraft = '',
   status,
   startedPhase,
-  phaseEstimate,
   priority,
   category,
   tags,
@@ -491,7 +487,6 @@ export function ticketInspectorPanel({
         <TicketInfoPanel
           status={status}
           startedPhase={startedPhase}
-          phaseEstimate={phaseEstimate}
           priority={priority}
           category={category}
           tags={tags}
