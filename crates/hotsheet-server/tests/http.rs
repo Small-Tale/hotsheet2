@@ -10044,6 +10044,155 @@ async fn create_get_update_close_and_query() {
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 }
 
+/// HS2-YDGM04: the ticket list serves when the current phase began and, once the store has
+/// three closed spans of that testing phase, their median as the phase estimate.
+#[tokio::test]
+async fn ticket_list_serves_testing_phase_estimate_after_three_closed_spans() {
+    let (primary, state) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(state.with_checkout_registry(registry.path().join("checkouts.json")));
+    let registration = serde_json::json!({
+        "root": checkout.path(), "alias": "phases", "stores": [primary.path()]
+    });
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts",
+            Some(&registration.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    async fn patch(app: &axum::Router, slug: &str, body: &str) {
+        let response = app
+            .clone()
+            .oneshot(authed("PATCH", &format!("/tickets/{slug}"), Some(body)))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+    async fn create(app: &axum::Router, title: &str) -> String {
+        let response = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/tickets",
+                Some(&format!(r#"{{"title":"{title}"}}"#)),
+            ))
+            .await
+            .unwrap();
+        body_json(response).await["slug"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    }
+    async fn listed(app: &axum::Router, slug: &str) -> serde_json::Value {
+        let rows = body_json(
+            app.clone()
+                .oneshot(authed("GET", "/tickets", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["slug"] == slug)
+            .unwrap()
+            .clone()
+    }
+    let live = create(&app, "Live").await;
+    patch(
+        &app,
+        &live,
+        r#"{"status":"started","started_phase":"final_testing"}"#,
+    )
+    .await;
+    let row = listed(&app, &live).await;
+    assert!(row["started_phase_since"].is_string());
+    assert!(row.get("started_phase_estimate_ms").is_none());
+    for round in 0..3 {
+        let done = create(&app, &format!("Done {round}")).await;
+        patch(
+            &app,
+            &done,
+            r#"{"status":"started","started_phase":"final_testing"}"#,
+        )
+        .await;
+        patch(&app, &done, r#"{"status":"completed"}"#).await;
+        let row = listed(&app, &live).await;
+        assert_eq!(
+            row.get("started_phase_estimate_ms").is_some(),
+            round == 2,
+            "estimate appears only with three closed spans"
+        );
+    }
+    // The detail read carries the same estimate as the list row.
+    let detail = body_json(
+        app.clone()
+            .oneshot(authed("GET", &format!("/tickets/{live}"), None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        detail["started_phase_estimate_ms"],
+        listed(&app, &live).await["started_phase_estimate_ms"]
+    );
+    assert_eq!(
+        detail["started_phase_since"],
+        listed(&app, &live).await["started_phase_since"]
+    );
+    // The checkout detail and paged checkout list carry it too.
+    let checkout_detail = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/phases/tickets/{live}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        checkout_detail["started_phase_estimate_ms"],
+        detail["started_phase_estimate_ms"]
+    );
+    let page = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                "/checkouts/phases/tickets?page_size=50",
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let paged = page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["slug"] == live.as_str())
+        .unwrap();
+    assert_eq!(
+        paged["started_phase_estimate_ms"],
+        detail["started_phase_estimate_ms"]
+    );
+    assert!(detail["started_phase_estimate_ms"].is_u64());
+    // Initial testing has no history yet; leaving the phase drops both fields.
+    patch(&app, &live, r#"{"started_phase":"initial_testing"}"#).await;
+    let row = listed(&app, &live).await;
+    assert!(row["started_phase_since"].is_string());
+    assert!(row.get("started_phase_estimate_ms").is_none());
+    patch(&app, &live, r#"{"status":"completed"}"#).await;
+    let row = listed(&app, &live).await;
+    assert!(row.get("started_phase_since").is_none());
+}
+
 #[tokio::test]
 async fn started_phase_round_trips_through_http_and_indexed_query() {
     let (_dir, state) = state();

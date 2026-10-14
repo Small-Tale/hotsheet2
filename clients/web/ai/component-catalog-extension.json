@@ -2109,7 +2109,7 @@
       "id": "ticket-row",
       "name": "TicketRow",
       "kind": "component",
-      "purpose": "Dense ticket summary and selection target, with a compact completion-confidence pill on completed/verified tickets.",
+      "purpose": "Dense ticket summary and selection target, with a compact completion-confidence pill on completed/verified tickets and a testing-phase time-left estimate beside the phase chip.",
       "useWhen": [
         "Hot Sheet needs dense ticket summary and selection target, with a compact completion-confidence pill on completed/verified tickets."
       ],

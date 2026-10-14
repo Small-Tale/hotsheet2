@@ -1,0 +1,6 @@
+/* The testing-phase estimate sits inline beside a phase chip (HS2-YDGM04). */
+.phase-estimate {
+  display: inline-flex;
+  flex: none;
+  vertical-align: middle;
+}

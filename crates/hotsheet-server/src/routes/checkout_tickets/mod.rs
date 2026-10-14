@@ -266,10 +266,9 @@ fn read_checkout_ticket_source(
             return Ok(None);
         };
         let store = multistore::store_url_id(&entry.store);
-        return Ok(Some(ResolvedTicket {
-            ticket: ApiTicket::from_provider(&ticket, &store, None),
-            store,
-        }));
+        let mut api = ApiTicket::from_provider(&ticket, &store, None);
+        crate::routes::tickets::apply_detail_phase_estimate(&entry, &ticket, &mut api)?;
+        return Ok(Some(ResolvedTicket { ticket: api, store }));
     }
     // A qualified reference names this source explicitly, so say why it cannot be read.
     if required && connection_disabled(state, &source.connection_id)? {

@@ -564,6 +564,28 @@ released; an exact claim remains available to record CI results and complete or 
 the ticket. A CI failure in the ticket's own change stays with that ticket. An
 independent failure gets a prioritized follow-up bug linked from its completion note.
 
+#### Testing-phase time-left estimate (HS2-YDGM04)
+
+Those phase activity notes are the only timing source; no new storage is added.
+`hotsheet_ticketing::phase_timing` walks a ticket's activity notes in time order into
+phase spans: a span opens on `Started phase changed from X to Y`, and closes on the
+next phase change (including a change to Unspecified) or on
+`Status changed from Started to …`. Reversed and repeated transitions are separate
+spans; a span still open is never a duration sample.
+
+- **Since:** `started_phase_since` on list rows and ticket details is the start of the
+  still-open span when it matches the ticket's current phase (absent otherwise).
+- **Estimate:** the index keeps each ticket's closed `initial_testing` and
+  `final_testing` span durations (`phase_spans` table, rebuilt with the ticket row and
+  invalidated by the existing change stream). List and detail responses compute the
+  per-store median per phase, separately, and serve it as `started_phase_estimate_ms`
+  on Started tickets in that testing phase — only once the store has at least three
+  closed spans of that phase. Trashed and moved tickets do not contribute.
+- **Display:** list rows, column cards, and the detail status line show a Lucide timer
+  with the time left (`~6m left`) beside the phase chip, and `Soon` once the phase runs
+  past its typical duration, matching claim ETA rows. A local render tick updates the
+  countdown; it never issues network requests. Other providers carry no estimate.
+
 ## 2.7 Concurrency & automatic conflict resolution
 
 > **Maintainer requirement (2026-08-19): conflict resolution must be "almost

@@ -7,6 +7,7 @@ import {
   isTicketActivelyWorkedOn,
   nextActiveTicketExpiry,
   nextClaimEtaTick,
+  nextPhaseEstimateTick,
 } from '../active-ticket-work';
 import type { CheckoutTicketCounts, TicketRow as WireTicketRow } from '../api';
 import type { LiveClaimNoticeProps } from '../components/active-claim';
@@ -56,15 +57,17 @@ export function createClaimClockController(dependencies: ClaimClockDependencies)
       eta: claimEtaPresentation(ticket, now),
     };
   }
-  /** Re-render ETA countdowns while a live claim has a future ETA; a local timer only (HS2-XQMDQB). */
+  /** Re-render ETA countdowns while a live claim or testing phase has a future estimate; a local timer only (HS2-XQMDQB, HS2-YDGM04). */
   function scheduleClaimEtaTick() {
     if (claimEtaTimer !== undefined) window.clearTimeout(claimEtaTimer);
     claimEtaTimer = undefined;
     const now = Date.now(),
-      delay = nextClaimEtaTick(
-        projects.value.flatMap((item) => projectTabTicketRows(item.id)),
-        now,
-      );
+      rows = projects.value.flatMap((item) => projectTabTicketRows(item.id)),
+      // Testing-phase countdowns share the claim ETA's local tick (HS2-YDGM04).
+      delays = [nextClaimEtaTick(rows, now), nextPhaseEstimateTick(rows, now)].filter(
+        (value): value is number => value !== undefined,
+      ),
+      delay = delays.length ? Math.min(...delays) : undefined;
     claimEtaClock.value = now;
     if (delay === undefined) return;
     claimEtaTimer = window.setTimeout(() => {

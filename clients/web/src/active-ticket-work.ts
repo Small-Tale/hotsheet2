@@ -117,3 +117,55 @@ export function nextClaimEtaTick(tickets: readonly ClaimEtaState[], now = Date.n
   }
   return delay;
 }
+
+type PhaseEstimateState = Pick<
+  Partial<TicketRow>,
+  'status' | 'started_phase' | 'started_phase_since' | 'started_phase_estimate_ms'
+>;
+
+/**
+ * Estimated time left in a testing phase (HS2-YDGM04): the store's median past span of that phase
+ * minus the time since the phase began; "Soon" once overrun. Undefined outside a Started testing phase
+ * or without an estimate (the server omits it until three prior spans exist).
+ */
+export type PhaseEstimatePresentation =
+  { kind: 'estimate'; label: string; title: string } | { kind: 'overrun'; label: string; title: string };
+
+function phaseDeadline(ticket: PhaseEstimateState): { since: number; deadline: number } | undefined {
+  if (ticket.status !== 'started') return undefined;
+  if (ticket.started_phase !== 'initial_testing' && ticket.started_phase !== 'final_testing') return undefined;
+  const typical = ticket.started_phase_estimate_ms,
+    since = Date.parse(ticket.started_phase_since ?? '');
+  if (typical === undefined || !Number.isFinite(typical) || typical < 0 || !Number.isFinite(since)) return undefined;
+  return { since, deadline: since + typical };
+}
+
+export function phaseEstimatePresentation(
+  ticket: PhaseEstimateState,
+  now = Date.now(),
+): PhaseEstimatePresentation | undefined {
+  const timing = phaseDeadline(ticket);
+  if (!timing) return undefined;
+  const typical = approximateDuration(timing.deadline - timing.since).replace('~', 'about ');
+  if (timing.deadline <= now)
+    return { kind: 'overrun', label: 'Soon', title: `Past this phase's typical duration (${typical})` };
+  return {
+    kind: 'estimate',
+    label: `${approximateDuration(timing.deadline - now)} left`,
+    title: `This phase typically takes ${typical}`,
+  };
+}
+
+/**
+ * Delay until the next local testing-phase countdown refresh (HS2-YDGM04), or undefined when no row
+ * has a future phase estimate. A local render tick only: it must never trigger network requests.
+ */
+export function nextPhaseEstimateTick(tickets: readonly PhaseEstimateState[], now = Date.now()): number | undefined {
+  let delay: number | undefined;
+  for (const ticket of tickets) {
+    const timing = phaseDeadline(ticket);
+    if (!timing || timing.deadline <= now) continue;
+    delay = Math.min(delay ?? CLAIM_ETA_TICK_MS, CLAIM_ETA_TICK_MS, timing.deadline - now + 25);
+  }
+  return delay;
+}

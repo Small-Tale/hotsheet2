@@ -366,6 +366,8 @@ describe('UX demo catalog', () => {
     const EXEMPT: Record<string, string> = {
       'active-claim':
         'Live-claim spinner, ETA, and header notice rendered within TicketRow and TicketInspector (both demo every claim state).',
+      'phase-estimate':
+        'Testing-phase time-left label rendered within TicketRow (demoes its estimate and overrun states) and the inspector status line.',
       'main-shell': 'Typed application configuration boundary around the cataloged AppShell.',
       'sidebar-panel': 'Panel-parts contract and standalone Pane wrapper behind the cataloged sidebars and AppShell.',
       'notification-inspector': 'Empty notification-mode inspector chrome rendered within the cataloged AppShell.',

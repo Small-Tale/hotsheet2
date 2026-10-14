@@ -853,6 +853,13 @@ always retain native clipboard behavior.
   **Claim ETA** setting exposes the none, on-track, and past-estimate variants. The worker
   label is visually clipped at a maximum width of `24ch` in list and column rows; the
   full identity remains in its accessible name and hover title (HS2-3H4Y31).
+  In an `initial_testing` or `final_testing` phase with a store estimate (HS2-YDGM04), the
+  shared `PhaseEstimate` (`components/phase-estimate.tsx`: Lucide `timer` icon plus quiet
+  compact text) follows the phase chip in list rows and column cards with `~6m left`, or
+  `Soon` once the phase passes its typical duration; its title states the typical duration.
+  The detail status line shows the same component after the status trigger. It shares the
+  claim ETA's local render tick. The demo's **Testing phase estimate** setting exposes the
+  none, on-track, and overrun variants (visible with a testing Started phase).
   - category/type icon and color use a serializable Lucide name plus the HS1 custom
     command palette; a configured icon replaces category text and appears before the title.
     Neutral retains its pale fill swatch but uses a darker, still-lighter-than-gray icon

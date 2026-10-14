@@ -33,7 +33,7 @@ pub enum Status {
 
 /// Progress within `started`. This is separate from a live claim: a ticket can
 /// remain in final testing while its worker is free to take another ticket.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StartedPhase {
     Analyzing,

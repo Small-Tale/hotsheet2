@@ -7,6 +7,8 @@ import {
   isTicketActivelyWorkedOn,
   nextActiveTicketExpiry,
   nextClaimEtaTick,
+  nextPhaseEstimateTick,
+  phaseEstimatePresentation,
   projectTabTicketState,
 } from './active-ticket-work';
 import type { TicketRow } from './api';
@@ -192,5 +194,47 @@ describe('claim ETA presentation (HS2-XQMDQB)', () => {
     expect(nextClaimEtaTick([live], now)).toBe(10_025);
     expect(nextClaimEtaTick([live], at('2026-10-01T11:00:01Z'))).toBeUndefined();
     expect(nextClaimEtaTick([live, { ...live, claim_eta_at: '2026-10-01T10:59:55Z' }], now)).toBe(5_025);
+  });
+});
+
+describe('phaseEstimatePresentation (HS2-YDGM04)', () => {
+  const at = (iso: string) => Date.parse(iso),
+    testing = {
+      status: 'started',
+      started_phase: 'final_testing' as const,
+      started_phase_since: '2026-10-01T10:00:00Z',
+      started_phase_estimate_ms: 20 * 60_000,
+    };
+
+  it('counts down from the typical duration and reads Soon once overrun', () => {
+    expect(phaseEstimatePresentation(testing, at('2026-10-01T10:05:00Z'))).toMatchObject({
+      kind: 'estimate',
+      label: '~15m left',
+      title: 'This phase typically takes about 20m',
+    });
+    expect(phaseEstimatePresentation(testing, at('2026-10-01T10:20:00Z'))).toMatchObject({
+      kind: 'overrun',
+      label: 'Soon',
+    });
+    expect(
+      phaseEstimatePresentation({ ...testing, started_phase: 'initial_testing' }, at('2026-10-01T10:19:50Z')),
+    ).toMatchObject({ kind: 'estimate', label: '<1m left' });
+  });
+
+  it('shows nothing outside a Started testing phase or without an estimate', () => {
+    const now = at('2026-10-01T10:05:00Z');
+    expect(phaseEstimatePresentation({ ...testing, started_phase: 'working' }, now)).toBeUndefined();
+    expect(phaseEstimatePresentation({ ...testing, status: 'completed' }, now)).toBeUndefined();
+    expect(phaseEstimatePresentation({ ...testing, started_phase_estimate_ms: undefined }, now)).toBeUndefined();
+    expect(phaseEstimatePresentation({ ...testing, started_phase_since: undefined }, now)).toBeUndefined();
+    expect(phaseEstimatePresentation({ ...testing, started_phase_since: 'nope' }, now)).toBeUndefined();
+    expect(phaseEstimatePresentation({ ...testing, started_phase_estimate_ms: -1 }, now)).toBeUndefined();
+  });
+
+  it('ticks locally until the nearest phase deadline and stops once every estimate is overrun', () => {
+    expect(nextPhaseEstimateTick([testing], at('2026-10-01T10:19:50Z'))).toBe(10_025);
+    expect(nextPhaseEstimateTick([testing], at('2026-10-01T10:05:00Z'))).toBe(30_000);
+    expect(nextPhaseEstimateTick([testing], at('2026-10-01T10:21:00Z'))).toBeUndefined();
+    expect(nextPhaseEstimateTick([{ ...testing, status: 'completed' }], at('2026-10-01T10:05:00Z'))).toBeUndefined();
   });
 });

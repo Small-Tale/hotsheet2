@@ -253,7 +253,10 @@ pub(crate) fn list_entry_tickets(
     let mut query = params.into_query(entry.store.root())?;
     let bound = ops::StoreReadBound::new(query.limit)?;
     query.limit = Some(bound.fetch_limit());
-    let mut rows = entry.index.lock_or_recover().query(&query)?;
+    let (mut rows, typical_phases) = {
+        let index = entry.index.lock_or_recover();
+        (index.query(&query)?, index.typical_phase_durations()?)
+    };
     let truncated = bound.finish(&mut rows)?;
     for row in &mut rows {
         row.set_connection(connection_id);
@@ -267,6 +270,7 @@ pub(crate) fn list_entry_tickets(
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     for row in &mut rows {
         row.add_auto_context(&contexts);
+        hotsheet_ticketing::phase_timing::apply_phase_estimate(row, &typical_phases);
     }
     let mut response = Json(rows_to_json(rows, &fields)).into_response();
     if truncated {
@@ -297,12 +301,33 @@ pub(crate) fn api_ticket_with_settings(
 ) -> Result<ApiTicket, ApiError> {
     let contexts = auto_context::effective(settings)
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    Ok(ApiTicket::with_provider_auto_context(
+    let mut api = ApiTicket::with_provider_auto_context(
         ticket,
         &multistore::store_url_id(&entry.store),
         None,
         &contexts,
-    ))
+    );
+    apply_detail_phase_estimate(entry, ticket, &mut api)?;
+    Ok(api)
+}
+
+/// Give a git ticket detail the same testing-phase estimate as its list row (HS2-YDGM04).
+pub(crate) fn apply_detail_phase_estimate(
+    entry: &StoreEntry,
+    ticket: &Ticket,
+    api: &mut ApiTicket,
+) -> Result<(), ApiError> {
+    if api.started_phase_since.is_some()
+        && ticket
+            .started_phase
+            .is_some_and(hotsheet_ticketing::phase_timing::is_estimated_phase)
+    {
+        let typical = entry.index.lock_or_recover().typical_phase_durations()?;
+        api.started_phase_estimate_ms = ticket
+            .started_phase
+            .and_then(|phase| typical.get(&phase).copied());
+    }
+    Ok(())
 }
 
 pub(crate) fn contextualize_api_ticket(

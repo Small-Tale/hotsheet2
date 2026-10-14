@@ -344,6 +344,10 @@ export interface TicketRow {
   claim_eta_at?: string;
   /** When the live claim began, derived from its history (HS2-XQMDQB). */
   claim_started_at?: string;
+  /** When the current Started phase began, derived server-side from phase history (HS2-YDGM04). */
+  started_phase_since?: string;
+  /** Median duration of this store's past spans of the current testing phase (HS2-YDGM04). */
+  started_phase_estimate_ms?: number;
   worker_label?: string;
   legacy_number?: string;
   claim_count: number;

@@ -27871,6 +27871,84 @@ test('a terminal created from the desktop drawer menu takes input focus even und
   await expect(drawer.locator('.terminal-session:not([hidden]) .xterm-helper-textarea')).toBeFocused();
 });
 
+test('shows the testing-phase time-left estimate on list rows, column cards, and the detail status line (HS2-YDGM04)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  const minutes = (count: number) => new Date(Date.now() + count * 60_000).toISOString(),
+    phase = {
+      status: 'started',
+      started_phase: 'final_testing' as const,
+      started_phase_since: minutes(-4),
+      started_phase_estimate_ms: 12 * 60_000,
+    },
+    testing = { ...row, ...phase },
+    overrun = {
+      ...startedRow2,
+      ...phase,
+      started_phase: 'initial_testing' as const,
+      started_phase_since: minutes(-30),
+    },
+    // No estimate yet (fewer than three prior spans): the phase chip shows alone.
+    unestimated = { ...startedRow3, started_phase: 'final_testing' as const, started_phase_since: minutes(-1) };
+  await page.route(/\/tickets(?:\?.*)?$/, (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const rows = [testing, overrun, unestimated],
+      url = new URL(route.request().url());
+    return route.fulfill({
+      json: url.searchParams.has('page_size')
+        ? {
+            items: rows,
+            counts: {
+              total: 3,
+              queued: 3,
+              backlog: 0,
+              archive: 0,
+              open: 3,
+              up_next: 1,
+              active: 0,
+              started: 3,
+              completed_today: 0,
+            },
+          }
+        : rows,
+    });
+  });
+  await page.route(
+    (url) => /\/tickets\/(?:01|HS2-DEMO01|git-local%3A01)$/.test(url.pathname),
+    (route) => (route.request().method() === 'GET' ? route.fulfill({ json: { ...full, ...phase } }) : route.fallback()),
+  );
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  const estimateOf = (slug: string) =>
+    page.locator(`[data-component="ticket-list-row"][data-ticket-slug="${slug}"] [data-phase-estimate]`);
+  const assertEstimates = async () => {
+    await expect(estimateOf('HS2-DEMO01')).toHaveAttribute('data-phase-estimate', 'estimate');
+    await expect(estimateOf('HS2-DEMO01')).toHaveText(/~[78]m left/);
+    await expect(estimateOf('HS2-DEMO01')).toHaveAttribute('title', 'This phase typically takes about 12m');
+    await expect(estimateOf('HS2-DEMO01').locator('svg')).toHaveCount(1);
+    await expect(estimateOf('HS2-START02')).toHaveAttribute('data-phase-estimate', 'overrun');
+    await expect(estimateOf('HS2-START02')).toHaveText('Soon');
+    await expect(estimateOf('HS2-START03')).toHaveCount(0);
+  };
+  await assertEstimates();
+  await page.screenshot({ path: test.info().outputPath('phase-estimate-list-wide.png') });
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const statusLine = page.locator('[data-status-line] [data-phase-estimate]');
+  await expect(statusLine).toHaveAttribute('data-phase-estimate', 'estimate');
+  await expect(statusLine).toHaveText(/~[78]m left/);
+  await page.screenshot({ path: test.info().outputPath('phase-estimate-detail-wide.png') });
+  await page.getByLabel('Columns View').click();
+  await expect(page.locator('[data-component="ticket-list-row"][data-presentation="column"]').first()).toBeVisible();
+  await assertEstimates();
+  await page.screenshot({ path: test.info().outputPath('phase-estimate-column-wide.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: test.info().outputPath('phase-estimate-column-narrow.png') });
+});
+
 test('coalesces Not Working note typing per pause and submits the latest draft (HS2-9CWDSB)', async ({ page }) => {
   await mockProject(page);
   const bodies: string[] = [];
@@ -27921,4 +27999,53 @@ test('coalesces Not Working note typing per pause and submits the latest draft (
   await expect.poll(() => bodies.length).toBe(1);
   expect(bodies[0]).toContain('Still broken after reload');
   await expect(note).toHaveValue('Still broken after reload');
+});
+
+test('opens row, gallery, and reference attachment menus through the shared opener (HS2-1RQA1E)', async ({ page }) => {
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const menu = page.locator('[data-context-menu="attachment"]'),
+    items = () => menu.getByRole('menuitem').allTextContents(),
+    insideViewport = async () => {
+      const box = (await menu.getByRole('menu').first().boundingBox())!,
+        viewport = page.viewportSize()!;
+      return box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.width && box.y + box.height <= viewport.height;
+    };
+  await page.getByRole('tab', { name: /Attachments/ }).click();
+  const item = page.locator('[data-attachment-id="A1"]');
+  // Row ellipsis and row right-click open the item menu (with Rename).
+  await item.getByRole('button', { name: 'More Actions for proof.png' }).click();
+  await expect(menu).toHaveAttribute('data-kind', 'item');
+  expect(await items()).toContain('Rename');
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await item.click({ button: 'right' });
+  await expect(menu).toHaveAttribute('data-kind', 'item');
+  await page.keyboard.press('Escape');
+  // Gallery menu button and right-click on gallery media open the host menu (with Copy path).
+  await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
+  const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ });
+  await gallery.getByRole('button', { name: 'More image actions' }).click();
+  await expect(menu).toHaveAttribute('data-kind', 'host');
+  expect(await items()).toContain('Copy path');
+  expect(await insideViewport()).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  if (!(await gallery.isVisible())) await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
+  await gallery.locator('[data-gallery-image="true"]').click({ button: 'right' });
+  await expect(menu).toHaveAttribute('data-kind', 'host');
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  if (await gallery.isVisible()) await page.keyboard.press('Escape');
+  await expect(gallery).toHaveCount(0);
+  // A Markdown reference right-click opens the host menu at the pointer, clamped on a phone.
+  await page.getByRole('tab', { name: 'Info' }).click();
+  const reference = page.locator('.markdown-preview__attachment-image').first();
+  await reference.click({ button: 'right' });
+  await expect(menu).toHaveAttribute('data-kind', 'host');
+  expect(await insideViewport()).toBe(true);
+  await page.screenshot({ path: 'target/visual-captures/hs2-1rqa1e-reference-menu-wide.png' });
 });

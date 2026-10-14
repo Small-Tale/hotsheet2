@@ -7,7 +7,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { CircleAlert, Star } from 'lucide';
 
-import type { ClaimEtaPresentation } from '../active-ticket-work';
+import type { ClaimEtaPresentation, PhaseEstimatePresentation } from '../active-ticket-work';
 import type { StartedPhase } from '../api';
 import { SEARCH_AND_COMPOSER_ACTIONS } from '../interaction-attrs/search-and-composer';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
@@ -20,6 +20,7 @@ import {
   resolveCategoryIconColor,
 } from './category-presentation';
 import { ConfidenceBadge } from './confidence-badge';
+import { PhaseEstimate } from './phase-estimate';
 import { priorityPresentation, type TicketPriority } from './priority-presentation';
 import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
 import { TagChip } from './tag-chip';
@@ -77,6 +78,8 @@ export interface TicketRowProps {
   agentName?: string;
   /** Progress toward the live claim's ETA, shown beside the active-work indicator (HS2-XQMDQB). */
   claimEta?: ClaimEtaPresentation;
+  /** Estimated time left in the current testing phase, beside the phase chip (HS2-YDGM04). */
+  phaseEstimate?: PhaseEstimatePresentation;
   updatedLabel?: string;
   /**
    * Derived AI completion confidence (0-100) of a completed/verified ticket (HS2-A0Q6G6).
@@ -251,6 +254,9 @@ export function TicketRow(raw: TicketRowProps) {
               {(props.presentation === 'list' ||
                 (props.presentation === 'column' && props.status === 'started' && props.startedPhase)) && (
                 <StatusBadge status={props.status} startedPhase={props.startedPhase} compact />
+              )}
+              {props.status === 'started' && props.startedPhase && props.phaseEstimate && (
+                <PhaseEstimate estimate={props.phaseEstimate} compact />
               )}
               {props.busy && <RowClaimIndicator agentName={props.agentName} claimEta={props.claimEta} />}
               {needsReview && (

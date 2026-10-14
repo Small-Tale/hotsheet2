@@ -5,7 +5,12 @@ import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { batch, effect, mount, signal } from 'kerfjs';
 
-import { claimEtaPresentation, isTicketActivelyWorkedOn, projectTabTicketState } from '../active-ticket-work';
+import {
+  claimEtaPresentation,
+  isTicketActivelyWorkedOn,
+  phaseEstimatePresentation,
+  projectTabTicketState,
+} from '../active-ticket-work';
 import { filterAdvancedSearchResults, usesAdvancedSearchExpression } from '../advanced-search';
 import {
   Api,
@@ -1960,6 +1965,7 @@ export async function startHotSheetWebClient() {
     ),
     busy: isTicketActivelyWorkedOn(ticket),
     claimEta: claimEtaPresentation(ticket, claimEtaClock.value),
+    phaseEstimate: phaseEstimatePresentation(ticket, claimEtaClock.value),
     agentName: ticket.worker_label || ticket.claimed_by || 'AI',
     updatedLabel: ago(ticket.updated_at),
     latestConfidence: ticket.latest_confidence,

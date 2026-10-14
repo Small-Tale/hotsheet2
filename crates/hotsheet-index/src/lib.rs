@@ -16,7 +16,7 @@ use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 
 /// Bump to force a full rebuild on open when the on-disk schema is stale.
-const SCHEMA_VERSION: i64 = 19;
+const SCHEMA_VERSION: i64 = 20;
 
 /// How long an index connection waits for another process's write lock.
 const INDEX_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
@@ -60,6 +60,7 @@ CREATE TABLE tickets (
   priority_rank   INTEGER NOT NULL DEFAULT 2,
   status          TEXT,
   started_phase   TEXT,
+  started_phase_since TEXT,
   status_rank     INTEGER NOT NULL DEFAULT 0,
   close_reason    TEXT,
   duplicate_of    TEXT,
@@ -82,6 +83,9 @@ CREATE TABLE tickets (
 CREATE INDEX idx_tickets_status ON tickets(store_id, status);
 CREATE INDEX idx_tickets_duplicate_target ON tickets(store_id, duplicate_of)
   WHERE close_reason = 'duplicate';
+CREATE TABLE phase_spans (store_id TEXT NOT NULL, ticket_id TEXT NOT NULL, phase TEXT NOT NULL, duration_ms INTEGER NOT NULL);
+CREATE INDEX idx_phase_spans ON phase_spans(store_id, phase);
+CREATE INDEX idx_phase_spans_ticket ON phase_spans(store_id, ticket_id);
 CREATE TABLE tags (store_id TEXT, ticket_id TEXT, tag TEXT);
 CREATE INDEX idx_tags ON tags(store_id, tag);
 CREATE TABLE assignees (store_id TEXT, ticket_id TEXT, assignee TEXT);
@@ -318,7 +322,7 @@ impl Index {
         if version != Some(SCHEMA_VERSION) {
             conn.execute_batch(
                 "DROP TABLE IF EXISTS tickets; DROP TABLE IF EXISTS tags; \
-                 DROP TABLE IF EXISTS assignees; DROP TABLE IF EXISTS reviews; \
+                 DROP TABLE IF EXISTS assignees; DROP TABLE IF EXISTS reviews; DROP TABLE IF EXISTS phase_spans; \
                  DROP TABLE IF EXISTS tickets_fts; DROP TABLE IF EXISTS index_meta;",
             )?;
             conn.execute_batch(SCHEMA)?;
@@ -448,8 +452,8 @@ impl Index {
             "INSERT INTO tickets(store_id,id,slug,title,details,category,priority,priority_rank,\
              status,status_rank,close_reason,duplicate_of,closed_at,up_next,tags_json,blocked_by_json,blocked_reason,\
              attachment_names_json,created_at,updated_at,completed_at,verified_at,claimed_by,claim_lease_expires_at,\
-             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number,claim_eta_at,claim_started_at,latest_confidence,started_phase) \
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35) \
+             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number,claim_eta_at,claim_started_at,latest_confidence,started_phase,started_phase_since) \
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36) \
              ON CONFLICT(store_id,id) DO UPDATE SET \
              slug=excluded.slug,title=excluded.title,details=excluded.details,category=excluded.category,\
              priority=excluded.priority,priority_rank=excluded.priority_rank,status=excluded.status,\
@@ -461,7 +465,8 @@ impl Index {
              claim_count=excluded.claim_count,file_path=excluded.file_path,\
              content_hash=excluded.content_hash,feedback_needed=excluded.feedback_needed,has_media_annotation=excluded.has_media_annotation,\
              legacy_number=excluded.legacy_number,claim_eta_at=excluded.claim_eta_at,claim_started_at=excluded.claim_started_at,\
-             latest_confidence=excluded.latest_confidence,started_phase=excluded.started_phase",
+             latest_confidence=excluded.latest_confidence,started_phase=excluded.started_phase,\
+             started_phase_since=excluded.started_phase_since",
             params![
                 self.store_id, id, t.slug, t.title, t.details, t.category,
                 enum_str(&t.priority), priority_rank(t.priority) as i64,
@@ -476,8 +481,21 @@ impl Index {
                 hotsheet_ticketing::ops::claim_started_at(t).map(|at| at.as_str().to_string()),
                 hotsheet_ticketing::ops::latest_confidence(t).map(|score| i64::from(score.get())),
                 t.started_phase.as_ref().map(enum_str),
+                hotsheet_ticketing::phase_timing::started_phase_since(t).map(|at| at.as_str().to_string()),
             ],
         )?;
+
+        // Closed testing-phase spans feed the per-store typical durations (HS2-YDGM04).
+        self.conn.execute(
+            "DELETE FROM phase_spans WHERE store_id=?1 AND ticket_id=?2",
+            params![self.store_id, id],
+        )?;
+        for (phase, duration_ms) in hotsheet_ticketing::phase_timing::estimated_phase_durations(t) {
+            self.conn.execute(
+                "INSERT INTO phase_spans(store_id,ticket_id,phase,duration_ms) VALUES(?1,?2,?3,?4)",
+                params![self.store_id, id, enum_str(&phase), duration_ms as i64],
+            )?;
+        }
 
         let rowid: i64 = self.conn.query_row(
             "SELECT rowid FROM tickets WHERE store_id=?1 AND id=?2",
@@ -574,7 +592,35 @@ impl Index {
             "DELETE FROM reviews WHERE store_id=?1 AND ticket_id=?2",
             params![self.store_id, id],
         )?;
+        self.conn.execute(
+            "DELETE FROM phase_spans WHERE store_id=?1 AND ticket_id=?2",
+            params![self.store_id, id],
+        )?;
         Ok(())
+    }
+
+    /// Typical (median) duration per estimated Started phase across this store's indexed
+    /// closed spans, omitting phases with too little history (HS2-YDGM04). Live tickets
+    /// only: trashed and moved tombstones do not contribute.
+    pub fn typical_phase_durations(
+        &self,
+    ) -> Result<std::collections::HashMap<hotsheet_model::StartedPhase, u64>, IndexError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT p.phase, p.duration_ms FROM phase_spans p JOIN tickets t \
+             ON t.store_id=p.store_id AND t.id=p.ticket_id \
+             WHERE p.store_id=?1 AND t.status NOT IN ('deleted','moved')",
+        )?;
+        let spans = stmt
+            .query_map(params![self.store_id], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(hotsheet_ticketing::phase_timing::typical_phase_durations(
+            spans.into_iter().filter_map(|(phase, duration)| {
+                let phase = serde_json::from_value(serde_json::Value::String(phase)).ok()?;
+                Some((phase, u64::try_from(duration).ok()?))
+            }),
+        ))
     }
 
     /// Drop all rows and rebuild from a full store walk. Always safe (disposable).
@@ -582,7 +628,7 @@ impl Index {
         let transaction = self.conn.unchecked_transaction()?;
         self.conn
             .execute_batch(
-                "DELETE FROM tickets; DELETE FROM tags; DELETE FROM assignees; DELETE FROM reviews; DELETE FROM tickets_fts;",
+                "DELETE FROM tickets; DELETE FROM tags; DELETE FROM assignees; DELETE FROM reviews; DELETE FROM phase_spans; DELETE FROM tickets_fts;",
             )?;
         let mut count = 0;
         for path in ticket_files(store)? {
@@ -1089,7 +1135,7 @@ impl Index {
             "SELECT t.id,t.slug,t.title,t.details,t.category,t.priority,t.status,t.up_next,\
              t.tags_json,t.blocked_by_json,t.blocked_reason,t.created_at,t.updated_at,t.completed_at,t.verified_at,\
              t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.claim_lease_expires_at,t.worker_label,t.claim_count,\
-             t.feedback_needed,t.legacy_number,t.claim_eta_at,t.claim_started_at,t.latest_confidence,t.started_phase \
+             t.feedback_needed,t.legacy_number,t.claim_eta_at,t.claim_started_at,t.latest_confidence,t.started_phase,t.started_phase_since \
              FROM {from} WHERE {} ORDER BY {order_clause}{limit}",
             wheres.join(" AND ")
         );
@@ -1126,6 +1172,8 @@ impl Index {
                     claim_lease_expires_at: r.get(19)?,
                     claim_eta_at: r.get(24)?,
                     claim_started_at: r.get(25)?,
+                    started_phase_since: r.get(28)?,
+                    started_phase_estimate_ms: None,
                     worker_label: r.get(20)?,
                     legacy_number: r.get(23)?,
                     claim_count: r.get::<_, i64>(21)? as u32,

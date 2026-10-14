@@ -121,6 +121,77 @@ fn started_phase_survives_index_rebuild_and_matches_file_scan() {
     assert_eq!(indexed_phase.started_phase, scanned_phase.started_phase);
 }
 
+fn phase_step(store: &FsStore, index: &Index, id: &str, at: &str, patch: TicketPatch) {
+    let ticket = ops::update(store, &ulid(id), Timestamp::new(at), patch).unwrap();
+    index.upsert(&ticket, "unused", at).unwrap();
+}
+
+fn phase(phase: StartedPhase) -> TicketPatch {
+    TicketPatch {
+        status: Some(Status::Started),
+        started_phase: Some(Some(phase)),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn typical_testing_durations_follow_upserts_deletes_and_rebuilds() {
+    let (_dir, store, index) = seeded();
+    let ids = ["01ARZ3NDEKTSV4RRFFQ69G5FB0", "01ARZ3NDEKTSV4RRFFQ69G5FB1"];
+    // Two closed final-testing spans (4m, 8m): below the three-span threshold.
+    for (id, end) in ids
+        .iter()
+        .zip(["2026-08-19T01:04:00Z", "2026-08-19T01:08:00Z"])
+    {
+        phase_step(
+            &store,
+            &index,
+            id,
+            "2026-08-19T01:00:00Z",
+            phase(StartedPhase::FinalTesting),
+        );
+        phase_step(&store, &index, id, end, phase(StartedPhase::Working));
+    }
+    assert!(index.typical_phase_durations().unwrap().is_empty());
+    // A third span (6m) re-entering on the first ticket reaches the threshold: median 6m.
+    phase_step(
+        &store,
+        &index,
+        ids[0],
+        "2026-08-19T02:00:00Z",
+        phase(StartedPhase::FinalTesting),
+    );
+    let open = index.query(&TicketQuery::default()).unwrap();
+    let row = open.iter().find(|row| row.id == ids[0]).unwrap();
+    assert_eq!(
+        row.started_phase_since.as_deref(),
+        Some("2026-08-19T02:00:00Z")
+    );
+    assert!(
+        index.typical_phase_durations().unwrap().is_empty(),
+        "open span excluded"
+    );
+    phase_step(
+        &store,
+        &index,
+        ids[0],
+        "2026-08-19T02:06:00Z",
+        TicketPatch {
+            status: Some(Status::Completed),
+            ..Default::default()
+        },
+    );
+    let typical = index.typical_phase_durations().unwrap();
+    assert_eq!(typical.get(&StartedPhase::FinalTesting), Some(&360_000));
+    assert_eq!(typical.get(&StartedPhase::InitialTesting), None);
+    // Rebuild derives the same spans from the files.
+    index.rebuild_from_store(&store).unwrap();
+    assert_eq!(index.typical_phase_durations().unwrap(), typical);
+    // Removing a ticket drops its spans below the threshold again.
+    index.delete(&ulid(ids[1])).unwrap();
+    assert!(index.typical_phase_durations().unwrap().is_empty());
+}
+
 #[test]
 fn ticket_count_tracks_every_indexed_row_through_upsert_delete_and_rebuild() {
     let (_d, store, ix) = seeded();

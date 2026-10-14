@@ -282,7 +282,10 @@ fn merge_checkout_page(
                     key,
                     connection_id: store_id.clone(),
                 });
-                let rows = entry.index.lock_or_recover().query(&query)?;
+                let (rows, typical_phases) = {
+                    let index = entry.index.lock_or_recover();
+                    (index.query(&query)?, index.typical_phase_durations()?)
+                };
                 let exhausted = rows.len() < request.want;
                 let matches = commit_filter(rows.iter().map(|row| row.slug.clone()).collect())?;
                 let mut batch = Vec::with_capacity(rows.len());
@@ -301,6 +304,10 @@ fn merge_checkout_page(
                         row.make_compact();
                     }
                     row.add_auto_context(&contexts);
+                    hotsheet_ticketing::phase_timing::apply_phase_estimate(
+                        &mut row,
+                        &typical_phases,
+                    );
                     let mut value = serde_json::to_value(row).map_err(|error| {
                         ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
                     })?;

@@ -13,6 +13,35 @@ import {
 } from './ticket-row';
 
 describe('TicketRow', () => {
+  it('shows the testing-phase estimate beside the phase chip in list rows and column cards (HS2-YDGM04)', () => {
+    const ticket: TicketRowProps = {
+      slug: 'HS2-PHASE',
+      title: 'Phase estimate',
+      status: 'started',
+      startedPhase: 'final_testing',
+      priority: 'default',
+      category: 'task',
+      tags: [],
+      phaseEstimate: { kind: 'estimate', label: '~6m left', title: 'This phase typically takes about 12m' },
+    };
+    for (const presentation of ['list', 'column'] as const) {
+      const markup = String(TicketRow({ ...ticket, presentation }));
+      expect(markup).toContain('data-phase-estimate="estimate"');
+      expect(markup).toContain('~6m left');
+      expect(markup).toContain('data-lucide="timer"');
+      expect(markup.indexOf('data-component="status-badge"')).toBeLessThan(markup.indexOf('data-phase-estimate'));
+      const overrun = String(
+        TicketRow({ ...ticket, presentation, phaseEstimate: { kind: 'overrun', label: 'Soon', title: '' } }),
+      );
+      expect(overrun).toContain('data-phase-estimate="overrun"');
+      expect(overrun).toContain('>Soon<');
+      // A stale estimate never renders once the ticket leaves Started or loses its phase.
+      expect(String(TicketRow({ ...ticket, presentation, status: 'completed' }))).not.toContain('data-phase-estimate');
+      expect(String(TicketRow({ ...ticket, presentation, startedPhase: undefined }))).not.toContain(
+        'data-phase-estimate',
+      );
+    }
+  });
   it('places the project source mark after the category in list and column cards', () => {
     const ticket: TicketRowProps = {
       slug: 'HS2-SOURCE',

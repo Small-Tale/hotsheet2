@@ -13,12 +13,14 @@ import { Skeleton } from '@kerfjs/ui/skeleton';
 import { Text } from '@kerfjs/ui/text';
 import { CircleAlert, Plus } from 'lucide';
 
+import type { PhaseEstimatePresentation } from '../active-ticket-work';
 import type { StartedPhase } from '../api';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import { DETAILS_FEEDBACK_ID, textRequestsFeedback } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { MarkdownEditor, type MarkdownEditorMode } from './markdown-editor';
 import { FeedbackPrompt, type NoteCardProps, NoteEditor, RespondToFeedbackButton } from './note-card';
+import { PhaseEstimate } from './phase-estimate';
 import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
 import { TicketCategorySelect } from './ticket-category-select';
 import { TicketInspectorPanel } from './ticket-inspector-panel';
@@ -34,6 +36,8 @@ const WARNING_TEXT = foregroundColorVar('--wa-color-warning-on-quiet');
 export interface TicketInfoPanelProps {
   status: TicketStatus;
   startedPhase?: StartedPhase;
+  /** Estimated time left in the current testing phase (HS2-YDGM04). */
+  phaseEstimate?: PhaseEstimatePresentation;
   priority: TicketPriority;
   category: string;
   tags: string[];
@@ -143,6 +147,7 @@ function TicketInfoPanelPlaceholder({ readerPresentation = false }: { readerPres
 function LoadedTicketInfoPanel({
   status,
   startedPhase,
+  phaseEstimate,
   priority,
   category,
   tags,
@@ -204,6 +209,7 @@ function LoadedTicketInfoPanel({
                       canEditStartedPhase={canEditStartedPhase}
                     />
                   )}
+                  {status === 'started' && startedPhase && phaseEstimate && <PhaseEstimate estimate={phaseEstimate} />}
                   {blockedReason && <BlockedBadge />}
                 </>
               </Row>

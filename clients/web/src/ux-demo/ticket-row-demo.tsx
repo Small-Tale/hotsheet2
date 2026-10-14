@@ -3,7 +3,7 @@ import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
-import type { ClaimEtaPresentation } from '../active-ticket-work';
+import type { ClaimEtaPresentation, PhaseEstimatePresentation } from '../active-ticket-work';
 import type { StartedPhase } from '../api';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../components/category-presentation';
 import { CorruptTicketRow } from '../components/corrupt-ticket-row';
@@ -19,6 +19,13 @@ export type TicketRowClaimEta = 'none' | 'estimate' | 'overrun';
 export const TICKET_ROW_CLAIM_ETA: Record<Exclude<TicketRowClaimEta, 'none'>, ClaimEtaPresentation> = {
   estimate: { kind: 'estimate', percent: 25, label: '~45m left', title: 'Estimated to finish in about 45 minutes' },
   overrun: { kind: 'overrun', label: 'Soon', title: 'Past its estimate by about 10 minutes' },
+};
+
+/** Testing-phase estimate states the demo exposes (HS2-YDGM04); shown in a Started testing phase. */
+export type TicketRowPhaseEstimate = 'none' | 'estimate' | 'overrun';
+export const TICKET_ROW_PHASE_ESTIMATE: Record<Exclude<TicketRowPhaseEstimate, 'none'>, PhaseEstimatePresentation> = {
+  estimate: { kind: 'estimate', label: '~6m left', title: 'This phase typically takes about 12m' },
+  overrun: { kind: 'overrun', label: 'Soon', title: "Past this phase's typical duration (about 12m)" },
 };
 
 /** Completion confidence choices the demo exposes (HS2-A0Q6G6); `none` is unscored. */
@@ -44,6 +51,7 @@ export const ticketRowSettings = {
   selected: signal(false),
   busy: signal(true),
   claimEta: signal<TicketRowClaimEta>('estimate'),
+  phaseEstimate: signal<TicketRowPhaseEstimate>('estimate'),
   /** Derived completion confidence; shown only for completed/verified rows (HS2-A0Q6G6). */
   confidence: signal<string>('none'),
   categoryIcon: signal('sparkles'),
@@ -68,6 +76,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
   ticketRowSettings.selected.value = false;
   ticketRowSettings.busy.value = true;
   ticketRowSettings.claimEta.value = 'estimate';
+  ticketRowSettings.phaseEstimate.value = 'estimate';
   ticketRowSettings.confidence.value = 'none';
   ticketRowSettings.categoryIcon.value = 'sparkles';
   ticketRowSettings.categoryColor.value = '#3b82f6';
@@ -86,6 +95,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
         tags: ticketRowSettings.tags.value,
         'category-icon': ticketRowSettings.categoryIcon.value,
         'claim-eta': ticketRowSettings.claimEta.value,
+        'phase-estimate': ticketRowSettings.phaseEstimate.value,
         confidence: ticketRowSettings.confidence.value,
         'category-color': ticketRowSettings.categoryColor.value,
         agent: ticketRowSettings.agentName.value,
@@ -143,6 +153,10 @@ export function TicketRowDemo() {
               ticketRowSettings.claimEta.value === 'none'
                 ? undefined
                 : TICKET_ROW_CLAIM_ETA[ticketRowSettings.claimEta.value],
+            phaseEstimate:
+              ticketRowSettings.phaseEstimate.value === 'none'
+                ? undefined
+                : TICKET_ROW_PHASE_ESTIMATE[ticketRowSettings.phaseEstimate.value],
             categoryIcon: ticketRowSettings.categoryIcon.value,
             categoryColor: ticketRowSettings.categoryColor.value,
             agentName: ticketRowSettings.agentName.value,
@@ -250,6 +264,16 @@ export function TicketRowSettings() {
         ]}
       />
       <Select
+        name="phase-estimate"
+        label="Testing phase estimate (shown in Initial or Final testing)"
+        value={ticketRowSettings.phaseEstimate.value}
+        choices={[
+          { value: 'none', label: 'No Estimate' },
+          { value: 'estimate', label: 'On Track (~6m Left)' },
+          { value: 'overrun', label: 'Past Typical Duration (Soon)' },
+        ]}
+      />
+      <Select
         name="confidence"
         label="Completion confidence (shown when completed or verified)"
         value={ticketRowSettings.confidence.value}
@@ -332,6 +356,9 @@ function wireTicketRowDemo(root: HTMLElement): () => void {
           break;
         case 'claim-eta':
           ticketRowSettings.claimEta.value = control.value as typeof ticketRowSettings.claimEta.value;
+          break;
+        case 'phase-estimate':
+          ticketRowSettings.phaseEstimate.value = control.value as typeof ticketRowSettings.phaseEstimate.value;
           break;
         case 'confidence':
           ticketRowSettings.confidence.value = control.value;

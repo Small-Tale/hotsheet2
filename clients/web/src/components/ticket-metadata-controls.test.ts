@@ -45,6 +45,24 @@ describe('ticket metadata controls and inspector panels', () => {
     );
   });
 
+  it('shows the testing-phase estimate on the detail status line after the status trigger (HS2-YDGM04)', () => {
+    const ticket = {
+      status: 'started' as const,
+      priority: 'high' as const,
+      category: 'feature',
+      tags: [],
+      details: '',
+    };
+    const estimate = { kind: 'estimate' as const, label: '~4m left', title: 'This phase typically takes about 9m' };
+    const markup = String(TicketInfoPanel({ ...ticket, startedPhase: 'initial_testing', phaseEstimate: estimate }));
+    expect(markup).toMatch(/data-status-line[^]*data-phase-estimate="estimate"/);
+    expect(markup.indexOf('Change Status, Initial testing')).toBeLessThan(markup.indexOf('data-phase-estimate'));
+    expect(markup).toContain('title="This phase typically takes about 9m"');
+    expect(String(TicketInfoPanel({ ...ticket, status: 'completed', phaseEstimate: estimate }))).not.toContain(
+      'data-phase-estimate',
+    );
+  });
+
   it('uses compact Details field-label geometry in preview and editing modes (HS2-S6S709)', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-info-panel.css'), 'utf8');
     expect(css).toContainSource(
