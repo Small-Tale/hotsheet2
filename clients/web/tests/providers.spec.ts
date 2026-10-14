@@ -21186,6 +21186,8 @@ test('searches indexed ticket details and notes without discarding the full proj
     },
   );
   const pending = page.waitForRequest((request) => new URL(request.url()).searchParams.get('text') === 'QQRY00');
+  // Kerf beta.102 collapses the emptied field when cleared with focus elsewhere; reopen it.
+  await page.getByRole('button', { name: 'Search tickets', exact: true }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('QQRY00');
   await pending;
   await page.getByRole('button', { name: 'Clear search' }).click();

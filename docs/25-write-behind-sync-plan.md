@@ -214,10 +214,10 @@ page. Above 50 pending issues one bounded full scan is cheaper than per-issue re
 and the earlier scan path is used.
 
 | Read (fake Jira, 10,000 issues, 100 labeled, 3 pending tag edits) | Search pages | Issue GETs |
-| --- | --- | --- |
-| Before: pending overlay, any filter | 100 | 0 |
-| After: unpaged `tags=[hot]` | 1 | 3 |
-| After: all six 20-row keyset pages for `tags=[hot]` | ≤ 12 total | 3 per page |
+| ----------------------------------------------------------------- | ------------ | ---------- |
+| Before: pending overlay, any filter                               | 100          | 0          |
+| After: unpaged `tags=[hot]`                                       | 1            | 3          |
+| After: all six 20-row keyset pages for `tags=[hot]`               | ≤ 12 total   | 3 per page |
 
 Unfiltered reads and text/title-sorted reads still page the matching set (the
 whole project when nothing is pushable). A 100,000-issue project with a pushable

@@ -431,7 +431,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['shell-banner', 3],
     ['project-setup-warning-banner', 1],
     ['ticket-page-more', 2],
-    ['app-empty-state', 3],
+    ['app-empty-state', 4],
     ['app-error', 1],
     ['ticket-close-dialog', 1],
     ['project-close-dialog', 1],

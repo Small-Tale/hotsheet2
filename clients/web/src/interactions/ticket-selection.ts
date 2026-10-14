@@ -167,12 +167,6 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
           const stillSingle =
             single && selectedTicketSlugs.value.length === 1 && selectedTicketSlugs.value[0] === single;
           if (rail && !ticket && stillSingle) terminalRailScreen.value = 'root';
-          // The inert partial leaves NavStack focusing the view through a generated tabindex that the
-          // loaded re-render drops, sending focus to <body>; move it into the loaded detail (KF-ADYAY9).
-          if (rail && ticket && stillSingle)
-            requestAnimationFrame(() => {
-              restoreRailDetailFocus(row);
-            });
         });
       },
       isSelectAll: (keyboard) =>
@@ -470,14 +464,4 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
   return () => {
     lifetime.dispose();
   };
-}
-
-function restoreRailDetailFocus(origin: HTMLElement) {
-  if (document.activeElement && document.activeElement !== document.body) return;
-  const view = origin
-    .closest('[data-component="nav-stack"]')
-    ?.querySelector<HTMLElement>('[data-nav-key][data-nav-active="true"]');
-  view
-    ?.querySelector<HTMLElement>('[data-nav-focus], [role="tab"][aria-selected="true"], button:not([disabled])')
-    ?.focus({ preventScroll: true });
 }

@@ -542,10 +542,8 @@ test('keeps the project identity readable beside expanded search at 680px', asyn
       height: geometry.projectBar.bottom,
     },
   });
+  // Kerf beta.102: clearing with focus outside the field collapses it without reclaiming the caret.
   await page.getByRole('button', { name: 'Clear search' }).click();
-  await search.evaluate((node) => {
-    (node as HTMLElement).blur();
-  });
   await expect(search).toHaveCount(0);
   const trigger = page.getByRole('button', { name: 'Search tickets' });
   await expect(trigger).toBeVisible();
