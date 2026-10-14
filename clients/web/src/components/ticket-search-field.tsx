@@ -233,20 +233,24 @@ function TicketSearchSurfaceState({
   );
 }
 
-function TicketSearchHelpButton({ open }: { open: boolean }) {
-  return (
-    <button
-      type="button"
-      class="ticket-search-field__help-button"
-      {...TICKET_SEARCH_ACTIONS.toggleHelp.attrs}
-      aria-label="Search Syntax Help"
-      aria-expanded={String(open)}
-      title="Search syntax help"
-      data-token-search-keep-open
-    >
-      <LucideIcon icon={CircleHelp} name="circle-help" />
-    </button>
-  );
+/**
+ * The syntax-help disclosure as Kerf's compact trailing action (KF-R056AJ, HS2-P1689S): Kerf sizes,
+ * shapes, and states it like the clear button; `data-token-search-keep-open` keeps the field's
+ * surfaces open while it is pressed.
+ */
+function ticketSearchHelpTrailing(help: boolean, open: boolean) {
+  return help
+    ? {
+        trailingAction: {
+          icon: <LucideIcon icon={CircleHelp} name="circle-help" />,
+          label: 'Search Syntax Help',
+          action: TICKET_SEARCH_ACTIONS.toggleHelp.value,
+          expanded: open,
+          haspopup: 'dialog' as const,
+          attributes: { 'data-token-search-keep-open': '' },
+        },
+      }
+    : {};
 }
 
 export interface TicketSearchFormFieldProps {
@@ -304,7 +308,7 @@ export function TicketSearchFormField({
         removeAction={TICKET_SEARCH_ACTIONS.removeToken.value}
         clearAction={TICKET_SEARCH_ACTIONS.clear.value}
         clearLabel={clearLabel}
-        trailing={help ? <TicketSearchHelpButton open={helpOpen} /> : undefined}
+        {...ticketSearchHelpTrailing(help, helpOpen)}
       />
       <TicketSearchSurfaceState id={id} model={model} open={!disabled} helpOpen={help && helpOpen} />
     </div>
@@ -348,7 +352,7 @@ export function TicketSearchField({
       removeAction: TICKET_SEARCH_ACTIONS.removeToken.value,
       clearAction: TICKET_SEARCH_ACTIONS.clear.value,
       clearLabel,
-      trailing: help ? <TicketSearchHelpButton open={helpOpen} /> : undefined,
+      ...ticketSearchHelpTrailing(help, helpOpen),
       // The field's token colors are set on this app-owned hook, shared with TicketSearchFormField
       // (HS2-8FS5BJ, HS2-RXHZVR), never by reaching into Kerf's `.kui-token-search`.
       className: 'ticket-search-field__query',

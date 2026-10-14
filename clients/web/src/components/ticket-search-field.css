@@ -13,22 +13,6 @@
   gap: var(--kui-space-2xs);
   min-width: 0;
 }
-.ticket-search-field__help-button {
-  display: grid;
-  width: remify(17.6px);
-  height: remify(17.6px);
-  padding: 0;
-  border: 0;
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-neutral-on-quiet);
-  background: transparent;
-  cursor: pointer;
-  place-items: center;
-}
-.ticket-search-field__help-button:hover {
-  color: var(--wa-color-neutral-on-normal);
-  background: var(--wa-color-neutral-border-quiet);
-}
 /* Surface content (app-owned markup inside Kerf's anchored surface): a readable width clamped
    to the viewport beside the surface's own inset, and a scrolling help body. */
 .ticket-search-field__date {

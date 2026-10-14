@@ -39,11 +39,16 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(markup).toContain(`data-action="${TICKET_SEARCH_ACTIONS.removeToken.value}"`);
     expect(markup).toContain(`data-action="${TICKET_SEARCH_ACTIONS.clear.value}"`);
     expect(markup).toContain('aria-label="Clear search"');
-    expect(markup).toMatch(
-      new RegExp(
-        `class="ticket-search-field__help-button" data-action="${TICKET_SEARCH_ACTIONS.toggleHelp.value}" aria-label="Search Syntax Help" aria-expanded="false"`,
-      ),
-    );
+    // The help toggle is Kerf's compact trailing action (KF-R056AJ, HS2-P1689S), not app-styled markup.
+    const helpButton = new RegExp(`<button[^>]*data-action="${TICKET_SEARCH_ACTIONS.toggleHelp.value}"[^>]*>`).exec(
+      markup,
+    )?.[0];
+    expect(helpButton).toBeDefined();
+    expect(helpButton).toContain('aria-label="Search Syntax Help"');
+    expect(helpButton).toContain('aria-expanded="false"');
+    expect(helpButton).toContain('aria-haspopup="dialog"');
+    expect(helpButton).toContain('data-token-search-keep-open');
+    expect(markup).not.toContain('ticket-search-field__help-button');
     expect(markup).toContain('data-lucide="circle-help"');
     expect(markup).toContain('data-collapsible="false" data-expanded="true"');
     expect(markup).not.toContain('kui-token-search__suggestions');

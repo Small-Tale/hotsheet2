@@ -4178,7 +4178,7 @@ test('centers search controls on the first line while the query wraps', async ({
         search: box('.kui-token-search__editor'),
         icon: box('.kui-token-search__leading'),
         clear: node.querySelector('.kui-token-search__clear') ? box('.kui-token-search__clear') : undefined,
-        help: box('.ticket-search-field__help-button'),
+        help: box('[data-action="toggle-ticket-search-help"]'),
       };
     });
   const centered = async (expectedGroupCenter: boolean) => {
