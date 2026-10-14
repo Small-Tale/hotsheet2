@@ -21,6 +21,8 @@ export const MAX_TICKET_HISTORY_TRANSACTIONS = 30;
 export class TicketHistory {
   private undoStack: Transaction[] = [];
   private redoStack: Transaction[] = [];
+  /** Settles once every in-flight execute/undo/redo has recorded its outcome (HS2-K90QHF). */
+  private pending: Promise<unknown> = Promise.resolve();
   constructor(
     private readonly read: (slug: string) => TicketSnapshot | undefined,
     private readonly apply: (slug: string, patch: TicketPatch) => Promise<boolean>,
@@ -28,7 +30,12 @@ export class TicketHistory {
   async execute(slug: string, patch: TicketPatch): Promise<boolean> {
     return this.executeMany([{ slug, patch }]);
   }
-  async executeMany(operations: Array<{ slug: string; patch: TicketPatch }>): Promise<boolean> {
+  executeMany(operations: Array<{ slug: string; patch: TicketPatch }>): Promise<boolean> {
+    // Apply immediately (optimistic UI must not wait), but track it so a following undo/redo waits for the
+    // transaction to be recorded instead of silently finding an empty stack (HS2-K90QHF).
+    return this.track(this.executeNow(operations));
+  }
+  private async executeNow(operations: Array<{ slug: string; patch: TicketPatch }>): Promise<boolean> {
     const changes = operations.flatMap(({ slug, patch }) => {
       const current = this.read(slug);
       return current
@@ -48,11 +55,16 @@ export class TicketHistory {
     if (this.undoStack.length > MAX_TICKET_HISTORY_TRANSACTIONS) this.undoStack.shift();
     this.redoStack = [];
   }
-  async undo(): Promise<boolean> {
-    return this.move(this.undoStack, this.redoStack, true);
+  undo(): Promise<boolean> {
+    return this.track(this.pending.then(() => this.move(this.undoStack, this.redoStack, true)));
   }
-  async redo(): Promise<boolean> {
-    return this.move(this.redoStack, this.undoStack, false);
+  redo(): Promise<boolean> {
+    return this.track(this.pending.then(() => this.move(this.redoStack, this.undoStack, false)));
+  }
+  private track(operation: Promise<boolean>): Promise<boolean> {
+    const previous = this.pending;
+    this.pending = Promise.all([previous, operation.catch(() => false)]);
+    return operation;
   }
   private async move(source: Transaction[], destination: Transaction[], undo: boolean): Promise<boolean> {
     const transaction = source.at(-1);

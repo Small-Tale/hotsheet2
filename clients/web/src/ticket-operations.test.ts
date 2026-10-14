@@ -8,6 +8,58 @@ import {
 } from './ticket-operations';
 
 describe('ticket operation history', () => {
+  it('waits for in-flight edits before undo and redo instead of dropping them (HS2-K90QHF)', async () => {
+    const ticket: TicketSnapshot = { slug: 'HS2-ONE', status: 'started' };
+    const releases: Array<() => void> = [];
+    const applied: unknown[] = [];
+    const history = new TicketHistory(
+      () => ticket,
+      (_slug, patch) => {
+        Object.assign(ticket, patch);
+        applied.push(patch.status);
+        return new Promise<boolean>((resolve) => {
+          releases.push(() => {
+            resolve(true);
+          });
+        });
+      },
+    );
+    const edit = history.execute(ticket.slug, { status: 'completed' });
+    const undo = history.undo();
+    const redo = history.redo();
+    await Promise.resolve();
+    expect(applied).toEqual(['completed']);
+    releases.shift()!();
+    expect(await edit).toBe(true);
+    await expect.poll(() => releases.length).toBe(1);
+    expect(applied).toEqual(['completed', 'started']);
+    releases.shift()!();
+    expect(await undo).toBe(true);
+    await expect.poll(() => releases.length).toBe(1);
+    releases.shift()!();
+    expect(await redo).toBe(true);
+    expect(applied).toEqual(['completed', 'started', 'completed']);
+    expect(ticket.status).toBe('completed');
+    expect(await history.redo()).toBe(false);
+  });
+  it('keeps undo usable after an in-flight edit fails', async () => {
+    const ticket: TicketSnapshot = { slug: 'HS2-ONE', count: 0 };
+    let fail = true;
+    const history = new TicketHistory(
+      () => ticket,
+      async (_slug, patch) => {
+        if (fail) throw new Error('network');
+        Object.assign(ticket, patch);
+        return true;
+      },
+    );
+    await expect(history.execute(ticket.slug, { count: 1 })).rejects.toThrow('network');
+    expect(await history.undo()).toBe(false);
+    fail = false;
+    await history.execute(ticket.slug, { count: 2 });
+    expect(await history.undo()).toBe(true);
+    expect(ticket.count).toBe(0);
+  });
   it('retains only recent undo operations across repeated edits and redo', async () => {
     const ticket: TicketSnapshot = { slug: 'HS2-ONE', count: 0 };
     const history = new TicketHistory(
