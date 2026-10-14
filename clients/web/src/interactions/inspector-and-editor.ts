@@ -835,12 +835,13 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.dismissFeedback.selector, (_event, target) => {
       const id = data(target).noteId;
       if (!id) return;
-      void updateSelected({ note: 'No response needed', note_kind: 'regular' }).then((saved) => {
-        if (saved) {
-          readerInlineFeedbackReplies.value = { ...readerInlineFeedbackReplies.value, [id]: [] };
-          readerFeedbackChoiceSelections.value = { ...readerFeedbackChoiceSelections.value, [id]: [] };
-          readerFeedbackChoiceAnchors.delete(id);
-        }
+      const frame = linkedReaderFrame(target),
+        // A linked reader frame answers on its own ticket, not the workspace selection (HS2-04XTV5).
+        saved = frame
+          ? linkedReaderSaves(frame.id).respond('No response needed')
+          : updateSelected({ note: 'No response needed', note_kind: 'regular' });
+      void saved.then((ok) => {
+        if (ok) clearFeedbackReplyState(id);
       });
     }),
   );

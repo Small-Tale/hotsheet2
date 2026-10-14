@@ -3365,7 +3365,8 @@ unsupported, so they cannot create this state through Hot Sheet.
   by note id. A stored `feedback_needed` prompt—answered or not, sidebar, reader, or
   linked reader frame—is never offered for in-place editing: every reply (typed, inline,
   or chosen) becomes its own new `regular` note and the prompt keeps its text
-  (HS2-MB2Q10). The server enforces this too: a human text edit of an AI-authored
+  (HS2-MB2Q10). In a linked reader frame, Respond and No Response Needed both post
+  to that frame's own ticket, never to the workspace selection (HS2-04XTV5). The server enforces this too: a human text edit of an AI-authored
   `feedback_needed` note is refused with 409 Conflict.
 - **Feedback prompts support user-chosen inline reply points.** In reader mode, the
   client maps a click in the rendered Markdown to the corresponding source-character

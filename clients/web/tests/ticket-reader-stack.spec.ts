@@ -89,6 +89,7 @@ async function mockLayeredProjects(
   mutations: Array<{ projectId: string; ticketId: string; patch: Record<string, unknown> }> = [],
   rejectMutations = false,
   attachmentsFor: Record<string, Attachment[]> = {},
+  notesFor: Record<string, unknown[]> = {},
 ) {
   const chooser = ['/work/target', '/work/deep'];
   await page.route('**/*', async (route) => {
@@ -205,7 +206,7 @@ async function mockLayeredProjects(
               ...ticket,
               blocked_reason: null,
               concurrency_token: `token-${ticket.id}`,
-              notes: [],
+              notes: notesFor[ticket.id] ?? [],
               attachments: attachmentsFor[ticket.id] ?? [],
             },
           })
@@ -554,3 +555,48 @@ test('merges a concurrent remote edit into a linked reader draft instead of disc
   await expect(page.locator('.app-error')).toContainText('changed remotely in the same place you edited');
   await expect(editor).toHaveValue('First line, rewritten here\nSecond line\nAppended elsewhere');
 });
+
+for (const action of ['Respond', 'No Response Needed'] as const) {
+  test(`answers a linked reader frame feedback prompt with ${action} on the frame ticket (HS2-04XTV5)`, async ({
+    page,
+  }) => {
+    const mutations: Array<{ projectId: string; ticketId: string; patch: Record<string, unknown> }> = [];
+    const prompt = {
+      id: 'FB1',
+      kind: 'feedback_needed',
+      created_at: '2026-09-11T00:02:00Z',
+      edited_at: '2026-09-11T00:02:00Z',
+      text: 'Should the linked frame keep its draft?',
+    };
+    await mockLayeredProjects(page, mutations, false, {}, { target: [prompt] });
+    await page.setViewportSize({ width: 1200, height: 900 });
+    await openProjects(page);
+    await page.locator('#app-right-rail').getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
+    const reader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' }),
+      card = reader.locator('article[data-note-id="FB1"]'),
+      response = card.getByRole('textbox', { name: 'Feedback response' });
+    await expect(response).toBeVisible();
+    await response.fill('Keep it, please.');
+    // A frame reply stays a local draft until an explicit action (HS2-MB2Q10).
+    await response.blur();
+    await page.waitForTimeout(300);
+    expect(mutations).toEqual([]);
+    await card.getByRole('button', { name: action, exact: true }).click();
+    await expect
+      .poll(() => mutations.map((item) => [item.projectId, item.ticketId, item.patch.note, item.patch.note_kind]))
+      .toEqual([
+        [
+          'target-project',
+          'git-target:target',
+          action === 'Respond' ? 'Keep it, please.' : 'No response needed',
+          'regular',
+        ],
+      ]);
+    expect(mutations.some((item) => item.patch.note_id === 'FB1')).toBe(false);
+    // The workspace selection is untouched by a frame answer.
+    await expect(page.locator('#app-right-rail [data-component="ticket-inspector-header"]')).toHaveAttribute(
+      'data-ticket-slug',
+      'KF-ROOT01',
+    );
+  });
+}
