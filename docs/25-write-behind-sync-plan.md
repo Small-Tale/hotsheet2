@@ -194,11 +194,39 @@ pending ticket omitted from a stale native page. A read over more than 100,000
 native issues fails explicitly instead of allocating an unbounded ticket list.
 Unpaged reads still return all matching tickets. They now filter each 100-issue
 native page after applying pending edits, so a selective query retains only its
-matching output rows rather than materializing every issue at once. An unfiltered
-read remains proportional to the entire source and both read shapes still fetch
-1,000 network pages at 100,000 issues. A durable index or exact native JQL
-pushdown, together with live Jira latency profiling, remains necessary before
-broader rollout (HS2-E7GMSR, HS2-5XXM4P).
+matching output rows rather than materializing every issue at once (HS2-E7GMSR).
+
+**Native JQL pushdown (HS2-5XXM4P).** The Jira adapter now pushes superset-safe
+predicates into JQL: status (status-category ids `3` done, `4` in progress, neither
+for Not Started), `closed`/`open_only`, and each tag as `labels = "…"`. The exact
+client-side filter still runs, so a pushed clause can only drop issues that could
+never match. Text, category, priority, assignee, and created/updated-before bounds
+stay client-side: JQL stemming, unknown-value errors, unmapped priority names, and
+user-timezone dates could otherwise drop real matches.
+
+With pending edits, the overlay no longer scans the whole project. An issue without
+pending edits is judged by remote state alone, so the native (pushed-down) query
+decides it exactly as the no-pending path does. Pending issues are removed from the
+native result, re-read individually (falling back to the durable admission
+snapshot), projected, filtered, and merged. Keyset pages request
+`limit + pending + 1` native rows so dropping pending rows cannot hide the next
+page. Above 50 pending issues one bounded full scan is cheaper than per-issue reads
+and the earlier scan path is used.
+
+| Read (fake Jira, 10,000 issues, 100 labeled, 3 pending tag edits) | Search pages | Issue GETs |
+| --- | --- | --- |
+| Before: pending overlay, any filter | 100 | 0 |
+| After: unpaged `tags=[hot]` | 1 | 3 |
+| After: all six 20-row keyset pages for `tags=[hot]` | ≤ 12 total | 3 per page |
+
+Unfiltered reads and text/title-sorted reads still page the matching set (the
+whole project when nothing is pushable). A 100,000-issue project with a pushable
+filter matching 1% now needs about 10 pages instead of 1,000. Live Jira validation
+uses 2,000 seeded `[HS2 benchmark]` issues in the `HS2T` test project (label
+`hs2-benchmark` + `hs2-bench-scale`; every 100th also `hs2-bench-hot`); the free
+site cannot practically hold 100,000 issues, so larger sizes are extrapolated from
+page counts. Run `jira_live_pushdown_profile` (ignored, `HOTSHEET_JIRA_LIVE_*` plus
+`HOTSHEET_JIRA_LIVE_PROFILE_LABEL=hs2-bench-hot`).
 
 Opt-in synthetic Jira transport profile, 50-row title-sorted page, one pending
 title edit, separate processes per sample. Times exclude real network latency;

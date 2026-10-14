@@ -445,6 +445,18 @@ test('keeps each failed root and recovery identity, then recovers the selected t
   await page.getByRole('tab', { name: 'alpha', exact: true }).click();
   await expect(failure).toContainText('111');
   await page.getByRole('tab', { name: 'beta', exact: true }).click();
+  await expect(failure).toContainText('beta server unavailable');
+  // The failure panel uses the phone shell like every other branch (HS2-RSX13Q).
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(page.locator('.project-tab-bar--mobile')).toHaveCount(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-rsx13q-restore-failure-1280.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.project-tab-bar--mobile')).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'beta', exact: true })).toBeHidden();
+  await expect(failure).toBeVisible();
+  await expect(page.locator('wa-select[name="mobile-project"]')).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-rsx13q-restore-failure-390.png' });
+  await page.setViewportSize({ width: 1280, height: 720 });
   fixture.unavailable.delete('beta');
   await failure.getByRole('button', { name: 'Retry project' }).click();
   await expect(page.getByText('beta restored work', { exact: true })).toBeVisible();

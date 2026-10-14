@@ -375,6 +375,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           tabs={tabs}
           mode="project"
           header={<WorkspaceIdentity projectName="Project unavailable" id="workspace-page-title" headingLevel={1} />}
+          mobile={viewportMobile.value}
           workspace={<ProjectRestoreError {...restoreFailure} />}
           inspectorVisible={false}
           overlay={viewportMobile.value ? undefined : popup}

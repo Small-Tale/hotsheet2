@@ -50,6 +50,16 @@ describe('workspace composition surfaces', () => {
     );
   });
 
+  it('passes the phone layout to every MainShell branch, including restore failure (HS2-RSX13Q)', () => {
+    const source = readFileSync(new URL('../features/hot-sheet-shell.tsx', import.meta.url), 'utf8'),
+      shells = source
+        .split('<MainShell')
+        .slice(1)
+        .map((chunk) => chunk.slice(0, chunk.search(/\n\s*\/>/)));
+    expect(shells.length).toBeGreaterThanOrEqual(4);
+    for (const shell of shells) expect(shell).toContain('mobile={viewportMobile.value}');
+  });
+
   it('keeps the application root focused on deriving typed surface props', () => {
     const source = ['../app/runtime.tsx', '../features/hot-sheet-shell.tsx', '../features/hot-sheet-app.tsx']
       .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))

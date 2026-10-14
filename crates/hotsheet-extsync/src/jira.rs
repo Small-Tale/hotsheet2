@@ -245,7 +245,7 @@ impl JiraProvider {
     fn issue_page(
         &self,
         cursor: Option<&str>,
-        updated_after: Option<&str>,
+        filter: &str,
         limit: usize,
         sort: SortKey,
     ) -> Result<(Vec<JiraIssue>, Option<String>), ProviderError> {
@@ -254,13 +254,10 @@ impl JiraProvider {
             SortKey::Created => "created",
             _ => "updated",
         };
-        let mut jql = format!("project = {} ORDER BY {order} ASC", self.config.project_key);
-        if let Some(after) = updated_after {
-            jql = format!(
-                "project = {} AND updated >= \"{}\" ORDER BY {order} ASC",
-                self.config.project_key, after
-            )
-        }
+        let jql = format!(
+            "project = {}{filter} ORDER BY {order} ASC",
+            self.config.project_key
+        );
         let response=self.request("POST",&self.endpoint("search/jql"),Some(&json!({"jql":jql,"nextPageToken":cursor,"maxResults":limit.min(100),"fields":["summary","description","status","priority","issuetype","labels","assignee","created","updated","resolutiondate"]})))?;
         let page: JiraSearch = self.json(response)?;
         let next = if page.is_last {
@@ -271,16 +268,12 @@ impl JiraProvider {
         Ok((page.issues, next))
     }
 
-    fn list_issues(&self, updated_after: Option<&str>) -> Result<Vec<JiraIssue>, ProviderError> {
+    fn list_issues(&self, filter: &str) -> Result<Vec<JiraIssue>, ProviderError> {
         let mut next_page_token: Option<String> = None;
         let mut issues = Vec::new();
         loop {
-            let (page, next) = self.issue_page(
-                next_page_token.as_deref(),
-                updated_after,
-                100,
-                SortKey::Updated,
-            )?;
+            let (page, next) =
+                self.issue_page(next_page_token.as_deref(), filter, 100, SortKey::Updated)?;
             issues.extend(page);
             let Some(next) = next else { break };
             next_page_token = Some(next);
@@ -427,7 +420,7 @@ impl TicketProvider for JiraProvider {
             return self.unsupported("requested query filter");
         }
         let mut tickets = self
-            .list_issues(query.updated_after.as_deref())?
+            .list_issues(&native_filter(query))?
             .into_iter()
             .map(|issue| self.ticket(issue, vec![]))
             .filter(|ticket| provider_text_matches(ticket, query.text.as_deref()))
@@ -518,7 +511,7 @@ impl TicketProvider for JiraProvider {
             });
         }
         let (issues, next_cursor) =
-            self.issue_page(cursor, query.updated_after.as_deref(), limit, query.sort)?;
+            self.issue_page(cursor, &native_filter(query), limit, query.sort)?;
         Ok(ProviderTicketPage {
             items: filter_provider_ticket_page(
                 issues
@@ -553,7 +546,7 @@ impl TicketProvider for JiraProvider {
         keyset_page_from_native_pages(query, after, resume, limit, |cursor| {
             let (issues, next) = self.issue_page(
                 cursor,
-                query.updated_after.as_deref(),
+                &native_filter(query),
                 NATIVE_KEYSET_PAGE,
                 query.sort,
             )?;
@@ -575,7 +568,7 @@ impl TicketProvider for JiraProvider {
         let mut summary = ProviderTicketSummary::default();
         let mut cursor = None;
         loop {
-            let (issues, next) = self.issue_page(cursor.as_deref(), None, 100, SortKey::Updated)?;
+            let (issues, next) = self.issue_page(cursor.as_deref(), "", 100, SortKey::Updated)?;
             for issue in issues {
                 summary.add_ticket(&self.ticket(issue, vec![]), now, day_starts)
             }
@@ -587,7 +580,7 @@ impl TicketProvider for JiraProvider {
 
     fn find_transfer(&self, operation_id: &str) -> Result<Option<ApiTicket>, ProviderError> {
         Ok(self
-            .list_issues(None)?
+            .list_issues("")?
             .into_iter()
             .find(|issue| {
                 marker(&adf_to_text(issue.fields.description.as_ref()), "operation").as_deref()
@@ -905,6 +898,47 @@ struct JiraComment {
 #[derive(Debug, Deserialize)]
 struct JiraCreated {
     key: String,
+}
+
+/// Native JQL pushdown (HS2-5XXM4P). Every clause selects a superset of the rows the
+/// Hot Sheet filter keeps, so the exact client-side filter still decides membership
+/// while Jira stops returning issues that can never match. Only predicates whose
+/// mapping is total and locale-independent are pushed: status category ids (`3`
+/// done, `4` in progress) and labels. Text, category, priority, assignee, and date
+/// bounds stay client-side because JQL stemming, unknown-value errors, unmapped
+/// priority names, and timezone-relative dates could otherwise drop real matches.
+fn native_filter(query: &TicketQuery) -> String {
+    let mut clauses = Vec::new();
+    if let Some(after) = query.updated_after.as_deref() {
+        clauses.push(format!("updated >= \"{}\"", jql_escape(after)));
+    }
+    match query.status {
+        None => {}
+        Some(Status::Completed) => clauses.push("statusCategory = 3".into()),
+        Some(Status::Started) => clauses.push("statusCategory = 4".into()),
+        Some(Status::NotStarted) => clauses.push("statusCategory not in (3, 4)".into()),
+        // No Jira issue maps to any other Hot Sheet status.
+        Some(_) => clauses.push("statusCategory = 3 AND statusCategory != 3".into()),
+    }
+    match (query.open_only, query.closed) {
+        (_, Some(true)) if query.open_only => {
+            clauses.push("statusCategory = 3 AND statusCategory != 3".into())
+        }
+        (_, Some(true)) => clauses.push("statusCategory = 3".into()),
+        (true, _) | (_, Some(false)) => clauses.push("statusCategory != 3".into()),
+        _ => {}
+    }
+    for tag in &query.tags {
+        clauses.push(format!("labels = \"{}\"", jql_escape(tag)));
+    }
+    clauses
+        .into_iter()
+        .map(|clause| format!(" AND {clause}"))
+        .collect()
+}
+
+fn jql_escape(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 fn capabilities() -> ProviderCapabilities {
@@ -1229,6 +1263,109 @@ mod tests {
         assert_eq!(requests[1].3.as_ref().unwrap()["nextPageToken"], "page-2");
     }
 
+    /// HS2-5XXM4P: only superset-safe predicates reach JQL, with quoting escaped.
+    #[test]
+    fn native_filter_pushes_status_closure_and_labels_into_jql() {
+        let with = |query: TicketQuery| native_filter(&query);
+        assert_eq!(with(TicketQuery::default()), "");
+        assert_eq!(
+            with(TicketQuery {
+                status: Some(Status::NotStarted),
+                tags: vec!["a\"b".into(), "c\\d".into()],
+                text: Some("ignored".into()),
+                priority: Some(Priority::High),
+                category: Some("Bug".into()),
+                ..Default::default()
+            }),
+            " AND statusCategory not in (3, 4) AND labels = \"a\\\"b\" AND labels = \"c\\\\d\""
+        );
+        assert_eq!(
+            with(TicketQuery {
+                status: Some(Status::Completed),
+                ..Default::default()
+            }),
+            " AND statusCategory = 3"
+        );
+        assert_eq!(
+            with(TicketQuery {
+                status: Some(Status::Started),
+                ..Default::default()
+            }),
+            " AND statusCategory = 4"
+        );
+        assert_eq!(
+            with(TicketQuery {
+                status: Some(Status::Backlog),
+                ..Default::default()
+            }),
+            " AND statusCategory = 3 AND statusCategory != 3"
+        );
+        assert_eq!(
+            with(TicketQuery {
+                closed: Some(true),
+                ..Default::default()
+            }),
+            " AND statusCategory = 3"
+        );
+        assert_eq!(
+            with(TicketQuery {
+                closed: Some(false),
+                ..Default::default()
+            }),
+            " AND statusCategory != 3"
+        );
+        assert_eq!(
+            with(TicketQuery {
+                open_only: true,
+                ..Default::default()
+            }),
+            " AND statusCategory != 3"
+        );
+        assert_eq!(
+            with(TicketQuery {
+                open_only: true,
+                closed: Some(true),
+                ..Default::default()
+            }),
+            " AND statusCategory = 3 AND statusCategory != 3"
+        );
+
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    response(200, json!({"isLast":true,"issues":[issue("ENG-1","one")]})),
+                    response(200, json!({"isLast":true,"issues":[issue("ENG-1","one")]})),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let query = TicketQuery {
+            tags: vec!["customer".into()],
+            status: Some(Status::Started),
+            ..Default::default()
+        };
+        assert_eq!(provider(fake.clone()).query(&query).unwrap().len(), 1);
+        assert_eq!(
+            provider(fake.clone())
+                .query_page(&query, None, 50)
+                .unwrap()
+                .items
+                .len(),
+            1
+        );
+        for request in fake.requests.lock_or_recover().iter() {
+            assert!(
+                request.3.as_ref().unwrap()["jql"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with(
+                        "project = ENG AND statusCategory = 4 AND labels = \"customer\" ORDER BY "
+                    )
+            );
+        }
+    }
+
     #[test]
     fn native_page_returns_jira_next_page_token_without_fetching_it() {
         let fake=Arc::new(Fake{responses:Mutex::new(vec![response(200,json!({"nextPageToken":"page-2","isLast":false,"issues":[issue("ENG-1","one")]}))].into()),..Default::default()});
@@ -1364,6 +1501,72 @@ mod tests {
                 ..Default::default()
             })
             .unwrap();
+    }
+
+    /// HS2-5XXM4P: live search page count and latency for a full project read versus a
+    /// pushed-down label read. Seed with labeled `[HS2 benchmark]` issues in a throwaway
+    /// project; set `HOTSHEET_JIRA_LIVE_PROFILE_LABEL` to the sparse label.
+    #[test]
+    #[ignore = "reads a real Jira project; set HOTSHEET_JIRA_LIVE_* and HOTSHEET_JIRA_LIVE_PROFILE_LABEL"]
+    fn jira_live_pushdown_profile() {
+        struct Counting(UreqGitHubTransport, std::sync::atomic::AtomicUsize);
+        impl HttpTransport for Counting {
+            fn request(
+                &self,
+                method: &str,
+                url: &str,
+                headers: &[(&str, String)],
+                body: Option<&Value>,
+            ) -> Result<HttpResponse, String> {
+                self.1.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                self.0.request(method, url, headers, body)
+            }
+        }
+        let env = |name: &str| std::env::var(name).expect(name);
+        let transport = Arc::new(Counting(
+            UreqGitHubTransport,
+            std::sync::atomic::AtomicUsize::new(0),
+        ));
+        let provider = JiraProvider::new(
+            JiraConfig {
+                connection_id: "jira-live".into(),
+                project_key: env("HOTSHEET_JIRA_LIVE_PROJECT"),
+                base_url: env("HOTSHEET_JIRA_LIVE_BASE_URL"),
+                email: env("HOTSHEET_JIRA_LIVE_EMAIL"),
+                token: env("HOTSHEET_JIRA_LIVE_TOKEN"),
+                default: false,
+            },
+            transport.clone(),
+        );
+        let label = env("HOTSHEET_JIRA_LIVE_PROFILE_LABEL");
+        for (name, query) in [
+            ("full", TicketQuery::default()),
+            (
+                "label",
+                TicketQuery {
+                    tags: vec![label.clone()],
+                    ..Default::default()
+                },
+            ),
+            (
+                "label+open",
+                TicketQuery {
+                    tags: vec![label.clone()],
+                    open_only: true,
+                    ..Default::default()
+                },
+            ),
+        ] {
+            transport.1.store(0, std::sync::atomic::Ordering::Relaxed);
+            let started = Instant::now();
+            let rows = provider.query(&query).unwrap();
+            println!(
+                "jira-live-pushdown mode={name} rows={} requests={} elapsed_ms={}",
+                rows.len(),
+                transport.1.load(std::sync::atomic::Ordering::Relaxed),
+                started.elapsed().as_millis()
+            );
+        }
     }
 
     /// HS2-7D9BPK: the reopen-history bound against a real Jira changelog and status

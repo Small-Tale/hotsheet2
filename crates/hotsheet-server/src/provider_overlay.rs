@@ -1,7 +1,7 @@
 //! Provisional Jira reads over the durable provider outbox.
 //!
 //! A pending field edit can change search membership and sort order. Apply it to the
-//! complete native result before filtering, limiting, or choosing a keyset page.
+//! projected row before filtering, limiting, or choosing a keyset page.
 
 use std::collections::BTreeMap;
 
@@ -28,6 +28,8 @@ pub enum OverlayReadError {
 
 const NATIVE_SCAN_PAGE: usize = 100;
 const MAX_PENDING_NATIVE_SCAN: usize = 100_000;
+/// Above this many pending issues one full scan is cheaper than per-issue reads.
+const MAX_PENDING_POINT_READS: usize = 50;
 
 /// Read a full ticket with all admitted edits for its provider-native identity.
 /// A durable base snapshot keeps the provisional ticket readable if the provider
@@ -52,8 +54,14 @@ pub fn get(
 }
 
 /// Read a provider list with pending edits applied before the requested filters,
-/// search, sort, and limit. Without pending edits the native adapter retains its
-/// normal optimized query path and its precise unsupported-filter behavior.
+/// search, sort, and limit.
+///
+/// HS2-5XXM4P: membership of an issue without pending edits is decided by remote
+/// state alone, so the native (JQL-pushdown) query answers it exactly as the
+/// no-pending path does. Only pending issues need provisional treatment: they are
+/// dropped from the native result, re-read individually, projected, and filtered
+/// locally. Network pages therefore scale with the matching result instead of the
+/// whole project. A large pending set falls back to one bounded full scan.
 pub fn query(
     provider: &dyn TicketProvider,
     outbox: &ProviderOutbox,
@@ -65,20 +73,22 @@ pub fn query(
         return Ok(provider.query(query)?);
     }
     if let Some(limit) = query.limit {
-        return Ok(bounded_projected_page(
-            provider,
-            query,
-            pending,
-            None,
-            limit,
-            MAX_PENDING_NATIVE_SCAN,
-        )?
-        .items
-        .into_iter()
-        .map(|item| item.ticket)
-        .collect());
+        return Ok(projected_page(provider, query, pending, None, limit)?
+            .items
+            .into_iter()
+            .map(|item| item.ticket)
+            .collect());
     }
-    projected_rows(provider, query, pending)
+    if pending.len() > MAX_PENDING_POINT_READS {
+        return projected_rows_with_limit(provider, query, pending, MAX_PENDING_NATIVE_SCAN);
+    }
+    let mut rows = provider.query(&unbounded_query(query))?;
+    rows.retain(|ticket| !pending.contains_key(&ticket.native_id));
+    let filter_query = unbounded_query(query);
+    for ticket in projected_pending(provider, pending)? {
+        rows.extend(filter_provider_ticket_page(vec![ticket], &filter_query));
+    }
+    Ok(filter_provider_ticket_page(rows, query))
 }
 
 /// Read a value-keyset page from the projected Jira result. The native resume hint
@@ -97,16 +107,76 @@ pub fn query_after(
     if pending.is_empty() {
         return Ok(provider.query_after(query, after, resume, limit)?);
     }
-    bounded_projected_page(
-        provider,
-        query,
-        pending,
-        after,
-        limit,
-        MAX_PENDING_NATIVE_SCAN,
-    )
+    projected_page(provider, query, pending, after, limit)
 }
 
+/// Native page widened by the pending count: after dropping at most `P` pending
+/// rows, the first `limit + 1` remaining rows are exactly the first `limit + 1`
+/// non-pending rows after `after`, which then merge with the projected pending
+/// candidates. One native keyset read replaces a scan of the whole project.
+fn projected_page(
+    provider: &dyn TicketProvider,
+    query: &TicketQuery,
+    pending: BTreeMap<String, Vec<OutboxOperation>>,
+    after: Option<&MergeKey>,
+    limit: usize,
+) -> Result<ProviderKeysetPage, OverlayReadError> {
+    if pending.len() > MAX_PENDING_POINT_READS {
+        return bounded_projected_page(
+            provider,
+            query,
+            pending,
+            after,
+            limit,
+            MAX_PENDING_NATIVE_SCAN,
+        );
+    }
+    let native_query = unbounded_query(query);
+    let native = provider.query_after(
+        &native_query,
+        after,
+        None,
+        limit.saturating_add(pending.len()).saturating_add(1),
+    )?;
+    let filter_query = unbounded_query(query);
+    let mut candidates = Vec::with_capacity(limit.saturating_add(1).min(501));
+    for item in native.items {
+        if !pending.contains_key(&item.ticket.native_id) {
+            retain_candidate(&mut candidates, item.ticket, &filter_query, after, limit);
+        }
+    }
+    for ticket in projected_pending(provider, pending)? {
+        retain_candidate(&mut candidates, ticket, &filter_query, after, limit);
+    }
+    Ok(keyset_page_from_rows(candidates, query, after, limit))
+}
+
+/// Current remote state for each pending issue with its queued edits applied. The
+/// durable admission snapshot stands in when the provider cannot return the issue.
+fn projected_pending(
+    provider: &dyn TicketProvider,
+    pending: BTreeMap<String, Vec<OutboxOperation>>,
+) -> Result<Vec<ApiTicket>, OverlayReadError> {
+    let mut rows = Vec::with_capacity(pending.len());
+    for (native_id, operations) in pending {
+        let remote = match provider.get(&native_id) {
+            Ok(mut ticket) => {
+                // List rows carry no comment bodies; keep the list contract uniform.
+                ticket.notes.clear();
+                serde_json::to_value(ticket)?
+            }
+            Err(_) => operations[0].base_ticket.clone(),
+        };
+        rows.push(serde_json::from_value(project_pending_ticket(
+            &remote,
+            &operations,
+        )?)?);
+    }
+    Ok(rows)
+}
+
+/// Fallback full scan for an unusually large pending set, where per-issue reads
+/// would cost more than paging the project once.
 fn bounded_projected_page(
     provider: &dyn TicketProvider,
     query: &TicketQuery,
@@ -216,14 +286,6 @@ fn pending_for_connection(
     Ok(pending)
 }
 
-fn projected_rows(
-    provider: &dyn TicketProvider,
-    query: &TicketQuery,
-    pending: BTreeMap<String, Vec<OutboxOperation>>,
-) -> Result<Vec<ApiTicket>, OverlayReadError> {
-    projected_rows_with_limit(provider, query, pending, MAX_PENDING_NATIVE_SCAN)
-}
-
 fn projected_rows_with_limit(
     provider: &dyn TicketProvider,
     query: &TicketQuery,
@@ -323,6 +385,7 @@ mod tests {
     struct GeneratedJira {
         count: usize,
         search_calls: AtomicUsize,
+        get_calls: AtomicUsize,
     }
 
     impl GitHubTransport for GeneratedJira {
@@ -340,7 +403,8 @@ mod tests {
                         "summary":format!("Issue {index:06}"),"description":null,
                         "status":{"statusCategory":{"key":"new"}},
                         "priority":{"name":"Medium"},"issuetype":{"name":"Task"},
-                        "labels":[],"assignee":null,
+                        "labels":if index % 100 == 7 { vec!["hot"] } else { vec![] },
+                        "assignee":null,
                         "created":"2026-10-01T00:00:00Z","updated":"2026-10-01T00:00:00Z",
                         "resolutiondate":null
                     }
@@ -354,15 +418,24 @@ mod tests {
                     .unwrap_or("0")
                     .parse::<usize>()
                     .unwrap();
-                let end = (start + body["maxResults"].as_u64().unwrap() as usize).min(self.count);
+                // Honor the pushed-down label clause like Jira does.
+                let matching = (0..self.count)
+                    .filter(|index| {
+                        !body["jql"].as_str().unwrap().contains("labels = \"hot\"")
+                            || index % 100 == 7
+                    })
+                    .collect::<Vec<_>>();
+                let end =
+                    (start + body["maxResults"].as_u64().unwrap() as usize).min(matching.len());
                 json!({
-                    "issues":(start..end).map(issue).collect::<Vec<_>>(),
-                    "isLast":end == self.count,
-                    "nextPageToken":(end < self.count).then(||end.to_string()),
+                    "issues":matching[start..end].iter().copied().map(issue).collect::<Vec<_>>(),
+                    "isLast":end == matching.len(),
+                    "nextPageToken":(end < matching.len()).then(||end.to_string()),
                 })
             } else if method == "GET" && url.contains("/comment?") {
                 json!({"comments":[],"total":0})
             } else if method == "GET" && url.contains("/issue/ENG-") {
+                self.get_calls.fetch_add(1, Ordering::Relaxed);
                 let index = url.rsplit('-').next().unwrap().parse::<usize>().unwrap();
                 issue(index)
             } else {
@@ -380,6 +453,7 @@ mod tests {
         let transport = Arc::new(GeneratedJira {
             count,
             search_calls: AtomicUsize::new(0),
+            get_calls: AtomicUsize::new(0),
         });
         let provider = JiraProvider::new(
             JiraConfig {
@@ -668,6 +742,167 @@ mod tests {
         assert_eq!(transport.search_calls.load(Ordering::Relaxed), 3);
     }
 
+    fn tag_patch(id: &str, ticket: &ApiTicket, tags: &[&str]) -> OutboxAdmission {
+        OutboxAdmission::new(
+            id,
+            ticket,
+            ProviderPatch {
+                tags: Some(tags.iter().map(|tag| (*tag).to_string()).collect()),
+                ..ProviderPatch::default()
+            },
+        )
+        .unwrap()
+    }
+
+    /// HS2-5XXM4P: a pushed-down label filter reads only matching native pages while
+    /// pending edits still move issues into and out of the result.
+    #[test]
+    fn pushdown_overlay_reads_matching_pages_and_moves_pending_rows() {
+        let (provider, transport) = generated_jira(10_000);
+        let dir = tempfile::tempdir().unwrap();
+        let mut outbox = ProviderOutbox::open(dir.path().join("outbox.sqlite"), 10).unwrap();
+        let leaves = provider.get("ENG-000007").unwrap();
+        let enters = provider.get("ENG-000008").unwrap();
+        let missing = provider.get("ENG-020000").unwrap();
+        outbox
+            .admit_batch(&[
+                tag_patch("leaves", &leaves, &[]),
+                tag_patch("enters", &enters, &["hot"]),
+                tag_patch("missing-enters", &missing, &["hot"]),
+            ])
+            .unwrap();
+        transport.search_calls.store(0, Ordering::Relaxed);
+        transport.get_calls.store(0, Ordering::Relaxed);
+        let hot = TicketQuery {
+            tags: vec!["hot".into()],
+            sort: SortKey::Created,
+            ..TicketQuery::default()
+        };
+
+        let rows = query(&provider, &outbox, "jira-test", &hot).unwrap();
+        let ids = rows
+            .iter()
+            .map(|row| row.native_id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(rows.len(), 101);
+        assert!(!ids.contains(&"ENG-000007"));
+        assert!(ids.contains(&"ENG-000008") && ids.contains(&"ENG-020000"));
+        assert_eq!(transport.search_calls.load(Ordering::Relaxed), 1);
+        assert_eq!(transport.get_calls.load(Ordering::Relaxed), 3);
+
+        // Walk every keyset page; the union must equal the unpaged result exactly.
+        transport.search_calls.store(0, Ordering::Relaxed);
+        let mut seen = Vec::new();
+        let mut after = None;
+        loop {
+            let page = query_after(
+                &provider,
+                &outbox,
+                "jira-test",
+                &hot,
+                after.as_ref(),
+                None,
+                20,
+            )
+            .unwrap();
+            seen.extend(page.items.iter().map(|item| item.ticket.native_id.clone()));
+            if page.exhausted {
+                break;
+            }
+            after = Some(MergeKey::from_ticket(&page.items.last().unwrap().ticket));
+        }
+        let mut expected = ids.iter().map(|id| (*id).to_string()).collect::<Vec<_>>();
+        expected.sort();
+        let mut walked = seen.clone();
+        walked.sort();
+        walked.dedup();
+        assert_eq!(walked.len(), seen.len(), "keyset pages repeated a row");
+        assert_eq!(walked, expected);
+        // Six pages over a 100-row label result, never the 100-page project scan.
+        assert!(transport.search_calls.load(Ordering::Relaxed) <= 12);
+
+        // Baseline: the pre-pushdown full scan pages the whole project.
+        transport.search_calls.store(0, Ordering::Relaxed);
+        let baseline = projected_rows_with_limit(
+            &provider,
+            &TicketQuery {
+                tags: vec![],
+                ..hot.clone()
+            },
+            pending_for_connection(&outbox, "jira-test").unwrap(),
+            MAX_PENDING_NATIVE_SCAN,
+        )
+        .unwrap();
+        assert_eq!(baseline.len(), 10_001);
+        assert_eq!(transport.search_calls.load(Ordering::Relaxed), 100);
+    }
+
+    /// Adversarial: a pending edit that is later re-edited back, an empty-then-refilled
+    /// pending set, and more pending issues than point reads (full-scan fallback) all
+    /// return the same membership as the projection rule.
+    #[test]
+    fn pushdown_overlay_matches_full_scan_across_pending_transitions() {
+        let (provider, transport) = generated_jira(1_000);
+        let dir = tempfile::tempdir().unwrap();
+        let mut outbox = ProviderOutbox::open(dir.path().join("outbox.sqlite"), 200).unwrap();
+        let hot = TicketQuery {
+            tags: vec!["hot".into()],
+            sort: SortKey::Created,
+            ..TicketQuery::default()
+        };
+        let ids = |rows: Vec<ApiTicket>| {
+            let mut ids = rows
+                .into_iter()
+                .map(|row| row.native_id)
+                .collect::<Vec<_>>();
+            ids.sort();
+            ids
+        };
+        let full = |outbox: &ProviderOutbox| {
+            ids(projected_rows_with_limit(
+                &provider,
+                &hot,
+                pending_for_connection(outbox, "jira-test").unwrap(),
+                MAX_PENDING_NATIVE_SCAN,
+            )
+            .unwrap())
+        };
+        assert_eq!(
+            ids(query(&provider, &outbox, "jira-test", &hot).unwrap()).len(),
+            10
+        );
+
+        let leaves = provider.get("ENG-000107").unwrap();
+        outbox
+            .admit_batch(&[
+                tag_patch("out", &leaves, &[]),
+                tag_patch("back", &leaves, &["hot"]),
+            ])
+            .unwrap();
+        let reedited = ids(query(&provider, &outbox, "jira-test", &hot).unwrap());
+        assert!(reedited.contains(&"ENG-000107".to_string()));
+        assert_eq!(reedited, full(&outbox));
+
+        let many = (0..60)
+            .map(|index| {
+                let ticket = provider.get(&format!("ENG-{:06}", index * 10 + 1)).unwrap();
+                tag_patch(&format!("many-{index}"), &ticket, &["hot"])
+            })
+            .collect::<Vec<_>>();
+        outbox.admit_batch(&many).unwrap();
+        transport.search_calls.store(0, Ordering::Relaxed);
+        transport.get_calls.store(0, Ordering::Relaxed);
+        let fallback = ids(query(&provider, &outbox, "jira-test", &hot).unwrap());
+        assert_eq!(fallback.len(), 70);
+        // Over MAX_PENDING_POINT_READS: one full scan and no per-issue reads.
+        assert_eq!(transport.get_calls.load(Ordering::Relaxed), 0);
+        assert_eq!(transport.search_calls.load(Ordering::Relaxed), 10);
+        assert_eq!(fallback, full(&outbox));
+        let first_page = query_after(&provider, &outbox, "jira-test", &hot, None, None, 5).unwrap();
+        assert_eq!(first_page.items.len(), 5);
+        assert!(!first_page.exhausted);
+    }
+
     #[test]
     fn unpaged_overlay_rejects_a_native_scan_over_the_limit() {
         let (provider, transport) = generated_jira(250);
@@ -730,10 +965,11 @@ mod tests {
         let started = std::time::Instant::now();
         let page = match mode.as_str() {
             "full" => keyset_page_from_rows(
-                projected_rows(
+                projected_rows_with_limit(
                     &provider,
                     &query,
                     pending_for_connection(&outbox, "jira-test").unwrap(),
+                    MAX_PENDING_NATIVE_SCAN,
                 )
                 .unwrap(),
                 &query,
