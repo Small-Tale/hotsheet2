@@ -1,3 +1,4 @@
+import { isContentItemActivation } from '@kerfjs/ui/wire-content-items';
 import { delegate } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -155,31 +156,21 @@ export interface FeedbackChoicesBindings {
   readonly toggle: (noteId: string, choiceId: string, modifiers: FeedbackChoiceModifiers) => void;
 }
 
-const choiceEmbeddedControl = 'a,[data-action="open-attachment-gallery"]';
-
-/** Wire click and Enter/Space toggling of feedback choices under `root`; embedded links keep their action. */
+/**
+ * Wire pointer toggling of feedback choices under `root`. The choices are Kerf
+ * multi-select ContentItems: `wireContentItems` (registered once app-wide)
+ * turns Enter/Space into a click, and nested links or gallery buttons keep
+ * their own action because `isContentItemActivation` rejects them.
+ */
 export function wireFeedbackChoices(root: HTMLElement, bindings: FeedbackChoicesBindings): () => void {
   const lifetime = createScope();
-  const toggle = (event: MouseEvent | KeyboardEvent, target: Element) => {
-    const { noteId, choiceId } = (target as HTMLElement).dataset;
-    if (!noteId || !choiceId) return;
-    bindings.toggle(noteId, choiceId, { additive: event.metaKey || event.ctrlKey, range: event.shiftKey });
-  };
   lifetime.add(
     delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.toggleFeedbackChoice.selector, (event, target) => {
-      if ((event.target as Element).closest(choiceEmbeddedControl)) return;
-      toggle(event as MouseEvent, target);
-    }),
-  );
-  lifetime.add(
-    delegate(root, 'keydown', INSPECTOR_AND_EDITOR_ACTIONS.toggleFeedbackChoice.selector, (event, target) => {
-      if (
-        !['Enter', ' '].includes((event as KeyboardEvent).key) ||
-        (event.target as Element).closest(choiceEmbeddedControl)
-      )
-        return;
-      event.preventDefault();
-      toggle(event as KeyboardEvent, target);
+      const item = target as HTMLElement,
+        { noteId, choiceId } = item.dataset;
+      if (!noteId || !choiceId || !isContentItemActivation(event, item)) return;
+      const mouse = event as MouseEvent;
+      bindings.toggle(noteId, choiceId, { additive: mouse.metaKey || mouse.ctrlKey, range: mouse.shiftKey });
     }),
   );
   return () => {

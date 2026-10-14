@@ -164,49 +164,6 @@
 .note-card__inline-reply {
   min-height: remify(64px);
 }
-/* Selectable feedback choices rendered as pressed toggle cards. */
-.note-card__choices {
-  display: grid;
-  gap: var(--kui-space-xs);
-}
-.note-card__choice {
-  display: grid;
-  width: 100%;
-  min-width: 0;
-  padding: var(--kui-space-xs) var(--kui-space-m);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-l);
-  color: inherit;
-  background: var(--wa-color-surface-default);
-  font: inherit;
-  /* Choice text matches note body text and scales with the reading scale. */
-  font-size: calc(var(--hotsheet-reading-scale, 1) * var(--wa-font-size-s));
-  line-height: 1.5;
-  text-align: left;
-  cursor: pointer;
-  grid-template-columns: remify(24px) minmax(0, 1fr);
-  align-items: start;
-  gap: var(--kui-space-xs);
-}
-.note-card__choice:hover {
-  border-color: var(--wa-color-success-fill-loud);
-}
-.note-card__choice[aria-pressed='true'] {
-  border-color: var(--wa-color-success-fill-loud);
-  background: var(--wa-color-success-fill-quiet);
-}
-.note-card__choice-check {
-  display: grid;
-  width: remify(24px);
-  height: remify(24px);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-pill);
-  place-items: center;
-}
-.note-card__choice[aria-pressed='true'] .note-card__choice-check {
-  border-color: var(--wa-color-success-fill-loud);
-  background: var(--wa-color-success-fill-normal);
-}
 .note-card[data-kind='status'] .note-card__kind {
   color: var(--wa-color-text-link);
 }

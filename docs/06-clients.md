@@ -3362,11 +3362,12 @@ unsupported, so they cannot create this state through Hot Sheet.
   and render the exact acknowledgement as a subtle ordinary note rather than another
   warning surface.
 - **Feedback prompts may offer explicit choices.** An uppercase `CHOICE` or `CHOICE:`
-  line immediately followed by a Markdown list becomes a set of rounded selection
-  controls. A normal click selects one option or clears the sole selection; Command on
+  line immediately followed by a Markdown list becomes a labeled multi-select grid of
+  Kerf `ContentItem` rows (`selectionMode="multiple"`, HS2-3XV34B). A normal click selects one option or clears the sole selection; Command on
   macOS and Ctrl elsewhere toggles additional options, while Shift selects a range.
-  Zero or multiple selections are always valid. Selected controls use a green border,
-  quiet green fill, and checkmark. Option content uses the same Markdown and attachment
+  Enter or Space on a focused option acts as a normal click, and arrow keys move between
+  options. Zero or multiple selections are always valid. Selected options use Kerf's
+  selected ContentItem presentation (`aria-selected`). Option content uses the same Markdown and attachment
   reference rendering as notes, including image references. Submission records the
   selected option text in the regular response note and may include the existing
   freeform and inline responses; the choice list never makes an answer mandatory.

@@ -1,6 +1,7 @@
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { List } from '@kerfjs/ui/list';
 import { Select } from '@kerfjs/ui/select';
+import { wireContentItems } from '@kerfjs/ui/wire-content-items';
 import { delegate, delegateCapture, effect, type SafeHtml, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -643,6 +644,8 @@ function wireContentComponentsDemo(root: HTMLElement): () => void {
     }),
   );
   let demoFeedbackChoiceAnchor: string | undefined = 'choice-1';
+  // Feedback choices are Kerf multi-select ContentItems; Kerf turns Enter/Space into their click (HS2-3XV34B).
+  demoListeners.add(wireContentItems(root));
   demoListeners.add(
     wireFeedbackChoices(root, {
       toggle: (noteId, choiceId, modifiers) => {

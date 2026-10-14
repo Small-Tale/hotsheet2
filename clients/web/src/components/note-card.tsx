@@ -3,10 +3,11 @@ import './native-textarea.css';
 import './note-card.css';
 
 import { ContentItem, type ContentItemAppearance } from '@kerfjs/ui/content-item';
-import { foregroundColor, rem, uiColor } from '@kerfjs/ui/css-values';
+import { rem, uiColor } from '@kerfjs/ui/css-values';
 import { DisclosureArrow } from '@kerfjs/ui/disclosure-arrow';
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Activity, Check, CircleAlert, FilePenLine, MessageSquareText, Plus, RefreshCw, Trash2, X } from 'lucide';
+import { Activity, CircleAlert, FilePenLine, MessageSquareText, Plus, RefreshCw, Trash2, X } from 'lucide';
 
 import type { AttachmentReferenceContext } from '../attachment-references';
 import { parseFeedbackChoices } from '../feedback-choices';
@@ -179,36 +180,26 @@ export function FeedbackPrompt({
             replies={inlineReplies}
             attachmentContext={attachmentContext}
           />
-          <div class="note-card__choices" role="group" aria-label="Feedback choices">
+          <List selectionMode="multiple" ariaLabel="Feedback choices" gap="xs">
             {choiceGroup.choices.map((choice) => (
-              <div
-                class="note-card__choice"
-                {...INSPECTOR_AND_EDITOR_ACTIONS.toggleFeedbackChoice.attrs}
-                data-note-id={id}
-                data-choice-id={choice.id}
-                role="button"
-                tabIndex={0}
-                aria-pressed={selected.has(choice.id) ? 'true' : 'false'}
+              <ContentItem
+                interactive
+                action={INSPECTOR_AND_EDITOR_ACTIONS.toggleFeedbackChoice.value}
+                itemId={choice.id}
+                selectionMode="multiple"
+                selected={selected.has(choice.id)}
+                frame="framed"
+                rootAttributes={{ 'data-note-id': id, 'data-choice-id': choice.id }}
               >
-                <span class="note-card__choice-check" aria-hidden="true">
-                  <LucideIcon
-                    size="xs"
-                    icon={Check}
-                    name="check"
-                    color={selected.has(choice.id) ? uiColor('neutral-on-loud') : foregroundColor('transparent')}
-                  />
-                </span>
-                <span>
-                  <MarkdownPreview
-                    source={choice.markdown}
-                    attachmentContext={attachmentContext}
-                    size="inherit"
-                    media="thumbnail"
-                  />
-                </span>
-              </div>
+                <MarkdownPreview
+                  source={choice.markdown}
+                  attachmentContext={attachmentContext}
+                  size="inherit"
+                  media="thumbnail"
+                />
+              </ContentItem>
             ))}
-          </div>
+          </List>
           <FeedbackBlocks
             source={choiceGroup.after}
             sourceStart={choiceGroup.afterStart}

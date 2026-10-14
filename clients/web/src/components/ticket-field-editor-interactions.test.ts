@@ -24,6 +24,10 @@ vi.mock('kerfjs', async (original) => ({
     };
   },
 }));
+// Kerf decides whether a click is the card's own activation or a nested control's (HS2-3XV34B).
+vi.mock('@kerfjs/ui/wire-content-items', () => ({
+  isContentItemActivation: (event: { target: { nested?: boolean } }) => !event.target.nested,
+}));
 vi.mock('../ticket-title-editing', () => ({
   normalizeTicketTitleField: (field: { value: string }) => field.value.replace(/\s*\n\s*/g, ' '),
   ticketTitleKeyFinishesEdit: (event: KeyboardEvent) => event.key === 'Enter' && !event.isComposing,
@@ -104,20 +108,16 @@ describe('ticket field editor wiring (HS2-KAWNER)', () => {
     expect(bindings.finish).toHaveBeenCalledWith(field);
   });
 
-  it('toggles feedback choices with modifiers but leaves embedded links alone', () => {
+  it('toggles feedback choices with modifiers but leaves nested controls alone', () => {
     const bindings = { toggle: vi.fn() };
     wireFeedbackChoices(root, bindings);
-    const choice = { dataset: { noteId: 'n', choiceId: 'c' } } as unknown as Element,
-      plain = { closest: () => null },
-      link = { closest: () => ({}) };
     const click = handler('click', '[data-action="toggle-feedback-choice"]'),
-      keydown = handler('keydown', '[data-action="toggle-feedback-choice"]');
-    click({ target: plain, metaKey: true, ctrlKey: false, shiftKey: false }, choice);
-    keydown(keyEvent('Enter', { target: plain, shiftKey: true }), choice);
-    click({ target: link, metaKey: false, ctrlKey: false, shiftKey: false }, choice);
-    keydown(keyEvent('Enter', { target: link }), choice);
-    keydown(keyEvent('x', { target: plain }), choice);
-    click({ target: plain, metaKey: false, ctrlKey: false, shiftKey: false }, { dataset: {} });
+      choice = { dataset: { noteId: 'n', choiceId: 'c' } },
+      nested = { nested: true };
+    click({ target: choice, metaKey: true, ctrlKey: false, shiftKey: false }, choice);
+    click({ target: choice, metaKey: false, ctrlKey: false, shiftKey: true }, choice);
+    click({ target: nested, metaKey: false, ctrlKey: false, shiftKey: false }, choice);
+    click({ target: choice, metaKey: false, ctrlKey: false, shiftKey: false }, { dataset: {} });
     expect(bindings.toggle.mock.calls).toEqual([
       ['n', 'c', { additive: true, range: false }],
       ['n', 'c', { additive: false, range: true }],

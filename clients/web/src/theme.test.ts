@@ -157,7 +157,6 @@ describe('shared client theme', () => {
       '--wa-color-text-quiet',
       '--wa-color-brand-fill-quiet',
       '--wa-color-brand-border-quiet',
-      '--wa-color-success-fill-quiet',
       '--wa-color-warning-fill-quiet',
       '--wa-color-danger-fill-quiet',
       '--wa-color-neutral-fill-quiet',

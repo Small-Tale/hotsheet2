@@ -2639,9 +2639,14 @@
       },
       "state": [],
       "wiring": {
-        "required": false,
-        "helpers": [],
-        "obligations": []
+        "required": true,
+        "helpers": [
+          "wireContentItems",
+          "wireFeedbackChoices"
+        ],
+        "obligations": [
+          "Feedback choices are Kerf multi-select ContentItems in a labeled List grid; wire wireContentItems once on the root for Enter/Space and wireFeedbackChoices for the modifier-aware toggle."
+        ]
       },
       "responsive": {
         "owner": "not-applicable",

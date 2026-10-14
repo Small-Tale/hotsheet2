@@ -167,9 +167,14 @@ describe('NoteCard', () => {
     expect(markup.match(/data-action="toggle-feedback-choice"/g)).toHaveLength(2);
     expect(markup).not.toContain('CHOICE:');
     expect(markup).toContain('<strong>Keep</strong>');
-    expect(markup).toContain('aria-pressed="false"');
-    expect(markup).toContain('aria-pressed="true"');
-    expect(markup).toContain('data-lucide="check"');
+    // Kerf multi-select ContentItems in a labeled List grid own the selection chrome (HS2-3XV34B).
+    expect(markup).toMatch(
+      /role="grid"[^>]*aria-label="Feedback choices"|aria-label="Feedback choices"[^>]*role="grid"/,
+    );
+    expect(markup).toContain('aria-selected="false"');
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).toContain('data-selection-mode="multiple"');
+    expect(markup).not.toContain('note-card__choice');
     expect(markup).toContain('src="/checkouts/project/tickets/HS2-CHOICE/attachments/by-name/proof.png"');
     expect(markup).toContain('placeholder="Additional response (optional)"');
   });
@@ -280,9 +285,7 @@ describe('NoteCard', () => {
     expect(css).toMatch(/\.note-card \{[^}]*gap: var\(--kui-space-xs\)/);
     expect(css).toMatch(/\.note-card__kind \{[^}]*gap: var\(--kui-space-2xs\)/);
     expect(css).toMatch(/\.note-card__editor > div \{[^}]*gap: var\(--kui-space-xs\)/);
-    expect(css).toMatch(
-      /\.note-card__choice \{[^}]*padding: var\(--kui-space-xs\) var\(--kui-space-m\);[^}]*grid-template-columns: remify\(24px\)[^}]*gap: var\(--kui-space-xs\)/,
-    );
+    expect(css).not.toContain('note-card__choice');
     expect(css).toMatchSource(/__inline-reply-row button \{[^}]*width: remify\(32px\); height: remify\(32px\)/);
     // The response badge carries a Lucide icon, never a font glyph (HS2-MDJRCM).
     expect(css).not.toMatch(/feedback-block::after|content: '\+'/);
