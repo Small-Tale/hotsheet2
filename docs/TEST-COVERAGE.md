@@ -7,7 +7,10 @@ different server build still does. The browser flow in
 `clients/web/tests/compatibility.spec.ts` keeps project data visible without a
 false build-mismatch banner; the local production-host
 integration flow remains in `clients/web/scripts/local-host.e2e.test.mjs`.
-HS2-6VQ5RV also pins the production bundle and executables at host startup;
+HS2-6VQ5RV also runs that flow against a private checkout whose `plugins/` templates are
+edited after the host starts, then asserts no `setupWarning` on reopen and no setup banner
+after a reload, on a phone page, or in a fresh context; `project-bridge.test.ts` covers the
+stable-host deferral for both host kinds. It also pins the production bundle and executables at host startup;
 `clients/web/src/local-host.test.ts` overwrites and deletes the working outputs,
 then checks that the pinned document, asset, and executable stay available. The
 isolated production-host browser flow in `clients/web/scripts/local-host.e2e.test.mjs`

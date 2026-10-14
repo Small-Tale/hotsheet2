@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
-import { chmod, copyFile, mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
+import { appendFile, chmod, copyFile, cp, mkdir, mkdtemp, readdir, rm, stat } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -102,6 +102,9 @@ it('serves the production client and the local bridge without Vite', async () =>
   // Everything that can fail runs inside the try, so the host and its machine server are always
   // stopped: a browser that failed to launch used to leave both running (HS2-WQ65KT).
   try {
+    // HS2-6VQ5RV: a private checkout whose setup templates the test edits after the host starts.
+    const checkout = resolve(home, 'checkout');
+    await cp(resolve(repoRoot, 'plugins'), resolve(checkout, 'plugins'), { recursive: true });
     const candidateBin = resolve(home, 'candidate-bin');
     await mkdir(candidateBin);
     const candidates = Object.fromEntries(
@@ -119,7 +122,13 @@ it('serves the production client and the local bridge without Vite', async () =>
     ).build_revision;
     child = spawn(process.execPath, [resolve(buildRoot, 'dist-host/local-host.js'), '--port', String(port)], {
       cwd: webRoot,
-      env: { ...productionEnvironment, ...candidates, HOT_SHEET_BUILD_REVISION: revision, HOTSHEET_HOME: home },
+      env: {
+        ...productionEnvironment,
+        ...candidates,
+        HOT_SHEET_BUILD_REVISION: revision,
+        HOTSHEET_HOME: home,
+        HOTSHEET_REPO_ROOT: checkout,
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     child.stdout.on('data', (chunk) => (log += chunk));
@@ -170,7 +179,9 @@ it('serves the production client and the local bridge without Vite', async () =>
       body: JSON.stringify({ root: project, ticketStore }),
     });
     expect(opened.status).toBe(201);
-    const { id, apiPath } = await opened.json(),
+    const openedBody = await opened.json();
+    expect(openedBody.setupWarning).toBeUndefined();
+    const { id, apiPath } = openedBody,
       api = `${origin}${apiPath}`,
       hostsProject = async () => (await (await fetch(`${api}/stores`)).json()).some((store) => store.prefix === 'LH');
     expect((await fetch(`${api}/ws/poll?timeout_ms=0&since=0&client=e2e-tab`)).status).toBe(200);
@@ -185,6 +196,22 @@ it('serves the production client and the local bridge without Vite', async () =>
     expect((await fetch(`${api}/checkouts/${encodeURIComponent(id)}/tickets`)).status).toBe(200);
     expect(await hostsProject()).toBe(true);
 
+    // HS2-6VQ5RV: setup templates change in the checkout after the host started (a source edit
+    // without a relaunch). Refreshes and other devices must not see a setup banner.
+    const pluginDirectory = (await readdir(resolve(checkout, 'plugins'), { withFileTypes: true })).find((entry) =>
+      entry.isDirectory(),
+    );
+    const pluginFile = (await readdir(resolve(checkout, 'plugins', pluginDirectory.name))).find(Boolean);
+    await appendFile(resolve(checkout, 'plugins', pluginDirectory.name, pluginFile), '\nedited after host start\n');
+    const reopened = await fetch(`${origin}/__hotsheet/projects/open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root: project, ticketStore }),
+    });
+    expect(reopened.status).toBe(201);
+    expect((await reopened.json()).setupWarning).toBeUndefined();
+    const setupBanner = '[data-component="project-setup-warning-banner"]';
+
     // A second browser client can render the project through the still-running production host.
     // Capture the connected state at the viewport of the reported failure and on a phone.
     await page.setViewportSize({ width: 1969, height: 1240 });
@@ -193,6 +220,10 @@ it('serves the production client and the local bridge without Vite', async () =>
     await page.getByRole('textbox', { name: 'Project Folder' }).fill(project);
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('heading', { name: 'Queue', level: 1 }).waitFor({ state: 'visible' });
+    expect(await page.locator(setupBanner).count()).toBe(0);
+    await page.reload();
+    await page.getByRole('heading', { name: 'Queue', level: 1 }).waitFor({ state: 'visible' });
+    expect(await page.locator(setupBanner).count()).toBe(0);
     await mkdir(resolve(webRoot, 'target/visual-captures'), { recursive: true });
     await page.screenshot({
       path: resolve(webRoot, 'target/visual-captures/hs2-efewsc-connected-wide.png'),
@@ -204,6 +235,7 @@ it('serves the production client and the local bridge without Vite', async () =>
     await phone.getByRole('textbox', { name: 'Project Folder' }).fill(project);
     await phone.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await phone.getByRole('combobox', { name: 'Ticket view' }).waitFor({ state: 'visible' });
+    expect(await phone.locator(setupBanner).count()).toBe(0);
     await phone.screenshot({
       path: resolve(webRoot, 'target/visual-captures/hs2-efewsc-connected-narrow.png'),
       fullPage: true,
@@ -224,6 +256,7 @@ it('serves the production client and the local bridge without Vite', async () =>
     const linked = await fresh.newPage();
     await linked.goto(`${origin}/?project=${encodeURIComponent(project)}`);
     await linked.getByRole('heading', { name: 'Queue', level: 1 }).waitFor({ state: 'visible' });
+    expect(await linked.locator(setupBanner).count()).toBe(0);
     await linked.screenshot({ path: resolve(webRoot, 'target/visual-captures/hs2-r4209f-project-link.png') });
     const narrowLink = await browser.newPage({ viewport: { width: 390, height: 844 } });
     await narrowLink.goto(`${origin}/?project=${encodeURIComponent(project)}`);

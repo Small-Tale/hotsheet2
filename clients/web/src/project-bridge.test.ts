@@ -21,6 +21,7 @@ import {
   hasHs1Registrations,
   hs1ChannelSlug,
   hs1MigrationArgs,
+  isStableLocalHost,
   linkedTicketStore,
   listServerCheckouts,
   localStoreInitArgs,
@@ -262,6 +263,38 @@ describe('project setup compatibility', () => {
       /No setup files were changed/i,
     );
     expect(staleRunner).toHaveBeenCalledOnce();
+  });
+  it('keeps a stable host silent across refreshes and devices after later template edits (HS2-6VQ5RV)', async () => {
+    const fingerprint = await developmentSetupAssetsFingerprint();
+    expect(isStableLocalHost({})).toBe(false);
+    expect(isStableLocalHost({ HOTSHEET_LOCAL_HOST_SNAPSHOT: '1' })).toBe(true);
+    expect(isStableLocalHost({ HOTSHEET_WEB_STABLE_DEV: '1' })).toBe(true);
+    for (const variable of ['HOTSHEET_LOCAL_HOST_SNAPSHOT', 'HOTSHEET_WEB_STABLE_DEV']) {
+      vi.stubEnv(variable, '1');
+      try {
+        // Pinned CLI from host start; templates edited in the checkout afterwards.
+        const pinned = vi.fn().mockResolvedValue(JSON.stringify({ ...cli, setup_assets_fingerprint: '0'.repeat(64) }));
+        // First page load, a refresh, and a second device: no warning and no setup write each time.
+        for (let open = 0; open < 3; open += 1)
+          await expect(refreshLocalProjectSetup('/work/code', '/work/tickets.hs2', pinned)).resolves.toEqual({});
+        expect(pinned).toHaveBeenCalledTimes(3);
+        expect(pinned.mock.calls.every(([, args]) => (args as string[]).includes('compatibility'))).toBe(true);
+        // After a deliberate rebuild/relaunch the CLI matches again and the refresh runs.
+        const relaunched = vi
+          .fn()
+          .mockResolvedValueOnce(JSON.stringify({ ...cli, setup_assets_fingerprint: fingerprint }))
+          .mockResolvedValueOnce(JSON.stringify({ set_up: [], removed: [] }));
+        await expect(refreshLocalProjectSetup('/work/code', '/work/tickets.hs2', relaunched)).resolves.toEqual({});
+        expect(relaunched).toHaveBeenCalledTimes(2);
+        // A CLI with no digest at all is a broken build, not drift: still reported.
+        const missing = vi.fn().mockResolvedValue(JSON.stringify(cli));
+        await expect(refreshLocalProjectSetup('/work/code', '/work/tickets.hs2', missing)).rejects.toThrow(
+          /cargo build -p hotsheet-cli/i,
+        );
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    }
   });
 });
 

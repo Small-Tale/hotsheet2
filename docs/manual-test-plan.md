@@ -126,7 +126,7 @@ host and server running while editing a Rust source file in the disposable check
 where its binaries were built. Rebuild the web client and Rust executables in that
 checkout without relaunching the host.
 Refresh one client and open the project in a second browser. Both should remain connected
-without a false build-mismatch banner, and the second browser should still receive the
+without a false build-mismatch or setup-template banner, and the second browser should still receive the
 original client bundle. Restore the source file, then deliberately rebuild and relaunch;
 confirm the new build is selected. Automated snapshot tests cover overwritten and
 deleted working artifacts; the real LAN transition remains a manual check.

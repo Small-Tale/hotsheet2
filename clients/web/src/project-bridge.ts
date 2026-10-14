@@ -341,17 +341,26 @@ export async function developmentSetupAssetsFingerprint(repositoryRoot = develop
 /** Set by `snapshotLocalHostArtifacts` when the host runs startup copies of its binaries (HS2-A3C894). */
 export const LOCAL_HOST_SNAPSHOT_ENV = 'HOTSHEET_LOCAL_HOST_SNAPSHOT';
 
+/** A stable host (production snapshot or stable dev server) whose pinned CLI predates later
+ * in-tree template edits. Expected drift between deliberate restarts, not a broken build. */
+export class SetupTemplatesChangedSinceHostStartError extends Error {}
+
+/** True for the hosts `npm run {prod,dev}:rebuild-lan` start: they stay on what they started with. */
+export function isStableLocalHost(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {
+  return environment[LOCAL_HOST_SNAPSHOT_ENV] === '1' || environment.HOTSHEET_WEB_STABLE_DEV === '1';
+}
+
 export function requireCurrentSetupAssets(
   cli: CliCompatibility,
   sourceFingerprint: string,
-  snapshotHost = process.env[LOCAL_HOST_SNAPSHOT_ENV] === '1',
+  snapshotHost = isStableLocalHost(),
 ): void {
   if (cli.setup_assets_fingerprint === sourceFingerprint) return;
   // A snapshot host's CLI is intentionally pinned at startup, so in-tree template edits are expected
   // drift rather than a broken build. Still refuse the refresh (the pinned CLI would write older
   // guidance), but say what actually fixes it (HS2-A3C894).
   if (snapshotHost && cli.setup_assets_fingerprint)
-    throw new Error(
+    throw new SetupTemplatesChangedSinceHostStartError(
       'Setup templates changed after this Hot Sheet host started. Restart the host to apply the newer project guidance. No setup files were changed.',
     );
   const detail = cli.setup_assets_fingerprint
@@ -441,7 +450,14 @@ export async function refreshLocalProjectSetup(
   store: string,
   runner: ProcessRunner = runProcess,
 ): Promise<ProjectSetupRefreshResult> {
-  await requireCurrentSetupCli(store, runner);
+  try {
+    await requireCurrentSetupCli(store, runner);
+  } catch (error) {
+    // HS2-6VQ5RV: a stable host must look the same on every refresh and device until the user
+    // restarts it. Skip the refresh silently; the next deliberate relaunch picks the templates up.
+    if (error instanceof SetupTemplatesChangedSinceHostStartError) return {};
+    throw error;
+  }
   const output = await runner(
     toolBinary(),
     ['-C', store, 'setup', '--refresh', '--project', root, '--json'],
