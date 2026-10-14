@@ -8122,6 +8122,11 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   await nameDialog.getByRole('button', { name: 'Add' }).click();
   await expect(dialog.getByRole('tab', { name: 'Focus' })).toHaveAttribute('aria-selected', 'true');
   await dialog.getByRole('tab', { name: 'Focus' }).click({ button: 'right' });
+  await expect(
+    dialog
+      .locator('[data-context-menu="terminal-visibility-group"]')
+      .getByRole('menu', { name: 'Visibility Group Actions' }),
+  ).toBeVisible();
   await dialog.locator('[data-context-menu="terminal-visibility-group"]').getByText('Rename…').click();
   await expect(groupName).toHaveValue('Focus');
   await groupName.fill('Deep Focus');
@@ -18349,7 +18354,7 @@ test('shows the attachment actions menu above the modal ticket reader (HS2-EZ10R
   await reader.getByRole('tab', { name: /Attachments/ }).click();
   await reader.getByRole('button', { name: 'More Actions for proof.png' }).click();
   const menu = page.locator('[data-context-menu="attachment"]');
-  await expect(menu.getByRole('menu').first()).toBeVisible();
+  await expect(menu.getByRole('menu', { name: 'Attachment Actions' })).toBeVisible();
   // The menu renders as a descendant of the modal reader dialog, so it is on top AND interactive
   // (the reader's modality would otherwise leave an out-of-dialog menu inert/covered, HS2-EZ10RS).
   await expect(menu).toHaveCount(1);

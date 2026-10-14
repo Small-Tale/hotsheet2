@@ -279,12 +279,13 @@ test('right-click closes mixed terminal and AI-chat ranges from either tab kind'
   await expect.poll(() => drawerOrder(drawer)).toEqual(['shell-one', chatOneId, 'shell-two', chatTwoId]);
   await drawer.locator(`[data-tab-id="${chatOneId}"]`).getByRole('tab').click({ button: 'right' });
   const chatMenu = page.locator('[data-context-menu="app-tab"]');
-  await expect(chatMenu.getByRole('menu').first()).toBeVisible();
+  await expect(chatMenu.getByRole('menu', { name: /Tab Actions$/ })).toBeVisible();
   await expect(chatMenu.getByText('Rename…')).toHaveCount(0);
   await chatMenu.getByText('Close Tabs to the Right').click();
   await expect.poll(() => drawerOrder(drawer)).toEqual(['shell-one', chatOneId]);
   await drawer.locator('[data-tab-id="shell-one"]').getByRole('tab').click({ button: 'right' });
   const terminalMenu = page.locator('[data-context-menu="app-tab"]');
+  await expect(terminalMenu.getByRole('menu', { name: /Tab Actions$/ })).toBeVisible();
   await terminalMenu.getByText('Close All Tabs').click();
   await expect.poll(() => drawerOrder(drawer)).toEqual([]);
   await expect(drawer.getByRole('tab', { name: 'Project grid' })).toHaveAttribute('aria-selected', 'true');

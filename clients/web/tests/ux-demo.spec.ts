@@ -1132,7 +1132,7 @@ test('keeps repository file action menus visible at wide and narrow sizes', asyn
   await repository.locator('[data-action="open-repository-file-menu-trigger"]').first().click();
   // A context-mode Kerf PopupMenu owns the menu surface, item geometry, and placement (HS2-HBFXQY).
   const repositoryMenu = repository.locator('[data-context-menu="repository-file"]'),
-    repositoryMenuPanel = repositoryMenu.getByRole('menu');
+    repositoryMenuPanel = repositoryMenu.getByRole('menu', { name: 'File Actions' });
   await expect(repositoryMenu.getByRole('menuitem').allTextContents()).resolves.toEqual([
     'Show Diff',
     'Open',
@@ -2710,7 +2710,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
 
   await row.click({ button: 'right' });
   const menu = page.locator('[data-context-menu="ticket"]');
-  await expect(menu.getByRole('menu').first()).toBeVisible();
+  await expect(menu.getByRole('menu', { name: 'Ticket Actions' })).toBeVisible();
   const menuItems = menu.locator('wa-dropdown-item');
   await expect(menu.locator(':scope > wa-dropdown-item')).toHaveCount(11);
   await expect(menuItems).toHaveCount(27);

@@ -1059,7 +1059,7 @@ test('opens the drawer grid tile More actions menu from a phone tap, in front of
   const more = drawer.getByRole('button', { name: 'More Actions for Codex Main' });
   await more.tap();
   const menu = page.locator('[data-context-menu="terminal"]');
-  await expect(menu.getByRole('menu').first()).toBeVisible();
+  await expect(menu.getByRole('menu', { name: 'Terminal Actions' })).toBeVisible();
   await expect(menu.locator('wa-dropdown-item')).toHaveCount(1);
   await expect(menu.getByText('Hide Terminal')).toHaveCount(0);
   // The menu must be painted in front of the terminal grid, not merely present in the DOM.

@@ -212,7 +212,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await expect(page.getByRole('button', { name: 'Delete Needs docs' })).toHaveCount(0);
   await page.getByRole('button', { name: 'More Actions for Needs docs' }).click();
   const menu = page.locator('[data-context-menu="saved-view"]');
-  await expect(menu.getByRole('menu').first()).toBeVisible();
+  await expect(menu.getByRole('menu', { name: /View Actions$/ })).toBeVisible();
   await page.waitForTimeout(250);
   await page.screenshot({
     path: 'target/visual-captures/hs2-r7gpjm-view-menu-wide.png',
@@ -250,7 +250,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await expect(savedRow).toBeInViewport();
   await savedRow.click({ button: 'right' });
   const narrowMenu = page.locator('[data-context-menu="saved-view"]');
-  await expect(narrowMenu.getByRole('menu').first()).toBeVisible();
+  await expect(narrowMenu.getByRole('menu', { name: /View Actions$/ })).toBeVisible();
   await page.waitForTimeout(250);
   await page.screenshot({
     path: 'target/visual-captures/hs2-r7gpjm-view-menu-narrow.png',

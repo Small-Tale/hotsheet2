@@ -288,6 +288,7 @@ test('opens the terminal edit menu on a long-press and copies and pastes through
 
   // Before focus mode, a long-press opens the menu and its lift does not also tap the terminal into focus.
   await touchHold(page, viewport, 700);
+  await expect(editMenu(page).getByRole('menu', { name: 'Terminal Edit Actions' })).toBeVisible();
   await expect(editMenu(page).getByRole('menuitem', { name: 'Paste' })).toBeVisible();
   await expect(drawer).not.toHaveAttribute('data-focus-mode', 'true');
   await page.keyboard.press('Escape');

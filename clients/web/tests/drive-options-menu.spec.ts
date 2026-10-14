@@ -47,6 +47,7 @@ test('uses one disclosure and aligned icon-label choices at wide and narrow size
   const model = menu.locator(':scope > wa-dropdown-item').filter({ hasText: 'Model' });
   const effort = menu.locator(':scope > wa-dropdown-item').filter({ hasText: 'Effort' });
 
+  await expect(menu.getByRole('menu', { name: 'Drive Provider, Model, and Effort Options' })).toBeVisible();
   await expect(provider).toBeVisible();
   await expect(provider.locator(':scope > [data-lucide="chevron-right"]')).toHaveCount(0);
   expect(await provider.evaluate((node) => node.shadowRoot?.querySelectorAll('[part="submenu-icon"]').length)).toBe(1);
