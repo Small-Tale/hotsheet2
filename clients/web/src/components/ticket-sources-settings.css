@@ -16,7 +16,9 @@
   /* Tall padded rows; the card border frames them, so no per-row hover border (Kerf public tokens). */
   --kui-list-item-min-height: remify(64px);
   --kui-list-item-padding-block: var(--wa-space-s);
-  --kui-list-item-padding-inline: var(--wa-space-s);
+  /* Kerf's shared ListItem/ListActionRow inset (KF-N3TDV3): 7px plus the row's 1px border and the
+     card's 1px border puts both row kinds' leading icons on the settings text edge (HS2-MWSKFQ). */
+  --kui-list-row-padding-inline: remify(7px);
   /* Kerf's group dividers need the row border, so the hover border is made transparent instead of removed. */
   --kui-color-neutral-border-normal: transparent;
   --kui-list-item-trailing-color: var(--wa-color-neutral-on-quiet);

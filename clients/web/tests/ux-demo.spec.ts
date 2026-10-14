@@ -8808,6 +8808,80 @@ test('shows the source mark after the type on cards and beside the inspector num
   );
 });
 
+test('sidebar component demos render at the 272px production rail width (HS2-5K0VN4, KF-DH5MH8)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const component of [
+      'project-summary',
+      'repository-summary',
+      'view-navigation',
+      'command-navigation',
+      'settings-navigation',
+      'notification-navigation',
+      'drive-control',
+      'drive-options-menu',
+      'terminal-operations-sidebar',
+    ]) {
+      await page.goto(`/ux-demo?component=${component}`);
+      const frames = page.locator('[data-width="sidebar"]');
+      await expect(frames.first()).toBeVisible();
+      for (const box of await frames.evaluateAll((nodes) =>
+        nodes.map((node) => ({
+          width: node.getBoundingClientRect().width,
+          overflow: node.scrollWidth > node.clientWidth + 1,
+        })),
+      ))
+        expect(box, component).toEqual({ width: 272, overflow: false });
+    }
+  }
+});
+
+test('a selected repository file row keeps its selected tint while hovered (HS2-PG85W9, KF-Z737D0)', async ({
+  page,
+}) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=repository-status-popover');
+    const files = page.locator('.kui-list-action-row[data-item-id]');
+    if (!(await files.first().isVisible())) await page.getByText('Staged', { exact: true }).first().click();
+    await files.first().locator('.kui-list-action-row__primary').click();
+    await page.mouse.move(0, 0);
+    const selected = page.locator(
+      '.kui-list-action-row[data-pressed="true"], .kui-list-action-row[data-selected="true"]',
+    );
+    await expect(selected).toHaveCount(1);
+    const tint = () => selected.evaluate((row) => getComputedStyle(row).backgroundColor);
+    const rest = await tint();
+    expect(rest).not.toBe('rgba(0, 0, 0, 0)');
+    await selected.locator('.kui-list-action-row__primary').hover();
+    await expect.poll(tint).toBe(rest);
+  }
+});
+
+test('git and external source rows share one leading-icon edge on the settings text edge (HS2-MWSKFQ)', async ({
+  page,
+}) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/ux-demo?component=ticket-sources-settings');
+    const card = page.locator('.ticket-provider-settings__connections');
+    await expect(card.locator('.kui-list-item__icon')).toHaveCount(1);
+    await expect(card.locator('.kui-list-action-row__icon')).toHaveCount(2);
+    const copyLeft = await page
+      .locator('[data-component="ticket-sources-settings"] p.kui-text')
+      .first()
+      .evaluate((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return range.getClientRects().item(0)!.left;
+      });
+    const iconLefts = await card
+      .locator('.kui-list-item__icon, .kui-list-action-row__icon')
+      .evaluateAll((icons) => icons.map((icon) => icon.getBoundingClientRect().left));
+    for (const left of iconLefts) expect(Math.abs(left - copyLeft)).toBeLessThanOrEqual(1);
+  }
+});
+
 test('ticket source connection rows hover flush with their card edge (HS2-KZP94T)', async ({ page }) => {
   for (const width of [1100, 390]) {
     await page.setViewportSize({ width, height: 1000 });

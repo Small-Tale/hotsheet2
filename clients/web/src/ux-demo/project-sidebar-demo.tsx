@@ -87,11 +87,11 @@ export const sidebarCommands: CommandNavigationItem[] = [
   { id: 'publish', label: 'Publish preview', color: '#8b5cf6', icon: 'send', kind: 'ai', group: 'Release' },
 ];
 
-/** One sidebar specimen in a compact Kerf frame, with the shared sidebar event log below it. Resizing
+/** One sidebar specimen in a sidebar-width (272px) Kerf frame (HS2-5K0VN4), with the shared sidebar event log below it. Resizing
  * the sidebar does not write to the log, so no stale height readout lingers (HS2-3HC2A7, HS2-7F6MJ7). */
 function DemoFrame({ children, label = 'Interactive' }: { children: SafeHtml; label?: string }) {
   return (
-    <CatalogExample label={label} viewport={{ width: 'compact' }}>
+    <CatalogExample label={label} viewport={{ width: 'sidebar' }}>
       {children}
       <DemoEvent>{sidebarEvent.value}</DemoEvent>
     </CatalogExample>
@@ -114,7 +114,7 @@ export function ProjectSummaryDemo() {
       <DemoFrame label="Default">
         <ProjectSummary completedToday={6} inProgress={3} trend={completionTrend} />
       </DemoFrame>
-      <CatalogExample label="Success Tone" viewport={{ width: 'compact' }}>
+      <CatalogExample label="Success Tone" viewport={{ width: 'sidebar' }}>
         <ProjectSummary
           completedToday={12}
           inProgress={5}
@@ -122,7 +122,7 @@ export function ProjectSummaryDemo() {
           chartTone="success"
         />
       </CatalogExample>
-      <CatalogExample label="Compact with Background Trend" viewport={{ width: 'compact' }}>
+      <CatalogExample label="Compact with Background Trend" viewport={{ width: 'sidebar' }}>
         <ProjectSummary
           completedToday={2}
           inProgress={4}
@@ -335,7 +335,7 @@ export function ProjectSidebarDemo() {
       <CatalogExample
         label="Resizable"
         note="Drag or use the arrow keys on the grip to resize the sidebar."
-        viewport={{ width: 'compact', layout: 'flex-column', frame: 'solid', surface: 'default', overflow: 'hidden' }}
+        viewport={{ width: 'sidebar', layout: 'flex-column', frame: 'solid', surface: 'default', overflow: 'hidden' }}
       >
         <ResizableRegion
           id={PROJECT_SIDEBAR_REGION_ID}
@@ -380,7 +380,7 @@ export function ProjectSidebarDemo() {
 }
 export function SettingsNavigationDemo() {
   return (
-    <CatalogExample label="Interactive" viewport={{ width: 'compact' }}>
+    <CatalogExample label="Interactive" viewport={{ width: 'sidebar' }}>
       <SettingsNavigation selected="ai" collapseControl />
     </CatalogExample>
   );
@@ -388,11 +388,11 @@ export function SettingsNavigationDemo() {
 export function NotificationNavigationDemo() {
   return (
     <>
-      <CatalogExample label="Active" viewport={{ width: 'compact' }}>
+      <CatalogExample label="Active" viewport={{ width: 'sidebar' }}>
         <NotificationNavigation selected="pending" counts={{ pending: 3, day: 5, week: 12 }} collapseControl />
       </CatalogExample>
       {/* Paused: the footer offers Resume instead of Pause (HS2-QYA9SC). */}
-      <CatalogExample label="Paused" viewport={{ width: 'compact' }} rootAttributes={{ 'data-demo-variant': 'paused' }}>
+      <CatalogExample label="Paused" viewport={{ width: 'sidebar' }} rootAttributes={{ 'data-demo-variant': 'paused' }}>
         <NotificationNavigation selected="pending" counts={{ pending: 3, day: 5, week: 12 }} paused collapseControl />
       </CatalogExample>
     </>
@@ -400,7 +400,7 @@ export function NotificationNavigationDemo() {
 }
 export function TerminalOperationsSidebarDemo() {
   return (
-    <CatalogExample label="Interactive" viewport={{ width: 'compact' }}>
+    <CatalogExample label="Interactive" viewport={{ width: 'sidebar' }}>
       <TerminalOperationsSidebar
         projects={[
           { id: 'hotsheet2', name: 'HotSheet2', completedToday: 1, inProgress: 6, trend: [1, 1, 3, 2, 5, 4, 1] },

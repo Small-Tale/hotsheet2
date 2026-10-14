@@ -13686,6 +13686,15 @@ test('aligns settings page copy with field labels, group headers, row content, a
   // Page copy sits on the field-label text edge, inset from the source card frame.
   expect(sourcesCopy).toBeGreaterThan(sourcesFrame);
   expect(await textLeft('.ticket-provider-settings__footnote')).toBe(sourcesCopy);
+  // Kerf's shared --kui-list-row-padding-inline puts git (ListItem) and external (ListActionRow)
+  // source icons on that same text edge (HS2-MWSKFQ, KF-N3TDV3).
+  const sourceIcons = await page
+    .locator(
+      '.ticket-provider-settings__connections .kui-list-item__icon, .ticket-provider-settings__connections .kui-list-action-row__icon',
+    )
+    .evaluateAll((icons) => icons.map((icon) => Math.round(icon.getBoundingClientRect().left)));
+  expect(sourceIcons.length).toBeGreaterThan(0);
+  for (const left of sourceIcons) expect(Math.abs(left - sourcesCopy)).toBeLessThanOrEqual(1);
 
   await open('Commands');
   const commandsCopy = await textLeft('[data-component="command-settings-editor"] > p.kui-text');
