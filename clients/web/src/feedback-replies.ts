@@ -1,4 +1,8 @@
-import { parseFeedbackChoices, selectedFeedbackChoicesMarkdown } from './feedback-choices';
+import {
+  parseFeedbackChoices,
+  selectedFeedbackChoicesMarkdown,
+  selectedFeedbackGroupMarkdown,
+} from './feedback-choices';
 
 export interface InlineFeedbackReply {
   offset: number;
@@ -64,13 +68,17 @@ export function combineFeedbackReply(
       if (segment.reply?.text.trim()) pieces.push(segment.reply.text.trim());
     }
   };
-  const choiceGroup = parseFeedbackChoices(prompt);
-  if (choiceGroup) {
-    appendRegion(choiceGroup.before, 0);
-    if (selectedChoices) pieces.push(selectedChoices);
-    appendRegion(choiceGroup.after, choiceGroup.afterStart);
+  const choices = parseFeedbackChoices(prompt);
+  if (choices) {
+    // Each group's selection follows the quoted prose (and question) that precedes it.
+    choices.groups.forEach((group, index) => {
+      appendRegion(choices.regions[index].source, choices.regions[index].sourceStart);
+      const groupSelection = selectedFeedbackGroupMarkdown(group, selectedChoiceIds);
+      if (groupSelection) pieces.push(groupSelection);
+    });
+    const trailing = choices.regions[choices.groups.length];
+    appendRegion(trailing.source, trailing.sourceStart);
   } else appendRegion(prompt, 0);
-  if (!choiceGroup && selectedChoices) pieces.push(selectedChoices);
   if (general) pieces.push(general);
   return pieces.join('\n\n');
 }

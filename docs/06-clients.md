@@ -3379,15 +3379,22 @@ unsupported, so they cannot create this state through Hot Sheet.
   keep it in the same action row, height, and centerline as the adjacent Respond action,
   and render the exact acknowledgement as a subtle ordinary note rather than another
   warning surface.
-- **Feedback prompts may offer explicit choices.** An uppercase `CHOICE` or `CHOICE:`
-  line immediately followed by a Markdown list becomes a labeled multi-select grid of
-  Kerf `ContentItem` rows (`selectionMode="multiple"`, HS2-3XV34B). A normal click selects one option or clears the sole selection; Command on
+- **Feedback prompts may offer explicit choices.** Every uppercase `CHOICE` or `CHOICE:`
+  line followed by a Markdown list (blank lines may separate the header from the list and
+  loose list items; a switch between bullet and numbered markers ends the list) becomes a
+  labeled multi-select grid of Kerf `ContentItem` rows (`selectionMode="multiple"`,
+  HS2-3XV34B). A note may hold several groups (HS2-83YCDP): prose between groups renders
+  in order, `CHOICE` text inside fenced code is ignored, and each group is its own list
+  labeled by the prose line preceding its header. Selection modifiers act within one
+  group and leave other groups' selections intact. A normal click selects one option or clears the sole selection; Command on
   macOS and Ctrl elsewhere toggles additional options, while Shift selects a range.
   Enter or Space on a focused option acts as a normal click, and arrow keys move between
   options. Zero or multiple selections are always valid. Selected options use Kerf's
   selected ContentItem presentation (`aria-selected`). Option content uses the same Markdown and attachment
   reference rendering as notes, including image references. Submission records the
-  selected option text in the regular response note and may include the existing
+  selected option text in the regular response note (a single group as
+  `Selected choice(s):`; multiple groups as each answered group's bold question line
+  followed by its selected bullets) and may include the existing
   freeform and inline responses; the choice list never makes an answer mandatory.
 - **`regular` and `status` notes, and the ticket `details`, use the same direct editing
   affordances in the reader as they do in the inspector.** Rendered Markdown owns its

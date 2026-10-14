@@ -25,7 +25,7 @@ import { type WorkspaceViewMode } from '../components/workspace-header';
 import { maintainContextPopupMenuAnchor } from '../context-menu-position';
 import { copyText } from '../copy-text';
 import { createCoalescedInput, type DebouncedAutosave } from '../debounced-autosave';
-import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
+import { parseFeedbackChoices, updateFeedbackChoiceDocumentSelection } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
 import { combineFeedbackReply, type InlineFeedbackReply, sourceOffsetForVisibleOffset } from '../feedback-replies';
 import { HostOnlyActionError } from '../host-only-actions';
@@ -729,10 +729,10 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   );
   function toggleFeedbackChoice(noteId: string, choiceId: string, modifiers: FeedbackChoiceModifiers) {
     const source = feedbackSource(noteId),
-      group = source && parseFeedbackChoices(source);
-    if (!group) return;
-    const next = updateFeedbackChoiceSelection(
-      group.choices.map((choice) => choice.id),
+      choices = source && parseFeedbackChoices(source);
+    if (!choices) return;
+    const next = updateFeedbackChoiceDocumentSelection(
+      choices,
       readerFeedbackChoiceSelections.value[noteId] ?? [],
       choiceId,
       readerFeedbackChoiceAnchors.get(noteId),

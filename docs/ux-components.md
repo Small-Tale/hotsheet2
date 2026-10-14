@@ -1567,8 +1567,8 @@ icons; structural separators do not require icons.
   `TicketInfoPanel`'s marked-description feedback composes them instead of rendering
   NoteCard's private classes (HS2-3X404M).
   In reader mode, regular/status notes remain directly editable, while feedback-needed
-  and feedback-draft notes always render their Respond/Submit editor style. An uppercase
-  `CHOICE` block in a feedback-needed note becomes Markdown-capable Kerf multi-select
+  and feedback-draft notes always render their Respond/Submit editor style. Each uppercase
+  `CHOICE` block in a feedback-needed note (several per note, HS2-83YCDP) becomes Markdown-capable Kerf multi-select
   `ContentItem` rows in a labeled `List` grid (HS2-3XV34B; no app choice CSS); they
   support platform-additive and Shift-range selection, and coexist with inline and freeform replies. Hover/focus
   reveals an explicit Edit action in both inspector and reader, while

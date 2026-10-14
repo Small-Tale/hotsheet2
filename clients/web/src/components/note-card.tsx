@@ -169,21 +169,42 @@ export function FeedbackPrompt({
   selectedChoices?: readonly string[];
   attachmentContext?: AttachmentReferenceContext;
 }) {
-  const choiceGroup = parseFeedbackChoices(source),
+  const choices = parseFeedbackChoices(source),
     selected = new Set(selectedChoices);
+  if (!choices)
+    return (
+      <div class="note-card__feedback-prompt">
+        <FeedbackBlocks
+          source={source}
+          sourceStart={0}
+          noteId={id}
+          replies={inlineReplies}
+          attachmentContext={attachmentContext}
+        />
+      </div>
+    );
+  const trailing = choices.regions[choices.groups.length];
   return (
     <div class="note-card__feedback-prompt">
-      {choiceGroup ? (
+      {choices.groups.map((group, index) => (
         <>
           <FeedbackBlocks
-            source={choiceGroup.before}
-            sourceStart={0}
+            source={choices.regions[index].source}
+            sourceStart={choices.regions[index].sourceStart}
             noteId={id}
             replies={inlineReplies}
             attachmentContext={attachmentContext}
           />
-          <List selectionMode="multiple" ariaLabel="Feedback Choices" gap="xs">
-            {choiceGroup.choices.map((choice) => (
+          <List
+            selectionMode="multiple"
+            ariaLabel={
+              choices.groups.length === 1
+                ? 'Feedback Choices'
+                : `Feedback Choices ${group.index}${group.question ? `: ${group.question}` : ''}`
+            }
+            gap="xs"
+          >
+            {group.choices.map((choice) => (
               <ContentItem
                 interactive
                 action={INSPECTOR_AND_EDITOR_ACTIONS.toggleFeedbackChoice.value}
@@ -202,23 +223,15 @@ export function FeedbackPrompt({
               </ContentItem>
             ))}
           </List>
-          <FeedbackBlocks
-            source={choiceGroup.after}
-            sourceStart={choiceGroup.afterStart}
-            noteId={id}
-            replies={inlineReplies}
-            attachmentContext={attachmentContext}
-          />
         </>
-      ) : (
-        <FeedbackBlocks
-          source={source}
-          sourceStart={0}
-          noteId={id}
-          replies={inlineReplies}
-          attachmentContext={attachmentContext}
-        />
-      )}
+      ))}
+      <FeedbackBlocks
+        source={trailing.source}
+        sourceStart={trailing.sourceStart}
+        noteId={id}
+        replies={inlineReplies}
+        attachmentContext={attachmentContext}
+      />
     </div>
   );
 }

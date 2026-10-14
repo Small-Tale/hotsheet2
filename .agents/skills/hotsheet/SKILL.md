@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 61 -->
+<!-- hotsheet-skill-version: 62 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -180,8 +180,9 @@ Notes:
 - If a ticket is unclear, do not guess. Record the needed decision, continue independent
   tickets, and return if the answer becomes available.
 - When a genuine user decision can be narrowed to concise, distinct options, a
-  `FEEDBACK NEEDED` note may include an uppercase `CHOICE` or `CHOICE:` line immediately
-  followed by a Markdown list. Options may include attachment references. Use choices
+  `FEEDBACK NEEDED` note may include one or more uppercase `CHOICE` or `CHOICE:` lines, each
+  followed by a Markdown list (blank lines allowed). Put each group's question on the line
+  before its `CHOICE`. Options may include attachment references. Use choices
   to make a decision easier, not to offload ordinary implementation judgment or replace
   an open-ended question. Users may select zero or multiple options and may always add a
   freeform response, so do not describe the list as exhaustive or require a selection.

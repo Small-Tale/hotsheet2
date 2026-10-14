@@ -24,7 +24,7 @@ import {
 import type { InspectorTab } from '../components/ticket-inspector';
 import { showTicketReaderDialog, TicketReader } from '../components/ticket-reader';
 import { addTicketTag, openTicketTagSurface, removeTicketTag } from '../components/ticket-tag-editor';
-import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
+import { parseFeedbackChoices, updateFeedbackChoiceDocumentSelection } from '../feedback-choices';
 import { DemoEvent } from './components/demo-event';
 import { selectDemo, selectedId } from './components/demo-state';
 import { DEMO_ACTIONS, DEMO_COMPONENTS } from './demo-actions';
@@ -193,6 +193,13 @@ export const READER_NOTES: NoteCardProps[] = [
     author: 'Codex',
     time: '12 minutes ago',
     body: 'How should the reader preserve this response?\n\nCHOICE:\n- Keep it beside the **larger editor**\n- Move it below the editor\n- `attachment:reader-wireframe.png`',
+  },
+  {
+    id: 'reader-feedback-groups',
+    kind: 'feedback_needed' as const,
+    author: 'Codex',
+    time: '10 minutes ago',
+    body: 'A few decisions before I continue.\n\n**1. Which store owns the notes?**\n\nCHOICE:\n- The ticket store\n- The document store\n\n**2. Does the existing "Notes" field stay?**\n\nCHOICE\n\n- Keep it read-only\n- Migrate and remove it\n\n**3. When should the migration run?**\n\nCHOICE:\n\n1. On first launch\n\n2. From an explicit command\n\nAnything else I should know?',
   },
   {
     id: 'reader-draft',
@@ -650,10 +657,10 @@ function wireContentComponentsDemo(root: HTMLElement): () => void {
     wireFeedbackChoices(root, {
       toggle: (noteId, choiceId, modifiers) => {
         const note = readerNotes.value.find((item) => item.id === noteId),
-          group = note && parseFeedbackChoices(note.body);
-        if (!group) return;
-        const next = updateFeedbackChoiceSelection(
-          group.choices.map((choice) => choice.id),
+          choices = note && parseFeedbackChoices(note.body);
+        if (!choices) return;
+        const next = updateFeedbackChoiceDocumentSelection(
+          choices,
           readerFeedbackChoiceSelections.value[noteId] ?? [],
           choiceId,
           demoFeedbackChoiceAnchor,
