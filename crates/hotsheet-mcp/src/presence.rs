@@ -8,7 +8,9 @@
 //! inside a Hot Sheet terminal, from the `HOTSHEET_SERVER`/`HOTSHEET_SECRET` route-back
 //! environment. Otherwise a serverless shim (`--path`) looks the store up in the machine-local
 //! instance registry (`${HOTSHEET_HOME}/instances`, HS2-E4J72D) and reports to the live server
-//! recorded there. Without any of these the shim stays silent.
+//! recorded there. Without any of these the shim stays silent. A failed heartbeat
+//! re-consults the registry, so a stale terminal route-back or a server restarted on a new
+//! port moves the lease to the live server.
 
 use std::path::Path;
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -166,10 +168,33 @@ impl Presence {
         transport: impl PresenceTransport,
         interval: Duration,
     ) -> Self {
+        Self::start_relocating(target, transport, interval, || None)
+    }
+
+    /// Like [`Presence::start`], but after a failed upsert `relocate` names the server to
+    /// report to now (HS2-HNXE38 reopen). A Hot Sheet terminal outlives a server restart, so
+    /// its `HOTSHEET_SERVER` route-back can name a dead port while the instance registry
+    /// records the live one; a restarted server also moves to a new port. When `relocate`
+    /// yields a different endpoint the lease moves there and registers at once.
+    pub fn start_relocating(
+        mut target: PresenceTarget,
+        transport: impl PresenceTransport,
+        interval: Duration,
+        mut relocate: impl FnMut() -> Option<(String, String)> + Send + 'static,
+    ) -> Self {
         let (stop, stopped) = mpsc::channel::<()>();
         let thread = std::thread::spawn(move || {
             loop {
-                transport.upsert(&target);
+                if !transport.upsert(&target)
+                    && let Some((base, secret)) = relocate()
+                {
+                    let base = base.trim_end_matches('/').to_owned();
+                    if base != target.base || secret != target.secret {
+                        target.base = base;
+                        target.secret = secret;
+                        transport.upsert(&target);
+                    }
+                }
                 match stopped.recv_timeout(interval) {
                     Err(RecvTimeoutError::Timeout) => {}
                     Ok(()) | Err(RecvTimeoutError::Disconnected) => break,
@@ -395,6 +420,161 @@ mod tests {
             calls.0.lock().unwrap().clone(),
             vec!["upsert L".to_owned(), "release L".to_owned()]
         );
+    }
+
+    /// Records `upsert <base>` / `release <base>`; upserts to bases in `dead` fail.
+    #[derive(Clone)]
+    struct Endpoints {
+        calls: Arc<Mutex<Vec<String>>>,
+        dead: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl Endpoints {
+        fn new(dead: &[&str]) -> Self {
+            Self {
+                calls: Arc::default(),
+                dead: Arc::new(Mutex::new(dead.iter().map(|d| (*d).to_owned()).collect())),
+            }
+        }
+        fn calls(&self) -> Vec<String> {
+            self.calls.lock().unwrap().clone()
+        }
+    }
+
+    impl PresenceTransport for Endpoints {
+        fn upsert(&self, target: &PresenceTarget) -> bool {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("upsert {} {}", target.base, target.secret));
+            !self.dead.lock().unwrap().contains(&target.base)
+        }
+        fn release(&self, target: &PresenceTarget) {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("release {}", target.base));
+        }
+    }
+
+    fn proxy_target(base: &str) -> PresenceTarget {
+        PresenceTarget::resolve(
+            Some(base),
+            Some("old"),
+            env(&[]),
+            || None,
+            1,
+            None,
+            "L".into(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_dead_route_back_relocates_to_the_registry_server_at_once() {
+        // The terminal env names a server that restarted; the registry names the live one.
+        let wire = Endpoints::new(&["http://dead"]);
+        drop(Presence::start_relocating(
+            proxy_target("http://dead"),
+            wire.clone(),
+            Duration::from_secs(60),
+            || Some(("http://live/".to_owned(), "new".to_owned())),
+        ));
+        assert_eq!(
+            wire.calls(),
+            vec![
+                "upsert http://dead old".to_owned(),
+                "upsert http://live new".to_owned(),
+                "release http://live".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn relocation_is_skipped_when_healthy_unknown_or_unchanged() {
+        // Healthy: relocate is never consulted.
+        let wire = Endpoints::new(&[]);
+        drop(Presence::start_relocating(
+            proxy_target("http://ok"),
+            wire.clone(),
+            Duration::from_secs(60),
+            || panic!("a healthy heartbeat must not relocate"),
+        ));
+        assert_eq!(
+            wire.calls(),
+            vec!["upsert http://ok old", "release http://ok"]
+        );
+        // Down with no registry record, or the registry names the same endpoint: retry later
+        // without a duplicate upsert.
+        for relocated in [None, Some(("http://down/".to_owned(), "old".to_owned()))] {
+            let wire = Endpoints::new(&["http://down"]);
+            drop(Presence::start_relocating(
+                proxy_target("http://down"),
+                wire.clone(),
+                Duration::from_secs(60),
+                move || relocated.clone(),
+            ));
+            assert_eq!(
+                wire.calls(),
+                vec!["upsert http://down old", "release http://down"]
+            );
+        }
+    }
+
+    #[test]
+    fn a_server_restart_on_a_new_port_moves_a_running_lease() {
+        // Heartbeats succeed, the server dies and restarts elsewhere, the lease follows it
+        // and stays there; the release goes to the server that holds the lease.
+        let wire = Endpoints::new(&[]);
+        let registry = Arc::new(Mutex::new(("http://a".to_owned(), "s".to_owned())));
+        let presence = Presence::start_relocating(
+            PresenceTarget::resolve(
+                Some("http://a"),
+                Some("s"),
+                env(&[]),
+                || None,
+                1,
+                None,
+                "L".into(),
+            )
+            .unwrap(),
+            wire.clone(),
+            Duration::from_millis(5),
+            {
+                let registry = Arc::clone(&registry);
+                move || Some(registry.lock().unwrap().clone())
+            },
+        );
+        while wire.calls().len() < 2 {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        *registry.lock().unwrap() = ("http://b".to_owned(), "t".to_owned());
+        wire.dead.lock().unwrap().push("http://a".to_owned());
+        while !wire
+            .calls()
+            .iter()
+            .filter(|c| *c == "upsert http://b t")
+            .nth(1)
+            .is_some()
+        {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        presence.stop();
+        let calls = wire.calls();
+        let moved = calls.iter().position(|c| c == "upsert http://b t").unwrap();
+        assert!(
+            calls[..moved]
+                .iter()
+                .all(|c| c.starts_with("upsert http://a")),
+            "{calls:?}"
+        );
+        assert!(
+            calls[moved..calls.len() - 1]
+                .iter()
+                .all(|c| c == "upsert http://b t"),
+            "{calls:?}"
+        );
+        assert_eq!(calls.last().unwrap(), "release http://b");
     }
 
     #[test]

@@ -995,6 +995,23 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > from the hook-reported `ai_connection`, which means permission prompts are routed.
 > A serverless shim with no known server reports nothing.
 >
+> **Which shim the config launches (HS2-HNXE38 reopen).** Presence needs a current
+> `hotsheet-mcp`. `setup` records an absolute command: an existing absolute
+> `HOTSHEET_MCP_BIN` first, else the `hotsheet-mcp` beside the running CLI/server, else the
+> bare name resolved through PATH. The development local host runs the server from a
+> private snapshot without the shim, so it sets `HOTSHEET_MCP_BIN` to the stable
+> `target/{release,debug}/hotsheet-mcp` matching the selected server profile; otherwise
+> setup wrote a bare `hotsheet-mcp` that PATH could resolve to a stale install with no
+> presence lease, and the badge correctly read "MCP not connected" while Claude reported
+> the server healthy. `npm run server:rebuild` builds and installs the shim with the CLI.
+>
+> **Following a moved server (HS2-HNXE38 reopen).** A Hot Sheet terminal outlives a server
+> restart through its broker, so its `HOTSHEET_SERVER` route-back can name a dead port, and a
+> restarted server listens on a new port. After any failed heartbeat a serverless shim
+> re-reads the instance registry for its `--path` store and, when it names a different
+> endpoint, moves the lease there and registers at once (keeping `terminal_id`). Proxy-mode
+> shims (`--server`) never relocate.
+>
 > **Client display (HS2-670ADP).** The web client folds MCP presence into the existing
 > terminal AI connection badge on drawer tabs and dashboard tiles; there is no separate MCP
 > icon and no project-level indicator. The connection is either fully connected or it is

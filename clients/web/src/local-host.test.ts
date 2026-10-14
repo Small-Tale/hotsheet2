@@ -6,7 +6,12 @@ import { resolve } from 'node:path';
 import { Hono } from 'hono';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createLocalHostApp, releaseBinaryEnvironment, snapshotLocalHostArtifacts } from './local-host';
+import {
+  createLocalHostApp,
+  mcpBinaryEnvironment,
+  releaseBinaryEnvironment,
+  snapshotLocalHostArtifacts,
+} from './local-host';
 
 describe('local production host (HS2-587N4D)', () => {
   let dist: string;
@@ -197,5 +202,34 @@ describe('pinned production artifacts (HS2-6VQ5RV)', () => {
       if (pinnedRoot) expect(existsSync(pinnedRoot)).toBe(false);
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe('stable MCP shim for AI-tool configs (HS2-HNXE38)', () => {
+  const root = '/repo',
+    release = '/repo/target/release/hotsheet-mcp',
+    debug = '/repo/target/debug/hotsheet-mcp',
+    present =
+      (...paths: string[]) =>
+      (path: string) =>
+        paths.includes(path);
+
+  it('follows the selected server profile, then the other profile', () => {
+    const both = present(release, debug);
+    expect(mcpBinaryEnvironment(root, '/repo/target/release/hotsheet-server', {}, both)).toEqual({
+      HOTSHEET_MCP_BIN: release,
+    });
+    expect(mcpBinaryEnvironment(root, '/repo/target/debug/hotsheet-server', {}, both)).toEqual({
+      HOTSHEET_MCP_BIN: debug,
+    });
+    expect(mcpBinaryEnvironment(root, '/repo/target/release/hotsheet-server', {}, present(debug))).toEqual({
+      HOTSHEET_MCP_BIN: debug,
+    });
+    expect(mcpBinaryEnvironment(root, undefined, {}, present(release))).toEqual({ HOTSHEET_MCP_BIN: release });
+  });
+
+  it('keeps an explicit override and selects nothing when no shim is built', () => {
+    expect(mcpBinaryEnvironment(root, undefined, { HOTSHEET_MCP_BIN: '/custom/mcp' }, present(debug))).toEqual({});
+    expect(mcpBinaryEnvironment(root, '/repo/target/debug/hotsheet-server', {}, present())).toEqual({});
   });
 });

@@ -924,12 +924,16 @@ fn marked_artifact_requires_preservation(
     })
 }
 
-/// The `hotsheet-mcp` command string to record in a tool's MCP config: the absolute sibling
-/// next to the running binary when it exists (so the config needs no PATH munging — HS2-103),
-/// else the bare `fallback` (resolved via PATH at launch). Works from any binary (CLI or
-/// server) since `hotsheet-mcp` installs alongside them.
+/// The `hotsheet-mcp` command string to record in a tool's MCP config. An absolute, existing
+/// `HOTSHEET_MCP_BIN` wins (a host that runs the server from a private snapshot names the
+/// stable shim it built, HS2-HNXE38); else the absolute sibling next to the running binary
+/// when it exists (so the config needs no PATH munging — HS2-103); else the bare `fallback`
+/// (resolved via PATH at launch, which can pick up a stale install).
 pub fn mcp_command(fallback: &str) -> String {
     mcp_command_for(
+        std::env::var_os("HOTSHEET_MCP_BIN")
+            .as_deref()
+            .map(Path::new),
         std::env::current_exe()
             .ok()
             .as_deref()
@@ -938,10 +942,15 @@ pub fn mcp_command(fallback: &str) -> String {
     )
 }
 
-fn mcp_command_for(exe_dir: Option<&Path>, fallback: &str) -> String {
-    exe_dir
-        .map(|d| d.join("hotsheet-mcp"))
-        .filter(|p| p.is_file())
+fn mcp_command_for(explicit: Option<&Path>, exe_dir: Option<&Path>, fallback: &str) -> String {
+    explicit
+        .filter(|p| p.is_absolute() && p.is_file())
+        .map(Path::to_path_buf)
+        .or_else(|| {
+            exe_dir
+                .map(|d| d.join("hotsheet-mcp"))
+                .filter(|p| p.is_file())
+        })
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_else(|| fallback.to_string())
 }
@@ -3228,15 +3237,51 @@ args = []
     fn mcp_command_prefers_the_absolute_sibling() {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(
-            mcp_command_for(Some(dir.path()), "hotsheet-mcp"),
+            mcp_command_for(None, Some(dir.path()), "hotsheet-mcp"),
             "hotsheet-mcp"
         );
-        assert_eq!(mcp_command_for(None, "hotsheet-mcp"), "hotsheet-mcp");
+        assert_eq!(mcp_command_for(None, None, "hotsheet-mcp"), "hotsheet-mcp");
         let sib = dir.path().join("hotsheet-mcp");
         std::fs::write(&sib, "x").unwrap();
         assert_eq!(
-            mcp_command_for(Some(dir.path()), "hotsheet-mcp"),
+            mcp_command_for(None, Some(dir.path()), "hotsheet-mcp"),
             sib.to_string_lossy()
+        );
+    }
+
+    #[test]
+    fn mcp_command_prefers_an_existing_absolute_override() {
+        // HS2-HNXE38: a snapshot-run server has no sibling shim; the host names a stable one.
+        let snapshot = tempfile::tempdir().unwrap();
+        let stable = tempfile::tempdir().unwrap();
+        let shim = stable.path().join("hotsheet-mcp");
+        std::fs::write(&shim, "x").unwrap();
+        let shim_str = shim.to_string_lossy().into_owned();
+        assert_eq!(
+            mcp_command_for(Some(&shim), Some(snapshot.path()), "hotsheet-mcp"),
+            shim_str
+        );
+        // The override beats an existing sibling too.
+        std::fs::write(snapshot.path().join("hotsheet-mcp"), "x").unwrap();
+        assert_eq!(
+            mcp_command_for(Some(&shim), Some(snapshot.path()), "hotsheet-mcp"),
+            shim_str
+        );
+        // A relative or missing override is ignored rather than persisted.
+        let sibling = snapshot
+            .path()
+            .join("hotsheet-mcp")
+            .to_string_lossy()
+            .into_owned();
+        for ignored in [Path::new("hotsheet-mcp"), &stable.path().join("missing")] {
+            assert_eq!(
+                mcp_command_for(Some(ignored), Some(snapshot.path()), "hotsheet-mcp"),
+                sibling
+            );
+        }
+        assert_eq!(
+            mcp_command_for(Some(Path::new("rel/mcp")), None, "hotsheet-mcp"),
+            "hotsheet-mcp"
         );
     }
 

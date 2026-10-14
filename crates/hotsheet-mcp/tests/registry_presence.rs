@@ -143,3 +143,69 @@ fn serverless_shim_without_a_registered_server_stays_silent() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+/// HS2-HNXE38 reopen: a Hot Sheet terminal survives a server restart, so its route-back
+/// `HOTSHEET_SERVER` can name a dead port. The shim's first heartbeat fails there and the
+/// lease moves to the live server the registry records, keeping the terminal id.
+#[test]
+fn a_stale_terminal_route_back_falls_back_to_the_registry_server() {
+    let home = tempfile::tempdir().unwrap();
+    let store_dir = tempfile::tempdir().unwrap();
+    FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let dead = {
+        let probe = TcpListener::bind("127.0.0.1:0").unwrap();
+        format!("http://{}", probe.local_addr().unwrap())
+    }; // dropped: nothing listens there any more
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let (tx, rx) = mpsc::channel();
+    fake_server(listener, tx);
+    let instances = home.path().join("instances");
+    std::fs::create_dir(&instances).unwrap();
+    std::fs::write(
+        instances.join("live.json"),
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": url,
+            "secret": "live-secret",
+            "store_path": store_dir.path().display().to_string(),
+            "index_path": "",
+            "started_at": "2026-10-14T00:00:00Z",
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_hotsheet-mcp"))
+        .arg("--path")
+        .arg(store_dir.path())
+        .env("HOTSHEET_HOME", home.path())
+        .env("HOTSHEET_SERVER", &dead)
+        .env("HOTSHEET_SECRET", "dead-secret")
+        .env("HOTSHEET_TERMINAL_ID", "term-1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    writeln!(
+        stdin,
+        r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{}}}}"#
+    )
+    .unwrap();
+    stdin.flush().unwrap();
+
+    let (route, secret, body) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert_eq!(route, "POST /mcp-presence");
+    assert_eq!(secret, "live-secret");
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(body["terminal_id"], "term-1");
+    let lease = body["lease_id"].as_str().unwrap().to_owned();
+
+    drop(stdin);
+    assert!(child.wait().unwrap().success());
+    let (route, secret, _) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert_eq!(route, format!("DELETE /mcp-presence/{lease}"));
+    assert_eq!(secret, "live-secret");
+}

@@ -61,6 +61,15 @@ fn main() -> Result<()> {
         lease_id,
     );
     let mut presence_target = presence_target;
+    // A failed heartbeat re-reads the registry for this store (stale terminal route-back,
+    // server restarted on a new port). Proxy mode has no store path and never relocates.
+    let relocate_store = cli.path.clone();
+    let relocate = move || {
+        relocate_store.as_deref().and_then(|store| {
+            presence::discover_server(&hotsheet_plugins::hotsheet_home().join("instances"), store)
+        })
+    };
+    let mut relocate = Some(relocate);
     let mut _presence: Option<Presence> = None;
 
     let backend: Box<dyn Backend> = match (cli.path, cli.server) {
@@ -86,12 +95,13 @@ fn main() -> Result<()> {
             continue; // ignore un-parseable input rather than crashing the shim
         };
         if presence::is_initialize(&msg)
-            && let Some(target) = presence_target.take()
+            && let (Some(target), Some(relocate)) = (presence_target.take(), relocate.take())
         {
-            _presence = Some(Presence::start(
+            _presence = Some(Presence::start_relocating(
                 target,
                 HttpPresence::default(),
                 presence::HEARTBEAT,
+                relocate,
             ));
         }
         if let Some(response) = handle_message(&msg, backend.as_ref()) {

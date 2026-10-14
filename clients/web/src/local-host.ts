@@ -113,6 +113,28 @@ export function releaseBinaryEnvironment(
   return chosen;
 }
 
+/**
+ * The stable `hotsheet-mcp` the server should record in AI-tool MCP configs (HS2-HNXE38). The host
+ * runs the server from a private snapshot without the shim, so setup would otherwise write a bare
+ * `hotsheet-mcp` that PATH can resolve to a stale install lacking the presence lease. The shim is
+ * not snapshotted: its path is persisted in project configs and must outlive this host. It
+ * prefers the build profile of the selected server, then the other profile.
+ */
+export function mcpBinaryEnvironment(
+  repositoryRoot: string,
+  serverBinary: string | undefined,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+  exists: (path: string) => boolean = existsSync,
+): Record<string, string> {
+  if (environment.HOTSHEET_MCP_BIN) return {};
+  const profiles = serverBinary?.includes('/target/release/') ? ['release', 'debug'] : ['debug', 'release'];
+  for (const profile of profiles) {
+    const path = resolve(repositoryRoot, 'target', profile, 'hotsheet-mcp');
+    if (exists(path)) return { HOTSHEET_MCP_BIN: path };
+  }
+  return {};
+}
+
 /** Keep a production host on the artifacts it selected at launch while working builds replace dist/ and target/. */
 export function snapshotLocalHostArtifacts(
   distRoot: string,
@@ -218,7 +240,11 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     if (process.env[variable]) selected[variable] = process.env[variable];
   }
   const snapshot = snapshotLocalHostArtifacts(fileURLToPath(new URL('../dist', import.meta.url)), selected);
-  Object.assign(process.env, snapshot.environment);
+  Object.assign(
+    process.env,
+    snapshot.environment,
+    mcpBinaryEnvironment(developmentRepositoryRoot(), selected.HOTSHEET_SERVER_BIN),
+  );
   console.log(
     'HOTSHEET_SERVER_BIN' in release && release.HOTSHEET_SERVER_BIN.includes('/target/release/')
       ? `Using release Hot Sheet binaries (${release.HOTSHEET_SERVER_BIN}).`

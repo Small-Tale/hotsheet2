@@ -447,7 +447,9 @@ preview/download, server directory browser) are separate design work.
   serves and launches from that snapshot. Later source edits and working builds cannot
   change a fresh browser's client bundle or the binary used for a server restart. The
   snapshot is removed when the host stops. An explicit rebuild/relaunch selects the new
-  source revision (HS2-EFEWSC, HS2-6VQ5RV).
+  source revision (HS2-EFEWSC, HS2-6VQ5RV). The MCP shim is not snapshotted: AI-tool
+  configs persist its path, so the host exports the stable `target/{release,debug}/hotsheet-mcp`
+  as `HOTSHEET_MCP_BIN` for setup to record (HS2-HNXE38).
   Explicit binary overrides remain authoritative. `server:rebuild:release` builds the release set
   and stops the running machine server, and
   `prod:rebuild-lan` runs it before serving the production client on `0.0.0.0`.
