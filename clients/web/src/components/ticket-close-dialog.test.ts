@@ -68,8 +68,9 @@ describe('TicketCloseDialog', () => {
 
   it('contains long result lists within a scrollable dialog surface', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-close-dialog.css'), 'utf8');
-    expect(css).toMatch(
-      /ticket-close-dialog__results \{[^}]*min-height: remify\(68px\);[^}]*max-height: remify\(224px\);[^}]*overflow-y: auto/,
+    // Kerf's framed, bounded List owns the frame and scroll bounds (KF-SHW2J9, HS2-Z46VA7).
+    expect(css).not.toMatch(
+      /ticket-close-dialog__results \{[^}]*\n\s*(min-height|max-height|overflow|border|padding)[\w-]*:/,
     );
     // DialogSurface owns the width; Kerf List, Row, Text, and StateBanner own the rest (HS2-F8HT1E).
     expect(css).not.toMatch(/::part|__form|__selected|__candidate|__actions|__hint/);

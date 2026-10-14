@@ -3,7 +3,7 @@ import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import './ticket-close-dialog.css';
 
-import { remify, uiColor } from '@kerfjs/ui/css-values';
+import { rem, remify, uiColor } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -100,10 +100,18 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
                       />
                     )}
                     {!state.selected && Boolean(state.query.trim()) && (
-                      <div
-                        class="ticket-close-dialog__results"
-                        aria-label="Matching tickets"
-                        aria-busy={String(Boolean(state.searching))}
+                      // Kerf's framed, bounded result picker (KF-SHW2J9, HS2-Z46VA7) owns the border,
+                      // radius, focus-ring inset, and min/max scroll bounds.
+                      <List
+                        scrollable
+                        frame
+                        minHeight={rem(4.25)}
+                        maxHeight={rem(14)}
+                        className="ticket-close-dialog__results"
+                        rootAttributes={{
+                          'aria-label': 'Matching tickets',
+                          'aria-busy': String(Boolean(state.searching)),
+                        }}
                       >
                         {candidates.map((candidate) => (
                           <ListItem
@@ -127,7 +135,7 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
                           />
                         ))}
                         {!state.searching && candidates.length === 0 && <Text tone="quiet">No matching tickets.</Text>}
-                      </div>
+                      </List>
                     )}
                     <Text size="compact" tone="quiet">
                       The selected ticket becomes the canonical target. This relationship is stored as structured

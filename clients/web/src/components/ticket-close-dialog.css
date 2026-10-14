@@ -1,12 +1,6 @@
-/* Bounded, framed scroller for duplicate candidates; Kerf List leaves the bound and frame to the app.
-   Rows fill the box and align their icon to the first line through Kerf public tokens. */
+/* Duplicate candidates: Kerf's framed, bounded List owns the frame and scroll bounds (KF-SHW2J9);
+   rows fill the box and align their icon to the first line through Kerf public tokens. */
 .ticket-close-dialog__results {
-  min-height: remify(68px);
-  max-height: remify(224px);
-  overflow-y: auto;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-m);
-  padding: var(--kui-space-2xs);
   --kui-layout-inline-margin: 0;
   --kui-list-item-padding-block: var(--kui-space-xs);
   --kui-list-item-align-items: start;
