@@ -116,7 +116,7 @@ async function mockTwoProjects(page: import('@playwright/test').Page) {
               {
                 connection_id: 'git-local',
                 provider: 'git',
-                display_name: 'Hot Sheet git',
+                display_name: 'Hot Sheet Git',
                 locator: '/tickets',
                 default: true,
                 capabilities,

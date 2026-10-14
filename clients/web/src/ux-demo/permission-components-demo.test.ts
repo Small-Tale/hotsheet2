@@ -9,7 +9,7 @@ import {
   resetPermissionRequestDemo,
 } from './permission-components-demo';
 
-describe('PermissionRequestCard demo settings', () => {
+describe('PermissionRequestCard demo Settings', () => {
   beforeEach(() => {
     resetPermissionRequestDemo();
   });

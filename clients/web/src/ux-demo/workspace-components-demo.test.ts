@@ -84,10 +84,10 @@ describe('connected workspace demo state', () => {
     for (const mode of ['list', 'notifications', 'board', 'settings', 'notifications'] as const) {
       workspaceMode.value = mode;
       const markup = String(WorkspaceHeaderDemo());
-      expect(markup).toContain('Notifications view, 2 pending');
+      expect(markup).toContain('Notifications View, 2 pending');
       expect(markup.includes('data-component="notification-center"')).toBe(mode === 'notifications');
       expect(markup.includes('data-component="ticket-board"')).toBe(mode === 'board');
-      expect(markup.includes('aria-label="Project settings"')).toBe(mode === 'settings');
+      expect(markup.includes('aria-label="Project Settings"')).toBe(mode === 'settings');
       expect(markup.includes('aria-label="Workspace tickets"')).toBe(mode === 'list');
     }
     expect(ignoreWorkspaceDemoPermission('workspace-demo:1')).toBe(true);
@@ -102,7 +102,7 @@ describe('connected workspace demo state', () => {
       decision: 'allow',
       scope: 'once',
     });
-    expect(String(WorkspaceHeaderDemo())).toContain('Notifications view, 1 pending');
+    expect(String(WorkspaceHeaderDemo())).toContain('Notifications View, 1 pending');
     expect(resolveWorkspaceDemoPermission('workspace-demo:1', 'deny', 'once')).toBe(false);
     expect(resolveWorkspaceDemoPermission('workspace-demo:2', 'deny', 'once')).toBe(true);
     expect(workspaceDemoNotifications.value.pending).toHaveLength(0);
@@ -111,13 +111,13 @@ describe('connected workspace demo state', () => {
     expect(String(WorkspaceHeaderDemo())).not.toContain('data-action="resolve-permission"');
     workspaceMode.value = 'list';
     resetWorkspaceDemoNotifications();
-    expect(String(WorkspaceHeaderDemo())).toContain('Notifications view, 2 pending');
+    expect(String(WorkspaceHeaderDemo())).toContain('Notifications View, 2 pending');
     workspaceMode.value = 'notifications';
     expect(workspaceDemoNotifications.value.history).toHaveLength(1);
     expect(workspaceDemoNotifications.value.pending.every((item) => !item.ignored)).toBe(true);
     expect(resolveWorkspaceDemoPermission('workspace-demo:2', 'allow', 'always')).toBe(true);
     expect(String(WorkspaceHeaderDemo())).toContain('allowed this kind of request');
-    expect(String(WorkspaceHeaderDemo())).toContain('Notifications view, 1 pending');
+    expect(String(WorkspaceHeaderDemo())).toContain('Notifications View, 1 pending');
   });
 
   it('filters across identity, title, and tags and preserves board totals', () => {
@@ -151,7 +151,7 @@ describe('connected workspace demo state', () => {
     workspaceMode.value = 'notifications';
     const notifications = String(TerminalTicketRailDemo());
     expect(notifications).toContain(
-      'data-segment-value="notifications" data-selected="true" aria-label="Notifications view" aria-pressed="true"',
+      'data-segment-value="notifications" data-selected="true" aria-label="Notifications View" aria-pressed="true"',
     );
     expect(notifications).toContain('data-component="notification-center"');
     expect(notifications).not.toContain('data-component="ticket-list-row"');
@@ -159,14 +159,14 @@ describe('connected workspace demo state', () => {
     expect(notifications).not.toContain('data-view-mode="settings"');
     workspaceMode.value = 'list';
     const list = String(TerminalTicketRailDemo());
-    expect(list).toContain('data-segment-value="list" data-selected="true" aria-label="List view" aria-pressed="true"');
+    expect(list).toContain('data-segment-value="list" data-selected="true" aria-label="List View" aria-pressed="true"');
     expect(list.match(/data-component="ticket-list-row"/g)).toHaveLength(7);
     expect(list).not.toContain('data-component="notification-center"');
     workspaceMode.value = 'board';
     const board = String(TerminalTicketRailDemo());
     expect(board).toContain('data-component="ticket-board" data-layout="paged"');
     expect(board).toContain(
-      'data-segment-value="board" data-selected="true" aria-label="Columns view" aria-pressed="true"',
+      'data-segment-value="board" data-selected="true" aria-label="Columns View" aria-pressed="true"',
     );
     expect(board).not.toContain('data-component="ticket-list"');
     workspaceMode.value = 'list';

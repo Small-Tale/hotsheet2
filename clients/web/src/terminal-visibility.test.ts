@@ -83,7 +83,7 @@ describe('workspace visibility type filtering', () => {
           projectId: 'one',
           projectName: 'One',
           kind: 'ai' as const,
-          title: 'Plain terminal',
+          title: 'Plain Terminal',
           alive: false,
           busy: false,
           scrollback: '',

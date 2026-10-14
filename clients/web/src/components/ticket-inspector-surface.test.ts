@@ -43,11 +43,11 @@ describe('ticket inspector surfaces', () => {
     ];
     for (const parts of surfaces) expect(parts.toggle.action).toBe('toggle-ticket-inspector');
     expect(surfaces.map((parts) => parts.toggle.name)).toEqual([
-      'ticket inspector',
-      'ticket inspector',
-      'ticket inspector',
-      'notification inspector',
-      'ticket inspector',
+      'Ticket Inspector',
+      'Ticket Inspector',
+      'Ticket Inspector',
+      'Notification Inspector',
+      'Ticket Inspector',
     ]);
   });
 });

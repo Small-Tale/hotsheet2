@@ -309,14 +309,14 @@ export function TicketListDemo() {
       >
         <TicketList tickets={collectionTickets.value} label="Example ticket list" />
       </CatalogExample>
-      <CatalogExample label="Empty state: new project" viewport={{ width: 'full' }}>
+      <CatalogExample label="Empty State: New Project" viewport={{ width: 'full' }}>
         <TicketList tickets={[]} emptyState={{ kind: 'project' }} label="Empty new project" />
       </CatalogExample>
-      <CatalogExample label="Empty state: empty view" viewport={{ width: 'full' }}>
+      <CatalogExample label="Empty State: Empty View" viewport={{ width: 'full' }}>
         <TicketList tickets={[]} emptyState={{ kind: 'view', viewLabel: 'Backlog' }} label="Empty Backlog" />
       </CatalogExample>
-      <CatalogExample label="Empty state: no search results" viewport={{ width: 'full' }}>
-        <TicketList tickets={[]} emptyState={{ kind: 'search', query: 'parser' }} label="Empty search" />
+      <CatalogExample label="Empty State: No Search Results" viewport={{ width: 'full' }}>
+        <TicketList tickets={[]} emptyState={{ kind: 'search', query: 'parser' }} label="Empty Search" />
       </CatalogExample>
       <DemoEvent>{collectionEvent.value}</DemoEvent>
     </>
@@ -348,13 +348,13 @@ export function TicketBoardDemo() {
         <TicketBoard columns={columns} label="Example status board" />
       </CatalogExample>
       <CatalogExample
-        label="Paged layout"
+        label="Paged Layout"
         note="Phone widths show one column at a time and snap to the nearest column when a swipe is released."
         viewport={{ width: 'compact', height: 'app' }}
       >
         <TicketBoard columns={columns} layout="paged" label="Paged status board" />
       </CatalogExample>
-      <CatalogExample label="Empty search" viewport={{ width: 'full', height: 'tall' }}>
+      <CatalogExample label="Empty Search" viewport={{ width: 'full', height: 'tall' }}>
         <TicketBoard
           columns={columns.map((column) => ({ ...column, tickets: [] }))}
           emptyState={{ kind: 'search', query: 'parser' }}

@@ -6,9 +6,9 @@ test('preserves page headings and dialog naming with direct Toolbar compositions
   await page.goto('/ux-demo?component=workspace-header');
   const demo = page.locator('[data-catalog-example-stack]');
   await expect(demo.getByRole('heading', { name: 'Queue', level: 1 })).toBeVisible();
-  await demo.getByRole('button', { name: 'Notifications view' }).click();
+  await demo.getByRole('button', { name: 'Notifications View' }).click();
   await expect(demo.getByRole('heading', { name: 'Notifications', level: 1 })).toBeVisible();
-  await demo.getByRole('button', { name: 'List view' }).click();
+  await demo.getByRole('button', { name: 'List View' }).click();
   await expect(demo.getByRole('heading', { name: 'Queue', level: 1 })).toBeVisible();
   await demo
     .locator('[data-component="toolbar"]')
@@ -18,15 +18,15 @@ test('preserves page headings and dialog naming with direct Toolbar compositions
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/ux-demo?component=connection-details-dialog');
-    const dialog = page.getByRole('dialog', { name: 'Server build details' });
+    const dialog = page.getByRole('dialog', { name: 'Server Build Details' });
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveAttribute('aria-describedby', 'connection-details-summary');
     const toolbar = dialog.locator('[data-component="toolbar"]');
     await expect(toolbar).not.toHaveAttribute('divider-sides');
     // With a description, Kerf moves the title id onto the title span (KF-DXVMBN, HS2-XHC39W).
-    await expect(toolbar.locator('#connection-details-title')).toHaveText('Server build details');
+    await expect(toolbar.locator('#connection-details-title')).toHaveText('Server Build Details');
     await expect(toolbar.locator('#connection-details-summary')).toHaveClass('kui-toolbar-text__description');
-    await expect(dialog.getByRole('heading', { name: 'Server build details' })).toHaveCount(0);
+    await expect(dialog.getByRole('heading', { name: 'Server Build Details' })).toHaveCount(0);
     await expect(dialog.locator('#connection-details-summary')).not.toHaveText('');
     // Kerf's icon tile: a 16px glyph centered in the group's control slot, like an icon button.
     const iconTile = toolbar.locator('[data-component="toolbar-control-group"]').first();

@@ -59,7 +59,7 @@ export function resetTicketSourceSetupDemo(root?: ParentNode): void {
 
 export function KeyboardSettingsDemo() {
   return (
-    <CatalogExample label="Apple keyboard">
+    <CatalogExample label="Apple Keyboard">
       <KeyboardSettings overrides={{}} apple={true} />
     </CatalogExample>
   );
@@ -135,7 +135,7 @@ export function TicketSourceSetupDialogDemo() {
 
 export function ProviderSetupFormDemo() {
   return (
-    <CatalogExample label="GitHub, authorized">
+    <CatalogExample label="GitHub, Authorized">
       <ProviderSetupForm
         kind="github"
         defaultChoice
@@ -153,7 +153,7 @@ export function ProviderSetupFormDemo() {
 
 export function TicketSourcesSettingsDemo() {
   return (
-    <CatalogExample label="Connected sources">
+    <CatalogExample label="Connected Sources">
       <TicketSourcesSettings sources={DEMO_PROJECT_SOURCES} />
     </CatalogExample>
   );
@@ -162,10 +162,10 @@ export function TicketSourcesSettingsDemo() {
 export function AccountsSettingsDemo() {
   return (
     <>
-      <CatalogExample label="Signed-in accounts">
+      <CatalogExample label="Signed-In Accounts">
         <AccountsSettings accounts={DEMO_ACCOUNTS} signingOut={undefined} />
       </CatalogExample>
-      <CatalogExample label="Server unreachable">
+      <CatalogExample label="Server Unreachable">
         <AccountsSettings accounts={[]} error="Could not reach the Hot Sheet server." />
       </CatalogExample>
     </>
@@ -242,12 +242,12 @@ export function TrashSettingsDemo() {
         <TrashSettings {...state.default} />
       </CatalogExample>
       {/* An unapplied shorter window enables "Apply now" and previews the purge (HS2-KPD942). */}
-      <CatalogExample label="Unapplied change" rootAttributes={TRASH_DEMO_EXAMPLE('unapplied')}>
+      <CatalogExample label="Unapplied Change" rootAttributes={TRASH_DEMO_EXAMPLE('unapplied')}>
         <TrashSettings {...state.unapplied} />
       </CatalogExample>
       {/* Leaving Lifecycle with an unapplied value asks to apply or revert it (HS2-F55956, HS2-WFFDAA). */}
       <CatalogExample
-        label="Leaving with an unapplied change"
+        label="Leaving with an Unapplied Change"
         note="Leave Lifecycle stands in for choosing another settings category or project tab."
         rootAttributes={TRASH_DEMO_EXAMPLE('leaving')}
       >

@@ -26,7 +26,7 @@ export function AIContentFeedback({ tool = 'AI', feedbackTarget }: { tool?: stri
         {...COMMANDS_AND_AI_ACTIONS.rateAiContent.attrs}
         data-ai-feedback-target={feedbackTarget}
         data-ai-feedback-rating="helpful"
-        aria-label="Helpful — keep suggestions like this"
+        aria-label="Helpful — Keep Suggestions Like This"
         title="Helpful — keep suggestions like this"
       >
         <LucideIcon size="xs" icon={ThumbsUp} name="thumbs-up" />
@@ -37,7 +37,7 @@ export function AIContentFeedback({ tool = 'AI', feedbackTarget }: { tool?: stri
         {...COMMANDS_AND_AI_ACTIONS.rateAiContent.attrs}
         data-ai-feedback-target={feedbackTarget}
         data-ai-feedback-rating="not-helpful"
-        aria-label="Not helpful — stop suggestions like this"
+        aria-label="Not Helpful — Stop Suggestions Like This"
         title="Not helpful — stop suggestions like this"
       >
         <LucideIcon size="xs" icon={ThumbsDown} name="thumbs-down" />

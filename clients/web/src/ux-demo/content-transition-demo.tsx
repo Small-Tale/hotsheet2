@@ -34,7 +34,7 @@ export function ContentTransitionDemo() {
   return (
     <>
       <CatalogExample
-        label="Setup dialog"
+        label="Setup Dialog"
         note="Navigation moves between the two sides; the settings pane picks the content transition style."
         viewport={{ width: 'medium', frame: 'solid', surface: 'default', shadow: true }}
       >

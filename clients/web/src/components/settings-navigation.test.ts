@@ -18,7 +18,7 @@ describe('SettingsNavigation', () => {
     expect(markup).toContain('data-item-id="terminals"');
     expect(markup).toMatch(/data-item-id="permissions"[^>]*aria-current="page"/);
     expect(markup).toContain('data-item-id="columns"');
-    expect(markup).toContain('aria-label="Hide settings sidebar"');
+    expect(markup).toContain('aria-label="Hide Settings Sidebar"');
     for (const icon of ['database', 'bot', 'terminal-square', 'archive-restore', 'shield-check', 'columns-3'])
       expect(markup).toContain(`data-lucide="${icon}"`);
     // Project-scoped categories and the app-scoped Keyboard item live under distinct headings (HS2-QT6PGR).
@@ -43,6 +43,6 @@ describe('SettingsNavigation', () => {
     expect(settingsCategoryTitle('permissions')).toBe('Permissions');
     expect(settingsCategoryTitle('columns')).toBe('Column view');
     expect(settingsCategoryTitle('general')).toBe('General');
-    expect(settingsCategoryTitle('keyboard')).toBe('Keyboard shortcuts');
+    expect(settingsCategoryTitle('keyboard')).toBe('Keyboard Shortcuts');
   });
 });

@@ -99,8 +99,8 @@ describe('TerminalDrawer', () => {
     expect(markup).toContain('>Project grid</span>');
     expect(markup).toContain('data-lucide="layout-grid"');
     expect(markup).not.toContain('data-lucide="grid-3x3"');
-    expect(markup).toMatch(/data-kui-tab-list[\s\S]*Terminal 2[\s\S]*kui-tab-bar__trailing[\s\S]*New drawer item/);
-    expect(markup).toMatch(/kui-tab-bar__end[\s\S]*terminal-drawer__actions[\s\S]*Hide terminal drawer/);
+    expect(markup).toMatch(/data-kui-tab-list[\s\S]*Terminal 2[\s\S]*kui-tab-bar__trailing[\s\S]*New Drawer Item/);
+    expect(markup).toMatch(/kui-tab-bar__end[\s\S]*terminal-drawer__actions[\s\S]*Hide Terminal Drawer/);
     expect(markup).toContain('data-component="app-tab"');
     expect(markup).toContain('data-tab-kind="terminal"');
     expect(markup).toContain('draggable="true"');
@@ -138,12 +138,12 @@ describe('TerminalDrawer', () => {
     expect(chat).toContain('data-component="app-tab"');
     expect(chat).toContain('data-action="close-ai-chat-tab"');
     expect(chat).toContain('data-presentation="embedded"');
-    for (const item of ['Terminal', 'AI shell', 'AI chat', 'Saved conversation…']) expect(chat).toContain(item);
+    for (const item of ['Terminal', 'AI shell', 'AI Chat', 'Saved Conversation…']) expect(chat).toContain(item);
     expect(chat).toContain('data-action="open-saved-conversation"');
     expect(chat).toContain('data-component="popup-menu"');
     expect(chat).toContain('data-terminal-drawer-create="true"');
     expect(chat).toContain('placement="top-start"');
-    expect(chat).toContain('New drawer item');
+    expect(chat).toContain('New Drawer Item');
     expect(chat).toContain('data-action="create-terminal-drawer-item"');
     expect(chat).not.toContain('terminal-drawer__create-menu');
     expect(chat).not.toContain('data-component="list-header"');
@@ -311,7 +311,7 @@ describe('TerminalDrawer', () => {
     const touch = drawer('one', true);
     // Native buttons in the existing end group, before Hide drawer, each with a Lucide icon and a name.
     expect(touch).toMatch(
-      /data-action="copy-terminal-text" aria-label="Copy terminal text"[^>]*>.*data-lucide="copy".*data-action="paste-terminal-text" aria-label="Paste"[^>]*>.*data-lucide="clipboard-paste".*data-action="toggle-terminal-drawer"/s,
+      /data-action="copy-terminal-text" aria-label="Copy Terminal Text"[^>]*>.*data-lucide="copy".*data-action="paste-terminal-text" aria-label="Paste"[^>]*>.*data-lucide="clipboard-paste".*data-action="toggle-terminal-drawer"/s,
     );
     // A fine pointer, the grid, and phone focus mode (which has its own pill) never show the rail pair.
     expect(drawer('one', false)).not.toContain('copy-terminal-text');
@@ -353,7 +353,7 @@ describe('TerminalDrawer', () => {
       ".terminal-drawer[data-focus-mode='true'] { position: fixed; z-index: 200; top: var(--terminal-focus-top); left: var(--terminal-focus-left); width: var(--terminal-focus-width); height: var(--terminal-focus-height);",
     );
     // The Exit pill floats in a Kerf FloatingToolbar that owns the safe-area inset (HS2-798JS4).
-    expect(markup).toContain('aria-label="Terminal focus exit"');
+    expect(markup).toContain('aria-label="Terminal Focus Exit"');
     expect(css).not.toContain('__focus-exit');
     // Off phones (no focusTextSize) the drawer focus mode shows only the Exit pill.
     expect(markup).not.toContain('terminal-drawer__focus-controls');
@@ -384,7 +384,7 @@ describe('TerminalDrawer', () => {
     expect(markup).toContain('terminal-drawer__focus-controls');
     expect(markup).toContain('data-action="cycle-mobile-terminal-columns"');
     expect(markup).toContain('data-columns="60"');
-    expect(markup).toContain('aria-label="Text size: 60 columns. Change text size"');
+    expect(markup).toContain('aria-label="Text Size: 60 Columns. Change Text Size"');
     expect(markup).toContain('data-lucide="a-large-small"');
     expect(markup).not.toContain('aria-hidden="true">60<');
     // HS2-FRB545: the Copy/Paste group sits beside it in the same Kerf FloatingToolbar.

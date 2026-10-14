@@ -195,7 +195,7 @@ export function TicketSearchDateHelper({ id, prefix }: { id: string; prefix: str
     >
       {/* Web Awesome owns the date and time fields and the Apply button (HS2-HEXGFB). */}
       <wa-input name={TICKET_SEARCH_DATE_INPUT} type="date" label="Date" size="small" />
-      <wa-input name={TICKET_SEARCH_TIME_INPUT} type="time" label="Time (optional)" size="small" />
+      <wa-input name={TICKET_SEARCH_TIME_INPUT} type="time" label="Time (Optional)" size="small" />
       <div class="ticket-search-field__date-apply">
         <wa-button size="small" {...TICKET_SEARCH_ACTIONS.applyDate.attrs} data-date-prefix={prefix}>
           Apply
@@ -239,7 +239,7 @@ function TicketSearchHelpButton({ open }: { open: boolean }) {
       type="button"
       class="ticket-search-field__help-button"
       {...TICKET_SEARCH_ACTIONS.toggleHelp.attrs}
-      aria-label="Search syntax help"
+      aria-label="Search Syntax Help"
       aria-expanded={String(open)}
       title="Search syntax help"
       data-token-search-keep-open

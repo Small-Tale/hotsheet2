@@ -16,7 +16,7 @@ export function HaltedSessionPopupDemo() {
     <CatalogExample label="Interactive" align="glyph">
       <DemoEvent>{haltedSessionDemoResult.value}</DemoEvent>
       <button type="button" data-reset-halt-demo>
-        Show halted session
+        Show Halted Session
       </button>
       {haltedSessionDemoVisible.value && (
         <HaltedSessionPopup

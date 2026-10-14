@@ -97,7 +97,7 @@ export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
     return (
       // Per-project statistics (HS2-Q1WCCY): Kerf's Pane owns the scroll and outer inset, and a
       // layout content stack separates the title from the report (HS2-3V3JY6).
-      <Pane element="section" label={`${props.projectName} project statistics`} deepInset>
+      <Pane element="section" label={`${props.projectName} Project Statistics`} deepInset>
         <div class="kui-content">
           <Text variant="h1" size="xlarge" flush>
             {props.projectName} project statistics
@@ -106,7 +106,7 @@ export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
         </div>
       </Pane>
     );
-  return <AppMessageState title="Cross-project stats" message="This dashboard is still being designed." />;
+  return <AppMessageState title="Cross-Project Stats" message="This dashboard is still being designed." />;
 }
 
 function statsPlaceholderPanel(label: string, toggle: SidebarPanelParts['toggle'], message: string): SidebarPanelParts {

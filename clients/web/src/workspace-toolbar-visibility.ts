@@ -3,6 +3,9 @@ const ITEM = '[data-hide-below], [data-show-below]';
 const STATE = 'data-toolbar-visibility-state';
 const HIDDEN = 'data-toolbar-width-hidden';
 
+/** The workspace toolbar's accessible name; the shell renders it and this observer finds the toolbar by it. */
+export const WORKSPACE_TOOLBAR_LABEL = 'Workspace Toolbar';
+
 function threshold(item: Element, name: string): number | undefined {
   const value = item.getAttribute(name);
   if (value === null) return undefined;
@@ -87,7 +90,7 @@ function searchSizingStyle(root: HTMLElement, selector: string): { style: CSSSty
 
 export function wireWorkspaceToolbarVisibility(
   root: HTMLElement,
-  selector = '.workspace-header[data-component="toolbar"], [data-component="toolbar"][aria-label="Workspace toolbar"]',
+  selector = `.workspace-header[data-component="toolbar"], [data-component="toolbar"][aria-label="${WORKSPACE_TOOLBAR_LABEL}"]`,
 ): () => void {
   let header: HTMLElement | null = null;
   let observedSearchSlot: HTMLElement | null = null;

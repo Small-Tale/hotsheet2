@@ -117,7 +117,7 @@ export function TicketSearchFieldDemo() {
     <>
       <CatalogExample
         align="glyph"
-        label="Standalone query field, floating surfaces"
+        label="Standalone Query Field, Floating Surfaces"
         note={
           <>
             Type <code>tag:</code> for Kerf's in-place tag completion, a lifecycle filter such as{' '}
@@ -141,7 +141,7 @@ export function TicketSearchFieldDemo() {
       </CatalogExample>
       <CatalogExample
         align="glyph"
-        label="Form field beside Web Awesome inputs"
+        label="Form Field Beside Web Awesome Inputs"
         rootAttributes={{ 'data-search-demo': 'form' }}
         note={
           <>
@@ -153,7 +153,7 @@ export function TicketSearchFieldDemo() {
         viewport={{ width: 'full' }}
       >
         <Grid columns={1} gap="m" textInsets="rl">
-          <wa-input name="ticket-search-demo-form-name" label="View name" required />
+          <wa-input name="ticket-search-demo-form-name" label="View Name" required />
           <TicketSearchFormField
             id="ticket-search-demo-form"
             label="View query"
@@ -167,7 +167,7 @@ export function TicketSearchFieldDemo() {
       </CatalogExample>
       <CatalogExample
         align="glyph"
-        label="Collapsible toolbar field, inline layout"
+        label="Collapsible Toolbar Field, Inline Layout"
         note={
           <>
             <code>layout="inline"</code> (the default) keeps Kerf's own collapsed and expanded widths; a{' '}
@@ -191,7 +191,7 @@ export function TicketSearchFieldDemo() {
       </CatalogExample>
       <CatalogExample
         align="glyph"
-        label="Grow layout (workspace header)"
+        label="Grow Layout (Workspace Header)"
         note={
           <>
             <code>layout="grow"</code>: the open field grows into the free room on its row from a 19rem floor, takes the
@@ -217,7 +217,7 @@ export function TicketSearchFieldDemo() {
       </CatalogExample>
       <CatalogExample
         align="glyph"
-        label="Row layout (narrow rail)"
+        label="Row Layout (Narrow Rail)"
         note={
           <>
             <code>layout="row"</code>: the collapsed icon sits at its zone's trailing edge and the open field fills a

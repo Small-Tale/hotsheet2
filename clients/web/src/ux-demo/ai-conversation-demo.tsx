@@ -161,7 +161,7 @@ export function AIConversationDemo() {
       >
         {aiConversationPresentation.value === 'dialog' && (
           <wa-button appearance="accent" data-action="open-ai-conversation-demo">
-            Open conversation
+            Open Conversation
           </wa-button>
         )}
         <DemoEvent>
@@ -242,18 +242,18 @@ export function AIConversationSettings() {
         choices={[
           { value: 'empty', label: 'Empty' },
           { value: 'streaming', label: 'Streaming' },
-          { value: 'permission', label: 'Permission requested' },
-          { value: 'completed', label: 'Completed with priced usage' },
-          { value: 'usage-unpriced', label: 'Completed with unpriced usage' },
+          { value: 'permission', label: 'Permission Requested' },
+          { value: 'completed', label: 'Completed with Priced Usage' },
+          { value: 'usage-unpriced', label: 'Completed with Unpriced Usage' },
           { value: 'failed', label: 'Failed' },
           { value: 'interrupted', label: 'Interrupted' },
-          { value: 'saved', label: 'Saved read-only transcript' },
+          { value: 'saved', label: 'Saved Read-Only Transcript' },
         ]}
       />
       <DeviceSetting value={aiConversationDevice.value} />
       {aiConversationPresentation.value === 'dialog' && (
         <wa-button type="button" data-action="open-ai-conversation-demo">
-          Open conversation
+          Open Conversation
         </wa-button>
       )}
       <wa-button type="button" data-action="reset-settings">

@@ -6,8 +6,8 @@ import { inspectorToggle, SidebarPane, type SidebarPanelParts } from './sidebar-
 /** The empty or multi-selection inspector's panel parts for the Workbench's right rail (HS2-QQW6CT). */
 export function ticketInspectorPlaceholderPanel({ selectionCount }: { selectionCount: number }): SidebarPanelParts {
   return {
-    label: 'Ticket inspector',
-    toolbar: { label: 'Ticket inspector toolbar', dividerSides: '' },
+    label: 'Ticket Inspector',
+    toolbar: { label: 'Ticket Inspector Toolbar', dividerSides: '' },
     toggle: inspectorToggle(),
     content: (
       <List

@@ -49,7 +49,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   // Global command chords — rebindable, resolved at the central dispatcher.
   {
     id: 'open-search',
-    label: 'Open search',
+    label: 'Open Search',
     description: 'Focus the workspace ticket search.',
     group: 'Global',
     defaultChord: { key: 'k', mod: true },
@@ -78,7 +78,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   // Ctrl elsewhere.
   {
     id: 'toggle-left-sidebar',
-    label: 'Toggle left sidebar',
+    label: 'Toggle Left Sidebar',
     description: 'Show or hide the project sidebar.',
     group: 'Views & panels',
     defaultChord: { key: 'b', mod: true },
@@ -86,7 +86,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'toggle-right-sidebar',
-    label: 'Toggle right sidebar',
+    label: 'Toggle Right Sidebar',
     description: 'Show or hide the ticket inspector.',
     group: 'Views & panels',
     defaultChord: { key: 'b', mod: true, alt: true, shift: true },
@@ -94,7 +94,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'toggle-bottom-drawer',
-    label: 'Toggle bottom drawer',
+    label: 'Toggle Bottom Drawer',
     description: 'Show or hide the terminal drawer.',
     group: 'Views & panels',
     defaultChord: { key: 'j', mod: true },
@@ -102,7 +102,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'view-list',
-    label: 'List view',
+    label: 'List View',
     description: 'Switch the workspace to the list view.',
     group: 'Views & panels',
     defaultChord: { key: 'l', mod: true, shift: true },
@@ -110,7 +110,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'view-board',
-    label: 'Column view',
+    label: 'Column View',
     description: 'Switch the workspace to the column (board) view.',
     group: 'Views & panels',
     defaultChord: { key: 'b', mod: true, shift: true },
@@ -118,7 +118,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'view-notifications',
-    label: 'Notifications view',
+    label: 'Notifications View',
     description: 'Switch the workspace to the notifications view.',
     group: 'Views & panels',
     defaultChord: { key: 'm', mod: true, shift: true },
@@ -126,7 +126,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'view-settings',
-    label: 'Settings view',
+    label: 'Settings View',
     description: 'Switch the workspace to the settings view.',
     group: 'Views & panels',
     defaultChord: { key: 's', mod: true, alt: true },
@@ -134,7 +134,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'view-workspace-grid',
-    label: 'Workspace grid',
+    label: 'Workspace Grid',
     description: 'Toggle the all-project workspace terminal grid and the last selected project.',
     group: 'Views & panels',
     defaultChord: { key: 'g', mod: true, shift: true },
@@ -142,7 +142,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'view-all-stats',
-    label: 'All-project stats',
+    label: 'All-Project Stats',
     description: 'Toggle the all-project stats dashboard and the last selected project.',
     group: 'Views & panels',
     defaultChord: { key: 'd', mod: true, shift: true },
@@ -151,7 +151,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   // Ticket clipboard & select-all — app-level chords, rebindable (resolved via matchesShortcut).
   {
     id: 'select-all-tickets',
-    label: 'Select all tickets',
+    label: 'Select All Tickets',
     description: 'Select every ticket in the current view.',
     group: 'Tickets',
     defaultChord: { key: 'a', mod: true },
@@ -159,7 +159,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'copy-tickets',
-    label: 'Copy tickets',
+    label: 'Copy Tickets',
     description: 'Copy the selected tickets.',
     group: 'Tickets',
     defaultChord: { key: 'c', mod: true },
@@ -167,7 +167,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'cut-tickets',
-    label: 'Cut tickets',
+    label: 'Cut Tickets',
     description: 'Cut the selected tickets.',
     group: 'Tickets',
     defaultChord: { key: 'x', mod: true },
@@ -175,7 +175,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'paste-tickets',
-    label: 'Paste tickets',
+    label: 'Paste Tickets',
     description: 'Paste tickets from the clipboard.',
     group: 'Tickets',
     defaultChord: { key: 'v', mod: true },
@@ -185,7 +185,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   // text field is focused (HS2-9SHYWD). Rebind to a modifier chord in Settings → Keyboard if preferred.
   {
     id: 'new-ticket',
-    label: 'New ticket',
+    label: 'New Ticket',
     description: 'Open the new-ticket composer.',
     group: 'Tickets',
     defaultChord: { key: 'c' },
@@ -193,7 +193,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'move-selection-up',
-    label: 'Move selection up',
+    label: 'Move Selection Up',
     description: 'Focus and select the previous ticket.',
     group: 'Tickets',
     defaultChord: { key: 'ArrowUp' },
@@ -201,7 +201,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'move-selection-down',
-    label: 'Move selection down',
+    label: 'Move Selection Down',
     description: 'Focus and select the next ticket.',
     group: 'Tickets',
     defaultChord: { key: 'ArrowDown' },
@@ -209,7 +209,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'activate',
-    label: 'Activate control',
+    label: 'Activate Control',
     description: 'Activate the focused row, control, or menu item.',
     group: 'Navigation & tabs',
     defaultChord: { key: 'Enter' },
@@ -225,7 +225,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'tab-previous',
-    label: 'Previous tab',
+    label: 'Previous Tab',
     description: 'Move focus to the previous tab in a tab strip.',
     group: 'Navigation & tabs',
     defaultChord: { key: 'ArrowLeft' },
@@ -233,7 +233,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'tab-next',
-    label: 'Next tab',
+    label: 'Next Tab',
     description: 'Move focus to the next tab in a tab strip.',
     group: 'Navigation & tabs',
     defaultChord: { key: 'ArrowRight' },
@@ -241,7 +241,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'tab-first',
-    label: 'First tab',
+    label: 'First Tab',
     description: 'Move focus to the first tab in a tab strip.',
     group: 'Navigation & tabs',
     defaultChord: { key: 'Home' },
@@ -249,7 +249,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'tab-last',
-    label: 'Last tab',
+    label: 'Last Tab',
     description: 'Move focus to the last tab in a tab strip.',
     group: 'Navigation & tabs',
     defaultChord: { key: 'End' },
@@ -257,7 +257,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'close-tab',
-    label: 'Close tab',
+    label: 'Close Tab',
     description: 'Close the focused terminal or chat tab.',
     group: 'Navigation & tabs',
     defaultChord: { key: 'Delete' },
@@ -265,7 +265,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'reorder-tab-left',
-    label: 'Move tab left',
+    label: 'Move Tab Left',
     description: 'Reorder the focused drawer tab toward the start.',
     group: 'Navigation & tabs',
     defaultChord: { key: 'ArrowLeft', alt: true, shift: true },
@@ -273,7 +273,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'reorder-tab-right',
-    label: 'Move tab right',
+    label: 'Move Tab Right',
     description: 'Reorder the focused drawer tab toward the end.',
     group: 'Navigation & tabs',
     defaultChord: { key: 'ArrowRight', alt: true, shift: true },
@@ -282,7 +282,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   // Cycle the active project / drawer tab (rebindable, resolved at the central dispatcher — HS2-9SHYWD).
   {
     id: 'project-tab-previous',
-    label: 'Previous project tab',
+    label: 'Previous Project Tab',
     description: 'Activate the previous open project tab.',
     group: 'Navigation & tabs',
     defaultChord: { key: 'ArrowLeft', mod: true, alt: true, shift: true },
@@ -290,7 +290,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'project-tab-next',
-    label: 'Next project tab',
+    label: 'Next Project Tab',
     description: 'Activate the next open project tab.',
     group: 'Navigation & tabs',
     defaultChord: { key: 'ArrowRight', mod: true, alt: true, shift: true },
@@ -298,7 +298,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'drawer-tab-previous',
-    label: 'Previous drawer tab',
+    label: 'Previous Drawer Tab',
     description: 'Select the previous bottom-drawer tab.',
     group: 'Navigation & tabs',
     defaultChord: { key: 'ArrowUp', mod: true, alt: true, shift: true },
@@ -306,7 +306,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'drawer-tab-next',
-    label: 'Next drawer tab',
+    label: 'Next Drawer Tab',
     description: 'Select the next bottom-drawer tab.',
     group: 'Navigation & tabs',
     defaultChord: { key: 'ArrowDown', mod: true, alt: true, shift: true },
@@ -314,7 +314,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'gallery-previous',
-    label: 'Previous attachment',
+    label: 'Previous Attachment',
     description: 'Show the previous image in the attachment gallery.',
     group: 'Media gallery',
     defaultChord: { key: 'ArrowLeft' },
@@ -322,7 +322,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'gallery-next',
-    label: 'Next attachment',
+    label: 'Next Attachment',
     description: 'Show the next image in the attachment gallery.',
     group: 'Media gallery',
     defaultChord: { key: 'ArrowRight' },
@@ -330,7 +330,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   },
   {
     id: 'gallery-toggle-playback',
-    label: 'Play or pause video',
+    label: 'Play or Pause Video',
     description: 'Toggle playback of the gallery video.',
     group: 'Media gallery',
     defaultChord: { key: ' ' },

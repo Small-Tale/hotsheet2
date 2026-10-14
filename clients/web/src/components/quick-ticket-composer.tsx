@@ -184,7 +184,7 @@ export function QuickTicketComposer({
           <wa-input
             class="quick-ticket-composer__title"
             name="new-ticket-title"
-            label="Ticket title"
+            label="Ticket Title"
             value={title}
             autofocus
             required
@@ -208,7 +208,7 @@ export function QuickTicketComposer({
               {details}
             </textarea>
           </label>
-          <section class="quick-ticket-composer__attachments" aria-label="New ticket attachments">
+          <section class="quick-ticket-composer__attachments" aria-label="New Ticket Attachments">
             <header>
               <span>
                 <LucideIcon size={14.4} icon={Paperclip} name="paperclip" />

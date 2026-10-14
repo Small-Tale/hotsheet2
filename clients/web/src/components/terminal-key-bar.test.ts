@@ -7,12 +7,12 @@ describe('TerminalKeyBar', () => {
   it('keeps the Fn group first and presents the ordinary keys in one toolbar', () => {
     const markup = String(TerminalKeyBar({ modifiers: NO_TERMINAL_MODIFIERS }));
     expect(markup).toContain('role="toolbar" aria-label="Terminal keys"');
-    expect(markup).toContain('class="terminal-key-bar__group" role="group" aria-label="Function row"');
+    expect(markup).toContain('class="terminal-key-bar__group" role="group" aria-label="Function Row"');
     // Each app-owned group slot holds a Kerf ToolbarControlGroup of native buttons (HS2-NQZ2EE).
     expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(3);
     expect(markup).toContain('aria-label="Escape, tab, and modifier keys"');
     expect(markup).toContain('aria-label="Arrow keys"');
-    expect(markup.indexOf('aria-label="Function row"')).toBeLessThan(markup.indexOf('aria-label="Arrow keys"'));
+    expect(markup.indexOf('aria-label="Function Row"')).toBeLessThan(markup.indexOf('aria-label="Arrow keys"'));
     expect(markup).toContain('data-key="Escape"');
     expect(markup).toContain('data-key="ArrowRight"');
     expect(markup).not.toContain('aria-label="Clipboard"');

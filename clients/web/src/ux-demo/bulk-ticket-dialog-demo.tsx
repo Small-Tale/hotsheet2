@@ -80,7 +80,7 @@ export function BulkTicketDialogDemo() {
   return (
     <>
       <CatalogExample align="glyph" label="Interactive">
-        {!open && <wa-button {...DEMO_ACTIONS.openBulkTicketDialogDemo.attrs}>Open dialog</wa-button>}
+        {!open && <wa-button {...DEMO_ACTIONS.openBulkTicketDialogDemo.attrs}>Open Dialog</wa-button>}
         <BulkTicketDialog state={open ? bulkTicketDialogState(bulkTicketDialogSettings.scenario.value) : undefined} />
       </CatalogExample>
       <DemoEvent>{bulkTicketDialogSettings.event.value}</DemoEvent>

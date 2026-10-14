@@ -39,11 +39,11 @@ export function CommandRunDialog({
             <Text flush>The command is still running. Stop it now?</Text>
             <Row slot="footer" hAlign="right" vAlign="middle" gap="xs" wrap>
               <wa-button appearance="outlined" {...COMMANDS_AND_AI_ACTIONS.dismissCommandDialog.attrs}>
-                Keep running
+                Keep Running
               </wa-button>
               <wa-button variant="danger" {...COMMANDS_AND_AI_ACTIONS.confirmStopCommand.attrs} data-run-id={run?.id}>
                 <LucideIcon slot="start" icon={Square} name="square" size={13.6} />
-                Stop command
+                Stop Command
               </wa-button>
             </Row>
           </wa-dialog>

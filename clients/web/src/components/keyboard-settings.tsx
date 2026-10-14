@@ -39,7 +39,7 @@ export interface KeyboardSettingsProps {
 export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSettingsProps) {
   const hasOverrides = Object.keys(overrides).length > 0;
   return (
-    <section class="keyboard-settings" data-component="keyboard-settings" aria-label="Keyboard shortcuts">
+    <section class="keyboard-settings" data-component="keyboard-settings" aria-label="Keyboard Shortcuts">
       <List gap="l">
         <Row hAlign="space-between" vAlign="top" gap="m" wrap>
           <Row flex={flex(1, 1, px(320))}>
@@ -56,7 +56,7 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
             disabled={!hasOverrides}
           >
             <LucideIcon slot="start" size={14.4} icon={RotateCcw} name="rotate-ccw" />
-            Reset all to defaults
+            Reset All to Defaults
           </wa-button>
         </Row>
         {KEYBOARD_SHORTCUT_GROUPS.map((group) => {
@@ -113,7 +113,7 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
                               data-shortcut-capture={shortcut.id}
                               aria-label={`Recording new shortcut for ${shortcut.label}. Press a key combination, or Escape to cancel.`}
                             >
-                              Press keys…
+                              Press Keys…
                             </button>
                           ) : (
                             <kbd class="keyboard-settings__chord">{formatChord(chord, apple)}</kbd>

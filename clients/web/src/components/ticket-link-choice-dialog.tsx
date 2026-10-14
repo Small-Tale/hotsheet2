@@ -34,7 +34,7 @@ export function TicketLinkChoiceDialog({ choice }: { choice?: TicketLinkChoice }
             <Text flush data-ticket-choice-intro>
               More than one ticket has this exact reference. Choose the source you meant.
             </Text>
-            <nav aria-label={`Exact matches for ${choice.reference.raw}`}>
+            <nav aria-label={`Exact Matches for ${choice.reference.raw}`}>
               <List gap="none" rootAttributes={{ 'data-ticket-matches': 'true' }}>
                 {choice.matches.map((match) => (
                   <ListItem

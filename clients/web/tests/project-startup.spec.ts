@@ -131,7 +131,7 @@ async function startupFixture(page: Page, roots: string[], active: string | unde
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities,
@@ -334,7 +334,7 @@ test('opens remembered projects concurrently, wires original order, and restores
   await page.getByRole('tab', { name: /^alpha/ }).click();
   await expect(page.getByText('alpha restored work', { exact: true })).toBeVisible();
   await expect(page.locator('[data-component="quick-ticket-composer"]')).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'Ticket title' })).toHaveValue('alpha preserved draft');
+  await expect(page.getByRole('textbox', { name: 'Ticket Title' })).toHaveValue('alpha preserved draft');
 });
 
 test('shows the active project while other remembered projects are still opening, as in-place placeholder tabs (HS2-X74D4B, HS2-2BEJXD)', async ({
@@ -456,7 +456,7 @@ test('defers inactive setup and migration prompts until their tab is activated',
   await page.keyboard.press('Escape');
   await page.getByRole('tab', { name: /^gamma/ }).click();
   await expect(migration).toHaveJSProperty('open', true);
-  await expect(migration.getByRole('button', { name: 'Not now' })).toBeVisible();
+  await expect(migration.getByRole('button', { name: 'Not Now' })).toBeVisible();
   await expect(setup).toBeHidden();
 });
 
@@ -472,7 +472,7 @@ test('survives all-failed, empty, and refilled startup transitions without retai
     localStorage.setItem('hotsheet.open-projects', '[]');
   });
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Open project', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open Project', exact: true })).toBeVisible();
   await expect(page.locator('.project-restore-error')).toHaveCount(0);
   fixture.unavailable.clear();
   await page.evaluate(() => {
@@ -501,7 +501,7 @@ test('activates a passive tab after closing the active project, then opens again
     .click();
   await expect(page.getByRole('tab', { name: /^gamma/ })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByText('gamma restored work', { exact: true })).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'Ticket title' })).toHaveValue('gamma preserved draft');
+  await expect(page.getByRole('textbox', { name: 'Ticket Title' })).toHaveValue('gamma preserved draft');
   await page.keyboard.press('Escape');
   await expect(page.locator('[data-component="quick-ticket-composer"]')).toBeHidden();
   for (const name of ['gamma', 'alpha']) {
@@ -513,17 +513,17 @@ test('activates a passive tab after closing the active project, then opens again
       .click();
     await expect(page.getByRole('tab', { name: new RegExp(`^${name}`) })).toHaveCount(0);
     if (name === 'gamma') {
-      await expect(page.getByRole('textbox', { name: 'Ticket title' })).toHaveValue('alpha preserved draft');
+      await expect(page.getByRole('textbox', { name: 'Ticket Title' })).toHaveValue('alpha preserved draft');
       await page.keyboard.press('Escape');
       await expect(page.locator('[data-component="quick-ticket-composer"]')).toBeHidden();
     }
   }
   // The closed Open project dialog must not inherit the just-closed confirmation dialog's open element.
   expect(await page.locator('wa-dialog[data-project-dialog][open]').count()).toBe(0);
-  await expect(page.getByRole('button', { name: 'Open project', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Open project', exact: true }).click();
-  await page.locator('[data-project-dialog]').getByRole('textbox', { name: 'Project folder' }).fill('/work/alpha');
-  await page.locator('[data-project-dialog]').getByRole('button', { name: 'Open project', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Open Project', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).click();
+  await page.locator('[data-project-dialog]').getByRole('textbox', { name: 'Project Folder' }).fill('/work/alpha');
+  await page.locator('[data-project-dialog]').getByRole('button', { name: 'Open Project', exact: true }).click();
   await expect(page.getByRole('tab', { name: /^alpha/ })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByText('alpha restored work', { exact: true })).toBeVisible();
   expect(fixture.attempts.get('alpha')).toBe(2);
@@ -557,7 +557,7 @@ test('restores inactive AI chats without activating their project and loads aggr
   expect(heavyCalls(fixture.calls).every((path) => path.includes('/beta/'))).toBe(true);
   expect(fixture.calls.some((path) => /\/(alpha|gamma)\/ai-tools/.test(path))).toBe(false);
   await expect(draft(page, 'alpha')).resolves.toBe('alpha preserved draft');
-  await page.getByRole('button', { name: 'Workspace grid', exact: true }).click();
+  await page.getByRole('button', { name: 'Workspace Grid', exact: true }).click();
   await expect(page.locator('[data-component="workspace-chat-tile"]')).toContainText('alpha › Codex chat');
   await expect
     .poll(() => heavyCalls(fixture.calls).filter((path) => /\/(alpha|gamma)\/.*\/tickets\?/.test(path)).length)

@@ -136,7 +136,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
           {
             connection_id: 'git',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/work/demo.hs2',
             default: true,
             capabilities: { create: true, update: true, notes: true, attachments: true, watch: true, query_fields: [] },
@@ -161,13 +161,13 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   });
   await page.setViewportSize({ width: 1800, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-component="global-search-overlay"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const search = page.getByRole('searchbox', { name: 'Search tickets' }),
     toolbar = page
-      .locator('[data-component="toolbar"][aria-label="Workspace toolbar"]')
+      .locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]')
       .filter({ has: page.locator('.ticket-search-field') }),
     searchGroup = toolbar.locator('.ticket-search-field'),
     geometry = () =>
@@ -177,13 +177,13 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
             return { top: value.top, bottom: value.bottom, height: value.height };
           },
           group = document.querySelector<HTMLElement>(
-            '[data-component="toolbar"][aria-label="Workspace toolbar"] .ticket-search-field',
+            '[data-component="toolbar"][aria-label="Workspace Toolbar"] .ticket-search-field',
           )!;
         return {
-          group: rect('[data-component="toolbar"][aria-label="Workspace toolbar"] .ticket-search-field'),
-          mode: rect('[data-component="toolbar"][aria-label="Workspace toolbar"] .view-mode-switcher'),
-          sort: rect('[data-component="toolbar"][aria-label="Workspace toolbar"] .workspace-header__sort-group'),
-          toolbar: rect('[data-component="toolbar"][aria-label="Workspace toolbar"]'),
+          group: rect('[data-component="toolbar"][aria-label="Workspace Toolbar"] .ticket-search-field'),
+          mode: rect('[data-component="toolbar"][aria-label="Workspace Toolbar"] .view-mode-switcher'),
+          sort: rect('[data-component="toolbar"][aria-label="Workspace Toolbar"] .workspace-header__sort-group'),
+          toolbar: rect('[data-component="toolbar"][aria-label="Workspace Toolbar"]'),
           tabs: rect('.app-shell__main > .project-tab-bar'),
           radius: getComputedStyle(group.querySelector<HTMLElement>('.kui-token-search')!).borderRadius,
         };
@@ -332,7 +332,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await expect(page.locator('[data-component="token-search-token"][data-token-value="is:up-next"]')).toBeVisible();
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.fill('is:active');
-  await page.getByRole('button', { name: 'Search syntax help' }).click();
+  await page.getByRole('button', { name: 'Search Syntax Help' }).click();
   await expect(page.locator('[data-component="token-search-token"][data-token-value="is:active"]')).toHaveCount(0);
   await search.press('Enter');
   await expect(page.locator('[data-component="token-search-token"][data-token-value="is:active"]')).toBeVisible();
@@ -343,7 +343,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   ).toBeVisible();
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.fill('updated-after:2026/09/07');
-  await page.getByRole('button', { name: 'Columns view' }).focus();
+  await page.getByRole('button', { name: 'Columns View' }).focus();
   await expect(
     page.locator('[data-component="token-search-token"][data-token-value="updated-after:2026/09/07"]'),
   ).toHaveCount(0);
@@ -389,7 +389,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   expect(ticketQueries.at(-1)?.searchParams.get('text') ?? '').toBe('');
   await page.setViewportSize({ width: 680, height: 720 });
   await page.screenshot({ path: 'target/visual-captures/hs2-m2zxjc-0y96fm-duplicate-narrow.png', fullPage: true });
-  await page.getByRole('button', { name: 'Search syntax help' }).click();
+  await page.getByRole('button', { name: 'Search Syntax Help' }).click();
   const help = page.getByRole('dialog', { name: 'Search syntax' });
   await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
   await expect(help).toContainText('NOT binds before AND, and AND before OR');
@@ -443,7 +443,7 @@ test('keeps the project identity readable beside expanded search at 680px', asyn
           {
             connection_id: 'git',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/work/demo.hs2',
             default: true,
             capabilities: { create: true, update: true, notes: true, attachments: true, watch: true, query_fields: [] },
@@ -468,8 +468,8 @@ test('keeps the project identity readable beside expanded search at 680px', asyn
   });
   await page.setViewportSize({ width: 680, height: 720 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const search = page.getByRole('searchbox', { name: 'Search tickets' });
   await search.fill('a wrapped production search query that leaves the project identity readable');
@@ -494,7 +494,7 @@ test('keeps the project identity readable beside expanded search at 680px', asyn
         };
       },
       toolbar = document.querySelector<HTMLElement>(
-        '[data-component="toolbar"][aria-label="Workspace toolbar"]:has(.ticket-search-field)',
+        '[data-component="toolbar"][aria-label="Workspace Toolbar"]:has(.ticket-search-field)',
       )!,
       trailing = toolbar.querySelector<HTMLElement>('.kui-toolbar__trailing')!,
       search = toolbar.querySelector<HTMLElement>('.ticket-search-field')!,

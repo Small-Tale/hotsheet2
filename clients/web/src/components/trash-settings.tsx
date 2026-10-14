@@ -70,12 +70,12 @@ export function TrashSettings({
               class="trash-settings__days"
               name="trash-cleanup-days"
               type="number"
-              label="Keep deleted tickets for (days)"
+              label="Keep Deleted Tickets for (Days)"
               value={draft?.value ?? String(days)}
               required
             />
             <wa-button type="submit" variant="brand" disabled={!dirty}>
-              Apply now
+              Apply Now
             </wa-button>
           </Row>
           {hint ? (

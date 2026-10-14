@@ -47,7 +47,7 @@ export function ListItemDemo() {
           description="Secondary detail"
         />
       </CatalogExample>
-      <CatalogExample label="Provider identities" viewport={{ width: 'compact' }}>
+      <CatalogExample label="Provider Identities" viewport={{ width: 'compact' }}>
         {(['github', 'gitlab', 'jira'] as const).map((kind) => (
           <ListItem
             action="demo-menu-item"

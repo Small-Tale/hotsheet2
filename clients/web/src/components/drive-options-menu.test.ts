@@ -24,7 +24,7 @@ describe('DriveOptionsMenu', () => {
         defaultSelection: { tool: 'claude', model: 'opus' },
       }),
     );
-    expect(markup).toContain('aria-label="Drive provider, model, and effort options"');
+    expect(markup).toContain('aria-label="Drive Provider, Model, and Effort Options"');
     expect(markup).toContain('data-action="select-drive-default" type="checkbox"');
     expect(markup).toContain(
       'data-value="claude" slot="submenu" data-action="select-drive-tool" value="claude" type="checkbox"',
@@ -57,9 +57,9 @@ describe('DriveOptionsMenu', () => {
         DriveOptionsMenu({ tools: [], selection: {}, defaultSelection: {}, error: 'AI discovery unavailable' }),
       );
     expect(loading).toContain('Detecting AI tools…');
-    expect(loading).not.toContain('No AI tools detected');
+    expect(loading).not.toContain('No AI Tools Detected');
     expect(failed).toContain('AI discovery unavailable');
-    expect(failed).not.toContain('No AI tools detected');
+    expect(failed).not.toContain('No AI Tools Detected');
   });
   it('uses the shared icon-label selection hierarchy without a duplicate disclosure icon', () => {
     const markup = String(

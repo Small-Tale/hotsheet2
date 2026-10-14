@@ -39,7 +39,7 @@ export function TicketBoardColumn({
       data-column-id={id}
       data-scroll-snap={scrollSnap ? 'start' : undefined}
       data-ticket-drop-status={dropStatus}
-      aria-label={`${title} column`}
+      aria-label={`${title} Column`}
     >
       <header>
         <h2 id={`ticket-column-${id}`}>

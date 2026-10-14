@@ -650,7 +650,7 @@ async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs, all
     scenarios.create_ticket = await measuredUiAction(
       async () => {
         await page.getByRole('button', { name: 'New ticket…' }).click();
-        await page.getByRole('textbox', { name: 'Ticket title' }).fill(title);
+        await page.getByRole('textbox', { name: 'Ticket Title' }).fill(title);
         await page.getByRole('button', { name: 'Create ticket' }).click();
       },
       () => page.locator('[data-component="ticket-list-row"]', { hasText: title }).waitFor(),

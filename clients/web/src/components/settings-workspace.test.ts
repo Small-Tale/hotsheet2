@@ -23,7 +23,7 @@ describe('SettingsWorkspace', () => {
   it('renders the selected category with its stable delegated action', () => {
     const general = String(SettingsWorkspace(props));
     expect(general).toContain('data-component="settings-workspace"');
-    expect(general).toContain('aria-label="General settings"');
+    expect(general).toContain('aria-label="General Settings"');
     expect(general).toContain('data-action="toggle-loading-activity"');
     const terminals = String(
       SettingsWorkspace({
@@ -73,7 +73,7 @@ describe('SettingsWorkspace', () => {
         category: 'sources',
         sources: {
           sources: [
-            { connectionId: 'git', name: 'Hot Sheet git', provider: 'git', locator: '/work/demo.hs2', default: true },
+            { connectionId: 'git', name: 'Hot Sheet Git', provider: 'git', locator: '/work/demo.hs2', default: true },
           ],
         },
       }),

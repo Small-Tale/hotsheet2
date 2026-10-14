@@ -18,7 +18,7 @@ describe('ProjectRestoreError', () => {
         recoveryPid: 4242,
       }),
     );
-    expect(markup).toContain('older-server could not be reopened');
+    expect(markup).toContain('older-server could not be reopened.');
     expect(markup).toContain('The older server only supports schema 2.');
     expect(markup).toContain('process (4242) is not responding');
     expect(markup).toContain('Project: /work/older-server');

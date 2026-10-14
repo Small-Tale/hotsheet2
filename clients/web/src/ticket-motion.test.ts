@@ -72,7 +72,7 @@ function ghost(slug = 'HS2-A', document = mockDocument()) {
     style: {},
     removeAttribute: vi.fn(),
     childElementCount: 0,
-    textContent: 'Ticket title',
+    textContent: 'Ticket Title',
   } as unknown as HTMLElement;
   const style = {
     dataset: {},

@@ -9,10 +9,10 @@ import { syncSettingsControls } from './settings-controls';
 
 /** Every public ConfidenceBadge variant: both appearances across all four rubric bands. */
 const CONFIDENCE_CHOICES: SelectChoice[] = [
-  { value: '96', label: '96% (fully verified)' },
-  { value: '82', label: '82% (minor assumptions)' },
-  { value: '55', label: '55% (partially verified)' },
-  { value: '20', label: '20% (largely unverified)' },
+  { value: '96', label: '96% (Fully Verified)' },
+  { value: '82', label: '82% (Minor Assumptions)' },
+  { value: '55', label: '55% (Partially Verified)' },
+  { value: '20', label: '20% (Largely Unverified)' },
 ];
 
 export const confidenceBadgeSettings = {
@@ -58,8 +58,8 @@ export function ConfidenceBadgeSettings() {
         label="Appearance"
         value={confidenceBadgeSettings.appearance.value}
         choices={[
-          { value: 'compact', label: 'Compact (pill)' },
-          { value: 'labeled', label: 'Labeled (inspector header)' },
+          { value: 'compact', label: 'Compact (Pill)' },
+          { value: 'labeled', label: 'Labeled (Inspector Header)' },
         ]}
       />
       <wa-button type="button" data-action="reset-settings">

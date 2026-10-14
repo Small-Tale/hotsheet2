@@ -486,7 +486,7 @@ export function AttachmentGallery({
           leading={<ToolbarText className="attachment-gallery__filename" text={image.name} tone="dark" fill />}
           trailing={
             <>
-              <ToolbarControlGroup label="Media navigation" tone="dark">
+              <ToolbarControlGroup label="Media Navigation" tone="dark">
                 <GalleryButton
                   action="previous-gallery-image"
                   label={`Previous ${noun}`}
@@ -503,7 +503,7 @@ export function AttachmentGallery({
                   disabled={images.length < 2}
                 />
               </ToolbarControlGroup>
-              <ToolbarControlGroup label="Media actions" tone="dark">
+              <ToolbarControlGroup label="Media Actions" tone="dark">
                 <GalleryButton
                   action="toggle-gallery-markup"
                   label={markup ? 'Finish markup' : 'Annotate media'}
@@ -518,7 +518,7 @@ export function AttachmentGallery({
                   icon={MoreHorizontal}
                 />
               </ToolbarControlGroup>
-              <ToolbarControlGroup label="Close gallery" tone="dark" single>
+              <ToolbarControlGroup label="Close Gallery" tone="dark" single>
                 <GalleryButton action="close-attachment-gallery" label={`Close ${noun} gallery`} icon={X} />
               </ToolbarControlGroup>
             </>
@@ -660,7 +660,7 @@ export function AttachmentGallery({
           </div>
         </div>
         {markup && (
-          <aside class="attachment-gallery__notes" aria-label="Annotation notes">
+          <aside class="attachment-gallery__notes" aria-label="Annotation Notes">
             <div class="attachment-gallery__notes-list" role="group" aria-label="Annotations">
               <List gap="2xs">
                 {annotations.length === 0 && <p>No annotations yet. Draw a mark to add a note.</p>}
@@ -678,7 +678,7 @@ export function AttachmentGallery({
             </div>
             {!selectedEditableAnnotation && annotations.length > 0 && <p>Select an annotation to edit its note.</p>}
             {selectedEditableAnnotation && (
-              <section class="attachment-gallery__editor" aria-label="Selected annotation editor">
+              <section class="attachment-gallery__editor" aria-label="Selected Annotation Editor">
                 <label>
                   Note (Markdown)
                   <textarea
@@ -730,7 +730,7 @@ export function AttachmentGallery({
             {selectedAnnotationNote?.text && (
               <section
                 class="attachment-gallery__selected-note"
-                aria-label={`Annotation ${annotationNumberOffset + annotations.indexOf(selectedAnnotationNote) + 1} note`}
+                aria-label={`Annotation ${annotationNumberOffset + annotations.indexOf(selectedAnnotationNote) + 1} Note`}
               >
                 <MarkdownPreview source={selectedAnnotationNote.text} tone="inverse" size="small" density="compact" />
               </section>
@@ -824,7 +824,7 @@ export function AttachmentGallery({
                       <button
                         type="button"
                         {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryVolume.attrs}
-                        aria-label="Volume controls"
+                        aria-label="Volume Controls"
                         aria-expanded={String(volumeOpen)}
                       >
                         <LucideIcon
@@ -842,7 +842,7 @@ export function AttachmentGallery({
               <div
                 class="attachment-gallery__volume-popup"
                 role="group"
-                aria-label="Volume controls"
+                aria-label="Volume Controls"
                 hidden={!volumeOpen}
               >
                 <span>Volume</span>
@@ -878,9 +878,9 @@ export function AttachmentGallery({
           data-crop-mode={String(cropMode)}
         >
           {markup && cropEnabled && !video && (
-            <FloatingToolbar label="Media crop" position="bottom-start" inset={px(0)}>
+            <FloatingToolbar label="Media Crop" position="bottom-start" inset={px(0)}>
               <ToolbarControlGroup
-                label="Media crop"
+                label="Media Crop"
                 content="mixed"
                 single={false}
                 selectedChrome="filled"
@@ -904,7 +904,7 @@ export function AttachmentGallery({
                     title="Restore full image"
                   >
                     <LucideIcon icon={RotateCcw} name="rotate-ccw" />
-                    Restore original
+                    Restore Original
                   </button>
                 )}
               </ToolbarControlGroup>
@@ -915,8 +915,8 @@ export function AttachmentGallery({
           )}
           {markup && !cropMode && (
             <span class="attachment-gallery__markup-position">
-              <FloatingToolbar label="Media markup" position="bottom" inset={px(0)}>
-                <ToolbarControlGroup label="Media markup">
+              <FloatingToolbar label="Media Markup" position="bottom" inset={px(0)}>
+                <ToolbarControlGroup label="Media Markup">
                   {(['select', 'rect', 'freehand', 'arrow', 'insertion', 'strike'] as const).map((choice) =>
                     choice === 'rect' ? (
                       <GalleryButton
@@ -949,13 +949,13 @@ export function AttachmentGallery({
               </FloatingToolbar>
             </span>
           )}
-          <FloatingToolbar label="Media zoom" position="bottom-end" inset={px(0)}>
-            <ToolbarControlGroup label="Media zoom">
+          <FloatingToolbar label="Media Zoom" position="bottom-end" inset={px(0)}>
+            <ToolbarControlGroup label="Media Zoom">
               <button
                 type="button"
                 {...ATTACHMENTS_AND_GALLERY_ACTIONS.zoomGalleryImage.attrs}
                 data-zoom-direction="out"
-                aria-label="Zoom out"
+                aria-label="Zoom Out"
                 title="Zoom out"
                 disabled={!zoom.canZoomOut}
               >
@@ -965,7 +965,7 @@ export function AttachmentGallery({
                 type="button"
                 {...ATTACHMENTS_AND_GALLERY_ACTIONS.zoomGalleryImage.attrs}
                 data-zoom-direction="in"
-                aria-label="Zoom in"
+                aria-label="Zoom In"
                 title="Zoom in"
                 disabled={!zoom.canZoomIn}
               >
@@ -995,14 +995,14 @@ export function AttachmentGallery({
                       variant="danger"
                       {...ATTACHMENTS_AND_GALLERY_ACTIONS.retryGallerySave.attrs}
                     >
-                      Retry save
+                      Retry Save
                     </wa-button>
                     <wa-button
                       size="small"
                       appearance="outlined"
                       {...ATTACHMENTS_AND_GALLERY_ACTIONS.discardGallerySave.attrs}
                     >
-                      Discard changes
+                      Discard Changes
                     </wa-button>
                   </Row>
                 ),

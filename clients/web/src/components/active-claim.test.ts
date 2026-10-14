@@ -66,7 +66,7 @@ describe('active claim presentation (HS2-QKNQXC)', () => {
     expect(withEta).toContain('role="status"');
     expect(withEta).toContain('data-component="state-banner"');
     expect(withEta).toContain('data-tone="info"');
-    expect(withEta).toContain('<strong>Claude worker is working on this</strong>');
+    expect(withEta).toContain('<strong>Claude worker is working on this.</strong>');
     expect(withEta).not.toContain('loading-spinner');
     expect(withEta).toContain('class="claim-eta__ring"');
     expect(withEta).toContain('data-claim-eta="estimate"');
@@ -84,13 +84,13 @@ describe('active claim presentation (HS2-QKNQXC)', () => {
         eta: { kind: 'estimate', percent: 30, label: '1h 27m left', title: 'Estimated to finish later' },
       }),
     );
-    expect(markup).toContain('<strong>Codex is working on this</strong>');
+    expect(markup).toContain('<strong>Codex is working on this.</strong>');
     expect(markup).toContain(`title="${worker} is actively working on this ticket"`);
     expect(markup).toContain(`aria-label="${worker} is actively working on this ticket; 1h 27m left"`);
     expect(markup).toContain('1h 27m left');
 
     const custom = String(LiveClaimNotice({ agentName: 'verylongcustomworkeridentity' }));
-    expect(custom).toContain('<strong>verylongcustomworke… is working on this</strong>');
+    expect(custom).toContain('<strong>verylongcustomworke… is working on this.</strong>');
     expect(custom).toContain('title="verylongcustomworkeridentity is actively working on this ticket"');
   });
 

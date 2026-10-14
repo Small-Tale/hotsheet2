@@ -65,7 +65,7 @@ export function SavedViewDialog({
               </Text>
               <wa-input
                 name="saved-view-name"
-                label="View name"
+                label="View Name"
                 value={name}
                 required
                 autofocus

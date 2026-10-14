@@ -87,7 +87,7 @@ test('rapid same-field edits are sequenced without a false conflict (HS2-K9SG2R)
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities,
@@ -151,8 +151,8 @@ test('rapid same-field edits are sequenced without a false conflict (HS2-K9SG2R)
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
   const priority_ = page.locator('[name="inspector-priority"]');
   await expect(priority_).toBeVisible();
@@ -205,7 +205,7 @@ test('a genuine external same-field write still surfaces a conflict (HS2-K9SG2R)
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities,
@@ -276,8 +276,8 @@ test('a genuine external same-field write still surfaces a conflict (HS2-K9SG2R)
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
   const priority_ = page.locator('[name="inspector-priority"]');
   await expect(priority_).toBeVisible();
@@ -323,7 +323,7 @@ test('typing never writes to the server and one blur saves the whole edit withou
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities,
@@ -389,8 +389,8 @@ test('typing never writes to the server and one blur saves the whole edit withou
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
@@ -460,7 +460,7 @@ test('restores an unsaved edit from its local recovery copy after a reload (HS2-
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities,
@@ -518,8 +518,8 @@ test('restores an unsaved edit from its local recovery copy after a reload (HS2-
     await page.goto('/');
     const row = page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]');
     if (!openedOnce) {
-      await page.getByRole('button', { name: 'Open project' }).click();
-      await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+      await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
       openedOnce = true;
     }
     // After reload, the remembered project must restore the row without another open.
@@ -589,7 +589,7 @@ for (const keepTyping of [true, false])
             {
               connection_id: 'git-local',
               provider: 'git',
-              display_name: 'Hot Sheet git',
+              display_name: 'Hot Sheet Git',
               locator: '/tickets',
               default: true,
               capabilities,
@@ -669,8 +669,8 @@ for (const keepTyping of [true, false])
       return route.continue();
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]').click();
     const inspector = page.locator('#app-right-rail');
     await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();

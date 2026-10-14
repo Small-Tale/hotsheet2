@@ -77,10 +77,10 @@ export function NotificationCardDemo() {
         </CatalogExample>
       ))}
       {/* The stacked footer gives each action group its own full-width row on narrow surfaces. */}
-      <CatalogExample label="Footer layout: stack" viewport={{ width: 'compact' }}>
+      <CatalogExample label="Footer Layout: Stack" viewport={{ width: 'compact' }}>
         <DemoCard elevation="list" footerLayout="stack" />
       </CatalogExample>
-      <CatalogExample label="Details: prose, bounded code, and custom content">
+      <CatalogExample label="Details: Prose, Bounded Code, and Custom Content">
         <List gap="m">
           <NotificationCard
             identity="Codex"

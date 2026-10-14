@@ -41,7 +41,7 @@ export function Hs1MigrationDialogDemo() {
     <CatalogExample align="glyph" label="Interactive">
       {!hs1MigrationDialogDemoOpen.value && (
         <wa-button appearance="accent" data-action="open-hs1-migration-demo">
-          Open import dialog
+          Open Import Dialog
         </wa-button>
       )}
       <Hs1MigrationDialog
@@ -80,10 +80,10 @@ export function resetHs1MigrationDialogDemo(root?: ParentNode): void {
 export function NotificationsPausedBannerDemo() {
   return (
     <>
-      <CatalogExample label="Nothing waiting">
+      <CatalogExample label="Nothing Waiting">
         <NotificationsPausedBanner waiting={0} />
       </CatalogExample>
-      <CatalogExample label="Notifications waiting">
+      <CatalogExample label="Notifications Waiting">
         <NotificationsPausedBanner waiting={3} />
       </CatalogExample>
     </>
@@ -101,7 +101,7 @@ const hs1JobLabels = {
 export function Hs1MigrationBannerDemo() {
   return (
     <>
-      <CatalogExample label="Migration available">
+      <CatalogExample label="Migration Available">
         <Hs1MigrationBanner databasePath="/work/demo/.hotsheet/db" />
       </CatalogExample>
       {(['measured', 'unknown', 'failed', 'succeeded', 'backup-unverified'] as const).map((state) => (
@@ -147,7 +147,7 @@ export function Hs1MigrationBannerDemo() {
           />
         </CatalogExample>
       ))}
-      <CatalogExample label="Cleanup offered">
+      <CatalogExample label="Cleanup Offered">
         <Hs1CleanupBanner />
       </CatalogExample>
     </>

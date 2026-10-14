@@ -223,7 +223,7 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
         blockedReasonDraft={
           linked?.blockedReasonDraft ?? (editable ? readerBlockedReasonDraft.value : (ticket.blocked_reason ?? ''))
         }
-        providerName="Hot Sheet git"
+        providerName="Hot Sheet Git"
         updatedLabel={`Updated ${ago(ticket.updated_at)}`}
         activeTab={activeTab}
         upNext={ticket.up_next}

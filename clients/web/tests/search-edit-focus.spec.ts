@@ -75,7 +75,7 @@ test('keeps a search-selected ticket selected through a background refresh (HS2-
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities,
@@ -136,8 +136,8 @@ test('keeps a search-selected ticket selected through a background refresh (HS2-
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-BASE1"]')).toBeVisible();
 
   const viewTitle = (await page.locator('#workspace-page-title').textContent())!.trim();

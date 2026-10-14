@@ -51,7 +51,7 @@ export function LucideIconPicker({ value, query = '', searchName, selectAction }
       <List gap="xs">
         <wa-input
           class="wa-visually-hidden-label"
-          label="Search icons"
+          label="Search Icons"
           type="search"
           size="small"
           name={searchName}

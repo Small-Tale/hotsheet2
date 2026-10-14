@@ -457,7 +457,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
             id: result.connectionId,
             provider: 'git',
             locator: result.ticketStore,
-            name: 'Hot Sheet git',
+            name: 'Hot Sheet Git',
             default: Boolean(target.needsTicketSetup),
             settings: {},
           },

@@ -26,7 +26,7 @@ describe('dialog layout primitives', () => {
     expect(markup).not.toContain('divider-sides=');
     expect(markup).toContain('id="connection-details-title"');
     expect(markup).toContain('data-size="xlarge"');
-    expect(markup).toContain('>Server build details<');
+    expect(markup).toContain('>Server Build Details<');
     // Kerf ToolbarText carries the supporting line (KF-DXVMBN, HS2-XHC39W).
     expect(markup).toMatch(/id="connection-details-summary"[^>]*>Current state</);
     expect(markup).not.toContain('app-heading');

@@ -21,7 +21,7 @@ export const appErrorDemoVisible = signal(true);
 export function FloatingToolbarDemo() {
   return (
     <CatalogExample
-      label="Over content"
+      label="Over Content"
       note="Floating controls remain available over scrolling content without joining the page toolbar."
       viewport={{
         width: 'full',
@@ -30,12 +30,12 @@ export function FloatingToolbarDemo() {
         tokens: { '--kui-color-neutral-fill-normal': 'var(--hs-floating-control-surface)' },
       }}
     >
-      <FloatingToolbar label="Preview zoom controls" position="bottom-end">
+      <FloatingToolbar label="Preview Zoom Controls" position="bottom-end">
         <ToolbarControlGroup>
-          <button type="button" aria-label="Zoom out">
+          <button type="button" aria-label="Zoom Out">
             <LucideIcon icon={Minus} name="minus" />
           </button>
-          <button type="button" aria-label="Zoom in">
+          <button type="button" aria-label="Zoom In">
             <LucideIcon icon={Plus} name="plus" />
           </button>
         </ToolbarControlGroup>
@@ -47,10 +47,10 @@ export function FloatingToolbarDemo() {
 export function AppTabDemo() {
   return (
     <CatalogExample
-      label="Project and terminal tabs"
+      label="Project and Terminal Tabs"
       viewport={{ width: 'full', layout: 'flex', frame: 'solid', surface: 'lowered' }}
     >
-      <TabBar id="app-tab-demo" label="Shared application tab demo">
+      <TabBar id="app-tab-demo" label="Shared Application Tab Demo">
         <AppTab
           id="project"
           name="Project tab"
@@ -95,7 +95,7 @@ export function ProjectSetupWarningBannerDemo() {
 export function ShellBannerDemo() {
   return (
     <>
-      <CatalogExample label="Info with trailing action">
+      <CatalogExample label="Info with Trailing Action">
         <ShellBanner
           component="shell-banner-demo"
           tone="info"
@@ -104,7 +104,7 @@ export function ShellBannerDemo() {
           action={<button type="button">Action</button>}
         />
       </CatalogExample>
-      <CatalogExample label="Success with action below">
+      <CatalogExample label="Success with Action Below">
         <ShellBanner
           component="shell-banner-demo"
           tone="success"
@@ -114,7 +114,7 @@ export function ShellBannerDemo() {
           action={<button type="button">Dismiss</button>}
         />
       </CatalogExample>
-      <CatalogExample label="Warning without action">
+      <CatalogExample label="Warning Without Action">
         <ShellBanner
           component="shell-banner-demo"
           tone="warning"
@@ -129,7 +129,7 @@ export function ShellBannerDemo() {
 export function TicketPageMoreDemo() {
   return (
     <>
-      <CatalogExample label="More available">
+      <CatalogExample label="More Available">
         <TicketPageMore />
       </CatalogExample>
       <CatalogExample label="Loading">
@@ -142,7 +142,7 @@ export function TicketPageMoreDemo() {
 export function AppEmptyStateDemo() {
   return (
     <>
-      <CatalogExample label="No project open">
+      <CatalogExample label="No Project Open">
         <AppEmptyState />
       </CatalogExample>
       <CatalogExample label="Restoring">
@@ -159,7 +159,7 @@ export function AppErrorDemo() {
   return (
     <CatalogExample label="Interactive">
       <button type="button" data-app-error-demo-show>
-        Show error
+        Show Error
       </button>
       {appErrorDemoVisible.value && <AppError message="The project could not be opened. Try again." />}
     </CatalogExample>

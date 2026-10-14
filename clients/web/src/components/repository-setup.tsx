@@ -59,7 +59,7 @@ export function RepositorySetup({
             {...REPOSITORY_ACTIONS.skipRepositoryRemote.attrs}
             disabled={busy}
           >
-            Skip for now
+            Skip for Now
           </wa-button>
           <wa-button appearance="accent" type="submit" disabled={busy}>
             {busy ? 'Adding origin…' : 'Add origin'}

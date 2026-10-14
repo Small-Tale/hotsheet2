@@ -47,10 +47,10 @@ export function DriveOptionsMenu({
       <PopupMenu
         context
         anchor={contextMenuAnchor(x, y)}
-        label="Drive provider, model, and effort options"
+        label="Drive Provider, Model, and Effort Options"
         placement="top-start"
         rootAttributes={{ 'data-context-menu': 'drive-options' }}
-        items={[{ label: loading ? 'Detecting AI tools…' : error || 'No AI tools detected', disabled: true }]}
+        items={[{ label: loading ? 'Detecting AI tools…' : error || 'No AI Tools Detected', disabled: true }]}
       />
     );
   const activeTool = tools.find((tool) => tool.id === (selection.tool ?? defaultSelection.tool)) ?? tools.at(0)!,
@@ -67,7 +67,7 @@ export function DriveOptionsMenu({
     <PopupMenu
       context
       anchor={contextMenuAnchor(x, y)}
-      label="Drive provider, model, and effort options"
+      label="Drive Provider, Model, and Effort Options"
       placement="top-start"
       rootAttributes={{ 'data-context-menu': 'drive-options' }}
       items={[

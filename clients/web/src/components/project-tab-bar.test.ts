@@ -8,7 +8,7 @@ describe('ProjectTabBar actions (HS2-402AXQ, HS2-PNCDAE)', () => {
   it('renders Add project as a native button in a borderless Kerf control group the strip never styles', () => {
     const markup = String(ProjectTabBar({ tabs: [{ id: 'demo', name: 'demo', location: 'local', selected: true }] }));
     expect(markup).toMatch(
-      /<div class="kui-toolbar-control-group" data-component="toolbar-control-group" data-appearance="borderless"[^>]*data-single="true"[^>]*data-size="compact"[^>]*data-content="icon"[^>]*><button type="button" data-action="choose-project" aria-label="Add project">/,
+      /<div class="kui-toolbar-control-group" data-component="toolbar-control-group" data-appearance="borderless"[^>]*data-single="true"[^>]*data-size="compact"[^>]*data-content="icon"[^>]*><button type="button" data-action="choose-project" aria-label="Add Project">/,
     );
     expect(markup).not.toContain('<wa-button');
     const css = readFileSync(new URL('./project-tab-bar.css', import.meta.url), 'utf8');
@@ -31,7 +31,7 @@ describe('ProjectTabBar actions (HS2-402AXQ, HS2-PNCDAE)', () => {
     );
     expect(markup).toContain('data-component="toolbar"');
     expect(markup).toMatch(
-      /kui-toolbar__leading"><div class="kui-toolbar-control-group"[^>]*aria-label="Global dashboards"[^]*data-shell-mode="stats" aria-label="Cross-project stats" aria-pressed="true"[^]*name="mobile-project"[^]*data-action="choose-project" aria-label="Add project"/,
+      /kui-toolbar__leading"><div class="kui-toolbar-control-group"[^>]*aria-label="Global Dashboards"[^]*data-shell-mode="stats" aria-label="Cross-Project Stats" aria-pressed="true"[^]*name="mobile-project"[^]*data-action="choose-project" aria-label="Add Project"/,
     );
     // Still-opening projects are not choices (HS2-2BEJXD).
     expect(markup).not.toContain('value="opening"');

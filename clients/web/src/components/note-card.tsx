@@ -140,7 +140,7 @@ function FeedbackBlocks({
                 {...INSPECTOR_AND_EDITOR_ACTIONS.removeInlineFeedbackReply.attrs}
                 data-note-id={noteId}
                 data-offset={sourceStart + segment.reply.offset}
-                aria-label={`Remove response at character ${sourceStart + segment.reply.offset}`}
+                aria-label={`Remove Response at Character ${sourceStart + segment.reply.offset}`}
                 title="Remove response"
               >
                 <LucideIcon size="s" icon={X} name="x" />
@@ -273,7 +273,7 @@ export function NoteEditor({
               data-note-id={id}
               title="Clear this feedback request without replying"
             >
-              No response needed
+              No Response Needed
             </wa-button>
           )}
           <wa-button
@@ -378,7 +378,7 @@ export function NoteCard({
                 type="button"
                 {...INSPECTOR_AND_EDITOR_ACTIONS.deleteNote.attrs}
                 data-note-id={id}
-                aria-label="Delete note"
+                aria-label="Delete Note"
                 title="Delete note"
               >
                 <LucideIcon size={12.8} icon={Trash2} name="trash-2" />

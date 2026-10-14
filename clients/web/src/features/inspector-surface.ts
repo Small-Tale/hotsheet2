@@ -238,7 +238,7 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
       blockedReason: ticket.blocked_reason,
       blockedReasonEditing: blockedReasonEditing.value,
       blockedReasonDraft: blockedReasonDraft.value,
-      providerName: 'Hot Sheet git',
+      providerName: 'Hot Sheet Git',
       updatedLabel: `Updated ${ago(ticket.updated_at)}`,
       activeTab: inspectorTab.value,
       upNext: ticket.up_next,

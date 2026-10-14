@@ -42,7 +42,7 @@ describe('SavedViewDialog', () => {
     expect(markup).toContain('data-component="saved-view-dialog"');
     // The shared ticket search brings tag completion and syntax help into the dialog (HS2-N5G6JS).
     expect(markup).not.toContain('workspace-header__search-group');
-    expect(markup).toContain('aria-label="Search syntax help"');
+    expect(markup).toContain('aria-label="Search Syntax Help"');
     // The help surface is a Kerf anchored surface hosted in the dialog (KF-F52T5D, HS2-8TE69P); the
     // field renders only its state marker, never an in-flow surface.
     expect(markup).not.toContain('ticket-search-surfaces');

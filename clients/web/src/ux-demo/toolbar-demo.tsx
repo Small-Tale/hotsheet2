@@ -11,14 +11,14 @@ export function ToolbarDemo() {
   return (
     <>
       <CatalogExample
-        label="Three slots"
+        label="Three Slots"
         viewport={{ width: 'full', layout: 'grid', frame: 'solid', surface: 'lowered' }}
       >
         <Toolbar
-          label="Example three-slot toolbar"
+          label="Example Three-Slot Toolbar"
           leading={
             <ToolbarControlGroup appearance="borderless" single>
-              <button type="button" aria-label="Show left sidebar">
+              <button type="button" aria-label="Show Left Sidebar">
                 <LucideIcon icon={PanelLeftOpen} name="panel-left-open" />
               </button>
             </ToolbarControlGroup>
@@ -26,7 +26,7 @@ export function ToolbarDemo() {
           center={<ToolbarText text="Hot Sheet 2" size="large" />}
           trailing={
             <ToolbarControlGroup appearance="borderless" single>
-              <button type="button" aria-label="Show right sidebar">
+              <button type="button" aria-label="Show Right Sidebar">
                 <LucideIcon icon={PanelRightOpen} name="panel-right-open" />
               </button>
             </ToolbarControlGroup>
@@ -34,11 +34,11 @@ export function ToolbarDemo() {
         />
       </CatalogExample>
       <CatalogExample
-        label="Without divider"
+        label="Without Divider"
         viewport={{ width: 'full', layout: 'grid', frame: 'solid', surface: 'lowered' }}
       >
         <Toolbar
-          label="Toolbar without divider"
+          label="Toolbar Without Divider"
           dividerSides=""
           center={<ToolbarText text="HS2-C1TY0F" size="small" />}
         />

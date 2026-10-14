@@ -59,12 +59,12 @@ describe('ProjectCloseDialog', () => {
     expect(markup).toContain('data-component="project-close-dialog"');
     expect(markup).toContain('label="Close Demo?"');
     expect(markup).toContain('2 running terminals and 1 AI chat will stay active unless you close them first.');
-    expect(markup).toContain('aria-label="Running terminals and AI chats"');
+    expect(markup).toContain('aria-label="Running Terminals and AI Chats"');
     expect(markup).toContain('data-component="list-header"');
     expect(markup.match(/data-component="list-item"/g)).toHaveLength(3);
     expect(markup).toContain('data-item-id="ai-chat:chat-one"');
     expect(markup).toContain('aria-current="page"');
-    expect(markup).toContain('aria-label="Codex chat chat preview"');
+    expect(markup).toContain('aria-label="Codex chat Chat Preview"');
     expect(markup).toContain('data-key="project-close-preview:ai-chat:chat-one"');
     expect(markup).toContain('data-component="ai-conversation"');
     expect(markup).toContain('data-read-only="true"');
@@ -85,7 +85,7 @@ describe('ProjectCloseDialog', () => {
     );
     expect(markup).toContain('data-item-id="terminal:term-one"');
     expect(markup).toContain('aria-current="page"');
-    expect(markup).toContain('aria-label="Tests terminal preview"');
+    expect(markup).toContain('aria-label="Tests Terminal Preview"');
     expect(markup).toContain('data-key="project-close-preview:terminal:term-one"');
     expect(markup).toContain('data-component="terminal-viewport"');
     expect(markup).toContain('data-project-id="demo"');
@@ -138,7 +138,7 @@ describe('ProjectCloseDialog', () => {
     expect(markup).not.toContain('No terminals or AI chats');
     expect(markup).not.toContain('circle-alert');
     expect(markup).not.toContain('close-all-project-resources');
-    expect(markup).not.toContain('Running items');
+    expect(markup).not.toContain('Running Items');
   });
 
   it('preserves identity, fallback selection, summary, and owned asymmetric preview geometry', () => {

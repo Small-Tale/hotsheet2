@@ -49,14 +49,14 @@ export function CorruptTicketInspectorDemo() {
   return (
     <>
       <DemoEvent>{corruptInspectorEvent.value}</DemoEvent>
-      <CatalogExample label="Unreadable ticket" viewport={{ width: 'medium' }}>
+      <CatalogExample label="Unreadable Ticket" viewport={{ width: 'medium' }}>
         <CorruptTicketInspector ticket={INVALID_TICKET} recovery={recoveryFor(INVALID_TICKET)} hostActionsAvailable />
       </CatalogExample>
-      <CatalogExample label="Hot Sheet 2 update required" viewport={{ width: 'medium' }}>
+      <CatalogExample label="Hot Sheet 2 Update Required" viewport={{ width: 'medium' }}>
         <CorruptTicketInspector ticket={UPGRADE_TICKET} recovery={recoveryFor(UPGRADE_TICKET)} hostActionsAvailable />
       </CatalogExample>
       {/* A remote client cannot reveal the server's file: the host-only control is disabled with a reason (HS2-TYS5SS). */}
-      <CatalogExample label="Remote device" viewport={{ width: 'medium' }}>
+      <CatalogExample label="Remote Device" viewport={{ width: 'medium' }}>
         <CorruptTicketInspector
           ticket={REMOTE_TICKET}
           recovery={recoveryFor(REMOTE_TICKET)}

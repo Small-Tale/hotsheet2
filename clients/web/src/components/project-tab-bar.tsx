@@ -40,7 +40,7 @@ export const PROJECT_TAB_BAR_ID = 'projects';
 
 export function ProjectTabBar({
   tabs,
-  label = 'Open projects',
+  label = 'Open Projects',
   mode = 'project',
   workspaceAction,
   mobile = false,

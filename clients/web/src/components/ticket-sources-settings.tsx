@@ -45,7 +45,7 @@ export interface TicketSourcesSettingsProps {
 }
 
 function sourceKind(provider: string) {
-  return provider === 'git' ? 'Hot Sheet git' : providerName(provider as ExternalProviderKind);
+  return provider === 'git' ? 'Hot Sheet Git' : providerName(provider as ExternalProviderKind);
 }
 
 /** One quiet, wrapping secondary line of a source or account (HS2-8JY7J2). */
@@ -166,7 +166,7 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
           </Text>
           {duplicates.length > 0 ? (
             <StateBanner
-              title="Some ticket sources look alike"
+              title="Some ticket sources look alike."
               detail="Choose a different color for sources from the same provider to tell their tickets apart."
               tone="warning"
               urgency="status"

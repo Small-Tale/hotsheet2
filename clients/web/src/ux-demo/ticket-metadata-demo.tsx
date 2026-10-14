@@ -55,7 +55,7 @@ export function TicketStatusMenuDemo() {
           canEditStartedPhase
         />
       </CatalogExample>
-      <CatalogExample align="glyph" label="Read-only provider">
+      <CatalogExample align="glyph" label="Read-Only Provider">
         <TicketStatusMenu value="started" startedPhase="final_testing" disabled />
       </CatalogExample>
     </>
@@ -90,7 +90,7 @@ export function TicketInfoPanelDemo() {
               body: 'The metadata and notes now share the inspector’s controlled state.',
             },
           ]}
-          providerName="Hot Sheet git"
+          providerName="Hot Sheet Git"
           updatedLabel="Updated 2 minutes ago"
         />
       </CatalogExample>
@@ -353,7 +353,7 @@ export function TicketAttachmentsDemo() {
         {menu && <AttachmentContextMenu x={menu.x} y={menu.y} hostActionsAvailable={!menu.remote} />}
       </CatalogExample>
       <CatalogExample
-        label="Remote device"
+        label="Remote Device"
         note="The attachment menu's host-only Open and Reveal actions render disabled with an explanation."
         viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
         rootAttributes={{ 'data-attachment-remote-demo': '' }}
@@ -361,20 +361,20 @@ export function TicketAttachmentsDemo() {
         <TicketAttachments attachments={remoteAttachmentDemoItems} />
       </CatalogExample>
       <CatalogExample
-        label="Append-only provider (GitHub assets repository)"
+        label="Append-Only Provider (GitHub Assets Repository)"
         note="Files can be added; existing ones open by link and cannot be regrouped, relabelled, renamed, or deleted."
         viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
       >
         <TicketAttachments attachments={appendOnlyAttachmentDemoItems} editable={false} />
       </CatalogExample>
       <CatalogExample
-        label="Provider without attachments"
+        label="Provider Without Attachments"
         viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
       >
         <TicketAttachments attachments={appendOnlyAttachmentDemoItems} enabled={false} />
       </CatalogExample>
       <CatalogExample
-        label="Linked reader"
+        label="Linked Reader"
         viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
       >
         <TicketAttachments
@@ -423,7 +423,7 @@ export function AttachmentGalleryDemo() {
         />
       ) : (
         <button type="button" data-action="open-gallery-demo">
-          Open gallery
+          Open Gallery
         </button>
       )}
     </CatalogExample>
@@ -433,7 +433,7 @@ export function TicketCodeReviewDemo() {
   return (
     <>
       <CatalogExample
-        label="Configured — disjoint bundles"
+        label="Configured — Disjoint Bundles"
         viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
       >
         <TicketCodeReview
@@ -486,7 +486,7 @@ export function TicketCodeReviewDemo() {
         />
       </CatalogExample>
       <CatalogExample
-        label="Remote device"
+        label="Remote Device"
         viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
       >
         <TicketCodeReview
@@ -507,7 +507,7 @@ export function TicketCodeReviewDemo() {
         />
       </CatalogExample>
       <CatalogExample
-        label="Not configured"
+        label="Not Configured"
         viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
       >
         <TicketCodeReview
@@ -532,7 +532,7 @@ export function TicketCodeReviewDemo() {
         <TicketCodeReview review={{ difftool: 'Meld', truncated: false, ranges: [], commits: [] }} />
       </CatalogExample>
       <CatalogExample
-        label="Loading / error"
+        label="Loading / Error"
         viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
       >
         <TicketCodeReview loading message="The repository is temporarily unavailable." />

@@ -152,7 +152,7 @@ export function ProviderSetupForm({
       {/* Buttons carry `data-key` so a re-render never recycles the clicked control into a different
           action while that click is still dispatching (for example Enterprise ↔ GitHub.com; KF-HK7WE8). */}
       {kind === 'github' && !editing && (
-        <SunkenPanel className="provider-setup-form__github-auth" ariaLabel="GitHub sign in">
+        <SunkenPanel className="provider-setup-form__github-auth" ariaLabel="GitHub Sign In">
           {auth?.state === 'waiting' ? (
             <>
               <Text flush>
@@ -204,7 +204,7 @@ export function ProviderSetupForm({
               <wa-input
                 name="github-enterprise-url"
                 type="url"
-                label="GitHub Enterprise server URL"
+                label="GitHub Enterprise Server URL"
                 required
                 placeholder="https://github.example.com"
                 value={auth.enterpriseUrl ?? ''}
@@ -226,7 +226,7 @@ export function ProviderSetupForm({
                   {...COMMANDS_AND_AI_ACTIONS.chooseGithubDotcom.attrs}
                   data-key="choose-github-dotcom"
                 >
-                  Use GitHub.com instead
+                  Use GitHub.com Instead
                 </wa-button>
               </Row>
             </>
@@ -309,7 +309,7 @@ export function ProviderSetupForm({
       {reusable.length > 0 && (
         <SunkenPanel
           className="provider-setup-form__account-reuse"
-          ariaLabel={`Signed-in ${providerName(kind)} accounts`}
+          ariaLabel={`Signed-In ${providerName(kind)} Accounts`}
         >
           <Text flush>
             Use an account already signed in on this computer to fill in its credential
@@ -355,7 +355,7 @@ export function ProviderSetupForm({
           <wa-input
             class="provider-setup-form__wide"
             name="connection-name"
-            label="Display name"
+            label="Display Name"
             placeholder={labels[0]}
             value={connection?.name ?? ''}
           >
@@ -395,7 +395,7 @@ export function ProviderSetupForm({
             />
           )}
           {choosing && (
-            <section class="provider-setup-form__wide" aria-label="GitHub repository access">
+            <section class="provider-setup-form__wide" aria-label="GitHub Repository Access">
               <SunkenPanel>
                 {auth.installations?.length ? (
                   <Text size="compact" tone="quiet" flush>
@@ -485,14 +485,14 @@ export function ProviderSetupForm({
               </label>
               <wa-input
                 name="attachment-folder"
-                label="Attachment folder"
+                label="Attachment Folder"
                 value={connectionSetting(connection, 'attachment_folder') || DEFAULT_GITHUB_ATTACHMENT_FOLDER}
               >
                 <span slot="hint">Relative folder in the assets repository.</span>
               </wa-input>
               <wa-input
                 name="attachment-branch"
-                label="Attachment branch"
+                label="Attachment Branch"
                 value={connectionSetting(connection, 'attachment_branch') || DEFAULT_GITHUB_ATTACHMENT_BRANCH}
               >
                 <span slot="hint">Existing branch to receive attachment files.</span>
@@ -504,7 +504,7 @@ export function ProviderSetupForm({
             <wa-input
               class="provider-setup-form__wide"
               name="credential-reference"
-              label="Credential reference"
+              label="Credential Reference"
               required
               placeholder={labels[2]}
               value={credentialValue}
@@ -521,7 +521,7 @@ export function ProviderSetupForm({
               <wa-input
                 name="jira-email"
                 type="email"
-                label="Account email"
+                label="Account Email"
                 required
                 value={emailValue}
                 data-key={`email-${prefillKey}`}
@@ -529,7 +529,7 @@ export function ProviderSetupForm({
               <wa-input
                 name="api-base"
                 type="url"
-                label="Jira site URL"
+                label="Jira Site URL"
                 required
                 placeholder="https://company.atlassian.net"
                 value={apiBaseValue}
@@ -542,7 +542,7 @@ export function ProviderSetupForm({
               class="provider-setup-form__wide"
               name="api-base"
               type="url"
-              label="API base URL (optional)"
+              label="API Base URL (Optional)"
               placeholder="https://gitlab.com/api/v4"
               value={apiBaseValue}
               data-key={`api-base-${prefillKey}`}

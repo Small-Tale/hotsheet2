@@ -11,14 +11,14 @@ export function ListDemo() {
     Array.from({ length: count }, (_, index) => <ListInsetText>{`Row ${index + 1}`}</ListInsetText>);
   return (
     <>
-      <CatalogExample label="No gap" viewport={{ width: 'compact' }}>
+      <CatalogExample label="No Gap" viewport={{ width: 'compact' }}>
         <List>{rows(3)}</List>
       </CatalogExample>
-      <CatalogExample label="Standard gap" viewport={{ width: 'compact' }}>
+      <CatalogExample label="Standard Gap" viewport={{ width: 'compact' }}>
         <List gap>{rows(3)}</List>
       </CatalogExample>
       <CatalogExample
-        label="Custom gap and scrolling"
+        label="Custom Gap and Scrolling"
         note="A bounded viewport scrolls the list inside its divider edges."
         viewport={{ width: 'compact', height: 'short', layout: 'flex' }}
       >

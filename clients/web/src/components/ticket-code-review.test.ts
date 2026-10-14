@@ -195,7 +195,7 @@ describe('TicketCodeReview', () => {
         },
       }),
     );
-    expect(markup).toContain('aria-label="Open change evidence"');
+    expect(markup).toContain('aria-label="Open Change Evidence"');
     expect(markup).toContain('data-action="open-change-evidence"');
     expect(markup).toContain('<strong>2</strong> docs');
     expect(markup).toContain('<strong>3</strong> tests');

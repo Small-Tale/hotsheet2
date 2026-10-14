@@ -16,7 +16,7 @@ describe('StatusBadge', () => {
     expect(String(BlockedBadge({ compact: true }))).toMatch(
       /data-appearance="solid"[^>]*data-size="compact"[^>]*>Blocked/u,
     );
-    const trigger = String(StatusBadge({ status: 'started', interactive: true, actionLabel: 'Change status' }));
+    const trigger = String(StatusBadge({ status: 'started', interactive: true, actionLabel: 'Change Status' }));
     expect(trigger).toMatch(/^<button type="button" class="status-badge"/u);
     expect(trigger).toContain('data-interactive="true"');
   });

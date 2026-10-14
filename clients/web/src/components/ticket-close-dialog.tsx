@@ -63,11 +63,11 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
                 choices={TICKET_CLOSE_REASON_CHOICES}
               />
               {duplicate && (
-                <section aria-label="Duplicate target">
+                <section aria-label="Duplicate Target">
                   <List gap="xs">
                     <wa-input
                       name="ticket-close-target-search"
-                      label="Existing ticket"
+                      label="Existing Ticket"
                       placeholder="Search by ticket number or title"
                       value={state.query}
                     >

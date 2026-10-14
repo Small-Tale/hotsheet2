@@ -54,7 +54,7 @@ export function MarkdownEditor({
       {(!embedded || showExpand) && (
         <Toolbar
           className="markdown-editor__toolbar"
-          label={`${label} toolbar`}
+          label={`${label} Toolbar`}
           dividerSides={embedded ? '' : 'b'}
           leading={
             embedded ? undefined : (

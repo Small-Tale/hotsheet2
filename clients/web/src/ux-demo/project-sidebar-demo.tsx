@@ -114,7 +114,7 @@ export function ProjectSummaryDemo() {
       <DemoFrame label="Default">
         <ProjectSummary completedToday={6} inProgress={3} trend={completionTrend} />
       </DemoFrame>
-      <CatalogExample label="Success tone" viewport={{ width: 'compact' }}>
+      <CatalogExample label="Success Tone" viewport={{ width: 'compact' }}>
         <ProjectSummary
           completedToday={12}
           inProgress={5}
@@ -122,7 +122,7 @@ export function ProjectSummaryDemo() {
           chartTone="success"
         />
       </CatalogExample>
-      <CatalogExample label="Compact with background trend" viewport={{ width: 'compact' }}>
+      <CatalogExample label="Compact with Background Trend" viewport={{ width: 'compact' }}>
         <ProjectSummary
           completedToday={2}
           inProgress={4}
@@ -339,7 +339,7 @@ export function ProjectSidebarDemo() {
       >
         <ResizableRegion
           id={PROJECT_SIDEBAR_REGION_ID}
-          label="project sidebar"
+          label="Project Sidebar"
           size={projectSidebarHeight.value}
           min={PROJECT_SIDEBAR_MIN_HEIGHT}
           max={PROJECT_SIDEBAR_MAX_HEIGHT}

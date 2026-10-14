@@ -65,7 +65,7 @@ async function openProject(page: Page) {
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities,
@@ -114,9 +114,9 @@ async function openProject(page: Page) {
     localStorage.setItem('hotsheet.terminals.drawer-open', 'true');
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('textbox', { name: /^Project folder/ }).fill('/work/demo');
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('textbox', { name: /^Project Folder/ }).fill('/work/demo');
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('.app-shell__workspace')).toBeVisible();
 }
 
@@ -144,7 +144,7 @@ test('composes the desktop shell, project strip, grid zoom, and magnified focus 
   await expect(workspace).toHaveAttribute('data-bottom-edge', 'false');
 
   // Terminals mode: the strip draws its own bottom rule (HS2-WH6CCR).
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await expect(shell).toHaveAttribute('data-mode', 'terminals');
   await expect(strip).toHaveAttribute('data-divider', 'true');
   await expect(strip).toHaveCSS('border-bottom-width', '1px');
@@ -156,7 +156,7 @@ test('composes the desktop shell, project strip, grid zoom, and magnified focus 
 
   // Kerf's zoom group owns its buttons' disabled state (KF-FTADQT, HS2-T44PFW): a disabled zoom button
   // reads as unavailable, dims, and paints no hover chrome.
-  const zoomIn = page.getByRole('button', { name: /^Zoom in/ });
+  const zoomIn = page.getByRole('button', { name: /^Zoom In/ });
   for (let step = 0; step < 8 && (await zoomIn.isEnabled()); step += 1) await zoomIn.click();
   await expect(zoomIn).toBeDisabled();
   await expect(zoomIn).toHaveCSS('cursor', 'not-allowed');
@@ -209,7 +209,7 @@ test('tracks the phone bottom edge and dedicated-terminal clipping through the d
   );
 
   // Collapsing the drawer hands the edge to the workspace, which then pads by the inset.
-  await drawer.getByRole('button', { name: 'Hide terminal drawer' }).click();
+  await drawer.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
   await expect(workspace).toHaveAttribute('data-bottom-edge', 'true');
   await expect
     .poll(() => workspace.evaluate((node) => parseFloat(getComputedStyle(node).paddingBottom)))
@@ -217,7 +217,7 @@ test('tracks the phone bottom edge and dedicated-terminal clipping through the d
   await expect(workspace).toHaveCSS('scroll-padding-bottom', '34px');
 
   // Reopening the drawer returns the edge to it.
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(workspace).toHaveAttribute('data-bottom-edge', 'false');
   await expect
     .poll(() => workspace.evaluate((node) => parseFloat(getComputedStyle(node).paddingBottom)))

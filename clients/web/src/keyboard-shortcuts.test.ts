@@ -34,7 +34,7 @@ function key(over: Partial<KeyboardEvent>): Pick<KeyboardEvent, 'key' | 'metaKey
 }
 
 describe('keyboard-shortcuts registry', () => {
-  it('has a stable, non-empty, unique-id catalog with valid defaults', () => {
+  it('has a stable, non-empty, unique-id catalog with valid Defaults', () => {
     expect(KEYBOARD_SHORTCUTS.length).toBeGreaterThan(10);
     const ids = KEYBOARD_SHORTCUTS.map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);

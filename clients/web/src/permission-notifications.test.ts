@@ -113,7 +113,7 @@ describe('permission notifications', () => {
     expect(timer.tick('p:1', 15_000, 50_000)).toBe(10_000);
     expect(timer.tick('p:1', 15_000, 60_000)).toBe(0);
   });
-  it('cancels one request without affecting valid fail-closed settings', () => {
+  it('cancels one request without affecting valid fail-closed Settings', () => {
     const timer = new VisiblePermissionTimer();
     timer.tick('p:1', 15_000, 0);
     timer.cancel('p:1', 1_000);

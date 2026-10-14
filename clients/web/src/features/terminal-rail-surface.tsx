@@ -152,7 +152,7 @@ export function createTerminalRailSurface(dependencies: TerminalRailSurfaceDepen
             />
           );
         case 'list':
-          return <TicketList tickets={shown.map(row)} label="Project tickets" />;
+          return <TicketList tickets={shown.map(row)} label="Project Tickets" />;
         default:
           return mode satisfies never;
       }

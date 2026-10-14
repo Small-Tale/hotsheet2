@@ -57,7 +57,7 @@ const icons: Record<ViewNavigationItem['icon'], [IconNode, string]> = {
 };
 export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
   return (
-    <nav class="view-navigation" data-component="view-navigation" aria-label="Ticket views">
+    <nav class="view-navigation" data-component="view-navigation" aria-label="Ticket Views">
       <List gap="2xs">
         <ListHeader
           label="Views"
@@ -130,8 +130,8 @@ export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
                     label={item.label}
                     status={count}
                     trailingAction="open-saved-view-menu"
-                    trailingActionLabel={`More actions for ${item.label}`}
-                    trailingActionTitle={`More actions for ${item.label}`}
+                    trailingActionLabel={`More Actions for ${item.label}`}
+                    trailingActionTitle={`More Actions for ${item.label}`}
                     trailingActionIcon={<LucideIcon size={14.4} icon={Ellipsis} name="ellipsis" />}
                     trailingActionAttributes={{
                       'data-item-label': item.label,
@@ -163,17 +163,17 @@ export function SavedViewContextMenu({ id, label, x, y }: SavedViewContextMenuSt
     <PopupMenu
       context
       anchor={contextMenuAnchor(x, y)}
-      label={`${label} view actions`}
+      label={`${label} View Actions`}
       rootAttributes={{ 'data-context-menu': 'saved-view', 'data-saved-view-id': id }}
       items={[
         {
-          label: 'Edit view…',
+          label: 'Edit View…',
           action: 'edit-saved-view',
           icon: <LucideIcon icon={Pencil} name="pencil" />,
           attributes: { 'data-item-id': id },
         },
         {
-          label: 'Delete view…',
+          label: 'Delete View…',
           action: 'delete-saved-view',
           tone: 'danger',
           icon: <LucideIcon icon={Trash2} name="trash-2" />,

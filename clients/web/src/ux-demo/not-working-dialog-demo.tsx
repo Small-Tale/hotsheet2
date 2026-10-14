@@ -24,7 +24,7 @@ export function NotWorkingDialogDemo() {
   return (
     <>
       <CatalogExample align="glyph" label="Interactive">
-        <wa-button data-action="open-not-working-demo">Open Not Working dialog</wa-button>
+        <wa-button data-action="open-not-working-demo">Open Not Working Dialog</wa-button>
         <NotWorkingDialog
           slug="HS2-DEMO"
           open={notWorkingDemoOpen.value}

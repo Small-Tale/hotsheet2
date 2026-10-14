@@ -184,7 +184,7 @@ describe('terminal name write queue (HS2-0E7Q6E)', () => {
       { started, write, settle } = deferredWrites();
     void queue.enqueue('p:t1', write('t1 rename'));
     void queue.enqueue('p:t2', write('t2 rename'));
-    // Another terminal's write never waits on this one.
+    // Another Terminal's write never waits on this one.
     expect(started).toEqual(['t1 rename', 't2 rename']);
     void queue.enqueue('p:t1', write('t1 reset'));
     await settle('t1 rename', false);

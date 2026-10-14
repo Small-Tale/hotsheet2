@@ -37,8 +37,8 @@ async function openWithCompatibility(page: import('@playwright/test').Page, comp
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
 }
 
 test('does not offer unsafe restart for an old server', async ({ page }) => {
@@ -126,7 +126,7 @@ test('tells development users to restart a server built from older local source'
   await expect(banner).toContainText('Rebuild if needed, then restart it to pick up your latest build');
   await expect(page.getByRole('heading', { name: 'Queue', level: 1 })).toBeVisible();
   await banner.getByRole('button', { name: 'View details' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Server build details' });
+  const dialog = page.getByRole('dialog', { name: 'Server Build Details' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('term')).toHaveText([
     'Running server version',

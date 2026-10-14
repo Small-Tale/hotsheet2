@@ -98,7 +98,7 @@ async function mockTickets(page: Page, fixture: { note?: string; noteKind?: stri
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities,
@@ -158,8 +158,8 @@ async function mockTickets(page: Page, fixture: { note?: string; noteKind?: stri
 
 async function openTicket(page: Page, tap = false) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const row = page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT01"]');
   if (tap) await row.tap();
   else await row.click();
@@ -210,7 +210,7 @@ test('a single click edits details and notes, and the blur-flush autosave contra
     .toBe(1);
   await expect(noteEditor).toHaveCount(0);
   // Card controls keep their own action: Delete is a button, not an edit entry.
-  await expect(note.getByRole('button', { name: 'Delete note' })).toBeVisible();
+  await expect(note.getByRole('button', { name: 'Delete Note' })).toBeVisible();
 
   // A habitual double-click still leaves the editor open and focused instead of closing it again.
   await note.locator('.note-card__body').getByText('Note edited with one click').dblclick();
@@ -304,7 +304,7 @@ test('a single click edits details in the ticket reader too', async ({ page }) =
   await page.setViewportSize({ width: 1280, height: 900 });
   const patches = await mockTickets(page);
   const inspector = await openTicket(page);
-  await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+  await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-EDIT01/ });
   await reader
     .getByRole('button', { name: 'Edit Ticket details' })
@@ -372,7 +372,7 @@ test('a code-formatted ticket slug in a feedback-needed note opens the ticket fr
 
   // The reader renders the same note as a feedback prompt; its code slug is a link there too, and
   // following it opens the ticket instead of adding an inline reply.
-  await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+  await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-EDIT01/ });
   const prompt = reader.locator('article[data-note-id="N1"] .note-card__feedback-prompt');
   await prompt.getByRole('link', { name: 'HS2-OTHER1', exact: true }).click();

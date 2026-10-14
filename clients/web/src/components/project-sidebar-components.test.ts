@@ -200,14 +200,14 @@ describe('ProjectSidebar component slice', () => {
       }),
     );
     expect(custom).toContain('data-lucide="search"');
-    expect(custom).toContain('aria-label="More actions for Needs docs"');
+    expect(custom).toContain('aria-label="More Actions for Needs docs"');
     expect(custom).toContain('data-component="list-action-row"');
     expect(custom).toContain('data-action="open-saved-view-menu"');
     expect(custom).toContain('data-item-label="Needs docs"');
     expect(custom).not.toContain('aria-label="Rename Needs docs"');
     expect(custom).not.toContain('aria-label="Delete Needs docs"');
     const menu = String(SavedViewContextMenu({ id: 'custom:docs', label: 'Needs docs', x: 20, y: 30 }));
-    expect(menu).toContain('aria-label="Needs docs view actions"');
+    expect(menu).toContain('aria-label="Needs docs View Actions"');
     expect(menu).toContain('data-action="edit-saved-view"');
     expect(menu).toContain('data-action="delete-saved-view"');
   });
@@ -291,7 +291,7 @@ describe('ProjectSidebar component slice', () => {
         ],
       }),
     );
-    expect(markup).toContain('aria-label="Shell command"');
+    expect(markup).toContain('aria-label="Shell Command"');
     expect(markup).toContain('data-lucide="square-terminal"');
     expect(markup).toContain('aria-label="AI command"');
     expect(markup).toContain('data-lucide="bot"');
@@ -501,13 +501,13 @@ describe('ProjectSidebar component slice', () => {
     const markup = String(ProjectSidebar(base));
     expect(markup).not.toContain('name="drive-tool"');
     expect(markup).toContain('Drive with Codex');
-    expect(markup).toContain('Choose Drive provider, model, and effort');
+    expect(markup).toContain('Choose Drive Provider, Model, and Effort');
     expect(markup).toContain(
-      'data-action="open-conversation" aria-label="Open Codex conversation" title="Open chat without starting the Hot Sheet workflow" aria-pressed="false"',
+      'data-action="open-conversation" aria-label="Open Codex Conversation" title="Open chat without starting the Hot Sheet workflow" aria-pressed="false"',
     );
     expect(markup).not.toContain('aria-pressed="false" disabled');
     expect(String(ProjectSidebar({ ...base, driveTool: 'claude', conversationOpen: true }))).toContain(
-      'aria-label="Open Claude conversation"',
+      'aria-label="Open Claude Conversation"',
     );
     const options = String(
       ProjectSidebar({
@@ -518,6 +518,6 @@ describe('ProjectSidebar component slice', () => {
         driveDefaultSelection: { tool: 'codex' },
       }),
     );
-    expect(options).toContain('aria-label="Drive provider, model, and effort options"');
+    expect(options).toContain('aria-label="Drive Provider, Model, and Effort Options"');
   });
 });

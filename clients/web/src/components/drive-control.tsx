@@ -38,7 +38,7 @@ export function DriveControl({
         type="button"
         class="drive-control__options"
         {...COMMANDS_AND_AI_ACTIONS.toggleDriveOptions.attrs}
-        aria-label="Choose Drive provider, model, and effort"
+        aria-label="Choose Drive Provider, Model, and Effort"
         aria-expanded={String(optionsOpen)}
         disabled={optionsDisabled || undefined}
         title="Choose Drive provider, model, and effort"

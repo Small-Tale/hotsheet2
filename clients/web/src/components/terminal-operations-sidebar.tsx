@@ -63,7 +63,7 @@ export function terminalOperationsPanel({
   return {
     label: 'Terminal operations sidebar',
     toolbar: { label: 'Operations sidebar toolbar', dividerSides: '' },
-    toggle: { action: 'toggle-project-sidebar', name: 'operations sidebar' },
+    toggle: { action: 'toggle-project-sidebar', name: 'Operations Sidebar' },
     content,
     pane: { contentElement: 'section', contentLabel: 'Terminal operations sidebar' },
   };

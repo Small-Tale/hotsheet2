@@ -101,7 +101,7 @@ export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBa
       role="toolbar"
       aria-label="Terminal keys"
     >
-      <KeyGroup label="Function row">
+      <KeyGroup label="Function Row">
         <button
           type="button"
           tabindex="-1"
@@ -133,7 +133,7 @@ export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBa
               type="button"
               tabindex="-1"
               {...TERMINALS_ACTIONS.copyTerminalText.attrs}
-              aria-label="Copy terminal text"
+              aria-label="Copy Terminal Text"
               title="Copy terminal text"
             >
               <LucideIcon size="s" icon={Copy} name="copy" />

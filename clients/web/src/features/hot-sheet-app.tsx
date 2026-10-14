@@ -492,8 +492,8 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
           details={composerDetails.value}
           category={composerCategory.value}
           upNext={composerUpNext.value}
-          providerName={composerTarget?.name ?? provider?.name ?? 'Hot Sheet git'}
-          defaultSourceName={provider?.name ?? 'Hot Sheet git'}
+          providerName={composerTarget?.name ?? provider?.name ?? 'Hot Sheet Git'}
+          defaultSourceName={provider?.name ?? 'Hot Sheet Git'}
           sourceIsDefault={composerTarget?.default ?? true}
           sources={writableTicketSources(provider).map((source) => ({
             value: source.connectionId,

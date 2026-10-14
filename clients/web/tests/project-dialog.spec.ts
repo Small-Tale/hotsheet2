@@ -9,7 +9,7 @@ for (const systemTheme of ['light', 'dark'] as const) {
     await page.goto('/ux-demo?component=project-dialog');
     const root = page.locator('html');
     const dialog = page.locator('[data-remote-project-dialog]');
-    const stage = page.getByRole('region', { name: 'ProjectDialog examples' });
+    const stage = page.getByRole('region', { name: 'ProjectDialog Examples' });
     const palette = () =>
       dialog.evaluate((element) => ({
         surface: getComputedStyle(element.shadowRoot!.querySelector('dialog')!).backgroundColor,
@@ -19,7 +19,7 @@ for (const systemTheme of ['light', 'dark'] as const) {
     const switchTheme = async (theme: 'light' | 'dark') => {
       await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
       await expect(dialog).toHaveJSProperty('open', false);
-      await page.getByRole('button', { name: `Use ${theme} theme`, exact: true }).click();
+      await page.getByRole('button', { name: `Use ${theme === 'dark' ? 'Dark' : 'Light'} Theme`, exact: true }).click();
       await expect(root).toHaveCSS('color-scheme', theme);
       await stage.getByRole('button', { name: 'Remote projects', exact: true }).click();
       await expect(dialog).toHaveJSProperty('open', true);
@@ -72,7 +72,7 @@ test('demonstrates project chooser states and opens again after empty, error, an
   await page.goto('/ux-demo?component=project-dialog');
   const remote = page.locator('[data-remote-project-dialog]');
   const local = page.locator('[data-project-dialog]');
-  const stage = page.getByRole('region', { name: 'ProjectDialog examples' });
+  const stage = page.getByRole('region', { name: 'ProjectDialog Examples' });
   const cancel = () => remote.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(remote).toHaveJSProperty('open', true);
   await expect(remote.locator('[data-component="list-item"]')).toHaveCount(10);
@@ -89,7 +89,7 @@ test('demonstrates project chooser states and opens again after empty, error, an
     .toBe(0);
   await remote.getByRole('button', { name: 'Demo /work/demo', exact: true }).focus();
   const firstRow = await remote.locator('[data-component="list-item"]').first().boundingBox();
-  const list = await remote.getByRole('navigation', { name: 'Open projects' }).boundingBox();
+  const list = await remote.getByRole('navigation', { name: 'Open Projects' }).boundingBox();
   expect(firstRow!.y - list!.y).toBeGreaterThanOrEqual(4);
   await page.screenshot({ path: 'target/visual-captures/hs2-xx5y2x-remote-project-mobile-dark.png' });
   await cancel();
@@ -126,12 +126,12 @@ test('demonstrates project chooser states and opens again after empty, error, an
   await expect(local).toContainText('process 4242');
   await local.getByRole('button', { name: 'Stop server and retry' }).click();
   await expect(local.locator('.project-dialog__server-recovery')).toHaveCount(0);
-  await local.getByRole('textbox', { name: /^Project folder/ }).fill('/work/edited');
-  await local.getByRole('button', { name: 'Open project', exact: true }).click();
+  await local.getByRole('textbox', { name: /^Project Folder/ }).fill('/work/edited');
+  await local.getByRole('button', { name: 'Open Project', exact: true }).click();
   await expect(local).toHaveJSProperty('open', false);
   await expect(stage.locator('[data-demo-event]')).toHaveText('Opened /work/edited');
   await stage.getByRole('button', { name: 'Local project', exact: true }).click();
-  await expect(local.getByRole('textbox', { name: /^Project folder/ })).toHaveValue('/work/edited');
+  await expect(local.getByRole('textbox', { name: /^Project Folder/ })).toHaveValue('/work/edited');
   await local.getByRole('button', { name: 'Cancel', exact: true }).click();
   await stage.getByRole('button', { name: 'Recovery in progress', exact: true }).click();
   await expect(local.getByRole('button', { name: 'Recovering…' })).toBeDisabled();

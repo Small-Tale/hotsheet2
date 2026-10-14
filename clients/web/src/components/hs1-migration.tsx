@@ -82,7 +82,7 @@ export function Hs1MigrationDialog({
             <List flex>
               <wa-input
                 name="hs1-ticket-store"
-                label="Ticket repository folder"
+                label="Ticket Repository Folder"
                 value={defaultStore}
                 required
                 disabled={busy}
@@ -122,7 +122,7 @@ export function Hs1MigrationDialog({
               {...PROJECT_LIFECYCLE_ACTIONS.dismissHs1Migration.attrs}
               disabled={busy}
             >
-              Not now
+              Not Now
             </wa-button>
             <wa-button appearance="accent" type="submit" disabled={busy}>
               {busy ? 'Importing…' : 'Import project'}
@@ -165,7 +165,7 @@ export function Hs1CleanupBanner() {
             Dismiss
           </button>
           <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.removeHs1Data.attrs}>
-            Delete old files…
+            Delete Old Files…
           </button>
         </Row>
       }
@@ -188,7 +188,7 @@ export function Hs1RegistrationRepairBanner() {
             Dismiss
           </button>
           <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.removeHs1Data.attrs}>
-            Repair old app registration…
+            Repair Old App Registration…
           </button>
         </Row>
       }

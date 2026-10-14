@@ -44,7 +44,7 @@ const ticket = (slug: string, status: string) => ({
   claim_count: 0,
 });
 
-test('never renders one project sidebar with another project statistics', async ({ page }) => {
+test('never renders one project sidebar with another Project Statistics', async ({ page }) => {
   let releaseOther!: () => void;
   const otherGate = new Promise<void>((resolve) => {
     releaseOther = resolve;
@@ -69,7 +69,7 @@ test('never renders one project sidebar with another project statistics', async 
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities,
@@ -147,16 +147,16 @@ test('never renders one project sidebar with another project statistics', async 
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
   await page.locator('wa-input[name="project-root"]').evaluate((node: HTMLElement & { value: string }, value) => {
     node.value = value;
   }, '/work/hotsheet2');
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const summary = page.locator('#app-left-rail [data-component="project-summary"]'),
     chart = summary.getByRole('img');
   await expect(summary).toHaveAccessibleName('Open project statistics: 2 completed today, 4 in progress');
   await expect(chart).toHaveAttribute('aria-label', 'Tickets completed over the last 7 days: 0, 1, 0, 2, 0, 1, 2');
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
   await expect(summary).toHaveAccessibleName('Open project statistics: 0 completed today, 0 in progress');
   await expect(chart).toHaveAttribute('aria-label', 'Tickets completed over the last 7 days: 0, 0, 0, 0, 0, 0, 0');
@@ -221,7 +221,7 @@ test('an obsolete background count snapshot cannot overwrite a project after an 
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities,
@@ -278,12 +278,12 @@ test('an obsolete background count snapshot cannot overwrite a project after an 
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
   await page.locator('wa-input[name="project-root"]').evaluate((node: HTMLElement & { value: string }, value) => {
     node.value = value;
   }, '/work/hotsheet2');
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
   await expect.poll(() => Boolean(demoPoll)).toBe(true);
   await demoPoll!.fulfill({
@@ -362,7 +362,7 @@ test('keeps the authoritative completion trend after a local delete drops the co
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities,
@@ -411,8 +411,8 @@ test('keeps the authoritative completion trend after a local delete drops the co
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const summary = page.locator('#app-left-rail [data-component="project-summary"]'),
     chart = summary.getByRole('img');
   await expect(summary).toHaveAccessibleName('Open project statistics: 2 completed today, 4 in progress');

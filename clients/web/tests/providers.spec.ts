@@ -144,9 +144,9 @@ test('keeps Git source repair controls visible after an identity mismatch (HS2-A
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   const sources = page.locator('[data-component="ticket-sources-settings"]');
   await expect(sources.getByText('Identity mismatch')).toBeVisible();
   await expect(sources).toContainText('Restore the original, or remove and add this source again.');
@@ -157,30 +157,30 @@ test('keeps Git source repair controls visible after an identity mismatch (HS2-A
   await mockProject(narrow);
   await narrow.route('**/__hotsheet/project-api/*/providers', (route) => route.fulfill({ json: descriptors() }));
   await narrow.goto(new URL('/', page.url()).toString());
-  await narrow.getByRole('button', { name: 'Open project' }).click();
-  await narrow.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await narrow.getByLabel('Settings view').click();
+  await narrow.getByRole('button', { name: 'Open Project' }).click();
+  await narrow.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await narrow.getByLabel('Settings View').click();
   const narrowSources = narrow.locator('[data-component="ticket-sources-settings"]');
   await expect(narrowSources.getByText('Identity mismatch')).toBeVisible();
   await narrow.waitForTimeout(600);
   await narrow.screenshot({ path: 'target/visual-captures/hs2-agc4zt-list-narrow.png', fullPage: true });
   await sources.getByRole('button', { name: 'Edit HS git tickets' }).click();
-  await expect(page.getByRole('button', { name: 'Remove from this project…' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove from This Project…' })).toBeVisible();
   const editor = page.locator('[data-component="git-source-editor"]');
   await expect(editor.getByRole('alert')).toContainText('This path contains a different Git store.');
   await expect(editor.locator('wa-checkbox[name="review-unverified-recovery"]')).toHaveCount(0);
   await page.waitForTimeout(500);
   await page.screenshot({ path: 'target/visual-captures/hs2-agc4zt-mismatch-wide.png', fullPage: true });
   await narrowSources.getByRole('button', { name: 'Edit HS git tickets' }).click();
-  await expect(narrow.getByRole('button', { name: 'Remove from this project…' })).toBeVisible();
+  await expect(narrow.getByRole('button', { name: 'Remove from This Project…' })).toBeVisible();
   await narrow.waitForTimeout(500);
   await narrow.screenshot({ path: 'target/visual-captures/hs2-agc4zt-mismatch-narrow.png', fullPage: true });
   await narrowContext.close();
-  await page.getByRole('button', { name: 'Remove from this project…' }).click();
-  await expect(page.getByRole('group', { name: 'Confirm removal' })).toContainText(
+  await page.getByRole('button', { name: 'Remove from This Project…' }).click();
+  await expect(page.getByRole('group', { name: 'Confirm Removal' })).toContainText(
     'Tickets stay in the Git repository.',
   );
-  await page.getByRole('group', { name: 'Confirm removal' }).getByRole('button', { name: 'Remove' }).click();
+  await page.getByRole('group', { name: 'Confirm Removal' }).getByRole('button', { name: 'Remove' }).click();
   await expect(sources).toContainText('This project uses 0 ticket sources.');
 });
 
@@ -206,9 +206,9 @@ test('shows repair controls when the linked Git store is unavailable (HS2-N4X1WG
       route.fulfill({ status: 409, json: { error: 'linked Git store cannot be verified' } }),
     );
     await surface.goto(url);
-    await surface.getByRole('button', { name: 'Open project' }).click();
-    await surface.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    await surface.getByLabel('Settings view').click();
+    await surface.getByRole('button', { name: 'Open Project' }).click();
+    await surface.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await surface.getByLabel('Settings View').click();
     const sources = surface.locator('[data-component="ticket-sources-settings"]');
     await expect(sources.getByText('Store unavailable')).toBeVisible();
     await surface.waitForTimeout(600);
@@ -222,7 +222,7 @@ test('shows repair controls when the linked Git store is unavailable (HS2-N4X1WG
   const editor = page.locator('[data-component="git-source-editor"]');
   await expect(editor.getByRole('alert')).toContainText('This Git store cannot be opened.');
   await expect(editor.locator('wa-checkbox[name="review-unverified-recovery"]')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Remove from this project…' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove from This Project…' })).toBeVisible();
 
   const narrowContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const narrow = await narrowContext.newPage();
@@ -255,8 +255,8 @@ test('keeps workspace toolbar visibility responsive without CSS probe work durin
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const sort = page.locator('[data-hide-below="416px"]').first();
   await expect(sort).toBeVisible();
   expect(await page.evaluate(() => (window as Window & { __toolbarProbeWrites?: number }).__toolbarProbeWrites)).toBe(
@@ -386,8 +386,8 @@ async function haltedSessionFixture(page: Page) {
 test('alerts for a terminal question and opens its originating session (HS2-KP9K85)', async ({ page }) => {
   const fixture = await haltedSessionFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await fixture.question('tool-1');
   const popup = page.getByRole('dialog', { name: 'AI waiting for your answer' });
   await expect(popup).toBeVisible();
@@ -409,8 +409,8 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     const fixture = await haltedSessionFixture(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await fixture.question('tool-multi', [
       { question: 'Which direction should I take?', options: [{ label: 'North' }, { label: 'South' }] },
       { question: 'What else?', options: [{ label: 'Fast' }, { label: 'Safe' }], multiSelect: true },
@@ -418,7 +418,7 @@ for (const width of [1280, 390]) {
     ]);
     const popup = page.getByRole('dialog', { name: 'AI waiting for your answer' });
     await expect(popup).toBeVisible();
-    await popup.getByRole('button', { name: 'Send answer' }).click();
+    await popup.getByRole('button', { name: 'Send Answer' }).click();
     await expect(popup.getByRole('alert')).toContainText('Answer every question');
     await popup.getByLabel('South').check();
     await popup.getByLabel('Fast').check();
@@ -427,7 +427,7 @@ for (const width of [1280, 390]) {
     await popup.getByRole('textbox', { name: 'Other answer for Any details?' }).fill('Use tests');
     await expect(popup.getByRole('alert')).toBeHidden();
     await page.screenshot({ path: test.info().outputPath(`hs2-swy32a-question-${width}.png`) });
-    await popup.getByRole('button', { name: 'Send answer' }).click();
+    await popup.getByRole('button', { name: 'Send Answer' }).click();
     await expect.poll(() => fixture.questionAnswers().length).toBe(1);
     expect(fixture.questionAnswers()[0]).toMatchObject({
       tool_use_id: 'tool-multi',
@@ -442,7 +442,7 @@ for (const width of [1280, 390]) {
       { question: 'Which direction should I take?', options: [{ label: 'North' }] },
     ]);
     await expect(popup).toBeVisible();
-    await popup.getByRole('button', { name: 'Answer in terminal' }).click();
+    await popup.getByRole('button', { name: 'Answer in Terminal' }).click();
     await expect.poll(() => fixture.questionAnswers().length).toBe(2);
     expect(fixture.questionAnswers()[1]).toMatchObject({ tool_use_id: 'tool-native', native: true });
     await expect(
@@ -459,8 +459,8 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     const fixture = await haltedSessionFixture(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
     const popup = page.getByRole('dialog', { name: 'AI session halted' }),
       permission = page.locator('[data-component="permission-request-popup"]');
@@ -473,14 +473,14 @@ for (const width of [1280, 390]) {
     await permission.getByRole('button', { name: 'Ignore' }).click();
     await expect(popup).toBeVisible();
     await expect(popup).toBeInViewport({ ratio: 1 });
-    for (const name of ['Open session', 'Dismiss', 'Pause notifications'])
+    for (const name of ['Open session', 'Dismiss', 'Pause Notifications'])
       await expect(popup.getByRole('button', { name, exact: true })).toBeInViewport({ ratio: 1 });
     await page.screenshot({ path: test.info().outputPath(`hs2-e6kawy-alert-${width}.png`) });
     await fixture.failRefresh();
     await expect(popup).toBeVisible();
     await expect(popup).toContainText('(first)');
     await fixture.recover();
-    await popup.getByRole('button', { name: 'Pause notifications' }).click();
+    await popup.getByRole('button', { name: 'Pause Notifications' }).click();
     await expect(popup).toHaveCount(0);
     await fixture.halt('resolved-while-paused');
     await expect(page.locator('[data-component="notifications-paused-banner"]')).toContainText(
@@ -521,11 +521,11 @@ test('acknowledges a halted prompt only after modal editing releases its top-lay
 }) => {
   const fixture = await haltedSessionFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'New ticket…', exact: true }).click();
   const composer = page.getByRole('dialog', { name: 'Create ticket' });
-  await composer.getByRole('textbox', { name: 'Ticket title' }).fill('Keep this draft');
+  await composer.getByRole('textbox', { name: 'Ticket Title' }).fill('Keep this draft');
   await fixture.halt('deferred');
   const popup = page.locator('[data-component="halted-session-popup"]');
   await expect(popup).toHaveCount(1);
@@ -554,10 +554,10 @@ test('acknowledges a halted prompt only after modal editing releases its top-lay
 test('prioritizes an ignored foreground permission request over queued halts (HS2-E6KAWY)', async ({ page }) => {
   const fixture = await haltedSessionFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  await page.getByRole('button', { name: 'Open Codex conversation' }).click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   await fixture.permission('hotsheet-project-chat-codex-demo-checkout');
   const conversation = page.locator('[data-component="ai-conversation"]'),
     permission = conversation.locator('[data-component="permission-request-popup"]'),
@@ -578,13 +578,13 @@ test('shows completed driven failures, preserves indicators on dismissal, and su
 }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat', { exact: true }).click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
   const host = drawer.locator('[data-component="ai-conversation"]'),
     composer = host.getByLabel('Message Codex');
   await composer.fill('Fail this turn.');
@@ -618,9 +618,9 @@ test('opens a halted session in its originating project and follows another wind
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.getByRole('tab', { name: /^other/ })).toHaveAttribute('aria-selected', 'true');
   await expect.poll(() => fixture.terminalGets().length).toBe(2);
   expect(new Set(fixture.terminalGets()).size).toBe(2);
@@ -640,7 +640,7 @@ test('opens a halted session in its originating project and follows another wind
   await page.screenshot({ path: test.info().outputPath('hs2-e6kawy-origin-open.png') });
   await page.getByRole('button', { name: 'New ticket…', exact: true }).click();
   const composer = page.getByRole('dialog', { name: 'Create ticket' });
-  await composer.getByRole('textbox', { name: 'Ticket title' }).fill('Keep editing');
+  await composer.getByRole('textbox', { name: 'Ticket Title' }).fill('Keep editing');
   await fixture.halt('seen-in-peer');
   const key = JSON.stringify(['terminal', 'demo-checkout', 'halt-worker', 'seen-in-peer']);
   await expect(page.locator('[data-component="halted-session-popup"]')).toHaveCount(1);
@@ -651,7 +651,7 @@ test('opens a halted session in its originating project and follows another wind
   }, key);
   await peer.close();
   await expect(page.locator('[data-component="halted-session-popup"]')).toHaveCount(0);
-  await expect(composer.getByRole('textbox', { name: 'Ticket title' })).toHaveValue('Keep editing');
+  await expect(composer.getByRole('textbox', { name: 'Ticket Title' })).toHaveValue('Keep editing');
   await expect
     .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('hotsheet.halted-session-seen') ?? '[]').length))
     .toBe(2);
@@ -674,8 +674,8 @@ test('keeps live halt dedupe when device storage is unavailable (HS2-E6KAWY)', a
   });
   const fixture = await haltedSessionFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const popup = page.getByRole('dialog', { name: 'AI session halted' });
   await fixture.halt('memory-only');
   await expect(popup).toBeVisible();
@@ -732,8 +732,8 @@ test('deduplicates actual server halt episodes, preserves duplicate timestamps, 
       void route.close();
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const report = { error_type: 'overloaded', message: 'Real Claude model capacity failure.', agent: 'claude' },
       popup = page.getByRole('dialog', { name: 'AI session halted' });
     await mutateHalt('POST', '/terminals/real-halt/halt', report);
@@ -1535,7 +1535,7 @@ async function mockProject(
           ...(ticketSourceConfigured ? gitStores : []).map((locator, index) => ({
             connection_id: gitSourceId(index),
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator,
             color: sourceColors[gitSourceId(index)],
             ...(unverifiedGitSourceId === gitSourceId(index) ? { unverified_recovery: true } : {}),
@@ -1853,7 +1853,7 @@ async function mockProject(
       });
     if (path.endsWith('/terminals/terminal-new') && request.method() === 'GET')
       return route.fulfill({
-        json: { id: 'terminal-new', alive: true, busy: false, cwd: '/work/demo', scrollback: 'New project terminal' },
+        json: { id: 'terminal-new', alive: true, busy: false, cwd: '/work/demo', scrollback: 'New project Terminal' },
       });
     const commandStart = path.match(/\/commands\/([^/]+)\/run$/);
     if (commandStart && request.method() === 'POST') {
@@ -2340,9 +2340,9 @@ async function mockProject(
           );
           const label =
             rating.rating === 'helpful'
-              ? 'Helpful — keep suggestions like this.'
+              ? 'Helpful — Keep Suggestions Like This.'
               : rating.rating === 'not_helpful'
-                ? 'Not helpful — stop suggestions like this.'
+                ? 'Not Helpful — Stop Suggestions Like This.'
                 : 'Withdrawn.';
           const updated = {
             ...(existingIndex >= 0
@@ -2464,15 +2464,15 @@ test('opens a roomy project dialog with native browse controls and working cance
   await page.setViewportSize({ width: 1100, height: 760 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
   const dialog = page.locator('[data-project-dialog]');
   await expect(dialog).toHaveJSProperty('open', true);
   await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value', '.');
   expect((await dialog.boundingBox())!.width).toBeGreaterThan(700);
-  await page.getByRole('button', { name: 'Browse for project folder' }).click();
+  await page.getByRole('button', { name: 'Browse for Project Folder' }).click();
   await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value', '/picked/project');
   await expect(dialog).toHaveJSProperty('open', true);
-  await page.getByRole('button', { name: 'Browse for ticket store' }).click();
+  await page.getByRole('button', { name: 'Browse for Ticket Store' }).click();
   await expect(page.locator('wa-input[name="ticket-store"]')).toHaveJSProperty('value', '/picked/tickets.hs2');
   await expect(dialog).toHaveJSProperty('open', true);
   await expect(dialog.locator('.project-dialog__error')).toBeEmpty();
@@ -2481,7 +2481,7 @@ test('opens a roomy project dialog with native browse controls and working cance
   await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toHaveJSProperty('open', false);
   await expect(dialog).toBeHidden();
-  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
   await expect(dialog).toHaveJSProperty('open', true);
 });
 
@@ -2508,7 +2508,7 @@ test('remote clients pick from the server open-projects list instead of the file
   );
   await page.setViewportSize({ width: 1100, height: 760 });
   await page.goto('/?device=remote');
-  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
   const remote = page.locator('[data-remote-project-dialog]');
   await expect(remote).toHaveJSProperty('open', true);
   await expect(remote.locator('.project-dialog__error')).toHaveCount(0);
@@ -2576,7 +2576,7 @@ test('shows a clear message, not a raw browser exception, when the remote projec
   );
   await page.setViewportSize({ width: 1100, height: 760 });
   await page.goto('/?device=remote');
-  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
   const remote = page.locator('[data-remote-project-dialog]');
   await expect(remote).toHaveJSProperty('open', true);
   const error = remote.locator('.project-dialog__error');
@@ -2611,8 +2611,8 @@ test('offers explicit identity-guarded recovery for an unresponsive local server
     return route.fulfill({ json: { recovered: true } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const dialog = page.locator('[data-project-dialog]'),
     recovery = dialog.locator('.project-dialog__server-recovery');
   await expect(recovery).toBeVisible();
@@ -2638,8 +2638,8 @@ test('always confirms before closing a project without running resources', async
     route.request().method() === 'GET' ? route.fulfill({ json: [] }) : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const projectTab = page.locator('[data-tab-kind="project"]');
   await projectTab.hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
@@ -2701,10 +2701,10 @@ test('falls back to the project dialog when the direct native chooser fails', as
     await route.fulfill({ status: 500, json: { error: 'The native folder chooser failed.' } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   const dialog = page.locator('[data-project-dialog]');
   await expect(dialog).toHaveJSProperty('open', true);
   await expect(dialog.locator('wa-input[name="project-root"]')).toHaveJSProperty('value', '/work/demo');
@@ -2731,8 +2731,8 @@ test('opens a project whose setup refresh was skipped and explains it in a dismi
     await page.goto('/');
     // The first pass opens the project; the reload restores it through the same open path.
     if (width === 1280) {
-      await page.getByRole('button', { name: 'Open project' }).click();
-      await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+      await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     }
     const banner = page.locator('[data-component="project-setup-warning-banner"]');
     await expect(banner).toContainText('Project setup needs attention');
@@ -2763,11 +2763,11 @@ test('explains changed Codex hooks without a setup-failure warning and dismisses
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
     if (width === 1280) {
-      await page.getByRole('button', { name: 'Open project' }).click();
-      await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+      await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     }
     const banner = page.locator('[data-codex-hooks-notice="true"]');
-    await expect(banner).toContainText('Review updated Codex hooks');
+    await expect(banner).toContainText('Review Updated Codex Hooks');
     await expect(banner).toContainText('Run /hooks in Codex for this checkout');
     await expect(banner).toContainText('.codex/hooks.json');
     // The rounded banner sits on the header surface, not the pane's sunken tint (HS2-0YPWH8).
@@ -2796,8 +2796,8 @@ test('clears a failed project-open error when retrying successfully', async ({ p
   await mockProject(page);
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   let failNextOpen = true;
   await page.route('**/__hotsheet/projects/open', async (route) => {
     if (failNextOpen) {
@@ -2806,19 +2806,19 @@ test('clears a failed project-open error when retrying successfully', async ({ p
     }
     return route.fallback();
   });
-  const retry = async () => page.getByRole('button', { name: 'Add project' }).click();
+  const retry = async () => page.getByRole('button', { name: 'Add Project' }).click();
   await retry();
   const appError = page.locator('[data-component="app-error"]');
   await expect(appError).toContainText('only supports schema 2');
-  await expect(appError.getByRole('button', { name: 'Dismiss error' })).toBeVisible();
+  await expect(appError.getByRole('button', { name: 'Dismiss Error' })).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-c6at65-dismissible-error-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 640 });
   await expect(appError).toBeInViewport();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-c6at65-dismissible-error-narrow.png', fullPage: true });
-  await appError.getByRole('button', { name: 'Dismiss error' }).click();
+  await appError.getByRole('button', { name: 'Dismiss Error' }).click();
   await expect(appError).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Add project' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Add Project' })).toBeEnabled();
   await page.setViewportSize({ width: 1280, height: 800 });
   await retry();
   await expect(page.locator('.app-error')).toHaveCount(0);
@@ -2858,9 +2858,9 @@ test('opens the native folder chooser directly from Add project and only onboard
     return route.fulfill({ status: 201, json: { ticketStore: '/work/other.hs2', connectionId: 'git-other' } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
   expect(openedRoots).toEqual(['.', '/work/other']);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
@@ -2881,7 +2881,7 @@ test('opens the native folder chooser directly from Add project and only onboard
   await otherTab.getByRole('button', { name: 'Close other' }).click();
   await page.locator('[data-component="project-close-dialog"]').getByRole('button', { name: 'Close Project' }).click();
   await expect(page.getByRole('tab', { name: 'other' })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
   await expect(setup).toBeHidden();
   await expect(setup).toHaveJSProperty('open', false);
@@ -2894,12 +2894,12 @@ test('changes a sole project source color in settings and inspector while cards 
 }, testInfo) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const ticketRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
   await ticketRow.screenshot({ path: 'target/visual-captures/hs2-myw20v-single-list-wide.png' });
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   const sourceRow = page.locator('[data-source-row][data-source-id="git-local"]');
   await expect(sourceRow).not.toContainText('Edit icon color');
   await sourceRow.click();
@@ -2919,19 +2919,19 @@ test('changes a sole project source color in settings and inspector while cards 
   await expect(page.locator('.app-toast')).toContainText('Ticket source color updated.');
   await expect(appearance.locator('input[name="project-source-color"][value="#3b82f6"]')).toBeChecked();
   await page.locator('[data-ticket-source-setup-dialog]').getByRole('button', { name: 'Done' }).click();
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
   await ticketRow.click();
   await expect(page.locator('[data-source-identity] [data-component="ticket-source-icon"]')).toHaveCSS(
     'color',
     'rgb(59, 130, 246)',
   );
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   await sourceRow.click();
   await appearance.locator('input[name="project-source-color"][value="#6b7280"]').check();
   await expect(appearance.locator('input[name="project-source-color"][value="#6b7280"]')).toBeChecked();
   await page.locator('[data-ticket-source-setup-dialog]').getByRole('button', { name: 'Done' }).click();
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
 });
 
@@ -2940,9 +2940,9 @@ test('relinks a moved git ticket repository from its source dialog (HS2-8BG4W9, 
 }, testInfo) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await page.locator('[data-source-row][data-source-id="git-local"][data-action="edit-provider-connection"]').click();
   const dialog = page.locator('[data-ticket-source-setup-dialog]');
   await page.screenshot({ path: testInfo.outputPath('git-relink-wide.png'), animations: 'disabled' });
@@ -2973,9 +2973,9 @@ test('requires review and keeps an unverified recovery visible for a moved legac
 }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await page.locator('[data-source-row][data-source-id="git-local"][data-action="edit-provider-connection"]').click();
   const dialog = page.locator('[data-ticket-source-setup-dialog]');
   await dialog.getByRole('textbox', { name: 'Location' }).fill('/work/recovered.hs2');
@@ -2995,9 +2995,9 @@ test('requires review and keeps an unverified recovery visible for a moved legac
 test('reviews a legacy store at its unchanged path before adopting it (HS2-RQXJQV)', async ({ page }) => {
   await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, true, false, false, false, false, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await expect(page.locator('[data-source-row][data-source-id="git-local"]')).toContainText('Review required');
   await page.screenshot({ path: 'target/visual-captures/hs2-rqxjqv-review-required-wide.png', animations: 'disabled' });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -3030,12 +3030,12 @@ test('centers the compact source mark with the type icon and ticket number in co
 }) => {
   await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, true, false, false, false, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const listRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await expect(listRow.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'git');
   await listRow.screenshot({ path: 'target/visual-captures/hs2-myw20v-multiple-list-wide.png' });
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   const type = await row.locator('.ticket-list-row__category-icon').boundingBox();
   const source = await row.locator('.ticket-list-row__source .ticket-source-icon').boundingBox();
@@ -3058,9 +3058,9 @@ test('centers the compact source mark with the type icon and ticket number in co
 test('aligns ticket source marks with their names in project settings (HS2-Q93H9A) @ci-smoke', async ({ page }) => {
   await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, true, false, false, false, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   const settings = page.locator('[data-component="ticket-sources-settings"]');
   for (const row of [
     settings.locator('[data-source-row][data-source-id="git-local"]'),
@@ -3078,10 +3078,10 @@ test('keeps the inspector source mark unclipped and close to the ticket number (
 }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
-  const toolbar = page.locator('#app-right-rail [data-component="toolbar"][aria-label="Ticket inspector toolbar"]');
+  const toolbar = page.locator('#app-right-rail [data-component="toolbar"][aria-label="Ticket Inspector Toolbar"]');
   const icon = await toolbar.locator('[data-source-identity] .ticket-source-icon').boundingBox();
   const number = await toolbar.locator('.ticket-inspector__slug').boundingBox();
   const bounds = await toolbar.boundingBox();
@@ -3104,8 +3104,8 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
   await expect(page.locator('.app-error')).toHaveCount(0);
@@ -3198,7 +3198,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     .toBe('content-transition-push-out-end');
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
   // Sign in comes first: nothing else to fill in, and nothing to connect, until GitHub authorizes (HS2-1JT25R).
-  await expect(providerForm.getByLabel('Display name')).toHaveCount(0);
+  await expect(providerForm.getByLabel('Display Name')).toHaveCount(0);
   await expect(providerForm.getByLabel(/API base URL/)).toHaveCount(0);
   await expect(setup.getByRole('button', { name: 'Connect provider' })).toHaveJSProperty('disabled', true);
   await transition.evaluate(async (node) => {
@@ -3236,7 +3236,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   // No connection id to invent, no credential reference, and a blank name defaults to the provider (HS2-48GA17).
   await expect(providerForm.getByLabel('Connection ID')).toHaveCount(0);
   await expect(providerForm.getByText('Use a credential reference instead')).toHaveCount(0);
-  await expect(providerForm.getByLabel(/Credential reference/)).toHaveCount(0);
+  await expect(providerForm.getByLabel(/Credential Reference/)).toHaveCount(0);
   const creates: Array<Record<string, unknown>> = [];
   page.on('request', (request) => {
     if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/provider-connections'))
@@ -3244,7 +3244,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   });
   // A searchable list of every reachable repository, with guidance for missing ones (HS2-27T5WT).
   const repository = providerForm.locator('input[name="connection-locator"]'),
-    access = providerForm.getByRole('region', { name: 'GitHub repository access' });
+    access = providerForm.getByRole('region', { name: 'GitHub Repository Access' });
   await expect(repository).toHaveAttribute('placeholder', 'Search your repositories…');
   await expect(providerForm.locator('#provider-setup-github-repositories option')).toHaveCount(2);
   await expect(providerForm.getByText('2 repositories available.')).toBeVisible();
@@ -3294,7 +3294,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(composer.getByText('This ticket provider does not support attachments.')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(composer).toBeHidden();
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   await expect(page.locator('[data-component="settings-workspace"]')).toBeVisible();
   const sourcesPanel = page.locator('[data-component="ticket-sources-settings"]');
   // The workspace toolbar titles the page; the panel does not repeat it (HS2-FV538C).
@@ -3316,7 +3316,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
   await providerForm.getByRole('button', { name: 'Sign in with GitHub' }).click();
   await expect(providerForm.getByText('Signed in to GitHub.')).toBeVisible();
-  await providerForm.getByLabel('Display name').fill('GitHub Secondary');
+  await providerForm.getByLabel('Display Name').fill('GitHub Secondary');
   await providerForm.locator('input[name="connection-locator"]').fill('small-tale/secondary');
   // Adding a second source keeps this project's existing default unless explicitly changed.
   await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', false);
@@ -3365,11 +3365,11 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await colorPicker.screenshot({ path: 'target/visual-captures/hs2-ant2r8-source-color-picker.png' });
   await colorPicker.getByRole('radio', { name: 'Purple' }).check();
   const footer = setup.locator('[data-transition-region="footer"] [data-side="b"]');
-  await expect(footer.getByRole('button', { name: 'Remove from this project…' })).toBeVisible();
+  await expect(footer.getByRole('button', { name: 'Remove from This Project…' })).toBeVisible();
   await expect(footer.getByRole('button', { name: 'Disable' })).toBeVisible();
   // Owned by this project alone, so there is no "shared with" note.
   await expect(setup.locator('.ticket-source-setup__scope-hint')).toHaveCount(0);
-  await providerForm.getByLabel('Display name').fill('GitHub Primary');
+  await providerForm.getByLabel('Display Name').fill('GitHub Primary');
   await providerForm.locator('input[name="attachment-repo"]').fill('');
   const updates: Array<Record<string, unknown>> = [];
   const colorUpdates: Array<Record<string, unknown>> = [];
@@ -3425,7 +3425,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await footer.getByRole('button', { name: 'Keep' }).click();
   await expect(footer.getByRole('button', { name: 'Save changes' })).toBeVisible();
   expect(detaches).toEqual([]);
-  await footer.getByRole('button', { name: 'Remove from this project…' }).click();
+  await footer.getByRole('button', { name: 'Remove from This Project…' }).click();
   await page.setViewportSize({ width: 390, height: 760 });
   await expect(prompt).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('remove-from-project-confirm-narrow.png'), fullPage: true });
@@ -3497,7 +3497,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(providerForm.getByText('Using your GitHub account on GitHub.')).toBeVisible();
   await expect(providerForm.locator('#provider-setup-github-repositories option')).toHaveCount(3);
   await providerForm.locator('input[name="connection-locator"]').fill('small-tale/reused');
-  await providerForm.getByLabel('Display name').fill('GitHub Reused');
+  await providerForm.getByLabel('Display Name').fill('GitHub Reused');
   await setup.getByRole('button', { name: 'Connect provider' }).click();
   await expect.poll(() => creates.length).toBe(3);
   expect(creates[2]).toMatchObject({
@@ -3586,8 +3586,8 @@ for (const width of [1280, 390])
       if (request.method() === 'POST' && path.endsWith('/provider-connections')) creates.push(request.postDataJSON());
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const setup = page.locator('[data-ticket-source-setup-dialog]'),
       form = setup.locator('[data-action="save-provider-connection"]');
     await expect(setup).toHaveJSProperty('open', true);
@@ -3614,7 +3614,7 @@ for (const width of [1280, 390])
         settings: { credential: { secret: 'github-app-abandoned' } },
       }),
     ]);
-    await page.getByLabel('Settings view').click();
+    await page.getByLabel('Settings View').click();
     const sources = page.locator('[data-component="ticket-sources-settings"]');
     await expect(sources.getByRole('button', { name: 'Edit GitHub Issues' })).toContainText('Default');
     await expect(sources.getByRole('button', { name: 'Remove GitHub Issues from this project' })).toBeVisible();
@@ -3676,9 +3676,9 @@ test('removes an orphaned account source while keeping its sign-in (HS2-G0E8ZS)'
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await page.locator('#app-left-rail nav[aria-label="Settings categories"] [data-item-id="accounts"]').click();
   const account = page.locator('[data-component="accounts-settings"] article[data-account-id="github-app-orphan"]'),
     source = account.locator('.ticket-provider-settings__account-source[data-source-id="github-orphan"]');
@@ -3748,8 +3748,8 @@ test('names an unused GitHub Enterprise sign-in by its host and reuses its serve
     if (request.method() === 'POST' && path.endsWith('/provider-connections')) creates.push(request.postDataJSON());
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const setup = page.locator('[data-ticket-source-setup-dialog]'),
     form = setup.locator('[data-action="save-provider-connection"]');
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
@@ -3840,8 +3840,8 @@ for (const width of [1280, 390])
         creates.push(request.postDataJSON());
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const setup = page.locator('[data-ticket-source-setup-dialog]'),
       form = setup.locator('[data-action="save-provider-connection"]'),
       field = (name: string) => form.locator(`wa-input[name="${name}"]`),
@@ -3947,13 +3947,13 @@ test('signs in to GitHub Enterprise from its server address before connecting (H
     if (request.method() === 'POST' && path.endsWith('/provider-connections')) creates.push(request.postDataJSON());
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const setup = page.locator('[data-ticket-source-setup-dialog]'),
     form = setup.locator('[data-action="save-provider-connection"]');
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
   await form.getByRole('button', { name: 'Use GitHub Enterprise…' }).click();
-  const server = form.getByLabel('GitHub Enterprise server URL');
+  const server = form.getByLabel('GitHub Enterprise Server URL');
   await expect(server).toBeVisible();
   await expect(form.getByRole('button', { name: 'Sign in with GitHub Enterprise' })).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-1jt25r-enterprise-wide.png', fullPage: true });
@@ -3966,7 +3966,7 @@ test('signs in to GitHub Enterprise from its server address before connecting (H
   expect(starts).toEqual([]);
   // Switching back and forth keeps what was typed.
   await server.fill('ghe.test/');
-  await form.getByRole('button', { name: 'Use GitHub.com instead' }).click();
+  await form.getByRole('button', { name: 'Use GitHub.com Instead' }).click();
   await expect(form.getByRole('button', { name: 'Sign in with GitHub', exact: true })).toBeVisible();
   await form.getByRole('button', { name: 'Use GitHub Enterprise…' }).click();
   await server.fill('ghe.test/');
@@ -3994,8 +3994,8 @@ test('blocks a new ticket store before an older project server can accept it', a
     }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const setup = page.locator('[data-ticket-source-setup-dialog]');
   await expect(setup).toHaveJSProperty('open', true);
   await setup.getByRole('button', { name: 'Create a Hot Sheet 2 git ticket repository', exact: true }).click();
@@ -4012,14 +4012,14 @@ test('keeps a dismissed ticket-source setup dialog closed across later project r
 }) => {
   await mockProject(page, true, false, 0, 0, 0, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const setup = page.locator('[data-ticket-source-setup-dialog]');
   await expect(setup).toHaveJSProperty('open', true);
   await setup.getByRole('button', { name: 'Close' }).click();
   await expect(setup).toBeHidden();
   await page.getByRole('tab', { name: /demo/ }).click();
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   await page.waitForTimeout(350);
   await expect(setup).toBeHidden();
   await expect(setup).toHaveJSProperty('open', false);
@@ -4029,8 +4029,8 @@ test('identifies detected HS1 data and keeps a dismissed import modal closed acr
   await page.setViewportSize({ width: 1100, height: 840 });
   await mockProject(page, true, false, 0, 0, 0, false, 2, false, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const dialog = page.locator('[data-component="hs1-migration-dialog"]'),
     dialogOpacity = () =>
       dialog.evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('dialog')!).opacity);
@@ -4039,7 +4039,7 @@ test('identifies detected HS1 data and keeps a dismissed import modal closed acr
   await expect(dialog.getByText('17', { exact: true })).toBeVisible();
   await expect.poll(dialogOpacity).toBe('1');
   await page.screenshot({ path: 'target/visual-captures/hs2-k4306s-hs1-source-dialog-wide.png', fullPage: true });
-  await dialog.getByRole('button', { name: 'Not now' }).click();
+  await dialog.getByRole('button', { name: 'Not Now' }).click();
   const banner = page.locator('[data-component="hs1-migration-banner"] > [data-component="state-banner"]');
   await expect(dialog).toBeHidden();
   await page.waitForTimeout(250);
@@ -4082,9 +4082,9 @@ test('adds a second git ticket store and connects its remote from one guided for
       : route.fulfill({ json: { connected: true } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Data Source…', exact: true }).click();
   const setup = page.locator('[data-ticket-source-setup-dialog]'),
     recommended = setup.getByRole('button', { name: 'Create a Hot Sheet 2 git ticket repository', exact: true });
@@ -4122,7 +4122,7 @@ test('adds a second git ticket store and connects its remote from one guided for
   await expect(setup).toHaveJSProperty('open', false);
   expect(remoteAttempts).toBe(2);
   await expect(page.getByText('This project uses 2 ticket sources.')).toBeVisible();
-  await expect(page.getByText('Hot Sheet git · /picked/project', { exact: true })).toBeVisible();
+  await expect(page.getByText('Hot Sheet Git · /picked/project', { exact: true })).toBeVisible();
 });
 
 test('expands the workspace grid and exits full screen on project navigation (HS2-6P63KW)', async ({ page }) => {
@@ -4130,11 +4130,11 @@ test('expands the workspace grid and exits full screen on project navigation (HS
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const shell = page.locator('[data-component="app-shell"]');
-  const dashboard = page.getByRole('region', { name: 'Workspace grid' });
+  const dashboard = page.getByRole('region', { name: 'Workspace Grid' });
   const enter = dashboard.getByRole('button', { name: 'Enter workspace grid full screen' });
   await expect(enter).toHaveAttribute('aria-pressed', 'false');
   await enter.click();
@@ -4142,7 +4142,7 @@ test('expands the workspace grid and exits full screen on project navigation (HS
   await expect(shell.locator('#app-left-rail')).toHaveCount(0);
   await expect(shell.locator('#app-right-rail')).toHaveCount(0);
   await expect(page.locator('[data-component="terminal-ticket-rail-list"]')).toHaveCount(0);
-  await expect(shell.getByRole('toolbar', { name: 'Workspace toolbar' })).toHaveCount(0);
+  await expect(shell.getByRole('toolbar', { name: 'Workspace Toolbar' })).toHaveCount(0);
   await expect(dashboard.getByRole('button', { name: 'Exit workspace grid full screen' })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -4158,7 +4158,7 @@ test('expands the workspace grid and exits full screen on project navigation (HS
   await enter.click();
   await page.getByRole('tab', { name: /^demo/ }).click();
   await expect(shell).toHaveAttribute('data-mode', 'project');
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await expect(dashboard.getByRole('button', { name: 'Enter workspace grid full screen' })).toHaveAttribute(
     'aria-pressed',
     'false',
@@ -4178,13 +4178,13 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
-  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     operations = page.getByRole('region', { name: 'Terminal operations sidebar' });
   await expect(dashboard).toBeVisible();
-  const zoomToolbar = dashboard.getByRole('toolbar', { name: 'Workspace grid controls' });
+  const zoomToolbar = dashboard.getByRole('toolbar', { name: 'Workspace Grid Controls' });
   await expect(zoomToolbar).toHaveAttribute('data-component', 'floating-toolbar');
   await expect(zoomToolbar).toHaveAttribute('data-position', 'bottom-end');
   await expect(zoomToolbar.locator('[data-component="toolbar-control-group"]')).toHaveCount(2);
@@ -4231,7 +4231,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await expect.poll(() => latestClaim('codex-main')).toMatchObject({ cols: 80, rows: 24, focus: true });
   const naturalClaim = await latestClaim('codex-main');
   await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-workspace-zoom-wide.png', fullPage: true });
-  await dashboard.getByRole('button', { name: /Zoom in, fit fewer items across/ }).click();
+  await dashboard.getByRole('button', { name: /Zoom In, Fit Fewer Items across/ }).click();
   await expect(dashboard).toHaveAttribute('data-fit', '3');
   await expect(page.evaluate(() => localStorage.getItem('hotsheet.terminals.fit-across'))).resolves.toBe('3');
   await expect
@@ -4249,7 +4249,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await page.getByRole('button', { name: 'Show operations sidebar' }).click();
   await expect(operations).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-mh8qn2-terminal-operations-1024x600.png', fullPage: true });
-  await dashboard.getByRole('button', { name: /Zoom out, fit more items high/ }).click();
+  await dashboard.getByRole('button', { name: /Zoom Out, Fit More Items high/ }).click();
   await expect(dashboard).toHaveAttribute('data-fit', '3');
   await expect(page.evaluate(() => localStorage.getItem('hotsheet.terminals.fit-high'))).resolves.toBe('3');
   await expect(page.evaluate(() => localStorage.getItem('hotsheet.terminals.fit-across'))).resolves.toBe('3');
@@ -4390,7 +4390,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await page.setViewportSize({ width: 1100, height: 720 });
   const liveTile = dashboard.locator('[data-terminal-key="demo-checkout:tests"]');
   await liveTile.getByRole('button', { name: 'Open Tests in demo' }).click();
-  await expect(page.getByRole('button', { name: 'Workspace grid' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('button', { name: 'Workspace Grid' })).toHaveAttribute('aria-pressed', 'false');
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer).toHaveAttribute('data-maximized', 'false');
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
@@ -4409,7 +4409,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
     })
     .not.toBe('80x24');
   await expect(dedicatedViewport).toHaveAttribute('data-driving', 'true');
-  await page.getByRole('button', { name: 'Workspace grid' }).focus();
+  await page.getByRole('button', { name: 'Workspace Grid' }).focus();
   await expect(dedicatedViewport.locator('.xterm-helper-textarea')).not.toBeFocused();
   await page.setViewportSize({ width: 1280, height: 840 });
   await expect.poll(() => latestClaim('tests')).toMatchObject({ focus: true });
@@ -4425,7 +4425,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
     path: 'target/visual-captures/hs2-kke1pm-terminal-fit-with-external-focus-after.png',
     fullPage: true,
   });
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await expect(dashboard).toBeVisible();
   await dashboard.locator('[data-terminal-key="demo-checkout:tests"]').dblclick();
   await expect(dedicatedViewport.locator('.xterm-helper-textarea')).toBeFocused();
@@ -4440,15 +4440,15 @@ test('preserves column view after visiting the terminal dashboard (HS2-BH8ZVD)',
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Columns view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Columns View').click();
   await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
-  await expect(page.getByRole('region', { name: 'Workspace grid' })).toBeVisible();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  await expect(page.getByRole('region', { name: 'Workspace Grid' })).toBeVisible();
   await page.getByRole('tab', { name: /demo/ }).click();
   await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
-  await expect(page.getByLabel('Columns view')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Columns View')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restore (HS2-W3GPHW)', async ({
@@ -4471,11 +4471,11 @@ test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restor
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
-  const workspace = page.getByRole('region', { name: 'Workspace grid' }),
-    workspaceZoom = workspace.getByRole('toolbar', { name: 'Workspace grid controls' });
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  const workspace = page.getByRole('region', { name: 'Workspace Grid' }),
+    workspaceZoom = workspace.getByRole('toolbar', { name: 'Workspace Grid Controls' });
   await expect(workspaceZoom).toHaveAttribute('data-component', 'floating-toolbar');
   await expect(workspaceZoom).toHaveAttribute('data-position', 'bottom-end');
   await expect(workspaceZoom.locator('[data-component="toolbar-control-group"]')).toHaveCount(2);
@@ -4484,7 +4484,7 @@ test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restor
     'default',
   );
   await expectDarkChildren(workspaceZoom, 'workspace-zoom');
-  await workspaceZoom.getByRole('button', { name: /Zoom in/ }).click();
+  await workspaceZoom.getByRole('button', { name: /Zoom In/ }).click();
   await expect(workspace).toHaveAttribute('data-fit', '3');
   await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-workspace-zoom-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
@@ -4493,7 +4493,7 @@ test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restor
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('tab', { name: /demo/ }).click();
-  const restore = page.getByRole('toolbar', { name: 'Terminal drawer controls' });
+  const restore = page.getByRole('toolbar', { name: 'Terminal Drawer Controls' });
   await expect(restore).toHaveAttribute('data-component', 'floating-toolbar');
   await expect(restore.locator('[data-component="toolbar-control-group"]')).toHaveAttribute('data-tone', 'default');
   await expectDarkChildren(restore, 'drawer-restore');
@@ -4513,14 +4513,14 @@ test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restor
   await expect(restore).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-drawer-restore-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 900 });
-  await restore.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await restore.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer).toHaveAttribute('data-mode', 'grid');
-  const drawerGrid = drawer.getByRole('region', { name: 'Workspace grid' }),
-    drawerZoom = drawerGrid.getByRole('toolbar', { name: 'Workspace tile zoom' });
+  const drawerGrid = drawer.getByRole('region', { name: 'Workspace Grid' }),
+    drawerZoom = drawerGrid.getByRole('toolbar', { name: 'Workspace Tile Zoom' });
   await expect(drawerZoom).toHaveAttribute('data-component', 'floating-toolbar');
   await expectDarkChildren(drawerZoom, 'drawer-zoom');
-  await drawerZoom.getByRole('button', { name: /Zoom in/ }).click();
+  await drawerZoom.getByRole('button', { name: /Zoom In/ }).click();
   await expect(drawerGrid).toHaveAttribute('data-fit', '1');
   await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-drawer-grid-zoom.png', fullPage: true });
 });
@@ -4532,10 +4532,10 @@ test('paints terminal dashboard transitions immediately and progressively mounts
   await installFakeTerminalSockets(page, true);
   await mockProject(page, true, false, 0, 0, 0, false, 48);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
-  const dashboard = page.getByRole('region', { name: 'Workspace grid' });
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace Grid' });
   await expect(dashboard.locator('[data-component="terminal-tile"]')).toHaveCount(48);
   await expect.poll(() => page.locator('.xterm').count()).toBeGreaterThan(0);
   const initialRuntimeCount = await page.locator('.xterm').count();
@@ -4559,7 +4559,7 @@ test('paints terminal dashboard transitions immediately and progressively mounts
   expect(projectTransition.projectVisible).toBe(true);
   expect(projectTransition.terminalVisible).toBe(false);
   expect(projectTransition.elapsed).toBeLessThan(100);
-  const dashboardTransition = await page.getByRole('button', { name: 'Workspace grid' }).evaluate(async (button) => {
+  const dashboardTransition = await page.getByRole('button', { name: 'Workspace Grid' }).evaluate(async (button) => {
     const start = performance.now();
     (button as HTMLElement).click();
     return {
@@ -4586,9 +4586,9 @@ for (const theme of ['light', 'dark'] as const) {
     await installFakeTerminalSockets(page, true);
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]');
     const segments = toolbar.getByRole('group', { name: 'View mode', exact: true });
     const icons = { list: 'list', board: 'columns-3', notifications: 'bell', settings: 'settings' };
     const expectMode = async (group: Locator, selected: keyof typeof icons, modes = Object.keys(icons)) => {
@@ -4608,11 +4608,11 @@ for (const theme of ['light', 'dark'] as const) {
     await expectMode(segments, 'list');
     await expect(segments).toHaveAttribute('data-layout', 'content');
     await expect(segments).toHaveAttribute('data-shape', 'pill');
-    const listMode = segments.getByRole('button', { name: 'List view' });
+    const listMode = segments.getByRole('button', { name: 'List View' });
     await listMode.click();
     await expect(listMode).toBeFocused();
     await page.keyboard.press('Tab');
-    await expect(segments.getByRole('button', { name: 'Columns view' })).toBeFocused();
+    await expect(segments.getByRole('button', { name: 'Columns View' })).toBeFocused();
     await page.keyboard.press('Enter');
     await expectMode(segments, 'board');
     await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
@@ -4620,17 +4620,17 @@ for (const theme of ['light', 'dark'] as const) {
       path: `target/visual-captures/hs2-f29qat-workspace-${theme}-wide.png`,
       animations: 'disabled',
     });
-    await segments.getByRole('button', { name: 'Notifications view' }).click();
+    await segments.getByRole('button', { name: 'Notifications View' }).click();
     await expectMode(segments, 'notifications');
     await expect(page.locator('[data-component="notification-center"]')).toBeVisible();
-    await segments.getByRole('button', { name: 'Settings view' }).click();
+    await segments.getByRole('button', { name: 'Settings View' }).click();
     await expectMode(segments, 'settings');
     await expect(page.getByRole('navigation', { name: 'Settings categories' })).toBeVisible();
     // An independent state producer resets the selected control; another native edit still works.
     await page.keyboard.press('ControlOrMeta+Shift+L');
     await expectMode(segments, 'list');
     await expect(page.locator('[data-component="ticket-list"]')).toBeVisible();
-    await segments.getByRole('button', { name: 'Columns view' }).click();
+    await segments.getByRole('button', { name: 'Columns View' }).click();
     await expectMode(segments, 'board');
     await page.setViewportSize({ width: 390, height: 844 });
     await expectMode(segments, 'board');
@@ -4641,7 +4641,7 @@ for (const theme of ['light', 'dark'] as const) {
     });
     await page.setViewportSize({ width: 1728, height: 971 });
     await expectMode(segments, 'board');
-    await page.getByRole('button', { name: 'Workspace grid' }).click();
+    await page.getByRole('button', { name: 'Workspace Grid' }).click();
     const rail = page.locator('#app-right-rail');
     const railSegments = rail.getByRole('group', { name: 'View mode', exact: true });
     // The rail mirrors the shared view mode and offers Columns too (HS2-656Q43).
@@ -4653,15 +4653,15 @@ for (const theme of ['light', 'dark'] as const) {
       .evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().width));
     expect(widths[0]).toBeCloseTo(widths[1], 0);
     expect(widths[0]).toBeGreaterThan(100);
-    await railSegments.getByRole('button', { name: 'Notifications view' }).click();
+    await railSegments.getByRole('button', { name: 'Notifications View' }).click();
     await expectMode(railSegments, 'notifications', ['list', 'board', 'notifications']);
     await expect(rail.locator('[data-component="notification-center"]')).toBeVisible();
-    await railSegments.getByRole('button', { name: 'List view' }).click();
+    await railSegments.getByRole('button', { name: 'List View' }).click();
     await expectMode(railSegments, 'list', ['list', 'board', 'notifications']);
     await expect(rail.locator('[data-component="ticket-list"]')).toBeVisible();
     await rail.screenshot({ path: `target/visual-captures/hs2-f29qat-rail-${theme}-wide.png`, animations: 'disabled' });
     await page.setViewportSize({ width: 1024, height: 600 });
-    await railSegments.getByRole('button', { name: 'Notifications view' }).click();
+    await railSegments.getByRole('button', { name: 'Notifications View' }).click();
     await expectMode(railSegments, 'notifications', ['list', 'board', 'notifications']);
     await page.screenshot({
       path: `target/visual-captures/hs2-f29qat-rail-${theme}-narrow.png`,
@@ -4670,25 +4670,25 @@ for (const theme of ['light', 'dark'] as const) {
   });
 }
 
-test('pages the workspace-grid rail through one snapped column at a time in its Columns view (HS2-656Q43)', async ({
+test('pages the workspace-grid rail through one snapped column at a time in its Columns View (HS2-656Q43)', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const rail = page.locator('#app-right-rail');
   await expect(rail.locator('[data-component="ticket-list"]')).toBeVisible();
-  await rail.getByRole('button', { name: /Columns view/ }).click();
+  await rail.getByRole('button', { name: /Columns View/ }).click();
   const board = rail.locator('[data-component="ticket-board"]'),
     columns = board.locator('[data-component="ticket-board-column"]');
   await expect(board).toHaveAttribute('data-layout', 'paged');
   await expect(board).toHaveCSS('scroll-snap-type', 'x mandatory');
   await expect(rail.locator('[data-component="ticket-list"]')).toHaveCount(0);
-  await expect(rail.getByRole('button', { name: /Columns view/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(rail.getByRole('button', { name: /Columns View/ })).toHaveAttribute('aria-pressed', 'true');
   // The rail keeps its launcher on the board too.
   await expect(rail.getByRole('button', { name: 'Ticket…' })).toBeVisible();
   // Ticket motion hides a real card only while its ghost flies from the list; every column's cards
@@ -4731,7 +4731,7 @@ test('pages the workspace-grid rail through one snapped column at a time in its 
   await expect(rail.locator('.kui-nav-stack__view[data-nav-key="root"]')).toHaveAttribute('data-nav-active', 'false');
   await rail.getByRole('button', { name: 'Back to ticket list' }).click();
   await expect(rail.locator('.kui-nav-stack__view[data-nav-key="root"]')).toHaveAttribute('data-nav-active', 'true');
-  await rail.getByRole('button', { name: /List view/ }).click();
+  await rail.getByRole('button', { name: /List View/ }).click();
   await expect(rail.locator('[data-component="ticket-list"]')).toBeVisible();
   await expect(board).toHaveCount(0);
 });
@@ -4741,9 +4741,9 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await expect(page.locator('[data-component="terminal-dashboard"]')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   const rail = page.locator('#app-right-rail'),
     projectSelect = page.locator('#app-right-rail wa-select[name="terminal-rail-project"]'),
@@ -4754,10 +4754,10 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await expect(projectSelect.locator('xpath=..')).toHaveAttribute('data-component', 'toolbar-control-group');
   await expect(viewSelect).toHaveAttribute('value', 'all');
   await expect(launcher).toHaveClass(/quick-ticket-composer__launcher/);
-  await expect(rail.getByRole('button', { name: /List view/ })).toBeVisible();
-  await expect(rail.getByRole('button', { name: /Notifications view/ })).toBeVisible();
-  await expect(rail.getByRole('button', { name: /Columns view/ })).toBeVisible();
-  await expect(rail.getByRole('button', { name: /Settings view/ })).toBeHidden();
+  await expect(rail.getByRole('button', { name: /List View/ })).toBeVisible();
+  await expect(rail.getByRole('button', { name: /Notifications View/ })).toBeVisible();
+  await expect(rail.getByRole('button', { name: /Columns View/ })).toBeVisible();
+  await expect(rail.getByRole('button', { name: /Settings View/ })).toBeHidden();
   const railGeometry = await rail.evaluate((node) => {
     const modeElement = node.querySelector<HTMLElement>('.view-mode-switcher')!,
       mode = modeElement.getBoundingClientRect(),
@@ -4854,9 +4854,9 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await expect(
     rail.locator('[data-component="token-search-token"][data-token-value=\'updated-after:"4h ago"\']'),
   ).toBeVisible();
-  await rail.getByRole('button', { name: 'Search syntax help' }).click();
+  await rail.getByRole('button', { name: 'Search Syntax Help' }).click();
   await expect(page.getByRole('dialog', { name: 'Search syntax' })).toBeVisible();
-  await rail.getByRole('button', { name: 'Search syntax help' }).click();
+  await rail.getByRole('button', { name: 'Search Syntax Help' }).click();
   await page.screenshot({
     path: 'target/visual-captures/hs2-egekzg-terminal-ticket-rail-search-wide.png',
     fullPage: true,
@@ -4893,7 +4893,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   );
   await expect(railToolbars).toHaveCount(1);
   await expect(railToolbars.getByRole('button', { name: 'Back to ticket list' })).toBeVisible();
-  await expect(railToolbars.getByRole('button', { name: 'Open ticket reader' })).toBeVisible();
+  await expect(railToolbars.getByRole('button', { name: 'Open Ticket Reader' })).toBeVisible();
   await expect(railToolbars.getByRole('button', { name: 'Hide ticket rail' })).toBeVisible();
   await expect(rail.locator('[data-nav-stack-header] [data-component="ticket-inspector-header"]')).toBeVisible();
   await expect(rail.locator('[data-component="ticket-inspector"]')).toHaveCount(0);
@@ -4933,11 +4933,11 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await back.click();
   await expect(rail.locator('.kui-nav-stack__view[data-nav-key="root"]')).toHaveAttribute('data-nav-active', 'true');
   await page.waitForTimeout(350);
-  await rail.getByRole('button', { name: /Notifications view/ }).click();
+  await rail.getByRole('button', { name: /Notifications View/ }).click();
   await expect(rail.locator('[data-component="notification-center"]')).toBeVisible();
-  await rail.getByRole('button', { name: /List view/ }).click();
+  await rail.getByRole('button', { name: /List View/ }).click();
   await page.setViewportSize({ width: 1024, height: 600 });
-  await expect(page.getByRole('region', { name: 'Workspace grid' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Workspace Grid' })).toBeVisible();
   await expect(rail).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-r292m4-workspace-grid-rail-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -5007,9 +5007,9 @@ test('streams ANSI terminal output, input, viewport leases, driver state, and re
   await installFakeTerminalSockets(page);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const viewport = page.locator('[data-component="terminal-viewport"][data-terminal-id="codex-main"]').first();
   await expect(viewport).toHaveAttribute('data-connection', 'connected');
   await expect(viewport).toHaveAttribute('data-renderer', 'dom');
@@ -5057,8 +5057,8 @@ test('streams ANSI terminal output, input, viewport leases, driver state, and re
     [],
   );
   await page.setViewportSize({ width: 1100, height: 720 });
-  const dashboard = page.getByRole('region', { name: 'Workspace grid' });
-  await dashboard.getByRole('button', { name: /Zoom out, fit more items high/ }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace Grid' });
+  await dashboard.getByRole('button', { name: /Zoom Out, Fit More Items high/ }).click();
   const preview = dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]');
   await expect(preview).toHaveAttribute('data-preview-only', 'true');
   await preview.click();
@@ -5158,7 +5158,7 @@ test('streams ANSI terminal output, input, viewport leases, driver state, and re
   await page.screenshot({ path: testInfo.outputPath('terminal-reconnect-single-replay.png'), fullPage: true });
   await page
     .getByRole('dialog', { name: 'Magnified Codex Main' })
-    .getByRole('button', { name: 'Open Codex Main in project terminal drawer' })
+    .getByRole('button', { name: 'Open Codex Main in Project Terminal Drawer' })
     .click();
   await page.setViewportSize({ width: 1728, height: 1117 });
   const drawer = page.locator('[data-component="terminal-drawer"]'),
@@ -5174,10 +5174,10 @@ test('keeps dashboard terminals inset and scaled through aggressive viewport res
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
-  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]'),
     preview = tile.locator('[data-display-mode="scaled-preview"]');
   await expect(preview).toHaveAttribute('data-connection', 'connected');
@@ -5194,7 +5194,7 @@ test('keeps dashboard terminals inset and scaled through aggressive viewport res
   await expect(preview.locator('.xterm-rows')).toContainText('GNU nano');
   await expect(preview.locator('.xterm-rows')).toContainText('Help');
   const initialScale = Number(await preview.getAttribute('data-scale'));
-  await dashboard.getByRole('button', { name: /Zoom in, fit fewer items across/ }).click();
+  await dashboard.getByRole('button', { name: /Zoom In, Fit Fewer Items across/ }).click();
   await expect.poll(async () => Number(await preview.getAttribute('data-scale'))).toBeGreaterThan(initialScale);
   await expect(preview).toHaveAttribute('data-grid-size', initialGrid!);
   for (const size of [
@@ -5242,10 +5242,10 @@ test('centers, focuses, and opens the magnified terminal from its footer', async
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
-  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]');
   await tile.click();
   const magnified = page.getByRole('dialog', { name: 'Magnified Codex Main' }),
@@ -5267,13 +5267,13 @@ test('centers, focuses, and opens the magnified terminal from its footer', async
   expect(geometry.overlay).toEqual({ x: 0, y: 0, width: geometry.viewport.width, height: geometry.viewport.height });
   expect(Math.abs(geometry.tileCenter.x - geometry.viewport.width / 2)).toBeLessThanOrEqual(1);
   expect(Math.abs(geometry.tileCenter.y - geometry.viewport.height / 2)).toBeLessThanOrEqual(1);
-  await expect(magnified.getByRole('button', { name: 'Open Codex Main in project terminal drawer' })).toBeVisible();
+  await expect(magnified.getByRole('button', { name: 'Open Codex Main in Project Terminal Drawer' })).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-kc7tv2-magnified-terminal-after.png', fullPage: true });
-  await magnified.getByRole('button', { name: 'Open Codex Main in project terminal drawer' }).click();
+  await magnified.getByRole('button', { name: 'Open Codex Main in Project Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer).toHaveAttribute('data-maximized', 'false');
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]').click();
   const reopened = page.getByRole('dialog', { name: 'Magnified Codex Main' });
   await reopened.locator('.terminal-tile__footer').dblclick();
@@ -5287,9 +5287,9 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await expect(page.getByRole('button', { name: 'Show terminal drawer' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await expect(page.getByRole('button', { name: 'Show Terminal Drawer' })).toBeVisible();
   const projectTab = page.locator('[data-tab-kind="project"]');
   await expect(projectTab.locator('.kui-app-tab__trailing')).toHaveCount(1);
   expect(
@@ -5301,7 +5301,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   const projectMenu = page.locator('[data-context-menu="app-tab"]');
   await expect(projectMenu.getByText('Close Tabs to the Left')).toBeVisible();
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const globalTile = page.locator('[data-component="terminal-tile"][data-terminal-key="demo-checkout:codex-main"]');
   await globalTile.click({ button: 'right' });
   await page.locator('[data-context-menu="terminal"]').getByText('Open').click();
@@ -5329,10 +5329,10 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   );
   await drawer.getByRole('tab', { name: 'Project grid' }).click();
   await expect(drawer).toHaveAttribute('data-mode', 'grid');
-  const dashboard = drawer.getByRole('region', { name: 'Workspace grid' });
+  const dashboard = drawer.getByRole('region', { name: 'Workspace Grid' });
   await expect(dashboard).toHaveAttribute('data-basis', 'high');
   await expect(dashboard).toHaveAttribute('data-fit', '2');
-  await dashboard.getByRole('button', { name: /Zoom in/ }).click();
+  await dashboard.getByRole('button', { name: /Zoom In/ }).click();
   await expect(dashboard).toHaveAttribute('data-fit', '1');
   const fitOne = await dashboard.evaluate((element) => {
     const content = element.querySelector('.terminal-dashboard__content')!.getBoundingClientRect(),
@@ -5347,7 +5347,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   expect(fitOne.tiles[1].y).toBeCloseTo(fitOne.tiles[0].y, 0);
   expect(fitOne.tiles[1].x).toBeGreaterThan(fitOne.tiles[0].x);
   await page.screenshot({ path: 'target/visual-captures/hs2-5rj7t0-drawer-fit-one.png', fullPage: true });
-  await dashboard.getByRole('button', { name: /Zoom out/ }).click();
+  await dashboard.getByRole('button', { name: /Zoom Out/ }).click();
   await expect(dashboard).toHaveAttribute('data-fit', '2');
   const wrapped = await dashboard
     .locator('.terminal-tile')
@@ -5359,7 +5359,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await expect(page.evaluate(() => localStorage.getItem('hotsheet.terminals.drawer-fit-high'))).resolves.toBe('2');
   await page.screenshot({ path: 'target/visual-captures/hs2-5rj7t0-drawer-grid.png', fullPage: true });
   await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-drawer-grid-zoom.png', fullPage: true });
-  const drawerZoom = dashboard.getByRole('toolbar', { name: 'Workspace tile zoom' });
+  const drawerZoom = dashboard.getByRole('toolbar', { name: 'Workspace Tile Zoom' });
   await expect(drawerZoom).toHaveAttribute('data-component', 'floating-toolbar');
   const codexTile = drawer.locator('[data-component="terminal-tile"][data-terminal-key="demo-checkout:codex-main"]');
   await codexTile.click({ button: 'right' });
@@ -5374,14 +5374,14 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await expect(drawer.getByRole('button', { name: 'Manage workspace visibility' })).toHaveCount(0);
   await expect(drawer.locator('wa-select[name="terminal-visibility-group"]')).toHaveCount(0);
   await expect(codexTile).toHaveCount(1);
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('Terminal', { exact: true }).click();
   await expect(drawer.getByRole('tab', { name: /Terminal New/ })).toHaveAttribute('aria-selected', 'true');
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
   const dedicated = drawer.locator('[data-component="terminal-session"]:not([hidden])');
   await expect(dedicated).toBeVisible();
   await expect(drawer.locator('[data-component="terminal-tile"]')).toHaveCount(0);
-  await expect(drawer.getByRole('toolbar', { name: 'Workspace tile zoom' })).toHaveCount(0);
+  await expect(drawer.getByRole('toolbar', { name: 'Workspace Tile Zoom' })).toHaveCount(0);
   const viewport = dedicated.locator('[data-component="terminal-viewport"]');
   await expect(viewport).toHaveAttribute('data-connection', 'connected');
   await expect(viewport).toHaveAttribute('data-renderer', 'dom');
@@ -5457,7 +5457,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await expect(viewport).toHaveAttribute('data-connection', 'connected');
   await expect(viewport).toHaveAttribute('data-renderer', 'dom');
   const lastTab = drawer.getByRole('tab', { name: /Terminal New/ }),
-    create = drawer.getByRole('button', { name: 'New drawer item' }),
+    create = drawer.getByRole('button', { name: 'New Drawer Item' }),
     tabBox = (await lastTab.boundingBox())!,
     createBox = (await create.boundingBox())!;
   expect(createBox.x - (tabBox.x + tabBox.width)).toBeLessThan(20);
@@ -5473,11 +5473,11 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await expect(terminalMenu.getByText('Close Tabs to the Left')).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-9n837w-terminal-tabs-wide.png', fullPage: true });
   await page.keyboard.press('Escape');
-  await drawer.getByRole('button', { name: 'Hide terminal drawer' }).click();
+  await drawer.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
   await expect(drawer).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Show terminal drawer' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Show Terminal Drawer' })).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-586bvq-terminal-drawer-collapsed.png', fullPage: true });
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await page.setViewportSize({ width: 1024, height: 600 });
   const reopenedDrawer = page.locator('[data-component="terminal-drawer"]');
   await expect(reopenedDrawer).toBeVisible();
@@ -5494,9 +5494,9 @@ test('keeps fitted terminal sizing by retaining dedicated drawer sessions across
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     codex = drawer.getByRole('tab', { name: /Codex Main/ }),
     tests = drawer.getByRole('tab', { name: /Tests/ }),
@@ -5573,9 +5573,9 @@ test('closes a terminal tab after its process has stopped (HS2-DPTG65)', async (
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     stopped = drawer.getByRole('tab', { name: /Tests/ });
   await expect(stopped).toBeVisible();
@@ -5592,8 +5592,8 @@ test('returns to the last ticket view when the current project tab is clicked fr
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const tab = page.getByRole('tab', { name: 'demo' }),
     list = page.locator('[data-component="ticket-list"]'),
@@ -5602,26 +5602,26 @@ test('returns to the last ticket view when the current project tab is clicked fr
     notifications = page.locator('[data-component="notification-center"]');
   await expect(list).toBeVisible();
   // Settings → the already-current project tab → the remembered list view.
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   await expect(settings).toBeVisible();
   await tab.click();
   await expect(settings).toHaveCount(0);
   await expect(list).toBeVisible();
-  await expect(page.getByLabel('List view')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('List View')).toHaveAttribute('aria-pressed', 'true');
   // Clicking the current tab on a ticket view is a no-op.
   await tab.click();
   await expect(list).toBeVisible();
   // Columns is remembered across a Notifications detour.
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   await expect(board).toBeVisible();
-  await page.getByLabel('Notifications view').click();
+  await page.getByLabel('Notifications View').click();
   await expect(notifications).toBeVisible();
   await tab.click();
   await expect(notifications).toHaveCount(0);
   await expect(board).toBeVisible();
-  await expect(page.getByLabel('Columns view')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Columns View')).toHaveAttribute('aria-pressed', 'true');
   // The remembered ticket view survives a reload that restores Settings.
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   await expect(settings).toBeVisible();
   await page.reload();
   await expect(settings).toBeVisible();
@@ -5630,23 +5630,23 @@ test('returns to the last ticket view when the current project tab is clicked fr
   await expect(board).toBeVisible();
 });
 
-test('hides the bottom terminal drawer on Notifications and Settings views, preserving the open preference (HS2-EQEJC7)', async ({
+test('hides the bottom terminal drawer on Notifications and Settings Views, preserving the open preference (HS2-EQEJC7)', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const drawerRegion = page.locator('#app-bottom-drawer'),
-    restore = page.getByRole('button', { name: 'Show terminal drawer' });
+    restore = page.getByRole('button', { name: 'Show Terminal Drawer' });
   // Open the drawer on a ticket view.
   await restore.click();
   await expect(drawerRegion).toBeVisible();
   await expect(page.locator('[data-component="terminal-drawer"]')).toBeVisible();
   // Notifications hides the whole drawer area — no drawer and no restore affordance.
-  await page.getByRole('button', { name: /Notifications view/ }).click();
+  await page.getByRole('button', { name: /Notifications View/ }).click();
   await expect(drawerRegion).toHaveCount(0);
   await expect(restore).toHaveCount(0);
   await expect(page.locator('[data-component="terminal-drawer"]')).toHaveCount(0);
@@ -5655,12 +5655,12 @@ test('hides the bottom terminal drawer on Notifications and Settings views, pres
     fullPage: true,
   });
   // Settings hides it the same way.
-  await page.getByRole('button', { name: /Settings view/ }).click();
+  await page.getByRole('button', { name: /Settings View/ }).click();
   await expect(drawerRegion).toHaveCount(0);
   await expect(restore).toHaveCount(0);
   await expect(page.locator('[data-component="terminal-drawer"]')).toHaveCount(0);
   // Returning to a ticket view restores the open drawer (preference preserved, not just collapsed).
-  await page.getByRole('button', { name: /List view/ }).click();
+  await page.getByRole('button', { name: /List View/ }).click();
   await expect(drawerRegion).toBeVisible();
   await expect(page.locator('[data-component="terminal-drawer"]')).toBeVisible();
 });
@@ -5684,12 +5684,12 @@ test('changes the chat provider and re-seeds the new provider with the prior tra
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const conversation = drawer.locator('[data-component="ai-conversation"][data-presentation="embedded"]');
   await conversation.getByLabel('Message Codex').fill('What time is it in California?');
   await conversation.getByLabel('Message Codex').press('Enter');
@@ -5726,10 +5726,10 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   // Claude keeps its own default model, distinct from the project's default provider (HS2-EK24KF).
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   const claudeModel = page.locator('wa-select[name="ai-provider-model-claude"]');
   await claudeModel.click();
@@ -5737,10 +5737,10 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
   await expect(page.locator('[data-component="ai-tool-settings"]')).toContainText('Saved for this project');
   // Opus supports Claude's previous (default) medium effort, so the model change keeps it (HS2-M0HWPH).
   await expect(page.locator('wa-select[name="ai-provider-effort-claude"]')).toHaveJSProperty('value', 'medium');
-  await page.getByLabel('List view').click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByLabel('List View').click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
-    create = drawer.getByRole('button', { name: 'New drawer item' }),
+    create = drawer.getByRole('button', { name: 'New Drawer Item' }),
     menu = drawer.locator('[data-terminal-drawer-create]'),
     parent = menu.locator('[data-item-id="ai-shell-providers"]'),
     shell = (provider?: string) =>
@@ -5775,7 +5775,7 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
   await expect.poll(() => created.length).toBe(3);
   expect(created.at(-1)).toMatchObject({ connect: 'codex', model: 'gpt-6-astra', effort: 'medium' });
   // On a phone a focused terminal is in focus mode; leave it to reach the drawer's create menu.
-  // Whether the new terminal's own asynchronous focus lands before or after the resize depends on
+  // Whether the new Terminal's own asynchronous focus lands before or after the resize depends on
   // load, so first wait for the phone geometry pass (it may focus the terminal), then focus the
   // terminal explicitly so focus mode is always entered and left deterministically (HS2-PYVWJ6).
   const session = drawer.locator('.terminal-session:not([hidden]) [data-terminal-id]'),
@@ -5856,11 +5856,11 @@ test('names AI shell tabs after their provider, numbered per provider (HS2-HZK0N
   });
   await page.setViewportSize({ width: 1600, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
-    create = drawer.getByRole('button', { name: 'New drawer item' }),
+    create = drawer.getByRole('button', { name: 'New Drawer Item' }),
     menu = drawer.locator('[data-terminal-drawer-create]'),
     parent = menu.locator('[data-item-id="ai-shell-providers"]'),
     open = async (item: 'claude' | 'codex' | 'terminal') => {
@@ -5874,7 +5874,7 @@ test('names AI shell tabs after their provider, numbered per provider (HS2-HZK0N
       await parent.locator(`[data-action="create-terminal-drawer-item"][data-provider="${item}"]`).click();
     },
     tabNames = async () =>
-      (await drawer.getByRole('tablist', { name: 'Terminal drawer views' }).getByRole('tab').allTextContents())
+      (await drawer.getByRole('tablist', { name: 'Terminal Drawer Views' }).getByRole('tab').allTextContents())
         .map((name) => name.trim())
         .filter((name) => name !== 'Project grid' && name !== '');
   await open('claude');
@@ -5896,11 +5896,11 @@ test('reopens the drawer AI shell submenu after Escape closes and breakpoint res
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
-    create = drawer.getByRole('button', { name: 'New drawer item' }),
+    create = drawer.getByRole('button', { name: 'New Drawer Item' }),
     menu = drawer.locator('[data-terminal-drawer-create]'),
     parent = menu.locator('[data-item-id="ai-shell-providers"]'),
     shell = parent.locator('[data-action="create-terminal-drawer-item"]:not([data-provider])'),
@@ -5961,12 +5961,12 @@ test('names the AI shell after the only installed provider (HS2-3HT4PA)', async 
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     menu = drawer.locator('[data-terminal-drawer-create]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   const item = menu.locator('[data-action="create-terminal-drawer-item"][data-item-id="ai-shell"]');
   await expect(item).toHaveText(/Claude shell/);
   await expect(menu.getByText('AI shell', { exact: true })).toHaveCount(0);
@@ -5991,12 +5991,12 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
     await dialog.accept(answers.shift() ?? '');
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const region = page.locator('#app-bottom-drawer'),
     drawer = page.locator('[data-component="terminal-drawer"]'),
-    create = drawer.getByRole('button', { name: 'New drawer item' });
+    create = drawer.getByRole('button', { name: 'New Drawer Item' });
   const createStyle = await create.evaluate((node) => {
     const style = getComputedStyle(node);
     return { background: style.backgroundColor, borderRadius: style.borderRadius, height: style.height };
@@ -6041,7 +6041,7 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   await page.screenshot({ path: 'target/visual-captures/hs2-r8smk2-popup-narrow-full.png', fullPage: true });
   await captureMenu('target/visual-captures/hs2-7ctqjc-cv0j2e-rhqatm-drawer-menu-narrow.png');
   await page.setViewportSize({ width: 1280, height: 800 });
-  await menu.getByText('AI chat').click({ modifiers: ['Alt'] });
+  await menu.getByText('AI Chat').click({ modifiers: ['Alt'] });
   await expect(region).not.toHaveCSS('overflow', 'visible');
   await expect(drawer).toHaveAttribute('data-mode', 'ai-chat');
   await expect(drawer.getByRole('tab', { name: 'Claude chat' })).toHaveAttribute('aria-selected', 'true');
@@ -6055,8 +6055,8 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   await create.focus();
   await drawer.getByRole('tab', { name: 'Claude chat' }).click();
   await expect(composer).toBeFocused();
-  await drawer.getByRole('button', { name: 'Hide terminal drawer' }).click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await drawer.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(composer).toBeFocused();
   await composer.fill('What time is it in California?');
   await composer.press('Enter');
@@ -6130,12 +6130,12 @@ test('keeps the embedded chat composer usable while a long transcript scrolls', 
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const conversation = drawer.locator('[data-component="ai-conversation"][data-presentation="embedded"]'),
     composer = conversation.getByLabel('Message Codex'),
     messages = conversation.locator('[data-message-id]');
@@ -6187,13 +6187,13 @@ test('restores phone shell and drawer geometry after a live desktop resize (HS2-
   await page.setViewportSize({ width: 1280, height: 844 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const shell = page.locator('[data-component="app-shell"]'),
     drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   await expect(drawer.locator('[data-component="ai-conversation"]')).toBeVisible();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await expect(page.getByRole('searchbox', { name: 'Search tickets' })).toBeVisible();
@@ -6251,9 +6251,9 @@ test('keeps production workspace search and More on one row through a phone resi
   await page.setViewportSize({ width: 1280, height: 844 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const header = page.locator('.kui-toolbar[aria-label="Workspace toolbar"]');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const header = page.locator('.kui-toolbar[aria-label="Workspace Toolbar"]');
   await header.getByRole('button', { name: 'Search tickets' }).click();
   await expect(header.getByRole('searchbox', { name: 'Search tickets' })).toBeVisible();
   await expect.poll(() => header.evaluate((node) => node.getBoundingClientRect().height)).toBeLessThan(80);
@@ -6273,7 +6273,7 @@ test('keeps production workspace search and More on one row through a phone resi
   await expect(header.locator('.view-mode-switcher')).toBeHidden();
   await expect(header.locator('.workspace-header__sort-group')).toBeHidden();
   await expect(header.locator('.workspace-header__utility-group')).toBeHidden();
-  await expect(header.getByRole('button', { name: 'More workspace controls' })).toBeVisible();
+  await expect(header.getByRole('button', { name: 'More Workspace Controls' })).toBeVisible();
   await expect
     .poll(() =>
       header.evaluate((node) => {
@@ -6287,7 +6287,7 @@ test('keeps production workspace search and More on one row through a phone resi
     .toBe(true);
   await page.waitForTimeout(1200);
   await page.screenshot({ path: 'target/visual-captures/hs2-nzk4ka-production-phone.png' });
-  await header.getByRole('button', { name: 'More workspace controls' }).click();
+  await header.getByRole('button', { name: 'More Workspace Controls' }).click();
   await expect(header.locator('[data-workspace-overflow]')).toHaveJSProperty('open', true);
   await expect(page.locator('[data-workspace-overflow-action="toggle-selected-up-next"]')).toBeVisible();
 });
@@ -6298,9 +6298,9 @@ test('hides nonempty search on disabled views and restores its open editor on re
   await page.setViewportSize({ width: 1728, height: 971 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]');
   const search = toolbar.locator('.ticket-search-field');
   const modes = toolbar.getByRole('group', { name: 'View mode', exact: true });
   await toolbar.getByRole('button', { name: 'Search tickets' }).click();
@@ -6321,19 +6321,19 @@ test('hides nonempty search on disabled views and restores its open editor on re
       ),
     )
     .toBeLessThan(20);
-  await modes.getByRole('button', { name: 'Notifications view' }).click();
+  await modes.getByRole('button', { name: 'Notifications View' }).click();
   await expect(page.locator('[data-component="notification-center"]')).toBeVisible();
   await expect(search).toHaveAttribute('data-expanded', 'false');
   await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toBeHidden();
   await page.screenshot({ path: 'target/visual-captures/hs2-6zk9kf-notifications.png', animations: 'disabled' });
-  await modes.getByRole('button', { name: 'List view' }).click();
+  await modes.getByRole('button', { name: 'List View' }).click();
   await expect(search).toHaveAttribute('data-expanded', 'true');
   await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toBeVisible();
   await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toContainText('Started');
   await toolbar.screenshot({ path: 'target/visual-captures/hs2-3wq9a1-search-restored.png', animations: 'disabled' });
   await toolbar.getByRole('searchbox', { name: 'Search tickets' }).fill('Ready');
   await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toContainText('Ready');
-  await modes.getByRole('button', { name: 'Settings view' }).click();
+  await modes.getByRole('button', { name: 'Settings View' }).click();
   await expect(page.locator('[data-component="settings-workspace"]')).toBeVisible();
   await expect(search).toHaveAttribute('data-expanded', 'false');
   await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toBeHidden();
@@ -6342,7 +6342,7 @@ test('hides nonempty search on disabled views and restores its open editor on re
   await expect(page.locator('[data-component="settings-workspace"]')).toBeVisible();
   await expect(search).toHaveAttribute('data-expanded', 'false');
   await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toBeHidden();
-  await modes.getByRole('button', { name: 'List view' }).click();
+  await modes.getByRole('button', { name: 'List View' }).click();
   await expect(search).toHaveAttribute('data-expanded', 'true');
   await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toContainText('Ready');
 });
@@ -6352,9 +6352,9 @@ for (const width of [2048, 760]) {
     await page.setViewportSize({ width, height: 900 });
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]');
     await toolbar.getByRole('button', { name: 'Search tickets' }).click();
     const editor = toolbar.getByRole('searchbox', { name: 'Search tickets' });
     await editor.fill('a');
@@ -6411,9 +6411,9 @@ test('remeasures a reopened search after a closed resize without restyling the a
   await page.setViewportSize({ width: 2048, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]'),
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]'),
     slot = toolbar.locator('.workspace-header__search-actions'),
     field = toolbar.locator('.ticket-search-field'),
     rootSizing = () =>
@@ -6438,7 +6438,7 @@ test('remeasures a reopened search after a closed resize without restyling the a
   expect(wide.width).toBeGreaterThan(240);
   expect(await rootSizing()).toEqual(['', '']);
   // Collapse the empty search by moving focus away, then shrink the window while it is closed.
-  await page.getByRole('button', { name: 'Show terminal drawer' }).focus();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).focus();
   await expect(field).toHaveAttribute('data-expanded', 'false');
   await page.setViewportSize({ width: 900, height: 900 });
   const narrow = await openAndMeasure();
@@ -6457,14 +6457,14 @@ test('keeps a scrolled-back transcript in place while selecting a message range'
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const conversation = drawer.locator('[data-component="ai-conversation"][data-presentation="embedded"]'),
     composer = conversation.getByLabel('Message Codex'),
     messages = conversation.locator('[data-action="pick-conversation-message"]'),
@@ -6522,7 +6522,7 @@ test('keeps a scrolled-back transcript in place while selecting a message range'
   await settle();
   await expectReadingPosition();
   await conversation.screenshot({ path: 'target/visual-captures/hs2-eqhary-scroll-selection-after.png' });
-  await conversation.getByRole('button', { name: 'Clear message selection' }).click();
+  await conversation.getByRole('button', { name: 'Clear Message Selection' }).click();
   await expect(conversation).toContainText('Select a message, then another to select a range.');
   await settle();
   await expectReadingPosition();
@@ -6632,12 +6632,12 @@ test('selects and copies chat messages before saving that range without choosing
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const conversation = drawer.locator('[data-component="ai-conversation"]');
   const composer = conversation.getByLabel('Message Codex');
   await composer.fill('Export the referenced proof.');
@@ -6653,13 +6653,13 @@ test('selects and copies chat messages before saving that range without choosing
   await expect(messageChoices.nth(1)).toHaveAttribute('data-selected', 'true');
   await expect(messageChoices.nth(0)).toHaveAttribute('data-selected', 'false');
   await expect(conversation).toContainText('1 message selected');
-  await conversation.getByRole('button', { name: 'Copy selected messages' }).click();
+  await conversation.getByRole('button', { name: 'Copy Selected Messages' }).click();
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toContain('The referenced proof is ready.');
   expect(await page.evaluate(() => navigator.clipboard.readText())).not.toContain('Export the referenced proof.');
   await conversation.screenshot({ path: 'target/visual-captures/hs2-eqhary-selected-chat-wide.png' });
-  const saveConversation = conversation.getByRole('button', { name: 'Save conversation' });
+  const saveConversation = conversation.getByRole('button', { name: 'Save Conversation' });
   await expect(saveConversation).toHaveJSProperty('tagName', 'BUTTON');
   await saveConversation.focus();
   await expect(saveConversation).toBeFocused();
@@ -6736,7 +6736,7 @@ test('selects and copies chat messages before saving that range without choosing
   );
   expect(optionBoxes[1].y).toBeGreaterThan(optionBoxes[0].y + optionBoxes[0].height - 1);
   await dialogPanel.screenshot({ path: 'target/visual-captures/hs2-zzpf2b-bundle-options-wide-after.png' });
-  await dialog.getByRole('button', { name: 'Save conversation' }).click();
+  await dialog.getByRole('button', { name: 'Save Conversation' }).click();
   await expect(page.locator('.app-toast')).toContainText('Saved conversation revision 1');
   await expect.poll(() => savedPayload).toBeTruthy();
   expect(savedPayload!.request.selectedMessageIds).toEqual([messageIds[1]]);
@@ -6746,8 +6746,8 @@ test('selects and copies chat messages before saving that range without choosing
     { id: 'proof-image', filename: 'proof.png', mimeType: 'image/png', kind: 'media', dataBase64: 'iVBORw==' },
   ]);
   const openSaved = async () => {
-    await drawer.getByRole('button', { name: 'New drawer item' }).click();
-    await drawer.locator('[data-terminal-drawer-create]').getByText('Saved conversation…').click();
+    await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+    await drawer.locator('[data-terminal-drawer-create]').getByText('Saved Conversation…').click();
   };
   await openSaved();
   const savedTab = drawer.getByRole('tab', { name: 'Codex saved chat' });
@@ -6769,17 +6769,17 @@ test('selects and copies chat messages before saving that range without choosing
   const resumed = drawer.locator('[data-component="ai-conversation"][data-read-only="false"]');
   await expect(resumed.getByLabel('Message Codex')).toBeVisible();
   await resumed.getByLabel('Message Codex').fill('Continue from the saved result.');
-  await expect(resumed.getByRole('button', { name: 'Send message to Codex' })).toBeEnabled();
+  await expect(resumed.getByRole('button', { name: 'Send Message to Codex' })).toBeEnabled();
 });
 
 test('shows selection in the main chat and skips export scope after it is cleared', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  await page.getByRole('button', { name: 'Open Codex conversation' }).click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const conversation = page.locator('[data-component="ai-conversation"]');
   await conversation.getByLabel('Message Codex').fill('What time is it in California?');
   await conversation.getByLabel('Message Codex').press('Enter');
@@ -6795,9 +6795,9 @@ test('shows selection in the main chat and skips export scope after it is cleare
     .getByRole('dialog')
     .screenshot({ path: 'target/visual-captures/hs2-eqhary-main-chat-selection-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 900 });
-  await conversation.getByRole('button', { name: 'Clear message selection' }).click();
+  await conversation.getByRole('button', { name: 'Clear Message Selection' }).click();
   await expect(conversation).toContainText('Select a message, then another to select a range.');
-  await conversation.getByRole('button', { name: 'Save conversation' }).click();
+  await conversation.getByRole('button', { name: 'Save Conversation' }).click();
   const dialog = page.locator('[data-component="conversation-export-dialog"]'),
     activeScreen = dialog.locator('[data-transition-region="content"] > [data-active="true"]');
   await expect(dialog).toHaveAttribute('data-navigation', 'none');
@@ -6811,25 +6811,25 @@ test('shows AI chats in the project and workspace grids and reopens them from th
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   await expect(drawer).toHaveAttribute('data-mode', 'ai-chat');
   await drawer.getByRole('tab', { name: 'Project grid' }).click();
   const projectChat = drawer.locator('[data-component="workspace-chat-tile"]');
-  await expect(projectChat).toContainText('Codex AI chat');
+  await expect(projectChat).toContainText('Codex AI Chat');
   await expect(projectChat).toContainText('Open Codex chat to continue the conversation.');
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
-  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     globalChat = dashboard.locator('[data-component="workspace-chat-tile"]');
   await expect(globalChat).toContainText('demo › Codex chat');
-  await expect(page.locator('.workspace-header__identity')).toContainText('Workspace grid');
+  await expect(page.locator('.workspace-header__identity')).toContainText('Workspace Grid');
   await page.screenshot({ path: 'target/visual-captures/hs2-hpy5r0-workspace-grid-ai-chat-wide.png', fullPage: true });
   for (let fit = 4; fit < 10; fit += 1)
-    await dashboard.getByRole('button', { name: /Zoom out, fit more items/ }).click();
+    await dashboard.getByRole('button', { name: /Zoom Out, Fit More Items/ }).click();
   await expect(dashboard).toHaveAttribute('data-fit', '10');
   const scaledGeometry = await globalChat.evaluate((element) => {
     const preview = element.querySelector<HTMLElement>('.workspace-chat-tile__preview')!,
@@ -6862,7 +6862,7 @@ test('shows AI chats in the project and workspace grids and reopens them from th
   });
   await globalChat.focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', { name: 'Workspace grid' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('button', { name: 'Workspace Grid' })).toHaveAttribute('aria-pressed', 'false');
   await expect(drawer).toHaveAttribute('data-mode', 'ai-chat');
   await expect(drawer.getByRole('tab', { name: 'Codex chat' })).toHaveAttribute('aria-selected', 'true');
 });
@@ -6878,20 +6878,20 @@ test('previews running project resources with shared menus and explicit keep-run
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     projectTab = page.locator('[data-tab-kind="project"]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   await expect(drawer.getByRole('tab', { name: 'Codex chat' })).toBeVisible();
   await projectTab.hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
   const dialog = page.locator('[data-component="project-close-dialog"]');
   await expect(dialog).toHaveJSProperty('open', true);
   await expect(dialog).toContainText('2 running terminals and 1 AI chat');
-  await expect(dialog.locator('[data-component="list-header"]')).toHaveText('Running items');
+  await expect(dialog.locator('[data-component="list-header"]')).toHaveText('Running Items');
   await expect(dialog.getByRole('button', { name: /Codex Main/ })).toHaveAttribute('aria-current', 'page');
   const viewport = dialog.locator('[data-component="terminal-viewport"]');
   await expect(viewport).toHaveAttribute('data-connection', 'connected');
@@ -6948,8 +6948,8 @@ test('previews running project resources with shared menus and explicit keep-run
   await expect(dialog.locator('[data-project-close-consequences]')).toBeInViewport();
   await page.screenshot({ path: 'target/visual-captures/hs2-xb41pf-project-close-phone.png', fullPage: true });
   await dialog.getByRole('button', { name: /Codex chat/ }).click();
-  await expect(dialog.getByRole('region', { name: 'Codex chat chat preview' })).toContainText('gpt-6-astra');
-  await expect(dialog.getByRole('region', { name: 'Codex chat chat preview' })).toContainText('medium');
+  await expect(dialog.getByRole('region', { name: 'Codex chat Chat Preview' })).toContainText('gpt-6-astra');
+  await expect(dialog.getByRole('region', { name: 'Codex chat Chat Preview' })).toContainText('medium');
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(projectTab).toHaveCount(1);
@@ -7022,9 +7022,9 @@ test('shows a real terminal hook report separately from MCP and bridge reachabil
       });
     await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => void route.close());
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const tab = page.locator('[data-tab-kind="terminal"][data-terminal-id="codex-session"]');
     await expect(tab).toBeVisible();
     hook('SessionStart');
@@ -7115,9 +7115,9 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
     });
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]'),
       tab = drawer.locator('[data-tab-kind="terminal"][data-terminal-id="claude-session"]'),
       halted = tab.locator('.terminal-drawer__halt'),
@@ -7188,7 +7188,7 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
     await expect(haltPrompt).toBeVisible();
     await haltPrompt.getByRole('button', { name: 'Dismiss', exact: true }).click();
     const tile = drawer.locator('.terminal-tile[data-terminal-key="demo-checkout:claude-session"]');
-    await tile.getByRole('button', { name: 'More actions' }).click();
+    await tile.getByRole('button', { name: 'More Actions' }).click();
     await page.getByRole('menuitem', { name: 'Clear stopped state' }).click();
     await expect(halted).toHaveCount(0);
     await expect(projectAttention).toHaveCount(0);
@@ -7273,9 +7273,9 @@ test('recovers a missing Codex connection when its interactive permission hook r
     });
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]'),
       tab = drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-shell"]'),
       connection = tab.locator('.terminal-drawer__ai-connection'),
@@ -7428,9 +7428,9 @@ test('warns when an AI tab never connects to Hot Sheet, and clears once it does 
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const tab = page.locator('[data-tab-kind="terminal"][data-terminal-id="codex-01TAB"]'),
     connection = tab.locator('.terminal-drawer__ai-connection'),
     tileConnection = page.locator(
@@ -7551,10 +7551,10 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
 
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     // The drawer terminal fits the wide drawer and drives the PTY off its 80x24 spawn size.
-    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.getByRole('tab', { name: /Wide Shell/ }).click();
     const drawerViewport = drawer.locator('[data-component="terminal-viewport"]');
@@ -7608,13 +7608,13 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     projectTab = page.locator('[data-tab-kind="project"]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const liveConversation = drawer.locator('[data-component="ai-conversation"]'),
     composer = liveConversation.getByLabel('Message Codex'),
     createViewDialog = page.getByRole('dialog', { name: 'Create View' });
@@ -7673,7 +7673,7 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
   await expect(preview).toHaveAttribute('data-read-only', 'true');
   await expect(preview.locator('[data-message-id]')).toHaveCount(2);
   await expect(preview.getByLabel('Message Codex')).toHaveCount(0);
-  await expect(preview.getByRole('button', { name: 'Save conversation' })).toHaveCount(0);
+  await expect(preview.getByRole('button', { name: 'Save Conversation' })).toHaveCount(0);
   const answer = preview.locator('.ai-conversation__message--assistant .markdown-preview');
   await expect(answer).toHaveText('I found the relevant client boundary. The event stream remains authoritative.');
   for (let index = 0; index < 2; index += 1) {
@@ -7725,12 +7725,12 @@ test('restores a kept-running AI chat tab and its live server session when the p
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   let drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   let conversation = drawer.locator('[data-component="ai-conversation"]');
   await conversation.getByLabel('Message Codex').fill('What time is it in California?');
   await conversation.getByLabel('Message Codex').press('Enter');
@@ -7743,8 +7743,8 @@ test('restores a kept-running AI chat tab and its live server session when the p
   await expect(closeDialog).toContainText('Terminals and AI chat tabs return when reopened');
   await closeDialog.getByRole('button', { name: 'Keep Running' }).click();
   await expect(projectTab).toHaveCount(0);
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   drawer = page.locator('[data-component="terminal-drawer"]');
   const restoredTab = drawer.getByRole('tab', { name: 'Codex chat' });
   await expect(restoredTab).toBeVisible();
@@ -7778,12 +7778,12 @@ test('restores an AI transcript and resumes its durable session after client and
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   let drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   let conversation = drawer.locator('[data-component="ai-conversation"]');
   await conversation.getByLabel('Message Codex').fill('What time is it in California?');
   await conversation.getByLabel('Message Codex').press('Enter');
@@ -7831,13 +7831,13 @@ test('closes every terminal and AI chat before removing a project when Stop All 
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     projectTab = page.locator('[data-tab-kind="project"]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   await expect(drawer.getByRole('tab', { name: 'Codex chat' })).toBeVisible();
   await projectTab.hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
@@ -7860,9 +7860,9 @@ test('holds terminal geometry throughout a slow drawer drag and fits once it set
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('tab', { name: /Codex Main/ }).click();
   const viewport = drawer.locator(
@@ -7904,8 +7904,8 @@ test('holds terminal geometry throughout a slow drawer drag and fits once it set
   await expect.poll(claimCount, { timeout: 800 }).toBeGreaterThan(initialClaims);
   await expect(viewport).toHaveAttribute('data-driving', 'true');
   await drawer.getByRole('tab', { name: 'Project grid' }).click();
-  const dashboard = drawer.getByRole('region', { name: 'Workspace grid' });
-  await dashboard.getByRole('button', { name: /Zoom in/ }).click();
+  const dashboard = drawer.getByRole('region', { name: 'Workspace Grid' });
+  await dashboard.getByRole('button', { name: /Zoom In/ }).click();
   await expect(dashboard).toHaveAttribute('data-fit', '1');
   const tile = dashboard.locator('.terminal-tile').first(),
     initialTileHeight = await tile.evaluate((element) => element.getBoundingClientRect().height),
@@ -7925,9 +7925,9 @@ test('resists below-minimum drawer resizing before a deliberate drag collapses i
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     region = page.locator('#app-bottom-drawer'),
     handle = page.getByRole('separator', { name: 'Resize Terminal drawer' });
@@ -7950,7 +7950,7 @@ test('resists below-minimum drawer resizing before a deliberate drag collapses i
   });
   await page.mouse.up();
   await expect(drawer).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Show terminal drawer' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Show Terminal Drawer' })).toBeVisible();
 });
 
 for (const theme of ['light', 'dark'] as const) {
@@ -7970,15 +7970,15 @@ for (const theme of ['light', 'dark'] as const) {
         : route.fallback(),
     );
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]');
-    await drawer.getByRole('button', { name: 'New drawer item' }).click();
-    await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat', { exact: true }).click();
+    await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+    await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
     await expect(drawer.getByRole('tab', { name: 'Codex chat' })).toBeVisible();
-    await page.getByRole('button', { name: 'Workspace grid' }).click();
-    const dashboard = page.getByRole('region', { name: 'Workspace grid' });
+    await page.getByRole('button', { name: 'Workspace Grid' }).click();
+    const dashboard = page.getByRole('region', { name: 'Workspace Grid' });
     const chat = dashboard.locator('[data-component="workspace-chat-tile"]');
     await expect(chat).toHaveCount(1);
     await page.getByRole('button', { name: 'Manage workspace visibility' }).click();
@@ -8014,7 +8014,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(types.getByRole('button', { name: 'Clear' })).toBeVisible();
     await choose('deselect-all', [], 0);
     await expect(dialog.getByText('No workspace items match the selected types.')).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Hide listed' })).toBeDisabled();
+    await expect(dialog.getByRole('button', { name: 'Hide Listed' })).toBeDisabled();
     await choose('ai', ['ai'], 1);
     await expect(rows).toHaveAccessibleName('Hide Codex Main');
     await choose('shell', ['shell', 'ai'], 2);
@@ -8031,7 +8031,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.keyboard.press('Escape');
     await expect(types).toHaveJSProperty('open', false);
     await expect(dialog).toHaveJSProperty('open', true);
-    await dialog.getByRole('button', { name: 'Hide listed' }).click();
+    await dialog.getByRole('button', { name: 'Hide Listed' }).click();
     await expect(rows).toHaveAccessibleName('Show Codex chat');
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveJSProperty('open', false);
@@ -8039,7 +8039,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(dashboard.locator('[data-component="terminal-tile"]')).toHaveCount(2);
     await expect(page.locator('.terminal-dashboard-controls__count')).not.toContainText('≥');
     await page.reload();
-    await page.getByRole('button', { name: 'Workspace grid' }).click();
+    await page.getByRole('button', { name: 'Workspace Grid' }).click();
     await expect(chat).toHaveCount(0);
     await page.getByRole('button', { name: 'Manage workspace visibility' }).click();
     await expect(types).toHaveJSProperty('value', ['shell', 'ai', 'chat']);
@@ -8048,7 +8048,7 @@ for (const theme of ['light', 'dark'] as const) {
     await choose('deselect-all', [], 0);
     await choose('chat', ['chat'], 1);
     await page.keyboard.press('Escape');
-    await dialog.getByRole('button', { name: 'Show listed' }).click();
+    await dialog.getByRole('button', { name: 'Show Listed' }).click();
     await expect(rows).toHaveAccessibleName('Hide Codex chat');
     await page.setViewportSize({ width: 390, height: 844 });
     await types.locator('[part~="expand-icon"]').click();
@@ -8073,10 +8073,10 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
-  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     codex = dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]'),
     manage = page.getByRole('button', { name: 'Manage workspace visibility' }),
     selector = page.locator('wa-select[name="terminal-visibility-group"]');
@@ -8084,7 +8084,7 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   await expect(visibilityToolbar.locator('[data-component="toolbar-control-group"]')).toHaveCount(2);
   await expect(manage).toBeInViewport({ ratio: 1 });
   await expect(selector).toBeInViewport({ ratio: 1 });
-  const gridToolbarGap = await page.locator('[aria-label="Workspace toolbar"]').evaluate((toolbar) => {
+  const gridToolbarGap = await page.locator('[aria-label="Workspace Toolbar"]').evaluate((toolbar) => {
     const trailing = toolbar.querySelector('.kui-toolbar__trailing'),
       selector = toolbar.querySelector('wa-select[name="terminal-visibility-group"]');
     if (!trailing || !selector) throw new Error('Grid toolbar visibility selector is missing');
@@ -8112,11 +8112,11 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
     'background-color',
     'rgba(0, 0, 0, 0)',
   );
-  await expect(dialog.getByRole('textbox', { name: 'Group name' })).toHaveCount(0);
+  await expect(dialog.getByRole('textbox', { name: 'Group Name' })).toHaveCount(0);
   await expect(dialog.getByRole('button', { name: 'Delete' })).toHaveCount(0);
-  await dialog.getByRole('button', { name: 'Add visibility group' }).click();
+  await dialog.getByRole('button', { name: 'Add Visibility Group' }).click();
   const nameDialog = page.locator('[data-terminal-visibility-name-dialog]'),
-    groupName = nameDialog.getByRole('textbox', { name: 'Group name' });
+    groupName = nameDialog.getByRole('textbox', { name: 'Group Name' });
   await expect(groupName).toBeFocused();
   await groupName.fill('Focus');
   await nameDialog.getByRole('button', { name: 'Add' }).click();
@@ -8148,10 +8148,10 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
     'Deep Focus',
   );
   await page.reload();
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await expect(page.locator('wa-select[name="terminal-visibility-group"]')).toHaveJSProperty('value', focusId!);
   await expect(
-    page.getByRole('region', { name: 'Workspace grid' }).locator('[data-terminal-key="demo-checkout:codex-main"]'),
+    page.getByRole('region', { name: 'Workspace Grid' }).locator('[data-terminal-key="demo-checkout:codex-main"]'),
   ).toHaveCount(0);
   dialog = page.locator('[data-terminal-visibility-dialog]');
   await dialog.evaluate((element) => {
@@ -8192,7 +8192,7 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   await expect(dialog.getByRole('tab', { name: 'Default' })).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('Escape');
   await expect(
-    page.getByRole('region', { name: 'Workspace grid' }).locator('[data-terminal-key="demo-checkout:codex-main"]'),
+    page.getByRole('region', { name: 'Workspace Grid' }).locator('[data-terminal-key="demo-checkout:codex-main"]'),
   ).toBeVisible();
 });
 
@@ -8201,11 +8201,11 @@ test('focuses a newly created terminal as soon as its viewport starts', async ({
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('Terminal', { exact: true }).click();
   const viewport = drawer.locator(
     '[data-component="terminal-session"]:not([hidden]) [data-component="terminal-viewport"]',
@@ -8231,7 +8231,7 @@ test('focuses a newly created terminal as soon as its viewport starts', async ({
       ),
     )
     .toContain('focused immediately');
-  await drawer.getByRole('button', { name: 'New drawer item' }).focus();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).focus();
   await expect
     .poll(() =>
       drawer
@@ -8249,9 +8249,9 @@ test('parks inactive dedicated terminal viewports and restores their live DOM on
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"]').click();
   const first = drawer.locator('[data-component="terminal-viewport"][data-terminal-id="codex-main"]');
@@ -8281,9 +8281,9 @@ test('keeps drawer creation and hide actions reachable with twelve terminal tabs
   await mockProject(page, true, false, 0, 0, 0, false, 12);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"]').first().click();
   for (const width of [1440, 760]) {
@@ -8302,7 +8302,7 @@ test('keeps drawer creation and hide actions reachable with twelve terminal tabs
     expect(geometry.stripRight).toBeLessThanOrEqual(geometry.drawerRight);
     expect(geometry.createRight).toBeLessThanOrEqual(geometry.drawerRight);
     expect(geometry.hideRight).toBeLessThanOrEqual(geometry.drawerRight);
-    await drawer.getByRole('button', { name: 'New drawer item' }).click();
+    await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await expect(drawer.locator('[data-terminal-drawer-create]')).toHaveAttribute('open');
     await page.keyboard.press('Escape');
   }
@@ -8319,9 +8319,9 @@ test('renames a terminal from its tab menu, saves it on the server, and keeps it
       renames.push({ path: new URL(request.url()).pathname, body: request.postDataJSON() });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer.getByRole('tab', { name: /Codex Main/ })).toBeVisible();
   const tab = drawer.getByRole('tab', { name: /Tests/ });
@@ -8330,7 +8330,7 @@ test('renames a terminal from its tab menu, saves it on the server, and keeps it
   await menu.getByText('Rename…').click();
   const dialog = page.locator('[data-terminal-rename-dialog]');
   await expect(dialog).toHaveJSProperty('open', true);
-  const name = dialog.getByRole('textbox', { name: /Terminal name/ });
+  const name = dialog.getByRole('textbox', { name: /Terminal Name/ });
   await expect(name).toBeFocused();
   await name.fill('Quality shell');
   await dialog.getByRole('button', { name: 'Rename' }).click();
@@ -8366,9 +8366,9 @@ test('uploads a rename saved only in this browser before names were shared (HS2-
       renames.push(request.postDataJSON());
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer.getByRole('tab', { name: /Legacy shell/ })).toBeVisible();
   await expect.poll(() => renames).toEqual([{ name: 'Legacy shell' }]);
@@ -8387,9 +8387,9 @@ for (const width of [1280, 390])
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]'),
       dialog = page.locator('[data-terminal-rename-dialog]'),
       field = dialog.locator('wa-input[name="terminal-name"]'),
@@ -8402,16 +8402,16 @@ for (const width of [1280, 390])
     // Rename one terminal…
     await openRename(/Tests/);
     await expect(field).toHaveJSProperty('value', 'Tests');
-    await dialog.getByRole('textbox', { name: /Terminal name/ }).fill('Quality shell');
+    await dialog.getByRole('textbox', { name: /Terminal Name/ }).fill('Quality shell');
     await dialog.getByRole('button', { name: 'Rename' }).click();
     await expect(dialog).toHaveJSProperty('open', false);
     await expect(drawer.getByRole('tab', { name: /Quality shell/ })).toBeVisible();
     // …then another: the field shows that terminal's own current name, not the previous rename.
     await openRename(/Codex Main/);
     await expect(field).toHaveJSProperty('value', 'Codex Main');
-    await expect(dialog.getByRole('textbox', { name: /Terminal name/ })).toBeFocused();
+    await expect(dialog.getByRole('textbox', { name: /Terminal Name/ })).toBeFocused();
     // Typing then cancelling never leaks the abandoned text into the next open.
-    await dialog.getByRole('textbox', { name: /Terminal name/ }).fill('Abandoned');
+    await dialog.getByRole('textbox', { name: /Terminal Name/ }).fill('Abandoned');
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toHaveJSProperty('open', false);
     await openRename(/Codex Main/);
@@ -8443,18 +8443,18 @@ test('serializes terminal name writes so a reset made during a slow rename still
     await route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     dialog = page.locator('[data-terminal-rename-dialog]'),
     rename = async (tabName: RegExp, name: string | null) => {
       await drawer.getByRole('tab', { name: tabName }).click({ button: 'right' });
       await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
       await expect(dialog).toHaveJSProperty('open', true);
-      if (name === null) await dialog.getByRole('button', { name: 'Reset to default' }).click();
+      if (name === null) await dialog.getByRole('button', { name: 'Reset to Default' }).click();
       else {
-        await dialog.getByRole('textbox', { name: /Terminal name/ }).fill(name);
+        await dialog.getByRole('textbox', { name: /Terminal Name/ }).fill(name);
         await dialog.getByRole('button', { name: 'Rename' }).click();
       }
       await expect(dialog).toHaveJSProperty('open', false);
@@ -8493,13 +8493,13 @@ for (const width of [1280, 390])
         renames.push(request.postDataJSON());
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]'),
       dialog = page.locator('[data-terminal-rename-dialog]'),
       field = dialog.locator('wa-input[name="terminal-name"]'),
-      reset = dialog.getByRole('button', { name: 'Reset to default' }),
+      reset = dialog.getByRole('button', { name: 'Reset to Default' }),
       openRename = async (tabName: RegExp) => {
         await drawer.getByRole('tab', { name: tabName }).click({ button: 'right' });
         await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
@@ -8510,7 +8510,7 @@ for (const width of [1280, 390])
     await openRename(/Tests/);
     await expect(reset).toHaveCount(0);
     await expect(field).toHaveJSProperty('hint', '');
-    await dialog.getByRole('textbox', { name: /Terminal name/ }).fill('Quality shell');
+    await dialog.getByRole('textbox', { name: /Terminal Name/ }).fill('Quality shell');
     await dialog.getByRole('button', { name: 'Rename' }).click();
     await expect(drawer.getByRole('tab', { name: /Quality shell/ })).toBeVisible();
     // Once renamed, the dialog names the default and offers to restore it.
@@ -8551,7 +8551,7 @@ for (const width of [1280, 390])
     // Renaming again after a reset works and offers the reset again.
     await reloaded.getByRole('tab', { name: /^Tests/ }).click({ button: 'right' });
     await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
-    await dialog.getByRole('textbox', { name: /Terminal name/ }).fill('Second name');
+    await dialog.getByRole('textbox', { name: /Terminal Name/ }).fill('Second name');
     await dialog.getByRole('button', { name: 'Rename' }).click();
     await expect(reloaded.getByRole('tab', { name: /Second name/ })).toBeVisible();
     await reloaded.getByRole('tab', { name: /Second name/ }).click({ button: 'right' });
@@ -8590,9 +8590,9 @@ test('shares a terminal rename with other devices and restores it through the re
       });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     return page.locator('[data-component="terminal-drawer"]');
   };
   try {
@@ -8622,7 +8622,7 @@ test('shares a terminal rename with other devices and restores it through the re
     await laptop.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
     const dialog = laptop.locator('[data-terminal-rename-dialog]');
     await expect(dialog.locator('wa-input[name="terminal-name"]')).toHaveJSProperty('value', 'Shared Shell');
-    await dialog.getByRole('textbox', { name: /Terminal name/ }).fill('Release shell');
+    await dialog.getByRole('textbox', { name: /Terminal Name/ }).fill('Release shell');
     await dialog.getByRole('button', { name: 'Rename' }).click();
     await expect(laptopDrawer.getByRole('tab', { name: /Release shell/ })).toBeVisible();
     await expect
@@ -8648,7 +8648,7 @@ test('shares a terminal rename with other devices and restores it through the re
     const laptopDrawerAgain = laptop.locator('[data-component="terminal-drawer"]');
     await laptopDrawerAgain.getByRole('tab', { name: /Release shell/ }).click({ button: 'right' });
     await laptop.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
-    await laptop.locator('[data-terminal-rename-dialog]').getByRole('button', { name: 'Reset to default' }).click();
+    await laptop.locator('[data-terminal-rename-dialog]').getByRole('button', { name: 'Reset to Default' }).click();
     await expect(laptopDrawerAgain.getByRole('tab', { name: /Shared Shell/ })).toBeVisible();
     await expect
       .poll(async () => (await server.request<Array<{ id: string; name?: string }>>('/terminals'))[0]?.name)
@@ -8666,9 +8666,9 @@ test('resizes the terminal drawer to the page-header boundary', async ({ page })
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   // The drawer may grow down to the shell's bottom edge (it docks below the main column).
   const main = page.locator('.app-shell'),
     workArea = page.locator('.app-shell__work-area'),
@@ -8704,17 +8704,17 @@ test('keeps the Kerf drawer create menu on screen and keyboard operable at the p
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const handle = page.getByRole('separator', { name: 'Resize Terminal drawer' }),
     drawer = page.locator('[data-component="terminal-drawer"]');
   await handle.focus();
   for (let step = 0; step < 32; step += 1) await page.keyboard.press('ArrowUp');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   const menu = drawer.locator('[data-terminal-drawer-create]');
   await expect(menu).toHaveAttribute('open', '');
-  await expect(menu.getByText('Saved conversation…')).toBeVisible();
+  await expect(menu.getByText('Saved Conversation…')).toBeVisible();
   const menuBounds = () =>
     menu.evaluate((node) => {
       const bounds = node.shadowRoot?.querySelector('[part="menu"]')?.getBoundingClientRect();
@@ -8734,14 +8734,14 @@ test('keeps the Kerf drawer create menu on screen and keyboard operable at the p
       return shortBounds ? shortBounds.y + shortBounds.height : Infinity;
     })
     .toBeLessThanOrEqual(300 - 8);
-  await menu.getByText('Saved conversation…').scrollIntoViewIfNeeded();
-  await expect(menu.getByText('Saved conversation…')).toBeVisible();
+  await menu.getByText('Saved Conversation…').scrollIntoViewIfNeeded();
+  await expect(menu.getByText('Saved Conversation…')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(menu).not.toHaveAttribute('open', '');
   await expect
     .poll(() => menu.evaluate((node) => (node as HTMLElement & { popup?: { active?: boolean } }).popup?.active))
     .toBe(false);
-  await drawer.getByRole('button', { name: 'New drawer item' }).focus();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).focus();
   await page.keyboard.press('Enter');
   await expect(menu).toHaveAttribute('open', '');
   const firstCommand = menu.locator('wa-dropdown-item').first();
@@ -8755,11 +8755,11 @@ test('keeps the Kerf drawer create menu on screen and keyboard operable at the p
 test('selects a drawer command after rapidly closing and reopening its popup', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
-    trigger = drawer.getByRole('button', { name: 'New drawer item' }),
+    trigger = drawer.getByRole('button', { name: 'New Drawer Item' }),
     menu = drawer.locator('[data-terminal-drawer-create]');
   await trigger.click();
   await expect(menu).toHaveAttribute('open', '');
@@ -8782,9 +8782,9 @@ test('double-clicks the drawer rail or any terminal tab to toggle maximization',
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     rail = drawer.locator('.terminal-drawer__rail'),
     handle = page.getByRole('separator', { name: 'Resize Terminal drawer' });
@@ -8817,9 +8817,9 @@ test('snaps the drawer track while compositing visibility motion and suppressing
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const region = page.locator('#app-bottom-drawer'),
     drawer = page.locator('[data-component="terminal-drawer"]'),
     handle = page.getByRole('separator', { name: 'Resize Terminal drawer' }),
@@ -8833,25 +8833,25 @@ test('snaps the drawer track while compositing visibility motion and suppressing
   await expect(handle).toHaveAttribute('aria-valuenow', '336');
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'false');
   await expect(region).toHaveCSS('transition-duration', '0s');
-  await drawer.getByRole('button', { name: 'Hide terminal drawer' }).click();
+  await drawer.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-terminal-drawer-transitioning', 'true');
   await expect(region).toHaveAttribute('data-collapsed', 'true');
   await expect(drawer).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Show terminal drawer' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Show Terminal Drawer' })).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-x8fg23-drawer-hiding.png', fullPage: true });
   await expect(drawer).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Show terminal drawer' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Show Terminal Drawer' })).toBeVisible();
 });
 
 test('keeps the collapsed terminal-drawer restore action on canonical shell insets (HS2-4Y6SM9)', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const restore = page.getByRole('button', { name: 'Show terminal drawer' });
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const restore = page.getByRole('button', { name: 'Show Terminal Drawer' });
   await expect(restore).toBeVisible();
-  const restoreToolbar = page.getByRole('toolbar', { name: 'Terminal drawer controls' });
+  const restoreToolbar = page.getByRole('toolbar', { name: 'Terminal Drawer Controls' });
   await expect(restoreToolbar).toHaveAttribute('data-component', 'floating-toolbar');
   await expect(restoreToolbar).toHaveAttribute('data-position', 'bottom-end');
   const restoreGroup = restoreToolbar.locator('[data-component="toolbar-control-group"]');
@@ -8886,8 +8886,8 @@ test('projects an indexed feedback-needed note into the real row and inspector r
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page, true, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
   await expect(ticket.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS(
     'background-color',
@@ -8900,18 +8900,18 @@ test('projects an indexed feedback-needed note into the real row and inspector r
     'data-needs-review',
     'true',
   );
-  await expect(inspector.locator('.ticket-inspector__feedback')).toContainText('Needs review');
+  await expect(inspector.locator('.ticket-inspector__feedback')).toContainText('Needs Review');
   await expect.poll(() => inspector.evaluate((node) => getComputedStyle(node, '::before').width)).toBe('auto');
   await page.screenshot({
     path: 'target/visual-captures/hs2-9fa1bv-feedback-sidebar-without-rail-wide.png',
     fullPage: true,
   });
-  await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+  await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const readerInspector = page.getByRole('dialog').locator('[data-component="ticket-inspector"]');
-  await expect(readerInspector.locator('.ticket-inspector__feedback')).toContainText('Needs review');
+  await expect(readerInspector.locator('.ticket-inspector__feedback')).toContainText('Needs Review');
   await expect.poll(() => readerInspector.evaluate((node) => getComputedStyle(node, '::before').width)).toBe('auto');
   await page.screenshot({ path: 'target/visual-captures/hs2-n6wa7y-reader-no-rail.png' });
-  await page.getByRole('button', { name: 'Close ticket reader' }).click();
+  await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await page.setViewportSize({ width: 760, height: 900 });
   await expect(ticket.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS(
     'background-color',
@@ -8932,10 +8932,10 @@ test('clicks exact feedback character positions, removes a split, and composes a
 }) => {
   const patches = await mockProject(page, true, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  await page.getByRole('button', { name: 'Open ticket reader' }).click();
+  await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const note = page.getByRole('dialog').locator('article[data-note-id="N4"]'),
     clickAfter = async (text: string) => {
       const block = note.locator('.note-card__feedback-block').filter({ hasText: text });
@@ -8966,7 +8966,7 @@ test('clicks exact feedback character positions, removes a split, and composes a
   const first = note.getByRole('textbox', { name: /Response at character/ });
   await expect(first).toBeFocused();
   await first.fill('Discard me');
-  await note.getByRole('button', { name: /Remove response at character/ }).click();
+  await note.getByRole('button', { name: /Remove Response at Character/ }).click();
   await expect(note.locator('.note-card__inline-reply')).toHaveCount(0);
   await clickAfter('Something');
   await note.getByRole('textbox', { name: /Response at character/ }).fill('My first response');
@@ -8994,10 +8994,10 @@ test('selects feedback choices with platform modifiers and preserves a freeform 
 }) => {
   const patches = await mockProject(page, true, 'choices');
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  await page.getByRole('button', { name: 'Open ticket reader' }).click();
+  await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const note = page.getByRole('dialog').locator('article[data-note-id="N4"]'),
     choices = note.getByRole('group', { name: 'Feedback choices' }).locator('.note-card__choice');
   await expect(choices).toHaveCount(3);
@@ -9010,14 +9010,14 @@ test('selects feedback choices with platform modifiers and preserves a freeform 
   const refreshedTicket = page.waitForResponse(
     (response) => response.request().method() === 'GET' && /\/tickets\//.test(new URL(response.url()).pathname),
   );
-  await page.getByLabel('Columns view').evaluate((button: HTMLElement) => {
+  await page.getByLabel('Columns View').evaluate((button: HTMLElement) => {
     button.click();
   });
   await refreshedTicket;
   await expect(note.getByRole('textbox', { name: 'Feedback response' })).toHaveValue(
     'The two options can be combined.',
   );
-  await expect(page.getByRole('dialog').getByText('Resolve note conflict')).toHaveCount(0);
+  await expect(page.getByRole('dialog').getByText('Resolve note Conflict')).toHaveCount(0);
   await note.screenshot({ path: test.info().outputPath('hs2-6eeeqb-feedback-choices.png') });
   await note.getByRole('button', { name: 'Respond' }).click();
   await expect
@@ -9030,8 +9030,8 @@ test('selects feedback choices with platform modifiers and preserves a freeform 
 test('responds to feedback choices embedded in the ticket description', async ({ page }) => {
   const patches = await mockProject(page, true, 'details');
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
   await expect(ticket.locator('.ticket-list-row__feedback')).toContainText('Needs review');
   await ticket.click();
@@ -9065,7 +9065,7 @@ test('responds to feedback choices embedded in the ticket description', async ({
   // The response editor is NoteCard's exported NoteEditor composed by the panel (HS2-3X404M); it keeps
   // both actions inside the surface at phone width.
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const name of ['No response needed', 'Respond']) {
+  for (const name of ['No Response Needed', 'Respond']) {
     const box = (await details.getByRole('button', { name, exact: true }).boundingBox())!,
       surface = (await readerSurface.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(surface.x);
@@ -9083,14 +9083,14 @@ test('responds to feedback choices embedded in the ticket description', async ({
 test('records No response needed as a subtle regular response and clears review state', async ({ page }) => {
   const patches = await mockProject(page, true, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const ticket = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await ticket.click();
-  await page.getByRole('button', { name: 'Open ticket reader' }).click();
+  await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog'),
     note = reader.locator('article[data-note-id="N4"]'),
-    dismiss = note.getByRole('button', { name: 'No response needed' }),
+    dismiss = note.getByRole('button', { name: 'No Response Needed' }),
     respond = note.getByRole('button', { name: 'Respond', exact: true });
   await note.screenshot({ path: 'target/visual-captures/hs2-9fng50-feedback-actions-after.png' });
   const dismissBox = (await dismiss.boundingBox())!,
@@ -9105,7 +9105,7 @@ test('records No response needed as a subtle regular response and clears review 
     .poll(() => patches.some((patch) => patch.note === 'No response needed' && patch.note_kind === 'regular'))
     .toBe(true);
   await expect(reader.locator('[data-acknowledgement="true"]')).toContainText('No response needed');
-  await page.getByRole('button', { name: 'Close ticket reader' }).click();
+  await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await expect(ticket.locator('.ticket-list-row__feedback')).toHaveCount(0);
   await ticket.click();
   const acknowledgement = page.locator('#app-right-rail [data-acknowledgement="true"]');
@@ -9117,8 +9117,8 @@ test('opens reader at the active feedback note from its inspector action', async
   await page.setViewportSize({ width: 1100, height: 520 });
   await mockProject(page, true, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail'),
     action = inspector.getByRole('button', { name: 'Respond to Feedback' });
@@ -9228,14 +9228,14 @@ test('browses repository files and commits with host-native actions', async ({ p
     return route.fulfill({ status: 204 });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const summary = page.locator('[data-component="repository-summary"]');
   await summary.getByRole('button').click();
   const popover = page.locator('[data-repository-surface="repository-status"]');
   await expect(popover).toHaveAttribute('data-state', 'conflicted');
   await expect(popover.locator('dt', { hasText: 'Branch' }).locator('..')).toContainText('feature/repository-dialog');
-  await expect(popover.getByRole('navigation', { name: 'Repository views' })).toContainText('24');
+  await expect(popover.getByRole('navigation', { name: 'Repository Views' })).toContainText('24');
   await expect(popover).toHaveAttribute('data-view', 'conflicted');
   await expect(popover.locator('[data-action="select-repository-file"][data-item-id="src/conflict.ts"]')).toBeVisible();
   // The list Pane of the list-detail SplitView owns the master scroll (HS2-3B8345).
@@ -9315,7 +9315,7 @@ test('browses repository files and commits with host-native actions', async ({ p
       actions.some((action) => action.mode === 'range' && action.from === 'aaa1111' && action.to === 'bbb2222'),
     )
     .toBe(true);
-  const compareToggle = popover.getByRole('button', { name: 'Compare two commits' });
+  const compareToggle = popover.getByRole('button', { name: 'Compare Two Commits' });
   await compareToggle.click();
   await expect(compareToggle).toHaveAttribute('aria-pressed', 'true');
   await expect(popover.locator('.ticket-code-review__compare-banner')).toContainText('Select the A side');
@@ -9352,10 +9352,10 @@ test('browses repository files and commits with host-native actions', async ({ p
   // A phone is a compact device class: the list-detail layout becomes a drill-down (HS2-3B8345). The
   // active comparison pushed the Commits detail, whose back control returns to the repository list.
   await expect(popover.locator('[data-component="nav-stack"]')).toHaveCount(1);
-  const back = popover.getByRole('button', { name: 'Back to repository views' });
+  const back = popover.getByRole('button', { name: 'Back to Repository Views' });
   await expect(back).toBeInViewport({ ratio: 1 });
   await back.click();
-  const repositoryNavigation = popover.getByRole('navigation', { name: 'Repository views' });
+  const repositoryNavigation = popover.getByRole('navigation', { name: 'Repository Views' });
   // Re-push the same detail key while the popped view is still animating out. Kerf beta.77
   // cancels the old removal timer before the live detail can be reused (KF-8ESDJD, HS2-BED455).
   await repositoryNavigation.getByRole('button', { name: /Commits 24/ }).evaluate(async (button) => {
@@ -9404,7 +9404,7 @@ test('browses repository files and commits with host-native actions', async ({ p
   await compareToggle.click();
   await expect(compareToggle).toHaveAttribute('aria-pressed', 'false');
   await expect(popover.locator('.ticket-code-review__compare-banner')).toHaveCount(0);
-  // The detail Pane owns the detail column's scroll.
+  // The detail Pane owns the detail Column's scroll.
   const detail = popover.locator('.repository-status-popover__split .kui-pane__content').nth(1);
   await expect(detail).toHaveCSS('overflow-y', 'auto');
   failed = true;
@@ -9440,8 +9440,8 @@ test('refreshes repository status from the project long-poll stream without simp
     pending.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const summary = page.locator('[data-component="repository-summary"]');
   await expect(summary.getByRole('button')).toHaveAccessibleName(/0 ahead/);
   await expect.poll(() => pending.length).toBeGreaterThan(0);
@@ -9492,10 +9492,10 @@ test('keeps exactly 24px above and below the nearly full-height ticket reader', 
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  await page.getByRole('button', { name: 'Open ticket reader' }).click();
+  await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' }),
     wide = await reader.boundingBox();
   expect(wide!.y).toBe(24);
@@ -9539,10 +9539,10 @@ test('enlarges reader description and note text 1.5× with a remembered global t
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  await page.getByRole('button', { name: 'Open ticket reader' }).click();
+  await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   let reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   const details = reader.locator('.ticket-info-panel__details-surface .markdown-preview').first(),
     note = reader.locator('article[data-note-id="N3"] .note-card__body .markdown-preview'),
@@ -9588,8 +9588,8 @@ test('enlarges reader description and note text 1.5× with a remembered global t
   await feedback.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-p85gec-reader-large-feedback-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
-  await reader.getByRole('button', { name: 'Close ticket reader' }).click();
-  await page.getByRole('button', { name: 'Open ticket reader' }).click();
+  await reader.getByRole('button', { name: 'Close Ticket Reader' }).click();
+  await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   await expect(reader).toHaveAttribute('data-large-text', 'true');
   await reader.getByRole('button', { name: 'Use standard reader text size' }).click();
@@ -9599,8 +9599,8 @@ test('enlarges reader description and note text 1.5× with a remembered global t
 test('clears needs review when a regular response follows the feedback-needed note', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
   await expect(ticket.locator('.ticket-list-row__indicator--needs-review')).toHaveCount(0);
   await expect(ticket.locator('.ticket-list-row__feedback')).toHaveCount(0);
@@ -9629,8 +9629,8 @@ test('shows Blocked only when the ticket has a visible blocked reason', async ({
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
   await expect(ticket.locator('[data-component="blocked-badge"]')).toHaveCount(0);
@@ -9669,7 +9669,7 @@ test('disables host-only diff actions with an explanation on a remote device (HS
     await inspector.getByRole('tab', { name: 'Code Review' }).click();
     const review = inspector.locator('[data-component="ticket-code-review"]');
     // Host-only controls are disabled up front with the reason as their tooltip (HS2-TYS5SS).
-    const open = review.getByRole('button', { name: 'Open commit bbb2222 in Glassbox' });
+    const open = review.getByRole('button', { name: 'Open Commit bbb2222 in Glassbox' });
     await expect(open).toBeDisabled();
     await expect(open).toHaveAttribute(
       'title',
@@ -9690,8 +9690,8 @@ test('disables host-only diff actions with an explanation on a remote device (HS
 test('lists associated commits and opens a validated commit or range in the configured diff tool', async ({ page }) => {
   const actions = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('tab', { name: 'Code Review' }).click();
@@ -9710,7 +9710,7 @@ test('lists associated commits and opens a validated commit or range in the conf
     inspector.getByRole('tab', { name: 'Code Review' }).locator('[data-lucide="message-square-code"]'),
   ).toBeVisible();
   await expect(review).toContainText('Opens in Glassbox');
-  const evidence = review.getByRole('button', { name: 'Open change evidence' });
+  const evidence = review.getByRole('button', { name: 'Open Change Evidence' });
   await expect(evidence).toContainText('2 docs3 tests3 source1 other2 new test files · 1 existing test file modified');
   await expect(review.locator('.ticket-code-review__commit')).toHaveCount(4);
   await expect(review.locator('.ticket-code-review__range')).toHaveCount(2);
@@ -9770,7 +9770,7 @@ test('lists associated commits and opens a validated commit or range in the conf
       ),
     )
     .toBe(true);
-  await review.getByRole('button', { name: 'Open commit bbb2222 in Glassbox' }).click();
+  await review.getByRole('button', { name: 'Open Commit bbb2222 in Glassbox' }).click();
   await expect
     .poll(() =>
       actions.some(
@@ -9823,8 +9823,8 @@ test('marks unmerged worktree commits and opens them before they are merged (HS2
   );
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('tab', { name: 'Code Review' }).click();
@@ -9838,7 +9838,7 @@ test('marks unmerged worktree commits and opens them before they are merged (HS2
   await expect(pending).toHaveAttribute('title', /worktree \/repo\/\.claude\/worktrees\/agent-1/);
   await expect(review.locator('li[data-commit-sha="aaa1111"] .ticket-code-review__unmerged')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-0wzrk5-unmerged-wide.png', fullPage: true });
-  await review.getByRole('button', { name: 'Open commit fff6666 in Glassbox' }).click();
+  await review.getByRole('button', { name: 'Open Commit fff6666 in Glassbox' }).click();
   await review.getByRole('button', { name: 'Open 2 commit bundle eee5555 through fff6666 in Glassbox' }).click();
   await expect
     .poll(() =>
@@ -9863,8 +9863,8 @@ test('renders the exact shared Code Review component in the inspector and reader
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const sidebar = page.locator('#app-right-rail');
   await sidebar.getByRole('tab', { name: 'Code Review' }).click();
@@ -9873,7 +9873,7 @@ test('renders the exact shared Code Review component in the inspector and reader
   await expect(sidebarReview).toContainText('No commits referencing this ticket were found.');
   const sharedMarkup = await sidebarReview.evaluate((element) => element.outerHTML);
   await sidebar.screenshot({ path: 'target/visual-captures/hs2-g7p7s7-code-review-inspector-after.png' });
-  await sidebar.getByRole('button', { name: 'Open ticket reader' }).click();
+  await sidebar.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   await reader.getByRole('tab', { name: 'Code Review' }).click();
   const readerReview = reader.locator('[data-component="ticket-code-review"]');
@@ -9916,12 +9916,12 @@ test('opens every selected ticket file in one difftool launch (HS2-J7HQ5E)', asy
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('tab', { name: 'Code Review' }).click();
-  await inspector.getByRole('button', { name: 'Open change evidence' }).click();
+  await inspector.getByRole('button', { name: 'Open Change Evidence' }).click();
   const evidenceDialog = page.locator('[data-repository-surface="change-evidence"]');
   await expect(evidenceDialog).toHaveAttribute('data-view', 'docs');
   const files = evidenceDialog.locator('[data-action="select-repository-file"]');
@@ -9943,16 +9943,16 @@ test('keeps change evidence interactive when launched from the modal ticket read
   const actions = await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const sidebar = page.locator('#app-right-rail');
-  await sidebar.getByRole('button', { name: 'Open ticket reader' }).click();
+  await sidebar.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   await expect(reader).toBeVisible();
   await reader.getByRole('tab', { name: 'Code Review' }).click();
   const review = reader.locator('[data-component="ticket-code-review"]');
-  await review.getByRole('button', { name: 'Open change evidence' }).click();
+  await review.getByRole('button', { name: 'Open Change Evidence' }).click();
   const evidenceDialog = page.locator('[data-repository-surface="change-evidence"]');
   await expect(evidenceDialog).toBeVisible();
   // The reader is a modal wa-dialog; a native popover launched from inside it must stay interactive, not sit inert beneath the modal top layer (HS2-EZ10RS / HS2-6EV2ES).
@@ -9977,8 +9977,8 @@ test('keeps change evidence interactive when launched from the modal ticket read
     .toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-6ev2es-evidence-over-reader.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  const navigation = evidenceDialog.getByRole('navigation', { name: 'Change evidence views' }),
-    detail = evidenceDialog.getByRole('list', { name: 'tests change evidence' });
+  const navigation = evidenceDialog.getByRole('navigation', { name: 'Change Evidence Views' }),
+    detail = evidenceDialog.getByRole('list', { name: 'tests Change Evidence' });
   await expect
     .poll(async () => {
       const [navigationBounds, detailBounds] = await Promise.all([navigation.boundingBox(), detail.boundingBox()]);
@@ -9996,8 +9996,8 @@ test('owns and restores sidebar and reader tabs independently', async ({ page })
   await page.setViewportSize({ width: 1600, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   let sidebar = page.locator('#app-right-rail'),
     sidebarTimeline = sidebar.getByRole('tab', { name: 'Timeline' });
@@ -10009,7 +10009,7 @@ test('owns and restores sidebar and reader tabs independently', async ({ page })
   await expect(sidebarTimeline).toHaveAttribute('aria-selected', 'true');
   await expect(sidebarTimeline).toHaveAttribute('tabindex', '0');
   await expect(sidebarInfo).toHaveAttribute('tabindex', '-1');
-  await sidebar.getByRole('button', { name: 'Open ticket reader' }).click();
+  await sidebar.getByRole('button', { name: 'Open Ticket Reader' }).click();
   let reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' }),
     readerAttachments = reader.getByRole('tab', { name: /Attachments/ });
   const readerInfo = reader.getByRole('tab', { name: 'Info' });
@@ -10027,7 +10027,7 @@ test('owns and restores sidebar and reader tabs independently', async ({ page })
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(readerAttachments).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-gzn2hz-tab-bar-reader-narrow.png', fullPage: true });
-  await reader.getByRole('button', { name: 'Close ticket reader' }).click();
+  await reader.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await expect(sidebarTimeline).toHaveAttribute('aria-selected', 'true');
   await expect
     .poll(() =>
@@ -10042,7 +10042,7 @@ test('owns and restores sidebar and reader tabs independently', async ({ page })
   sidebar = page.locator('#app-right-rail');
   sidebarTimeline = sidebar.getByRole('tab', { name: 'Timeline' });
   await expect(sidebarTimeline).toHaveAttribute('aria-selected', 'true');
-  await sidebar.getByRole('button', { name: 'Open ticket reader' }).click();
+  await sidebar.getByRole('button', { name: 'Open Ticket Reader' }).click();
   reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   readerAttachments = reader.getByRole('tab', { name: /Attachments/ });
   await expect(readerAttachments).toHaveAttribute('aria-selected', 'true');
@@ -10091,8 +10091,8 @@ test('shows animated active state only for the lifetime of a ticket claim lease'
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.waitForTimeout(500);
   const activeRow = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
@@ -10158,8 +10158,8 @@ test('shows the compact confidence pill on completed list rows and board cards a
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const pillOf = (slug: string) => page.locator(`[data-ticket-slug="${slug}"] [data-component="confidence-badge"]`);
   const assertPills = async (score: string, band: string) => {
@@ -10188,7 +10188,7 @@ test('shows the compact confidence pill on completed list rows and board cards a
   await expect(doneRow.locator('.ticket-list-row__metadata [data-component="confidence-badge"]')).toHaveCount(1);
   await page.screenshot({ path: 'target/visual-captures/claude/hs2-a0q6g6-list-wide.png' });
 
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   await expect(page.locator('[data-component="ticket-list-row"][data-presentation="column"]').first()).toBeVisible();
   await assertPills('92%', 'verified');
   await assertVerified();
@@ -10229,7 +10229,7 @@ test('shows the compact confidence pill on completed list rows and board cards a
       overflow: false,
     },
   });
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   await page.setViewportSize({ width: 390, height: 844 });
   const narrowPill = pillOf('HS2-DONE01').first();
   await expect(narrowPill).toHaveText('88%');
@@ -10291,13 +10291,13 @@ test('shows the live claim and its ETA in the inspector and reader headers and c
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail'),
     inspectorNotice = inspector.locator('[data-component="live-claim-notice"]');
-  await expect(inspectorNotice).toContainText('Codex is working on this');
+  await expect(inspectorNotice).toContainText('Codex is working on this.');
   await expect(inspectorNotice.locator('[data-component="loading-spinner"]')).toHaveCount(0);
   await expect(inspectorNotice.locator('.claim-eta__ring')).toBeVisible();
   await expect(inspectorNotice.locator('[data-claim-eta]')).toHaveAttribute('data-claim-eta', 'estimate');
@@ -10311,7 +10311,7 @@ test('shows the live claim and its ETA in the inspector and reader headers and c
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').dblclick();
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ }),
     readerNotice = reader.locator('[data-component="live-claim-notice"]');
-  await expect(readerNotice).toContainText('Codex is working on this');
+  await expect(readerNotice).toContainText('Codex is working on this.');
   await expect(readerNotice.locator('[data-claim-eta]')).toHaveText(/~4[45]m left/);
   // Evidence capture only: let the reader's open transition finish (spinners animate forever).
   await page.waitForTimeout(600);
@@ -10391,8 +10391,8 @@ test('shows ETA progress on actively claimed tickets in list and column views an
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const etaOf = (slug: string) => page.locator(`[data-ticket-slug="${slug}"] [data-claim-eta]`),
     estimateEta = etaOf('HS2-DEMO01'),
@@ -10417,7 +10417,7 @@ test('shows ETA progress on actively claimed tickets in list and column views an
   };
   await assertEtas();
   await page.screenshot({ path: test.info().outputPath('claim-eta-list-wide.png') });
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   await expect(page.locator('[data-component="ticket-list-row"][data-presentation="column"]').first()).toBeVisible();
   await assertEtas();
   await page.screenshot({ path: test.info().outputPath('claim-eta-column-wide.png') });
@@ -10434,7 +10434,7 @@ test('shows ETA progress on actively claimed tickets in list and column views an
   });
   await expect(estimateEta).toHaveText(/~(1h 5[89]m|2h) left/);
   // At phone width the list keeps the estimate readable inside the row.
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(estimateEta).toBeVisible();
   const [etaBox, rowBox] = await Promise.all([
@@ -10459,8 +10459,8 @@ test('copies the ticket number when the browser refuses the Clipboard API (HS2-1
   });
   await mockProject(page, true, false, 300);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const region = page.locator('#app-right-rail');
   await expect(region.locator('[data-component="ticket-inspector-header"]')).toBeVisible();
@@ -10474,8 +10474,8 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await mockProject(page, true, false, 300);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const region = page.locator('#app-right-rail');
   await expect(region).toBeVisible();
   const before = await region.evaluate((node) => node.getBoundingClientRect().width);
@@ -10484,7 +10484,7 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
   await expect(region).toBeVisible();
   await expect(region.locator('.ticket-inspector-placeholder')).toBeVisible();
   // The placeholder keeps the rail's standard toggle in the Workbench-composed toolbar (HS2-QQW6CT).
-  await expect(region.getByRole('button', { name: 'Hide ticket inspector' })).toBeVisible();
+  await expect(region.getByRole('button', { name: 'Hide Ticket Inspector' })).toBeVisible();
   expect(await region.evaluate((node) => node.getBoundingClientRect().width)).toBe(before);
   await expect(region.locator('[data-component="ticket-inspector-header"]')).toBeVisible();
   await region.getByRole('button', { name: 'Copy ticket number HS2-DEMO01' }).click();
@@ -10522,8 +10522,8 @@ test('keeps an active editor stable when its already-selected ticket is clicked 
       detailReads += 1;
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await row.click();
   const inspector = page.locator('#app-right-rail');
@@ -10581,7 +10581,7 @@ test('routes mixed git and external ticket reads and edits by qualified id', asy
         {
           connection_id: 'git-local',
           provider: 'git',
-          display_name: 'Hot Sheet git',
+          display_name: 'Hot Sheet Git',
           locator: '/tickets',
           default: true,
           capabilities: { update: true, notes: true },
@@ -10627,8 +10627,8 @@ test('routes mixed git and external ticket reads and edits by qualified id', asy
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="JIRA-7"]').click();
   const inspector = page.locator('#app-right-rail');
   await expect(inspector).toContainText('Jira routed ticket');
@@ -10687,7 +10687,7 @@ test('shows Jira outbox attention, retry, discard, and a fresh v2 queued edit (H
         {
           connection_id: 'git-local',
           provider: 'git',
-          display_name: 'Hot Sheet git',
+          display_name: 'Hot Sheet Git',
           locator: '/tickets',
           default: true,
           capabilities: { update: true, notes: true },
@@ -10733,25 +10733,25 @@ test('shows Jira outbox attention, retry, discard, and a fresh v2 queued edit (H
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="JIRA-7"]').click();
-  const sync = page.getByRole('region', { name: 'Jira sync status' });
+  const sync = page.getByRole('region', { name: 'Jira Sync Status' });
   await expect(sync).toContainText('Needs attention');
   await expect(sync).toContainText('Jira rejected the write');
   await page.screenshot({ path: 'target/visual-captures/hs2-93y887-jira-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+  await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
   await expect(sync).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-93y887-jira-phone.png', fullPage: true });
   await sync.getByRole('button', { name: 'Retry' }).click();
   await expect.poll(() => state).toBe('queued');
   await expect(sync).toContainText('Queued locally');
-  await sync.getByRole('button', { name: 'Discard local edit' }).click();
+  await sync.getByRole('button', { name: 'Discard Local Edit' }).click();
   await expect.poll(() => state).toBe('discarded');
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('heading', { name: 'Pending Jira edit' }).dblclick();
-  const titleInput = inspector.getByRole('textbox', { name: 'Ticket title' });
+  const titleInput = inspector.getByRole('textbox', { name: 'Ticket Title' });
   await titleInput.fill('Queued from browser');
   await titleInput.blur();
   await expect.poll(() => queuedId).toMatch(/^v2:\d{13}:[a-z0-9-]{16,80}$/);
@@ -10761,24 +10761,24 @@ test('shows Jira outbox attention, retry, discard, and a fresh v2 queued edit (H
 test('omits separators below every right-sidebar toolbar state', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.waitForTimeout(500);
   // Every right-rail surface's toolbar is the Workbench-composed panel toolbar (HS2-QQW6CT).
   const placeholder = page.locator('.ticket-inspector-placeholder'),
-    toolbar = page.locator('#app-right-rail [data-component="toolbar"][aria-label="Ticket inspector toolbar"]');
+    toolbar = page.locator('#app-right-rail [data-component="toolbar"][aria-label="Ticket Inspector Toolbar"]');
   await expect(placeholder).toContainText('Select a ticket to see and edit its details');
   await expect(toolbar).not.toHaveAttribute('divider-sides');
   await expect(toolbar).toHaveCSS('box-shadow', /^(rgba\(0, 0, 0, 0\) [^,]+)(, rgba\(0, 0, 0, 0\) [^,]+){3}$/);
   await page.screenshot({ path: 'target/visual-captures/hs2-gvk7zy-empty-inspector-wide.png', fullPage: true });
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
   await expect(
-    page.locator('#app-right-rail [data-component="toolbar"][aria-label="Ticket inspector toolbar"]'),
+    page.locator('#app-right-rail [data-component="toolbar"][aria-label="Ticket Inspector Toolbar"]'),
   ).not.toHaveAttribute('divider-sides');
-  await page.getByRole('button', { name: /Notifications view/ }).click();
+  await page.getByRole('button', { name: /Notifications View/ }).click();
   const notificationToolbar = page.locator(
-    '#app-right-rail [data-component="toolbar"][aria-label="Notification inspector toolbar"]',
+    '#app-right-rail [data-component="toolbar"][aria-label="Notification Inspector Toolbar"]',
   );
   await expect(notificationToolbar).not.toHaveAttribute('divider-sides');
   await page.setViewportSize({ width: 1024, height: 600 });
@@ -10792,8 +10792,8 @@ test('omits separators below every right-sidebar toolbar state', async ({ page }
 test('resizes and persists both production shell sidebars', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const sidebar = page.locator('#app-left-rail'),
     inspector = page.locator('#app-right-rail');
   const sidebarHandle = sidebar.getByRole('separator', { name: 'Resize Sidebar rail' }),
@@ -10832,42 +10832,42 @@ test('resizes and persists both production shell sidebars', async ({ page }) => 
   await selectSort('title');
   await selectSort('title');
   await expect(sortSelect).toHaveAttribute('aria-label', 'Sort tickets: Title, descending');
-  await page.getByLabel('Columns view').click();
-  await expect(sortSelect).toHaveAttribute('aria-label', 'Sort tickets: Recently updated, descending');
+  await page.getByLabel('Columns View').click();
+  await expect(sortSelect).toHaveAttribute('aria-label', 'Sort tickets: Recently Updated, descending');
   await selectSort('priority');
   const commandGroup = page.getByRole('button', { name: 'Project commands' });
   await commandGroup.click();
   await expect(commandGroup).toHaveAttribute('aria-expanded', 'false');
   await page.screenshot({ path: 'target/visual-captures/hs2-qgg6pf-resizable-sidebars.png', fullPage: true });
-  await page.getByRole('button', { name: 'Hide project sidebar' }).click();
-  await page.getByRole('button', { name: 'Hide ticket inspector' }).click();
+  await page.getByRole('button', { name: 'Hide Project Sidebar' }).click();
+  await page.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
   await page.reload();
-  await expect(page.getByLabel('Columns view')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Columns View')).toHaveAttribute('aria-pressed', 'true');
   await expect(sortSelect).toHaveJSProperty('value', 'priority');
   await expect(sortSelect).toHaveAttribute('aria-label', 'Sort tickets: Priority, ascending');
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   await expect(sortSelect).toHaveJSProperty('value', 'title');
   await expect(sortSelect).toHaveAttribute('aria-label', 'Sort tickets: Title, descending');
   await page.screenshot({ path: 'target/visual-captures/hs2-w3fdpm-independent-list-sort.png', fullPage: true });
-  await page.getByLabel('Columns view').click();
-  await expect(page.getByRole('button', { name: 'Show project sidebar' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Show ticket inspector' })).toBeVisible();
-  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  await page.getByLabel('Columns View').click();
+  await expect(page.getByRole('button', { name: 'Show Project Sidebar' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Show Ticket Inspector' })).toBeVisible();
+  await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
   await expect.poll(() => sidebar.evaluate((node) => node.getBoundingClientRect().width)).toBe(initialSidebar + 32);
   await expect(page.getByRole('button', { name: 'Project commands' })).toHaveAttribute('aria-expanded', 'false');
-  await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+  await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
   await expect.poll(() => inspector.evaluate((node) => node.getBoundingClientRect().width)).toBe(initialInspector + 16);
   // HS2-QQW6CT: the right rail's standard toggle sits in the rail's panel toolbar while it is open;
   // closing it from there moves the toggle — and focus — to the trailing edge of the workspace
   // toolbar, and reopening returns focus to the rail's own toggle.
-  const workspaceToolbar = page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]'),
-    railToggle = inspector.getByRole('button', { name: 'Hide ticket inspector' });
+  const workspaceToolbar = page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]'),
+    railToggle = inspector.getByRole('button', { name: 'Hide Ticket Inspector' });
   await expect(railToggle).toHaveAttribute('aria-controls', 'app-right-rail');
   await expect(railToggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(workspaceToolbar.getByRole('button', { name: 'Show ticket inspector' })).toHaveCount(0);
+  await expect(workspaceToolbar.getByRole('button', { name: 'Show Ticket Inspector' })).toHaveCount(0);
   await railToggle.click();
   await expect(inspector).toHaveAttribute('data-collapsed', 'true');
-  const relocated = workspaceToolbar.getByRole('button', { name: 'Show ticket inspector' });
+  const relocated = workspaceToolbar.getByRole('button', { name: 'Show Ticket Inspector' });
   await expect(relocated).toBeFocused();
   await expect(relocated).toHaveAttribute('aria-expanded', 'false');
   expect(
@@ -10875,10 +10875,10 @@ test('resizes and persists both production shell sidebars', async ({ page }) => 
       const buttons = [...node.querySelectorAll<HTMLElement>('.kui-toolbar__trailing button')];
       return buttons.at(-1)?.getAttribute('aria-label');
     }),
-  ).toBe('Show ticket inspector');
+  ).toBe('Show Ticket Inspector');
   await relocated.click();
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
-  await expect(inspector.getByRole('button', { name: 'Hide ticket inspector' })).toBeFocused();
+  await expect(inspector.getByRole('button', { name: 'Hide Ticket Inspector' })).toBeFocused();
 });
 
 test('orders equal status priority and title groups by most recently updated', async ({ page }) => {
@@ -10924,8 +10924,8 @@ test('orders equal status priority and title groups by most recently updated', a
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const order = () =>
     page
@@ -10952,8 +10952,8 @@ test('loads every ticket page in the active workspace sort order (HS2-X23ME4)', 
   });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect
     .poll(() => pageQueries.some((query) => query.get('sort') === 'updated' && query.get('direction') === 'descending'))
     .toBe(true);
@@ -10967,7 +10967,7 @@ test('loads every ticket page in the active workspace sort order (HS2-X23ME4)', 
   const updatedRequestsBeforeBoard = pageQueries.filter(
     (query) => query.get('sort') === 'updated' && query.get('direction') === 'descending',
   ).length;
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   await expect
     .poll(
       () =>
@@ -10984,8 +10984,8 @@ test('contains and centers inspector tabs while showing labels only when they fi
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const sidebarTabs = page.locator('#app-right-rail .ticket-inspector__tabs');
   const captureTabChrome = async (tabs: Locator, path: string) => {
@@ -11069,7 +11069,7 @@ test('contains and centers inspector tabs while showing labels only when they fi
   await expectTabGeometry(sidebarTabs);
   await captureTabChrome(sidebarTabs, 'target/visual-captures/hs2-wkgmn4-inspector-tabs-narrow.png');
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.getByRole('button', { name: 'Open ticket reader' }).click();
+  await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' }),
     readerTabs = reader.locator('.ticket-inspector__tabs');
   await expect(readerTabs.locator('.kui-app-tab__name').first()).toBeVisible();
@@ -11115,8 +11115,8 @@ test('shows no spurious permission popup or repeated work while an open project 
   });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.waitForTimeout(1_000);
   permissionRequests.length = 0;
   await resetRenderMetrics(page);
@@ -11252,7 +11252,7 @@ test('keeps a persistently failed project remembered without obscuring a success
   await expect(failedTabRoot.locator('[data-lucide="circle-alert"]')).toBeVisible();
   await failedTab.click();
   const failure = page.locator('.project-restore-error');
-  await expect(failure).toContainText('older-server could not be reopened');
+  await expect(failure).toContainText('older-server could not be reopened.');
   await expect(failure).toContainText('The older server only supports schema 2.');
   await expect(failure).toContainText('process (4242) is not responding');
   await expect(failure).toContainText('Project: /work/older-server');
@@ -11288,12 +11288,12 @@ test('projects background AI activity without rerendering the closed conversatio
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const drive = page.locator('#app-left-rail [data-action="toggle-drive"]');
   await drive.click();
-  await expect(page.getByRole('button', { name: 'Open Codex conversation' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Open Codex Conversation' })).toBeEnabled();
   await expect(page.locator('[data-component="ai-conversation"][data-presentation="embedded"]')).toHaveCount(1);
   await page.locator('[data-action="toggle-terminal-drawer"]').click();
   await page.waitForTimeout(300);
@@ -11331,9 +11331,9 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
     polls.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Columns view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Columns View').click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const select = page.locator('[data-inspector-status-menu]');
   const trigger = page.locator('[data-action="open-inspector-status-menu"]');
@@ -11394,7 +11394,7 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
   await expect.poll(() => category.evaluate((node) => (node as HTMLElement & { open?: boolean }).open)).toBe(true);
   await expect(page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   expect(await renderMetrics(page)).toEqual({ passes: 0, mutations: 0 });
-  await composer.getByRole('textbox', { name: 'Ticket title' }).click();
+  await composer.getByRole('textbox', { name: 'Ticket Title' }).click();
   await expect.poll(() => category.evaluate((node) => (node as HTMLElement & { open?: boolean }).open)).toBe(false);
   await expect(page.locator('[data-column-id="started"] [data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   await expect(composer).toBeVisible();
@@ -11403,8 +11403,8 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
 test('switches to Queue so a ticket created in Backlog with Up Next stays visible (HS2-F6937Q)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const sidebar = page.locator('#app-left-rail');
   await sidebar.locator('[data-action="select-view"][data-item-id="backlog"]').click();
   await expect(sidebar.locator('[data-action="select-view"][data-item-id="backlog"]')).toHaveAttribute(
@@ -11413,7 +11413,7 @@ test('switches to Queue so a ticket created in Backlog with Up Next stays visibl
   );
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const composer = page.getByRole('dialog', { name: 'Create ticket' });
-  await composer.getByLabel('Ticket title').fill('Websockets question');
+  await composer.getByLabel('Ticket Title').fill('Websockets question');
   await composer.locator('[data-action="toggle-new-ticket-up-next"]').click();
   await composer.getByRole('button', { name: 'Create ticket' }).click();
   // The Up Next ticket becomes not_started (a Queue ticket), so the view switches to Queue and the ticket is visible + selected.
@@ -11429,13 +11429,13 @@ test('switches to Queue so a ticket created in Backlog with Up Next stays visibl
 test('drags a newly created selected ticket without requiring reselection (HS2-6E9RRS)', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const sidebar = page.locator('#app-left-rail');
   await sidebar.locator('[data-action="select-view"][data-item-id="backlog"]').click();
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const composer = page.getByRole('dialog', { name: 'Create ticket' });
-  await composer.getByLabel('Ticket title').fill('Drag immediately after creation');
+  await composer.getByLabel('Ticket Title').fill('Drag immediately after creation');
   await composer.locator('[data-action="toggle-new-ticket-up-next"]').click();
   await composer.getByRole('button', { name: 'Create ticket' }).click();
   const created = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]'),
@@ -11463,8 +11463,8 @@ test('drags a newly created selected ticket without requiring reselection (HS2-6
 test('remembers the last ticket category after cancelling and refreshing', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const composer = page.getByRole('dialog', { name: 'Create ticket' }),
     category = composer.locator('wa-select[name="new-ticket-category"]');
@@ -11546,8 +11546,8 @@ test('creates a ticket in a chosen writable source and preselects it next time i
       creates.push(url.search);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
     dialog = page.getByRole('dialog', { name: 'Create ticket' }),
     source = dialog.locator('wa-select[name="new-ticket-source"]');
@@ -11591,7 +11591,7 @@ test('creates a ticket in a chosen writable source and preselects it next time i
       source.evaluate((node) => node.shadowRoot!.querySelector<HTMLInputElement>('[part~="display-input"]')!.value),
     )
     .toBe('GitHub issues');
-  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Routed to GitHub');
+  await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Routed to GitHub');
   await dialog.getByRole('button', { name: 'Create ticket' }).click();
   await expect(dialog).toBeHidden();
   expect(creates).toEqual(['?source=github-acme']);
@@ -11626,7 +11626,7 @@ test('creates a ticket in a chosen writable source and preselects it next time i
   await launcher.click();
   await expect(source).toHaveJSProperty('value', 'git-local');
   await expect(sourceWarning).toHaveCount(0);
-  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Routed to git');
+  await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Routed to git');
   await dialog.getByRole('button', { name: 'Create ticket' }).click();
   await expect(dialog).toBeHidden();
   expect(creates).toEqual(['?source=github-acme', '?source=git-local']);
@@ -11691,8 +11691,8 @@ test('keeps staged files but blocks Create on an attachment-less source, then cr
       uploads.push(decodeURIComponent(request.headers()['x-hotsheet-filename'] ?? ''));
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
     dialog = page.getByRole('dialog', { name: 'Create ticket' }),
     form = dialog.locator('[data-action="create-ticket-form"]'),
@@ -11721,7 +11721,7 @@ test('keeps staged files but blocks Create on an attachment-less source, then cr
   await expect(form.locator('.quick-ticket-composer__attachment')).toHaveCount(2);
   await expect(form.getByText('proof.txt')).toBeVisible();
   await expect(form.getByText('trace.log')).toBeVisible();
-  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Evidence routed back to git');
+  await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Evidence routed back to git');
   await expect(create).toHaveJSProperty('disabled', false);
   await expect(removeAll).toHaveCount(0);
   // Source B (GitHub) cannot: the files stay, Create is blocked with an explanation, Remove all appears.
@@ -11778,7 +11778,7 @@ test('keeps staged files but blocks Create on an attachment-less source, then cr
   await expect(stranded).toHaveCount(0);
   await expect(form.getByText('This ticket provider does not support attachments.')).toBeVisible();
   await expect(create).toHaveJSProperty('disabled', false);
-  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('No evidence for GitHub');
+  await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('No evidence for GitHub');
   // Switching back after Remove all keeps the list empty: nothing comes back.
   await pick('git-local', 'HS2 git tickets');
   await expect(form.locator('.quick-ticket-composer__attachment')).toHaveCount(0);
@@ -11895,8 +11895,8 @@ test('uploads staged files to a GitHub source with an assets repository and show
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const dialog = page.getByRole('dialog', { name: 'Create ticket' }),
     form = dialog.locator('[data-action="create-ticket-form"]'),
     source = dialog.locator('wa-select[name="new-ticket-source"]'),
@@ -11912,7 +11912,7 @@ test('uploads staged files to a GitHub source with an assets repository and show
   // An attachment-capable GitHub source keeps the drop zone and allows Create (HS2-8HHHK3 rule).
   await expect(form.locator('[data-new-ticket-attachments-stranded="true"]')).toHaveCount(0);
   await expect(form.getByLabel('Drop or browse attachments for new ticket')).toHaveCount(1);
-  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Evidence on GitHub');
+  await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Evidence on GitHub');
   await expect(create).toHaveJSProperty('disabled', false);
   await form.screenshot({ path: 'target/visual-captures/hs2-hsa64d-composer-github-wide.png' });
   await create.click();
@@ -11930,7 +11930,7 @@ test('uploads staged files to a GitHub source with an assets repository and show
   const panel = page.locator('[data-component="ticket-attachments"]');
   await expect(panel.locator('[data-component="ticket-attachment-item"]')).toHaveCount(2);
   await expect(panel.getByLabel('Browse and add attachments')).toHaveCount(1);
-  await expect(panel.getByRole('button', { name: /More actions for/ })).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: /More Actions for/ })).toHaveCount(0);
   await expect(panel.locator('[draggable="true"]')).toHaveCount(0);
   await expect(panel.locator('[data-action="edit-attachment-batch-label"]')).toHaveCount(0);
   await expect(panel.locator('select[name="attachment-batch-purpose"]')).toHaveJSProperty('disabled', true);
@@ -11955,14 +11955,14 @@ test('uploads staged files to a GitHub source with an assets repository and show
   // still slides out showed it offset and clipped (HS2-D2GC8Q). Reopen it and let it settle.
   const rail = page.locator('#app-right-rail');
   await expect(rail).toHaveAttribute('data-collapsed', 'true');
-  await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+  await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
   await expect(rail).toHaveAttribute('data-collapsed', 'false');
   await rail.locator('> .kui-workbench__panel-content').evaluate(async (node) => {
     await Promise.all(node.getAnimations().map((animation) => animation.finished));
   });
   await expect(panel.getByRole('link', { name: 'trace.log' })).toBeInViewport();
   await rail.screenshot({ path: 'target/visual-captures/hs2-hsa64d-inspector-readonly-narrow.png' });
-  await page.getByRole('button', { name: 'Hide ticket inspector' }).click();
+  await page.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
   await expect(githubRow).toBeVisible();
   await githubRow.screenshot({ path: testInfo.outputPath('github-issue-row-narrow.png'), animations: 'disabled' });
 });
@@ -11976,13 +11976,13 @@ test('keeps the plain source label and default routing for a single writable sou
       creates.push(url.search);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Create ticket' });
-  await expect(dialog.locator('.quick-ticket-composer__footer')).toContainText('Creating in Hot Sheet git');
+  await expect(dialog.locator('.quick-ticket-composer__footer')).toContainText('Creating in Hot Sheet Git');
   await expect(dialog.locator('wa-select[name="new-ticket-source"]')).toHaveCount(0);
-  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Default routing');
+  await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Default routing');
   await dialog.getByRole('button', { name: 'Create ticket' }).click();
   await expect(dialog).toBeHidden();
   expect(creates).toEqual(['']);
@@ -11992,14 +11992,14 @@ test('keeps production ticket creation inside the Web Awesome modal lifecycle', 
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
     dialog = page.getByRole('dialog', { name: 'Create ticket' });
   await launcher.click();
-  await expect(dialog.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();
+  await expect(dialog.getByRole('textbox', { name: 'Ticket Title' })).toBeFocused();
   expect(await dialog.evaluate((node) => node.shadowRoot?.querySelector('dialog')?.matches(':modal'))).toBe(true);
-  await page.getByRole('button', { name: 'Add project' }).evaluate((node) => {
+  await page.getByRole('button', { name: 'Add Project' }).evaluate((node) => {
     (node as HTMLElement).focus();
   });
   expect(await dialog.evaluate((host) => host.contains(document.activeElement))).toBe(true);
@@ -12020,7 +12020,7 @@ test('keeps production ticket creation inside the Web Awesome modal lifecycle', 
   await expect(dialog).toBeHidden();
   await expect(launcher).toBeFocused();
   await launcher.click();
-  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Focus created ticket');
+  await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Focus created ticket');
   await dialog.getByRole('button', { name: 'Create ticket' }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('textbox', { name: 'Ticket details' })).toBeFocused();
@@ -12030,11 +12030,11 @@ test('clears prior ticket text after cancel and successful creation', async ({ p
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
     dialog = page.getByRole('dialog', { name: 'Create ticket' }),
-    title = dialog.getByRole('textbox', { name: 'Ticket title' }),
+    title = dialog.getByRole('textbox', { name: 'Ticket Title' }),
     details = dialog.getByRole('textbox', { name: 'Details' });
   await launcher.click();
   await title.fill('Discarded title');
@@ -12061,14 +12061,14 @@ test('creating a ticket on a phone opens the inspector overlay on it (HS2-QFW2A7
   await page.setViewportSize({ width: 390, height: 844 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const inspector = page.locator('#app-right-rail');
   await expect(inspector).toHaveAttribute('data-collapsed', 'true');
 
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Create ticket' });
-  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Created title');
+  await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Created title');
   await dialog.getByRole('button', { name: 'Create ticket' }).click();
 
   // The overlay opens on the new ticket with its details editor ready, not inert offscreen.
@@ -12094,11 +12094,11 @@ test('creating a ticket on a desktop leaves the inspector as the user set it (HS
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Create ticket' });
-  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Created title');
+  await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Created title');
   await dialog.getByRole('button', { name: 'Create ticket' }).click();
   await expect(page.locator('.app-shell__scrim')).toHaveCount(0);
   await expect(page.locator('#app-right-rail [name="markdown-source"]')).toBeFocused();
@@ -12108,12 +12108,12 @@ test('does not resurrect a dismissed ticket composer after another modal closes'
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const conversation = drawer.locator('[data-component="ai-conversation"]'),
     createViewDialog = page.getByRole('dialog', { name: 'Create View' });
   await conversation.getByLabel('Message Codex').fill('Export the referenced proof.');
@@ -12122,11 +12122,11 @@ test('does not resurrect a dismissed ticket composer after another modal closes'
   await expect(createViewDialog).toBeHidden();
   const composerHost = page.locator('[data-component="quick-ticket-composer"]');
   await page.getByRole('button', { name: 'New ticket…' }).click();
-  await page.getByRole('textbox', { name: 'Ticket title' }).fill('Temporary ticket draft');
+  await page.getByRole('textbox', { name: 'Ticket Title' }).fill('Temporary ticket draft');
   await page.keyboard.press('Escape');
   await expect(composerHost).toBeHidden();
   await expect(composerHost.locator('[data-action="create-ticket-form"]')).toHaveCount(0);
-  await conversation.getByRole('button', { name: 'Save conversation' }).click();
+  await conversation.getByRole('button', { name: 'Save Conversation' }).click();
   const exportDialog = page.locator('[data-component="conversation-export-dialog"]');
   await expect(exportDialog).toHaveJSProperty('open', true);
   await exportDialog.getByRole('button', { name: 'Cancel' }).click();
@@ -12141,9 +12141,9 @@ test('does not resurrect a dismissed ticket composer after another modal closes'
   });
   await page.setViewportSize({ width: 560, height: 760 });
   await page.getByRole('button', { name: 'New ticket…' }).click();
-  await page.getByRole('textbox', { name: 'Ticket title' }).fill('Second temporary draft');
+  await page.getByRole('textbox', { name: 'Ticket Title' }).fill('Second temporary draft');
   await page.getByRole('button', { name: 'Cancel' }).click();
-  await conversation.getByRole('button', { name: 'Save conversation' }).click();
+  await conversation.getByRole('button', { name: 'Save Conversation' }).click();
   await exportDialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(composerHost).toBeHidden();
   await expect(createViewDialog).toBeHidden();
@@ -12205,7 +12205,7 @@ test('restores a saved composer draft without painting the dialog during remembe
     ),
   ).toBe(false);
   await page.getByRole('button', { name: 'New ticket…' }).click();
-  await expect(dialog.getByRole('textbox', { name: 'Ticket title' })).toHaveValue('Remembered startup draft');
+  await expect(dialog.getByRole('textbox', { name: 'Ticket Title' })).toHaveValue('Remembered startup draft');
   await expect(dialog.getByRole('textbox', { name: 'Details' })).toHaveValue('Preserved without startup modality');
   await expect(dialog.locator('wa-select[name="new-ticket-category"]')).toHaveJSProperty('value', 'feature');
   await expect(dialog.getByRole('button', { name: 'Remove new ticket from Up Next' })).toBeVisible();
@@ -12216,9 +12216,9 @@ test('animates ticket moves, arrivals, and departures in sequence', async ({ pag
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Columns view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Columns View').click();
   await page.evaluate(() => {
     // eslint-disable-next-line @typescript-eslint/unbound-method
     const original = Element.prototype.animate;
@@ -12383,13 +12383,13 @@ test('animates ticket moves, arrivals, and departures in sequence', async ({ pag
   await expect(moved).toHaveCount(0);
   await clear();
   await page.getByRole('button', { name: 'New ticket…' }).click();
-  await page.getByRole('textbox', { name: 'Ticket title' }).fill('Animated incoming ticket');
+  await page.getByRole('textbox', { name: 'Ticket Title' }).fill('Animated incoming ticket');
   await page.getByRole('button', { name: 'Create ticket' }).click();
   const incoming = page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEW001"]'),
     incomingGhost = page.locator('[data-ticket-motion-ghost="incoming"][data-ticket-motion-slug="HS2-NEW001"]');
   await expect(incoming).toBeAttached();
   await expect(incoming).toHaveCount(1);
-  await expect(page.getByLabel('Ticket workspace').getByText('Animated incoming ticket', { exact: true })).toHaveCount(
+  await expect(page.getByLabel('Ticket Workspace').getByText('Animated incoming ticket', { exact: true })).toHaveCount(
     1,
   );
   await expect(incomingGhost).toBeAttached();
@@ -12447,14 +12447,14 @@ test('naturally makes room before fading in a ticket created from the composer',
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Columns view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Columns View').click();
   const existing = page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEXT01"]').locator('..'),
     before = await existing.boundingBox();
   expect(before).not.toBeNull();
   await page.getByRole('button', { name: 'New ticket…' }).click();
-  await page.getByRole('textbox', { name: 'Ticket title' }).fill('Naturally animated incoming ticket');
+  await page.getByRole('textbox', { name: 'Ticket Title' }).fill('Naturally animated incoming ticket');
   // Sample the incoming ghost's opacity on every frame from before creation until it is removed, so the
   // fade-in assertion never depends on a wall-clock sleep landing mid-flight (HS2-FGHVY4: a fixed 200ms
   // wait raced the animation on a loaded machine and then waited on an already-removed ghost).
@@ -12561,13 +12561,13 @@ test('finishes local ticket creation motion without redundantly reconciling its 
     polls.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Columns view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Columns View').click();
   await expect.poll(() => polls.length).toBeGreaterThan(0);
   const readsBefore = ticketGets;
   await page.getByRole('button', { name: 'New ticket…' }).click();
-  await page.getByRole('textbox', { name: 'Ticket title' }).fill('Created while watch event arrives');
+  await page.getByRole('textbox', { name: 'Ticket Title' }).fill('Created while watch event arrives');
   await page.getByRole('button', { name: 'Create ticket' }).click();
   await expect.poll(() => eventDelivered).toBe(true);
   await expect(page.locator('[data-ticket-slug="HS2-NEW001"]')).toHaveCount(0);
@@ -12593,8 +12593,8 @@ test('finishes local ticket creation motion without redundantly reconciling its 
 test('runs grouped local commands, confirms stop, exposes history, and saves settings', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const command = page.getByRole('button', { name: 'Run checks' });
   await expect(page.getByText('Quality', { exact: true })).toBeVisible();
   await expect(command).toHaveAttribute('title', 'Press and hold for command history.');
@@ -12603,7 +12603,7 @@ test('runs grouped local commands, confirms stop, exposes history, and saves set
   await page.getByRole('button', { name: 'Running Run checks' }).click();
   const stop = page.locator('[data-component="command-cancellation-dialog"]');
   await expect(stop.getByRole('dialog', { name: 'Stop Run checks?' })).toBeVisible();
-  await stop.getByRole('button', { name: 'Stop command' }).click();
+  await stop.getByRole('button', { name: 'Stop Command' }).click();
   await expect(stop).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Run checks' })).toHaveAttribute('title', /Last run: cancelled/);
   await page.getByRole('button', { name: 'Run checks' }).dispatchEvent('pointerdown');
@@ -12625,7 +12625,7 @@ test('runs grouped local commands, confirms stop, exposes history, and saves set
   await page.keyboard.press('Escape');
   await expect(history).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 720 });
-  const settingsView = page.getByLabel('Settings view');
+  const settingsView = page.getByLabel('Settings View');
   await settingsView.dispatchEvent('click');
   await expect(settingsView).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
@@ -12634,14 +12634,14 @@ test('runs grouped local commands, confirms stop, exposes history, and saves set
   await firstRow.locator('[data-component="popup-menu"] [slot="trigger"]').click();
   await firstRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const commandDialog = page.locator('#command-editor-dialog');
-  await commandDialog.getByLabel('Button label').fill('Review');
+  await commandDialog.getByLabel('Button Label').fill('Review');
   await commandDialog.getByRole('textbox', { name: 'Program' }).fill('/usr/bin/true');
   const commandsSaved0 = page.waitForResponse(
     (response) => response.url().endsWith('/commands') && response.request().method() === 'PUT',
   );
   await commandDialog.getByRole('button', { name: 'Done' }).click();
   await commandsSaved0;
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   await expect(page.getByRole('button', { name: 'Review' })).toBeVisible();
 });
 
@@ -12649,8 +12649,8 @@ test('aligns project sidebar highlights, content, and icon hit targets to shared
   await page.setViewportSize({ width: 1280, height: 760 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const sidebar = page.locator('#app-left-rail'),
     queue = sidebar.locator('[data-action="select-view"][data-item-id="all"]'),
     queueIcon = queue.locator('.kui-list-item__icon'),
@@ -12658,7 +12658,7 @@ test('aligns project sidebar highlights, content, and icon hit targets to shared
     viewsTitle = sidebar.getByRole('heading', { name: 'Views', exact: true }),
     viewActionLayer = sidebar.getByRole('button', { name: 'Add view' }),
     hideLayer = sidebar.locator('.kui-pane__header > .kui-toolbar .kui-toolbar-control-group'),
-    chat = sidebar.getByRole('button', { name: 'Open Codex conversation' });
+    chat = sidebar.getByRole('button', { name: 'Open Codex Conversation' });
   const boxes = await Promise.all(
     [sidebar, queue, queueIcon, queueLabel, viewsTitle, viewActionLayer, hideLayer, chat].map((locator) =>
       locator.boundingBox(),
@@ -12730,8 +12730,8 @@ test('runs a portable shell command in a named terminal and opens the bottom dra
       terminalRequests.push(request.postDataJSON());
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   let refreshStarted = false,
     releaseRefresh!: () => void;
   const refreshGate = new Promise<void>((resolve) => {
@@ -12745,7 +12745,7 @@ test('runs a portable shell command in a named terminal and opens the bottom dra
     }
     return route.fallback();
   });
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect.poll(() => refreshStarted).toBe(true);
   await page.getByRole('button', { name: 'Lint project' }).click();
   await expect.poll(() => terminalRequests).toEqual([{ shell_command: 'npm run lint', cwd: '/work/demo/client' }]);
@@ -12799,11 +12799,11 @@ test('serves the repository Quality commands from a real server and queues Every
     });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
-      if (width < 1024) await page.getByRole('button', { name: 'Show project sidebar' }).click();
+      if (width < 1024) await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
       for (const title of ['Reqs ↔ Code', 'Check Code Hygiene', 'Analyze Code Quality', 'Everything'])
         await expect(page.getByRole('button', { name: `${title} AI command`, exact: true })).toBeVisible();
       await page
@@ -12853,9 +12853,9 @@ test('queues a custom AI command as an urgent Up Next ticket and signals an avai
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Open Codex conversation' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const conversation = page.locator('[data-component="ai-conversation"]'),
     dialog = conversation.getByRole('dialog');
   await expect(dialog).toBeVisible();
@@ -12911,8 +12911,8 @@ test('keeps a custom AI command ticket when no AI connection is available', asyn
       requests.push({ path: new URL(request.url()).pathname, body: request.postDataJSON() ?? {} });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Review without a live AI' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-NEW001"]')).toContainText('Review without a live AI');
   await expect(page.locator('.app-toast')).toContainText('Queued HS2-NEW001.');
@@ -12931,9 +12931,9 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   const editor = page.locator('[data-component="command-settings-editor"]');
   const commandDialog = page.locator('#command-editor-dialog');
@@ -12945,11 +12945,11 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   await expect(tabBar.locator('wa-button', { hasText: 'Add group…' })).toHaveJSProperty('appearance', 'outlined');
   await expect(editor.locator('[data-action="add-command-setting"], [data-action="add-command-group"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Add command…', exact: true }).click();
-  await commandDialog.getByLabel('Button label').fill('Lint');
-  await commandDialog.getByLabel('Shell command').fill('npm run lint');
+  await commandDialog.getByLabel('Button Label').fill('Lint');
+  await commandDialog.getByLabel('Shell Command').fill('npm run lint');
   await commandDialog.getByRole('button', { name: 'Done' }).click();
   await page.getByRole('button', { name: 'Add command…', exact: true }).click();
-  await commandDialog.getByLabel('Button label').fill('Review changes');
+  await commandDialog.getByLabel('Button Label').fill('Review changes');
   // Type is a Kerf Select (HS2-WNXRG3): choose the AI option through its real popup.
   const typeSelect = commandDialog.locator('wa-select[name="kind"]');
   await expect(typeSelect).toHaveJSProperty('value', 'shell');
@@ -12963,8 +12963,8 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   await commandDialog.locator('[data-action="open-command-manual-model"]').dispatchEvent('click');
   const manualModel = page.locator('[data-component="manual-model-dialog"]');
   await expect(manualModel.locator('dialog')).toBeVisible();
-  await manualModel.getByLabel('Model identifier').fill('claude-preview');
-  await manualModel.getByRole('button', { name: 'Use model' }).click();
+  await manualModel.getByLabel('Model Identifier').fill('claude-preview');
+  await manualModel.getByRole('button', { name: 'Use Model' }).click();
   await expect(commandDialog.getByRole('button', { name: /Claude · claude-preview/ })).toBeVisible();
   await commandDialog.locator('[data-action="select-command-ai-default"]').dispatchEvent('click');
   await expect(commandDialog.getByRole('button', { name: 'Project Default' })).toBeVisible();
@@ -13005,7 +13005,7 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   // surface, matching the tab bar above it, not the sunken work area (HS2-YKB7HS).
   await page.setViewportSize({ width: 390, height: 900 });
   await page.reload();
-  await page.getByRole('button', { name: 'Show settings sidebar' }).click();
+  await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Ticket sources', exact: true })).not.toBeInViewport();
@@ -13046,12 +13046,12 @@ test('keeps an empty command group across reloads, populating, and emptying it (
   page.on('dialog', (dialog) => void dialog.accept('Ideas'));
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const editor = page.locator('[data-component="command-settings-editor"]'),
     ideas = editor.locator('[data-command-group="Ideas"]'),
     openCommandSettings = async () => {
-      await page.getByLabel('Settings view').click();
+      await page.getByLabel('Settings View').click();
       await page.getByRole('button', { name: 'Commands', exact: true }).click();
       await expect(editor.locator('.command-settings-editor__row', { hasText: 'Run checks' })).toBeVisible();
     },
@@ -13083,10 +13083,10 @@ test('keeps an empty command group across reloads, populating, and emptying it (
   await page.setViewportSize({ width: 390, height: 844 });
   // A phone-width load uses the compact shell, whose settings categories sit behind a sidebar toggle.
   await page.reload();
-  await page.getByLabel('Settings view').click();
-  await page.getByRole('button', { name: 'Show settings sidebar' }).click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
-  await page.getByRole('button', { name: 'Hide settings sidebar' }).click();
+  await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
   await expect(page.getByRole('button', { name: 'Ticket sources', exact: true })).not.toBeInViewport();
   await page.mouse.move(200, 600);
   await page.waitForTimeout(800);
@@ -13131,7 +13131,7 @@ test('keeps an empty command group across reloads, populating, and emptying it (
   await commandsSaved2;
   await page.reload();
   await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   await expect(ideas.locator('.command-settings-editor__group-empty')).toBeVisible();
   await expect(editor.locator('[data-command-group]')).toHaveCount(2);
@@ -13142,7 +13142,7 @@ test('keeps an empty command group across reloads, populating, and emptying it (
   await expect.poll(() => groupWrites.at(-1)).toEqual([]);
   await page.reload();
   await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   await expect(editor.getByText('No custom commands yet.')).toBeVisible();
 });
@@ -13166,12 +13166,12 @@ test('persists an empty command group through the real server (HS2-EZ5KMC)', asy
     page.on('dialog', (dialog) => void dialog.accept('Ideas'));
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const editor = page.locator('[data-component="command-settings-editor"]'),
       ideas = editor.locator('[data-command-group="Ideas"]'),
       openCommandSettings = async () => {
-        await page.getByLabel('Settings view').click();
+        await page.getByLabel('Settings View').click();
         await page.getByRole('button', { name: 'Commands', exact: true }).click();
         await expect(editor).toBeVisible();
       },
@@ -13210,12 +13210,12 @@ test('keeps a command edit made just before a reload through the real server (HS
     });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const editor = page.locator('[data-component="command-settings-editor"]'),
       commandDialog = page.locator('#command-editor-dialog'),
       openCommandSettings = async () => {
-        await page.getByLabel('Settings view').click();
+        await page.getByLabel('Settings View').click();
         await page.getByRole('button', { name: 'Commands', exact: true }).click();
         await expect(editor).toBeVisible();
       },
@@ -13225,8 +13225,8 @@ test('keeps a command edit made just before a reload through the real server (HS
         );
     await openCommandSettings();
     await page.getByRole('button', { name: 'Add command…', exact: true }).click();
-    await commandDialog.getByLabel('Button label').fill('Ship it');
-    await commandDialog.getByLabel('Shell command').fill('echo ship');
+    await commandDialog.getByLabel('Button Label').fill('Ship it');
+    await commandDialog.getByLabel('Shell Command').fill('echo ship');
     await commandDialog.getByRole('button', { name: 'Done' }).click();
     // Hide the page inside the 600 ms autosave window, then reload: the page-hide flush must save the
     // edit. The event is dispatched because Playwright cannot route the keepalive request a real
@@ -13239,7 +13239,7 @@ test('keeps a command edit made just before a reload through the real server (HS
     await expect(editor.locator('.command-settings-editor__row', { hasText: 'Ship it' })).toBeVisible();
     // A later edit still autosaves normally after the reload.
     await editor.locator('.command-settings-editor__row', { hasText: 'Ship it' }).dblclick();
-    await commandDialog.getByLabel('Button label').fill('Ship it now');
+    await commandDialog.getByLabel('Button Label').fill('Ship it now');
     await commandDialog.getByRole('button', { name: 'Done' }).click();
     await expect.poll(storedTitles).toEqual(['Ship it now']);
   } finally {
@@ -13256,17 +13256,17 @@ test('multi-selects command rows and drags the whole selection to reorder (HS2-V
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   const editor = page.locator('[data-component="command-settings-editor"]'),
     commandDialog = page.locator('#command-editor-dialog'),
     rowFor = (title: string) => editor.locator('.command-settings-editor__row', { hasText: title });
   for (const label of ['Alpha', 'Beta', 'Gamma']) {
     await page.getByRole('button', { name: 'Add command…', exact: true }).click();
-    await commandDialog.getByLabel('Button label').fill(label);
-    await commandDialog.getByLabel('Shell command').fill(`echo ${label}`);
+    await commandDialog.getByLabel('Button Label').fill(label);
+    await commandDialog.getByLabel('Shell Command').fill(`echo ${label}`);
     await commandDialog.getByRole('button', { name: 'Done' }).click();
     await expect(rowFor(label)).toBeVisible();
   }
@@ -13384,8 +13384,8 @@ test('collapses individual project command groups independently and remembers ea
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   let commands = page.locator('[data-component="command-navigation"]'),
     quality = commands.getByRole('button', { name: 'Quality', exact: true }),
     git = commands.getByRole('button', { name: 'Git', exact: true });
@@ -13459,9 +13459,9 @@ for (const viewport of [
       return route.fallback();
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    if (viewport.width === 390) await page.getByRole('button', { name: 'Show project sidebar' }).click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    if (viewport.width === 390) await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
     const commands = page.locator('[data-component="command-navigation"]');
     await expect(commands.getByRole('button', { name: 'Everything' })).toBeVisible();
     await expect(commands.locator('.command-navigation__command[data-command-palette="transparent"]')).toHaveCount(2);
@@ -13509,8 +13509,8 @@ for (const width of [1280, 390]) {
       polls.push(route);
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator('[data-component="quick-ticket-composer-launcher"]:visible').first().click();
     const composer = page.locator('[data-component="quick-ticket-composer"]'),
       title = composer.locator('wa-input[name="new-ticket-title"] input'),
@@ -13552,8 +13552,8 @@ for (const width of [1280, 390]) {
       polls.push(route);
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-DEMO01"]:visible').first().click();
     await page.getByRole('button', { name: 'Edit Ticket details' }).locator('visible=true').first().click();
     const details = page.getByRole('textbox', { name: 'Ticket details' }),
@@ -13592,9 +13592,9 @@ test('aligns settings page copy with field labels, group headers, row content, a
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   // The left edge of the first rendered text glyph run inside an element.
   const textLeft = (selector: string) =>
     page
@@ -13655,19 +13655,19 @@ test('aligns settings page copy with field labels, group headers, row content, a
 test('switches settings categories from the project sidebar', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const selected = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await selected.click();
   await expect(selected).toHaveAttribute('data-selected', 'true');
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   const navigation = page.getByRole('navigation', { name: 'Settings categories' }),
     placeholder = page.locator('.ticket-inspector-placeholder'),
     placeholderToolbar = page.locator(
-      '#app-right-rail [data-component="toolbar"][aria-label="Ticket inspector toolbar"]',
+      '#app-right-rail [data-component="toolbar"][aria-label="Ticket Inspector Toolbar"]',
     );
   await expect(navigation).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Ticket sources settings' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Ticket sources Settings' })).toBeVisible();
   await expect(page.locator('.project-settings > h2')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Project sidebar' })).toHaveCount(0);
   await expect(page.locator('#app-right-rail')).toBeVisible();
@@ -13678,28 +13678,28 @@ test('switches settings categories from the project sidebar', async ({ page }) =
     /^(rgba\(0, 0, 0, 0\) [^,]+)(, rgba\(0, 0, 0, 0\) [^,]+){3}$/,
   );
   await navigation.getByRole('button', { name: 'Commands', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Commands settings' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Commands Settings' })).toBeVisible();
   await expect(page.locator('[data-component="command-settings-editor"]')).toBeVisible();
   await expect(navigation.getByRole('button', { name: 'Commands', exact: true })).toHaveAttribute(
     'aria-current',
     'page',
   );
   await navigation.getByRole('button', { name: 'Permissions' }).click();
-  await expect(page.getByRole('region', { name: 'Permissions settings' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Permissions Settings' })).toBeVisible();
   await expect(page.locator('[name="permission-automation-action"]')).toBeVisible();
   await expect(page.locator('[data-component="command-settings-editor"]')).toHaveCount(0);
   await navigation.getByRole('button', { name: 'Column view' }).click();
-  await expect(page.getByRole('region', { name: 'Column view settings' })).toBeVisible();
-  await expect(page.getByText('Hide Verified column')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Column view Settings' })).toBeVisible();
+  await expect(page.getByText('Hide Verified Column')).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-wsmx7c-settings-sidebar-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
-  await expect(page.getByRole('region', { name: 'Column view settings' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Column view Settings' })).toBeVisible();
   await expect(placeholderToolbar).toHaveCSS(
     'box-shadow',
     /^(rgba\(0, 0, 0, 0\) [^,]+)(, rgba\(0, 0, 0, 0\) [^,]+){3}$/,
   );
   await page.screenshot({ path: 'target/visual-captures/hs2-wsmx7c-settings-sidebar-floor.png', fullPage: true });
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   await expect(selected).toHaveAttribute('data-selected', 'true');
 });
 
@@ -13723,8 +13723,8 @@ test('renders exactly once when the long poll announces a permission request', a
     polls.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await expect(page.locator('#app-loading-indicator')).toHaveCount(0);
   await expect.poll(() => polls.length).toBeGreaterThan(0);
@@ -13787,7 +13787,7 @@ test('renders exactly once when the long poll announces a permission request', a
   }
   await page.reload();
   await expect(popup).toBeVisible();
-  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
   await expect(page.locator('#app-left-rail')).toBeVisible();
   expect(
     await popup.locator('.notification-card__identity').evaluate((element) => {
@@ -13834,11 +13834,11 @@ for (const viewport of [
       await route.fulfill({ json: { connection: 'codex-session', decision: 'allow', persisted: false } });
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const popup = page.locator('[data-component="permission-request-popup"]');
     await expect(popup).toContainText('cargo test --workspace');
-    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await expect(drawer).toBeVisible();
     await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dispatchEvent('dblclick');
@@ -13909,8 +13909,8 @@ for (const viewport of [
       await route.fulfill({ json: { connection: 'codex-session', decision: 'allow', persisted: false } });
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const popup = page.locator('[data-component="permission-request-popup"][data-layer="top"]');
     await expect(popup).toContainText('request-61');
     // Without a modal the popup is an ordinary, non-blocking popover.
@@ -13993,8 +13993,8 @@ test('hides a permission popup when its server disconnects and restores only liv
     polls.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toContainText('cargo test');
   const announce = async (id: number) => {
@@ -14034,8 +14034,8 @@ test('records externally resolved empty-action permissions in notification histo
     polls.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toContainText('Wants permission to use ToolSearch');
   await expect(popup.locator('.notification-card__details')).toHaveCount(0);
@@ -14050,7 +14050,7 @@ test('records externally resolved empty-action permissions in notification histo
     },
   });
   await expect(popup).toHaveCount(0);
-  await page.getByRole('button', { name: /Notifications view/ }).click();
+  await page.getByRole('button', { name: /Notifications View/ }).click();
   await page.getByRole('button', { name: /Last 24 Hours/ }).click();
   const previous = page
     .locator(
@@ -14070,7 +14070,7 @@ test('records externally resolved empty-action permissions in notification histo
     }),
   ).toBe(16);
   await page.screenshot({ path: 'target/visual-captures/hs2-f058ae-responded-notification-wide.png', fullPage: true });
-  await page.getByRole('button', { name: 'Hide notification inspector' }).click();
+  await page.getByRole('button', { name: 'Hide Notification Inspector' }).click();
   await page.setViewportSize({ width: 760, height: 844 });
   await expect(previous).toBeInViewport();
   await expect(previous.locator('.notification-card__summary')).toHaveCSS('margin-bottom', '16px');
@@ -14124,8 +14124,8 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
     polls.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
 
   const stale = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-QQRY00"]');
   await expect(stale).toBeVisible();
@@ -14234,7 +14234,7 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   const inspector = page.locator('[data-component="corrupt-ticket-inspector"]');
   await expect(inspector).toHaveClass(/corrupt-ticket-inspector__body/);
   await expect(inspector).toHaveCSS('gap', '24px');
-  await expect(inspector).toContainText('Ticket parsing error');
+  await expect(inspector).toContainText('Ticket Parsing Error');
   await expect(inspector).toContainText('unsupported content follows the bounded Notes section');
   await expect(inspector).toContainText('01M1DNB977BK0NG7YJ77RVZXTV.md');
   // The recovery icons are sized by LucideIcon size="s", not app CSS on their svg (HS2-8Z0GCC).
@@ -14296,8 +14296,8 @@ test('identifies a ticket from newer HS2 as upgrade-required instead of corrupt'
     }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: /Ticket errors/ }).click();
   const newer = page.locator('[data-component="corrupt-ticket-row"]');
   await expect(newer).toContainText('Hot Sheet 2 update required');
@@ -14344,15 +14344,15 @@ test('lays the corrupt row icon beside its text for a real server diagnostic (HS
     });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: /Ticket errors/ }).click();
     const corrupt = page.locator('[data-component="corrupt-ticket-row"]');
     await expect(corrupt).toContainText(created.slug);
     await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(0);
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
-      if (width < 1024) await expect(page.getByRole('button', { name: 'Show project sidebar' })).toBeVisible();
+      if (width < 1024) await expect(page.getByRole('button', { name: 'Show Project Sidebar' })).toBeVisible();
       await expect(corrupt).toBeInViewport({ ratio: 1 });
       // The narrow layout slides the sidebar away; measure once the row has stopped moving.
       await expect
@@ -14443,8 +14443,8 @@ test('updates the open project after external ticket additions edits and deletio
   };
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const original = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await original.click();
   await expect(page.locator('#app-right-rail')).toContainText('Use real project tickets');
@@ -14532,8 +14532,8 @@ test('merges unrelated external ticket fields and offers an editable merge for t
   };
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
@@ -14562,7 +14562,7 @@ test('merges unrelated external ticket fields and offers an editable merge for t
   await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
   await emit();
 
-  await inspector.getByRole('button', { name: 'Open ticket reader' }).evaluate((node) => {
+  await inspector.getByRole('button', { name: 'Open Ticket Reader' }).evaluate((node) => {
     (node as HTMLElement).click();
   });
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ });
@@ -14588,7 +14588,7 @@ test('merges unrelated external ticket fields and offers an editable merge for t
 
   const resolution = conflict.getByRole('textbox', { name: 'Merged details' });
   await resolution.fill('My local wording\n\nTheir newer wording');
-  await conflict.getByRole('button', { name: 'Apply merged value' }).click();
+  await conflict.getByRole('button', { name: 'Apply Merged Value' }).click();
   await expect(conflict).toHaveCount(0);
   await expect(editor).toHaveValue('My local wording\n\nTheir newer wording');
   await expect
@@ -14627,8 +14627,8 @@ test('merges a concurrent remote edit and rides out token churn without losing t
     return route.fulfill({ json: { store: 'git-local', ...liveFull } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
@@ -14686,12 +14686,12 @@ test('merges concurrent edits to different words of the same title (HS2-R8TYCG)'
     return route.fulfill({ json: { store: 'git-local', ...liveFull } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.locator('[data-action="edit-ticket-title"]').dblclick();
-  const title = inspector.getByRole('textbox', { name: 'Ticket title' });
+  const title = inspector.getByRole('textbox', { name: 'Ticket Title' });
   await expect(title).toHaveValue('Fix the parser bug');
   // Another writer renames a different word of the same one-line title.
   liveFull = { ...liveFull, title: 'Fix the lexer bug', concurrency_token: 'remote-title' };
@@ -14747,8 +14747,8 @@ test('does not report this clients own in-flight autosave as a merge conflict @c
     });
   };
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
@@ -14783,8 +14783,8 @@ test('does not report this clients own in-flight autosave as a merge conflict @c
 test('translates urgent priority through the canonical server contract', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   await page.locator('wa-select[name="inspector-priority"]').evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'urgent';
@@ -14805,8 +14805,8 @@ test('translates urgent priority through the canonical server contract', async (
 test('moves tickets to Backlog and Archive from every shipped status menu', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: /Archive/ }).click();
   const archived = page.locator('[data-ticket-slug="HS2-ARCH01"]');
   await archived.click();
@@ -14815,7 +14815,7 @@ test('moves tickets to Backlog and Archive from every shipped status menu', asyn
   await expect(status.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'archive');
   await expect(status.locator('[data-action="open-inspector-status-menu"]')).toHaveAttribute(
     'aria-label',
-    'Change status, Archive',
+    'Change Status, Archive',
   );
   await expect(status.locator('[data-component="status-badge"] [data-lucide="archive"]')).toBeVisible();
   await status.locator('[data-action="open-inspector-status-menu"]').click();
@@ -14828,7 +14828,7 @@ test('moves tickets to Backlog and Archive from every shipped status menu', asyn
   await expect(backlogged).toBeVisible();
   await backlogged.click({ button: 'right' });
   const menu = page.locator('[data-context-menu="ticket"]');
-  await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change status' }).hover();
+  await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change Status' }).hover();
   const choices = menu.locator('[data-context-field="status"]');
   await expect(choices).toHaveCount(6);
   // A PopupMenu submenu holds no divider before Backlog (Kerf gap KF-7KR1BC).
@@ -14842,8 +14842,8 @@ test('moves tickets to Backlog and Archive from every shipped status menu', asyn
 test('projects Up Next immediately and reconciles without a full project refresh', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const row = page.locator('[data-component="ticket-list-row"]', { hasText: 'Not started ticket' }),
     projectTab = page.locator('[data-tab-kind="project"]', { hasText: 'demo' });
   await expect(projectTab.locator('.project-tab__work-count')).not.toContainText('≥');
@@ -14981,10 +14981,10 @@ test('keeps primary 138-ticket interactions within the painted UI budget', async
     route.fulfill({ json: { connection: 'perf-session', decision: 'allow', persisted: false } }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-component="permission-request-popup"]').getByRole('button', { name: 'Ignore' }).click();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
   await page.evaluate(() => {
     (window as typeof window & { __interactionTimings?: unknown[] }).__interactionTimings = [];
@@ -15032,8 +15032,8 @@ test('keeps primary 138-ticket interactions within the painted UI budget', async
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   samples.push(await timing('ticket-view-change', () => page.getByRole('button', { name: /Backlog/ }).click()));
   samples.push(await timing('ticket-view-change', () => page.getByRole('button', { name: /Queue/ }).click()));
-  samples.push(await timing('workspace-mode-change', () => page.getByRole('button', { name: 'Columns view' }).click()));
-  samples.push(await timing('workspace-mode-change', () => page.getByRole('button', { name: 'List view' }).click()));
+  samples.push(await timing('workspace-mode-change', () => page.getByRole('button', { name: 'Columns View' }).click()));
+  samples.push(await timing('workspace-mode-change', () => page.getByRole('button', { name: 'List View' }).click()));
   const first = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   samples.push(await timing('ticket-selection', () => first.click()));
   samples.push(
@@ -15047,7 +15047,7 @@ test('keeps primary 138-ticket interactions within the painted UI budget', async
         .then(() => page.locator('[data-inspector-status-menu] [data-ticket-status="completed"]').click()),
     ),
   );
-  await page.getByRole('button', { name: /Notifications view/ }).click();
+  await page.getByRole('button', { name: /Notifications View/ }).click();
   samples.push(
     await timing('permission-decision', () =>
       page.locator('[data-component="notification-center"]').getByRole('button', { name: 'Allow Once' }).click(),
@@ -15206,9 +15206,9 @@ for (const viewport of [
       for (const release of held) release();
     };
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    await page.getByRole('button', { name: 'Add project' }).click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Add Project' }).click();
     const projectPicker = page.locator('wa-select[name="mobile-project"]');
     let ptyLoadActive = false;
     const switchProject = async (name: 'demo' | 'other') => {
@@ -15273,14 +15273,14 @@ for (const viewport of [
           ? ticket.getByRole('button', { name: 'Remove from Up Next' }).click()
           : page.locator('#app-right-rail').getByRole('button', { name: 'Remove from Up Next' }).click(),
       );
-      if (viewport.name === 'narrow') await page.getByRole('button', { name: 'Hide ticket inspector' }).click();
-      await sample('terminal-drawer', () => page.getByRole('button', { name: 'Show terminal drawer' }).click());
+      if (viewport.name === 'narrow') await page.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
+      await sample('terminal-drawer', () => page.getByRole('button', { name: 'Show Terminal Drawer' }).click());
       const drawer = page.locator('[data-component="terminal-drawer"]');
       await sample('terminal-tab', () => drawer.locator('[data-tab-kind="terminal"]').first().click());
       if (ptyProfile) await expect.poll(() => ptyRoutes.length).toBeGreaterThan(0);
       await sample('ai-chat-create', async () => {
-        await drawer.getByRole('button', { name: 'New drawer item' }).click();
-        await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat', { exact: true }).click();
+        await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+        await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
       });
       await expect(drawer.locator('[data-component="ai-conversation"]')).toBeVisible();
       const composer = drawer.getByLabel('Message Codex');
@@ -15487,8 +15487,8 @@ test('shows Trash below Archive and restores deleted tickets through the real ti
       restoreRequests.push(new URL(request.url()).pathname);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const navigation = page.locator('[data-component="view-navigation"]'),
     labels = () =>
       navigation
@@ -15536,12 +15536,12 @@ test('projects a newly created ticket within one frame without a collection refr
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const requests: string[] = [];
   page.on('request', (request) => requests.push(`${request.method()} ${new URL(request.url()).pathname}`));
   await page.getByRole('button', { name: 'New ticket…' }).click();
-  await page.getByRole('textbox', { name: 'Ticket title' }).fill('Immediate ticket');
+  await page.getByRole('textbox', { name: 'Ticket Title' }).fill('Immediate ticket');
   await page.evaluate(() => {
     const state = window as typeof window & {
       newTicketResponseAt?: number;
@@ -15626,8 +15626,8 @@ test('aligns Status controls without duplicating badge insets and preserves sele
   await page.setViewportSize({ width: 1440, height: 900 });
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail'),
     status = inspector.locator('.ticket-status-menu'),
@@ -15681,7 +15681,7 @@ test('aligns Status controls without duplicating badge insets and preserves sele
     await expect(badge).toHaveAttribute('data-status', value);
     await expect(status.locator('[data-action="open-inspector-status-menu"]')).toHaveAttribute(
       'aria-label',
-      `Change status, ${label}`,
+      `Change Status, ${label}`,
     );
     await expect(badge).toHaveAttribute('data-status', value);
     await expect(badge).toHaveText(label);
@@ -15696,13 +15696,13 @@ test('aligns Status controls without duplicating badge insets and preserves sele
       await captureInspectorStatus(inspector, 'target/visual-captures/hs2-ahadnk-status-wide.png');
   }
   await inspector.getByRole('button', { name: 'Block ticket' }).click();
-  await inspector.getByRole('textbox', { name: 'Blocked reason' }).fill('Waiting for review');
-  await inspector.getByRole('textbox', { name: 'Blocked reason' }).blur();
+  await inspector.getByRole('textbox', { name: 'Blocked Reason' }).fill('Waiting for review');
+  await inspector.getByRole('textbox', { name: 'Blocked Reason' }).blur();
   await expect(inspector.locator('[data-status-line] [data-component="blocked-badge"]')).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 700 });
   await expectStatusGeometry(inspector);
   await captureInspectorStatus(inspector, 'target/visual-captures/hs2-ahadnk-status-blocked-narrow.png');
-  await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+  await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expectStatusGeometry(reader);
@@ -15713,8 +15713,8 @@ test('matches Details label spacing to Category before and after editing (HS2-S6
   await page.setViewportSize({ width: 1440, height: 900 });
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   const sidebar = page.locator('#app-right-rail');
   const expectDetailsSpacing = async (surface: Locator) => {
@@ -15753,7 +15753,7 @@ test('matches Details label spacing to Category before and after editing (HS2-S6
   await exerciseDetails(sidebar, 'sidebar-wide');
   await page.setViewportSize({ width: 1024, height: 700 });
   await exerciseDetails(sidebar, 'sidebar-narrow');
-  await sidebar.getByRole('button', { name: 'Open ticket reader' }).click();
+  await sidebar.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   await page.setViewportSize({ width: 390, height: 844 });
   await exerciseDetails(reader, 'reader-mobile');
@@ -15762,8 +15762,8 @@ test('matches Details label spacing to Category before and after editing (HS2-S6
 test('autosaves ticket text fields without explicit save or cancel controls', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
@@ -15792,15 +15792,15 @@ test('autosaves ticket text fields without explicit save or cancel controls', as
   });
   await inspector.screenshot({ path: 'target/visual-captures/hs2-qbscn2-block-ticket-empty.png' });
   await inspector.getByRole('button', { name: 'Block ticket' }).click();
-  const blocked = inspector.getByRole('textbox', { name: 'Blocked reason' });
+  const blocked = inspector.getByRole('textbox', { name: 'Blocked Reason' });
   await blocked.fill('Waiting for review');
   await blocked.blur();
   await expect.poll(() => patches.some((patch) => patch.blocked_reason === 'Waiting for review')).toBe(true);
   await expect(inspector.getByText('Waiting for review', { exact: true })).toBeVisible();
-  await expect(inspector.getByRole('heading', { name: 'Blocked reason' })).toBeVisible();
+  await expect(inspector.getByRole('heading', { name: 'Blocked Reason' })).toBeVisible();
   await inspector.screenshot({ path: 'target/visual-captures/hs2-72kryh-blocked-reason.png' });
   await inspector.locator('.ticket-info-panel__blocked-surface').dblclick();
-  const clearReason = inspector.getByRole('textbox', { name: 'Blocked reason' });
+  const clearReason = inspector.getByRole('textbox', { name: 'Blocked Reason' });
   await expect(clearReason).toBeFocused();
   await clearReason.fill('   ');
   await clearReason.blur();
@@ -15811,8 +15811,8 @@ test('autosaves ticket text fields without explicit save or cancel controls', as
 test('honors the first control click while ticket details is focused', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
@@ -15832,19 +15832,19 @@ test('honors the first control click while ticket details is focused', async ({ 
 test('creates, cancels, edits, and deletes notes through the shared inspector and reader', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
-  await inspector.getByRole('button', { name: 'Add note' }).first().click();
+  await inspector.getByRole('button', { name: 'Add Note' }).first().click();
   const composer = inspector.locator('[data-component="note-composer"]');
   await expect(composer.getByRole('textbox', { name: 'New note' })).toBeFocused();
   await composer.getByRole('textbox', { name: 'New note' }).fill('Discard me');
   await composer.getByRole('button', { name: 'Cancel' }).click();
   await expect(composer).toHaveCount(0);
-  await inspector.getByRole('button', { name: 'Add note' }).first().click();
+  await inspector.getByRole('button', { name: 'Add Note' }).first().click();
   await inspector.getByRole('textbox', { name: 'New note' }).fill('Created note');
-  await inspector.getByRole('button', { name: 'Add note', exact: true }).last().click();
+  await inspector.getByRole('button', { name: 'Add Note', exact: true }).last().click();
   await expect
     .poll(() => patches.some((patch) => patch.note === 'Created note' && patch.note_kind === 'regular'))
     .toBe(true);
@@ -15870,9 +15870,9 @@ test('creates, cancels, edits, and deletes notes through the shared inspector an
     .poll(() => patches.some((patch) => patch.note_id === 'N3' && patch.note === 'Edited lifecycle note'))
     .toBe(true);
   await expect(editor).toHaveCount(0);
-  await inspector.locator('[data-note-id="N3"]').getByRole('button', { name: 'Delete note' }).click();
+  await inspector.locator('[data-note-id="N3"]').getByRole('button', { name: 'Delete Note' }).click();
   await expect(inspector.locator('[data-note-id="N3"]')).toHaveCount(0);
-  await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+  await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog');
   await expect(reader.getByRole('button', { name: 'Edit ticket', exact: true })).toHaveCount(0);
   const readerDetails = reader.getByRole('button', { name: 'Edit Ticket details' });
@@ -15881,7 +15881,7 @@ test('creates, cancels, edits, and deletes notes through the shared inspector an
   const readerDetailsEditor = reader.getByRole('textbox', { name: 'Ticket details' });
   await expect(readerDetailsEditor).toBeFocused();
   await readerDetailsEditor.blur();
-  await reader.getByRole('button', { name: 'Add note' }).first().click();
+  await reader.getByRole('button', { name: 'Add Note' }).first().click();
   const readerComposer = reader.locator('[data-component="note-composer"]');
   await expect(readerComposer).toBeVisible();
   await expect(readerComposer.getByRole('textbox', { name: 'New note' })).toBeFocused();
@@ -15901,13 +15901,13 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     const patches = await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByText('Use real project tickets').click();
     const inspector = page.locator('#app-right-rail');
     const parent = inspector.locator('[data-component="note-card"][data-note-id="N1"]');
     const feedbackDialog = page.locator('[data-component="ai-feedback-dialog"]');
-    await parent.getByRole('button', { name: 'Helpful — keep suggestions like this' }).click();
+    await parent.getByRole('button', { name: 'Helpful — Keep Suggestions Like This' }).click();
     await feedbackDialog.getByLabel('What should Hot Sheet keep doing?').fill('Keep the short status summary.');
     await feedbackDialog.getByRole('button', { name: 'Save feedback' }).click();
     await expect
@@ -15970,17 +15970,17 @@ for (const width of [1280, 390]) {
     await expect(reloaded.locator('.note-card__body').first()).not.toContainText('activity-distillation');
     await reloaded.screenshot({ path: `target/visual-captures/hs2-9r3xy0-feedback-${width}.png` });
     await reloaded.screenshot({ path: `target/visual-captures/hs2-2v52z6-feedback-${width}.png` });
-    await reloaded.getByRole('button', { name: 'Not helpful — stop suggestions like this' }).click();
+    await reloaded.getByRole('button', { name: 'Not Helpful — Stop Suggestions Like This' }).click();
     await feedbackDialog.getByLabel('What should Hot Sheet change or stop doing?').fill('Avoid the long summary.');
     await feedbackDialog.getByRole('button', { name: 'Update feedback' }).click();
     await expect.poll(() => patches.filter((patch) => Boolean(patch.ai_feedback)).length).toBe(2);
     await expect(reloaded.locator('.note-card__ai-feedback [data-component="note-card"]')).toHaveCount(1);
     page.once('dialog', (dialog) => dialog.accept());
-    await reloaded.getByRole('button', { name: 'Not helpful — stop suggestions like this' }).click();
+    await reloaded.getByRole('button', { name: 'Not Helpful — Stop Suggestions Like This' }).click();
     await expect.poll(() => patches.filter((patch) => Boolean(patch.ai_feedback)).length).toBe(3);
     await expect(reloaded.locator('.note-card__ai-feedback [data-component="note-card"]')).toHaveCount(1);
     await expect(reloaded).toContainText('Withdrawn.');
-    await reloaded.getByRole('button', { name: 'Delete note' }).first().click();
+    await reloaded.getByRole('button', { name: 'Delete Note' }).first().click();
     await expect(page.locator('#app-right-rail [data-note-id="N1"]')).toHaveCount(0);
     await expect(page.locator('#app-right-rail')).not.toContainText('Keep the short status summary.');
   });
@@ -15997,8 +15997,8 @@ test('aligns the empty Notes text and preserves Add note before the first note e
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
   const add = inspector.locator('.ticket-notes__add');
@@ -16027,7 +16027,7 @@ test('aligns the empty Notes text and preserves Add note before the first note e
     await page.screenshot({ path: `target/visual-captures/hs2-d4vee8-empty-notes-${name}.png`, clip });
   };
   await expect(add).toBeVisible();
-  await expect(add).toHaveText(/Add note/);
+  await expect(add).toHaveText(/Add Note/);
   await expectEmptyNotes(inspector, 'wide');
   await page.screenshot({ path: 'target/visual-captures/hs2-yn3x2j-empty-notes-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 844 });
@@ -16041,11 +16041,11 @@ test('aligns the empty Notes text and preserves Add note before the first note e
   await inspector.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(inspector.getByRole('textbox', { name: 'New note' })).toHaveCount(0);
   await expectEmptyNotes(inspector, 'after-cancel');
-  await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+  await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expectEmptyNotes(reader, 'reader-mobile');
-  await reader.getByRole('button', { name: 'Add note', exact: true }).last().click();
+  await reader.getByRole('button', { name: 'Add Note', exact: true }).last().click();
   await expect(reader.getByRole('textbox', { name: 'New note' })).toBeFocused();
   await expect(reader.locator('.ticket-notes__empty-inset')).toHaveCount(0);
 });
@@ -16054,8 +16054,8 @@ test('aligns the right inspector on shared menu primitives and its shared conten
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail'),
     info = inspector.locator('[data-component="ticket-info-panel"]');
@@ -16120,13 +16120,13 @@ test('edits title and tags through controlled capability-aware inspector state',
   await page.setViewportSize({ width: 1280, height: 720 });
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
   const title = inspector.getByRole('heading', { name: 'Use real project tickets' });
   await title.dblclick();
-  const titleInput = inspector.getByRole('textbox', { name: 'Ticket title' });
+  const titleInput = inspector.getByRole('textbox', { name: 'Ticket Title' });
   await titleInput.fill('Renamed ticket');
   await titleInput.blur();
   await expect.poll(() => patches.some((patch) => patch.title === 'Renamed ticket')).toBe(true);
@@ -16165,8 +16165,8 @@ test('wraps long titles while editing in the sidebar and reader at 1280 and 390 
   const patches = await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await page.locator('[data-ticket-slug="HS2-DEMO01"]').first().click();
@@ -16185,7 +16185,7 @@ test('wraps long titles while editing in the sidebar and reader at 1280 and 390 
     expect(titles.at(-1)).toBe(sidebarTitle);
     expect(titles.some((title) => /[\r\n]/.test(title))).toBe(false);
 
-    await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+    await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
     const reader = page.getByRole('dialog').locator('[data-component="ticket-inspector-header"]');
     const readerBefore = patches.length;
     const readerTitle = await editLongTitleThroughWrappingEditor(
@@ -16199,7 +16199,7 @@ test('wraps long titles while editing in the sidebar and reader at 1280 and 390 
       .poll(() => patches.slice(readerBefore).filter((patch) => typeof patch.title === 'string').length)
       .toBe(2);
     expect(patches.at(-1)?.title).toBe(readerTitle);
-    await page.getByRole('button', { name: 'Close ticket reader' }).click();
+    await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
   }
 });
 
@@ -16207,10 +16207,10 @@ test('keeps the title editor on the surface that started the edit at 1280 and 39
   const patches = await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const inspector = page.locator('#app-right-rail'),
-    sidebarEditor = inspector.getByRole('textbox', { name: 'Ticket title' }),
+    sidebarEditor = inspector.getByRole('textbox', { name: 'Ticket Title' }),
     ringVisible = (editor: Locator) =>
       editor.evaluate((node) => {
         const style = getComputedStyle(node),
@@ -16230,9 +16230,9 @@ test('keeps the title editor on the surface that started the edit at 1280 and 39
     const initialTitle = (await sidebarTitle.textContent())!.trim();
 
     // A reader edit opens only the reader's editor; the sidebar behind it keeps its static heading.
-    await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+    await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
     const reader = page.getByRole('dialog').locator('[data-component="ticket-inspector-header"]'),
-      readerEditor = reader.getByRole('textbox', { name: 'Ticket title' });
+      readerEditor = reader.getByRole('textbox', { name: 'Ticket Title' });
     await reader.locator('[data-action="edit-ticket-title"]').dblclick();
     await expect(readerEditor).toBeFocused();
     await expect(readerEditor).toHaveJSProperty('value', initialTitle);
@@ -16246,7 +16246,7 @@ test('keeps the title editor on the surface that started the edit at 1280 and 39
     await expect(readerEditor).toHaveCount(0);
     await expect(reader.getByRole('heading', { name: readerTitle })).toBeVisible();
     await expect.poll(() => patches.at(-1)?.title).toBe(readerTitle);
-    await page.getByRole('button', { name: 'Close ticket reader' }).click();
+    await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
     await expect(inspector.getByRole('heading', { name: readerTitle })).toBeVisible();
     await expect(sidebarEditor).toHaveCount(0);
 
@@ -16265,7 +16265,7 @@ test('keeps the title editor on the surface that started the edit at 1280 and 39
     await page.screenshot({ path: test.info().outputPath(`hs2-2m5bbn-sidebar-unfocused-${width}.png`) });
 
     // Starting a reader edit moves the editor to the reader; the sidebar shows its heading again.
-    await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+    await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
     await reader.locator('[data-action="edit-ticket-title"]').dblclick();
     await expect(readerEditor).toBeFocused();
     await expect(sidebarEditor).toHaveCount(0);
@@ -16274,7 +16274,7 @@ test('keeps the title editor on the surface that started the edit at 1280 and 39
     await readerEditor.press('Enter');
     await expect(readerEditor).toHaveCount(0);
     await expect.poll(() => patches.at(-1)?.title).toBe(finalTitle);
-    await page.getByRole('button', { name: 'Close ticket reader' }).click();
+    await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
 
     // A sidebar edit after the reader edit still opens in the sidebar and saves once on Enter.
     await inspector.locator('[data-action="edit-ticket-title"]').dblclick();
@@ -16291,17 +16291,17 @@ test('keeps the title editor on the surface that started the edit at 1280 and 39
 test('hides title and tag mutation affordances when the provider cannot update', async ({ page }) => {
   await mockProject(page, false);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('heading', { name: 'Use real project tickets' }).dblclick();
-  await expect(inspector.getByRole('textbox', { name: 'Ticket title' })).toHaveCount(0);
+  await expect(inspector.getByRole('textbox', { name: 'Ticket Title' })).toHaveCount(0);
   await expect(inspector.getByRole('combobox', { name: 'Add tag' })).toHaveCount(0);
   await expect(inspector.locator('.tag-chip')).toHaveCount(1);
   await expect(inspector.locator('.tag-chip [data-action="remove-tag-chip"]')).toHaveCount(0);
   await expect(inspector.getByRole('button', { name: 'Edit note' })).toHaveCount(0);
-  await expect(inspector.getByRole('button', { name: 'Delete note' })).toHaveCount(0);
+  await expect(inspector.getByRole('button', { name: 'Delete Note' })).toHaveCount(0);
   const statusField = inspector.locator('.ticket-info-panel__status-field'),
     status = statusField.locator('[data-component="status-badge"]');
   await expect(statusField.getByRole('heading', { name: 'Status' })).toBeVisible();
@@ -16317,8 +16317,8 @@ test('keeps an open inspector status popup at its trigger after its anchor is mo
 }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   const status = page.locator('#app-right-rail .ticket-status-menu'),
     trigger = status.locator('[data-action="open-inspector-status-menu"]'),
@@ -16351,8 +16351,8 @@ test('edits and clears the Started phase without changing lifecycle status', asy
       patches.push(request.postDataJSON());
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
   const status = inspector.locator('.ticket-status-menu');
@@ -16390,7 +16390,7 @@ test('edits and clears the Started phase without changing lifecycle status', asy
   await inspector
     .locator('.ticket-info-panel__metadata')
     .screenshot({ path: 'target/visual-captures/hs2-hhkjsc-phase-wide.png' });
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   await expect(
     page.locator('[data-column-id="started"] [data-ticket-slug="HS2-DEMO01"] [data-component="status-badge"]'),
   ).toHaveText('Initial testing');
@@ -16398,7 +16398,7 @@ test('edits and clears the Started phase without changing lifecycle status', asy
     .locator('[data-column-id="started"] [data-ticket-slug="HS2-DEMO01"]')
     .screenshot({ path: 'target/visual-captures/hs2-hhkjsc-column-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+  await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
   await inspector.getByRole('tab', { name: 'Timeline' }).click();
   await expect(inspector.locator('[data-component="ticket-timeline"]')).toContainText('Initial testing');
   await inspector.screenshot({ path: 'target/visual-captures/hs2-6t2vjm-phase-timeline-narrow.png' });
@@ -16432,9 +16432,9 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
       submitted = request.postDataJSON();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
   await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value', '.');
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.getByText('Use real project tickets')).toBeVisible();
   const featureRow = page.locator('[data-component="ticket-list-row"]', { hasText: 'Use real project tickets' });
   await expect(featureRow.locator('[data-lucide="sparkles"]')).toBeVisible();
@@ -16481,7 +16481,7 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await expect(timeline).not.toContainText('Status changed from Completed to Backlog');
   await page.screenshot({ path: 'target/visual-captures/hs2-szycjv-timeline-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+  await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
   await expect(page.locator('[data-component="ticket-timeline"]')).toBeVisible();
   await expect.poll(durationOffsetFromConnectorCenter).toBeLessThan(2);
   await page.screenshot({ path: 'target/visual-captures/hs2-szycjv-timeline-narrow.png' });
@@ -16530,7 +16530,7 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await page.screenshot({ path: 'target/visual-captures/hs2-chzkr5-create-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
   await expect(page.locator('[data-component="app-shell"]')).toHaveAttribute('data-mobile', 'false');
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   await expect(page.getByText('/work/demo.hs2')).toBeVisible();
 });
 
@@ -16538,8 +16538,8 @@ test('adapts the production AppShell below the former 1024 by 600 desktop floor'
   await page.setViewportSize({ width: 800, height: 500 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const shell = page.locator('[data-component="app-shell"]'),
     bounds = await shell.boundingBox();
@@ -16559,8 +16559,8 @@ test('adapts the production AppShell below the former 1024 by 600 desktop floor'
 test('shows reactive open and Up Next counts immediately above Drive', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.waitForTimeout(400);
   const sidebar = page.locator('#app-left-rail'),
@@ -16602,8 +16602,8 @@ test('overrides the default provider and reuses its dedicated drawer Drive chat'
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const sidebar = page.locator('#app-left-rail'),
     drive = sidebar.locator('[data-action="toggle-drive"]'),
@@ -16611,7 +16611,7 @@ test('overrides the default provider and reuses its dedicated drawer Drive chat'
   await expect(addView).toBeEnabled();
   await expect(addView).toHaveAttribute('title', 'Add view');
   await expect(sidebar.locator('wa-select[name="drive-tool"]')).toHaveCount(0);
-  await sidebar.getByRole('button', { name: 'Choose Drive provider, model, and effort' }).click();
+  await sidebar.getByRole('button', { name: 'Choose Drive Provider, Model, and Effort' }).click();
   await sidebar.locator('wa-dropdown-item').filter({ hasText: 'Provider' }).first().hover();
   await sidebar.locator('[data-action="select-drive-tool"][data-value="claude"]').click();
   await expect(drive).toHaveAccessibleName('Drive with Claude');
@@ -16670,10 +16670,10 @@ test('keeps the Drive menu open while choosing provider, model, and effort', asy
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const sidebar = page.locator('#app-left-rail'),
-    options = sidebar.getByRole('button', { name: 'Choose Drive provider, model, and effort' }),
+    options = sidebar.getByRole('button', { name: 'Choose Drive Provider, Model, and Effort' }),
     menu = sidebar.locator('[data-context-menu="drive-options"]');
   await options.click();
   await menu.locator(':scope > wa-dropdown-item').filter({ hasText: 'Provider' }).hover();
@@ -16717,13 +16717,13 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const sidebar = page.locator('#app-left-rail'),
     drive = sidebar.locator('[data-action="toggle-drive"]'),
-    conversationAction = sidebar.getByRole('button', { name: 'Open Codex conversation' });
+    conversationAction = sidebar.getByRole('button', { name: 'Open Codex Conversation' });
   await expect(conversationAction).toBeEnabled();
   await expect(drive).toHaveAccessibleName('Drive with Codex');
   await conversationAction.click();
@@ -16731,7 +16731,7 @@ test('opens a Codex chat without implicitly starting Drive through the productio
     dialog = conversationHost.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await expect(conversationHost).not.toContainText('$hotsheet');
-  await expect(conversationHost.getByRole('button', { name: 'Close conversation' })).toHaveCount(0);
+  await expect(conversationHost.getByRole('button', { name: 'Close Conversation' })).toHaveCount(0);
   await expect(drive).toHaveAccessibleName('Drive with Codex');
   await expect
     .poll(() => driveRequests)
@@ -16768,14 +16768,14 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   await expect(foregroundPopup).toHaveAttribute('data-layer', 'flow');
   await expect(foregroundPopup).toHaveCSS('position', 'relative');
   await expect(foregroundPopup).toHaveCSS('pointer-events', 'auto');
-  await expect(conversationHost.getByRole('button', { name: 'Save conversation' })).toHaveJSProperty(
+  await expect(conversationHost.getByRole('button', { name: 'Save Conversation' })).toHaveJSProperty(
     'tagName',
     'BUTTON',
   );
-  await expect(conversationHost.getByRole('button', { name: 'Save conversation' })).toBeDisabled();
+  await expect(conversationHost.getByRole('button', { name: 'Save Conversation' })).toBeDisabled();
   await expect(conversationHost.getByRole('button', { name: 'Stop Codex' })).toHaveJSProperty('tagName', 'BUTTON');
   await expect(conversationHost.getByRole('button', { name: 'Stop Codex' })).toBeVisible();
-  await conversationHost.getByRole('button', { name: 'Helpful — keep suggestions like this' }).last().click();
+  await conversationHost.getByRole('button', { name: 'Helpful — Keep Suggestions Like This' }).last().click();
   const feedbackDialog = page.locator('[data-component="ai-feedback-dialog"]');
   await expect(feedbackDialog.getByRole('dialog')).toBeVisible();
   await feedbackDialog
@@ -16784,7 +16784,7 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   await feedbackDialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(feedbackDialog).toHaveCount(0);
   expect(patches.some((patch) => Boolean(patch.ai_feedback))).toBe(false);
-  await conversationHost.getByRole('button', { name: 'Helpful — keep suggestions like this' }).last().click();
+  await conversationHost.getByRole('button', { name: 'Helpful — Keep Suggestions Like This' }).last().click();
   await feedbackDialog
     .getByLabel('What should Hot Sheet keep doing?')
     .fill('Keep the concise summaries.\n\n**Use examples.**');
@@ -16828,9 +16828,9 @@ test('keeps activity before the result that resumes after a permission pause', a
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Open Codex conversation' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const conversation = page.locator('[data-component="ai-conversation"]'),
     dialog = conversation.getByRole('dialog'),
     transcript = conversation.locator('.ai-conversation__transcript');
@@ -16897,10 +16897,10 @@ for (const viewport of [
     });
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-    await page.getByRole('button', { name: 'Open Codex conversation' }).click();
+    await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
     const conversation = page.locator('[data-component="ai-conversation"]'),
       dialog = conversation.getByRole('dialog'),
       popup = conversation.locator('.ai-conversation__foreground [data-component="permission-request-popup"]');
@@ -16979,10 +16979,10 @@ for (const viewport of [
     });
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-    await page.getByRole('button', { name: 'Open Codex conversation' }).click();
+    await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
     const conversation = page.locator('[data-component="ai-conversation"]'),
       dialog = conversation.getByRole('dialog'),
       foreground = conversation.locator('.ai-conversation__foreground'),
@@ -17074,10 +17074,10 @@ test('clears a foreground permission from its authoritative event while the Allo
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  await page.getByRole('button', { name: 'Open Codex conversation' }).click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const conversation = page.locator('[data-component="ai-conversation"]'),
     dialog = conversation.getByRole('dialog'),
     popup = conversation.locator('.ai-conversation__foreground [data-component="permission-request-popup"]');
@@ -17148,8 +17148,8 @@ test('restores an optimistically dismissed permission only when communication fa
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toBeVisible();
   await popup.getByRole('button', { name: 'Deny' }).click();
@@ -17184,25 +17184,25 @@ test('does not reopen a permission popup after the server reports that approval 
     return route.fulfill({ status: 404, json: { error: 'Unknown permission request' } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toBeVisible();
   await popup.getByRole('button', { name: 'Allow Once' }).click();
   await expect(popup).toHaveCount(0);
   await expect.poll(() => pending.length).toBe(0);
   await expect(popup).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Notifications view' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Notifications View' })).toBeVisible();
 });
 
 test('presents a legible, aligned AI chat without exposing its session id', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
-  await page.getByRole('button', { name: 'Open Codex conversation' }).click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const host = page.locator('[data-component="ai-conversation"]'),
     dialog = host.getByRole('dialog'),
     composer = host.getByLabel('Message Codex');
@@ -17256,9 +17256,9 @@ test('omits effort after selecting a model that does not support it', async ({ p
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   const settings = page.locator('[data-component="ai-tool-settings"]'),
     tool = settings.locator('wa-select[name="ai-default-tool"]');
@@ -17270,13 +17270,13 @@ test('omits effort after selecting a model that does not support it', async ({ p
   await page.waitForTimeout(300);
   await page.screenshot({ path: test.info().outputPath('ai-tools-project-saved-narrow.png') });
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.getByLabel('List view').click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByLabel('List View').click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const host = drawer.locator('[data-component="ai-conversation"]');
   await expect(host).toBeVisible();
   await expect(host.locator('.ai-conversation__model-effort')).toHaveText('medium');
@@ -17313,9 +17313,9 @@ test('configures per-provider AI defaults and exposes Claude Fable effort (HS2-E
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   const settings = page.locator('[data-component="ai-tool-settings"]'),
     tool = settings.locator('wa-select[name="ai-default-tool"]'),
@@ -17411,9 +17411,9 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   const settings = page.locator('[data-component="ai-tool-settings"]'),
     model = settings.locator('wa-select[name="ai-provider-model-codex"]'),
@@ -17426,8 +17426,8 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
   await expect(dialogHost).toContainText('accepted by Codex');
   await page.waitForTimeout(250);
   await page.screenshot({ path: 'target/visual-captures/hs2-p28pv9-other-model-dialog-wide.png', fullPage: true });
-  await page.getByRole('textbox', { name: /Model identifier/ }).fill(custom);
-  await dialogHost.getByRole('button', { name: 'Use model' }).click();
+  await page.getByRole('textbox', { name: /Model Identifier/ }).fill(custom);
+  await dialogHost.getByRole('button', { name: 'Use Model' }).click();
   await expect
     .poll(() => saves.at(-1))
     .toEqual({ tool: 'codex', model: custom, providers: { codex: { model: custom } } });
@@ -17449,9 +17449,9 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
     });
   await expect(model.locator(`wa-option[value='${custom}']`)).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   const sidebar = page.locator('#app-left-rail'),
-    options = sidebar.getByRole('button', { name: 'Choose Drive provider, model, and effort' }),
+    options = sidebar.getByRole('button', { name: 'Choose Drive Provider, Model, and Effort' }),
     menu = sidebar.locator('[data-context-menu="drive-options"]'),
     driveCustom = "drive legacy 'one'";
   await options.click();
@@ -17459,14 +17459,14 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
   await modelMenu.hover();
   await modelMenu.locator('[data-action="open-drive-manual-model"]').click();
   await expect(dialog).toBeVisible();
-  await page.getByRole('textbox', { name: /Model identifier/ }).fill(driveCustom);
+  await page.getByRole('textbox', { name: /Model Identifier/ }).fill(driveCustom);
   await page.setViewportSize({ width: 760, height: 640 });
   await page.waitForTimeout(250);
   await page.screenshot({
     path: 'target/visual-captures/hs2-p28pv9-drive-other-model-dialog-narrow.png',
     fullPage: true,
   });
-  await dialogHost.getByRole('button', { name: 'Use model' }).click();
+  await dialogHost.getByRole('button', { name: 'Use Model' }).click();
   await page.setViewportSize({ width: 1280, height: 800 });
   await options.click();
   const selectedCustom = modelMenu.locator(`[data-action="select-drive-model"][data-value="${driveCustom}"]`);
@@ -17501,9 +17501,9 @@ test('sends a manually entered live-conversation model literally', async ({ page
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Open Codex conversation' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   const chat = page.locator('[data-component="ai-conversation"]'),
     custom = 'legacy model "chat"';
   await chat.locator('[data-conversation-model-menu] [slot="trigger"]').click();
@@ -17512,8 +17512,8 @@ test('sends a manually entered live-conversation model literally', async ({ page
   await modelSubmenu.locator('[data-action="open-conversation-manual-model"]').click();
   const manualDialog = page.locator('[data-component="manual-model-dialog"]');
   await expect(manualDialog.locator('dialog')).toBeVisible();
-  await page.getByRole('textbox', { name: /Model identifier/ }).fill(custom);
-  await manualDialog.getByRole('button', { name: 'Use model' }).click();
+  await page.getByRole('textbox', { name: /Model Identifier/ }).fill(custom);
+  await manualDialog.getByRole('button', { name: 'Use Model' }).click();
   await expect(chat.locator('.ai-conversation__model-name')).toHaveAttribute('title', custom);
   await expect(manualDialog.locator('dialog')).toBeHidden();
   await expect(chat.locator('[data-conversation-model-menu]')).not.toHaveAttribute('open');
@@ -17560,9 +17560,9 @@ test('shows runtime-discovered Antigravity and OpenCode model catalogs', async (
   );
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   const settings = page.locator('[data-component="ai-tool-settings"]'),
     tool = settings.locator('wa-select[name="ai-default-tool"]'),
@@ -17612,21 +17612,21 @@ test('retries a failed AI-tool discovery from Drive without showing a false empt
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await expect.poll(() => baseAttempts).toBeGreaterThan(0);
   const sidebar = page.locator('#app-left-rail'),
-    options = sidebar.getByRole('button', { name: 'Choose Drive provider, model, and effort' });
+    options = sidebar.getByRole('button', { name: 'Choose Drive Provider, Model, and Effort' });
   await options.click();
   const menu = sidebar.locator('[data-context-menu="drive-options"]');
   await expect(menu).toContainText('Detecting AI tools…');
-  await expect(menu).not.toContainText('No AI tools detected');
+  await expect(menu).not.toContainText('No AI Tools Detected');
   await page.screenshot({ path: 'target/visual-captures/hs2-cx4xzr-discovery-retry-wide.png', fullPage: true });
   await expect.poll(() => refreshAttempts).toBe(1);
   releaseDiscovery();
   await expect(menu.locator('[data-action="select-drive-tool"][data-value="opencode"]')).toBeAttached();
-  await expect(menu).not.toContainText('No AI tools detected');
+  await expect(menu).not.toContainText('No AI Tools Detected');
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(menu.locator('[data-action="select-drive-model"][data-value="openai/gpt-5.6"]')).toBeAttached();
   await page.screenshot({ path: 'target/visual-captures/hs2-cx4xzr-discovery-retry-narrow.png', fullPage: true });
@@ -17661,8 +17661,8 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const summary = page.locator('[data-component="project-summary"]'),
     chart = summary.locator('[role="img"]');
@@ -17677,7 +17677,7 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   await expect(shell).toHaveAttribute('data-mode', 'stats');
   // The per-project statistics view hosts the completion-confidence calibration (HS2-Q1WCCY).
   await expect(
-    page.getByRole('region', { name: 'demo project statistics' }).locator('[data-component="confidence-calibration"]'),
+    page.getByRole('region', { name: 'demo Project Statistics' }).locator('[data-component="confidence-calibration"]'),
   ).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-y51ehn-project-stats-wide.png', fullPage: true });
   await page.getByRole('tab', { name: 'demo' }).click();
@@ -17689,10 +17689,10 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   await expect(summary).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await page.screenshot({ path: 'target/visual-captures/hs2-q1y8z7-completion-chart-narrow.png', fullPage: true });
   await summary.click();
-  await expect(page.getByRole('region', { name: 'demo project statistics' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'demo Project Statistics' })).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-y51ehn-project-stats-narrow.png', fullPage: true });
-  await page.getByRole('button', { name: 'Cross-project stats' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Cross-project stats' })).toBeVisible();
+  await page.getByRole('button', { name: 'Cross-Project Stats' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Cross-Project Stats' })).toBeVisible();
 });
 
 test('uses the compact workspace title and project-tab action on desktop while preserving mobile (HS2-9R1F91)', async ({
@@ -17701,12 +17701,12 @@ test('uses the compact workspace title and project-tab action on desktop while p
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
 
   const shell = page.locator('[data-component="app-shell"]'),
-    mainToolbar = shell.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]').first(),
+    mainToolbar = shell.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]').first(),
     projectTabs = shell.locator('.project-tab-bar'),
     title = page.locator('#workspace-page-title'),
     launcher = page.getByRole('button', { name: 'New ticket…' });
@@ -17730,10 +17730,10 @@ test('uses the compact workspace title and project-tab action on desktop while p
   const openProjectDialog = page.locator('[data-project-dialog]').locator('dialog');
   await expect(openProjectDialog).toBeHidden();
   await page.screenshot({ path: 'target/visual-captures/hs2-9r1f91-main-header-wide-final.png', fullPage: true });
-  await page.getByRole('button', { name: 'Hide project sidebar' }).click();
+  await page.getByRole('button', { name: 'Hide Project Sidebar' }).click();
 
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
-  await expect(page.locator('.workspace-header__identity')).toContainText('Workspace grid');
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  await expect(page.locator('.workspace-header__identity')).toContainText('Workspace Grid');
   await expect(projectTabs.locator('[data-component="quick-ticket-composer-launcher"]')).toHaveCount(0);
   await page.getByRole('tab', { name: 'demo' }).click();
 
@@ -17753,8 +17753,8 @@ test('uses the compact workspace title and project-tab action on desktop while p
 test('keeps the priority select open when opened right after creating a ticket (HS2-43F14D)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const launcher = page.getByRole('button', { name: 'New ticket…' });
   await launcher.click();
   const form = page.locator('[data-action="create-ticket-form"]');
@@ -17776,8 +17776,8 @@ test('keeps the priority select open when opened right after creating a ticket (
 test('focuses the ticket title every time the real composer expands', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const launcher = page.getByRole('button', { name: 'New ticket…' });
   await launcher.click();
   const title = page.locator('wa-input[name="new-ticket-title"]');
@@ -17798,8 +17798,8 @@ test('stages safe attachment drops from the collapsed and expanded new-ticket co
       uploads.push(decodeURIComponent(request.headers()['x-hotsheet-filename'] ?? ''));
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   // The launcher is a Web Awesome pill (HS2-PNCDAE): a real drag event starts on its shadow button and
   // is composed, so the delegated drop target sees (and marks) the host.
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
@@ -17929,8 +17929,8 @@ test('generates video posters in the browser for uploads and lazy backfills with
     return Array.from(new Uint8Array(await new Blob(chunks, { type: 'video/webm' }).arrayBuffer()));
   });
   videoBodies.set('VIDEO1', Buffer.from(portableVideo));
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await expect.poll(() => posters.has('VIDEO1')).toBe(true);
@@ -17969,7 +17969,7 @@ test('generates video posters in the browser for uploads and lazy backfills with
   const unsupportedGallery = page.getByRole('dialog', { name: /Video 2 of 3: unsupported.mov/ });
   await expect(unsupportedGallery.locator('video')).not.toHaveAttribute('controls', /.+/);
   await expect(unsupportedGallery.getByRole('button', { name: 'Play' })).toBeVisible();
-  await unsupportedGallery.getByRole('button', { name: 'Volume controls' }).click();
+  await unsupportedGallery.getByRole('button', { name: 'Volume Controls' }).click();
   await expect(unsupportedGallery.getByRole('button', { name: 'Mute video' })).toBeVisible();
   await expect(page.locator('.app-error')).toHaveCount(0);
   await page.keyboard.press('Escape');
@@ -18008,8 +18008,8 @@ test('releases video resources and event work after repeated gallery playback cy
     route.fulfill({ contentType: 'video/mp4', body: 'video fixture' }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const opener = page.getByRole('button', { name: 'Open walkthrough.mp4 in media gallery' });
@@ -18172,8 +18172,8 @@ test('keeps decoded video seeks responsive across repeated real playback session
       },
     });
   });
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const opener = page.getByRole('button', { name: 'Open reliability.webm in media gallery' }),
@@ -18265,11 +18265,11 @@ test('keeps decoded video seeks responsive across repeated real playback session
 test('restores project-scoped ticket creation and staged files after reload', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Create ticket' });
-  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('A ticket draft that survives refresh');
+  await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('A ticket draft that survives refresh');
   await dialog.getByRole('textbox', { name: 'Details' }).fill('Draft **Markdown** details');
   await dialog
     .getByLabel('Browse attachments for new ticket', { exact: true })
@@ -18282,7 +18282,7 @@ test('restores project-scoped ticket creation and staged files after reload', as
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const restoredForm = page.locator('[data-action="create-ticket-form"]');
   await expect(restoredForm).toBeVisible();
-  await expect(dialog.getByRole('textbox', { name: 'Ticket title' })).toHaveValue(
+  await expect(dialog.getByRole('textbox', { name: 'Ticket Title' })).toHaveValue(
     'A ticket draft that survives refresh',
   );
   await expect(dialog.getByRole('textbox', { name: 'Details' })).toHaveValue('Draft **Markdown** details');
@@ -18300,8 +18300,8 @@ test('keeps Markdown attachment images in flow and reports reference copies with
   });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   await inspector.evaluate((node: HTMLElement) => {
@@ -18322,7 +18322,7 @@ test('keeps Markdown attachment images in flow and reports reference copies with
     .locator('xpath=ancestor::article')
     .screenshot({ path: 'target/visual-captures/hs2-xane1p-direct-attachment-reference.png' });
   await page.getByRole('tab', { name: /Attachments/ }).click();
-  await page.getByRole('button', { name: 'More actions for proof.png' }).click();
+  await page.getByRole('button', { name: 'More Actions for proof.png' }).click();
   await page.locator('[data-context-menu="attachment"]').getByRole('menuitem', { name: 'Copy reference' }).click();
   await expect(page.locator('.app-toast')).toContainText('Attachment reference copied to clipboard.');
   await expect(page.locator('[data-attachments-status]')).toHaveCount(0);
@@ -18338,8 +18338,8 @@ test('shows the attachment actions menu above the modal ticket reader (HS2-EZ10R
   });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').dblclick();
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ });
   await expect(reader).toBeVisible();
@@ -18347,7 +18347,7 @@ test('shows the attachment actions menu above the modal ticket reader (HS2-EZ10R
     await reader.evaluate((host) => (host.shadowRoot!.querySelector('dialog') as HTMLDialogElement).matches(':modal')),
   ).toBe(true);
   await reader.getByRole('tab', { name: /Attachments/ }).click();
-  await reader.getByRole('button', { name: 'More actions for proof.png' }).click();
+  await reader.getByRole('button', { name: 'More Actions for proof.png' }).click();
   const menu = page.locator('[data-context-menu="attachment"]');
   await expect(menu.getByRole('menu').first()).toBeVisible();
   // The menu renders as a descendant of the modal reader dialog, so it is on top AND interactive
@@ -18366,8 +18366,8 @@ test('suppresses background app shortcuts while a modal dialog is open (HS2-FW4P
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const searchField = page.getByRole('searchbox', { name: 'Search tickets' });
   // Open the modal ticket reader, then the Open-search shortcut must NOT reach the background search.
@@ -18406,8 +18406,8 @@ test('renders canonical attachment references for filenames containing backticks
     route.request().method() === 'GET' ? route.fulfill({ json: { store: 'git-local', ...ticket } }) : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail'),
     reference = inspector.getByRole('link', { name: filename });
@@ -18440,20 +18440,20 @@ test('crops a gallery image and restores hidden original annotations (HS2-VFBYZY
       );
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
   const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ });
   await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(2);
   await gallery.getByRole('button', { name: 'Annotate media' }).click();
-  const cropToolbar = gallery.getByRole('toolbar', { name: 'Media crop' });
+  const cropToolbar = gallery.getByRole('toolbar', { name: 'Media Crop' });
   const cropButton = cropToolbar.getByRole('button', { name: 'Crop image' });
   await expect(cropButton).toBeVisible();
   const cropHeight = await cropButton.evaluate((node) => node.getBoundingClientRect().height);
   const zoomHeight = await gallery
-    .getByRole('button', { name: 'Zoom in' })
+    .getByRole('button', { name: 'Zoom In' })
     .evaluate((node) => node.getBoundingClientRect().height);
   expect(Math.abs(cropHeight - zoomHeight)).toBeLessThan(2);
   await cropToolbar.screenshot({ path: 'target/visual-captures/hs2-w619yz-crop-wide.png', animations: 'disabled' });
@@ -18510,8 +18510,8 @@ test('crops a gallery image and restores hidden original annotations (HS2-VFBYZY
 test('keeps gallery shortcuts out of a focused annotation note (HS2-V14PVP)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByLabel('Browse and add attachments').setInputFiles({
@@ -18561,8 +18561,8 @@ test.describe('phone touch annotation editing (HS2-BCA512)', () => {
     test.skip(browserName === 'firefox', 'Firefox has no mobile (isMobile) emulation.');
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
     await page.getByRole('tab', { name: /Attachments/ }).click();
     await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
@@ -18612,8 +18612,8 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
       writes.push(request.postDataJSON());
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
@@ -18624,16 +18624,16 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   const footerToolbar = gallery.locator('.attachment-gallery__footer-actions');
   await expect(footerToolbar.locator('[data-component="toolbar-control-group"]')).toHaveCount(2);
   await expect(gallery.getByRole('button', { name: 'Add rectangle' })).toBeInViewport({ ratio: 1 });
-  await expect(gallery.getByRole('button', { name: 'Zoom in' })).toBeInViewport({ ratio: 1 });
+  await expect(gallery.getByRole('button', { name: 'Zoom In' })).toBeInViewport({ ratio: 1 });
   await gallery.screenshot({ path: 'target/visual-captures/hs2-kb5yy6-gallery-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(gallery.getByRole('button', { name: 'Add rectangle' })).toBeInViewport({ ratio: 1 });
-  await expect(gallery.getByRole('button', { name: 'Zoom in' })).toBeInViewport({ ratio: 1 });
+  await expect(gallery.getByRole('button', { name: 'Zoom In' })).toBeInViewport({ ratio: 1 });
   await gallery.screenshot({ path: 'target/visual-captures/hs2-kb5yy6-gallery-phone.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
   const stage = gallery.locator('.attachment-gallery__stage'),
     media = gallery.locator('.attachment-gallery__media-wrap'),
-    notes = gallery.getByRole('complementary', { name: 'Annotation notes' });
+    notes = gallery.getByRole('complementary', { name: 'Annotation Notes' });
   await expect(notes).toBeVisible();
   await expect.poll(async () => (await stage.boundingBox())?.width).toBeGreaterThan(900);
   const stageBeforeSelection = (await stage.boundingBox())!,
@@ -18726,7 +18726,7 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   await activity.scrollIntoViewIfNeeded();
   await inspector.screenshot({ path: 'target/visual-captures/hs2-grgdze-annotation-note-wide.png' });
   await page.setViewportSize({ width: 940, height: 844 });
-  await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+  await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
   await activity.scrollIntoViewIfNeeded();
   await inspector.screenshot({ path: 'target/visual-captures/hs2-grgdze-annotation-note-narrow.png' });
   await page.getByRole('tab', { name: /Attachments/ }).click();
@@ -18748,8 +18748,8 @@ test('keeps failed gallery markup visible until retry succeeds (HS2-VXCSMZ) @ci-
       : route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
@@ -18777,11 +18777,11 @@ test('keeps failed gallery markup visible until retry succeeds (HS2-VXCSMZ) @ci-
       }),
     )
     .toBe(true);
-  await expect(gallery.getByRole('button', { name: 'Retry save' })).toBeInViewport();
+  await expect(gallery.getByRole('button', { name: 'Retry Save' })).toBeInViewport();
   await page.screenshot({ path: 'target/visual-captures/hs2-1frwaj-save-banner-failed-390.png' });
   await page.setViewportSize(wide);
   await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(1);
-  await gallery.getByRole('button', { name: 'Retry save' }).click();
+  await gallery.getByRole('button', { name: 'Retry Save' }).click();
   await expect(gallery.getByRole('alert')).toHaveCount(0);
   await expect(page.locator('.app-toast')).toContainText('Annotations saved.');
   expect(attempts).toBe(2);
@@ -18804,8 +18804,8 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
       writes.push(request.postDataJSON() as { annotations: MediaAnnotation[] });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
@@ -18813,7 +18813,7 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
     stage = gallery.locator('[data-gallery-zoom-stage="true"]'),
     surface = gallery.locator('[data-gallery-annotation-surface="true"]');
   await gallery.getByRole('button', { name: 'Annotate media' }).click();
-  const markupToolbar = gallery.getByRole('toolbar', { name: 'Media markup' });
+  const markupToolbar = gallery.getByRole('toolbar', { name: 'Media Markup' });
   for (const [tool, icon] of Object.entries({
     select: 'mouse-pointer-2',
     freehand: 'pencil-line',
@@ -19107,8 +19107,8 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
   };
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: `Open ${videoName} in media gallery, 2 annotations` }).click();
@@ -19342,8 +19342,8 @@ test('links ticket references in details and notes and layers the referenced tic
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   const backlogLink = inspector.getByRole('link', { name: 'HS2-BACK01' }),
@@ -19368,8 +19368,8 @@ test('renders attachment identity from a selected real ticket', async ({ page })
       hostActions.push(request.postData() ?? '');
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await expect(page.locator('#app-right-rail')).toContainText('Use real project tickets');
@@ -19382,7 +19382,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const item = page.locator('[data-attachment-id="A1"]');
   await expect(item).toContainText('proof.png');
-  const more = item.getByRole('button', { name: 'More actions for proof.png' });
+  const more = item.getByRole('button', { name: 'More Actions for proof.png' });
   await expect(more).toHaveAttribute('title', 'More actions for proof.png');
   await expect(more.locator('[data-lucide="more-horizontal"]')).toBeVisible();
   await expect(item.getByRole('button')).toHaveCount(1);
@@ -19416,7 +19416,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await gallery.screenshot({ path: 'target/visual-captures/hs2-64651d-gallery-wide.png' });
   await page.keyboard.press('Escape');
   await expect(gallery).toHaveCount(0);
-  await page.locator('#app-right-rail').getByRole('button', { name: 'Open ticket reader' }).click();
+  await page.locator('#app-right-rail').getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ });
   await expect(reader.locator('dialog:modal')).toHaveCount(1);
   await reader.locator('.markdown-preview__attachment-image').click();
@@ -19426,7 +19426,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await page.screenshot({ path: 'target/visual-captures/hs2-wqe7br-reader-gallery-after.png', fullPage: true });
   await page.keyboard.press('Escape');
   await expect(gallery).toHaveCount(0);
-  await reader.getByRole('button', { name: 'Close ticket reader' }).click();
+  await reader.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await expect(reader).toHaveCount(0);
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await thumbnail.evaluate((node) =>
@@ -19503,7 +19503,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
     .screenshot({ path: 'target/visual-captures/hs2-vqvf5b-attachment-menu-wide.png' });
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 940, height: 844 });
-  await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+  await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
   await item.scrollIntoViewIfNeeded();
   await more.click();
   await expect(attachmentMenu.getByRole('menuitem', { name: 'Show in Finder' })).toBeVisible();
@@ -19550,7 +19550,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await expect(page.getByRole('alert')).toContainText('floating-capture.png');
   await expect(page.getByRole('alert')).toContainText('Wait for it to appear on the desktop');
   await expect(page.locator('[data-attachment-id="A5"]')).toHaveCount(0);
-  await page.getByRole('button', { name: 'More actions for new-proof.txt' }).click();
+  await page.getByRole('button', { name: 'More Actions for new-proof.txt' }).click();
   await page.locator('[data-context-menu="attachment"]').getByRole('menuitem', { name: 'Remove' }).click();
   await expect(page.locator('[data-attachment-id="A3"]')).toHaveCount(0);
   await expect(page.locator('.app-toast')).toContainText('Attachment removed.');
@@ -19568,8 +19568,8 @@ test('renders attachment identity from a selected real ticket', async ({ page })
 test('edits non-empty and empty details on a single click (HS2-H1K9YY)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   const preview = page.getByRole('button', { name: 'Edit Ticket details' });
   await preview.click({ position: { x: 4, y: 4 } });
@@ -19600,7 +19600,7 @@ test('edits non-empty and empty details on a single click (HS2-H1K9YY)', async (
     resize: 'vertical',
   });
   await detailsSurface.screenshot({ path: 'target/visual-captures/hs2-7nzkyc-details-editor-wide.png' });
-  await page.getByRole('button', { name: 'Open ticket reader' }).click();
+  await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ });
   await expect(reader).toBeVisible();
   const readerPreview = reader.getByRole('button', { name: 'Edit Ticket details' });
@@ -19609,7 +19609,7 @@ test('edits non-empty and empty details on a single click (HS2-H1K9YY)', async (
   await expect(reader.getByRole('textbox', { name: 'Ticket details' })).toHaveValue('Carried into the larger editor');
   await expect(reader.getByRole('textbox', { name: 'Feedback response' })).toHaveCount(0);
   await expect(reader.locator('article[data-note-id="N2"]')).toHaveAttribute('data-kind', 'regular');
-  await reader.getByRole('button', { name: 'Close ticket reader' }).click();
+  await reader.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await expect(reader).toHaveCount(0);
   await expect(source).toHaveCount(0);
   await page.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
@@ -19631,8 +19631,8 @@ test('edits non-empty and empty details on a single click (HS2-H1K9YY)', async (
 test('keeps reader details, blocked reason, and note edit state independent from the sidebar', async ({ page }) => {
   const patches = await mockProject(page, true, false, 0, 0, 300);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await row.dblclick();
   let reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' }),
@@ -19646,27 +19646,27 @@ test('keeps reader details, blocked reason, and note edit state independent from
   await expect(reader.getByRole('textbox', { name: 'Ticket details' })).toHaveCount(0);
   await expect(preview).toContainText('The real ticket body.');
   await reader.getByRole('button', { name: 'Block ticket' }).click();
-  await expect(reader.getByRole('textbox', { name: 'Blocked reason' })).toBeVisible();
-  await expect(sidebar.getByRole('textbox', { name: 'Blocked reason' })).toHaveCount(0);
-  await reader.getByRole('textbox', { name: 'Blocked reason' }).blur();
+  await expect(reader.getByRole('textbox', { name: 'Blocked Reason' })).toBeVisible();
+  await expect(sidebar.getByRole('textbox', { name: 'Blocked Reason' })).toHaveCount(0);
+  await reader.getByRole('textbox', { name: 'Blocked Reason' }).blur();
   await reader.getByText('Editable note with').dblclick();
   await expect(reader.getByRole('textbox', { name: 'Note body' })).toBeVisible();
   await expect(sidebar.getByRole('textbox', { name: 'Note body' })).toHaveCount(0);
   await reader.getByRole('textbox', { name: 'Note body' }).blur();
   await preview.click({ position: { x: 4, y: 4 } });
-  await reader.getByRole('button', { name: 'Close ticket reader' }).click();
+  await reader.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await expect(reader).toHaveCount(0);
   const inspector = page.locator('#app-right-rail');
   await expect(inspector.getByRole('textbox', { name: 'Ticket details' })).toHaveCount(0);
   await expect(inspector.getByRole('button', { name: 'Edit Ticket details' })).toContainText('The real ticket body.');
-  await page.getByRole('button', { name: 'Open ticket reader' }).click();
+  await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   preview = reader.getByRole('button', { name: 'Edit Ticket details' });
   await preview.click({ position: { x: 4, y: 4 } });
   source = reader.getByRole('textbox', { name: 'Ticket details' });
   await source.fill('Saved while the reader closes');
   await page.screenshot({ path: 'target/visual-captures/hs2-x3gx39-reader-edit-wide.png', fullPage: true });
-  await reader.getByRole('button', { name: 'Close ticket reader' }).click();
+  await reader.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await expect(reader).toHaveCount(0);
   await expect.poll(() => patches.some((patch) => patch.details === 'Saved while the reader closes')).toBe(true);
   await expect(inspector.getByRole('textbox', { name: 'Ticket details' })).toHaveCount(0);
@@ -19680,8 +19680,8 @@ test('keeps reader details, blocked reason, and note edit state independent from
 test('persists separate sidebar, reader, and new-ticket heights through rerenders', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail'),
     resize = async (locator: Locator, height: number) => {
@@ -19695,12 +19695,12 @@ test('persists separate sidebar, reader, and new-ticket heights through rerender
     };
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   await resize(inspector.getByRole('textbox', { name: 'Ticket details' }), 132);
-  await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+  await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ });
   await reader.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   await resize(reader.getByRole('textbox', { name: 'Ticket details' }), 222);
   await reader.getByRole('button', { name: 'Block ticket' }).click();
-  await resize(reader.getByRole('textbox', { name: 'Blocked reason' }), 144);
+  await resize(reader.getByRole('textbox', { name: 'Blocked Reason' }), 144);
   await reader.getByText('Editable note with').dblclick();
   await resize(reader.getByRole('textbox', { name: 'Note body' }), 188);
   await expect
@@ -19720,7 +19720,7 @@ test('persists separate sidebar, reader, and new-ticket heights through rerender
       'blocked-reason.reader': '144',
       'note.reader': '188',
     });
-  await reader.getByRole('button', { name: 'Close ticket reader' }).click();
+  await reader.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const composer = page.locator('[data-action="create-ticket-form"]'),
     composerDetails = composer.getByRole('textbox', { name: 'Details' });
@@ -19761,8 +19761,8 @@ test('persists separate sidebar, reader, and new-ticket heights through rerender
 test('keeps backlog and archived tickets out of the active Queue', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('.kui-toolbar-text', { hasText: 'Queue' })).toBeVisible();
   await expect(page.locator('[data-project-dialog]')).not.toBeVisible();
   await expect(page.getByText('Use real project tickets')).toBeVisible();
@@ -19778,7 +19778,7 @@ test('keeps backlog and archived tickets out of the active Queue', async ({ page
   await page.keyboard.press('Escape');
   await expect(page.getByText('Use real project tickets')).toHaveCount(0);
   await page.getByRole('button', { name: 'New ticket…' }).click();
-  await page.getByRole('textbox', { name: 'Ticket title' }).fill('Created directly in backlog');
+  await page.getByRole('textbox', { name: 'Ticket Title' }).fill('Created directly in backlog');
   await page.getByRole('button', { name: 'Create ticket' }).click();
   const created = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]');
   await expect(created).toBeVisible();
@@ -19847,8 +19847,8 @@ test('loads all 138 Queue tickets before mixed-status pagination is applied', as
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(138);
   expect(collectionRequests).toContain('queue');
   await page.screenshot({ path: 'target/visual-captures/hs2-cs8agd-queue-138.png', fullPage: true });
@@ -19900,8 +19900,8 @@ test('loads ticket rows beyond the first 200 from the visible queue continuation
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const more = page.getByRole('button', { name: 'Load more tickets' });
   await expect(more).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-P00204"]')).toHaveCount(0);
@@ -19989,13 +19989,13 @@ test('loads each board column independently, 100 rows at a time in the active so
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-CP000"]')).toBeVisible();
   const listRequests = globalBoardRequests;
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   const board = page.locator('[data-component="ticket-board"]');
-  const column = (name: string) => board.getByRole('region', { name: `${name} column`, exact: true });
+  const column = (name: string) => board.getByRole('region', { name: `${name} Column`, exact: true });
   const columnRows = (name: string) => column(name).locator('[data-ticket-slug]');
   const columnMore = (name: string) => column(name).getByRole('button', { name: 'Load more tickets' });
   await expect(column('Not Started').getByLabel('205 tickets')).toBeVisible();
@@ -20150,16 +20150,16 @@ test('refills the loaded Completed page promptly after verifying and archiving 1
     await route.fulfill({ json: changed });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Columns view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Columns View').click();
   const completedColumn = page.locator('[data-column-id="completed"]'),
     verifiedColumn = page.locator('[data-column-id="verified"]'),
     menu = page.locator('[data-context-menu="ticket"]');
   await expect(completedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
   await completedColumn.getByRole('button', { name: 'Select all Completed tickets' }).click();
   await completedColumn.locator('[data-ticket-slug]').first().click({ button: 'right' });
-  await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change status' }).hover();
+  await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change Status' }).hover();
   await menu.locator('[data-context-field="status"][data-context-value="verified"]').click();
   await expect(completedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
   // The next 100 appear from cache while a further page waits for the batch to commit.
@@ -20222,9 +20222,9 @@ test('rolls a rejected bulk move back across the prefetched Completed page (HS2-
     await route.fulfill({ status: 409, json: { error: 'Ticket modified concurrently by another client.' } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Columns view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Columns View').click();
   const completedColumn = page.locator('[data-column-id="completed"]'),
     verifiedColumn = page.locator('[data-column-id="verified"]'),
     completedRows = completedColumn.locator('[data-ticket-slug]');
@@ -20233,7 +20233,7 @@ test('rolls a rejected bulk move back across the prefetched Completed page (HS2-
   await expect(completedColumn.locator('[data-selected="true"]')).toHaveCount(100);
   await completedRows.first().click({ button: 'right' });
   const menu = page.locator('[data-context-menu="ticket"]');
-  await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change status' }).hover();
+  await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change Status' }).hover();
   await menu.locator('[data-context-field="status"][data-context-value="verified"]').click();
   await expect(verifiedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
   await expect(completedRows).toHaveCount(100);
@@ -20306,11 +20306,11 @@ test('paginates the merged Completed column through completed then verified when
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Columns view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Columns View').click();
   const board = page.locator('[data-component="ticket-board"]');
-  const column = (name: string) => board.getByRole('region', { name: `${name} column`, exact: true });
+  const column = (name: string) => board.getByRole('region', { name: `${name} Column`, exact: true });
   const completedMore = () => column('Completed').getByRole('button', { name: 'Load more tickets' });
   // Verified is merged away; Completed carries the whole done total and displays 100 completed rows.
   await expect(column('Verified')).toHaveCount(0);
@@ -20376,9 +20376,9 @@ test('measures real local Git board performance for a 100-ticket verification an
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    await page.getByLabel('Columns view').click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByLabel('Columns View').click();
     const completed = page.locator('[data-column-id="completed"]'),
       verified = page.locator('[data-column-id="verified"]'),
       rows = (column: Locator) => column.locator('[data-ticket-slug]');
@@ -20388,7 +20388,7 @@ test('measures real local Git board performance for a 100-ticket verification an
     await expect(completed.locator('[data-selected="true"]')).toHaveCount(100);
     await rows(completed).first().click({ button: 'right' });
     const menu = page.locator('[data-context-menu="ticket"]');
-    await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change status' }).hover();
+    await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change Status' }).hover();
     await page.evaluate(() => {
       const scope = window as typeof window & {
         boardPerf?: {
@@ -20567,9 +20567,9 @@ test('stores the shell-history inheritance opt-out locally and applies it only t
       writes.push(request.postDataJSON());
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Terminals', exact: true }).click();
   const option = page.getByRole('checkbox', { name: 'Use my global shell history' });
   await expect(option).not.toBeChecked();
@@ -20596,8 +20596,8 @@ test('keeps managed workspace search open and focused through repeated controlle
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const field = page.locator('[data-token-search-id="workspace-search"]'),
     editor = page.getByRole('searchbox', { name: 'Search tickets' }),
     group = page.locator('.ticket-search-field').filter({ has: field });
@@ -20655,7 +20655,7 @@ test('keeps managed workspace search open and focused through repeated controlle
     });
     await page.getByRole('button', { name: 'Clear search', exact: true }).click();
     await expect(editor).toBeFocused();
-    await page.getByRole('button', { name: 'Add project', exact: true }).focus();
+    await page.getByRole('button', { name: 'Add Project', exact: true }).focus();
     await expect(group).toHaveAttribute('data-expanded', 'false');
   }
 });
@@ -20667,13 +20667,13 @@ for (const width of [1280, 390]) {
     await mockProject(page);
     await page.setViewportSize({ width, height: 844 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const trigger = page.getByRole('button', { name: 'Search tickets', exact: true }),
       editor = page.getByRole('searchbox', { name: 'Search tickets' }),
       field = page.locator('[data-token-search-id="workspace-search"]'),
       group = page.locator('.ticket-search-field').filter({ has: field }),
-      outside = page.getByRole('button', { name: 'Add project', exact: true });
+      outside = page.getByRole('button', { name: 'Add Project', exact: true });
 
     await trigger.click();
     await editor.fill('   ');
@@ -20722,8 +20722,8 @@ test('searches indexed ticket details and notes without discarding the full proj
       searchRequests.push(url.searchParams.get('text')!);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('QQRY00');
   await expect(page.locator('[data-ticket-slug="HS2-QQRY00"]')).toBeVisible();
@@ -20771,10 +20771,10 @@ test('clips animated ticket search results above the terminal drawer (HS2-29T4D8
   await mockProject(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Columns view' }).click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Columns View' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('[data-component="terminal-drawer"]')).toBeVisible();
   await page.evaluate(() => {
     const original = Object.getOwnPropertyDescriptor(Element.prototype, 'animate')!.value as Element['animate'];
@@ -20881,11 +20881,11 @@ test('searches only the current view before updating scoped sidebar counts', asy
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('stability');
-  const navigation = page.getByRole('navigation', { name: 'Ticket views' });
+  const navigation = page.getByRole('navigation', { name: 'Ticket Views' });
   await expect(navigation.getByLabel('Searching this view')).toHaveCount(3);
   await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(2);
   await expect(page.locator('[data-ticket-slug^="HS2-STABB"]')).toHaveCount(0);
@@ -20918,10 +20918,10 @@ test('searches only the current view before updating scoped sidebar counts', asy
   expect(searchBadgeGeometry.iconCenterY).toBeCloseTo(searchBadgeGeometry.numberCenterY, 0);
   await navigation.screenshot({ path: 'target/visual-captures/hs2-41szwd-search-counts.png' });
   // The search keeps the short view title, so the view switcher stays in the toolbar (HS2-18Y67S).
-  await page.getByRole('group', { name: 'View mode' }).getByRole('button', { name: 'Columns view' }).click();
+  await page.getByRole('group', { name: 'View mode' }).getByRole('button', { name: 'Columns View' }).click();
   const board = page.locator('[data-component="ticket-board"]');
-  await expect(board.getByRole('region', { name: 'Backlog column' })).toHaveCount(0);
-  await expect(board.getByRole('region', { name: 'Archive column' })).toHaveCount(0);
+  await expect(board.getByRole('region', { name: 'Backlog Column' })).toHaveCount(0);
+  await expect(board.getByRole('region', { name: 'Archive Column' })).toHaveCount(0);
   await expect(board.locator('[data-component="ticket-board-column"]')).toHaveCount(4);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(500);
@@ -21004,8 +21004,8 @@ test('filters duplicate tickets on the server before bounded search pagination',
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('is:duplicate ');
   await expect(page.locator('[data-component="token-search-token"][data-token-value="is:duplicate"]')).toBeVisible();
@@ -21057,8 +21057,8 @@ test('evaluates boolean search matches beyond the first ticket page', async ({ p
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('late AND (matching OR missing)');
   await expect(page.locator('[data-ticket-slug="HS2-BOOL-LATE"]')).toBeVisible();
@@ -21079,8 +21079,8 @@ test('tokenizes inline tag search with autocomplete and no separate advanced-sea
   await mockProject(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.getByRole('button', { name: 'Advanced search' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const query = page.getByRole('searchbox', { name: 'Search tickets' });
@@ -21106,8 +21106,8 @@ test('tokenizes inline tag search with autocomplete and no separate advanced-sea
 test('deletes inline search tokens from either adjacent caret boundary', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const query = page.getByRole('searchbox', { name: 'Search tickets' }),
     chip = page.locator('[data-component="token-search-token"]');
@@ -21149,8 +21149,8 @@ test('deletes inline search tokens from either adjacent caret boundary', async (
 test('deletes a trailing token immediately after Space commits it', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const query = page.getByRole('searchbox', { name: 'Search tickets' }),
     chip = page.locator('[data-component="token-search-token"]');
@@ -21169,8 +21169,8 @@ for (const width of [1440, 390]) {
     await mockProject(page);
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const trigger = page.getByRole('button', { name: 'Search tickets', exact: true }),
       query = page.getByRole('searchbox', { name: 'Search tickets' }),
       chip = query.locator('[data-component="token-search-token"]'),
@@ -21238,13 +21238,13 @@ for (const surface of ['workspace', 'saved-view']) {
     await page.route('**/views', (route) => route.fulfill({ json: [] }));
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page
       .getByRole('button', { name: surface === 'workspace' ? 'Search tickets' : 'Add view', exact: true })
       .click();
     if (surface === 'saved-view') {
-      const name = page.getByRole('textbox', { name: 'View name' });
+      const name = page.getByRole('textbox', { name: 'View Name' });
       await expect(name).toBeFocused();
       await name.fill('Token deletion regression');
     }
@@ -21376,8 +21376,8 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const query = page.getByRole('searchbox', { name: 'Search tickets' });
   await query.fill('tag:cl');
@@ -21416,7 +21416,7 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
   const helper = page.getByRole('group', { name: 'Date and time helper' });
   await expect(helper).toBeVisible();
   await helper.getByLabel('Date').fill('2026-09-01');
-  await helper.getByLabel('Time (optional)').fill('11:05');
+  await helper.getByLabel('Time (Optional)').fill('11:05');
   await helper.getByRole('button', { name: 'Apply' }).click();
   const dateChip = chip.filter({
     hasText: new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' }).format(
@@ -21437,7 +21437,7 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
     expect(await item.evaluate((node) => node.scrollWidth)).toBeLessThanOrEqual(
       await item.evaluate((node) => node.clientWidth),
     );
-  await page.getByRole('button', { name: 'Search syntax help' }).click();
+  await page.getByRole('button', { name: 'Search Syntax Help' }).click();
   const help = page.getByRole('dialog', { name: 'Search syntax' });
   await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
   await expect(help).toContainText('has:media-annotation');
@@ -21465,7 +21465,7 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
   ).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-mfady0-search-help-phone.png', fullPage: true });
   await help.screenshot({ path: 'target/visual-captures/hs2-pv2ag1-production-help-panel-phone.png' });
-  await page.getByRole('button', { name: 'Search syntax help' }).click();
+  await page.getByRole('button', { name: 'Search Syntax Help' }).click();
   await query.fill('created-after:');
   await expect(helper).toBeVisible();
   expect(await helper.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
@@ -21489,8 +21489,8 @@ test('distinguishes pending and empty ticket search feedback in list and board v
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('missing parser');
   await expect(page.getByRole('status').filter({ hasText: 'Searching tickets' })).toContainText(
@@ -21502,7 +21502,7 @@ test('distinguishes pending and empty ticket search feedback in list and board v
   );
   await page.screenshot({ path: 'target/visual-captures/hs2-ydrmad-search-empty-list-wide.png', fullPage: true });
   // The search keeps the short view title, so the view switcher stays in the toolbar (HS2-18Y67S).
-  await page.getByRole('group', { name: 'View mode' }).getByRole('button', { name: 'Columns view' }).click();
+  await page.getByRole('group', { name: 'View mode' }).getByRole('button', { name: 'Columns View' }).click();
   await expect(page.locator('[data-component="ticket-board"] [data-component="empty-state"]')).toHaveCount(1);
   await expect(page.getByText('No tickets match “missing parser”')).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 600 });
@@ -21517,14 +21517,14 @@ test('shows new-project feedback when a project has no tickets', async ({ page }
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const empty = page.locator('.ticket-empty-state[data-component="empty-state"]');
   await expect(empty).toHaveClass(/ticket-empty-state--project/);
   await expect(empty).toContainText('No tickets yet');
   await expect(empty).toContainText('Create a ticket to start planning this project.');
   await page.screenshot({ path: 'target/visual-captures/hs2-ydrmad-project-empty-list-wide.png', fullPage: true });
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   await expect(page.locator('[data-component="ticket-board"] [data-component="empty-state"]')).toHaveCount(1);
   await expect(empty).toContainText('No tickets yet');
   await page.screenshot({ path: 'target/visual-captures/hs2-ydrmad-project-empty-board-wide.png', fullPage: true });
@@ -21568,8 +21568,8 @@ test('shows local tickets and a partial-data warning when a GitHub source is rat
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   await expect(page.getByText("provider 'github-mixed' is rate limited", { exact: false })).toBeVisible();
   await expect(page.locator('[data-component="project-work-summary"]')).toContainText('1 open');
@@ -21578,7 +21578,7 @@ test('shows local tickets and a partial-data warning when a GitHub source is rat
     /^At least 1 open/,
   );
   await expect(page.getByText('No tickets yet')).toHaveCount(0);
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   await page.screenshot({
     path: 'target/visual-captures/hs2-190bas-partial-phone.png',
@@ -21589,7 +21589,7 @@ test('shows local tickets and a partial-data warning when a GitHub source is rat
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-mobile', 'false');
   await expect(
-    page.getByRole('navigation', { name: 'Ticket views' }).locator('.view-navigation__count').first(),
+    page.getByRole('navigation', { name: 'Ticket Views' }).locator('.view-navigation__count').first(),
   ).not.toContainText('≥');
   await page.screenshot({
     path: 'target/visual-captures/hs2-190bas-partial-wide.png',
@@ -21630,11 +21630,11 @@ test('keeps healthy search rows while hiding incomplete sidebar totals, then res
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const search = page.getByRole('searchbox', { name: 'Search tickets' }),
-    navigation = page.getByRole('navigation', { name: 'Ticket views' });
+    navigation = page.getByRole('navigation', { name: 'Ticket Views' });
   await search.fill('partial probe');
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   await expect(page.getByText('provider unavailable')).toBeVisible();
@@ -21682,8 +21682,8 @@ test('marks continuation totals partial while retaining both healthy pages (HS2-
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Load more tickets' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT08"]')).toBeVisible();
@@ -21707,14 +21707,14 @@ test('shows view-specific feedback when a populated project has no tickets in th
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const empty = page.locator('.ticket-empty-state[data-component="empty-state"]');
   await expect(empty).toHaveClass(/ticket-empty-state--view/);
   await expect(empty).toContainText('No tickets in Queue');
   await expect(empty).toContainText('Tickets will appear here when they enter this view.');
   await page.screenshot({ path: 'target/visual-captures/hs2-ydrmad-empty-queue-list-wide.png', fullPage: true });
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   await expect(page.locator('[data-component="ticket-board"] [data-component="empty-state"]')).toHaveCount(1);
   await expect(empty).toContainText('No tickets in Queue');
   await page.screenshot({ path: 'target/visual-captures/hs2-ydrmad-empty-queue-board-wide.png', fullPage: true });
@@ -21752,8 +21752,8 @@ test('shows honest loading feedback while a selected view collection is unresolv
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: /Archive/ }).click();
   const loading = page.locator('[data-component="empty-state"].ticket-empty-state--view-loading');
   await expect(loading).toContainText('Loading Archive');
@@ -21762,14 +21762,14 @@ test('shows honest loading feedback while a selected view collection is unresolv
   await expect(page.getByText('No tickets in Archive')).toHaveCount(0);
   // The stale cached Archive count must not surface a misleading "0 of N loaded" progress or a Load more button while the view is still loading (HS2-WR2P01).
   await expect(page.getByRole('button', { name: 'Load more tickets' })).toHaveCount(0);
-  await page.getByRole('button', { name: /Columns view/ }).click();
+  await page.getByRole('button', { name: /Columns View/ }).click();
   const boardLoading = page.locator(
     '[data-component="ticket-board"] [data-component="empty-state"].ticket-empty-state--view-loading',
   );
   await expect(boardLoading).toContainText('Loading Archive');
   await expect(page.locator('[data-component="ticket-board-column"] [data-ticket-progressive-loading]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Load more tickets' })).toHaveCount(0);
-  await page.getByRole('button', { name: /List view/ }).click();
+  await page.getByRole('button', { name: /List View/ }).click();
   await page.waitForTimeout(300);
   await page.screenshot({ path: 'target/visual-captures/hs2-wr2p01-view-loading-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
@@ -21794,13 +21794,13 @@ test('does not announce an empty project while its initial ticket collection is 
   });
   await page.setViewportSize({ width: 1920, height: 1040 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const loading = page.locator('[data-component="empty-state"].ticket-empty-state--loading');
   await expect(loading).toContainText('Loading tickets');
   await expect(loading).toContainText('Opening this project…');
   await expect(loading.locator('[data-component="loading-spinner"]')).toBeVisible();
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
   await expect(loading).toBeVisible();
   await expect(page.locator('#app-loading-indicator')).toHaveCount(0);
@@ -21819,10 +21819,10 @@ test('leaves individual empty board columns blank when another column has ticket
   );
   await page.setViewportSize({ width: 1920, height: 1040 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Columns view').click();
-  const verified = page.getByRole('region', { name: 'Verified column' });
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Columns View').click();
+  const verified = page.getByRole('region', { name: 'Verified Column' });
   await expect(verified.getByLabel('0 tickets')).toBeVisible();
   await expect(verified.locator('[data-component="empty-state"]')).toHaveCount(0);
   await expect(verified.getByText('No tickets in Verified')).toHaveCount(0);
@@ -21847,8 +21847,8 @@ test('requires confirmation before permanently emptying Trash', async ({ page })
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: /Trash/ }).click();
   await expect(page.locator('[data-ticket-slug="HS2-DEL001"]')).toBeVisible();
   const emptyButton = page.getByRole('button', { name: 'Empty Trash' }),
@@ -21895,8 +21895,8 @@ test('restores Trash and surfaces a persistent error when emptying fails', async
     route.fulfill({ status: 500, json: { error: 'Could not update the ticket store' } }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: /Trash/ }).click();
   await page.getByRole('button', { name: 'Empty Trash' }).click();
   await page.locator('[data-component="empty-trash-dialog"]').getByRole('button', { name: 'Empty Trash' }).click();
@@ -21911,9 +21911,9 @@ test('restores Trash and surfaces a persistent error when emptying fails', async
 test('derives board columns from the selected view and merges Verified by project setting', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Columns view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Columns View').click();
   const board = page.locator('.ticket-board');
   await expect(board.locator('.ticket-board-column')).toHaveCount(4);
   await expect(board.locator('.ticket-board-column__title')).toHaveText([
@@ -21925,21 +21925,21 @@ test('derives board columns from the selected view and merges Verified by projec
   await expect(board.locator('[data-column-id="completed"]')).toContainText('Completed ticket');
   await expect(board.locator('[data-column-id="verified"]')).toContainText('Verified ticket');
 
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Column view' }).click();
-  await page.locator('wa-checkbox', { hasText: 'Hide Verified column' }).click({ position: { x: 8, y: 8 } });
+  await page.locator('wa-checkbox', { hasText: 'Hide Verified Column' }).click({ position: { x: 8, y: 8 } });
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem('hotsheet.project.demo-checkout.hide-verified-column')))
     .toBe('true');
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   await expect(board.locator('.ticket-board-column__title')).toHaveText(['Not Started', 'Started', 'Completed']);
   await expect(board.locator('[data-column-id="completed"]')).toContainText('Completed ticket');
   await expect(board.locator('[data-column-id="completed"]')).toContainText('Verified ticket');
 
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Column view' }).click();
-  await page.locator('wa-checkbox', { hasText: 'Hide Verified column' }).click({ position: { x: 8, y: 8 } });
-  await page.getByLabel('Columns view').click();
+  await page.locator('wa-checkbox', { hasText: 'Hide Verified Column' }).click({ position: { x: 8, y: 8 } });
+  await page.getByLabel('Columns View').click();
   await expect(board.locator('.ticket-board-column__title')).toHaveText([
     'Not Started',
     'Started',
@@ -21993,8 +21993,8 @@ test('switches and searches large ticket views without cloning every row into mo
     return route.fulfill({ json: { items: matches, counts: {} } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(60);
   for (const [view, count] of [
     ['Backlog', 18],
@@ -22048,14 +22048,14 @@ test('switches and searches large ticket views without cloning every row into mo
 test('matches HS1 multi-selection semantics and selected outlines in list and column views', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const inspector = page.locator('#app-right-rail'),
     first = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START03"]'),
     second = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]');
   await expect(inspector).toContainText('Select a ticket to see and edit its details');
-  await inspector.getByRole('button', { name: 'Hide ticket inspector' }).click();
-  await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+  await inspector.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
+  await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
   await expect(inspector).toBeVisible();
   await first.hover();
   await expect(first).toHaveCSS('border-color', 'color(srgb 0.42 0.686118 0.918118)');
@@ -22069,7 +22069,7 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
   await expect(first).toHaveCSS('border-color', 'color(srgb 0.42 0.686118 0.918118)');
   const selectedBoxes = await Promise.all([first, second].map((locator) => locator.boundingBox()));
   expect(Math.abs(selectedBoxes[0]!.y + selectedBoxes[0]!.height - selectedBoxes[1]!.y)).toBe(1);
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   const started = page.locator('[data-column-id="started"]');
   const firstStarted = started.locator('[data-ticket-slug="HS2-DEMO01"]'),
     rangeEnd = started.locator('[data-ticket-slug="HS2-QQRY00"]');
@@ -22105,14 +22105,14 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
 test('drops ticket selection across ticket views but preserves it across view modes', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const inspector = page.locator('#app-right-rail'),
     active = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await active.click();
   await expect(active).toHaveAttribute('data-selected', 'true');
   await expect(inspector).toContainText('HS2-DEMO01');
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]')).toHaveAttribute(
     'data-selected',
     'true',
@@ -22132,8 +22132,8 @@ test('drops ticket selection across ticket views but preserves it across view mo
 test('styles completed and verified titles consistently in list and column rows', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const completed = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DONE01"] strong');
   await expect(completed).toHaveCSS('text-decoration-line', 'line-through');
   const quietColor = await completed.evaluate((node) => {
@@ -22145,7 +22145,7 @@ test('styles completed and verified titles consistently in list and column rows'
     return color;
   });
   await expect(completed).toHaveCSS('color', quietColor);
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   const verified = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-VERIFY01"] strong');
   await expect(verified).toHaveCSS('text-decoration-line', 'line-through');
   await expect(verified).toHaveCSS('color', quietColor);
@@ -22154,8 +22154,8 @@ test('styles completed and verified titles consistently in list and column rows'
 test('offers Up Next only on active tickets across rows and inspector', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"] [data-action="toggle-row-up-next"]')).toBeVisible();
   await expect(
     page.locator(
@@ -22175,8 +22175,8 @@ test('offers Up Next only on active tickets across rows and inspector', async ({
 test('offers completed verification actions only for one completed ticket', async ({ page }) => {
   const patches = await mockProject(page, true, false, 0, 750);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const completed = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DONE01"]'),
     verified = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-VERIFY01"]'),
     menu = page.locator('[data-context-menu="ticket"]');
@@ -22205,8 +22205,8 @@ test('reopens Verified and Archive tickets into Not Started plus Up Next', async
   const patches = await mockProject(page, true, false, 0, 750);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const menu = page.locator('[data-context-menu="ticket"]'),
     verified = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-VERIFY01"]');
   await verified.click({ button: 'right' });
@@ -22264,8 +22264,8 @@ test('reopens Verified and Archive tickets into Not Started plus Up Next', async
 test('hides Reopen Ticket when the provider cannot update tickets', async ({ page }) => {
   await mockProject(page, false);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const menu = page.locator('[data-context-menu="ticket"]');
   await page.locator('[data-ticket-slug="HS2-VERIFY01"]').click({ button: 'right' });
   await expect(menu.getByRole('menuitem', { name: 'Reopen Ticket', exact: true })).toHaveCount(0);
@@ -22283,8 +22283,8 @@ test('reports a completed ticket with note and evidence through one atomic provi
       requests.push(request.postData() ?? '');
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const completed = page.locator('[data-ticket-slug="HS2-DONE01"]');
   await completed.click({ button: 'right' });
   await page.locator('[data-context-action="Report not working"]').click();
@@ -22334,8 +22334,8 @@ test('hides a pending Not Working report immediately and restores its draft on f
     return route.fulfill({ status: 500, json: { error: 'atomic report failed' } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DONE01"]').click({ button: 'right' });
   await page
     .locator('[data-context-menu="ticket"]')
@@ -22362,12 +22362,12 @@ test('hides a pending Not Working report immediately and restores its draft on f
 test('opens the matching ticket reader on row double-click in list and columns', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').dblclick();
   await expect(page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' })).toBeVisible();
-  await page.getByRole('button', { name: 'Close ticket reader' }).click();
-  await page.getByLabel('Columns view').click();
+  await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
+  await page.getByLabel('Columns View').click();
   await page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEXT01"]').dblclick();
   await expect(page.getByRole('dialog', { name: 'Read and edit HS2-NEXT01' })).toBeVisible();
 });
@@ -22375,8 +22375,8 @@ test('opens the matching ticket reader on row double-click in list and columns',
 test('opens shared Markdown links safely in new tabs across the real inspector and reader', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail'),
     projectGuide = inspector.getByRole('link', { name: 'Project guide' });
@@ -22399,13 +22399,13 @@ test('opens ticket references without leaving column view (HS2-230NY7)', async (
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Columns view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Columns View').click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.locator('#app-right-rail').getByRole('link', { name: 'HS2-START02' }).click();
   await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
-  await expect(page.getByLabel('Columns view')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Columns View')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]')).toHaveAttribute(
     'data-selected',
     'true',
@@ -22488,9 +22488,9 @@ test('resolves exact ticket links across projects and shows only a compact ambig
   );
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   const otherTab = page.getByRole('tab', { name: 'other' }),
     otherUniqueRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-OTHER1"]');
   await expect(otherTab).toHaveAttribute('aria-selected', 'true');
@@ -22511,7 +22511,7 @@ test('resolves exact ticket links across projects and shows only a compact ambig
   let linked = page.getByRole('dialog', { name: 'Read and edit HS2-OTHER1 in other' });
   await expect(linked).toContainText('Other unique ticket');
   await expect(page.getByRole('tab', { name: 'demo' })).toHaveAttribute('aria-selected', 'true');
-  await linked.getByRole('button', { name: 'Close ticket reader' }).click();
+  await linked.getByRole('button', { name: 'Close Ticket Reader' }).click();
   inspector = await openSource();
   await inspector.getByRole('link', { name: 'HS2-MISSING', exact: true }).click();
   await expect(page.locator('.app-toast')).toContainText('No exact match for HS2-MISSING.');
@@ -22563,7 +22563,7 @@ test('resolves exact ticket links across projects and shows only a compact ambig
   linked = page.getByRole('dialog', { name: 'Read and edit HS2-SHARED1 in other' });
   await expect(linked).toContainText('Chosen cross-project destination.');
   await expect(page.getByRole('tab', { name: 'demo' })).toHaveAttribute('aria-selected', 'true');
-  await linked.getByRole('button', { name: 'Close ticket reader' }).click();
+  await linked.getByRole('button', { name: 'Close Ticket Reader' }).click();
   inspector = await openSource();
   await inspector.getByRole('link', { name: '@other-checkout/HS2-SHARED1', exact: true }).click();
   await expect(choice).toHaveCount(0);
@@ -22610,8 +22610,8 @@ test('auto-links a single-digit legacy HS-N reference to the imported ticket (HS
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   const legacyLink = inspector.getByRole('link', { name: 'HS-7', exact: true });
@@ -22632,8 +22632,8 @@ test('ships TicketRow context-menu behavior through real list and board composit
   });
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const first = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]'),
     menu = page.locator('[data-context-menu="ticket"]');
@@ -22673,8 +22673,8 @@ test('ships TicketRow context-menu behavior through real list and board composit
   await first.click({ button: 'right' });
   await menu.getByRole('menuitem', { name: 'Open ticket', exact: true }).click();
   await expect(page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ })).toBeVisible();
-  await page.getByRole('button', { name: 'Close ticket reader' }).click();
-  await page.getByLabel('Columns view').click();
+  await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
+  await page.getByLabel('Columns View').click();
   const boardRow = page.locator('[data-column-id="verified"] [data-ticket-slug="HS2-DEMO01"]');
   await boardRow.click({ button: 'right' });
   await expect(menu.getByRole('menu').first()).toBeVisible();
@@ -22690,8 +22690,8 @@ test('adds and removes tags and confirms deletion for a real multi-selection', a
     if (request.method() !== 'GET') mutationRequests.push(`${request.method()} ${new URL(request.url()).pathname}`);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const first = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-ticket-slug="HS2-START02"]'),
     menu = page.locator('[data-context-menu="ticket"]');
@@ -22762,8 +22762,8 @@ test('shows non-atomic provider updates in the app loading indicator (HS2-TPF3EB
     if (request.method() !== 'GET') mutationRequests.push(`${request.method()} ${new URL(request.url()).pathname}`);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.evaluate(() => {
     (window as Window & { __bulkTiming?: unknown }).__bulkTiming = undefined;
     document.addEventListener('hotsheet:mutation-timing', (event) => {
@@ -22775,7 +22775,7 @@ test('shows non-atomic provider updates in the app loading indicator (HS2-TPF3EB
     second = page.locator('[data-ticket-slug="HS2-START02"]');
   await first.click();
   await second.click({ modifiers: ['Meta'] });
-  await page.getByRole('button', { name: 'Toggle Up Next for selected tickets' }).click();
+  await page.getByRole('button', { name: 'Toggle Up Next for Selected Tickets' }).click();
   const loading = page.locator('#app-loading-indicator');
   await expect(loading).toContainText(/Updating tickets… [01] of 2/);
   await expect(page.locator('.app-toast')).toHaveCount(0);
@@ -22807,8 +22807,8 @@ test('keeps successful best-effort writes when another selected ticket fails (HS
       : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.evaluate(() => {
     (window as Window & { __bulkOutcome?: string }).__bulkOutcome = undefined;
     document.addEventListener('hotsheet:mutation-timing', (event) => {
@@ -22820,7 +22820,7 @@ test('keeps successful best-effort writes when another selected ticket fails (HS
     second = page.locator('[data-ticket-slug="HS2-START02"]');
   await first.click();
   await second.click({ modifiers: ['Meta'] });
-  await page.getByRole('button', { name: 'Toggle Up Next for selected tickets' }).click();
+  await page.getByRole('button', { name: 'Toggle Up Next for Selected Tickets' }).click();
   await expect(page.getByRole('alert')).toContainText(
     'Updated 1 of 2 tickets. 1 failed; HS2-START02: stale imported ticket',
   );
@@ -22838,19 +22838,19 @@ test('keeps successful best-effort writes when another selected ticket fails (HS
 test('keeps optimistically archived verified tickets hidden through an intermediate change event', async ({ page }) => {
   const patches = await mockProject(page, true, false, 0, 1_500, 0, false, 2, true);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const first = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-ticket-slug="HS2-START02"]'),
     menu = page.locator('[data-context-menu="ticket"]');
   await first.click();
   await second.click({ modifiers: ['Meta'] });
   await first.click({ button: 'right' });
-  await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change status' }).hover();
+  await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change Status' }).hover();
   await menu.locator('[data-context-field="status"][data-context-value="verified"]').click();
   await expect.poll(() => patches.filter((patch) => patch.status === 'verified').length, { timeout: 4_000 }).toBe(2);
   await page.waitForTimeout(1_700);
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   const verified = page.locator('[data-column-id="verified"]'),
     verifiedFirst = verified.locator('[data-ticket-slug="HS2-DEMO01"]'),
     verifiedSecond = verified.locator('[data-ticket-slug="HS2-START02"]');
@@ -22872,13 +22872,13 @@ test('keeps optimistically archived verified tickets hidden through an intermedi
 test('applies selected-ticket toolbar actions and clears tickets moved outside the current view', async ({ page }) => {
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const first = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-ticket-slug="HS2-START02"]'),
-    star = page.getByRole('button', { name: 'Toggle Up Next for selected tickets' }),
+    star = page.getByRole('button', { name: 'Toggle Up Next for Selected Tickets' }),
     starHost = page.locator('button[data-action="toggle-selected-up-next"]'),
-    more = page.getByRole('button', { name: 'More actions for selected tickets' }),
+    more = page.getByRole('button', { name: 'More Actions for Selected Tickets' }),
     menu = page.locator('[data-context-menu="ticket"]');
   await expect(star).toBeDisabled();
   await expect(more).toBeDisabled();
@@ -22912,14 +22912,14 @@ for (const surface of ['workspace', 'rail'] as const) {
       await installFakeTerminalSockets(page, true);
       await mockProject(page);
       await page.goto('/');
-      await page.getByRole('button', { name: 'Open project' }).click();
-      await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-      if (surface === 'rail') await page.getByRole('button', { name: 'Workspace grid' }).click();
-      else await page.getByRole('button', { name: 'Columns view', exact: true }).click();
+      await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+      if (surface === 'rail') await page.getByRole('button', { name: 'Workspace Grid' }).click();
+      else await page.getByRole('button', { name: 'Columns View', exact: true }).click();
       const rail = page.locator('#app-right-rail');
       const controls =
-        surface === 'rail' ? rail : page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]');
-      const star = controls.getByRole('button', { name: 'Toggle Up Next for selected tickets' });
+        surface === 'rail' ? rail : page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]');
+      const star = controls.getByRole('button', { name: 'Toggle Up Next for Selected Tickets' });
       const icon = star.locator('.workspace-header__up-next-icon');
       const select = async (slug: string, toggle = false, single = true) => {
         await page
@@ -23002,7 +23002,7 @@ for (const surface of ['workspace', 'rail'] as const) {
       await page.setViewportSize({ width: surface === 'workspace' ? 390 : 1024, height: 844 });
       if (surface === 'workspace') {
         const overflow = controls.locator('[data-workspace-overflow]');
-        await overflow.getByRole('button', { name: 'More workspace controls' }).click();
+        await overflow.getByRole('button', { name: 'More Workspace Controls' }).click();
         const item = overflow.locator('[data-workspace-overflow-action="toggle-selected-up-next"]');
         await expect(item).toHaveAccessibleName(/Toggle Up Next/);
         await expect(item).toHaveAttribute('data-workspace-overflow-state', 'mixed');
@@ -23055,16 +23055,16 @@ for (const surface of ['workspace', 'rail'] as const) {
     await installFakeTerminalSockets(page, true);
     await mockProject(page, false);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
-    if (surface === 'rail') await page.getByRole('button', { name: 'Workspace grid' }).click();
+    if (surface === 'rail') await page.getByRole('button', { name: 'Workspace Grid' }).click();
     const controls =
       surface === 'rail'
         ? page.locator('#app-right-rail')
-        : page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]');
-    await expect(controls.getByRole('button', { name: 'Toggle Up Next for selected tickets' })).toBeDisabled();
-    await expect(controls.getByRole('button', { name: 'More actions for selected tickets' })).toBeDisabled();
+        : page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]');
+    await expect(controls.getByRole('button', { name: 'Toggle Up Next for Selected Tickets' })).toBeDisabled();
+    await expect(controls.getByRole('button', { name: 'More Actions for Selected Tickets' })).toBeDisabled();
   });
 }
 
@@ -23072,11 +23072,11 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
   const patches = await mockProject(page);
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]'),
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]'),
     overflow = toolbar.locator('[data-workspace-overflow]'),
-    trigger = overflow.getByRole('button', { name: 'More workspace controls' }),
+    trigger = overflow.getByRole('button', { name: 'More Workspace Controls' }),
     first = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-ticket-slug="HS2-START02"]');
   await expect(page.locator('#app-right-rail')).toBeVisible();
@@ -23155,14 +23155,14 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
 test('dismisses ticket context menus on every true outside pointerdown', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const first = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]'),
     menu = page.locator('[data-context-menu="ticket"]');
   await first.click({ button: 'right' });
   await expect(menu.getByRole('menu').first()).toBeVisible();
-  await menu.locator('wa-dropdown-item', { hasText: 'Change status' }).dispatchEvent('pointerdown');
+  await menu.locator('wa-dropdown-item', { hasText: 'Change Status' }).dispatchEvent('pointerdown');
   await expect(menu.getByRole('menu').first()).toBeVisible();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await expect(menu).toHaveCount(0);
@@ -23186,8 +23186,8 @@ test('undoes, redoes, copies, pastes, and drags ticket mutations through the rea
   });
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const ticket = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await ticket.click();
   const nextPatch = () =>
@@ -23250,8 +23250,8 @@ test('drags single and selected tickets across columns, views, and the duplicate
   });
   const patches = await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const first = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-ticket-slug="HS2-START02"]'),
     dragTo = async (source: Locator, target: string) => {
@@ -23281,13 +23281,13 @@ test('drags single and selected tickets across columns, views, and the duplicate
   expect(mutations.filter((value) => value.endsWith('/batch'))).toHaveLength(1);
   expect(mutations.filter((value) => value.includes('/tickets/'))).toHaveLength(1);
   await page.locator('[data-ticket-drop-status="not_started"][data-item-id="all"]').click();
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   const boardFirst = page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-DEMO01"]');
   await boardFirst.click();
   await dragTo(boardFirst, '[data-column-id="completed"]');
   await expect.poll(() => patches.filter((patch) => patch.status === 'completed').length).toBe(1);
   await expect(page.locator('[data-column-id="completed"] [data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   const duplicateFirst = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),
     duplicateSecond = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEXT01"]');
   await duplicateFirst.click();
@@ -23302,8 +23302,8 @@ test('drags single and selected tickets across columns, views, and the duplicate
 test('previews rows with a border-only outline and keeps column cards borderless until selected', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),
     background = await row.evaluate((node) => getComputedStyle(node).backgroundColor),
     shadow = await row.evaluate((node) => getComputedStyle(node).boxShadow);
@@ -23311,7 +23311,7 @@ test('previews rows with a border-only outline and keeps column cards borderless
   await expect(row).toHaveCSS('background-color', background);
   expect(await row.evaluate((node) => getComputedStyle(node).boxShadow)).toBe(shadow);
   await page.screenshot({ path: 'target/visual-captures/hs2-rxy39s-row-hover-after.png', fullPage: true });
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   const card = page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEXT01"]');
   await expect(card).toHaveCSS('border-color', 'rgba(0, 0, 0, 0)');
   await card.click();
@@ -23354,9 +23354,9 @@ test('drops selected tickets on another project tab to copy them there', async (
   });
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('tab', { name: 'demo' }).click();
   const first = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]');
@@ -23423,9 +23423,9 @@ test('drops files on another project tab to stage a new ticket in that project (
       uploads.push(`${path}:${decodeURIComponent(request.headers()['x-hotsheet-filename'] ?? '')}`);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('tab', { name: 'demo' }).click();
   const destination = page.locator('[data-ticket-drop-project="other-checkout"]');
   await destination.evaluate((node) => {
@@ -23524,11 +23524,11 @@ test('switches already-open projects from cache within one frame and rejects sta
     return route.fulfill({ json: ticketsJson(route.request(), rows) });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toBeVisible();
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   await page.waitForTimeout(500);
   // The far-future lease must not spin the claim-expiry timer into a refresh loop (HS2-43Z35K).
   const settledReads = ticketReads;
@@ -23678,20 +23678,20 @@ test('keeps the new-ticket composer open when it is opened right after a project
     return route.fulfill({ json: ticketsJson(route.request(), other ? [otherRow] : [row, notStartedRow]) });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toBeVisible();
   // Switch back to demo with its activation refresh (and thus the session restore) held, then quickly open the composer.
   holdRefreshes = true;
   await page.getByRole('tab', { name: 'demo' }).click();
   await page.getByRole('button', { name: 'New ticket…' }).click();
-  await expect(page.getByRole('textbox', { name: 'Ticket title' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Ticket Title' })).toBeVisible();
   // Release the held refresh so the delayed session restore runs; it must not close the composer the user just opened.
   await expect.poll(() => pending.has('demo')).toBe(true);
   await pending.get('demo')!.fulfill({ json: ticketsJson(pending.get('demo')!.request(), [row, notStartedRow]) });
   await page.waitForTimeout(400);
-  await expect(page.getByRole('textbox', { name: 'Ticket title' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Ticket Title' })).toBeVisible();
 });
 
 test('reorders project and terminal tabs while preserving project order and complete keyboard focus', async ({
@@ -23724,9 +23724,9 @@ test('reorders project and terminal tabs while preserving project order and comp
   });
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   const projectTabs = page.locator('[data-tab-kind="project"]'),
     projectNames = () => projectTabs.locator('.kui-app-tab__name').allTextContents();
   await expect.poll(projectNames).toEqual(['demo', 'other']);
@@ -23765,21 +23765,21 @@ test('reorders project and terminal tabs while preserving project order and comp
   await expect(projectTabs.getByRole('tab', { name: 'demo' })).toBeFocused();
   await page.keyboard.press('ArrowRight');
   await expect(projectTabs.getByRole('tab', { name: 'other' })).toBeFocused();
-  const list = page.getByRole('button', { name: 'List view' }),
-    columns = page.getByRole('button', { name: 'Columns view' });
+  const list = page.getByRole('button', { name: 'List View' }),
+    columns = page.getByRole('button', { name: 'Columns View' });
   await list.focus();
   await page.keyboard.press('Tab');
   await expect(columns).toBeFocused();
   await page.setViewportSize({ width: 1100, height: 840 });
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     terminalTabs = drawer.locator('[data-tab-kind="terminal"]'),
     terminalNames = () => terminalTabs.getByRole('tab').allTextContents();
   await expect.poll(terminalNames).toEqual(['Codex Main', 'Tests']);
   await dragAfter(terminalTabs.nth(0), terminalTabs.nth(1));
   await expect.poll(terminalNames).toEqual(['Tests', 'Codex Main']);
-  await drawer.getByRole('button', { name: 'Hide terminal drawer' }).click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await drawer.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect.poll(terminalNames).toEqual(['Tests', 'Codex Main']);
   await drawer.getByRole('tab', { name: 'Project grid' }).focus();
   await page.keyboard.press('ArrowRight');
@@ -23800,8 +23800,8 @@ test('copies selected ticket ids to the local pasteboard without the async Clipb
   });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
   await page.keyboard.press(`${shortcut}+c`);
   await expect
@@ -23831,8 +23831,8 @@ test('scopes ticket clipboard shortcuts to the focused work area and preserves n
         });
     });
   });
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const workArea = page.locator('.app-shell__work-area'),
     ticket = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),
     focusColor = await resolvedColor(workArea, 'var(--wa-color-focus)');
@@ -23897,8 +23897,8 @@ test('preserves attachments and atomically undoes and redoes cut-paste', async (
   });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const source = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await source.click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
@@ -23946,20 +23946,20 @@ test('shows and resolves cross-project permission notifications with badges and 
     return route.fulfill({ json: { connection: 'claude-session', decision: 'allow', persisted: true } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toBeVisible();
   await expect(popup).toContainText('demo');
   await expect(popup).toContainText('/work/demo/src/main.ts');
-  await expect(page.getByRole('button', { name: /Notifications view, 1 pending/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Notifications View, 1 pending/ })).toBeVisible();
   await expect(page.locator('[data-tab-kind="project"] .project-tab__notification')).toContainText('1');
-  const notificationsButton = page.getByRole('button', { name: /Notifications view/ });
+  const notificationsButton = page.getByRole('button', { name: /Notifications View/ });
   await notificationsButton.click();
   // The shell must fill its host independently of the queue's intrinsic width (HS2-JMYRT3).
   await expect.poll(async () => (await page.locator('[data-component="workbench"]').boundingBox())?.width).toBe(1280);
   await expect(notificationsButton).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('button', { name: 'List View' })).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('#app-left-rail nav[aria-label="Notification views"]')).toBeVisible();
   await expect(page.locator('#workspace-page-title')).toContainText('Pending');
   await expect(page.locator('[data-component="notification-center"]')).toBeVisible();
@@ -24063,15 +24063,15 @@ test('scopes the notification center, navigation counts, and header badge to the
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const popup = page.locator('[data-component="permission-request-popup"]');
   await popup.getByRole('button', { name: 'Ignore' }).click();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
   await popup.getByRole('button', { name: 'Ignore' }).click();
-  const notifications = page.getByRole('button', { name: /Notifications view/ });
-  await expect(notifications).toHaveAccessibleName('Notifications view, 1 pending');
+  const notifications = page.getByRole('button', { name: /Notifications View/ });
+  await expect(notifications).toHaveAccessibleName('Notifications View, 1 pending');
   await notifications.click();
   const center = page.locator('[data-component="notification-center"]'),
     navigation = page.locator('#app-left-rail nav[aria-label="Notification views"]');
@@ -24104,7 +24104,7 @@ test('scopes the notification center, navigation counts, and header badge to the
   await expect(center).toContainText('other history action');
   await expect(center).not.toContainText('demo history action');
   await page.getByRole('tab', { name: 'demo' }).click();
-  await expect(notifications).toHaveAccessibleName('Notifications view, 1 pending');
+  await expect(notifications).toHaveAccessibleName('Notifications View, 1 pending');
   await expect(center).toContainText('demo history action');
   await expect(center).not.toContainText('other history action');
   await navigation.getByRole('button', { name: /Pending/ }).click();
@@ -24143,8 +24143,8 @@ test('counts permission automation only while its popup is visible', async ({ pa
       JSON.stringify({ action: 'allow', delayMs: 60_000 }),
     );
   });
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const popup = page.locator('[data-component="permission-request-popup"]');
   await expect(popup).toContainText('Auto-allow in');
   // An installed clock keeps following wall time, so exact m:ss text races slow local runs (and a
@@ -24160,7 +24160,7 @@ test('counts permission automation only while its popup is visible', async ({ pa
   await page.clock.fastForward(10_000);
   await expect.poll(countdownSeconds).toBeLessThanOrEqual(50);
   expect(await countdownSeconds()).toBeGreaterThan(30);
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const automation = page.locator('wa-select[name="permission-automation-action"]');
   // The floating popup overlaps this form on desktop since the compact header (HS2-9R1F91), so open
@@ -24175,13 +24175,13 @@ test('counts permission automation only while its popup is visible', async ({ pa
   await expect(automation).toHaveJSProperty('open', true);
   expect((await renderMetrics(page))?.passes).toBe(0);
   await page.keyboard.press('Escape');
-  await popup.getByRole('button', { name: 'Stop auto-allow countdown' }).click();
+  await popup.getByRole('button', { name: 'Stop auto-allow Countdown' }).click();
   await expect(popup.locator('.permission-request-card__countdown')).toHaveCount(0);
   await page.clock.fastForward(30_000);
   expect(answers).toBe(0);
   await popup.getByRole('button', { name: 'Ignore' }).click();
   await expect(popup).toHaveCount(0);
-  await page.getByRole('button', { name: /Notifications view/ }).click();
+  await page.getByRole('button', { name: /Notifications View/ }).click();
   await page.locator('[data-component="notification-center"]').getByRole('button', { name: 'Allow Once' }).click();
   await expect.poll(() => answers).toBe(1);
 });
@@ -24216,8 +24216,8 @@ test('pauses and resumes notifications app-wide from the popup, sidebar, and ban
       JSON.stringify({ action: 'allow', delayMs: 60_000 }),
     );
   });
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const popup = page.locator('[data-component="permission-request-popup"]'),
     banner = page.locator('[data-component="notifications-paused-banner"]');
   await expect(popup).toContainText('Auto-allow in');
@@ -24225,7 +24225,7 @@ test('pauses and resumes notifications app-wide from the popup, sidebar, and ban
 
   // Pausing from the popup hides it, banners the pause with the waiting count, and freezes the
   // auto-allow countdown, so nothing is answered while paused.
-  await popup.getByRole('button', { name: 'Pause notifications' }).click();
+  await popup.getByRole('button', { name: 'Pause Notifications' }).click();
   await expect(popup).toHaveCount(0);
   await expect(banner).toContainText('Notifications paused');
   await expect(banner).toContainText('1 permission request waiting.');
@@ -24234,11 +24234,11 @@ test('pauses and resumes notifications app-wide from the popup, sidebar, and ban
   expect(answers).toBe(0);
 
   // The request still waits in Notifications, whose sidebar footer now offers Resume.
-  await page.getByRole('button', { name: /Notifications view/ }).click();
+  await page.getByRole('button', { name: /Notifications View/ }).click();
   const center = page.locator('[data-component="notification-center"]');
   await expect(center).toContainText('npm test');
   await expect(page.getByRole('button', { name: 'Resume notifications' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Pause notifications' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Pause Notifications' })).toHaveCount(0);
   await page.screenshot({ path: test.info().outputPath('notifications-paused-shell.png') });
 
   // A reload restores the open project and keeps the pause.
@@ -24247,11 +24247,11 @@ test('pauses and resumes notifications app-wide from the popup, sidebar, and ban
   await expect(popup).toHaveCount(0);
 
   // Resuming from the sidebar brings the popup back with its countdown still running.
-  await page.getByRole('button', { name: /Notifications view/ }).click();
+  await page.getByRole('button', { name: /Notifications View/ }).click();
   await page.getByRole('button', { name: 'Resume notifications' }).click();
   await expect(banner).toHaveCount(0);
   await expect(popup).toContainText('Auto-allow in');
-  await expect(page.getByRole('button', { name: 'Pause notifications' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Pause Notifications' }).first()).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('hotsheet.notifications-paused'))).toBeNull();
 
   // Pause again from the sidebar, then resume from the banner.
@@ -24269,12 +24269,12 @@ test('pauses and resumes notifications app-wide from the popup, sidebar, and ban
   expect(answers).toBe(0);
 });
 
-test('persists and restores per-project permission automation settings', async ({ page }) => {
+test('persists and restores per-project permission automation Settings', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const action = page.locator('wa-select[name="permission-automation-action"]'),
     delay = page.locator('wa-select[name="permission-automation-delay"]');
@@ -24292,8 +24292,8 @@ test('persists and restores per-project permission automation settings', async (
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem('hotsheet.project.demo-checkout.permission-automation')))
     .toBe('{"action":"deny","delayMs":120000}');
-  await page.getByLabel('List view').click();
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('List View').click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   await expect(action).toHaveJSProperty('value', 'deny');
   await expect(delay).toHaveJSProperty('value', '120000');
@@ -24337,10 +24337,10 @@ test('auto-allows immediately at 0 seconds without ever presenting the popup (HS
       JSON.stringify({ action: 'allow', delayMs: 0 }),
     );
   });
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect.poll(() => bodies).toEqual([{ decision: 'allow', scope: 'once' }]);
-  await page.getByRole('button', { name: /Notifications view/ }).click();
+  await page.getByRole('button', { name: /Notifications View/ }).click();
   const center = page.locator('[data-component="notification-center"]');
   await page.getByRole('button', { name: /Last 24 Hours/ }).click();
   await expect(center).toContainText('Automatically allowed permission');
@@ -24356,9 +24356,9 @@ test('offers 0 seconds only for Auto-allow and keeps both selects in sync (HS2-E
   await mockProject(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   const action = page.locator('wa-select[name="permission-automation-action"]'),
     delay = page.locator('wa-select[name="permission-automation-delay"]'),
@@ -24408,8 +24408,8 @@ test('offers 0 seconds only for Auto-allow and keeps both selects in sync (HS2-E
   await expect(delay.locator('wa-option[value="0"]')).toHaveCount(1);
   await setValue(delay, '0');
   await expect.poll(stored).toBe('{"action":"allow","delayMs":0}');
-  await page.getByLabel('List view').click();
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('List View').click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
   await expect(action).toHaveJSProperty('value', 'allow');
   await expect(delay).toHaveJSProperty('value', '0');
@@ -24440,18 +24440,18 @@ test('shows and persists the shared Trash retention period in Lifecycle settings
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Lifecycle' }).click();
   const settings = page.locator('[data-component="trash-settings"]'),
     input = settings.locator('wa-input[name="trash-cleanup-days"]'),
-    apply = settings.getByRole('button', { name: 'Apply now' }),
+    apply = settings.getByRole('button', { name: 'Apply Now' }),
     hint = settings.locator('[data-role="trash-purge-hint"]'),
     leave = page.locator('[data-component="trash-retention-leave-dialog"]');
   await expect(settings).toContainText('Git history keeps every purged ticket file');
   await expect(input).toHaveJSProperty('value', '30');
-  // "Apply now" shares the field's line and stays disabled until the value changes.
+  // "Apply Now" shares the field's line and stays disabled until the value changes.
   await expect(apply).toHaveJSProperty('disabled', true);
   const fieldBox = await input.locator('input').boundingBox(),
     applyBox = await apply.boundingBox();
@@ -24474,15 +24474,15 @@ test('shows and persists the shared Trash retention period in Lifecycle settings
   ]);
   await expect(apply).toHaveJSProperty('disabled', true);
   await expect(settings.getByRole('status')).toHaveText('');
-  await page.getByLabel('List view').click();
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('List View').click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Lifecycle' }).click();
   await expect(input).toHaveJSProperty('value', '14');
 
   // Leaving with an unapplied value asks to apply or revert it (HS2-F55956). Revert continues.
   await input.locator('input').fill('5');
   await expect(hint).toHaveText('3 tickets in Trash will be purged');
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   await expect(leave).toHaveJSProperty('open', true);
   await expect(leave).toContainText('You changed Trash retention to 5 days but did not apply it.');
   await expect(leave).toContainText('3 tickets in Trash will be purged');
@@ -24491,7 +24491,7 @@ test('shows and persists the shared Trash retention period in Lifecycle settings
   await leave.getByRole('button', { name: 'Revert to 14 days' }).click();
   await expect(settings).toHaveCount(0);
   expect(writes).toHaveLength(1);
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Lifecycle' }).click();
   await expect(input).toHaveJSProperty('value', '14');
 
@@ -24549,9 +24549,9 @@ test('shares the settings category across projects but scopes command drafts to 
     route.request().method() === 'GET' ? route.fulfill({ json: [] }) : route.fallback(),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   let editor = page.locator('[data-component="command-settings-editor"]');
   const commandDialog = page.locator('#command-editor-dialog');
@@ -24565,15 +24565,15 @@ test('shares the settings category across projects but scopes command drafts to 
     await row.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   };
   await openFirstCommand('Demo checks');
-  await expect(commandDialog.getByLabel('Button label')).toHaveValue('Demo checks');
-  await commandDialog.getByLabel('Button label').fill('Unsaved demo draft');
+  await expect(commandDialog.getByLabel('Button Label')).toHaveValue('Demo checks');
+  await commandDialog.getByLabel('Button Label').fill('Unsaved demo draft');
   await commandDialog.getByRole('button', { name: 'Done' }).click();
   await expect.poll(() => commandDialog.evaluate((node) => node.matches(':popover-open'))).toBe(false);
   await expect(editor).toContainText('Unsaved demo draft');
   // Adding a project keeps the same settings category (shared across projects — HS2-4J50K3), so the
   // new project opens straight onto Commands rather than resetting to Ticket sources.
-  await page.getByRole('button', { name: 'Add project' }).click();
-  await expect(page.getByRole('region', { name: 'Commands settings' })).toBeVisible();
+  await page.getByRole('button', { name: 'Add Project' }).click();
+  await expect(page.getByRole('region', { name: 'Commands Settings' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Commands', exact: true })).toHaveAttribute('aria-current', 'page');
   editor = page.locator('[data-component="command-settings-editor"]');
   // A previous-project row that is still in the DOM right after the switch must not open an empty
@@ -24596,17 +24596,17 @@ test('shares the settings category across projects but scopes command drafts to 
   });
   expect(await commandDialog.evaluate((node) => node.matches(':popover-open'))).toBe(false);
   await openFirstCommand('Other checks');
-  await expect(commandDialog.getByLabel('Button label')).toHaveValue('Other checks');
+  await expect(commandDialog.getByLabel('Button Label')).toHaveValue('Other checks');
   await expect(editor).not.toContainText('Unsaved demo draft');
   await commandDialog.getByRole('button', { name: 'Done' }).click();
   await expect.poll(() => commandDialog.evaluate((node) => node.matches(':popover-open'))).toBe(false);
   await page.screenshot({ path: 'target/visual-captures/hs2-g9fmqj-other-project-settings-wide.png', fullPage: true });
   await page.getByRole('tab', { name: 'demo' }).click();
   editor = page.locator('[data-component="command-settings-editor"]');
-  await expect(page.getByRole('region', { name: 'Commands settings' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Commands Settings' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Commands', exact: true })).toHaveAttribute('aria-current', 'page');
   await openFirstCommand('Unsaved demo draft');
-  await expect(commandDialog.getByLabel('Button label')).toHaveValue('Unsaved demo draft');
+  await expect(commandDialog.getByLabel('Button Label')).toHaveValue('Unsaved demo draft');
   await expect(editor).not.toContainText('Other checks');
   await commandDialog.getByRole('button', { name: 'Done' }).click();
   await expect.poll(() => commandDialog.evaluate((node) => node.matches(':popover-open'))).toBe(false);
@@ -24619,14 +24619,14 @@ test('live project visual review', async ({ page }) => {
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
   await page
     .locator('wa-input[name="project-root"]')
     .evaluate(
       (node: HTMLElement & { value: string }, value) => (node.value = value),
       process.env.HOTSHEET_LIVE_PROJECT,
     );
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-component="ticket-list-row"]').first()).toBeVisible({ timeout: 15_000 });
   const loaded = page.waitForResponse(
     (response) => response.url().includes('/tickets/') && response.request().method() === 'GET',
@@ -24699,7 +24699,7 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities: {
@@ -24745,11 +24745,11 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
   });
   await page.setViewportSize({ width: 1400, height: 820 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const menu = page.locator('[data-context-menu="ticket"]');
   await expect(page.locator('[data-action="select-ticket-row"]').first()).toBeVisible();
-  // List view: scroll the workspace, then open the context menu on a currently-visible row.
+  // List View: scroll the workspace, then open the context menu on a currently-visible row.
   const list = await page.evaluate(() => {
     const ws = document.querySelector('.app-shell__workspace') as HTMLElement;
     ws.scrollTop = 400;
@@ -24783,7 +24783,7 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
   // Board view: scroll a column's ticket list, then open the context menu on a visible row in it.
-  await page.getByRole('button', { name: 'Columns view' }).click();
+  await page.getByRole('button', { name: 'Columns View' }).click();
   await expect(page.locator('.ticket-board-column__tickets').first()).toBeVisible();
   const board = await page.evaluate(() => {
     const col = [...document.querySelectorAll('.ticket-board-column__tickets')].find(
@@ -24921,8 +24921,8 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   });
   await page.setViewportSize({ width: 1400, height: 760 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const workspace = page.locator('.app-shell__workspace'),
     tickets = workspace.locator('[data-component="ticket-list-row"]'),
     scroll = () => workspace.evaluate((node) => node.scrollTop),
@@ -24955,7 +24955,7 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   await selectView('all');
   await expect(tickets).toHaveCount(160);
   await expect.poll(scroll).toBe(queueTop);
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   const columns = workspace.locator('.ticket-board-column__tickets');
   await expect(columns).toHaveCount(4);
   await expect.poll(scroll).toBe(0);
@@ -24966,9 +24966,9 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   });
   const boardPositions = await columns.evaluateAll((nodes) => nodes.map((node) => node.scrollTop));
   expect(boardPositions.slice(0, 2)).toEqual([250, 430]);
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   await expect.poll(scroll).toBe(queueTop);
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(tickets).toHaveCount(160);
   await expect(tickets.first()).toContainText('Other scroll ticket');
   await expect.poll(scroll).toBe(0);
@@ -24985,7 +24985,7 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   await expect(tickets).toHaveCount(120);
   await expect.poll(scroll).toBe(backlogTop);
   await selectView('all');
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   await expect.poll(() => columns.evaluateAll((nodes) => nodes.map((node) => node.scrollTop))).toEqual(boardPositions);
   await page.screenshot({
     path: 'target/visual-captures/hs2-pdyxyj-board-columns-restored.png',
@@ -25004,9 +25004,9 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   await page.setViewportSize({ width: 1400, height: 760 });
   await expect.poll(() => columns.evaluateAll((nodes) => nodes.map((node) => node.scrollTop))).toEqual(boardPositions);
   await page.getByRole('tab', { name: 'other', exact: true }).click();
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   await expect.poll(scroll).toBe(otherTop);
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const grid = workspace.locator('[data-ticket-scroll-owner="terminal-grid"]');
   await expect(grid).toBeVisible();
   const gridTop = await grid.evaluate((node) => {
@@ -25016,7 +25016,7 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   expect(gridTop).toBe(250);
   await page.getByRole('tab', { name: 'other', exact: true }).click();
   await expect.poll(scroll).toBe(otherTop);
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await expect.poll(() => grid.evaluate((node) => node.scrollTop)).toBe(gridTop);
   await page.screenshot({
     path: 'target/visual-captures/hs2-pdyxyj-terminal-grid-restored.png',
@@ -25027,7 +25027,7 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   // Change the inactive project's contents, then revisit the saved list destination.
   demoRows = demoRows.filter((item) => item.status === 'backlog').concat(demoRows.slice(0, 20));
   await page.getByRole('tab', { name: 'demo', exact: true }).click();
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   await expect(tickets).toHaveCount(20);
   await expect
     .poll(() => workspace.evaluate((node) => node.scrollTop === Math.max(0, node.scrollHeight - node.clientHeight)))
@@ -25089,7 +25089,7 @@ test('preserves list and every board-column scroll position across ticket mutati
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities: {
@@ -25160,8 +25160,8 @@ test('preserves list and every board-column scroll position across ticket mutati
   });
   await page.setViewportSize({ width: 1400, height: 760 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const workspace = page.locator('.app-shell__workspace');
   const listTarget = page.locator('[data-component="ticket-list-row"][data-status="completed"]').nth(8),
     listSlug = await listTarget.getAttribute('data-ticket-slug');
@@ -25205,7 +25205,7 @@ test('preserves list and every board-column scroll position across ticket mutati
     'verified',
   );
   await expect.poll(() => workspace.evaluate((node) => node.scrollTop)).toBe(listBefore);
-  await page.getByRole('button', { name: 'Columns view' }).click();
+  await page.getByRole('button', { name: 'Columns View' }).click();
   const columns = page.locator('.ticket-board-column__tickets');
   await expect(columns).toHaveCount(4);
   const positions = () =>
@@ -25264,9 +25264,9 @@ test('preserves list and every board-column scroll position across ticket mutati
 test('dismisses every remaining dialog through its native close event (HS2-3RQ7V7)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('tab', { name: /Tests/ }).click({ button: 'right' });
   await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
@@ -25278,10 +25278,10 @@ test('dismisses every remaining dialog through its native close event (HS2-3RQ7V
   await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toHaveJSProperty('open', false);
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await page.getByRole('button', { name: 'Manage workspace visibility' }).click();
   const visibility = page.locator('[data-terminal-visibility-dialog]');
-  await visibility.getByRole('button', { name: 'Add visibility group' }).click();
+  await visibility.getByRole('button', { name: 'Add Visibility Group' }).click();
   dialog = page.locator('[data-terminal-visibility-name-dialog]');
   await expect(dialog).toHaveJSProperty('open', true);
   await page.keyboard.press('Escape');
@@ -25355,8 +25355,8 @@ test('edits and contains a wrapping attachment group title through the productio
     return route.fulfill({ json: { store: 'git-local', ...liveFull } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const batch = page.locator('[data-attachment-group-drop-target]').first(),
@@ -25438,8 +25438,8 @@ test('keeps a production attachment label edit open while a live ticket update r
     polls.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const batch = page.locator('[data-attachment-group-drop-target]').first();
@@ -25485,7 +25485,7 @@ test('keeps a production attachment label edit open while a live ticket update r
 
   // The ticket reader composes the same editor in its own scope: editing there leaves the inspector
   // behind it closed.
-  await page.getByRole('button', { name: 'Open ticket reader' }).click();
+  await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   await reader.getByRole('tab', { name: /Attachments/ }).click();
   const readerBatch = reader.locator('[data-attachment-group-drop-target]').first();
@@ -25552,8 +25552,8 @@ test('autosaves a production attachment label once on blur, page hide, and Enter
         .map((key) => JSON.parse(localStorage.getItem(key)!) as { base: string; draft: string }),
     );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await openAttachments();
   const inspector = page.locator('#app-right-rail'),
     batch = inspector.locator('[data-attachment-group-drop-target]').first(),
@@ -25641,7 +25641,7 @@ test('autosaves a production attachment label once on blur, page hide, and Enter
   expect(writes).toHaveLength(3);
 
   // The reader composes the same editor in its own scope and writes once when its edit finishes.
-  await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+  await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   await reader.getByRole('tab', { name: /Attachments/ }).click();
   const readerBatch = reader.locator('[data-attachment-group-drop-target]').first();
@@ -25656,7 +25656,7 @@ test('autosaves a production attachment label once on blur, page hide, and Enter
   await expect.poll(() => writes.length).toBe(4);
   expect(writes[3]).toMatchObject({ batch_label: 'Reader label' });
   await expect(readerBatch.getByRole('button', { name: 'Edit batch label Reader label' })).toBeVisible();
-  await page.getByRole('button', { name: 'Close ticket reader' }).click();
+  await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
 
   // At 390 the inspector overlay edits the same way; Escape restores the label and writes nothing.
   await page.setViewportSize({ width: 390, height: 844 });
@@ -25732,8 +25732,8 @@ test('moves a media thumbnail between batches and removes active media from its 
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const thumbnail = page.getByRole('button', { name: 'Open proof.png in media gallery' }),
@@ -25773,8 +25773,8 @@ test('shows the decorative server-busy bars while a server request is in flight 
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page, true, false, 0, 0, 450);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const bars = page.locator('[data-component="server-busy-bars"]');
   await expect(bars).toBeAttached();
   await expect(bars).toHaveAttribute('aria-hidden', 'true');
@@ -25804,18 +25804,18 @@ test('rebinds and applies keyboard shortcuts from App Settings (HS2-QT6PGR)', as
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const apple = await page.evaluate(() => /macintosh|mac os|iphone|ipad|ipod/i.test(navigator.userAgent));
   const mod = apple ? 'Meta' : 'Control';
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   const nav = page.locator('#app-left-rail nav[aria-label="Settings categories"]');
   await expect(nav).toContainText('Project Settings');
   await expect(nav).toContainText('App Settings');
   await nav.locator('[data-item-id="keyboard"]').click();
   const screen = page.locator('[data-component="keyboard-settings"]');
   await expect(screen).toBeVisible();
-  await expect(page.locator('#workspace-page-title')).toContainText('Keyboard shortcuts');
+  await expect(page.locator('#workspace-page-title')).toContainText('Keyboard Shortcuts');
   await expect(screen.locator('[data-shortcut-id="open-search"] .keyboard-settings__chord')).toHaveText(
     apple ? '⌘K' : 'Ctrl+K',
   );
@@ -25842,7 +25842,7 @@ test('rebinds and applies keyboard shortcuts from App Settings (HS2-QT6PGR)', as
   await screen.locator('[data-shortcut-id="undo"] [data-action="edit-shortcut"]').click();
   await expect(screen.locator('[data-shortcut-capture="undo"]')).toBeFocused();
   await page.keyboard.press(`${mod}+g`);
-  await expect(screen.locator('[data-shortcut-id="undo"] .keyboard-settings__conflict')).toContainText('Open search');
+  await expect(screen.locator('[data-shortcut-id="undo"] .keyboard-settings__conflict')).toContainText('Open Search');
   await expect(screen.locator('[data-shortcut-id="open-search"] .keyboard-settings__conflict')).toContainText('Undo');
   // Reset just Undo: its default returns and the conflict clears while Open search stays rebound.
   await screen.locator('[data-shortcut-id="undo"] [data-action="reset-shortcut"]').click();
@@ -25851,7 +25851,7 @@ test('rebinds and applies keyboard shortcuts from App Settings (HS2-QT6PGR)', as
   );
   await expect(screen.locator('.keyboard-settings__conflict')).toHaveCount(0);
   // The rebinding takes effect: mod+K no longer opens search, mod+G does.
-  await page.getByRole('button', { name: 'List view', exact: true }).click();
+  await page.getByRole('button', { name: 'List View', exact: true }).click();
   await page.locator('.app-shell__work-area').focus();
   await page.keyboard.press(`${mod}+k`);
   await expect(page.getByRole('searchbox', { name: 'Search tickets' })).toHaveCount(0);
@@ -25862,11 +25862,11 @@ test('rebinds and applies keyboard shortcuts from App Settings (HS2-QT6PGR)', as
 test('applies a saved command color and icon to the sidebar command button (HS2-656XJ2)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const command = page.locator('[data-action="run-command"][data-item-id="check"]');
   await expect(command).toBeVisible();
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   const editor = page.locator('[data-component="command-settings-editor"]');
   await expect(editor).toBeVisible();
@@ -25887,7 +25887,7 @@ test('applies a saved command color and icon to the sidebar command button (HS2-
   );
   await commandDialog.getByRole('button', { name: 'Done' }).click();
   await commandsSaved4;
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   await expect(command).toBeVisible();
   await expect(command).toHaveAttribute('data-command-color', '#22c55e');
   await expect(command.locator('[data-lucide="circle-check-big"]')).toHaveCount(1);
@@ -25899,11 +25899,11 @@ test('applies a saved command color and icon to the sidebar command button (HS2-
 test('searches the full Lucide catalog to assign an arbitrary command icon (HS2-5VSNV3)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const command = page.locator('[data-action="run-command"][data-item-id="check"]');
   await expect(command).toBeVisible();
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   const editor = page.locator('[data-component="command-settings-editor"]');
   await expect(editor).toBeVisible();
@@ -25919,7 +25919,7 @@ test('searches the full Lucide catalog to assign an arbitrary command icon (HS2-
   await picker.scrollIntoViewIfNeeded();
   await picker.screenshot({ path: 'target/visual-captures/hs2-5vsnv3-icon-picker-popular.png' });
   // Typing a query loads the full catalog and surfaces the matching icon.
-  await picker.getByRole('searchbox', { name: 'Search icons' }).fill('compass');
+  await picker.getByRole('searchbox', { name: 'Search Icons' }).fill('compass');
   const compass = picker.locator('[data-action="select-command-icon"][data-icon-name="compass"]').first();
   await expect(compass).toBeVisible();
   await picker.screenshot({ path: 'target/visual-captures/hs2-5vsnv3-icon-picker-search.png' });
@@ -25930,7 +25930,7 @@ test('searches the full Lucide catalog to assign an arbitrary command icon (HS2-
   );
   await commandDialog.getByRole('button', { name: 'Done' }).click();
   await commandsSaved5;
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   await expect(command.locator('[data-lucide="compass"]')).toHaveCount(1);
 });
 
@@ -25959,12 +25959,12 @@ test('keeps the open new-ticket composer and its draft through a background tick
       .fulfill({ json: { cursor, events: [{ store: 'git-local', kind, id, slug }], overflow: false } });
   };
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: /New ticket/ }).click();
   const dialog = page.locator('[data-component="quick-ticket-composer"]');
   await expect(dialog).toHaveJSProperty('open', true);
-  await dialog.getByLabel('Ticket title').fill('Draft title I do not want to lose');
+  await dialog.getByLabel('Ticket Title').fill('Draft title I do not want to lose');
   await dialog.locator('[name="new-ticket-details"]').fill('Detailed notes typed before a background refresh.');
   const external = {
     ...row,
@@ -25981,7 +25981,7 @@ test('keeps the open new-ticket composer and its draft through a background tick
   await expect(page.locator('[data-ticket-slug="HS2-EXTERNAL"]')).toContainText('Externally added ticket');
   // The composer must stay open with its typed draft intact (HS2-D4PB9Y).
   await expect(dialog).toHaveJSProperty('open', true);
-  await expect(dialog.getByLabel('Ticket title')).toHaveValue('Draft title I do not want to lose');
+  await expect(dialog.getByLabel('Ticket Title')).toHaveValue('Draft title I do not want to lose');
   await expect(dialog.locator('[name="new-ticket-details"]')).toHaveValue(
     'Detailed notes typed before a background refresh.',
   );
@@ -25990,12 +25990,12 @@ test('keeps the open new-ticket composer and its draft through a background tick
 test('recovers the open new-ticket composer and its draft after a reload/restart (HS2-D4PB9Y)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: /New ticket/ }).click();
   const dialog = page.locator('[data-component="quick-ticket-composer"]');
   await expect(dialog).toHaveJSProperty('open', true);
-  await dialog.getByLabel('Ticket title').fill('Draft that must survive a restart');
+  await dialog.getByLabel('Ticket Title').fill('Draft that must survive a restart');
   await dialog.locator('[name="new-ticket-details"]').fill('Notes that must survive a restart.');
   // Reload immediately, before the 700ms persistence debounce — only the pagehide flush can save the draft.
   await page.reload();
@@ -26003,7 +26003,7 @@ test('recovers the open new-ticket composer and its draft after a reload/restart
   // Per design the composer is not auto-painted on startup, but the flushed draft is recovered on reopen.
   await expect(restored).toBeHidden();
   await page.getByRole('button', { name: 'New ticket…' }).click();
-  await expect(restored.getByRole('textbox', { name: 'Ticket title' })).toHaveValue(
+  await expect(restored.getByRole('textbox', { name: 'Ticket Title' })).toHaveValue(
     'Draft that must survive a restart',
   );
   await expect(restored.getByRole('textbox', { name: 'Details' })).toHaveValue('Notes that must survive a restart.');
@@ -26043,8 +26043,8 @@ test('opens a distinct terminal for each shell command even when a create is sti
     return route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Lint project' }).click();
   await expect.poll(() => posted).toEqual(['npm run lint']); // the first create's POST is held in flight
   await page.getByRole('button', { name: 'Test project' }).click(); // a second click arrives during the pending create
@@ -26086,8 +26086,8 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const row = page.locator(`[data-ticket-slug="${created.slug}"]`).first();
     await row.click();
     await row.click({ button: 'right' });
@@ -26161,8 +26161,8 @@ test('shows recorded completion confidence through the real server (HS2-DWTJ43)'
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
     const inspector = page.locator('#app-right-rail'),
       header = inspector.locator('.ticket-inspector__confidence'),
@@ -26211,7 +26211,7 @@ test('shows recorded completion confidence through the real server (HS2-DWTJ43)'
     await expect(header).toHaveAttribute('data-confidence', '93', { timeout: 15_000 });
     await expect(header.locator('[data-band="verified"]')).toBeVisible();
     // The reader composition renders the same header and note badges.
-    await page.getByRole('button', { name: 'Open ticket reader' }).click();
+    await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
     const reader = page.getByRole('dialog').filter({ has: page.locator('[data-component="ticket-inspector"]') });
     await expect(reader.locator('.ticket-inspector__confidence')).toHaveAttribute('data-confidence', '93');
     await expect(reader.locator(`article[data-note-id="${first.id}"] [data-component="confidence-badge"]`)).toHaveText(
@@ -26268,8 +26268,8 @@ test('reflects a corrected or cleared note confidence from the real server (HS2-
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const inspector = page.locator('#app-right-rail'),
       header = inspector.locator('.ticket-inspector__confidence'),
       card = inspector.locator(`[data-component="note-card"][data-note-id="${scored.id}"]`),
@@ -26381,8 +26381,8 @@ test('shows recorded note authorship from the real server (HS2-32QDZ3)', async (
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
     const inspector = page.locator('#app-right-rail'),
       card = (text: string) => inspector.locator(`[data-component="note-card"][data-note-id="${noteId(text)}"]`);
@@ -26489,8 +26489,8 @@ test('shows the project confidence calibration from the real server (HS2-Q1WCCY)
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator('[data-component="project-summary"]').first().click();
     const panel = page.locator('[data-component="confidence-calibration"]');
     await expect(panel).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
@@ -26548,8 +26548,8 @@ test('records the web client as the human actor on the real server (HS2-XF81CJ)'
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
     const inspector = page.locator('#app-right-rail');
     const status = inspector.locator('.ticket-status-menu');
@@ -26600,11 +26600,11 @@ test('loads board columns independently from the real server (HS2-HNZZHC)', asyn
     });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    await page.getByLabel('Columns view').click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByLabel('Columns View').click();
     const board = page.locator('[data-component="ticket-board"]'),
-      column = (name: string) => board.getByRole('region', { name: `${name} column`, exact: true }),
+      column = (name: string) => board.getByRole('region', { name: `${name} Column`, exact: true }),
       rows = (name: string) => column(name).locator('[data-ticket-slug]'),
       more = (name: string) => column(name).getByRole('button', { name: 'Load more tickets' });
     await expect(column('Started').getByLabel('3 tickets')).toBeVisible();
@@ -26662,12 +26662,12 @@ test('a quoting feedback reply clears Needs review through the real server (HS2-
     });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const row = page.locator(`[data-component="ticket-list-row"][data-ticket-slug="${created.slug}"]`);
     await expect(row.locator('.ticket-list-row__feedback')).toContainText('Needs review');
     await row.click();
-    await page.getByRole('button', { name: 'Open ticket reader' }).click();
+    await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
     const reader = page.getByRole('dialog').filter({ has: page.locator('[data-component="ticket-inspector"]') }),
       inspector = reader.locator('[data-component="ticket-inspector"]'),
       note = reader.locator(`article[data-note-id="${requestNote.id}"]`);
@@ -26696,7 +26696,7 @@ test('a quoting feedback reply clears Needs review through the real server (HS2-
     await expect(inspector).toHaveAttribute('data-needs-review', 'false');
     await replyCard.scrollIntoViewIfNeeded();
     await reader.screenshot({ path: 'target/visual-captures/hs2-avxycb-feedback-answered-mobile.png' });
-    await page.getByRole('button', { name: 'Close ticket reader' }).click();
+    await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
     await expect(row.locator('.ticket-list-row__feedback')).toHaveCount(0);
     await page.reload();
     await expect(row).toBeVisible();
@@ -26712,9 +26712,9 @@ test('preserves feature-controller command editing and run-dialog parity across 
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByLabel('Settings view').click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   const editor = page.locator('[data-component="command-settings-editor"]');
   const openEditor = async () => {
@@ -26724,7 +26724,7 @@ test('preserves feature-controller command editing and run-dialog parity across 
   };
   const dialog = page.locator('#command-editor-dialog');
   await openEditor();
-  await dialog.getByLabel('Button label').fill('Feature parity');
+  await dialog.getByLabel('Button Label').fill('Feature parity');
   await dialog.getByRole('textbox', { name: 'Program' }).fill('/usr/bin/true');
   const commandsSaved6 = page.waitForResponse(
     (response) => response.url().endsWith('/commands') && response.request().method() === 'PUT',
@@ -26738,21 +26738,21 @@ test('preserves feature-controller command editing and run-dialog parity across 
     path: 'target/visual-captures/hs2-dhygxj-command-settings-wide.png',
     animations: 'disabled',
   });
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   await expect(page.getByRole('button', { name: 'Feature parity', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Feature parity', exact: true }).click();
   await page.getByRole('button', { name: 'Running Feature parity' }).click();
   const stop = page.locator('[data-component="command-cancellation-dialog"]');
   await expect(stop.getByRole('dialog', { name: 'Stop Feature parity?' })).toBeVisible();
-  await stop.getByRole('button', { name: 'Stop command' }).click();
+  await stop.getByRole('button', { name: 'Stop Command' }).click();
   await expect(page.getByRole('button', { name: 'Feature parity', exact: true })).toHaveAttribute('title', /cancelled/);
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   await expect(editor).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('[data-component="app-shell"]')).toHaveAttribute('data-mobile', 'true');
   await openEditor();
-  await expect(dialog.getByLabel('Button label')).toHaveValue('Feature parity');
-  await dialog.getByLabel('Button label').fill('After return');
+  await expect(dialog.getByLabel('Button Label')).toHaveValue('Feature parity');
+  await dialog.getByLabel('Button Label').fill('After return');
   const commandsSaved7 = page.waitForResponse(
     (response) => response.url().endsWith('/commands') && response.request().method() === 'PUT',
   );
@@ -26772,9 +26772,9 @@ test('keeps terminal visibility anchored through interrupted close, resize, and 
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Workspace grid', exact: true }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace Grid', exact: true }).click();
   const select = page.locator('wa-select[name="terminal-visibility-group"]');
   type Probe = HTMLElement & { open: boolean; held: Animation[]; completedShows: number; completedHides: number };
   await select.evaluate((element) => {
@@ -26869,11 +26869,11 @@ test('keeps Add project beside the last project tab and New ticket at the far ed
   );
   await page.setViewportSize({ width: 1400, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   const tabs = page.locator('.project-tab-bar [role="tab"]'),
-    add = page.getByRole('button', { name: 'Add project' }),
+    add = page.getByRole('button', { name: 'Add Project' }),
     launcher = page.locator('.project-tab-bar [data-component="quick-ticket-composer-launcher"]'),
     strip = page.locator('.project-tab-bar .kui-tab-bar__tabs');
   await expect(tabs).toHaveCount(2);
@@ -26912,7 +26912,7 @@ test('keeps Add project beside the last project tab and New ticket at the far ed
   expect(box.launcher.right).toBeLessThanOrEqual(box.bar.right);
   await expect(strip).toBeVisible();
   await page.locator('.project-tab-bar').screenshot({ path: 'test-results/hs2-ne8jbs-many-tabs-wide.png' });
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await expect(page.locator('.project-tab-bar')).toHaveAttribute('data-mode', 'terminals');
   await expect(add).toBeVisible();
   const dashboardBar = (await page.locator('.project-tab-bar').boundingBox())!,
@@ -26924,24 +26924,24 @@ test('pins Add project to the far edge of dashboard project strips (HS2-0KSBW7)'
   await mockProject(page);
   await page.setViewportSize({ width: 1920, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const strip = page.locator('.project-tab-bar'),
-    add = strip.getByRole('button', { name: 'Add project' });
+    add = strip.getByRole('button', { name: 'Add Project' });
   for (const [mode, width] of [
-    ['Workspace grid', 1920],
-    ['Cross-project stats', 1024],
+    ['Workspace Grid', 1920],
+    ['Cross-Project Stats', 1024],
   ] as const) {
     await page.setViewportSize({ width, height: 900 });
     await strip.getByRole('button', { name: mode }).click();
-    await expect(strip).toHaveAttribute('data-mode', mode === 'Workspace grid' ? 'terminals' : 'stats');
+    await expect(strip).toHaveAttribute('data-mode', mode === 'Workspace Grid' ? 'terminals' : 'stats');
     const barBox = (await strip.boundingBox())!,
       addBox = (await add.boundingBox())!;
     expect(barBox.x + barBox.width - (addBox.x + addBox.width)).toBeLessThanOrEqual(32);
     await strip.screenshot({
-      path: `target/visual-captures/hs2-0ksbw7-${mode === 'Workspace grid' ? 'grid' : 'stats'}-${width}.png`,
+      path: `target/visual-captures/hs2-0ksbw7-${mode === 'Workspace Grid' ? 'grid' : 'stats'}-${width}.png`,
     });
-    if (mode === 'Workspace grid')
+    if (mode === 'Workspace Grid')
       await page.screenshot({ path: 'target/visual-captures/hs2-0ksbw7-grid-full-1920.png', fullPage: true });
   }
 });
@@ -26952,20 +26952,20 @@ test('keeps the gallery zoom and markup toolbars visible on a phone while the in
   await mockProject(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   // Tapping the ticket opens the inspector as a Workbench rail overlay, which covers the work area.
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await expect(page.locator('#app-right-rail')).toHaveAttribute('data-collapsed', 'false');
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
   const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ }),
-    zoom = gallery.getByRole('toolbar', { name: 'Media zoom' });
+    zoom = gallery.getByRole('toolbar', { name: 'Media Zoom' });
   await expect(zoom).toBeVisible();
   await expect(zoom).toHaveCSS('visibility', 'visible');
-  await expect(gallery.getByRole('button', { name: 'Zoom in' })).toBeInViewport({ ratio: 1 });
+  await expect(gallery.getByRole('button', { name: 'Zoom In' })).toBeInViewport({ ratio: 1 });
   await gallery.getByRole('button', { name: 'Annotate media' }).click();
-  const markup = gallery.getByRole('toolbar', { name: 'Media markup' });
+  const markup = gallery.getByRole('toolbar', { name: 'Media Markup' });
   await expect(markup).toBeVisible();
   await expect(gallery.getByRole('button', { name: 'Add rectangle' })).toBeInViewport({ ratio: 1 });
   // The dialog fills exactly the visible viewport, and with device insets its toolbar and footer
@@ -26994,7 +26994,7 @@ test('keeps the gallery zoom and markup toolbars visible on a phone while the in
   await expect(footer).toHaveCSS('padding-right', '19px');
   expect(
     await gallery
-      .getByRole('button', { name: 'Zoom in' })
+      .getByRole('button', { name: 'Zoom In' })
       .evaluate((node) => innerHeight - node.getBoundingClientRect().bottom),
   ).toBeGreaterThanOrEqual(34);
   expect(
@@ -27010,8 +27010,8 @@ test('paints magnified terminals above every surface from the workspace grid and
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   // Sample the paint at the four corners and the centre: every point must belong to the overlay, so it
   // is neither clipped to its region nor painted under a rail, the drawer, or the shell toolbar.
   const coversViewport = (name: string) =>
@@ -27032,7 +27032,7 @@ test('paints magnified terminals above every surface from the workspace grid and
       };
     });
   // The project drawer's grid, which used to clip the magnified terminal to the drawer region.
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('tab', { name: 'Project grid' }).click();
   await drawer.locator('[data-terminal-key="demo-checkout:codex-main"]').first().click();
@@ -27046,8 +27046,8 @@ test('paints magnified terminals above every surface from the workspace grid and
   await page.getByRole('dialog', { name: 'Magnified Codex Main' }).click({ position: { x: 8, y: 8 } });
   await expect(page.getByRole('dialog', { name: 'Magnified Codex Main' })).toHaveCount(0);
   // Workspace grid, with the ticket rail open on the right.
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
-  const dashboard = page.getByRole('region', { name: 'Workspace grid' });
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace Grid' });
   await dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]').click();
   await expect(page.getByRole('dialog', { name: 'Magnified Codex Main' })).toBeVisible();
   expect(await coversViewport('Magnified Codex Main')).toEqual({
@@ -27057,7 +27057,7 @@ test('paints magnified terminals above every surface from the workspace grid and
   await page.screenshot({ path: testInfo.outputPath('workspace-grid-magnified.png') });
   // The tile's own menu still opens above the top-layer overlay and stays operable.
   const magnified = page.getByRole('dialog', { name: 'Magnified Codex Main' });
-  await magnified.getByRole('button', { name: 'More actions for Codex Main' }).click();
+  await magnified.getByRole('button', { name: 'More Actions for Codex Main' }).click();
   const menuItem = page.locator('[data-context-menu="terminal"] wa-dropdown-item').first();
   await expect(menuItem).toBeVisible();
   expect(
@@ -27100,8 +27100,8 @@ test('reconciles permissions from the change stream with no polling timer, backi
     polls.push(route);
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await expect.poll(() => polls.length).toBeGreaterThan(0);
   await expect.poll(() => permissionGets.length).toBeGreaterThan(0);
@@ -27172,8 +27172,8 @@ test('surfaces a real server permission request through the live stream with no 
       },
     );
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
     const permissionGets = () => forwarded.filter((entry) => entry === 'GET /permissions').length;
     await expect.poll(permissionGets).toBeGreaterThan(0);
@@ -27208,14 +27208,14 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await mockProject(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]');
     await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
     await expect(drawer).toHaveAttribute('data-maximized', 'true');
-    await drawer.getByRole('button', { name: 'New drawer item' }).click();
-    await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat', { exact: true }).click();
+    await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+    await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
     const host = drawer.locator('[data-component="ai-conversation"]'),
       composer = host.getByLabel('Message Codex');
     await composer.fill('Fail this turn.');
@@ -27238,13 +27238,13 @@ test('restores an idle server failure when a persisted conversation still has an
 }) => {
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat', { exact: true }).click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
   const composer = drawer.getByLabel('Message Codex');
   await composer.fill('Fail this turn.');
   await composer.press('Enter');
@@ -27282,12 +27282,12 @@ test('coalesces streamed conversation storage writes and flushes before reload (
   });
   await mockProject(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const composer = drawer.getByLabel('Message Codex');
   const before = await page.evaluate(
     () => (window as typeof window & { __conversationStorageWrites: number }).__conversationStorageWrites,
@@ -27330,13 +27330,13 @@ test('bounds app renders during a sustained conversation stream (HS2-0PFQ8V)', a
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect.poll(() => sockets.length).toBeGreaterThan(0);
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const composer = drawer.getByLabel('Message Codex');
   await resetRenderMetrics(page);
   await composer.fill('Start sustained output');
@@ -27396,13 +27396,13 @@ test('keeps an accepted new conversation turn streaming after an older idle conn
       connectionId = request.postDataJSON().connection_id;
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat', { exact: true }).click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
   const host = drawer.locator('[data-component="ai-conversation"]');
   await expect(host.getByLabel('Message Codex')).toBeVisible();
   const idle = {
@@ -27458,9 +27458,9 @@ test('a terminal created from the desktop drawer menu takes input focus even und
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     menu = drawer.locator('[data-terminal-drawer-create]');
   if (browserName === 'chromium') {
@@ -27484,7 +27484,7 @@ test('a terminal created from the desktop drawer menu takes input focus even und
     };
     document.addEventListener('focusin', steal, true);
   });
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await menu.locator('[data-action="create-terminal-drawer-item"][data-item-id="default-shell"]').click();
   await expect(drawer.locator('[role="tab"]')).toHaveCount(before + 1);
   // The new, selected session's xterm input owns focus, not the menu or its trigger.

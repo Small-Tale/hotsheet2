@@ -49,8 +49,8 @@ export function SettingsWorkspaceSettings() {
         value={settingsWorkspaceSettings.permissionAction.value}
         choices={[
           { value: 'off', label: 'Off' },
-          { value: 'allow', label: 'Auto-allow' },
-          { value: 'deny', label: 'Auto-deny' },
+          { value: 'allow', label: 'Auto-Allow' },
+          { value: 'deny', label: 'Auto-Deny' },
         ]}
       />
       <wa-button type="button" {...DEMO_ACTIONS.resetSettings.attrs}>

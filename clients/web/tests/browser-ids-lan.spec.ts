@@ -147,7 +147,7 @@ for (const width of [390, 1280]) {
         composer = page.getByRole('dialog', { name: 'Create ticket' });
       const filenames = ['first.txt', 'second.txt'];
       await newTicket.click();
-      await composer.getByRole('textbox', { name: 'Ticket title' }).fill('Cancelled draft');
+      await composer.getByRole('textbox', { name: 'Ticket Title' }).fill('Cancelled draft');
       await composer
         .getByLabel('Drop or browse attachments for new ticket', { exact: true })
         .setInputFiles({ name: 'discarded.txt', mimeType: 'text/plain', buffer: Buffer.from('discarded') });
@@ -155,7 +155,7 @@ for (const width of [390, 1280]) {
       await composer.getByRole('button', { name: 'Cancel' }).click();
       for (const [index, filename] of filenames.entries()) {
         await newTicket.click();
-        await composer.getByRole('textbox', { name: 'Ticket title' }).fill(`LAN attachment ${index + 1}`);
+        await composer.getByRole('textbox', { name: 'Ticket Title' }).fill(`LAN attachment ${index + 1}`);
         await expect(composer.getByRole('button', { name: 'Remove discarded.txt' })).toHaveCount(0);
         await composer.getByLabel('Drop or browse attachments for new ticket', { exact: true }).setInputFiles(
           [filename, `extra-${filename}`].map((name) => ({
@@ -175,7 +175,7 @@ for (const width of [390, 1280]) {
             'true',
           );
           await expect(page.getByRole('textbox', { name: 'Ticket details' })).toBeVisible();
-          await page.getByRole('button', { name: 'Hide ticket inspector' }).click();
+          await page.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
         } else await expect(page.getByRole('textbox', { name: 'Ticket details' })).toBeVisible();
         if (index === 1) {
           await expect.poll(() => uploads.length).toBe(3);
@@ -197,15 +197,15 @@ for (const width of [390, 1280]) {
         expect(new Set(ticket.attachments.map((item) => item.batch_id)).size).toBe(1);
       }
       await page.screenshot({ path: testInfo.outputPath(`LAN-tickets-${width}.png`), fullPage: true });
-      await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+      await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
       const drawer = page.locator('[data-component="terminal-drawer"]'),
-        create = drawer.getByRole('button', { name: 'New drawer item' });
+        create = drawer.getByRole('button', { name: 'New Drawer Item' });
       for (let index = 0; index < 2; index++) {
         await create.click();
-        await drawer.getByRole('menuitem', { name: 'AI chat' }).click();
+        await drawer.getByRole('menuitem', { name: 'AI Chat' }).click();
         const chat = drawer.locator('[data-component="ai-conversation"]');
         await chat.getByLabel('Message Codex').fill(`LAN turn ${index + 1}`);
-        await chat.getByRole('button', { name: 'Send message to Codex' }).click();
+        await chat.getByRole('button', { name: 'Send Message to Codex' }).click();
         await expect(chat).toContainText('Test tool is offline');
         await expect(chat).toContainText(`LAN turn ${index + 1}`);
         const halted = page.getByRole('dialog', { name: 'AI session halted', exact: true });
@@ -220,7 +220,7 @@ for (const width of [390, 1280]) {
       // LAN client sees the menu item disabled with the reason (HS2-F78B1S, HS2-PR6N58,
       // HS2-TYS5SS). The insecure-context saved-chat id path stays covered by browser-id unit tests.
       await create.click();
-      const saved = drawer.getByRole('menuitem', { name: 'Saved conversation…' });
+      const saved = drawer.getByRole('menuitem', { name: 'Saved Conversation…' });
       await expect(saved).toHaveAttribute('disabled', /.*/);
       await expect(saved).toHaveAttribute(
         'title',
@@ -233,13 +233,13 @@ for (const width of [390, 1280]) {
       await drawer
         .locator('[data-component="ai-conversation"]')
         .screenshot({ path: testInfo.outputPath(`LAN-saved-conversation-${width}.png`) });
-      await page.getByRole('button', { name: 'Workspace grid' }).click();
+      await page.getByRole('button', { name: 'Workspace Grid' }).click();
       await page.getByRole('button', { name: 'Manage workspace visibility' }).click();
       const visibility = page.locator('[data-terminal-visibility-dialog]'),
         nameDialog = page.locator('[data-terminal-visibility-name-dialog]');
       for (const name of ['Focus one', 'Focus two']) {
-        await visibility.getByRole('button', { name: 'Add visibility group' }).click();
-        await nameDialog.getByRole('textbox', { name: 'Group name' }).fill(name);
+        await visibility.getByRole('button', { name: 'Add Visibility Group' }).click();
+        await nameDialog.getByRole('textbox', { name: 'Group Name' }).fill(name);
         await nameDialog.getByRole('button', { name: 'Add', exact: true }).click();
         await expect(visibility.getByRole('tab', { name })).toHaveAttribute('aria-selected', 'true');
       }
@@ -255,7 +255,7 @@ for (const width of [390, 1280]) {
       expect(await page.evaluate(() => localStorage.getItem('hotsheet.terminals.visibility-groups'))).toContain(
         'Focus two',
       );
-      await expect(page.getByRole('button', { name: 'Workspace grid' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Workspace Grid' })).toBeVisible();
       // A continuous layout loop must still fail. At the final stable surface, native resize
       // deferrals must stop instead of recurring on later paints. Kerf 5.0.0-beta.72 applies
       // TabBar snapTabs insets outside its ResizeObserver delivery (KF-BJD03Y), so the baseline

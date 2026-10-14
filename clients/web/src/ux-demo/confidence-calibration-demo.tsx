@@ -58,7 +58,7 @@ const CALIBRATION_FIXTURE: CalibrationReport = {
 
 const STATE_CHOICES: SelectChoice[] = [
   { value: 'ready', label: 'Report' },
-  { value: 'empty', label: 'No completions yet' },
+  { value: 'empty', label: 'No Completions Yet' },
   { value: 'loading', label: 'Loading' },
   { value: 'error', label: 'Error' },
 ];

@@ -89,7 +89,7 @@ function ResourceDetail({ resource, projectId }: { resource: ProjectCloseResourc
       <section
         class="project-close-dialog__detail project-close-dialog__terminal"
         data-key={`project-close-preview:${key}`}
-        aria-label={`${resource.name} terminal preview`}
+        aria-label={`${resource.name} Terminal Preview`}
       >
         <TerminalPreview projectId={projectId} terminalId={resource.id} viewportKey={`project-close:${resource.id}`} />
       </section>
@@ -98,7 +98,7 @@ function ResourceDetail({ resource, projectId }: { resource: ProjectCloseResourc
     <section
       class="project-close-dialog__detail project-close-dialog__chat"
       data-key={`project-close-preview:${key}`}
-      aria-label={`${resource.name} chat preview`}
+      aria-label={`${resource.name} Chat Preview`}
     >
       <AIConversation
         open
@@ -179,9 +179,9 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
           )}
           {hasResources ? (
             <div class="project-close-dialog__layout" aria-busy={String(busy)}>
-              <aside class="project-close-dialog__resources" aria-label="Running terminals and AI chats">
+              <aside class="project-close-dialog__resources" aria-label="Running Terminals and AI Chats">
                 <List fill scrollable controlInsets="trbl">
-                  <ListHeader label="Running items" />
+                  <ListHeader label="Running Items" />
                   <nav>
                     <List gap="none">
                       {state.resources.map((resource) => {

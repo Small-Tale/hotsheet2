@@ -127,7 +127,7 @@ export function TerminalDrawerDemo() {
         />
       </CatalogExample>
       {/* With one installed AI provider the AI shell entry is named for it instead of a submenu (HS2-3HT4PA). */}
-      <CatalogExample label="One AI provider" viewport={drawerFrame}>
+      <CatalogExample label="One AI Provider" viewport={drawerFrame}>
         <TerminalDrawer
           projectId="demo-single"
           projectName="Demo project"
@@ -143,7 +143,7 @@ export function TerminalDrawerDemo() {
       </CatalogExample>
       {/* A remote client disables host-only drawer entries such as Saved conversation… (HS2-NWWF1Z). */}
       <CatalogExample
-        label="Remote device"
+        label="Remote Device"
         note="Host-only entries in the new-terminal menu, such as Saved conversation…, render disabled with an explanation."
         viewport={drawerFrame}
       >
@@ -162,7 +162,7 @@ export function TerminalDrawerDemo() {
         />
       </CatalogExample>
       {/* Tab status: a halted AI session (HS2-HJ4D1H), and whether an AI session reaches Hot Sheet (HS2-EV1XK3). */}
-      <CatalogExample label="Terminal tab states" viewport={drawerFrame}>
+      <CatalogExample label="Terminal Tab States" viewport={drawerFrame}>
         <TerminalDrawer
           projectId="demo-states"
           projectName="Demo project"
@@ -224,7 +224,7 @@ export function TerminalDrawerDemo() {
           selectedId="connected"
         />
       </CatalogExample>
-      <CatalogExample label="AI chat tab states" viewport={drawerFrame}>
+      <CatalogExample label="AI Chat Tab States" viewport={drawerFrame}>
         <TerminalDrawer
           projectId="demo-chat-states"
           projectName="Demo project"
@@ -252,7 +252,7 @@ export function TerminalDrawerDemo() {
         />
       </CatalogExample>
       {/* A touch-first desktop (coarse primary pointer) adds rail Copy and Paste (HS2-5DHHPV). */}
-      <CatalogExample label="Touch-first desktop" viewport={drawerFrame}>
+      <CatalogExample label="Touch-First Desktop" viewport={drawerFrame}>
         <TerminalDrawer
           projectId="demo-touch"
           projectName="Demo project"
@@ -379,7 +379,7 @@ export function TerminalKeyBarDemo() {
           {keyBarDemoOutput.value || 'Tap a key to see the bytes it sends.'}
         </DemoEvent>
       </CatalogExample>
-      <CatalogExample label="Function row" viewport={{ width: 'compact', overflow: 'hidden' }}>
+      <CatalogExample label="Function Row" viewport={{ width: 'compact', overflow: 'hidden' }}>
         <TerminalKeyBar modifiers={{ ctrl: 'once', alt: 'locked', shift: 'off' }} functionRow />
       </CatalogExample>
     </>
@@ -400,16 +400,16 @@ export function FixedAspectTerminalCardDemo() {
   };
   return (
     <>
-      <CatalogExample label="Grid preview" viewport={{ width: 'text', surface: 'lowered' }}>
+      <CatalogExample label="Grid Preview" viewport={{ width: 'text', surface: 'lowered' }}>
         <FixedAspectTerminalCard session={session} fit="aspect" />
       </CatalogExample>
-      <CatalogExample label="Magnified interactive" viewport={{ width: 'full', surface: 'lowered' }}>
+      <CatalogExample label="Magnified Interactive" viewport={{ width: 'full', surface: 'lowered' }}>
         <FixedAspectTerminalCard session={session} mode="magnified" fit="aspect" />
       </CatalogExample>
-      <CatalogExample label="Magnified, touch-first desktop" viewport={{ width: 'full', surface: 'lowered' }}>
+      <CatalogExample label="Magnified, Touch-First Desktop" viewport={{ width: 'full', surface: 'lowered' }}>
         <FixedAspectTerminalCard session={session} mode="magnified" fit="aspect" touchClipboard />
       </CatalogExample>
-      <CatalogExample label="Magnified phone toolbar" viewport={{ width: 'compact', surface: 'lowered' }}>
+      <CatalogExample label="Magnified Phone Toolbar" viewport={{ width: 'compact', surface: 'lowered' }}>
         <FixedAspectTerminalCard
           session={session}
           mode="magnified"
@@ -417,7 +417,7 @@ export function FixedAspectTerminalCardDemo() {
           mobile={{ viewport: { left: 0, top: 0, width: 390, height: 844 }, keyboardVisible: false, columns: 60 }}
         />
       </CatalogExample>
-      <CatalogExample label="Magnified phone, keyboard presented" viewport={{ width: 'compact', surface: 'lowered' }}>
+      <CatalogExample label="Magnified Phone, Keyboard Presented" viewport={{ width: 'compact', surface: 'lowered' }}>
         <FixedAspectTerminalCard
           session={session}
           mode="magnified"
@@ -433,8 +433,8 @@ export function TerminalEditMenuDemo() {
   return (
     <CatalogExample label="Interactive">
       <Row gap="xs">
-        <wa-button data-edit-menu-demo-open>Long-press here</wa-button>
-        <wa-button data-edit-menu-demo-open="selection">Long-press a word</wa-button>
+        <wa-button data-edit-menu-demo-open>Long-Press Here</wa-button>
+        <wa-button data-edit-menu-demo-open="selection">Long-Press a Word</wa-button>
       </Row>
       <DemoEvent live={false} attributes={{ 'data-edit-menu-demo-output': '' }}>
         {editMenuDemoOutput.value || 'Open the menu, then choose an action.'}
@@ -449,11 +449,11 @@ export function terminalClipboardDemo(copy: boolean) {
     <CatalogExample label="Interactive">
       <Row gap="xs">
         {copy ? (
-          <wa-button data-clipboard-demo-open="copy">Open copy sheet</wa-button>
+          <wa-button data-clipboard-demo-open="copy">Open Copy Sheet</wa-button>
         ) : (
           <>
-            <wa-button data-clipboard-demo-open="denied">Clipboard denied</wa-button>
-            <wa-button data-clipboard-demo-open="unavailable">Clipboard unavailable</wa-button>
+            <wa-button data-clipboard-demo-open="denied">Clipboard Denied</wa-button>
+            <wa-button data-clipboard-demo-open="unavailable">Clipboard Unavailable</wa-button>
           </>
         )}
       </Row>
@@ -473,8 +473,8 @@ export function TerminalRenameDialogDemo() {
   return (
     <CatalogExample label="Interactive">
       <Row gap="xs">
-        <wa-button data-rename-demo-open="renamed">Rename a renamed terminal</wa-button>
-        <wa-button data-rename-demo-open="default">Rename a default-named terminal</wa-button>
+        <wa-button data-rename-demo-open="renamed">Rename a Renamed Terminal</wa-button>
+        <wa-button data-rename-demo-open="default">Rename a Default-Named Terminal</wa-button>
       </Row>
       <DemoEvent live={false} attributes={{ 'data-rename-demo-output': '' }}>
         {renameDemoOutput.value || 'Reset to default appears only while a rename applies.'}

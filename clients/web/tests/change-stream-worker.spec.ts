@@ -151,7 +151,7 @@ async function installProjects(page: Page) {
           {
             connection_id: 'git',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: `/work/${projectId}.hs2`,
             default: true,
             capabilities,
@@ -195,9 +195,9 @@ async function installProjects(page: Page) {
 
 async function openBothProjects(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.getByRole('tab', { name: 'Beta' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('[data-ticket-slug="HS2-BETA01"]')).toBeVisible();
   await page.getByRole('tab', { name: 'Alpha' }).click();
@@ -266,9 +266,9 @@ test('keeps the main-thread stream when the worker setting is off', async ({ pag
   page.on('worker', (worker) => workers.push(worker.url()));
   const fixture = await installProjects(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-BETA01"]')).toBeVisible();
   fixture.rows[projects.beta.id] = [...fixture.rows[projects.beta.id], row('BETA02', 'Beta second')];
   fixture.emit(projects.beta.id, 'created', 'HS2-BETA02');

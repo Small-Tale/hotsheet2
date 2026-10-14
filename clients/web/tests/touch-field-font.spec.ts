@@ -143,17 +143,17 @@ async function auditAppInteractions(page: Page, phone: boolean) {
     },
     dismiss = () => page.keyboard.press('Escape');
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await expect(page.getByRole('textbox', { name: /^Project folder/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await expect(page.getByRole('textbox', { name: /^Project Folder/ })).toBeVisible();
   await audit('project dialog');
   await openDemoProject(page);
   await expect(page.locator('[data-component="app-shell"]')).toBeVisible();
   await audit('project');
   if (phone) {
-    await page.getByRole('button', { name: 'Show project sidebar' }).click();
+    await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
     await audit('phone sidebar');
     await dismiss();
-    await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+    await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
     await audit('phone inspector');
     return small;
   }
@@ -168,14 +168,14 @@ async function auditAppInteractions(page: Page, phone: boolean) {
   await dismiss();
   await page.getByLabel('HS2-M1: HS2-M1').first().click();
   const rail = page.locator('#app-right-rail');
-  for (const action of ['Add note', 'Add tag', 'Block ticket']) {
+  for (const action of ['Add Note', 'Add tag', 'Block ticket']) {
     await rail.getByRole('button', { name: action }).first().click();
     await audit(`inspector ${action}`);
     await dismiss();
   }
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await audit('terminal drawer');
-  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Settings View').click();
   await expect(page.locator('[data-component="settings-workspace"]')).toBeVisible();
   await audit('settings');
   return small;
@@ -252,7 +252,7 @@ async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
     },
     shot = (name: string) => page.screenshot({ path: test.info().outputPath(`hs2-me1xbc-${name}-${label}.png`) }),
     sidebar = async () => {
-      const show = page.getByRole('button', { name: 'Show project sidebar' });
+      const show = page.getByRole('button', { name: 'Show Project Sidebar' });
       if (phone && (await show.isVisible())) await show.click();
     };
   await openDemoProject(page, true, 1, undefined, undefined, { ...POPULATED, uninitializedRepository: true });
@@ -273,14 +273,14 @@ async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
   await expect(repository).toBeHidden();
 
   await sidebar();
-  await page.getByRole('button', { name: 'More actions for Mine' }).click();
-  await page.locator('[data-context-menu="saved-view"]').getByText('Edit view…').click();
-  await expect(page.getByRole('textbox', { name: 'View name' })).toHaveValue('Mine');
+  await page.getByRole('button', { name: 'More Actions for Mine' }).click();
+  await page.locator('[data-context-menu="saved-view"]').getByText('Edit View…').click();
+  await expect(page.getByRole('textbox', { name: 'View Name' })).toHaveValue('Mine');
   await audit('saved view rename');
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('textbox', { name: 'View name' })).toBeHidden();
-  if (phone) await page.getByRole('button', { name: 'Hide project sidebar' }).click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await expect(page.getByRole('textbox', { name: 'View Name' })).toBeHidden();
+  if (phone) await page.getByRole('button', { name: 'Hide Project Sidebar' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('tab', { name: /Codex Main/ }).click({ button: 'right' });
   await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
@@ -289,8 +289,8 @@ async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
   await audit('terminal rename');
   await page.keyboard.press('Escape');
   await expect(rename).toHaveJSProperty('open', false);
-  if (phone) await page.getByRole('button', { name: 'Hide terminal drawer' }).click();
-  await page.getByLabel('Settings view').click();
+  if (phone) await page.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
+  await page.getByLabel('Settings View').click();
   const workspace = page.locator('[data-component="settings-workspace"]');
   await expect(workspace).toBeVisible();
   for (const category of [
@@ -306,13 +306,13 @@ async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
     'Keyboard',
   ]) {
     // The phone keeps the settings categories in a sidebar overlay.
-    const settingsSidebar = page.getByRole('button', { name: 'Show settings sidebar' });
+    const settingsSidebar = page.getByRole('button', { name: 'Show Settings Sidebar' });
     if (phone && (await settingsSidebar.isVisible())) await settingsSidebar.click();
     await page.getByRole('button', { name: category, exact: true }).first().click();
-    if (phone) await page.getByRole('button', { name: 'Hide settings sidebar' }).click();
+    if (phone) await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
     await audit(`settings ${category}`);
     if (category === 'Ticket sources') {
-      await page.getByRole('button', { name: 'Edit Hot Sheet git' }).click();
+      await page.getByRole('button', { name: 'Edit Hot Sheet Git' }).click();
       await expect(page.getByRole('textbox', { name: 'Location' })).toHaveValue('/tickets');
       await audit('ticket source form');
       await page.keyboard.press('Escape');
@@ -340,7 +340,7 @@ async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
       await shot('ai-tools');
       await model.click();
       await model.getByText('Other…').click();
-      const field = page.getByRole('textbox', { name: /Model identifier/ });
+      const field = page.getByRole('textbox', { name: /Model Identifier/ });
       await expect(field).toBeVisible();
       await field.fill('codex-preview');
       await audit('AI tools other model');
@@ -355,7 +355,7 @@ async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
       const row = page.locator('[data-component="command-settings-editor"] .command-settings-editor__row').first();
       await row.locator('[data-component="popup-menu"] [slot="trigger"]').click();
       await row.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
-      await expect(page.locator('#command-editor-dialog').getByLabel('Button label')).toHaveValue('Run tests');
+      await expect(page.locator('#command-editor-dialog').getByLabel('Button Label')).toHaveValue('Run tests');
       await audit('command editor');
       await page.screenshot({ path: test.info().outputPath(`hs2-nygr2q-command-editor-${label}.png`) });
       await page.keyboard.press('Escape');

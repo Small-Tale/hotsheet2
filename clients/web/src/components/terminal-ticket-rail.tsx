@@ -114,7 +114,7 @@ export function terminalTicketRailPanel({
             wraps the closed full-width view group and keeps open search inline as space allows. */}
         <Toolbar
           className="terminal-ticket-rail__controls"
-          label="Ticket rail controls"
+          label="Ticket Rail Controls"
           dividerSides=""
           responsive="none"
           centerAlign="stretch"
@@ -138,7 +138,7 @@ export function terminalTicketRailPanel({
       <section
         class="terminal-ticket-rail__list"
         data-component="terminal-ticket-rail-list"
-        aria-label="Project tickets"
+        aria-label="Project Tickets"
       >
         {content}
       </section>

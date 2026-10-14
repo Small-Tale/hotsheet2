@@ -40,7 +40,7 @@ describe('TagChip', () => {
     expect(disabled).toContain('data-disabled=""');
     expect(disabled).toMatch(/<button[^>]*data-action="remove-tag-chip"[^>]*disabled/);
   });
-  it('provides stable compact defaults', () => {
+  it('provides stable compact Defaults', () => {
     expect(normalizeTagChipProps({ id: 'tag-1', label: ' needs-design ' })).toEqual({
       id: 'tag-1',
       label: 'needs-design',

@@ -53,7 +53,7 @@ describe('permission presentation components', () => {
     expect(markup).toContain('Allow Once');
     expect(markup).toContain('data-scope="always"');
     expect(markup).toContain('Auto-allow in');
-    expect(markup).toContain('aria-label="Stop auto-allow countdown"');
+    expect(markup).toContain('aria-label="Stop auto-allow Countdown"');
     expect(markup).toContain('title="Stop auto-allow countdown for this request"');
     expect(markup).toContain('data-lucide="pause"');
     expect(readFileSync(resolve(import.meta.dirname, 'permission-request-card.css'), 'utf8')).toContainSource(
@@ -78,7 +78,7 @@ describe('permission presentation components', () => {
   it('labels automatic denial explicitly', () => {
     const markup = String(PermissionRequestCard({ item: pending, countdown: '0:13', countdownAction: 'deny' }));
     expect(markup).toContain('Auto-deny in');
-    expect(markup).toContain('aria-label="Stop auto-deny countdown"');
+    expect(markup).toContain('aria-label="Stop auto-deny Countdown"');
   });
 
   it('updates only the matching countdown text and skips unchanged or absent output', () => {
@@ -94,7 +94,7 @@ describe('permission presentation components', () => {
 
   it('removes always scope when unsupported and exposes popup semantics', () => {
     const markup = String(PermissionRequestPopup({ item: { ...pending, always_allow_supported: false } }));
-    expect(markup).toContain('aria-label="Permission request"');
+    expect(markup).toContain('aria-label="Permission Request"');
     expect(markup).toContain('>Allow</wa-button>');
     expect(markup).not.toContain('Always Allow');
   });
@@ -116,7 +116,7 @@ describe('permission presentation components', () => {
     expect(inline).toMatch(/^<aside /);
     // Escape activates the popup's client-only Ignore while it is lifted above a modal (HS2-S8K9BG).
     expect(top).toMatch(new RegExp(`<wa-button [^>]*${TOP_LAYER_DISMISS_ATTRIBUTE}[^>]*>\\s*Ignore`));
-    // The in-flow layer is how the AI conversation's foreground places its copy without restyling it (HS2-M2W2DP).
+    // The in-flow layer is how the AI Conversation's foreground places its copy without restyling it (HS2-M2W2DP).
     const flow = String(PermissionRequestPopup({ item: pending, layer: 'flow' }));
     expect(flow).toContain('data-layer="flow"');
     expect(flow).not.toContain('popover=');
@@ -261,11 +261,11 @@ describe('notification pause controls (HS2-QYA9SC)', () => {
     const counts = { pending: 2, day: 1, week: 4 };
     const active = String(NotificationNavigation({ selected: 'pending', counts }));
     expect(active).toContain('data-action="pause-notifications"');
-    expect(active).toContain('Pause notifications');
+    expect(active).toContain('Pause Notifications');
     expect(active).toContain('data-lucide="bell-off"');
     const paused = String(NotificationNavigation({ selected: 'pending', counts, paused: true }));
     expect(paused).toContain('data-action="resume-notifications"');
-    expect(paused).toContain('Resume notifications');
+    expect(paused).toContain('Resume Notifications');
     expect(paused).not.toContain('pause-notifications');
   });
 

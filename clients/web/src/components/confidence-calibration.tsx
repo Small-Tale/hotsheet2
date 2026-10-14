@@ -95,14 +95,14 @@ export function ConfidenceCalibration({ state }: { state: ConfidenceCalibrationS
   if (state.status === 'loading')
     return (
       <div class="confidence-calibration" data-component="confidence-calibration" data-state="loading">
-        <EmptyState busy title="Loading confidence calibration" />
+        <EmptyState busy title="Loading Confidence Calibration" />
       </div>
     );
   if (state.status === 'error')
     return (
       <div class="confidence-calibration" data-component="confidence-calibration" data-state="error">
         <StateBanner
-          title="Confidence calibration is unavailable"
+          title="Confidence calibration is unavailable."
           detail={state.message}
           tone="danger"
           urgency="alert"
@@ -116,7 +116,7 @@ export function ConfidenceCalibration({ state }: { state: ConfidenceCalibrationS
     return (
       <div class="confidence-calibration" data-component="confidence-calibration" data-state="empty">
         <EmptyState
-          title="No completions yet"
+          title="No Completions Yet"
           detail="Calibration appears once tickets are completed. Each completion is compared with what happened next: reopened or verified."
           icon={<LucideIcon icon={Gauge} name="gauge" />}
         />
@@ -161,9 +161,9 @@ export function ConfidenceCalibration({ state }: { state: ConfidenceCalibrationS
             </tbody>
           </table>
         </div>
-        <section class="confidence-calibration__recent" aria-label="Recent completions">
+        <section class="confidence-calibration__recent" aria-label="Recent Completions">
           <List gap="xs">
-            <ListHeader label="Recent completions" headingLevel={3} />
+            <ListHeader label="Recent Completions" headingLevel={3} />
             <ul class="confidence-calibration__recent-list">
               {recent.map((event) => (
                 <li data-key={`calibration-event:${event.slug}:${event.completed_at}`} data-outcome={event.outcome}>

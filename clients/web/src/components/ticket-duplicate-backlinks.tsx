@@ -43,9 +43,9 @@ function DuplicateTicketItem({
 
 export function TicketDuplicateTarget({ target }: { target: DuplicateTargetSummary }) {
   return (
-    <section data-component="ticket-duplicate-target" aria-label="Duplicate target">
+    <section data-component="ticket-duplicate-target" aria-label="Duplicate Target">
       <List gap="2xs" controlInsets="b">
-        <ListHeader label="Duplicate of" />
+        <ListHeader label="Duplicate Of" />
         <DuplicateTicketItem
           id={target.id}
           projectName={target.projectName}
@@ -67,7 +67,7 @@ export function TicketDuplicateBacklinks({
 }) {
   if (backlinks.length === 0 && inaccessibleProjects.length === 0) return null;
   return (
-    <section data-component="ticket-duplicate-backlinks" aria-label="Duplicate backlinks">
+    <section data-component="ticket-duplicate-backlinks" aria-label="Duplicate Backlinks">
       <List gap="2xs" controlInsets="b">
         <ListHeader
           label="Duplicates"

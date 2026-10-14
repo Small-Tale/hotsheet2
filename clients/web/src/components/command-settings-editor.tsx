@@ -151,7 +151,7 @@ function AiCommandSelection({
       {/* A stacked field: the ListHeader label matches the Web Awesome field labels above and below,
           and the PopupMenu's group (the cataloged menu-trigger composition, HS2-CSRJ9Y) gets the full
           row width so the label never truncates at phone width (HS2-XZ6Q5A). */}
-      <ListHeader label="AI configuration" headingLevel={3} density="compact" inline />
+      <ListHeader label="AI Configuration" headingLevel={3} density="compact" inline />
       <Toolbar
         dividerSides=""
         leading={
@@ -223,7 +223,7 @@ function CommandDetailFields({
   return (
     <List gap="m" rootAttributes={{ 'data-command-id': command.id }}>
       <Grid minColumnWidth={px(224)} gap="m">
-        <wa-input label="Button label" name="title" data-command-field required value={command.title} />
+        <wa-input label="Button Label" name="title" data-command-field required value={command.title} />
         <Select
           name="kind"
           label="Type"
@@ -256,7 +256,7 @@ function CommandDetailFields({
       )}
       {type === 'shell' && (
         <wa-textarea
-          label="Shell command"
+          label="Shell Command"
           name="command"
           data-command-field
           required
@@ -284,7 +284,7 @@ function CommandDetailFields({
         </>
       )}
       <wa-input
-        label="Confirmation message"
+        label="Confirmation Message"
         name="confirmation"
         data-command-field
         value={command.confirmation ?? ''}
@@ -420,7 +420,7 @@ export function CommandSettingsEditor({
       {/* Kerf's PopoverDialogSurface owns the native popover="auto" chrome, size, and backdrop (HS2-T1MVPV). */}
       <PopoverDialogSurface
         id={COMMAND_EDITOR_DIALOG_ID}
-        label="Edit command"
+        label="Edit Command"
         bodyLayout="fill"
         rootAttributes={{ 'data-command-editor-dialog': 'true' }}
       >
@@ -451,7 +451,7 @@ export function CommandSettingsEditor({
                     </span>
                   </ToolbarControlGroup>
                   <ToolbarText
-                    text="Edit command"
+                    text="Edit Command"
                     id="command-editor-title"
                     size="xlarge"
                     description="Changes save automatically."
@@ -459,7 +459,7 @@ export function CommandSettingsEditor({
                 </>
               }
               trailing={
-                <ToolbarControlGroup label="Command actions" appearance="borderless" single>
+                <ToolbarControlGroup label="Command Actions" appearance="borderless" single>
                   <button type="button" {...COMMANDS_AND_AI_ACTIONS.closeCommandEditor.attrs}>
                     Done
                   </button>

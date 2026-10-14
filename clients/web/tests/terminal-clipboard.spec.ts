@@ -25,15 +25,15 @@ async function installPhone(page: Page) {
 
 async function openProject(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
 }
 
 async function openFocusedDrawerTerminal(page: Page) {
   await openProject(page);
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
   const viewport = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
   await expect(viewport).toHaveAttribute('data-connection', 'connected');
@@ -62,10 +62,10 @@ test('copies all terminal text or a selection from the phone copy sheet', async 
   const { drawer } = await openFocusedDrawerTerminal(page);
   const pill = drawer.getByRole('group', { name: 'Clipboard' });
   await expect(pill).toBeVisible();
-  await expect(pill.getByRole('button', { name: 'Copy terminal text' })).toHaveCSS('cursor', 'pointer');
+  await expect(pill.getByRole('button', { name: 'Copy Terminal Text' })).toHaveCSS('cursor', 'pointer');
   await page.screenshot({ path: test.info().outputPath('hs2-frb545-focus-clipboard-pill.png') });
 
-  await pill.getByRole('button', { name: 'Copy terminal text' }).tap();
+  await pill.getByRole('button', { name: 'Copy Terminal Text' }).tap();
   const sheet = page.locator('[data-component="terminal-copy-dialog"]'),
     field = sheet.getByRole('textbox', { name: 'Terminal text' });
   await expect(sheet).toHaveJSProperty('open', true);
@@ -93,7 +93,7 @@ test('copies all terminal text or a selection from the phone copy sheet', async 
   await expect(toast(page)).toContainText(`Copied terminal text (${lines} lines)`);
 
   // A selection copies just that text; reopening snapshots afresh with no stale selection.
-  await pill.getByRole('button', { name: 'Copy terminal text' }).tap();
+  await pill.getByRole('button', { name: 'Copy Terminal Text' }).tap();
   await expect(sheet).toHaveJSProperty('open', true);
   await expect(field).toHaveJSProperty('selectionEnd', 0);
   const start = value.indexOf('nano 8.4');
@@ -107,7 +107,7 @@ test('copies all terminal text or a selection from the phone copy sheet', async 
 
   // Done closes without copying.
   await page.evaluate(() => navigator.clipboard.writeText('unchanged'));
-  await pill.getByRole('button', { name: 'Copy terminal text' }).tap();
+  await pill.getByRole('button', { name: 'Copy Terminal Text' }).tap();
   await sheet.getByRole('button', { name: 'Done' }).tap();
   await expect(sheet).toHaveJSProperty('open', false);
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('unchanged');
@@ -208,19 +208,19 @@ test('falls back to a paste sheet when clipboard reading is denied or unavailabl
   await expect.poll(async () => (await sentInput(page)).slice(before)).toEqual(['date\r']);
 });
 
-test('copies and pastes from the phone magnified terminal toolbar', async ({ page, context }) => {
+test('copies and pastes from the phone magnified terminal Toolbar', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await installPhone(page);
   await openProject(page);
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
-  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]');
   await expect(tile.locator('[data-display-mode="scaled-preview"]')).toHaveAttribute('data-geometry-ready', 'true');
   await tile.click();
   const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
     footer = magnified.locator('.terminal-tile__footer');
   await expect(magnified.locator('[data-display-mode="interactive"] .xterm-rows')).toContainText('GNU nano 8.4');
-  await expect(footer.getByRole('button', { name: 'Copy terminal text' })).toBeVisible();
+  await expect(footer.getByRole('button', { name: 'Copy Terminal Text' })).toBeVisible();
   // Every footer control stays inside the phone width.
   const overflow = await footer.evaluate((node) => node.scrollWidth - node.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
@@ -234,7 +234,7 @@ test('copies and pastes from the phone magnified terminal toolbar', async ({ pag
     0,
   );
   expect(await identity.evaluate((node) => node.clientWidth)).toBeGreaterThanOrEqual(88);
-  await footer.getByRole('button', { name: 'More actions for nano' }).tap();
+  await footer.getByRole('button', { name: 'More Actions for nano' }).tap();
   const menu = page.locator('[data-context-menu="terminal"]');
   await expect(menu.getByText('Open', { exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
@@ -244,7 +244,7 @@ test('copies and pastes from the phone magnified terminal toolbar', async ({ pag
     await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => 0)));
   });
   await page.screenshot({ path: test.info().outputPath('hs2-frb545-magnified-toolbar-390.png') });
-  await footer.getByRole('button', { name: 'Copy terminal text' }).tap();
+  await footer.getByRole('button', { name: 'Copy Terminal Text' }).tap();
   const sheet = page.locator('[data-component="terminal-copy-dialog"]');
   await expect(sheet.getByRole('textbox', { name: 'Terminal text' })).toHaveValue(/GNU nano 8\.4/);
   await expect(sheet).toContainText('select part of Nano');
@@ -278,9 +278,9 @@ test('opens the terminal edit menu on a long-press and copies and pastes through
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await installPhone(page);
   await openProject(page);
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
   const viewport = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
   await expect(viewport).toHaveAttribute('data-connection', 'connected');
@@ -351,8 +351,8 @@ test('opens the terminal edit menu on a long-press and copies and pastes through
 test('long-press on a magnified phone terminal opens the edit menu without tap-focusing it', async ({ page }) => {
   await installPhone(page);
   await openProject(page);
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
-  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]');
   await expect(tile.locator('[data-display-mode="scaled-preview"]')).toHaveAttribute('data-geometry-ready', 'true');
   // Preview tiles are not interactive terminals: a long-press there never opens the edit menu.
@@ -379,9 +379,9 @@ test.describe('desktop', () => {
   test('keeps the desktop terminal free of phone clipboard controls', async ({ page }) => {
     await installTerminalFixture(page);
     await openProject(page);
-    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]');
-    await drawer.getByRole('button', { name: 'New drawer item' }).click();
+    await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
     const viewport = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
     await expect(viewport).toHaveAttribute('data-connection', 'connected');
@@ -404,15 +404,15 @@ test.describe('touch tablet at a desktop width', () => {
     await installTerminalFixture(page);
     await openProject(page);
     expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
-    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]');
-    await drawer.getByRole('button', { name: 'New drawer item' }).click();
+    await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
     const viewport = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
     await expect(viewport).toHaveAttribute('data-connection', 'connected');
     // Desktop chrome: no phone focus mode, but the rail carries Copy and Paste beside Hide drawer.
     const rail = drawer.locator('.terminal-drawer__rail'),
-      railCopy = rail.getByRole('button', { name: 'Copy terminal text' }),
+      railCopy = rail.getByRole('button', { name: 'Copy Terminal Text' }),
       railPaste = rail.getByRole('button', { name: 'Paste', exact: true });
     await expect(railCopy).toBeVisible();
     await expect(railPaste).toBeVisible();
@@ -421,7 +421,7 @@ test.describe('touch tablet at a desktop width', () => {
     await expect(railPaste.locator('[data-lucide="clipboard-paste"]')).toHaveCount(1);
     const [copyBox, hideBox] = await Promise.all([
       railCopy.boundingBox(),
-      rail.getByRole('button', { name: 'Hide terminal drawer' }).boundingBox(),
+      rail.getByRole('button', { name: 'Hide Terminal Drawer' }).boundingBox(),
     ]);
     expect(copyBox!.x).toBeLessThan(hideBox!.x);
     expect(Math.abs(copyBox!.y - hideBox!.y)).toBeLessThan(2);
@@ -453,17 +453,17 @@ test.describe('touch tablet at a desktop width', () => {
     // Selecting the grid drops the rail pair; a magnified tile's desktop toolbar carries it instead.
     await drawer.getByRole('tab', { name: 'Project grid' }).tap();
     await expect(railCopy).toHaveCount(0);
-    await page.getByRole('button', { name: 'Workspace grid' }).click();
-    const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+    await page.getByRole('button', { name: 'Workspace Grid' }).click();
+    const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
       tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]');
     await expect(tile.locator('[data-display-mode="scaled-preview"]')).toHaveAttribute('data-geometry-ready', 'true');
-    await expect(tile.getByRole('button', { name: 'Copy terminal text' })).toHaveCount(0);
+    await expect(tile.getByRole('button', { name: 'Copy Terminal Text' })).toHaveCount(0);
     await tile.click();
     const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
       footer = magnified.locator('.terminal-tile__footer');
     await expect(magnified.locator('[data-display-mode="interactive"]')).toHaveAttribute('data-geometry-ready', 'true');
-    await expect(footer.getByRole('button', { name: 'Copy terminal text' })).toBeVisible();
-    await expect(footer.getByRole('button', { name: 'Open nano in project terminal drawer' })).toBeVisible();
+    await expect(footer.getByRole('button', { name: 'Copy Terminal Text' })).toBeVisible();
+    await expect(footer.getByRole('button', { name: 'Open nano in Project Terminal Drawer' })).toBeVisible();
     expect(await footer.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
     await magnified.evaluate(async (node) => {
       await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => 0)));
@@ -503,7 +503,7 @@ async function terminalTextBox(viewport: Locator, text: string) {
     }
     return undefined;
   }, text);
-  if (!box) throw new Error(`"${text}" is not rendered in the terminal`);
+  if (!box) throw new Error(`"${text}" is not rendered in the Terminal`);
   return box;
 }
 

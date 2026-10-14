@@ -17,7 +17,7 @@ export function CodexHooksNoticeBanner({ path }: { path: string }) {
     <div class="codex-hooks-notice-banner" data-component="codex-hooks-notice-banner">
       <List controlInsets="trbl" rootAttributes={{ 'data-codex-hooks-notice': 'true' }}>
         <StateBanner
-          title="Review updated Codex hooks"
+          title="Review Updated Codex Hooks"
           detail={`Hot Sheet updated ${path}. Run /hooks in Codex for this checkout to review and trust the updated hooks.`}
           tone="warning"
           urgency="status"

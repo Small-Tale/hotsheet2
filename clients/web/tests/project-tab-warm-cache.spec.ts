@@ -173,7 +173,7 @@ async function installWorkspace(page: Page) {
           {
             connection_id: 'git',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: `/work/${id}.hs2`,
             default: true,
             capabilities,

@@ -319,7 +319,7 @@ export function TerminalDrawer({
       data-maximized={String(maximized)}
       data-focus-mode={String(focusMode)}
       data-terminal-drawer-measure="true"
-      aria-label={`${projectName} terminal drawer`}
+      aria-label={`${projectName} Terminal Drawer`}
       style={
         focusMode && focusViewport
           ? `--terminal-focus-left:${focusViewport.left}px;--terminal-focus-top:${focusViewport.top}px;--terminal-focus-width:${focusViewport.width}px;--terminal-focus-height:${focusViewport.height}px`
@@ -335,7 +335,7 @@ export function TerminalDrawer({
           <div class="terminal-drawer__views">
             <TabBar
               id={TERMINAL_DRAWER_TAB_BAR_ID}
-              label="Terminal drawer views"
+              label="Terminal Drawer Views"
               // Terminal selection replaces the controlled tab nodes and changes a live work surface.
               // Keep arrow-key navigation focus-only; Enter/Space performs the explicit activation.
               activation="manual"
@@ -343,7 +343,7 @@ export function TerminalDrawer({
               trailing={
                 <ToolbarControlGroup size="compact" appearance="borderless" single nestedDropdown>
                   <PopupMenu
-                    label="New drawer item"
+                    label="New Drawer Item"
                     icon={<LucideIcon icon={Plus} name="plus" />}
                     caret={false}
                     placement="top-start"
@@ -357,13 +357,13 @@ export function TerminalDrawer({
                       },
                       aiShellMenuItem(aiProviders, defaultAiProvider),
                       {
-                        label: 'AI chat',
+                        label: 'AI Chat',
                         action: 'create-terminal-drawer-item',
                         icon: <LucideIcon icon={MessageSquare} name="message-square" />,
                         attributes: { 'data-item-id': 'ai-chat' },
                       },
                       {
-                        label: 'Saved conversation…',
+                        label: 'Saved Conversation…',
                         action: 'open-saved-conversation',
                         ...(hostActionsAvailable
                           ? {}
@@ -387,7 +387,7 @@ export function TerminalDrawer({
                     <button
                       type="button"
                       {...TERMINALS_ACTIONS.copyTerminalText.attrs}
-                      aria-label="Copy terminal text"
+                      aria-label="Copy Terminal Text"
                       title="Copy terminal text"
                     >
                       <LucideIcon icon={Copy} name="copy" />
@@ -406,7 +406,7 @@ export function TerminalDrawer({
                   <button
                     type="button"
                     {...TERMINALS_ACTIONS.toggleTerminalDrawer.attrs}
-                    aria-label="Hide terminal drawer"
+                    aria-label="Hide Terminal Drawer"
                     title="Hide terminal drawer"
                   >
                     <LucideIcon icon={PanelBottomClose} name="panel-bottom-close" />
@@ -450,7 +450,7 @@ export function TerminalDrawer({
         // Phone focus-mode text-size and Copy/Paste controls (HS2-ZSFAHF, HS2-FRB545) float over the
         // terminal in Kerf's forced-dark toolbar; with the keyboard up the key bar's Fn row carries them.
         <FloatingToolbar
-          label="Terminal focus controls"
+          label="Terminal Focus Controls"
           position="top-start"
           safeAreaInsets
           className="terminal-drawer__focus-controls"
@@ -460,7 +460,7 @@ export function TerminalDrawer({
               type="button"
               {...TERMINALS_ACTIONS.cycleMobileTerminalColumns.attrs}
               data-columns={String(focusTextSize.columns)}
-              aria-label={`Text size: ${focusTextSize.columns} columns. Change text size`}
+              aria-label={`Text Size: ${focusTextSize.columns} Columns. Change Text Size`}
               title="Change text size"
             >
               <LucideIcon size="s" icon={ALargeSmall} name="a-large-small" />
@@ -470,7 +470,7 @@ export function TerminalDrawer({
             <button
               type="button"
               {...TERMINALS_ACTIONS.copyTerminalText.attrs}
-              aria-label="Copy terminal text"
+              aria-label="Copy Terminal Text"
               title="Copy terminal text"
             >
               <LucideIcon size="s" icon={Copy} name="copy" />
@@ -482,7 +482,7 @@ export function TerminalDrawer({
         </FloatingToolbar>
       )}
       {focusMode && (
-        <FloatingToolbar label="Terminal focus exit" position="top-end" safeAreaInsets>
+        <FloatingToolbar label="Terminal Focus Exit" position="top-end" safeAreaInsets>
           <ToolbarControlGroup single content="mixed" shape="pill">
             <button
               type="button"

@@ -57,7 +57,7 @@ describe('TerminalVisibilityDialog', () => {
     expect(markup).toContain('terminal-visibility-dialog__toolbar');
     expect(markup).toContain('data-component="tab-bar"');
     // The Add icon is sized by its LucideIcon prop inside a Kerf ToolbarControlGroup (HS2-YNW0B3).
-    expect(markup).toMatch(/aria-label="Add visibility group"[^]*?<svg[^>]*data-lucide="plus"[^>]*data-size="16"/);
+    expect(markup).toMatch(/aria-label="Add Visibility Group"[^]*?<svg[^>]*data-lucide="plus"[^>]*data-size="16"/);
   });
   it('uses selected app-tab styling, shared menu headers, and shared menu rows', () => {
     const markup = String(
@@ -97,7 +97,7 @@ describe('TerminalVisibilityDialog', () => {
       );
     expect(markup).not.toContain('>Project</h2>');
     expect(markup).toContain('>Other</h2>');
-    expect(markup).toContain('aria-label="Visibility group actions"');
+    expect(markup).toContain('aria-label="Visibility Group Actions"');
     expect(markup).toMatch(/popup-menu-context-x:20px;[^"]*popup-menu-context-y:30px/);
     expect(markup).toContain('data-context-menu="terminal-visibility-group"');
     expect(markup).toContain('data-component="popup-menu"');
@@ -113,7 +113,7 @@ describe('TerminalVisibilityDialog', () => {
           contextMenu: { id: 'default', x: 0, y: 0 },
         }),
       ),
-    ).not.toContain('Visibility group actions');
+    ).not.toContain('Visibility Group Actions');
   });
   it('prompts for a name before add and rename mutations', () => {
     const add = String(TerminalVisibilityNameDialog({ prompt: { mode: 'add', value: '' } })),

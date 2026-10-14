@@ -72,9 +72,9 @@ export function StatusBadgeSettings() {
           { value: 'analyzing', label: 'Analyzing' },
           { value: 'planning', label: 'Planning' },
           { value: 'working', label: 'Working' },
-          { value: 'initial_testing', label: 'Initial testing' },
+          { value: 'initial_testing', label: 'Initial Testing' },
           { value: 'integrating', label: 'Integrating' },
-          { value: 'final_testing', label: 'Final testing' },
+          { value: 'final_testing', label: 'Final Testing' },
         ]}
       />
       <Select

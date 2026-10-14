@@ -100,7 +100,7 @@ export function CommandNavigation({ label, commands, expanded, collapsedGroups =
                       const { icon, name } = resolveCommandIcon(command.icon),
                         type =
                           command.kind === 'shell'
-                            ? { icon: SquareTerminal, name: 'square-terminal', label: 'Shell command' }
+                            ? { icon: SquareTerminal, name: 'square-terminal', label: 'Shell Command' }
                             : command.kind === 'ai'
                               ? { icon: Bot, name: 'bot', label: 'AI command' }
                               : undefined;

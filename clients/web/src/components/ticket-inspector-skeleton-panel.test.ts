@@ -32,7 +32,7 @@ describe('TicketInspectorSkeleton', () => {
     expect(markup).toContain('kui-skeleton');
     // The collapse control still works while loading; nothing else is interactive.
     expect(markup).toContain('data-action="toggle-ticket-inspector"');
-    expect(markup).toContain('aria-label="Hide ticket inspector"');
+    expect(markup).toContain('aria-label="Hide Ticket Inspector"');
     expect(markup).toContain('data-component="ticket-inspector-skeleton-body"');
     expect(markup).not.toMatch(/HS2-/);
   });
@@ -66,9 +66,9 @@ describe('placeholder variants', () => {
     expect(sidebar.match(/kui-select--placeholder/g)).toHaveLength(2);
     expect(sidebar).not.toContain('Not started');
     // The Tags and Notes add actions are drawn but disabled while loading.
-    expect(sidebar.match(/aria-label="Add (tag|note)"[^>]*disabled/g)).toHaveLength(2);
+    expect(sidebar.match(/aria-label="Add (tag|Note)"[^>]*disabled/g)).toHaveLength(2);
     // Value-free: no tags, notes, provider, or updated time.
-    expect(sidebar).not.toContain('Hot Sheet git');
+    expect(sidebar).not.toContain('Hot Sheet Git');
     expect(sidebar).not.toContain('No notes added.');
     expect(String(TicketInfoPanel({ placeholder: true, readerPresentation: true }))).toMatch(
       /ticket-inspector-panel--reader/,

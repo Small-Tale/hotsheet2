@@ -24,7 +24,7 @@ export function TicketSourceColorPicker({
       role="radiogroup"
       aria-labelledby={labelId}
     >
-      <FieldLabel id={labelId}>Icon color</FieldLabel>
+      <FieldLabel id={labelId}>Icon Color</FieldLabel>
       <Grid columns={4} gap="xs">
         {TICKET_SOURCE_COLORS.map((option) => (
           <label class="ticket-source-color-picker__choice" style={`--ticket-source-choice-color: ${option.value}`}>

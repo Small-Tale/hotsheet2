@@ -5,7 +5,7 @@ import { AppEmptyState, ProjectRestoreState } from './app-empty-state';
 describe('app empty states', () => {
   it('offers project opening from the empty application', () => {
     const markup = String(AppEmptyState());
-    expect(markup).toContain('Open a Hot Sheet project');
+    expect(markup).toContain('Open a Hot Sheet Project');
     expect(markup).toContain('data-action="add-project"');
   });
 

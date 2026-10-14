@@ -101,7 +101,7 @@ describe('AIConversation', () => {
     // The heading's supporting line is Kerf ToolbarText's description (HS2-XHC39W).
     expect(markup).toMatch(/data-has-description="true"[\s\S]*kui-toolbar-text__description/);
     // The DialogHeader groups the conversation actions under a localized label (HS2-M4X0WS).
-    expect(markup).toMatch(/kui-toolbar__trailing[\s\S]*aria-label="Codex conversation actions"/);
+    expect(markup).toMatch(/kui-toolbar__trailing[\s\S]*aria-label="Codex Conversation Actions"/);
     expect(markup).toContain('Enter to send · Shift+Enter for a new line');
     expect(markup).toContain('class="ai-conversation__send"');
     expect(markup).toContain('data-lucide="arrow-up"');
@@ -197,7 +197,7 @@ describe('AIConversation', () => {
     );
     expect(markup).not.toContain('data-action="stop-conversation"');
     expect(markup).toContain('data-status="failed"');
-    expect(markup).toContain('Conversation unavailable');
+    expect(markup).toContain('Conversation Unavailable');
     expect(markup).toContain('circle-alert');
     expect(markup).toContain('The tool turn failed.');
   });
@@ -284,7 +284,7 @@ describe('AIConversation', () => {
     );
     expect(markup).toContain('data-presentation="embedded"');
     expect(markup).toContain('ai-conversation--embedded');
-    expect(markup).toContain('Conversation transcript');
+    expect(markup).toContain('Conversation Transcript');
     expect(markup).toContain('send-conversation-turn');
     expect(markup).toContain('class="ai-conversation__composer-toolbar"');
     expect(markup).toContain('class="ai-conversation__send"');
@@ -341,7 +341,7 @@ describe('AIConversation', () => {
       }),
     );
     expect(active).toContain('data-action="save-conversation"');
-    expect(active).toContain('aria-label="Save conversation"');
+    expect(active).toContain('aria-label="Save Conversation"');
     expect(active).toContain('send-conversation-turn');
     const saved = String(
       AIConversation({

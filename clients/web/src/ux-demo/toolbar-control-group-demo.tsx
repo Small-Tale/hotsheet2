@@ -32,7 +32,7 @@ export const toolbarGroupDemoMode = signal<'list' | 'board' | 'settings'>('list'
 export function ToolbarControlGroupDemo() {
   return (
     <>
-      <CatalogExample label="Segmented choices" align="glyph">
+      <CatalogExample label="Segmented Choices" align="glyph">
         <Toolbar
           leading={
             <ToolbarControlGroup>
@@ -44,11 +44,11 @@ export function ToolbarControlGroupDemo() {
                 appearance="toolbar"
                 shape="pill"
                 choices={[
-                  { value: 'list', label: 'List view', content: <LucideIcon icon={List} name="list" /> },
-                  { value: 'board', label: 'Columns view', content: <LucideIcon icon={Columns3} name="columns-3" /> },
+                  { value: 'list', label: 'List View', content: <LucideIcon icon={List} name="list" /> },
+                  { value: 'board', label: 'Columns View', content: <LucideIcon icon={Columns3} name="columns-3" /> },
                   {
                     value: 'settings',
-                    label: 'Settings view',
+                    label: 'Settings View',
                     content: <LucideIcon icon={Settings} name="settings" />,
                   },
                 ]}
@@ -57,81 +57,81 @@ export function ToolbarControlGroupDemo() {
           }
         />
       </CatalogExample>
-      <CatalogExample label="Popup menu" align="glyph">
+      <CatalogExample label="Popup Menu" align="glyph">
         <Toolbar
           leading={
             <ToolbarControlGroup single nestedDropdown>
               <PopupMenu
-                label="Sort tickets"
+                label="Sort Tickets"
                 icon={<LucideIcon icon={ArrowDownAZ} name="arrow-down-a-z" />}
-                items={[{ label: 'Recently updated' }, { label: 'Priority' }]}
+                items={[{ label: 'Recently Updated' }, { label: 'Priority' }]}
               />
             </ToolbarControlGroup>
           }
         />
       </CatalogExample>
-      <CatalogExample label="Button group" align="glyph">
+      <CatalogExample label="Button Group" align="glyph">
         <Toolbar
           leading={
-            <ToolbarControlGroup label="View actions">
-              <button type="button" aria-label="Favorite view">
+            <ToolbarControlGroup label="View Actions">
+              <button type="button" aria-label="Favorite View">
                 <LucideIcon icon={Star} name="star" />
               </button>
-              <button type="button" aria-label="More actions">
+              <button type="button" aria-label="More Actions">
                 <LucideIcon icon={MoreHorizontal} name="ellipsis" />
               </button>
             </ToolbarControlGroup>
           }
         />
       </CatalogExample>
-      <CatalogExample label="Single button" align="glyph">
+      <CatalogExample label="Single Button" align="glyph">
         <Toolbar
           leading={
             <ToolbarControlGroup single>
-              <button type="button" aria-label="Pin view">
+              <button type="button" aria-label="Pin View">
                 <LucideIcon icon={Pin} name="pin" />
               </button>
             </ToolbarControlGroup>
           }
         />
       </CatalogExample>
-      <CatalogExample label="Borderless group" align="glyph">
+      <CatalogExample label="Borderless Group" align="glyph">
         <Toolbar
           leading={
             <ToolbarControlGroup appearance="borderless" single>
-              <button type="button" aria-label="Show sidebar">
+              <button type="button" aria-label="Show Sidebar">
                 <LucideIcon icon={PanelLeftOpen} name="panel-left-open" />
               </button>
             </ToolbarControlGroup>
           }
         />
       </CatalogExample>
-      <CatalogExample label="Push button, resting" align="glyph">
+      <CatalogExample label="Push Button, Resting" align="glyph">
         <Toolbar
           leading={
             <ToolbarControlGroup buttonAppearance="push" single>
-              <button type="button" aria-label="Resting comparison" aria-pressed="false">
+              <button type="button" aria-label="Resting Comparison" aria-pressed="false">
                 <LucideIcon icon={GitCompare} name="git-compare" />
               </button>
             </ToolbarControlGroup>
           }
         />
       </CatalogExample>
-      <CatalogExample label="Push button, pressed" align="glyph">
+      <CatalogExample label="Push Button, Pressed" align="glyph">
         <Toolbar
           leading={
             <ToolbarControlGroup buttonAppearance="push" single>
-              <button type="button" aria-label="Pressed comparison" aria-pressed="true">
+              <button type="button" aria-label="Pressed Comparison" aria-pressed="true">
                 <LucideIcon icon={GitCompare} name="git-compare" />
               </button>
             </ToolbarControlGroup>
           }
         />
       </CatalogExample>
-      <CatalogExample label="Dark group" align="glyph">
+      <CatalogExample label="Dark Group" align="glyph">
         <Toolbar
           leading={
-            <ToolbarControlGroup label="Dark navigation" tone="dark">
+            <ToolbarControlGroup label="Dark Navigation" tone="dark">
               <button type="button" aria-label="Previous">
                 <LucideIcon icon={ChevronLeft} name="chevron-left" />
               </button>

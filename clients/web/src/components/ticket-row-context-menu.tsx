@@ -36,7 +36,7 @@ export const TICKET_CONTEXT_ACTIONS: ReadonlyArray<{
   { action: 'Open ticket', icon: SquareArrowOutUpRight, iconName: 'square-arrow-out-up-right' },
   { action: 'Change category', icon: Shapes, iconName: 'shapes' },
   { action: 'Change priority', icon: Gauge, iconName: 'gauge' },
-  { action: 'Change status', icon: CircleDot, iconName: 'circle-dot' },
+  { action: 'Change Status', icon: CircleDot, iconName: 'circle-dot' },
   { action: 'Toggle Up Next', icon: Star, iconName: 'star' },
   { action: 'Add tag', icon: Tag, iconName: 'tag' },
   { action: 'Remove tag', icon: Tags, iconName: 'tags' },
@@ -234,7 +234,7 @@ export function TicketRowContextMenu({
     }),
     metadataSubmenu({
       field: 'status',
-      label: 'Change status',
+      label: 'Change Status',
       icon: CircleDot,
       iconName: 'circle-dot',
       choices: TICKET_STATUS_CHOICES,
@@ -260,7 +260,7 @@ export function TicketRowContextMenu({
     <PopupMenu
       context
       anchor={contextMenuAnchor(x, y)}
-      label="Ticket actions"
+      label="Ticket Actions"
       rootAttributes={{ 'data-context-menu': 'ticket' }}
       items={entries}
     />

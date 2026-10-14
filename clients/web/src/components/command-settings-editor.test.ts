@@ -110,7 +110,7 @@ describe('CommandSettingsEditor', () => {
 
     const open = String(CommandSettingsEditor({ ...props, editingId: 'c' }));
     expect(open).toContain('data-editing="true"');
-    expect(open).toContain('Edit command');
+    expect(open).toContain('Edit Command');
     expect(open).toMatch(/data-appearance="borderless"[^>]*><span class="command-settings-editor__dialog-icon"/);
     expect(css).toMatch(/\.command-settings-editor__dialog-icon\s*\{[^}]*margin-inline:\s*auto;/);
     expect(open).toContain('data-action="close-command-editor"');
@@ -225,10 +225,10 @@ describe('CommandSettingsEditor', () => {
         editingId: 'p',
       }),
     );
-    expect(program).toMatch(/<wa-input label="Button label" name="title" data-command-field[^>]*value="Build"/);
+    expect(program).toMatch(/<wa-input label="Button Label" name="title" data-command-field[^>]*value="Build"/);
     expect(program).toMatch(/<wa-input label="Program" name="program"/);
     expect(program).toMatch(/<wa-textarea label="Arguments" name="args"[^>]*hint="One exact argument per line\."/);
-    expect(program).toContain('wa-input label="Confirmation message" name="confirmation"');
+    expect(program).toContain('wa-input label="Confirmation Message" name="confirmation"');
     expect(program).toMatch(/<wa-select[^>]*name="kind"/);
     expect(program).toContain('data-component="grid"');
     // Every command field is a Web Awesome control; only Kerf ChoiceChips' color radios are native.
@@ -245,7 +245,7 @@ describe('CommandSettingsEditor', () => {
         editingId: 's',
       }),
     );
-    expect(shell).toMatch(/<wa-textarea label="Shell command" name="command"[^>]*hint="Runs in the project root/);
+    expect(shell).toMatch(/<wa-textarea label="Shell Command" name="command"[^>]*hint="Runs in the project root/);
   });
 
   it('composes Kerf PopoverDialogSurface instead of app popover chrome (HS2-T1MVPV, HS2-D9JBXT)', () => {
@@ -253,7 +253,7 @@ describe('CommandSettingsEditor', () => {
     // its own content stack, never the popover root.
     const markup = String(CommandSettingsEditor({ commands: [] }));
     expect(markup).toMatch(
-      /<section[^>]*id="command-editor-dialog"[^>]*data-component="popover-dialog-surface"[^>]*popover="auto"[^>]*role="dialog"[^>]*aria-label="Edit command"/,
+      /<section[^>]*id="command-editor-dialog"[^>]*data-component="popover-dialog-surface"[^>]*popover="auto"[^>]*role="dialog"[^>]*aria-label="Edit Command"/,
     );
     expect(markup).toContain('data-command-editor-dialog="true"');
     expect(markup).not.toContain('dialog-surface command-settings-editor__dialog');

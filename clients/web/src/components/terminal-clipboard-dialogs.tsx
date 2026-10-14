@@ -52,7 +52,7 @@ export function TerminalEditMenu({ state }: { state?: TerminalEditMenuState }) {
     <PopupMenu
       context
       anchor={contextMenuAnchor(state.x, state.y)}
-      label="Terminal edit actions"
+      label="Terminal Edit Actions"
       rootAttributes={{ 'data-context-menu': 'terminal-edit' }}
       items={[
         ...(state.selection
@@ -93,7 +93,7 @@ export function TerminalCopyDialog({ state }: { state?: TerminalCopyState }) {
           data-key="terminal-clipboard-dialogs"
           {...TERMINALS_TARGETS.terminalCopyDialog.attrs}
           class="terminal-clipboard-dialog"
-          label="Copy terminal text"
+          label="Copy Terminal Text"
           open={open}
           data-controlled-open={String(open)}
         >

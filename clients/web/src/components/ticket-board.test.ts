@@ -197,7 +197,7 @@ describe('TicketBoard', () => {
     expect(markup).not.toContain('No tickets');
   });
 
-  it('does not render a placeholder in an individual empty column', () => {
+  it('does not render a placeholder in an individual empty Column', () => {
     const markup = String(
       TicketBoard({
         columns: [

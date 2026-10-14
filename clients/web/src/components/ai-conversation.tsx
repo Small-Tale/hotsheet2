@@ -262,7 +262,7 @@ export function AIConversation({
       type="button"
       {...COMMANDS_AND_AI_ACTIONS.saveConversation.attrs}
       disabled={busy || messages.length === 0 || !hostActionsAvailable}
-      aria-label="Save conversation"
+      aria-label="Save Conversation"
       title={
         hostOnlyDisabledReason('conversation-export', hostActionsAvailable) ??
         (busy ? 'Wait for the active response before saving' : 'Save conversation')
@@ -310,7 +310,7 @@ export function AIConversation({
             appearance="plain"
             size="small"
             {...COMMANDS_AND_AI_ACTIONS.copyConversationSelection.attrs}
-            aria-label="Copy selected messages"
+            aria-label="Copy Selected Messages"
             title="Copy selected messages"
           >
             <LucideIcon size={14.4} icon={Copy} name="copy" />
@@ -319,7 +319,7 @@ export function AIConversation({
             appearance="plain"
             size="small"
             {...COMMANDS_AND_AI_ACTIONS.clearConversationSelection.attrs}
-            aria-label="Clear message selection"
+            aria-label="Clear Message Selection"
             title="Clear message selection"
           >
             <LucideIcon size={14.4} icon={X} name="x" />
@@ -330,12 +330,12 @@ export function AIConversation({
   ) : null;
   const timeline = conversationTimeline(messages, activity),
     transcript = (
-      <section class="ai-conversation__transcript" aria-label="Conversation transcript" aria-live="polite">
+      <section class="ai-conversation__transcript" aria-label="Conversation Transcript" aria-live="polite">
         {messages.length === 0 && (
           <EmptyState
             className="ai-conversation__empty"
             icon={<LucideIcon size={28} icon={MessageSquare} name="message-square" />}
-            title={readOnly ? 'No conversation messages yet' : 'Start a conversation'}
+            title={readOnly ? 'No Conversation Messages Yet' : 'Start a Conversation'}
             detail={
               readOnly
                 ? 'This chat has not received any messages.'
@@ -375,7 +375,7 @@ export function AIConversation({
             urgency="alert"
             copyLayout="stacked"
             icon={<LucideIcon icon={CircleAlert} name="circle-alert" size={17.6} />}
-            title="Conversation unavailable"
+            title="Conversation Unavailable"
             detail={error}
           />
         )}
@@ -412,7 +412,7 @@ export function AIConversation({
           )}
         </span>
         <PopupMenu
-          label="Change provider, model, and effort"
+          label="Change Provider, Model, and Effort"
           icon={<LucideIcon icon={ChevronDown} name="chevron-down" />}
           caret={false}
           placement="top-end"
@@ -476,7 +476,7 @@ export function AIConversation({
           pill
           type="submit"
           disabled={busy || !draft.trim()}
-          aria-label={`Send message to ${tool}`}
+          aria-label={`Send Message to ${tool}`}
           title={busy ? `${tool} is still working` : `Send message to ${tool}`}
         >
           <LucideIcon size="s" icon={ArrowUp} name="arrow-up" />
@@ -492,7 +492,7 @@ export function AIConversation({
         data-presentation="embedded"
         data-read-only={String(readOnly)}
         data-selection-id={selectionId}
-        aria-label={`${tool} conversation`}
+        aria-label={`${tool} Conversation`}
       >
         {/* A compact (40px) Kerf Toolbar keeps the drawer header short enough that the transcript clears
             the floating composer (KF-0QDF0V, HS2-P16J04). */}
@@ -508,7 +508,7 @@ export function AIConversation({
           }
           trailing={
             saveAction || stopAction ? (
-              <ToolbarControlGroup label={`${tool} conversation actions`} appearance="borderless" size="compact">
+              <ToolbarControlGroup label={`${tool} Conversation Actions`} appearance="borderless" size="compact">
                 <>
                   {saveAction}
                   {stopAction}
@@ -556,14 +556,14 @@ export function AIConversation({
                 <LucideIcon color={uiColor('brand-on-quiet')} icon={Bot} name="bot" />
               </ToolbarControlGroup>
               <ToolbarText
-                text={`${tool} conversation`}
+                text={`${tool} Conversation`}
                 id="ai-conversation-title"
                 size="xlarge"
                 description={summary}
               />
             </>
           }
-          trailing={<ToolbarControlGroup label={`${tool} conversation actions`}>{actions}</ToolbarControlGroup>}
+          trailing={<ToolbarControlGroup label={`${tool} Conversation Actions`}>{actions}</ToolbarControlGroup>}
         />
         {foreground && <div class="ai-conversation__foreground">{foreground}</div>}
         {savedNotice}

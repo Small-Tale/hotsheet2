@@ -24,10 +24,10 @@ export const TICKET_ROW_CLAIM_ETA: Record<Exclude<TicketRowClaimEta, 'none'>, Cl
 /** Completion confidence choices the demo exposes (HS2-A0Q6G6); `none` is unscored. */
 const TICKET_ROW_CONFIDENCE_CHOICES: SelectChoice[] = [
   { value: 'none', label: 'Unscored' },
-  { value: '94', label: '94% (fully verified)' },
-  { value: '82', label: '82% (minor assumptions)' },
-  { value: '55', label: '55% (partially verified)' },
-  { value: '25', label: '25% (largely unverified)' },
+  { value: '94', label: '94% (Fully Verified)' },
+  { value: '82', label: '82% (Minor Assumptions)' },
+  { value: '55', label: '55% (Partially Verified)' },
+  { value: '25', label: '25% (Largely Unverified)' },
 ];
 
 export const ticketRowSettings = {
@@ -155,7 +155,7 @@ export function TicketRowDemo() {
       {/* The shared row shell's danger presentation (HS2-1FH8BG): a danger rail and a selection wiggle
           around CorruptTicketRow's diagnostic content; Selected drives both rows. */}
       <CatalogExample
-        label="Danger presentation"
+        label="Danger Presentation"
         viewport={{ width: 'full' }}
         rootAttributes={{ 'data-ticket-row-demo-danger': '' }}
       >
@@ -192,9 +192,9 @@ export function TicketRowSettings() {
           { value: 'analyzing', label: 'Analyzing' },
           { value: 'planning', label: 'Planning' },
           { value: 'working', label: 'Working' },
-          { value: 'initial_testing', label: 'Initial testing' },
+          { value: 'initial_testing', label: 'Initial Testing' },
           { value: 'integrating', label: 'Integrating' },
-          { value: 'final_testing', label: 'Final testing' },
+          { value: 'final_testing', label: 'Final Testing' },
         ]}
       />
       <Select
@@ -216,8 +216,8 @@ export function TicketRowSettings() {
         value={ticketRowSettings.categoryColor.value}
         choices={CATEGORY_COLORS.map((option): SelectChoice => ({ value: option.value, label: option.label }))}
       />
-      <wa-input name="tags" label="Tags (comma separated)" value={ticketRowSettings.tags.value} />
-      <wa-input name="agent" label="Active agent" value={ticketRowSettings.agentName.value} />
+      <wa-input name="tags" label="Tags (Comma Separated)" value={ticketRowSettings.tags.value} />
+      <wa-input name="agent" label="Active Agent" value={ticketRowSettings.agentName.value} />
       <wa-checkbox name="up-next" checked={ticketRowSettings.upNext.value}>
         Up Next
       </wa-checkbox>
@@ -244,9 +244,9 @@ export function TicketRowSettings() {
         label="Claim ETA (shown while AI working)"
         value={ticketRowSettings.claimEta.value}
         choices={[
-          { value: 'none', label: 'No estimate' },
-          { value: 'estimate', label: 'On track (~45m left)' },
-          { value: 'overrun', label: 'Past its estimate (Soon)' },
+          { value: 'none', label: 'No Estimate' },
+          { value: 'estimate', label: 'On Track (~45m Left)' },
+          { value: 'overrun', label: 'Past Its Estimate (Soon)' },
         ]}
       />
       <Select

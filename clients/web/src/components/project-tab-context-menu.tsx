@@ -46,7 +46,7 @@ export function AppTabContextMenu({
       case 'ai-chat':
         return {
           legacyId: { 'data-chat-id': id },
-          label: 'AI chat',
+          label: 'AI Chat',
           action: 'terminal-tab-context-action',
         };
       default:
@@ -57,7 +57,7 @@ export function AppTabContextMenu({
     <PopupMenu
       context
       anchor={contextMenuAnchor(x, y)}
-      label={`${label} tab actions`}
+      label={`${label} Tab Actions`}
       rootAttributes={{ 'data-context-menu': 'app-tab', 'data-tab-kind': kind, 'data-tab-id': id, ...legacyId }}
       items={actions.flatMap((item): PopupMenuEntry[] => [
         ...(item.id === 'close-all' ? [{ kind: 'divider' } as const] : []),

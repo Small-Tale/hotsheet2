@@ -49,9 +49,9 @@ describe('AttachmentGallery', () => {
     expect(markup).toContain('aria-label="Restore full image"');
     expect(markup).not.toContain('aria-label="Add rectangle"');
     expect(markup).toContain(
-      'data-position="bottom-start" data-placement="floating" role="toolbar" aria-label="Media crop"',
+      'data-position="bottom-start" data-placement="floating" role="toolbar" aria-label="Media Crop"',
     );
-    expect(markup).toMatch(/data-component="toolbar-control-group"[^>]*aria-label="Media crop"/);
+    expect(markup).toMatch(/data-component="toolbar-control-group"[^>]*aria-label="Media Crop"/);
     expect(markup).toMatch(/data-selected-chrome="filled"[^>]*data-selected-tone="brand"/);
     expect(markup).toMatch(/aria-label="Finish crop"[^>]*aria-pressed="true"/);
     expect(markup).toContain('data-lucide="crop"');
@@ -105,7 +105,7 @@ describe('AttachmentGallery', () => {
     expect(css).not.toContain(':disabled');
     expect(css).not.toContain('cursor: default');
     const markup = String(AttachmentGallery({ images, activeUrl: '/a.png' }));
-    expect(markup).toMatch(/<button[^>]*aria-label="Zoom out"[^>]*disabled/);
+    expect(markup).toMatch(/<button[^>]*aria-label="Zoom Out"[^>]*disabled/);
     expect(markup).not.toContain('attachment-gallery__control');
   });
   it('bounds the notes rail tracks so a long note wraps instead of overflowing (HS2-JF94J1)', () => {
@@ -175,7 +175,7 @@ describe('AttachmentGallery', () => {
     expect(css).not.toContain('.attachment-gallery__filename {');
     const markupMode = String(AttachmentGallery({ images, activeUrl: '/b.svg', markup: true }));
     expect(markupMode).toContain(
-      'data-position="bottom" data-placement="floating" role="toolbar" aria-label="Media markup"',
+      'data-position="bottom" data-placement="floating" role="toolbar" aria-label="Media Markup"',
     );
     expect(markupMode.match(/data-component="toolbar-control-group"/g)).toHaveLength(5);
     expect(markupMode.match(/data-tone="dark"/g)).toHaveLength(4);
@@ -248,7 +248,7 @@ describe('AttachmentGallery', () => {
     );
     expect(markup).toContain('aria-expanded="true"');
     expect(markup).not.toContain(
-      'class="attachment-gallery__volume-popup" role="group" aria-label="Volume controls" hidden',
+      'class="attachment-gallery__volume-popup" role="group" aria-label="Volume Controls" hidden',
     );
     expect(markup).toContain('aria-label="Unmute video"');
     const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
@@ -356,7 +356,7 @@ describe('AttachmentGallery', () => {
       expect(markup).toContain(`data-intent-color="${color}"`);
     expect(markup).toContain('aria-label="Annotation 3, rect, comment, bug"');
     expect(markup).toContain('aria-label="Annotation 7, insertion, insert: Add **detail**"');
-    expect(markup).toContain('aria-label="Annotation 7 note"');
+    expect(markup).toContain('aria-label="Annotation 7 Note"');
     expect(markup).toContain('<strong>detail</strong>');
     expect(markup).toContain('class="attachment-gallery__annotation-arrow-head"');
     expect(attachmentGalleryArrowHead(arrow, 800, 600)).toContain('M 1000,1000 L ');
@@ -571,7 +571,7 @@ describe('AttachmentGallery', () => {
       expect(markup).toContain('Check **this**');
       if (selectedAnnotation) {
         expect(markup.indexOf('aria-label="Annotation note"')).toBeLessThan(footer);
-        expect(markup.indexOf('aria-label="Annotation 1 note"')).toBeLessThan(footer);
+        expect(markup.indexOf('aria-label="Annotation 1 Note"')).toBeLessThan(footer);
       }
     }
     const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');

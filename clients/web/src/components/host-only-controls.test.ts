@@ -140,7 +140,7 @@ describe('host-only controls on remote clients', () => {
         hostActionsAvailable: false,
       }),
     );
-    expect(conversation).toMatch(/aria-label="Save conversation"/);
+    expect(conversation).toMatch(/aria-label="Save Conversation"/);
     expect(conversation).toContain(`title="${reason('conversation-export')}"`);
     const drawer = String(
       TerminalDrawer({

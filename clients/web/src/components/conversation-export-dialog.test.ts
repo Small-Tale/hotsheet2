@@ -41,7 +41,7 @@ describe('ConversationExportDialog', () => {
     expect(markup).toContain('data-navigation="none"');
     expect(markup).toContain('data-active-side="b"');
     expect(markup).toContain('data-transition-style="none"');
-    expect(markup).toContain('Save conversation');
+    expect(markup).toContain('Save Conversation');
     expect(markup).toContain('Bundle contents');
     expect(markup).toContain('data-action="submit-conversation-export"');
     expect(markup).not.toContain('previous-conversation-export-step');
@@ -137,7 +137,7 @@ describe('ConversationExportDialog', () => {
     expect(markup).toContain('Revision 4 of this conversation is already there.');
     expect(markup).toContain('name="conversation-export-write-mode" value="reexport" checked');
     expect(markup).toContain('name="conversation-export-write-mode" value="overwrite"');
-    expect(markup).toContain('Re-export conversation');
+    expect(markup).toContain('Re-export Conversation');
     expect(markup).not.toContain('data-action="finish-conversation-export" disabled');
   });
 
@@ -191,9 +191,9 @@ describe('ConversationExportDialog', () => {
       ConversationExportDialog({ state: { source, messages, draft: defaultConversationExportDraft(), step: 2 } }),
     );
     expect(markup).not.toContain('Step 2 of 2');
-    expect(markup).toContain('Save conversation');
+    expect(markup).toContain('Save Conversation');
     expect(markup).not.toContain('Choose where to save the conversation.');
-    expect(markup).not.toContain('disabled>Save conversation');
+    expect(markup).not.toContain('disabled>Save Conversation');
     expect(markup).not.toContain('manifest.json');
   });
 });

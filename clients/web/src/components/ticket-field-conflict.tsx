@@ -38,7 +38,7 @@ export function TicketFieldConflict({ conflict, resolution }: TicketFieldConflic
       class="ticket-field-conflict"
       data-component="ticket-field-conflict"
       data-conflict-field={conflict.key}
-      aria-label={`Resolve ${field} conflict`}
+      aria-label={`Resolve ${field} Conflict`}
     >
       <ContentItem appearance="warning" frame="framed">
         <List gap="xs">
@@ -73,7 +73,7 @@ export function TicketFieldConflict({ conflict, resolution }: TicketFieldConflic
               {...INSPECTOR_AND_EDITOR_ACTIONS.acceptRemoteTicketField.attrs}
             >
               <LucideIcon slot="start" size="s" icon={RotateCcw} name="rotate-ccw" />
-              Use theirs
+              Use Theirs
             </wa-button>
             <wa-button
               size="small"
@@ -82,7 +82,7 @@ export function TicketFieldConflict({ conflict, resolution }: TicketFieldConflic
               {...INSPECTOR_AND_EDITOR_ACTIONS.applyTicketFieldMerge.attrs}
             >
               <LucideIcon slot="start" size="s" icon={GitMerge} name="git-merge" />
-              Apply merged value
+              Apply Merged Value
             </wa-button>
           </Row>
         </List>

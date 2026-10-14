@@ -38,7 +38,7 @@ describe('TerminalRenameDialog', () => {
     expect(unnamed).not.toContain('data-action="reset-terminal-rename"');
     expect(unnamed).not.toContain('hint=');
     expect(renamed).toContain('data-action="reset-terminal-rename"');
-    expect(renamed).toContain('Reset to default');
+    expect(renamed).toContain('Reset to Default');
     expect(renamed).toContain('hint="Default name: Claude 1"');
     expect(renamed).toContain('value="Review"');
     // Reset leads; Cancel and Rename stay together on the trailing side.

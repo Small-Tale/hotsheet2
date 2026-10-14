@@ -7,7 +7,7 @@ describe('TicketInspectorPlaceholder', () => {
     const empty = String(TicketInspectorPlaceholder({ selectionCount: 0, collapseControl: true }));
     expect(empty).toContain('data-component="toolbar"');
     expect(empty).toContain('data-action="toggle-ticket-inspector"');
-    expect(empty).toContain('aria-label="Hide ticket inspector"');
+    expect(empty).toContain('aria-label="Hide Ticket Inspector"');
     expect(empty).toContain('Select a ticket to see and edit its details');
 
     // Without its collapse control (the Workbench renders the toggle) the standalone pane has no toolbar.
@@ -17,7 +17,7 @@ describe('TicketInspectorPlaceholder', () => {
     expect(multi).toContain('2 items selected — use batch actions to edit them together');
 
     const parts = ticketInspectorPlaceholderPanel({ selectionCount: 1 });
-    expect(parts.toggle).toEqual({ action: 'toggle-ticket-inspector', name: 'ticket inspector' });
+    expect(parts.toggle).toEqual({ action: 'toggle-ticket-inspector', name: 'Ticket Inspector' });
     expect(String(parts.content)).toContain('data-ticket-inspector-placeholder="true"');
     expect(String(parts.content)).toContain('1 items selected');
   });

@@ -97,7 +97,7 @@ export function isAppSettingsCategory(category: SettingsCategory): boolean {
 export function settingsCategoryTitle(category: SettingsCategory): string {
   const item = allCategories.find((entry) => entry.id === category);
   if (!item) return 'Settings';
-  return category === 'keyboard' ? 'Keyboard shortcuts' : item.label;
+  return category === 'keyboard' ? 'Keyboard Shortcuts' : item.label;
 }
 
 /** The settings navigator's panel parts for the Workbench's left rail (HS2-RWGQWN). */
@@ -123,7 +123,7 @@ export function settingsNavigationPanel({ selected }: { selected: SettingsCatego
   return {
     label: 'Settings categories',
     toolbar: { label: 'Settings sidebar toolbar', dividerSides: '' },
-    toggle: { action: 'toggle-project-sidebar', name: 'settings sidebar' },
+    toggle: { action: 'toggle-project-sidebar', name: 'Settings Sidebar' },
     content: (
       <List gap="m" controlInsets="tb">
         {renderGroup('Project Settings', projectCategories)}

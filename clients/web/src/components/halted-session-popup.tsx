@@ -54,7 +54,7 @@ export function HaltedSessionPopup({ episode }: { episode: HaltedSessionEpisode 
               Dismiss
             </wa-button>
             <wa-button appearance="plain" size="small" {...NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.attrs}>
-              Pause notifications
+              Pause Notifications
             </wa-button>
           </>
         }
@@ -120,7 +120,7 @@ export function HaltedSessionPopup({ episode }: { episode: HaltedSessionEpisode 
                 size="small"
                 type="submit"
               >
-                Send answer
+                Send Answer
               </wa-button>
             </Row>
           </form>

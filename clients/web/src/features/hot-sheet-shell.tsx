@@ -329,7 +329,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           }
           sidebarVisible={!sidebarCollapsed.value}
           sidebarSize={sidebarSize.value}
-          header={<WorkspaceIdentity projectName={shellMode.value === 'terminals' ? 'Workspace grid' : 'Stats'} />}
+          header={<WorkspaceIdentity projectName={shellMode.value === 'terminals' ? 'Workspace Grid' : 'Stats'} />}
           headerActions={
             shellMode.value === 'terminals' ? (
               <TerminalDashboardControls

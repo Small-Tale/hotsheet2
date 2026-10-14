@@ -74,7 +74,7 @@ export function ConnectionDetailsDialog({
               <LucideIcon color={uiColor('brand-on-quiet')} icon={ServerCog} name="server-cog" />
             </ToolbarControlGroup>
             <ToolbarText
-              text="Server build details"
+              text="Server Build Details"
               id="connection-details-title"
               size="xlarge"
               description={summary}

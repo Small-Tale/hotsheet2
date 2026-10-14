@@ -35,7 +35,7 @@ describe('ticket metadata controls and inspector panels', () => {
     };
     const editable = String(TicketInfoPanel({ ...ticket, startedPhase: 'planning', canEditStartedPhase: true }));
     expect(editable).not.toContain('name="inspector-started-phase"');
-    expect(editable).toContain('aria-label="Change status, Planning"');
+    expect(editable).toContain('aria-label="Change Status, Planning"');
     for (const phase of ['', 'analyzing', 'planning', 'working', 'initial_testing', 'integrating', 'final_testing'])
       expect(editable).toContain(`data-started-phase="${phase}"`);
     expect(editable).toContain('data-action="set-inspector-started-phase"');
@@ -112,7 +112,7 @@ describe('ticket metadata controls and inspector panels', () => {
       /<wa-select\b[^>]*\slabel="Compact priority"/,
     );
     const status = String(TicketStatusMenu({ value: 'completed' }));
-    expect(status).toContain('aria-label="Change status, Completed"');
+    expect(status).toContain('aria-label="Change Status, Completed"');
     // The app-owned wrapper carries the placement class; the Kerf Select root keeps only its own classes.
     expect(status).toContain('<span class="ticket-status-menu">');
     expect(status).toContain('class="status-badge" data-component="status-badge" data-status="completed"');
@@ -148,7 +148,7 @@ describe('ticket metadata controls and inspector panels', () => {
     );
     expect(info).toContain('data-action="edit-blocked-reason"');
     expect(info).toContain('Block ticket');
-    expect(info).not.toContain('<h2>Blocked reason</h2>');
+    expect(info).not.toContain('<h2>Blocked Reason</h2>');
     // The block action is a plain Kerf ListItem; no app class sits on its root (KUI-L022).
     expect(info).not.toContain('ticket-inspector__block-action');
     expect(info).toContain('class="kui-list-item" data-component="list-item"');
@@ -174,7 +174,7 @@ describe('ticket metadata controls and inspector panels', () => {
         blockedReason: 'Waiting',
       }),
     );
-    expect(blocked).toContain('data-font="default" data-border="none">Blocked reason</h2>');
+    expect(blocked).toContain('data-font="default" data-border="none">Blocked Reason</h2>');
     expect(blocked).toContain('data-edit-blocked-reason="true"');
     expect(blocked).toContain('aria-label="Edit blocked reason"');
     expect(blocked).not.toContain('ticket-inspector__text-action');
@@ -230,7 +230,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(css).toMatch(/ticket-attachments__image-grid button \{[^}]*max-width: remify\(220px\)/);
     expect(css).toMatchSource(/ticket-attachments__image-grid :is\(img,video\) \{[^}]*object-fit: contain/);
     expect(css).not.toContain('ticket-attachments__count');
-    expect(attachments).toContain('aria-label="More actions for one.png" title="More actions for one.png"');
+    expect(attachments).toContain('aria-label="More Actions for one.png" title="More actions for one.png"');
     expect(attachments).toContain('title="one.png — double-click to open"');
     expect(attachments).toContain('data-lucide="more-horizontal"');
     const unsupported = String(TicketAttachments({ attachments: [{ id: 'one', name: 'one.png' }], enabled: false }));

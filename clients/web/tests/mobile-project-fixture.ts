@@ -90,7 +90,7 @@ export async function openDemoProject(
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities,
@@ -167,7 +167,7 @@ export async function openDemoProject(
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('textbox', { name: /^Project folder/ }).fill('/work/demo');
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('textbox', { name: /^Project Folder/ }).fill('/work/demo');
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
 }

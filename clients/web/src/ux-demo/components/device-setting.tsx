@@ -14,8 +14,8 @@ export function DeviceSetting({ value }: { value: DemoDevice }) {
       label="Device"
       value={value}
       choices={[
-        { value: 'host', label: 'Computer running Hot Sheet' },
-        { value: 'remote', label: 'Remote device' },
+        { value: 'host', label: 'Computer Running Hot Sheet' },
+        { value: 'remote', label: 'Remote Device' },
       ]}
     />
   );

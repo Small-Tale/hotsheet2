@@ -70,7 +70,7 @@ describe('WorkspaceHeader', () => {
 
   it.each([0, 7, 120])('preserves the full accessible notification count %s and clamped badge', (count) => {
     const markup = String(WorkspaceControls({ mode: 'notifications', notificationCount: count }));
-    expect(markup).toContain(`aria-label="Notifications view${count ? `, ${count} pending` : ''}"`);
+    expect(markup).toContain(`aria-label="Notifications View${count ? `, ${count} pending` : ''}"`);
     if (count)
       expect(markup).toContain(
         `class="view-mode-switcher__badge" aria-hidden="true">${count > 99 ? '99+' : count}</span>`,
@@ -115,7 +115,7 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('<span class="kui-toolbar-text__text">Hot Sheet 2');
     expect(markup).toContain('aria-label="View mode"');
     expect(markup).toContain(
-      'data-segment-value="settings" data-selected="true" aria-label="Settings view" aria-pressed="true"',
+      'data-segment-value="settings" data-selected="true" aria-label="Settings View" aria-pressed="true"',
     );
     expect(markup).not.toContain('data-token-search-editor="workspace-search"');
     expect(enabled).toContain('data-token-search-editor="workspace-search"');
@@ -143,7 +143,7 @@ describe('WorkspaceHeader', () => {
     expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"(?=[^>]*data-expanded="false")/);
     expect(enabled).toMatch(/class="kui-toolbar-control-group ticket-search-field"(?=[^>]*data-expanded="true")/);
     expect(markup).not.toContain('workspace-header__search-tokens');
-    expect(enabled).toContain('aria-label="Search syntax help"');
+    expect(enabled).toContain('aria-label="Search Syntax Help"');
     expect(markup).not.toContain('aria-label="Date and time helper"');
     expect(
       String(
@@ -216,7 +216,7 @@ describe('WorkspaceHeader', () => {
     'uses a semantic trigger for %s %s',
     (sort, direction, iconName) => {
       expect(workspaceSortTrigger(sort, direction).iconName).toBe(iconName);
-      const label = sort === 'updated' ? 'Recently updated' : sort[0].toUpperCase() + sort.slice(1);
+      const label = sort === 'updated' ? 'Recently Updated' : sort[0].toUpperCase() + sort.slice(1);
       expect(
         String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list', sort, sortDirection: direction })),
       ).toContain(`aria-label="Sort tickets: ${label}, ${direction}"`);
@@ -269,7 +269,7 @@ describe('WorkspaceHeader', () => {
 
   it('offers the columns/board view toggle and its overflow entry (HS2-ZYJMDP)', () => {
     const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'board' }));
-    expect(markup).toContain('data-segment-value="board" data-selected="true" aria-label="Columns view"');
+    expect(markup).toContain('data-segment-value="board" data-selected="true" aria-label="Columns View"');
     expect(markup).toContain('data-workspace-overflow-action="set-view-mode" data-view-mode="board"');
     expect(markup.match(/data-action="set-view-mode"/g)).toHaveLength(4);
   });
@@ -293,7 +293,7 @@ describe('WorkspaceHeader', () => {
     expect(markup).not.toContain('aria-label="Matching tags"');
     expect(markup).not.toContain('aria-label="Date and time helper"');
     expect(markup).not.toContain('aria-label="Search syntax"');
-    expect(markup).toContain('aria-label="Notifications view, 7 pending"');
+    expect(markup).toContain('aria-label="Notifications View, 7 pending"');
     expect(markup).toContain('class="view-mode-switcher__badge" aria-hidden="true">7</span>');
     expect(markup.match(/data-action="set-view-mode"/g)).toHaveLength(4);
     expect(markup).not.toContain('data-workspace-search="true"');
@@ -393,7 +393,7 @@ describe('WorkspaceHeader', () => {
         selectedTicketsUpNextEligible: true,
       }),
     );
-    expect(markup).toContain('kui-popup-menu__label">More workspace controls</span>');
+    expect(markup).toContain('kui-popup-menu__label">More Workspace Controls</span>');
     // PopupMenu items carry the app's routing and state as data attributes (HS2-CSRJ9Y).
     expect(markup).toContain(
       'data-workspace-overflow-kind="utility" data-workspace-overflow-action="toggle-selected-up-next" data-workspace-overflow-state="all"',

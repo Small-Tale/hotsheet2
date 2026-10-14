@@ -316,7 +316,7 @@ function TerminalCard({
       <div class="terminal-tile__footer">
         <Toolbar
           position="footer"
-          label={`${session.title ?? session.id} terminal`}
+          label={`${session.title ?? session.id} Terminal`}
           leading={
             <>
               {magnified && mobile && (
@@ -408,7 +408,7 @@ function TerminalCard({
                 appearance="borderless"
                 content="icon"
                 size={magnified && mobile ? 'default' : 'compact'}
-                label="Terminal actions"
+                label="Terminal Actions"
               >
                 {magnified && mobile && (
                   <button
@@ -416,7 +416,7 @@ function TerminalCard({
                     class="terminal-tile__text-size"
                     {...TERMINALS_ACTIONS.cycleMobileTerminalColumns.attrs}
                     data-columns={String(mobile.columns)}
-                    aria-label={`Text size: ${mobile.columns} columns. Change text size`}
+                    aria-label={`Text Size: ${mobile.columns} Columns. Change Text Size`}
                     title="Change text size"
                   >
                     <LucideIcon size="s" icon={ALargeSmall} name="a-large-small" />
@@ -427,7 +427,7 @@ function TerminalCard({
                     type="button"
                     class="terminal-tile__clipboard"
                     {...TERMINALS_ACTIONS.copyTerminalText.attrs}
-                    aria-label="Copy terminal text"
+                    aria-label="Copy Terminal Text"
                     title="Copy terminal text"
                   >
                     <LucideIcon size="s" icon={Copy} name="copy" />
@@ -449,7 +449,7 @@ function TerminalCard({
                   class="terminal-tile__menu"
                   {...TERMINALS_ACTIONS.openTerminalContextMenu.attrs}
                   data-item-id={key}
-                  aria-label={`More actions for ${session.title ?? session.id}`}
+                  aria-label={`More Actions for ${session.title ?? session.id}`}
                   title="More actions"
                 >
                   <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
@@ -462,7 +462,7 @@ function TerminalCard({
                     class="terminal-tile__open"
                     {...TERMINALS_ACTIONS.openTerminalProject.attrs}
                     data-terminal-key={key}
-                    aria-label={`Open ${session.title ?? session.id} in project terminal drawer`}
+                    aria-label={`Open ${session.title ?? session.id} in Project Terminal Drawer`}
                     title="Open in project terminal drawer"
                   >
                     <LucideIcon size="s" icon={ExternalLink} name="external-link" />
@@ -559,7 +559,7 @@ export function TerminalSession({
       data-component="terminal-session"
       data-terminal-key={keyFor(session)}
       hidden={!active}
-      aria-label={`${session.title ?? session.id} terminal`}
+      aria-label={`${session.title ?? session.id} Terminal`}
     >
       <div
         class="terminal-viewport terminal-viewport--dedicated"
@@ -605,7 +605,7 @@ export function WorkspaceGridChatCard({ chat, previewScale = 1 }: { chat: Worksp
             <LucideIcon icon={MessageSquare} name="message-square" size={8} color={uiColor('brand-on-quiet')} />
           </span>
           <div>
-            <strong>{chat.tool} AI chat</strong>
+            <strong>{chat.tool} AI Chat</strong>
             <p>{chat.summary || `Open ${chat.name} to continue the conversation.`}</p>
           </div>
         </div>
@@ -613,7 +613,7 @@ export function WorkspaceGridChatCard({ chat, previewScale = 1 }: { chat: Worksp
       <div class="terminal-tile__footer">
         <Toolbar
           position="footer"
-          label={`${chat.name} AI chat`}
+          label={`${chat.name} AI Chat`}
           leading={
             <>
               <TileState state={state} />
@@ -738,7 +738,7 @@ export function TerminalDashboard({
       data-layout-mode={layoutMode}
       data-basis={layout.basis}
       data-fit={String(layout.fit)}
-      aria-label="Workspace grid"
+      aria-label="Workspace Grid"
     >
       <div
         class="terminal-dashboard__content"
@@ -790,7 +790,7 @@ export function TerminalDashboard({
       </div>
       <div class="terminal-dashboard__zoom">
         <FloatingToolbar
-          label={layoutMode === 'drawer' ? 'Workspace tile zoom' : 'Workspace grid controls'}
+          label={layoutMode === 'drawer' ? 'Workspace Tile Zoom' : 'Workspace Grid Controls'}
           position="bottom-end"
         >
           {layoutMode !== 'drawer' && (
@@ -812,7 +812,7 @@ export function TerminalDashboard({
               {...TERMINALS_ACTIONS.zoomTerminalGrid.attrs}
               data-zoom-direction="out"
               disabled={layout.fit >= layout.max}
-              aria-label={`Zoom out, fit more items ${layout.basis}`}
+              aria-label={`Zoom Out, Fit More Items ${layout.basis}`}
               title="Zoom out"
             >
               <LucideIcon icon={Minus} name="minus" />
@@ -822,7 +822,7 @@ export function TerminalDashboard({
               {...TERMINALS_ACTIONS.zoomTerminalGrid.attrs}
               data-zoom-direction="in"
               disabled={layout.fit <= 1}
-              aria-label={`Zoom in, fit fewer items ${layout.basis}`}
+              aria-label={`Zoom In, Fit Fewer Items ${layout.basis}`}
               title="Zoom in"
             >
               <LucideIcon icon={Plus} name="plus" />
@@ -861,7 +861,7 @@ export function TerminalDashboard({
         <PopupMenu
           context
           anchor={contextMenuAnchor(contextMenu.x, contextMenu.y)}
-          label="Terminal actions"
+          label="Terminal Actions"
           rootAttributes={{ 'data-context-menu': 'terminal', 'data-terminal-key': contextMenu.key }}
           items={[
             ...(contextMenuActions.includes('clear-halt') && menuSession?.halt

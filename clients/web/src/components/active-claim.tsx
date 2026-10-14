@@ -78,7 +78,7 @@ export function LiveClaimNotice({ agentName, eta }: LiveClaimNoticeProps) {
   return (
     <div class="live-claim-notice" data-component="live-claim-notice" title={label}>
       <StateBanner
-        title={`${visibleClaimHolder(agentName)} is working on this`}
+        title={`${visibleClaimHolder(agentName)} is working on this.`}
         tone="info"
         urgency="status"
         icon={

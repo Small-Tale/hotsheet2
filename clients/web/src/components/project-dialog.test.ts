@@ -33,7 +33,7 @@ describe('project dialogs', () => {
     expect(markup).toContain('data-multiline="true"');
     expect(markup).toContain('data-action="open-remote-checkout"');
     expect(markup).toContain('data-item-id="demo"');
-    expect(markup).toContain('aria-label="Open projects"');
+    expect(markup).toContain('aria-label="Open Projects"');
     // Kerf sizes the dialog and scrolls the checkout list; no app max-height remains (HS2-W4RNKJ).
     expect(markup).toContain('data-component="dialog-surface"');
     expect(markup).toMatch(/role="navigation"[^>]*data-scrollable="true"|data-scrollable="true"[^>]*role="navigation"/);

@@ -136,7 +136,7 @@ test('recovers a project folder without Git and optionally connects origin', asy
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: project.stores[0],
             default: true,
             capabilities: { create: true, update: true, notes: true, attachments: true, watch: true, query_fields: [] },
@@ -166,8 +166,8 @@ test('recovers a project folder without Git and optionally connects origin', asy
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-action="open-repository-status"]').click();
   const dialog = page.locator('[data-repository-surface="repository-status"]');
   await expect(dialog).toHaveAttribute('data-state', 'uninitialized');

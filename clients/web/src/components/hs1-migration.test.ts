@@ -101,7 +101,7 @@ describe('HS1 migration presentation', () => {
     const markup = String(Hs1RegistrationRepairBanner());
     expect(markup).toContain('data-tone="warning"');
     expect(markup).toContain('may reopen this imported project');
-    expect(markup).toContain('Repair old app registration');
+    expect(markup).toContain('Repair Old App Registration');
     expect(markup).toContain('data-action="remove-hs1-data"');
   });
 });

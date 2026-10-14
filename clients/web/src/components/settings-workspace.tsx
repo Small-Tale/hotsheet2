@@ -55,7 +55,7 @@ export function SettingsWorkspace({
     <section
       class="settings-workspace"
       data-component="settings-workspace"
-      aria-label={`${settingsCategoryTitle(category)} settings`}
+      aria-label={`${settingsCategoryTitle(category)} Settings`}
       data-settings-category={category}
     >
       {category === 'sources' && <TicketSourcesSettings {...sources} />}
@@ -90,8 +90,8 @@ export function SettingsWorkspace({
               value={permissions.automation.action}
               choices={[
                 { value: 'off', label: 'Off' },
-                { value: 'allow', label: 'Auto-allow' },
-                { value: 'deny', label: 'Auto-deny' },
+                { value: 'allow', label: 'Auto-Allow' },
+                { value: 'deny', label: 'Auto-Deny' },
               ]}
             />
             <Select

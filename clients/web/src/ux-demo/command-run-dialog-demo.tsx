@@ -100,7 +100,7 @@ export function CommandRunDialogDemo() {
         {commandRunDialogSettings.open.value && (
           <CommandRunDialog command={command} run={stop ? runningRun : completedRun} confirmStop={stop} />
         )}
-        <wa-button {...DEMO_ACTIONS.openCommandRunDialogDemo.attrs}>Open dialog</wa-button>
+        <wa-button {...DEMO_ACTIONS.openCommandRunDialogDemo.attrs}>Open Dialog</wa-button>
       </CatalogExample>
       <DemoEvent>{commandRunDialogSettings.event.value}</DemoEvent>
     </>
@@ -115,8 +115,8 @@ export function CommandRunDialogSettings() {
         label="Presentation"
         value={commandRunDialogSettings.presentation.value}
         choices={[
-          { value: 'output', label: 'Run output' },
-          { value: 'stop', label: 'Stop confirmation' },
+          { value: 'output', label: 'Run Output' },
+          { value: 'stop', label: 'Stop Confirmation' },
         ]}
       />
       <wa-button type="button" {...DEMO_ACTIONS.resetSettings.attrs}>

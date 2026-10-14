@@ -42,9 +42,9 @@ describe('ticket source surfaces', () => {
     expect(idle).not.toContain('name="api-base"');
     const blank = { session: '', userCode: '', verificationUri: '' };
     const enterprise = form({ ...blank, state: 'idle', enterprise: true, enterpriseUrl: 'https://ghe.test' });
-    expect(enterprise).toContain('GitHub Enterprise server URL');
+    expect(enterprise).toContain('GitHub Enterprise Server URL');
     expect(enterprise).toContain('name="github-enterprise-url"');
-    expect(enterprise).toContain('label="GitHub Enterprise server URL"');
+    expect(enterprise).toContain('label="GitHub Enterprise Server URL"');
     expect(enterprise).toContain('value="https://ghe.test"');
     expect(enterprise).toContain('Sign in with GitHub Enterprise');
     expect(enterprise).toContain('data-action="choose-github-dotcom"');
@@ -188,7 +188,7 @@ describe('ticket source surfaces', () => {
     expect(connecting).not.toContain('request-provider-removal');
     const editing = String(TicketSourceSetupDialog({ ...base, editingProviderId: 'github-main' }));
     expect(editing).toContain('data-action="request-provider-removal"');
-    expect(editing).toContain('Remove from this project…');
+    expect(editing).toContain('Remove from This Project…');
     expect(editing).toContain('data-lucide="trash-2"');
     expect(editing).toContain('data-action="submit-provider-setup"');
     expect(editing).not.toContain('confirm-provider-removal');
@@ -274,8 +274,8 @@ describe('ticket source surfaces', () => {
     expect(signedIn).toContain('<wa-checkbox class="provider-setup-form__wide" name="make-default"');
     expect(signedIn).toContain('name="attachment-repo"');
     expect(signedIn).toContain('Enter an assets repository and save to configure attachments.');
-    expect(signedIn).toContain('name="attachment-folder" label="Attachment folder" value="hotsheet-attachments"');
-    expect(signedIn).toContain('name="attachment-branch" label="Attachment branch" value="main"');
+    expect(signedIn).toContain('name="attachment-folder" label="Attachment Folder" value="hotsheet-attachments"');
+    expect(signedIn).toContain('name="attachment-branch" label="Attachment Branch" value="main"');
     expect(signedIn).not.toContain('name="api-base"');
     const configured = String(
       ProviderSetupForm({
@@ -341,8 +341,8 @@ describe('ticket source surfaces', () => {
     expect(failedEdit).toContain('You can enter a repository path manually.');
     expect(failedEdit).toContain('value="acme/issues"');
     expect(failedEdit).not.toContain('provider-setup-github-repositories');
-    expect(configured).toContain('name="attachment-folder" label="Attachment folder" value="evidence"');
-    expect(configured).toContain('name="attachment-branch" label="Attachment branch" value="media"');
+    expect(configured).toContain('name="attachment-folder" label="Attachment Folder" value="evidence"');
+    expect(configured).toContain('name="attachment-branch" label="Attachment Branch" value="media"');
     const remote = String(
       TicketSourceSetupDialog({
         project: { root: '/work/demo', name: 'Demo', stores: ['/work/demo.hs2'] },
@@ -364,7 +364,7 @@ describe('ticket source surfaces', () => {
 
   it("lists only this project's own sources with its default and a remove action (HS2-3SCH1K, HS2-SM9PM8)", () => {
     const sources = [
-        { connectionId: 'git-demo', name: 'Hot Sheet git', provider: 'git', locator: '/work/demo.hs2', default: false },
+        { connectionId: 'git-demo', name: 'Hot Sheet Git', provider: 'git', locator: '/work/demo.hs2', default: false },
         {
           connectionId: 'github-main',
           name: 'Issues',
@@ -451,7 +451,7 @@ describe('ticket source surfaces', () => {
     );
     expect(editor).toContain('This Git store cannot be opened.');
     expect(editor).not.toContain('name="review-unverified-recovery"');
-    expect(editor).toContain('Remove from this project…');
+    expect(editor).toContain('Remove from This Project…');
   });
 
   it('offers project-local source colors and warns when provider and color repeat', () => {
@@ -460,7 +460,7 @@ describe('ticket source surfaces', () => {
       { connectionId: 'gh-b', name: 'Beta', provider: 'github', locator: 'b', default: false, color: '#3b82f6' },
     ];
     const repeated = String(TicketSourcesSettings({ sources }));
-    expect(repeated).toContain('Some ticket sources look alike');
+    expect(repeated).toContain('Some ticket sources look alike.');
     expect(repeated).not.toContain('name="project-source-color"');
     expect(repeated).toContain('data-action="edit-provider-connection"');
     const gitEditor = String(
@@ -473,7 +473,7 @@ describe('ticket source surfaces', () => {
     expect(gitEditor).not.toContain('name="project-source-color"');
     expect(repeated).toContain('data-provider="github"');
     expect(String(TicketSourcesSettings({ sources: [{ ...sources[0], color: undefined }, sources[1]] }))).not.toContain(
-      'Some ticket sources look alike',
+      'Some ticket sources look alike.',
     );
     expect(
       String(
@@ -484,7 +484,7 @@ describe('ticket source surfaces', () => {
           ],
         }),
       ),
-    ).toContain('Some ticket sources look alike');
+    ).toContain('Some ticket sources look alike.');
   });
 
   it('opens the default git source in a path and color editor (HS2-XKEHAK, HS2-8BG4W9)', () => {
@@ -517,7 +517,7 @@ describe('ticket source surfaces', () => {
     expect(markup).toContain('>Save location</wa-button>');
     expect(markup).toContain('name="project-source-color" value="#3b82f6" data-source-id="git-local" checked');
     expect(markup).toContain('>Done</wa-button>');
-    expect(markup).toContain('Remove from this project…');
+    expect(markup).toContain('Remove from This Project…');
     const removing = String(
       TicketSourceSetupDialog({
         project: { root: '/work/demo', name: 'Demo', stores: ['/work/demo.hs2'] },

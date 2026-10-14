@@ -88,7 +88,7 @@ function TicketInfoPanelPlaceholder({ readerPresentation = false }: { readerPres
       presentation={readerPresentation ? 'reader' : 'sidebar'}
       attributes={{ 'data-placeholder': 'true', 'aria-hidden': 'true', inert: '' }}
     >
-      <section class="ticket-info-panel__metadata" aria-label="Ticket metadata">
+      <section class="ticket-info-panel__metadata" aria-label="Ticket Metadata">
         <List gap="xs">
           <Grid columns={2} gap="xs">
             <TicketCategorySelect name="inspector-category" value="" placeholder />
@@ -167,7 +167,7 @@ function LoadedTicketInfoPanel({
   blockedReason = '',
   blockedReasonEditing = false,
   blockedReasonDraft = blockedReason,
-  providerName = 'Hot Sheet git',
+  providerName = 'Hot Sheet Git',
   updatedLabel = 'Updated now',
   attachmentContext,
 }: TicketInfoPanelProps) {
@@ -180,7 +180,7 @@ function LoadedTicketInfoPanel({
       className="ticket-info-panel"
       presentation={readerPresentation ? 'reader' : 'sidebar'}
     >
-      <section class="ticket-info-panel__metadata" aria-label="Ticket metadata">
+      <section class="ticket-info-panel__metadata" aria-label="Ticket Metadata">
         <List gap="xs">
           <Grid columns={2} gap="xs">
             <TicketCategorySelect name="inspector-category" value={category} disabled={!canUpdate} />
@@ -211,16 +211,16 @@ function LoadedTicketInfoPanel({
       <List gap="xs" className="ticket-info-panel__section ticket-info-panel__blocked-section">
         {blockedReasonEditing ? (
           <>
-            <ListHeader label="Blocked reason" />
+            <ListHeader label="Blocked Reason" />
             <div class="ticket-info-panel__blocked-editor">
-              <textarea name="blocked-reason" aria-label="Blocked reason">
+              <textarea name="blocked-reason" aria-label="Blocked Reason">
                 {blockedReasonDraft}
               </textarea>
             </div>
           </>
         ) : blockedReason ? (
           <>
-            <ListHeader label="Blocked reason" />
+            <ListHeader label="Blocked Reason" />
             <div
               class="ticket-info-panel__blocked-surface"
               data-edit-blocked-reason={canEditText ? 'true' : undefined}

@@ -30,7 +30,7 @@ for (const width of [1280, 390]) {
       );
     const imagePalette = await palette();
     await expect(gallery.locator('.attachment-gallery__filename')).toHaveCSS('color', 'rgb(255, 255, 255)');
-    for (const label of ['Media markup', 'Media zoom'])
+    for (const label of ['Media Markup', 'Media Zoom'])
       await expect(
         gallery.getByRole('toolbar', { name: label }).locator('[data-component="toolbar-control-group"]'),
       ).toHaveCSS('background-color', 'rgb(58, 58, 60)');
@@ -65,9 +65,9 @@ for (const width of [1280, 390]) {
     await gallery.getByRole('button', { name: 'Close image gallery' }).click();
     await expect(gallery).toHaveCount(0);
     // Explicit app theme toggles must keep working outside the gallery.
-    await page.getByRole('button', { name: 'Use dark theme', exact: true }).click();
+    await page.getByRole('button', { name: 'Use Dark Theme', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await page.getByRole('button', { name: 'Open gallery', exact: true }).click();
+    await page.getByRole('button', { name: 'Open Gallery', exact: true }).click();
     await gallery.getByRole('button', { name: 'Annotate media, 1 annotation' }).click();
     await expect.poll(palette).toEqual(imagePalette);
     await gallery.getByRole('button', { name: 'Next image' }).click();
@@ -112,7 +112,7 @@ for (const width of [1280, 390]) {
     });
     await expect(gallery.locator('video')).toHaveJSProperty('videoWidth', 640);
     await expect(gallery.locator('video')).toHaveCSS('filter', 'none');
-    await gallery.getByRole('button', { name: 'Volume controls' }).click();
+    await gallery.getByRole('button', { name: 'Volume Controls' }).click();
     await expect
       .poll(() => gallery.locator('video').evaluate((video: HTMLVideoElement) => video.readyState))
       .toBeGreaterThanOrEqual(2);
@@ -129,7 +129,7 @@ for (const width of [1280, 390]) {
     await gallery.getByRole('button', { name: 'Close video gallery' }).focus();
     await page.keyboard.press('Enter');
     await expect(gallery).toHaveCount(0);
-    await page.getByRole('button', { name: 'Use light theme', exact: true }).click();
+    await page.getByRole('button', { name: 'Use Light Theme', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await expect.poll(surrounding).toBe(lightSurface);
   });

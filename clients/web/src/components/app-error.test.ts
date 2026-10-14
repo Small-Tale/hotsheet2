@@ -12,5 +12,5 @@ it('renders the error with an accessible dismissal action', () => {
   expect(markup).toContain('data-tone="danger"');
   expect(markup).toContain('data-action-placement="below"');
   expect(markup).toContain('role="alert"');
-  expect(markup).toContain('>Dismiss error</button>');
+  expect(markup).toContain('>Dismiss Error</button>');
 });

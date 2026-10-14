@@ -157,7 +157,7 @@ describe('TicketInspector', () => {
           : 'ticket-inspector__title-frame';
       expect(markup).toContain(`<div class="${frame}" data-title-mirror="${title}">`);
       expect(markup).toMatch(
-        new RegExp(`name="ticket-title" aria-label="Ticket title" rows="1"[^>]*>${title}</textarea>`),
+        new RegExp(`name="ticket-title" aria-label="Ticket Title" rows="1"[^>]*>${title}</textarea>`),
       );
       expect(markup).not.toContain('<input class="ticket-inspector__title-input"');
     }
@@ -183,7 +183,7 @@ describe('TicketInspector', () => {
       expect(markup).toContain('data-component="tab-bar"');
       expect(markup).toContain('data-tab-bar-id="ticket-inspector-sidebar-HS2-TEST"');
       expect(markup).toContain('data-tab-activation="automatic"');
-      expect(markup).toContain('aria-label="Ticket inspector sections"');
+      expect(markup).toContain('aria-label="Ticket Inspector Sections"');
       expect(markup).toMatch(
         new RegExp(
           `data-inspector-tab="${tab}"[^>]*data-component="app-tab"[^>]*data-tab-id="${tab}"[^>]*data-selected="true"`,
@@ -195,7 +195,7 @@ describe('TicketInspector', () => {
           `role="tab" aria-selected="true" aria-label="[^"]+"[^>]*data-action="set-inspector-tab" data-tab-id="${tab}" tabindex="0"`,
         ),
       );
-      expect(markup).toContain('aria-label="Hide ticket inspector"');
+      expect(markup).toContain('aria-label="Hide Ticket Inspector"');
       expect(markup).toContain('data-action="toggle-ticket-inspector"');
       expect(markup).toContain('data-lucide="panel-right-close"');
       expect(markup).toContain(
@@ -308,7 +308,7 @@ describe('TicketInspector', () => {
         },
       }),
     );
-    expect(working).toContain('Codex is working on this');
+    expect(working).toContain('Codex is working on this.');
     expect(working).toContain('data-component="state-banner"');
     expect(working).toContain('data-claim-eta="estimate"');
     // The live-work notice leads the header notices, above Needs review.
@@ -357,10 +357,10 @@ describe('TicketInspector', () => {
     const waiting = String(TicketInspector({ ...base, feedbackNeeded: true }));
     expect(waiting).toContain('ticket-inspector__feedback');
     expect(waiting).toContain('data-needs-review="true"');
-    expect(waiting).toContain('Needs review');
+    expect(waiting).toContain('Needs Review');
     expect(waiting).toContain('circle-alert');
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
-    // The reader no longer paints a purple needs-review side rail; the "Needs review" pill is the only
+    // The reader no longer paints a purple needs-review side rail; the "Needs Review" pill is the only
     // feedback-needed indicator in the reader (HS2-N6WA7Y).
     expect(css).not.toMatch(/data-presentation="reader"\]\[data-needs-review="true"\]::before/);
   });
@@ -375,7 +375,7 @@ describe('TicketInspector', () => {
       }),
     );
     expect(markup).toContain('data-component="ticket-duplicate-target"');
-    expect(markup).toContain('Duplicate of');
+    expect(markup).toContain('Duplicate Of');
     expect(markup).toContain('Hot Sheet 2 · HS2-TARGET');
     expect(markup).toContain('Canonical ticket');
     expect(markup).toContain('data-action="open-duplicate-target" data-item-id="target-id"');
@@ -445,7 +445,7 @@ describe('TicketInspector', () => {
     // HS2-3X404M: the panel composes NoteCard's exported editor and respond action rather than
     // writing NoteCard's private classes into its own source.
     expect(reader).toContain('placeholder="Additional response (optional)"');
-    expect(reader).toContain('No response needed');
+    expect(reader).toContain('No Response Needed');
     const panelSource = readFileSync(resolve(import.meta.dirname, 'ticket-info-panel.tsx'), 'utf8');
     expect(panelSource).not.toContain('note-card__');
     expect(panelSource).toMatch(/<NoteEditor\b/);
@@ -570,7 +570,7 @@ describe('TicketInspector', () => {
       feedbackNeeded: true,
       liveClaim: { agentName: 'Codex' },
     });
-    expect(parts.toggle).toEqual({ action: 'toggle-ticket-inspector', name: 'ticket inspector' });
+    expect(parts.toggle).toEqual({ action: 'toggle-ticket-inspector', name: 'Ticket Inspector' });
     expect(parts.label).toBe('HS2-TEST inspector');
     expect(String(parts.toolbar.leading)).toContain('data-action="copy-ticket-slug"');
     expect(String(parts.toolbar.trailing)).toContain('data-action="open-ticket-reader"');
@@ -583,7 +583,7 @@ describe('TicketInspector', () => {
     expect(header).toContain('Inspect this ticket');
     expect(header).toContain('data-component="live-claim-notice"');
     expect(header).toContain('data-confidence="82"');
-    expect(header).toContain('Needs review');
+    expect(header).toContain('Needs Review');
     expect(header).toContain('data-component="tab-bar"');
     const content = String(parts.content);
     expect(content).toContain('data-component="ticket-inspector-body"');

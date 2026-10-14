@@ -9,7 +9,7 @@ export function ListHeaderDemo() {
   return (
     <>
       <CatalogExample
-        label="With action"
+        label="With Action"
         note="Section labels align with ListItem icons whether the header has an action or toggles a group."
         viewport={{ width: 'compact' }}
       >
@@ -20,7 +20,7 @@ export function ListHeaderDemo() {
           actionIcon={<LucideIcon icon={Plus} name="plus" />}
         />
       </CatalogExample>
-      <CatalogExample label="Group toggle" viewport={{ width: 'compact' }}>
+      <CatalogExample label="Group Toggle" viewport={{ width: 'compact' }}>
         <ListHeader label="Project Commands" action="demo-toggle" expanded toggle />
       </CatalogExample>
     </>

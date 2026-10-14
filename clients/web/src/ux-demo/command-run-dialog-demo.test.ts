@@ -33,8 +33,8 @@ describe('CommandRunDialog demo (HS2-CWWX7S, HS2-Z7C27E)', () => {
     expect(markup).toContain('All checks passed in 4.2s');
     const settings = String(CommandRunDialogSettings());
     expect(settings).toContain('data-settings="command-run-dialog"');
-    expect(settings).toContain('Run output');
-    expect(settings).toContain('Stop confirmation');
+    expect(settings).toContain('Run Output');
+    expect(settings).toContain('Stop Confirmation');
   });
 
   it('swaps to the stop confirmation, reopens on swap, and reports dismiss and stop', () => {

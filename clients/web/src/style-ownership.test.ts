@@ -15,7 +15,7 @@ describe('global stylesheet ownership', () => {
         ['data-ticket-source-setup-dialog', '.ticket-source-setup-dialog', '.ticket-source-setup'],
       ],
       ['provider setup', 'provider-setup-form.css', ['.provider-setup-form']],
-      ['ticket-source settings', 'ticket-sources-settings.css', ['.ticket-provider-settings']],
+      ['ticket-source Settings', 'ticket-sources-settings.css', ['.ticket-provider-settings']],
       ['settings workspace', 'settings-workspace.css', ['.settings-workspace']],
     ] as const;
     // TicketPageMore composes a pill `wa-button` with no stylesheet at all (HS2-TCM7WC).

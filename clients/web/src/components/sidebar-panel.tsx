@@ -41,7 +41,7 @@ export interface SidebarPanelParts {
  * rail is collapsed, so one action both hides and shows the rail.
  */
 export const INSPECTOR_TOGGLE_ACTION = 'toggle-ticket-inspector';
-export const inspectorToggle = (name = 'ticket inspector'): WorkbenchPanelToggle => ({
+export const inspectorToggle = (name = 'Ticket Inspector'): WorkbenchPanelToggle => ({
   action: INSPECTOR_TOGGLE_ACTION,
   name,
 });

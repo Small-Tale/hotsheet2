@@ -57,7 +57,7 @@ describe('ConfidenceCalibration (HS2-Q1WCCY)', () => {
 
   it('lists recent completions newest first with their score and outcome', () => {
     const markup = String(ConfidenceCalibration({ state: { status: 'ready', report: calibrationFixture } }));
-    const recent = markup.slice(markup.indexOf('Recent completions'));
+    const recent = markup.slice(markup.indexOf('Recent Completions'));
     expect(recent.indexOf('HS2-B')).toBeLessThan(recent.indexOf('HS2-A'));
     expect(recent).toContain('Unscored');
     expect(recent).toContain('Awaiting outcome');
@@ -68,14 +68,14 @@ describe('ConfidenceCalibration (HS2-Q1WCCY)', () => {
   it('shows loading, error, and empty states', () => {
     expect(String(ConfidenceCalibration({ state: { status: 'loading' } }))).toContain('data-state="loading"');
     const error = String(ConfidenceCalibration({ state: { status: 'error', message: 'server offline' } }));
-    expect(error).toContain('Confidence calibration is unavailable');
+    expect(error).toContain('Confidence calibration is unavailable.');
     expect(error).toContain('server offline');
     const empty = String(
       ConfidenceCalibration({
         state: { status: 'ready', report: { ...calibrationFixture, completions: 0, events: [] } },
       }),
     );
-    expect(empty).toContain('No completions yet');
+    expect(empty).toContain('No Completions Yet');
     expect(empty).not.toContain('<table');
   });
 

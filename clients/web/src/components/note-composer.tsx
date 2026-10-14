@@ -27,7 +27,7 @@ export function NoteComposer({ value = '' }: { value?: string }) {
               Cancel
             </wa-button>
             <wa-button appearance="accent" type="submit" disabled={!value.trim()}>
-              Add note
+              Add Note
             </wa-button>
           </Row>
         </List>

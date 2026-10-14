@@ -223,13 +223,13 @@ test('uses native modality for focus, nested Escape, backdrop policy, and respon
   const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]');
   await row.dblclick();
   const reader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' }),
-    close = reader.getByRole('button', { name: 'Close ticket reader' });
+    close = reader.getByRole('button', { name: 'Close Ticket Reader' });
   await expect(reader).toBeVisible();
   await expect(close).toBeFocused();
   expect(
     await reader.evaluate((host) => (host.shadowRoot!.querySelector('dialog') as HTMLDialogElement).matches(':modal')),
   ).toBe(true);
-  await page.getByRole('button', { name: 'Add project' }).evaluate((node) => {
+  await page.getByRole('button', { name: 'Add Project' }).evaluate((node) => {
     (node as HTMLElement).focus();
   });
   expect(await reader.evaluate((host) => host.contains(document.activeElement))).toBe(true);
@@ -290,11 +290,11 @@ test('vetoes reader dismissal when an asynchronous draft flush fails', async ({ 
 
 async function openProjects(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.getByRole('tab', { name: 'Hot Sheet 2' })).toHaveAttribute('aria-selected', 'true');
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.getByRole('tab', { name: 'Deep Work' })).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('tab', { name: 'Kerf' }).click();
   await page.locator('[data-ticket-slug="KF-ROOT01"]').click();
@@ -330,7 +330,7 @@ test('layers exact cross-project ticket readers and unwinds focus without changi
   await page.keyboard.press('Escape');
   await expect(third).toHaveCount(0);
   await expect(first.getByRole('link', { name: '@third-project/HS2-LINK01' })).toBeFocused();
-  await first.getByRole('button', { name: 'Close ticket reader' }).click();
+  await first.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await expect(first).toHaveCount(0);
   await expect(inspectorLink).toBeFocused();
   await expect(page.getByRole('tab', { name: projects.source.name })).toHaveAttribute('aria-selected', 'true');
@@ -349,7 +349,7 @@ test('layers links above an existing reader and closes one level at a time', asy
   const linked = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
   await expect(linked.getByText('Reader 2 of 2')).toBeVisible();
   await expect(baseReader).not.toBeVisible();
-  await linked.getByRole('button', { name: 'Close ticket reader' }).click();
+  await linked.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await expect(linked).toHaveCount(0);
   await expect(baseReader).toBeVisible();
   await expect(baseReader.getByRole('link', { name: '@target-project/HS2-LINK01' })).toBeFocused();
@@ -369,13 +369,13 @@ test('edits same-slug linked readers through their owning project and flushes be
   await page.screenshot({ path: 'target/visual-captures/hs2-1xqb2k-linked-edit-wide.png', fullPage: true });
   await page.setViewportSize({ width: 720, height: 760 });
   await page.screenshot({ path: 'target/visual-captures/hs2-1xqb2k-linked-edit-narrow.png', fullPage: true });
-  await deepReader.getByRole('button', { name: 'Close ticket reader' }).click();
+  await deepReader.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await expect(deepReader).toHaveCount(0);
   await targetReader.locator('[data-action="edit-markdown"]').click({ position: { x: 4, y: 4 } });
   await targetReader
     .getByRole('textbox', { name: 'Ticket details' })
     .fill('Target project draft stays with git-target.');
-  await targetReader.getByRole('button', { name: 'Close ticket reader' }).click();
+  await targetReader.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await expect(targetReader).toHaveCount(0);
   await expect
     .poll(() => mutations.map((item) => [item.projectId, item.ticketId, item.patch.details]))
@@ -444,12 +444,12 @@ test('keeps linked reader attachment batches read-only even with an editable pro
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(batch.getByRole('heading', { name: 'Linked evidence' })).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('linked-batch-readonly-phone.png') });
-  await linked.getByRole('button', { name: 'Close ticket reader' }).click();
+  await linked.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await workspaceReader.getByRole('tab', { name: /Attachments/ }).click();
   await expect(workspaceReader.getByRole('button', { name: 'Edit batch label Workspace evidence' })).toBeVisible();
   await expect(workspaceReader.locator('[name="attachment-batch-purpose"]')).toBeEnabled();
   await expect(workspaceReader.locator('[name="attachment-batch-purpose"]')).toHaveValue('reference');
-  await workspaceReader.getByRole('button', { name: 'Close ticket reader' }).click();
+  await workspaceReader.getByRole('button', { name: 'Close Ticket Reader' }).click();
   expect(attachmentWrites).toEqual([]);
   expect(
     await page.evaluate(() => Object.keys(localStorage).filter((key) => key.includes('attachment_label'))),

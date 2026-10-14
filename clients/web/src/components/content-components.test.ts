@@ -48,7 +48,7 @@ describe('content components', () => {
     expect(markup).toContain('data-component="list-inset-text" data-sides="rl"');
     expect(markup).toContain('class="kui-list-item ticket-notes__add"');
     expect(markup).toContain(
-      '<span class="kui-list-item__label"><span class="kui-list-item__primary-label">Add note</span></span>',
+      '<span class="kui-list-item__label"><span class="kui-list-item__primary-label">Add Note</span></span>',
     );
     const composing = String(TicketNotes({ notes: [], composing: true }));
     expect(composing).toContain('data-component="note-composer"');
@@ -376,7 +376,7 @@ describe('content components', () => {
     const markup = String(
       TicketReader({
         slug: 'HS2-LINKED',
-        title: 'Linked reader',
+        title: 'Linked Reader',
         status: 'started',
         priority: 'default',
         category: 'bug',

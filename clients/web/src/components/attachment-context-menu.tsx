@@ -46,7 +46,7 @@ export function AttachmentContextMenu({
     <PopupMenu
       context
       anchor={contextMenuAnchor(x, y)}
-      label="Attachment actions"
+      label="Attachment Actions"
       rootAttributes={{ 'data-context-menu': 'attachment', 'data-kind': kind }}
       items={[
         item(

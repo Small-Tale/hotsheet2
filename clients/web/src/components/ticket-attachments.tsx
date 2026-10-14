@@ -252,7 +252,7 @@ export function TicketAttachments({
                         class="ticket-attachments__item-menu"
                         type="button"
                         {...ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentMenu.attrs}
-                        aria-label={`More actions for ${attachment.name}`}
+                        aria-label={`More Actions for ${attachment.name}`}
                         title={`More actions for ${attachment.name}`}
                       >
                         <LucideIcon size={14.4} icon={MoreHorizontal} name="more-horizontal" />

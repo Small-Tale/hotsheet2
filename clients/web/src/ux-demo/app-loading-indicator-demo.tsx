@@ -13,21 +13,21 @@ export const appLoadingDemoProgress = signal<BulkUpdateProgress | undefined>(und
 export function AppLoadingIndicatorDemo() {
   return (
     <CatalogExample
-      label="App loading indicator states"
+      label="App Loading Indicator States"
       note="Choose a loading state; the app indicator appears in the viewport corner."
     >
       <Row gap="xs" wrap>
         <wa-button type="button" data-app-loading-demo="project">
-          Project load
+          Project Load
         </wa-button>
         <wa-button type="button" data-app-loading-demo="start">
-          Update start
+          Update Start
         </wa-button>
         <wa-button type="button" data-app-loading-demo="progress">
-          Update progress
+          Update Progress
         </wa-button>
         <wa-button type="button" data-app-loading-demo="complete">
-          Update complete
+          Update Complete
         </wa-button>
       </Row>
       <AppLoadingIndicator progress={appLoadingDemoProgress.value} />

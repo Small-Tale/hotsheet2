@@ -127,11 +127,11 @@ for (const width of [390, 1280]) {
           bytes: typeof crypto.getRandomValues,
         })),
       ).toEqual({ secure: false, uuid: 'undefined', bytes: 'function' });
-      await page.getByRole('button', { name: 'Workspace grid', exact: true }).click();
-      const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+      await page.getByRole('button', { name: 'Workspace Grid', exact: true }).click();
+      const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
         tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]'),
         preview = tile.locator('[data-display-mode="scaled-preview"]');
-      const zoom = dashboard.getByRole('button', { name: /Zoom in/ });
+      const zoom = dashboard.getByRole('button', { name: /Zoom In/ });
       while (await zoom.isEnabled()) await zoom.click();
       await expectGlyphPixels(page, preview, 'REPLAY LAN GLYPHS');
       await tile.screenshot({ path: testInfo.outputPath(`safari-lan-preview-${width}.png`) });
@@ -142,7 +142,7 @@ for (const width of [390, 1280]) {
       await magnified.screenshot({ path: testInfo.outputPath(`safari-lan-magnified-${width}.png`) });
       if (width === 390) {
         // The phone toolbar reaches the drawer through More actions → Open (HS2-8NQRJB).
-        await magnified.getByRole('button', { name: /^More actions for nano$/i }).click();
+        await magnified.getByRole('button', { name: /^More Actions for nano$/i }).click();
         await page.locator('[data-context-menu="terminal"]').getByText('Open', { exact: true }).click();
       } else await magnified.getByRole('button', { name: /^Open nano in project terminal drawer$/i }).click();
       const dedicated = page.locator('[data-component="terminal-session"] [data-terminal-id="nano"]');
@@ -232,8 +232,8 @@ test('WebKit shows terminal initialization failures instead of an empty black su
       });
     });
     await page.goto(remoteOrigin);
-    await page.getByRole('button', { name: 'Workspace grid', exact: true }).click();
-    const zoom = page.getByRole('region', { name: 'Workspace grid' }).getByRole('button', { name: /Zoom in/ });
+    await page.getByRole('button', { name: 'Workspace Grid', exact: true }).click();
+    const zoom = page.getByRole('region', { name: 'Workspace Grid' }).getByRole('button', { name: /Zoom In/ });
     while (await zoom.isEnabled()) await zoom.click();
     const tile = page.locator('[data-terminal-key="terminal-feedback:nano"]');
     await expect(tile.getByRole('alert')).toHaveText('Terminal could not start. Reload the page to try again.');

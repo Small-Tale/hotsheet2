@@ -66,7 +66,7 @@ async function openGridWorkspace(page: Page) {
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities: { create: true, update: true, query_fields: [] },
@@ -136,7 +136,7 @@ test('project grid -> workspace grid -> full screen -> exit -> project grid reus
   await expect(drawer).toHaveAttribute('data-mode', 'grid');
   // Maximize the drawer so all six tiles are in view and mount.
   await page.getByRole('tab', { name: 'Project grid' }).dblclick();
-  await settledGrid(page, 'demo terminal drawer');
+  await settledGrid(page, 'demo Terminal Drawer');
   const tags = await tagTerminals(page),
     sockets = await socketCount(page);
   expect(Object.keys(tags)).toHaveLength(6);
@@ -152,23 +152,23 @@ test('project grid -> workspace grid -> full screen -> exit -> project grid reus
   };
   await step(
     'workspace grid',
-    () => page.getByRole('button', { name: 'Workspace grid' }).first().click(),
-    'Workspace grid',
+    () => page.getByRole('button', { name: 'Workspace Grid' }).first().click(),
+    'Workspace Grid',
   );
   await step(
     'full screen',
     () => page.getByRole('button', { name: 'Enter workspace grid full screen' }).click(),
-    'Workspace grid',
+    'Workspace Grid',
   );
   await expect(page.locator('[data-component="app-shell"]')).toHaveAttribute('data-grid-fullscreen', 'true');
   await page.screenshot({ path: 'target/visual-captures/hs2-tbqq00-fullscreen-reused.png' });
   await step(
     'exit full screen',
     () => page.getByRole('button', { name: 'Exit workspace grid full screen' }).click(),
-    'Workspace grid',
+    'Workspace Grid',
   );
   await page.screenshot({ path: 'target/visual-captures/hs2-amnnbr-workspace-grid-reused.png' });
-  await step('project grid', () => page.getByRole('tab', { name: /demo/ }).click(), 'demo terminal drawer');
+  await step('project grid', () => page.getByRole('tab', { name: /demo/ }).click(), 'demo Terminal Drawer');
   test.info().annotations.push({ type: 'grid-switch-ms', description: JSON.stringify(timings) });
   console.log('grid switch timings (ms)', JSON.stringify(timings));
 });

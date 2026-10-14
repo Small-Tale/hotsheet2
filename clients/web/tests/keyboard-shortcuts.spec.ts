@@ -79,7 +79,7 @@ async function installFixture(page: import('@playwright/test').Page) {
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities,
@@ -113,11 +113,11 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
   await page.setViewportSize({ width: 1440, height: 900 });
   await installFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
   await page.locator('wa-input[name="project-root"]').evaluate((node: HTMLElement & { value: string }, value) => {
     node.value = value;
   }, '/work/hotsheet2');
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
 
   const list = page.locator('[data-component="ticket-list"]');
   const board = page.locator('[data-component="ticket-board"]');
@@ -128,7 +128,7 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
   await expect(list).toBeVisible();
   // Anchor focus on a stable, non-editable toolbar control (no-op: already the list view) so the first
   // keydown dispatches from an attached node and reaches the document-level dispatcher.
-  await page.getByRole('button', { name: 'List view' }).click();
+  await page.getByRole('button', { name: 'List View' }).click();
 
   // Column (board) ↔ list view.
   await page.keyboard.press('ControlOrMeta+Shift+B');
@@ -150,7 +150,7 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
   await page.keyboard.press('ControlOrMeta+j');
   await expect(drawer).toBeVisible();
   await page.keyboard.press('ControlOrMeta+j');
-  await expect(page.getByRole('button', { name: 'Show terminal drawer' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Show Terminal Drawer' })).toBeVisible();
 
   // The right-sidebar default adds Shift so Safari's ⌘⌥B bookmark editor keeps its chord.
   await expect(inspectorRegion).toHaveAttribute('data-collapsed', 'false');
@@ -161,7 +161,7 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
 
   // Project-tab cycling with two open projects uses shifted chords so browsers retain their
   // unshifted ⌘/Ctrl+⌥+Arrow tab navigation.
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('ControlOrMeta+Alt+Shift+ArrowLeft');
   await expect(page.getByRole('tab', { name: 'hotsheet2' })).toHaveAttribute('aria-selected', 'true');
@@ -203,7 +203,7 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
   await page.setViewportSize({ width: 760, height: 700 });
   await captureTabDefaults('target/visual-captures/hs2-q1bh0v-navigation-shortcuts-after-narrow.png');
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.locator('.view-mode-switcher [aria-label="List view"]').click();
+  await page.locator('.view-mode-switcher [aria-label="List View"]').click();
 
   // Bare `c` opens the new-ticket composer; Escape closes it.
   await expect(composer).toBeHidden();
@@ -237,12 +237,12 @@ for (const apple of [true, false]) {
     // Keep the real sync client connected without a zero-delay polling fallback in this HTTP fixture.
     await page.routeWebSocket(/\/__hotsheet\/project-api\/[^/]+\/ws\/sync(?:\?.*)?$/, () => undefined);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open Project' }).click();
     await page.locator('wa-input[name="project-root"]').evaluate((node: HTMLElement & { value: string }) => {
       node.value = '/work/hotsheet2';
     });
-    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-    await page.getByLabel('Settings view').click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByLabel('Settings View').click();
     await page.locator('#app-left-rail [data-item-id="keyboard"]').click();
     const screen = page.locator('[data-component="keyboard-settings"]');
     const row = (id: string) => screen.locator(`li[data-shortcut-id="${id}"]`);
@@ -283,7 +283,7 @@ for (const apple of [true, false]) {
     await expect(screen.locator('.keyboard-settings__conflict')).toHaveCount(0);
     await record('undo');
     await page.keyboard.press('Control+g');
-    await expect(row('undo').getByRole('status')).toContainText('Open search');
+    await expect(row('undo').getByRole('status')).toContainText('Open Search');
     await expect(row('open-search').getByRole('status')).toContainText('Undo');
     if (apple) await page.screenshot({ path: 'target/visual-captures/hs2-835bzd-control-conflict-wide.png' });
     await row('undo').locator('[data-action="reset-shortcut"]').click();
@@ -294,12 +294,12 @@ for (const apple of [true, false]) {
     await page.keyboard.press('Control+Meta+Alt+Shift+J');
     await expect(row('redo').locator('kbd')).toHaveText(apple ? '⌃⌘⌥⇧J' : 'Ctrl+Meta+Alt+Shift+J');
     await page.reload();
-    await page.getByLabel('Settings view').click();
+    await page.getByLabel('Settings View').click();
     await page.locator('#app-left-rail [data-item-id="keyboard"]').click();
     await expect(row('open-search').locator('kbd')).toHaveText(apple ? '⌃G' : 'Ctrl+G');
     await expect(row('redo').locator('kbd')).toHaveText(apple ? '⌃⌘⌥⇧J' : 'Ctrl+Meta+Alt+Shift+J');
 
-    await page.getByRole('button', { name: 'List view', exact: true }).click();
+    await page.getByRole('button', { name: 'List View', exact: true }).click();
     await page.locator('.app-shell__work-area').focus();
     await page.keyboard.press('g');
     await page.keyboard.press('Meta+g');
@@ -311,11 +311,11 @@ for (const apple of [true, false]) {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('searchbox', { name: 'Search tickets' })).toHaveCount(0);
 
-    await page.getByLabel('Settings view').click();
-    await screen.getByRole('button', { name: 'Reset all to defaults' }).click();
+    await page.getByLabel('Settings View').click();
+    await screen.getByRole('button', { name: 'Reset all to Defaults' }).click();
     expect(await stored()).toEqual({});
     await expect(row('open-search').locator('kbd')).toHaveText(apple ? '⌘K' : 'Ctrl+K');
-    await expect(screen.getByRole('button', { name: 'Reset all to defaults' })).toBeDisabled();
+    await expect(screen.getByRole('button', { name: 'Reset all to Defaults' })).toBeDisabled();
     await record('open-search');
     await page.keyboard.press('Control+q');
     await expect(row('open-search').locator('kbd')).toHaveText(apple ? '⌃Q' : 'Ctrl+Q');
@@ -332,7 +332,7 @@ for (const apple of [true, false]) {
     await expect(row('open-search')).toBeVisible();
     await record('undo');
     await page.keyboard.press('Control+q');
-    await expect(row('undo').getByRole('status')).toContainText('Open search');
+    await expect(row('undo').getByRole('status')).toContainText('Open Search');
     await expect(row('open-search').getByRole('status')).toContainText('Undo');
     const bounds = await screen.evaluate((node) => ({
       width: node.getBoundingClientRect().width,

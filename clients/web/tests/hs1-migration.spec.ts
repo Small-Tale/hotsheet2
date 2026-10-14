@@ -234,12 +234,12 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
   const { state, releaseImport, releaseRemote, advance, failImport } = await mockHs1Project(page);
   await page.setViewportSize({ width: 1100, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const dialog = page.locator('[data-component="hs1-migration-dialog"]');
   await expect(dialog).toHaveJSProperty('open', true);
   await expect(dialog).toContainText('tickets, notes, attachments, settings, and AI-tool setup');
-  await expect(dialog.getByRole('textbox', { name: 'Ticket repository folder' })).toHaveValue('/work/legacy.hs2');
+  await expect(dialog.getByRole('textbox', { name: 'Ticket Repository Folder' })).toHaveValue('/work/legacy.hs2');
   await dialog.evaluate(async (node) => {
     await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
   });
@@ -331,7 +331,7 @@ test('imports an HS1 project, then offers cleanup only after remote backup', asy
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await banner.screenshot({ path: testInfo.outputPath('hs1-cleanup-banner-narrow.png'), animations: 'disabled' });
   page.once('dialog', (prompt) => prompt.accept());
-  await banner.getByRole('button', { name: 'Delete old files…' }).click();
+  await banner.getByRole('button', { name: 'Delete Old Files…' }).click();
   await expect(banner).toHaveCount(0);
   expect(state.deleted).toBe(true);
   await expect(jobBanner).toHaveCount(0);
@@ -355,8 +355,8 @@ test('persists HS1 cleanup dismissal until the saved dismissal is cleared', asyn
   const { state } = await mockHs1Project(page, 'imported');
   await page.setViewportSize({ width: 760, height: 720 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const banner = page.locator('[data-component="hs1-cleanup-banner"] > [data-component="state-banner"]');
   await expect(banner).toBeVisible();
   await banner.getByRole('button', { name: 'Dismiss' }).click();
@@ -378,8 +378,8 @@ test('repairs preexisting HS1 registrations after an older cleanup, then stays r
   const { state } = await mockHs1Project(page, 'repair');
   await page.setViewportSize({ width: 760, height: 720 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const banner = page.locator('[data-component="hs1-cleanup-banner"] > [data-component="state-banner"]');
   await expect(banner).toContainText('Hot Sheet 1 may reopen this imported project');
   await expect(banner).toHaveAttribute('data-tone', 'warning');
@@ -387,14 +387,14 @@ test('repairs preexisting HS1 registrations after an older cleanup, then stays r
 
   state.legacyRunning = true;
   page.once('dialog', (prompt) => prompt.accept());
-  await banner.getByRole('button', { name: 'Repair old app registration…' }).click();
+  await banner.getByRole('button', { name: 'Repair Old App Registration…' }).click();
   await expect(page.locator('.app-error')).toContainText('Hot Sheet 1 is still running');
   await expect(banner).toBeVisible();
   expect(state.repair).toBe(true);
 
   state.legacyRunning = false;
   page.once('dialog', (prompt) => prompt.accept());
-  await banner.getByRole('button', { name: 'Repair old app registration…' }).click();
+  await banner.getByRole('button', { name: 'Repair Old App Registration…' }).click();
   await expect(banner).toHaveCount(0);
   await expect(page.locator('.app-toast')).toContainText('Repaired the old Hot Sheet 1 project registration');
   await reloadRestoredProject(page);
@@ -408,11 +408,11 @@ test('keeps background import failure and retry owned by its project across navi
   const controls = await mockHs1Project(page);
   await page.setViewportSize({ width: 1100, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project', exact: true }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-component="hs1-migration-dialog"]').getByRole('button', { name: 'Import project' }).click();
   await expect(page.locator('[data-component="hs1-job-banner"]')).toContainText('Copying database');
-  await page.getByRole('button', { name: 'Add project', exact: true }).click();
+  await page.getByRole('button', { name: 'Add Project', exact: true }).click();
   await expect(page.locator('[data-project-id="other"]')).toHaveAttribute('data-selected', 'true');
   await expect(page.locator('[data-component="hs1-job-banner"]')).toHaveCount(0);
   await expect(page.locator('[data-project-id="legacy"] .project-tab__operation')).toBeVisible();

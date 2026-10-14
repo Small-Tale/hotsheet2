@@ -78,7 +78,7 @@ async function mockSavedViews(page: Page) {
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: project.stores[0],
             default: true,
             capabilities: { create: true, update: true, notes: true, attachments: true, watch: true, query_fields: [] },
@@ -143,12 +143,12 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   const views = await mockSavedViews(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add view' }).click();
   const dialog = page.locator('[data-component="saved-view-dialog"]');
-  await expect(dialog.getByRole('textbox', { name: 'View name' })).toBeVisible();
-  await dialog.getByRole('textbox', { name: 'View name' }).fill('Needs docs');
+  await expect(dialog.getByRole('textbox', { name: 'View Name' })).toBeVisible();
+  await dialog.getByRole('textbox', { name: 'View Name' }).fill('Needs docs');
   const query = dialog.getByRole('searchbox', { name: 'Search query' });
   // The query is Kerf's form-field presentation, not a toolbar group (HS2-E40KC0).
   await expect(dialog.locator('[data-component="token-search-field"][data-presentation="form-field"]')).toHaveCount(1);
@@ -207,10 +207,10 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await expect(page.locator('[data-ticket-slug="HS2-DOCS"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-CODE"]')).toHaveCount(0);
   expect(views()).toEqual([{ id: 'needs-docs', name: 'Needs docs', query: 'tag:docs' }]);
-  await expect(page.getByRole('button', { name: 'More actions for Needs docs' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'More Actions for Needs docs' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Rename Needs docs' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Delete Needs docs' })).toHaveCount(0);
-  await page.getByRole('button', { name: 'More actions for Needs docs' }).click();
+  await page.getByRole('button', { name: 'More Actions for Needs docs' }).click();
   const menu = page.locator('[data-context-menu="saved-view"]');
   await expect(menu.getByRole('menu').first()).toBeVisible();
   await page.waitForTimeout(250);
@@ -218,11 +218,11 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
     path: 'target/visual-captures/hs2-r7gpjm-view-menu-wide.png',
     clip: { x: 0, y: 260, width: 520, height: 400 },
   });
-  await menu.getByText('Edit view…').click();
+  await menu.getByText('Edit View…').click();
   await expect(dialog).toHaveAttribute('data-mode', 'rename');
   await expect(query).toBeVisible();
   await expect(dialog.locator('[data-component="token-search-token"]')).toContainText('tag:docs');
-  await dialog.getByRole('textbox', { name: 'View name' }).fill('Documentation');
+  await dialog.getByRole('textbox', { name: 'View Name' }).fill('Documentation');
   await query.fill('tag:client ');
   await expect(dialog.locator('[data-component="token-search-token"]')).toContainText('tag:client');
   await page.waitForTimeout(250);
@@ -241,12 +241,12 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   expect(views()).toEqual([{ id: 'needs-docs', name: 'Documentation', query: 'tag:client' }]);
   await page.getByRole('button', { name: 'Add view', exact: true }).click();
   await expect(dialog).toHaveAttribute('data-mode', 'create');
-  await expect(dialog.getByRole('textbox', { name: 'View name' })).toHaveValue('');
-  await dialog.getByRole('textbox', { name: 'View name' }).fill('Fresh create');
+  await expect(dialog.getByRole('textbox', { name: 'View Name' })).toHaveValue('');
+  await dialog.getByRole('textbox', { name: 'View Name' }).fill('Fresh create');
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   const savedRow = page.locator('[data-saved-view-id="custom:needs-docs"]');
   await page.setViewportSize({ width: 720, height: 760 });
-  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
   await expect(savedRow).toBeInViewport();
   await savedRow.click({ button: 'right' });
   const narrowMenu = page.locator('[data-context-menu="saved-view"]');
@@ -259,7 +259,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   // The phone sidebar overlay stays open through the menu and the dialog it launches: presses in
   // those portals are not outside presses (HS2-5APX20, Kerf `keepOpenOn`).
   const sidebarRail = page.locator('#app-left-rail');
-  await narrowMenu.getByText('Delete view…').click();
+  await narrowMenu.getByText('Delete View…').click();
   await expect(sidebarRail).toHaveAttribute('data-collapsed', 'false');
   const confirmation = page.locator('[data-component="saved-view-delete-dialog"]');
   await expect(confirmation).toContainText('Tickets are not affected.');
@@ -270,7 +270,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await confirmation.getByRole('button', { name: 'Delete View' }).click();
   await expect(confirmation).toHaveJSProperty('open', false);
   await expect(sidebarRail).toHaveAttribute('data-collapsed', 'false');
-  await expect(page.getByRole('button', { name: 'Hide project sidebar' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Hide Project Sidebar' })).toBeVisible();
   await page.screenshot({
     path: 'target/visual-captures/hs2-5apx20-sidebar-after-delete-narrow.png',
     animations: 'disabled',
@@ -289,11 +289,11 @@ test('scopes the search bar to a selected shared view without populating it (HS2
   const views = await mockSavedViews(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add view' }).click();
   const dialog = page.locator('[data-component="saved-view-dialog"]');
-  await dialog.getByRole('textbox', { name: 'View name' }).fill('Needs docs');
+  await dialog.getByRole('textbox', { name: 'View Name' }).fill('Needs docs');
   await dialog.getByRole('searchbox', { name: 'Search query' }).fill('tag:docs ');
   await dialog.getByRole('button', { name: 'Create View' }).click();
   expect(views()).toEqual([{ id: 'needs-docs', name: 'Needs docs', query: 'tag:docs' }]);
@@ -347,13 +347,13 @@ test('keeps immediate saved-view query replacement focused when opening frames r
   await mockSavedViews(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project', exact: true }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const frames = await holdAnimationFrames(page);
   try {
     await page.getByRole('button', { name: 'Add view', exact: true }).click();
     const dialog = page.locator('[data-component="saved-view-dialog"]'),
-      name = dialog.getByRole('textbox', { name: 'View name' }),
+      name = dialog.getByRole('textbox', { name: 'View Name' }),
       query = dialog.getByRole('searchbox', { name: 'Search query' });
     await expect(query).toBeVisible();
     // Allow the native dialog's initial autofocus. Later application opening work
@@ -407,13 +407,13 @@ test('keeps saved-view cancel and reopen authoritative across delayed frames and
 }) => {
   await mockSavedViews(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project', exact: true }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const frames = await holdAnimationFrames(page);
   try {
     const add = page.getByRole('button', { name: 'Add view', exact: true }),
       dialog = page.locator('[data-component="saved-view-dialog"]'),
-      name = dialog.getByRole('textbox', { name: 'View name' }),
+      name = dialog.getByRole('textbox', { name: 'View Name' }),
       query = dialog.getByRole('searchbox', { name: 'Search query' });
     await add.click();
     await expect(query).toBeVisible();
@@ -508,12 +508,12 @@ test('offers tag completion, the date helper, and syntax help inside the saved-v
   const views = await mockSavedViews(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add view' }).click();
   const dialog = page.locator('[data-component="saved-view-dialog"]');
   const query = dialog.getByRole('searchbox', { name: 'Search query' });
-  await dialog.getByRole('textbox', { name: 'View name' }).fill('Recent docs');
+  await dialog.getByRole('textbox', { name: 'View Name' }).fill('Recent docs');
   // The same in-place tag completion as the workspace search, fed by the project's tags.
   await query.fill('tag:');
   // Kerf's model renders the in-place tag completion inside the field (HS2-5JXBQY).
@@ -527,7 +527,7 @@ test('offers tag completion, the date helper, and syntax help inside the saved-v
   await expect(query).toBeFocused();
   await expect(dialog.locator('input[name="saved-view-query"]')).toHaveValue('tag:docs');
   // Syntax help opens over the dialog and closes again from the same button.
-  await dialog.getByRole('button', { name: 'Search syntax help' }).click();
+  await dialog.getByRole('button', { name: 'Search Syntax Help' }).click();
   const help = dialog.getByRole('dialog', { name: 'Search syntax' });
   await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
   // The help is a Kerf anchored surface hosted in the wa-dialog's interactive slot (KF-F52T5D,
@@ -565,7 +565,7 @@ test('offers tag completion, the date helper, and syntax help inside the saved-v
     .toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-8te69p-saved-view-help-phone.png' });
   await page.setViewportSize(wide);
-  await dialog.getByRole('button', { name: 'Search syntax help' }).click();
+  await dialog.getByRole('button', { name: 'Search Syntax Help' }).click();
   await expect(help).toHaveCount(0);
   // Enter inside the date helper applies the date instead of submitting the form.
   await query.click();

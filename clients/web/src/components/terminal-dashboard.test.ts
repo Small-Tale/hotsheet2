@@ -89,7 +89,7 @@ describe('TerminalDashboard', () => {
     expect(markup).toContain('data-action="preview-terminal"');
     expect(markup).toContain('<div class="terminal-dashboard__zoom"><div class="kui-floating-toolbar"');
     expect(markup).toContain(
-      'data-component="floating-toolbar" data-position="bottom-end" data-placement="floating" role="toolbar" aria-label="Workspace grid controls"',
+      'data-component="floating-toolbar" data-position="bottom-end" data-placement="floating" role="toolbar" aria-label="Workspace Grid Controls"',
     );
     expect(markup).toContain('data-component="toolbar-control-group"');
     expect(markup).toContain('data-tone="default"');
@@ -109,11 +109,11 @@ describe('TerminalDashboard', () => {
   });
   it('renders AI chats beside terminals with the same fixed-natural-size scaling contract', () => {
     const markup = String(TerminalDashboard({ groups, width: 1200, height: 700, fitAcross: 4, fitHigh: 2 }));
-    expect(markup).toContain('aria-label="Workspace grid"');
+    expect(markup).toContain('aria-label="Workspace Grid"');
     expect(markup).toContain('data-component="workspace-chat-tile"');
     expect(markup).toContain('data-chat-id="chat:review"');
     expect(markup).toContain('data-action="open-grid-ai-chat"');
-    expect(markup).toContain('Claude AI chat');
+    expect(markup).toContain('Claude AI Chat');
     expect(markup).toContain('Reviewing the workspace changes');
     expect(markup).toMatch(
       /class="terminal-tile__state" title="Working"><span class="kui-badge"[^>]*aria-label="Working"/,
@@ -179,7 +179,7 @@ describe('TerminalDashboard', () => {
     // The control stays present and accessible; a toast reports the change instead of an inline number.
     expect(markup).toContain('data-action="cycle-mobile-terminal-columns"');
     expect(markup).toContain('data-columns="60"');
-    expect(markup).toContain('aria-label="Text size: 60 columns. Change text size"');
+    expect(markup).toContain('aria-label="Text Size: 60 Columns. Change Text Size"');
     expect(markup).not.toContain('aria-hidden="true">60<');
     // HS2-FRB545: the phone toolbar carries Copy and Paste beside text size.
     expect(markup).toContain('data-action="copy-terminal-text"');
@@ -189,11 +189,11 @@ describe('TerminalDashboard', () => {
     // identity and open-in-drawer button; previews never carry them.
     const tablet = String(FixedAspectTerminalCard({ session, mode: 'magnified', touchClipboard: true }));
     expect(tablet.match(/class="terminal-tile__clipboard"/g)).toHaveLength(2);
-    expect(tablet).toContain('Open Codex in project terminal drawer');
+    expect(tablet).toContain('Open Codex in Project Terminal Drawer');
     // HS2-XHA5QA: the icon actions sit in one borderless Kerf group, compact on desktop and default on the
     // phone toolbar, whose Close button gets its own single group.
     const actions = (html: string) =>
-      /<[^>]*data-component="toolbar-control-group"[^>]*aria-label="Terminal actions"[^>]*>/.exec(html)?.[0] ?? '';
+      /<[^>]*data-component="toolbar-control-group"[^>]*aria-label="Terminal Actions"[^>]*>/.exec(html)?.[0] ?? '';
     expect(actions(tablet)).toContain('data-appearance="borderless"');
     expect(actions(tablet)).toContain('data-size="compact"');
     expect(actions(markup)).toContain('data-size="default"');
@@ -221,11 +221,11 @@ describe('TerminalDashboard', () => {
     ).toHaveLength(1);
     // HS2-8NQRJB: the phone toolbar drops the separate open-in-drawer button (More actions → Open and the
     // identity keep that action) so the identity is not truncated; the desktop toolbar keeps it.
-    expect(markup).not.toContain('in project terminal drawer');
+    expect(markup).not.toContain('in project Terminal Drawer');
     expect(markup).toContain('data-action="open-terminal-context-menu"');
     expect(markup).toContain('data-action="open-terminal-project"');
     expect(String(FixedAspectTerminalCard({ session, mode: 'magnified' }))).toContain(
-      'Open Codex in project terminal drawer',
+      'Open Codex in Project Terminal Drawer',
     );
   });
   it('keeps the smallest tile keyboard-focusable and makes its fitted magnified copy interactive', () => {
@@ -244,7 +244,7 @@ describe('TerminalDashboard', () => {
     expect(magnified).not.toContain('data-grid-policy="dashboard-80x24"');
     expect(magnified.match(/data-component="terminal-viewport"/g)).toHaveLength(1);
     expect(magnified).toContain('data-action="open-terminal-project"');
-    expect(magnified).toContain('Open Codex in project terminal drawer');
+    expect(magnified).toContain('Open Codex in Project Terminal Drawer');
     expect(magnified).not.toContain('Restore terminal grid');
   });
   it('pauses only the matching grid preview while a terminal is magnified', () => {

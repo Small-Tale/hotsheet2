@@ -21,7 +21,7 @@ describe('TicketDuplicateBacklinks', () => {
       }),
     );
     expect(markup).toContain('class="kui-text" data-component="text"');
-    expect(markup).toContain('data-font="default" data-border="none">Duplicate of</h2>');
+    expect(markup).toContain('data-font="default" data-border="none">Duplicate Of</h2>');
     expect(markup).toContain('Beta · HS2-SAME');
     expect(markup).toContain('Canonical report');
     expect(markup).toContain('aria-label="Open duplicate target HS2-SAME from Beta"');

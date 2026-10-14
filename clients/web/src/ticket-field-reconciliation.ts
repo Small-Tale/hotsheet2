@@ -20,7 +20,7 @@ export type DraftReconciliation =
   | { kind: 'conflict'; base: string; draft: string };
 
 const labels: Record<string, string> = {
-  blocked_reason: 'Blocked reason',
+  blocked_reason: 'Blocked Reason',
   category: 'Category',
   details: 'Details',
   priority: 'Priority',

@@ -19,7 +19,7 @@ import { type TicketRowListEdge, ticketRowShellAttributes } from './ticket-row';
 const filename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1);
 
 export function corruptTicketIdentity(ticket: CorruptTicket) {
-  return ticket.slug ?? ticket.id ?? filename(ticket.path) ?? 'Unreadable ticket';
+  return ticket.slug ?? ticket.id ?? filename(ticket.path) ?? 'Unreadable Ticket';
 }
 
 export interface CorruptTicketRecoveryState {
@@ -165,7 +165,7 @@ export function corruptTicketInspectorPanel({
           />
           <List gap="2xs" flex>
             <Text variant="span" size="compact" tone="danger">
-              <strong>{upgradeRequired ? 'Hot Sheet 2 update required' : 'Unreadable ticket'}</strong>
+              <strong>{upgradeRequired ? 'Hot Sheet 2 Update Required' : 'Unreadable Ticket'}</strong>
             </Text>
             <Text role="heading" aria-level={1} tone="danger" flush lineHeight="tight" wrap="anywhere">
               <strong>{identity}</strong>
@@ -177,13 +177,13 @@ export function corruptTicketInspectorPanel({
     content: (
       <div class="corrupt-ticket-inspector__body" data-component="corrupt-ticket-inspector">
         <section>
-          <ListHeader label={upgradeRequired ? 'Update required' : 'Ticket parsing error'} />
+          <ListHeader label={upgradeRequired ? 'Update Required' : 'Ticket Parsing Error'} />
           <Text tone="danger" controlMargins="rl" wrap="anywhere">
             {ticket.error}
           </Text>
         </section>
         <section>
-          <ListHeader label="Ticket file" />
+          <ListHeader label="Ticket File" />
           <code title={ticket.path}>{ticket.path}</code>
         </section>
         <div class="corrupt-ticket-inspector__actions">

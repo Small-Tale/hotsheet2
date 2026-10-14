@@ -96,9 +96,9 @@ export function TicketCodeReview({
               type="button"
               class="ticket-code-review__evidence"
               {...REPOSITORY_ACTIONS.openChangeEvidence.attrs}
-              aria-label="Open change evidence"
+              aria-label="Open Change Evidence"
             >
-              <h3>Change evidence</h3>
+              <h3>Change Evidence</h3>
               <div class="ticket-code-review__evidence-grid">
                 <span>
                   <LucideIcon size="s" icon={FileText} name="file-text" />
@@ -145,7 +145,7 @@ export function TicketCodeReview({
               <div class="ticket-code-review__compare-toolbar">
                 <Toolbar
                   leading={
-                    <ToolbarControlGroup label="Comparison side" size="compact" selectedChrome="filled">
+                    <ToolbarControlGroup label="Comparison Side" size="compact" selectedChrome="filled">
                       <button
                         type="button"
                         {...REPOSITORY_ACTIONS.setRepositoryComparisonSide.attrs}
@@ -270,7 +270,7 @@ export function TicketCodeReview({
                     data-review-commit={commit.sha}
                     disabled={!enabled}
                     title={hostReason}
-                    aria-label={`Open commit ${commit.short_sha} in ${review.difftool ?? 'configured diff tool'}`}
+                    aria-label={`Open Commit ${commit.short_sha} in ${review.difftool ?? 'configured diff tool'}`}
                   >
                     <LucideIcon size={14.4} icon={ExternalLink} name="external-link" />
                   </button>

@@ -140,8 +140,8 @@ export function AppShellSettings() {
         label="Presentation"
         value={appShellSettings.presentation.value}
         choices={[
-          { value: 'framed', label: 'Framed (UX catalog window)' },
-          { value: 'viewport', label: 'Viewport (application root)' },
+          { value: 'framed', label: 'Framed (UX Catalog Window)' },
+          { value: 'viewport', label: 'Viewport (Application Root)' },
         ]}
       />
       <wa-checkbox name="overlay-open" checked={appShellSettings.overlayOpen.value}>
@@ -287,35 +287,35 @@ export function ProjectTabBarDemo() {
       <CatalogExample label="Default" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
         <ProjectTabBar tabs={projectTabs.value} mode={shellMode.value} />
       </CatalogExample>
-      <CatalogExample label="With workspace action" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
+      <CatalogExample label="With Workspace Action" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
         <ProjectTabBar
           tabs={projectTabs.value}
-          label="Open projects with workspace action"
+          label="Open Projects with Workspace Action"
           mode={shellMode.value}
           workspaceAction={{ kind: 'new-ticket' }}
         />
       </CatalogExample>
       {/* The Trash view swaps the far-edge action for the outlined danger Empty Trash button (HS2-PNCDAE). */}
-      <CatalogExample label="Trash view action" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
+      <CatalogExample label="Trash View Action" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
         <ProjectTabBar
           tabs={projectTabs.value}
-          label="Open projects with the Trash view action"
+          label="Open Projects with the Trash View Action"
           mode={shellMode.value}
           workspaceAction={{ kind: 'empty-trash' }}
         />
       </CatalogExample>
       {/* The shell-column presentation (HS2-DR549A): the strip shares the column surface and leaves the
           separator to the content below it, as AppShell composes it in project mode. */}
-      <CatalogExample label="Shell column" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
+      <CatalogExample label="Shell Column" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
         <ProjectTabBar
           tabs={projectTabs.value}
-          label="Open projects in the shell column"
+          label="Open Projects in the Shell Column"
           mode={shellMode.value}
           surface="default"
           divider={false}
         />
       </CatalogExample>
-      <CatalogExample label="Phone project picker" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
+      <CatalogExample label="Phone Project Picker" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
         <ProjectTabBar tabs={projectTabs.value} mode={shellMode.value} mobile />
         <DemoEvent>{shellEvent.value}</DemoEvent>
       </CatalogExample>
@@ -343,7 +343,7 @@ export function ResizableRegionDemo() {
   return (
     <>
       <CatalogExample
-        label="Horizontal, collapsible"
+        label="Horizontal, Collapsible"
         note="Drag either handle or use arrow keys while it is focused."
         align="inline-control"
       >
@@ -362,7 +362,7 @@ export function ResizableRegionDemo() {
       >
         <ResizableRegion
           id="resize-demo-horizontal"
-          label="Example sidebar"
+          label="Example Sidebar"
           size={resizeDemoWidth.value}
           min={250}
           max={420}
@@ -378,7 +378,7 @@ export function ResizableRegionDemo() {
       >
         <ResizableRegion
           id="resize-demo-vertical"
-          label="Example drawer"
+          label="Example Drawer"
           size={resizeDemoHeight.value}
           min={120}
           max={260}
@@ -458,8 +458,8 @@ export function AppShellDemo() {
     switch (workspaceMode.value) {
       case 'settings':
         return (
-          <section class="workspace-settings-preview" aria-label="Project settings">
-            <h2 class="workspace-settings-preview__title">Project settings</h2>
+          <section class="workspace-settings-preview" aria-label="Project Settings">
+            <h2 class="workspace-settings-preview__title">Project Settings</h2>
             <p class="workspace-settings-preview__description">
               Configure ticket providers, project defaults, commands, and checkout behavior.
             </p>
@@ -478,20 +478,20 @@ export function AppShellDemo() {
     switch (activeShellMode) {
       case 'terminals':
         return (
-          <section class="shell-mode-surface" aria-label="Workspace grid workspace">
-            <h2>Workspace grid</h2>
+          <section class="shell-mode-surface" aria-label="Workspace Grid Workspace">
+            <h2>Workspace Grid</h2>
             <p>Monitor and arrange terminals, AI chats, and future workspace tools across connected projects.</p>
           </section>
         );
       case 'stats':
         return shellStatsProjectName.value ? (
-          <section class="shell-mode-surface" aria-label={`${shellStatsProjectName.value} project statistics`}>
+          <section class="shell-mode-surface" aria-label={`${shellStatsProjectName.value} Project Statistics`}>
             <h2>{shellStatsProjectName.value} project statistics</h2>
             <p>Detailed ticket-flow and usage charts are coming in a future Hot Sheet update.</p>
           </section>
         ) : (
-          <section class="shell-mode-surface" aria-label="Cross-project stats workspace">
-            <h2>Cross-project stats</h2>
+          <section class="shell-mode-surface" aria-label="Cross-Project Stats Workspace">
+            <h2>Cross-Project Stats</h2>
             <p>Compare ticket flow and activity across connected projects.</p>
           </section>
         );
@@ -504,7 +504,7 @@ export function AppShellDemo() {
   const { projectName, viewName } = (() => {
     switch (activeShellMode) {
       case 'terminals':
-        return { projectName: 'Workspace grid', viewName: 'Workspace Grid' };
+        return { projectName: 'Workspace Grid', viewName: 'Workspace Grid' };
       case 'stats':
         return { projectName: 'Stats', viewName: 'Cross-project Stats' };
       case 'project':
@@ -550,10 +550,10 @@ export function AppShellDemo() {
         workspace={workspace}
         workspacePresentation={workspaceMode.value === 'board' && !globalMode ? 'edge-to-edge' : 'inset'}
         terminalDrawer={
-          <section class="shell-mode-surface" aria-label="Example terminal drawer">
+          <section class="shell-mode-surface" aria-label="Example Terminal Drawer">
             <h2>Terminal drawer</h2>
             <button type="button" data-action="toggle-app-shell-demo-terminal-drawer">
-              Hide terminal drawer
+              Hide Terminal Drawer
             </button>
           </section>
         }
@@ -575,7 +575,7 @@ export function AppShellDemo() {
                 notes: readerNotes.value,
                 editingNoteId: editingNoteId.value,
                 noteDraft: noteDraft.value,
-                providerName: 'Hot Sheet git',
+                providerName: 'Hot Sheet Git',
                 updatedLabel: ticket.updatedLabel,
                 activeTab: inspectorTab.value,
                 upNext: ticket.upNext,
@@ -591,7 +591,7 @@ export function AppShellDemo() {
         details={composerDetails.value}
         category={composerCategory.value}
         upNext={composerUpNext.value}
-        providerName="Hot Sheet git"
+        providerName="Hot Sheet Git"
       />
       <DemoEvent>{shellEvent.value}</DemoEvent>
     </CatalogExample>

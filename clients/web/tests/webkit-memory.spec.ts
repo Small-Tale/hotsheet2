@@ -110,7 +110,7 @@ test('profile WebKit memory through a real ticket and terminal session (HS2-2G23
     await page.goto(`${remoteOrigin}/`);
     await expect(page.locator('[data-component="ticket-list"]')).toBeVisible();
     await expect(page.locator('[data-ticket-slug]').first()).toBeVisible();
-    await page.getByRole('button', { name: 'Workspace grid', exact: true }).click();
+    await page.getByRole('button', { name: 'Workspace Grid', exact: true }).click();
     const terminalTile = page.locator('[data-terminal-key="memory:memory-shell"]');
     await expect(terminalTile).toBeVisible();
     await expect(terminalTile.locator('.xterm-rows > div').first()).toBeVisible();
@@ -122,22 +122,22 @@ test('profile WebKit memory through a real ticket and terminal session (HS2-2G23
     for (let block = 1; block <= blocks; block += 1) {
       for (let cycle = 1; cycle <= cycles; cycle += 1) {
         const edit = (block - 1) * cycles + cycle;
-        await page.getByLabel('Columns view').click();
+        await page.getByLabel('Columns View').click();
         await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
-        await page.getByLabel('Notifications view').click();
+        await page.getByLabel('Notifications View').click();
         await projectTab.click();
-        await page.getByLabel('Settings view').click();
+        await page.getByLabel('Settings View').click();
         await projectTab.click();
-        await page.getByLabel('List view').click();
+        await page.getByLabel('List View').click();
         await expect(page.locator('[data-component="ticket-list"]')).toBeVisible();
         await page.locator('[data-ticket-slug]').first().click();
         const inspector = page.locator('#app-right-rail');
         await inspector.locator('[data-action="edit-ticket-title"]').dblclick();
-        const title = inspector.getByRole('textbox', { name: 'Ticket title' });
+        const title = inspector.getByRole('textbox', { name: 'Ticket Title' });
         await title.fill(`Memory cycle ${edit}`);
         await title.blur();
         await expect(inspector.locator('[data-action="edit-ticket-title"]')).toContainText(`Memory cycle ${edit}`);
-        await page.getByRole('button', { name: 'Workspace grid', exact: true }).click();
+        await page.getByRole('button', { name: 'Workspace Grid', exact: true }).click();
         await expect(terminalTile).toBeVisible();
         await sample(`block-${block}-cycle-${cycle}`);
       }

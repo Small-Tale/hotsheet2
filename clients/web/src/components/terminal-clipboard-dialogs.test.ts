@@ -62,7 +62,7 @@ describe('TerminalEditMenu (HS2-KKP8YJ)', () => {
   it('anchors a context PopupMenu at the press with Copy Text… and Paste reusing the clipboard actions', () => {
     const markup = String(TerminalEditMenu({ state: { x: 120, y: 340 } }));
     expect(markup).toContain('data-context-menu="terminal-edit"');
-    expect(markup).toContain('aria-label="Terminal edit actions"');
+    expect(markup).toContain('aria-label="Terminal Edit Actions"');
     // Kerf PopupMenu positions the context anchor through its own inline coordinates.
     expect(markup).toMatch(/popup-menu-context-x:120px;[^"]*popup-menu-context-y:340px/);
     expect(markup).toContain('data-context-menu="terminal-edit"');

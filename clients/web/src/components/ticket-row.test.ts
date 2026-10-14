@@ -70,7 +70,7 @@ describe('TicketRow', () => {
     expect(markup).toContain('Sync needs attention (2)');
     expect(String(TicketRow({ ...ticket, pendingSyncState: 'queued' }))).toContain('Pending sync (2)');
   });
-  it('normalizes fallbacks, tags, and boolean defaults', () => {
+  it('normalizes fallbacks, tags, and boolean Defaults', () => {
     expect(
       normalizeTicketRowProps({
         slug: ' ',

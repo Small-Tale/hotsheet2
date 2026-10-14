@@ -74,7 +74,7 @@ export function TerminalVisibilityNameDialog({ prompt }: { prompt?: TerminalVisi
             <List gap="l">
               <wa-input
                 name="terminal-visibility-group-name"
-                label="Group name"
+                label="Group Name"
                 value={prompt?.value ?? ''}
                 required
                 autofocus
@@ -123,7 +123,7 @@ export function TerminalVisibilityDialog({
             <List dividerSides="b">
               <TabBar
                 id="terminal-visibility-groups"
-                label="Terminal visibility groups"
+                label="Terminal Visibility Groups"
                 className="terminal-visibility-dialog__toolbar"
                 trailingPlacement="adjacent"
                 trailing={
@@ -131,7 +131,7 @@ export function TerminalVisibilityDialog({
                     <button
                       type="button"
                       {...TERMINALS_ACTIONS.addTerminalVisibilityGroup.attrs}
-                      aria-label="Add visibility group"
+                      aria-label="Add Visibility Group"
                       title="Add visibility group"
                     >
                       <LucideIcon icon={Plus} name="plus" size={16} />
@@ -212,7 +212,7 @@ export function TerminalVisibilityDialog({
               data-action="hide-all-terminals-in-group"
               disabled={visibleGroups.length === 0}
             >
-              Hide listed
+              Hide Listed
             </wa-button>
             <wa-button
               appearance="plain"
@@ -220,7 +220,7 @@ export function TerminalVisibilityDialog({
               data-action="show-all-terminals-in-group"
               disabled={visibleGroups.length === 0}
             >
-              Show listed
+              Show Listed
             </wa-button>
           </Row>
           {contextMenu && contextMenu.id !== DEFAULT_TERMINAL_VISIBILITY_GROUP_ID && (
@@ -229,7 +229,7 @@ export function TerminalVisibilityDialog({
             <PopupMenu
               context
               anchor={contextMenuAnchor(contextMenu.x, contextMenu.y)}
-              label="Visibility group actions"
+              label="Visibility Group Actions"
               rootAttributes={{
                 'data-context-menu': 'terminal-visibility-group',
                 'data-context-group-id': contextMenu.id,

@@ -86,7 +86,7 @@ describe('RepositoryStatusPopover', () => {
     const detail = String(
       RepositoryStatusPopover({ status: status(), view: 'conflicted', compact: true, detailActive: true }),
     );
-    expect(detail).toContain('Back to repository views');
+    expect(detail).toContain('Back to Repository Views');
     expect(detail).toContain('Conflicted');
     // Setup, loading, and error states keep one headed column on every device.
     const failed = String(RepositoryStatusPopover({ status: null, error: 'git failed', compact: true }));
@@ -209,7 +209,7 @@ describe('RepositoryStatusPopover', () => {
     ).toEqual(['A', 'C', 'D', 'M', 'R', 'T', 'U', '?']);
   });
 
-  it('reuses the master-detail and Git-letter rows for ticket change evidence', () => {
+  it('reuses the master-detail and Git-letter rows for ticket Change Evidence', () => {
     const markup = String(
       ChangeEvidenceDialog({
         view: 'tests',
@@ -228,7 +228,7 @@ describe('RepositoryStatusPopover', () => {
       }),
     );
     expect(markup).toContain('data-repository-surface="change-evidence"');
-    expect(markup).toContain('aria-label="Change evidence views"');
+    expect(markup).toContain('aria-label="Change Evidence Views"');
     expect(markup).toContain('data-action="select-repository-file" data-item-id="clients/web/src/dialog.test.ts"');
     expect(markup).toContain('data-file-menu-source="ticket"');
     expect(markup).toMatch(/data-component="badge"[^>]*aria-hidden="true">A<\/span>/);
@@ -258,7 +258,7 @@ describe('RepositoryStatusPopover', () => {
     expect(markup).toContain('Ship repository browser');
     expect(markup).toContain('data-action="open-repository-review"');
     expect(markup).toContain('data-review-mode="range"');
-    expect(markup).toContain('aria-label="Compare two commits"');
+    expect(markup).toContain('aria-label="Compare Two Commits"');
     expect(markup).toContain('data-action="toggle-repository-comparison"');
     expect(markup).toMatch(
       /data-button-appearance="push"[^>]*data-single="true"[^>]*><button[^>]*toggle-repository-comparison/,
@@ -267,7 +267,7 @@ describe('RepositoryStatusPopover', () => {
       /kui-toolbar__trailing[\s\S]*data-appearance="contained"[\s\S]*toggle-repository-comparison[\s\S]*refresh-repository-status/,
     );
     expect(markup).toMatch(
-      /kui-toolbar__trailing"><div[^>]*aria-label="Repository comparison"[\s\S]*<\/div><div[^>]*aria-label="Repository refresh"/,
+      /kui-toolbar__trailing"><div[^>]*aria-label="Repository Comparison"[\s\S]*<\/div><div[^>]*aria-label="Repository Refresh"/,
     );
     expect(markup).not.toMatch(/kui-toolbar__trailing"><div[^>]*data-component="toolbar-control-group"[^>]*><div/);
     expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(3);

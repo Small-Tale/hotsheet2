@@ -6,7 +6,7 @@ describe('AttachmentContextMenu', () => {
   it('uses native dropdown items for attachment-row actions including host-native reveal', () => {
     const markup = String(AttachmentContextMenu({ x: 12, y: 24, kind: 'item', revealLabel: 'Show in Finder' }));
     expect(markup.match(/<wa-dropdown-item/g)).toHaveLength(6);
-    expect(markup).toContain('aria-label="Attachment actions"');
+    expect(markup).toContain('aria-label="Attachment Actions"');
     for (const id of ['open', 'download', 'copy-reference', 'rename', 'reveal', 'remove'])
       expect(markup).toContain(`data-item-id="${id}"`);
     expect(markup).toContain('Show in Finder');

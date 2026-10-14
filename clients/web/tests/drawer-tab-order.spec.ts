@@ -88,7 +88,7 @@ async function installFixture(page: import('@playwright/test').Page) {
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities,
@@ -186,14 +186,14 @@ test('orders terminal and AI-chat tabs as one persistent, keyboard-accessible dr
   await page.setViewportSize({ width: 1440, height: 900 });
   await installFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer).toBeVisible();
   await expect.poll(() => drawerOrder(drawer)).toEqual(['shell-one', 'shell-two']);
-  await drawer.getByRole('button', { name: 'New drawer item' }).click();
-  await drawer.getByRole('menuitem', { name: 'AI chat' }).click();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.getByRole('menuitem', { name: 'AI Chat' }).click();
   const chat = drawer.locator('[data-tab-kind="ai-chat"]');
   await expect(chat).toBeVisible();
   const chatId = await chat.getAttribute('data-tab-id');
@@ -209,9 +209,9 @@ test('orders terminal and AI-chat tabs as one persistent, keyboard-accessible dr
     'aria-keyshortcuts',
     'Delete Backspace Alt+Shift+ArrowLeft Alt+Shift+ArrowRight',
   );
-  await drawer.getByRole('button', { name: 'Hide terminal drawer' }).click();
+  await drawer.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
   await expect(drawer).not.toBeVisible();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(drawer).toBeVisible();
   await expect.poll(() => drawerOrder(drawer)).toEqual([chatId!, 'shell-two', 'shell-one']);
   expect(
@@ -262,13 +262,13 @@ test('right-click closes mixed terminal and AI-chat ranges from either tab kind'
   await page.setViewportSize({ width: 1440, height: 900 });
   await installFixture(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   for (let index = 0; index < 2; index += 1) {
-    await drawer.getByRole('button', { name: 'New drawer item' }).click();
-    await drawer.getByRole('menuitem', { name: 'AI chat' }).click();
+    await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+    await drawer.getByRole('menuitem', { name: 'AI Chat' }).click();
   }
   const chats = drawer.locator('[data-tab-kind="ai-chat"]'),
     chatOneId = (await chats.nth(0).getAttribute('data-tab-id'))!,

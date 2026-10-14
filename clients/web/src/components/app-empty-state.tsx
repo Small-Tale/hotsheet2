@@ -7,11 +7,11 @@ export function AppEmptyState() {
   return (
     <List fill hAlign="center" vAlign="middle">
       <EmptyState
-        title="Open a Hot Sheet project"
+        title="Open a Hot Sheet Project"
         detail="Choose a code checkout to discover its ticket sources and start working."
         action={
           <wa-button appearance="accent" {...PROJECT_LIFECYCLE_ACTIONS.addProject.attrs}>
-            Open project
+            Open Project
           </wa-button>
         }
       />

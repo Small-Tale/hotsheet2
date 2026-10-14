@@ -80,7 +80,7 @@ test('mobile floating controls stay inside the dynamic viewport and safe area (H
     // ResizableRegion owns its restore control and consumes Kerf's component-safe-area contract.
     document.documentElement.style.setProperty(['--kui', 'safe-area-block-end'].join('-'), '48px');
   });
-  const restore = page.getByRole('button', { name: 'Show terminal drawer' }),
+  const restore = page.getByRole('button', { name: 'Show Terminal Drawer' }),
     restoreToolbar = page.locator('.kui-workbench__restore[data-panel="bottom"] .kui-floating-toolbar');
   await expect(restore).toBeVisible();
   const rootGeometry = await page.evaluate(() => ({
@@ -94,8 +94,8 @@ test('mobile floating controls stay inside the dynamic viewport and safe area (H
   const restoreBottom = await restoreToolbar.evaluate((node) => innerHeight - node.getBoundingClientRect().bottom);
   expect(restoreBottom).toBeCloseTo(64, 0);
   await page.screenshot({ path: 'target/visual-captures/hs2-43n9zb-mobile-drawer-restore.png', fullPage: true });
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
-  const zoom = page.getByRole('toolbar', { name: 'Workspace grid controls' });
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  const zoom = page.getByRole('toolbar', { name: 'Workspace Grid Controls' });
   await expect(zoom).toBeVisible();
   // `.terminal-dashboard__zoom` is the zero-size safe-area anchor; measure the floating toolbar itself.
   const zoomBottom = await zoom.evaluate((node) => innerHeight - node.getBoundingClientRect().bottom);
@@ -127,7 +127,7 @@ test('gives a focused mobile terminal the visual viewport until explicit exit (H
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await openDemoProject(page, true);
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const shell = page.locator('[data-component="app-shell"]'),
     drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-app-tab__select').click();
@@ -185,13 +185,13 @@ test('exposes the phone text-size control in drawer focus mode, cycling with a t
     };
   });
   await openDemoProject(page, true);
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-app-tab__select').click();
   await drawer.locator('.terminal-session:not([hidden]) .xterm-helper-textarea').focus();
   await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
   // The drawer focus mode now offers the same text-size control as the magnified terminal (HS2-ZSFAHF).
-  const textSize = drawer.getByRole('button', { name: /^Text size: \d+ columns/ });
+  const textSize = drawer.getByRole('button', { name: /^Text Size: \d+ Columns/ });
   await expect(textSize).toBeVisible();
   await drawer.screenshot({ path: testInfo.outputPath('drawer-focus-text-size.png') });
   const before = await textSize.getAttribute('data-columns');
@@ -256,7 +256,7 @@ test('mobile viewport uses a single-column layout with overlay sidebars, one at 
   await expect(scrim).toHaveCount(0);
 
   // Open the project sidebar as an overlay.
-  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
   await expect(sidebar).toHaveAttribute('data-collapsed', 'false');
   await expect(scrim).toBeVisible();
   // The sidebar overlays the main column rather than sitting beside it.
@@ -273,7 +273,7 @@ test('mobile viewport uses a single-column layout with overlay sidebars, one at 
   await expect(scrim).toHaveCount(0);
 
   // The inspector opens as its own overlay while the sidebar stays closed (one at a time).
-  await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+  await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
   await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
   await expect(scrim).toBeVisible();
@@ -298,11 +298,11 @@ test('mobile side panels cover the terminal drawer and pad interactive content i
     document.documentElement.style.setProperty('--hotsheet-safe-area-bottom', '37px');
     document.documentElement.style.setProperty('--hotsheet-safe-area-left', '7px');
   });
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const shell = page.locator('[data-component="app-shell"]'),
     sidebarRegion = page.locator('#app-left-rail'),
     inspectorRegion = page.locator('#app-right-rail');
-  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
   await expect(sidebarRegion).toHaveAttribute('data-collapsed', 'false');
   await expect(sidebarRegion.locator('.kui-workbench__panel-content')).toHaveCSS('transform', 'none');
   await expect
@@ -392,7 +392,7 @@ test('mobile ticket scrollers reach the screen bottom and inset their content fo
   // The top bar is the Workbench work area's Pane header, which sits under the translucent status
   // bar: the header surface starts at the edge and pads by the inset, and the toolbar inside it
   // keeps Kerf's own 8px gap above the control band (HS2-P289N2).
-  const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]').first(),
+  const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]').first(),
     paneHeader = toolbar.locator('xpath=ancestor::*[contains(@class, "kui-pane__header")][1]');
   expect(
     await paneHeader.evaluate((node) => ({
@@ -427,7 +427,7 @@ test('mobile ticket scrollers reach the screen bottom and inset their content fo
   });
   await page.screenshot({ path: 'target/visual-captures/hs2-4a29rr-mobile-list-bottom.png', animations: 'disabled' });
   // Each board column scroller does the same.
-  await page.getByLabel('Columns view').click();
+  await page.getByLabel('Columns View').click();
   await expect(page.locator('.ticket-board-column__tickets').first()).toBeVisible();
   expect(await geometry('.ticket-board-column__tickets')).toMatchObject({
     bottom: 844,
@@ -445,10 +445,10 @@ test('mobile ticket scrollers reach the screen bottom and inset their content fo
     });
   await page.screenshot({ path: 'target/visual-captures/hs2-4a29rr-mobile-board-bottom.png', animations: 'disabled' });
   // An expanded terminal drawer owns the bottom edge, so the scrollers return to their ordinary padding.
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   await expect(page.locator('#app-bottom-drawer[data-collapsed="false"]')).toBeVisible();
   expect(await geometry('.ticket-board-column__tickets')).toMatchObject({ paddingBottom: '16px' });
-  await page.getByLabel('List view').click();
+  await page.getByLabel('List View').click();
   expect(await geometry('.app-shell__workspace')).toMatchObject({ paddingBottom: '11.2px' });
 });
 
@@ -494,10 +494,10 @@ test('mobile pages the columns view one snapped column at a time and keeps the b
   const columns = board.locator('[data-component="ticket-board-column"]');
 
   // The Columns toggle is offered on mobile and presents the paged board edge to edge.
-  await page.getByRole('button', { name: 'Columns view' }).click();
+  await page.getByRole('button', { name: 'Columns View' }).click();
   await expect(board).toHaveAttribute('data-layout', 'paged');
   await expect(page.locator('[data-component="ticket-list"]')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Columns view' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Columns View' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.app-shell__workspace')).toHaveAttribute('data-presentation', 'edge-to-edge');
   await expect(board).toHaveCSS('scroll-snap-type', 'x mandatory');
   const geometry = await board.evaluate((element) => {
@@ -547,13 +547,13 @@ test('mobile pages the columns view one snapped column at a time and keeps the b
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(board).toHaveAttribute('data-layout', 'grid');
   await expect(board).toHaveCSS('scroll-snap-type', 'none');
-  await expect(page.getByRole('button', { name: 'Columns view' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Columns View' })).toHaveAttribute('aria-pressed', 'true');
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(board).toHaveAttribute('data-layout', 'paged');
-  await page.getByRole('button', { name: 'List view' }).click();
+  await page.getByRole('button', { name: 'List View' }).click();
   await expect(page.locator('[data-component="ticket-list"]')).toBeVisible();
   await expect(board).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'List View' })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('tapping a ticket auto-opens the inspector overlay, and tap-away returns to the list (HS2-N7RPFP)', async ({
@@ -608,7 +608,7 @@ test('mobile replaces the project tabs and view title with select controls (HS2-
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities,
@@ -653,9 +653,9 @@ test('mobile replaces the project tabs and view title with select controls (HS2-
     return route.continue();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('textbox', { name: /^Project folder/ }).fill('/work/demo');
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('textbox', { name: /^Project Folder/ }).fill('/work/demo');
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
 
   // The horizontal project tab strip is replaced by a project Select; no project tabs render.
@@ -684,7 +684,7 @@ test('mobile replaces the project tabs and view title with select controls (HS2-
   await expect(viewSelect).toHaveJSProperty('value', 'all');
 
   // Adding a project opens and activates it; the project Select then switches the active project.
-  await page.locator('.project-tab-bar--mobile').getByRole('button', { name: 'Add project' }).click();
+  await page.locator('.project-tab-bar--mobile').getByRole('button', { name: 'Add Project' }).click();
   await expect(projectSelect).toHaveAttribute('value', 'other-checkout');
   await expect(projectCombobox).toHaveValue('other');
   await expect(projectSelect.locator('.project-tab-bar__selected-project')).toHaveText('other');
@@ -751,7 +751,7 @@ test('resizing from mobile back to desktop restores the side-by-side layout (HS2
   await openDemoProject(page);
   const shell = page.locator('[data-component="app-shell"]');
   const sidebar = page.locator('#app-left-rail');
-  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
   await expect(sidebar).toHaveAttribute('data-collapsed', 'false');
   // Growing past the breakpoint drops mobile mode and its ephemeral open state.
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -777,7 +777,7 @@ test('keeps reopened inspector content within the viewport across desktop and mo
     await page.setViewportSize({ width, height: 844 });
     await expect(shell).toHaveAttribute('data-mobile', String(width < 1024));
     if (width < 1024 && (await inspector.getAttribute('data-collapsed')) === 'true')
-      await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+      await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
     await expect(inspector).toHaveAttribute('data-collapsed', 'false');
     await expect
       .poll(() =>
@@ -789,7 +789,7 @@ test('keeps reopened inspector content within the viewport across desktop and mo
       .toBe(true);
     const notes = content.locator('[data-component="ticket-notes"]');
     await notes.scrollIntoViewIfNeeded();
-    await expect(notes.getByRole('button', { name: 'Add note', exact: true }).last()).toBeInViewport();
+    await expect(notes.getByRole('button', { name: 'Add Note', exact: true }).last()).toBeInViewport();
     await expect(notes.locator('.ticket-notes__empty')).toBeInViewport();
     if (width === 940 || width === 390)
       await page.screenshot({
@@ -797,10 +797,10 @@ test('keeps reopened inspector content within the viewport across desktop and mo
         animations: 'disabled',
       });
     if (width < 1024) {
-      await content.getByRole('button', { name: 'Hide ticket inspector', exact: true }).click();
+      await content.getByRole('button', { name: 'Hide Ticket Inspector', exact: true }).click();
       await expect(inspector).toHaveAttribute('data-collapsed', 'true');
       await expect(page.locator('.app-shell__scrim')).toHaveCount(0);
-      await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+      await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
       await expect(inspector).toHaveAttribute('data-collapsed', 'false');
       await expect
         .poll(() => content.evaluate((node) => node.getBoundingClientRect().right <= innerWidth + 1))
@@ -861,7 +861,7 @@ for (const initialWidth of [390, 1280]) {
         animations: 'disabled',
       });
       await page.getByRole('button', { name: 'Clear search', exact: true }).click();
-      await page.getByRole('button', { name: 'Add project', exact: true }).focus();
+      await page.getByRole('button', { name: 'Add Project', exact: true }).focus();
       await expect(group).toHaveAttribute('data-expanded', 'false');
     }
   });
@@ -876,12 +876,12 @@ test('preserves child scrolling and usable mobile overlays after search focus (H
   await page.getByRole('button', { name: 'Search tickets', exact: true }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('continued');
   await page.getByRole('button', { name: 'Clear search', exact: true }).click();
-  await page.getByRole('button', { name: 'Add project', exact: true }).focus();
+  await page.getByRole('button', { name: 'Add Project', exact: true }).focus();
   await workspace.hover();
   await page.mouse.wheel(0, 600);
   await expect.poll(() => workspace.evaluate((node) => node.scrollTop)).toBeGreaterThan(100);
   await expect.poll(() => shell.evaluate((node) => node.scrollLeft)).toBe(0);
-  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
   const sidebar = page.locator('#app-left-rail');
   await expect
     .poll(() =>
@@ -911,9 +911,9 @@ test('preserves child scrolling and usable mobile overlays after search focus (H
   await body.hover();
   await page.mouse.wheel(0, 600);
   await expect.poll(() => body.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
-  await expect(inspector.getByRole('button', { name: 'Add note', exact: true }).last()).toBeInViewport();
+  await expect(inspector.getByRole('button', { name: 'Add Note', exact: true }).last()).toBeInViewport();
   await page.screenshot({ path: 'target/visual-captures/hs2-jbtpnr-inspector-mobile.png', animations: 'disabled' });
-  await inspector.getByRole('button', { name: 'Hide ticket inspector', exact: true }).click();
+  await inspector.getByRole('button', { name: 'Hide Ticket Inspector', exact: true }).click();
   await expect(scrim).toHaveCount(0);
   await expect.poll(() => shell.evaluate((node) => node.scrollLeft)).toBe(0);
 });
@@ -924,7 +924,7 @@ for (const initialWidth of [390, 1280]) {
     await openDemoProject(page);
     const editor = page.getByRole('searchbox', { name: 'Search tickets' });
     const field = page.locator('[data-token-search-id="workspace-search"]');
-    const outside = page.getByRole('button', { name: 'Add project', exact: true });
+    const outside = page.getByRole('button', { name: 'Add Project', exact: true });
     // Input tasks may arrive before the next frame. Hold only frames scheduled by
     // the Clear click so Playwright's ordinary pointer actionability still runs.
     await page.evaluate(() => {
@@ -1017,7 +1017,7 @@ test('blacks out the app behind a focused drawer terminal so nothing shows aroun
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await openDemoProject(page, true);
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-app-tab__select').click();
   await drawer.locator('.terminal-session:not([hidden]) .xterm-helper-textarea').focus();
@@ -1052,11 +1052,11 @@ test('opens the drawer grid tile More actions menu from a phone tap, in front of
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true }),
     page = await context.newPage();
   await openDemoProject(page, true);
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('tab', { name: 'Project grid' }).tap();
   await expect(drawer).toHaveAttribute('data-mode', 'grid');
-  const more = drawer.getByRole('button', { name: 'More actions for Codex Main' });
+  const more = drawer.getByRole('button', { name: 'More Actions for Codex Main' });
   await more.tap();
   const menu = page.locator('[data-context-menu="terminal"]');
   await expect(menu.getByRole('menu').first()).toBeVisible();
@@ -1084,7 +1084,7 @@ test('opens the drawer grid tile More actions menu from a phone tap, in front of
     .tap();
   const magnified = drawer.getByRole('dialog', { name: /Magnified/ });
   await expect(magnified).toBeVisible();
-  await magnified.getByRole('button', { name: 'More actions for Codex Main' }).tap();
+  await magnified.getByRole('button', { name: 'More Actions for Codex Main' }).tap();
   await expect(menu.getByRole('menu').first()).toBeVisible();
   // The magnified terminal is a top-layer popover (HS2-Z9PQSC); the menu's own popup opens in the top
   // layer after it, so probe the visible menu item rather than the wrapper's positioning anchor.
@@ -1107,7 +1107,7 @@ test('keeps every tab strip horizontally scrollable only (HS2-QG4K9W)', async ({
       context = await browser.newContext({ viewport: { width, height: 844 }, hasTouch: phone, isMobile: phone }),
       page = await context.newPage();
     await openDemoProject(page, true);
-    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawerTabs = page.locator('.terminal-drawer__views .kui-tab-bar__tabs');
     await expect(drawerTabs).toBeVisible();
     // The drawer strip grows with its tabs rather than clipping them into a vertical scroll range.
@@ -1143,7 +1143,7 @@ test('keeps overflowing phone drawer tabs and actions reachable without snap (HS
     { id: 'terminal-feedback', alive: true, busy: false, cwd: '/work/demo' },
     { id: 'release-notes', alive: true, busy: false, cwd: '/work/demo' },
   ]);
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     strip = drawer.locator('.terminal-drawer__views .kui-tab-bar__tabs'),
     gridTab = drawer.getByRole('tab', { name: 'Project grid' }),
@@ -1155,7 +1155,7 @@ test('keeps overflowing phone drawer tabs and actions reachable without snap (HS
   await expect(peers.last()).toHaveAttribute('data-selected', 'true');
   await expect.poll(() => strip.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
   await strip.screenshot({ path: testInfo.outputPath('hs2-6y8hsh-strip-after-reveal-390.png') });
-  await drawer.getByRole('button', { name: 'New drawer item' }).tap();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).tap();
   await expect(drawer.locator('[data-terminal-drawer-create]')).toHaveAttribute('open');
   await page.keyboard.press('Escape');
   await gridTab.tap();
@@ -1171,7 +1171,7 @@ test('resizing the phone drawer never focuses its terminal, only a tap does (HS2
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true }),
     page = await context.newPage();
   await openDemoProject(page, true);
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const shell = page.locator('[data-component="app-shell"]'),
     drawer = page.locator('[data-component="terminal-drawer"]'),
     terminalInput = drawer.locator('.terminal-session:not([hidden]) .xterm-helper-textarea');
@@ -1216,7 +1216,7 @@ test('phone terminal drawer keeps the home-indicator inset below every content v
   await page.evaluate(() => {
     document.documentElement.style.setProperty('--hotsheet-safe-area-bottom', '34px');
   });
-  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
     handle = page.getByRole('separator', { name: 'Resize Terminal drawer' }),
     gap = (selector: string) =>
@@ -1233,12 +1233,12 @@ test('phone terminal drawer keeps the home-indicator inset below every content v
   await expect(handle).toHaveAttribute('aria-valuenow', '320');
   // Vertically scrolling grid (two across): the scroller itself ends above the inset.
   const grid = drawer.locator('.terminal-dashboard'),
-    zoomIn = grid.getByRole('button', { name: /^Zoom in/ });
+    zoomIn = grid.getByRole('button', { name: /^Zoom In/ });
   await expect(grid).toHaveAttribute('data-fit', '2');
   await expect.poll(() => gap('[data-component="terminal-drawer"] .terminal-dashboard__content')).toEqual([34]);
-  const zoomToolbar = grid.getByRole('toolbar', { name: 'Workspace tile zoom' });
+  const zoomToolbar = grid.getByRole('toolbar', { name: 'Workspace Tile Zoom' });
   // The zoom toolbar hangs off the padded edge (its own 16px inset), not below it.
-  expect((await gap('[data-component="terminal-drawer"] [aria-label="Workspace tile zoom"]'))[0]).toBeCloseTo(50, 0);
+  expect((await gap('[data-component="terminal-drawer"] [aria-label="Workspace Tile Zoom"]'))[0]).toBeCloseTo(50, 0);
   await expect(zoomToolbar).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('drawer-grid-two-across.png'), animations: 'disabled' });
   // One-row grid (horizontal scrolling): every tile stops above the inset.
@@ -1258,7 +1258,7 @@ test('phone terminal drawer keeps the home-indicator inset below every content v
   for (let step = 0; step < 4; step += 1) await page.keyboard.press('ArrowDown');
   await expect(handle).toHaveAttribute('aria-valuenow', '262');
   await page.keyboard.press('ArrowDown');
-  await expect(page.getByRole('button', { name: 'Show terminal drawer' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Show Terminal Drawer' })).toBeVisible();
 });
 
 test('Kerf drives the phone overlays: Escape closes, Tab stays inside, focus returns to the opener, and the desktop preference survives (HS2-Y1B1Y1)', async ({
@@ -1269,7 +1269,7 @@ test('Kerf drives the phone overlays: Escape closes, Tab stays inside, focus ret
   const sidebar = page.locator('#app-left-rail'),
     inspector = page.locator('#app-right-rail'),
     scrim = page.locator('.app-shell__scrim'),
-    showSidebar = page.getByRole('button', { name: 'Show project sidebar' });
+    showSidebar = page.getByRole('button', { name: 'Show Project Sidebar' });
   // The passive backdrop carries no app action; the outside press is Kerf's.
   await expect(scrim).toHaveCount(0);
   await showSidebar.click();
@@ -1296,7 +1296,7 @@ test('Kerf drives the phone overlays: Escape closes, Tab stays inside, focus ret
   await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
   await page.screenshot({ path: testInfo.outputPath('phone-inspector-overlay.png'), animations: 'disabled' });
   // Hiding the overlay inspector from its own control never touches the persisted desktop preference.
-  await inspector.getByRole('button', { name: 'Hide ticket inspector' }).click();
+  await inspector.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
   await expect(inspector).toHaveAttribute('data-collapsed', 'true');
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
@@ -1389,7 +1389,7 @@ test('touch textareas grow with their content instead of offering a resize grip 
   const sourceGrown = await textareaSizing(source);
   expect(sourceGrown.height).toBeGreaterThan(sourceEmpty.height + 60);
   expect(sourceGrown.overflows).toBe(false);
-  await inspector.getByRole('button', { name: 'Add note', exact: true }).first().tap();
+  await inspector.getByRole('button', { name: 'Add Note', exact: true }).first().tap();
   const note = inspector.getByRole('textbox', { name: 'New note' });
   await expect(note).toBeVisible();
   const noteEmpty = await textareaSizing(note);
@@ -1461,17 +1461,17 @@ test('side panels settle cleanly across a 1280 -> 390 -> 1280 resize with the si
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   await page.screenshot({ path: 'target/visual-captures/hs2-d2gc8q-390-settled.png' });
 
-  await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+  await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
   await settled();
   const phone = await geometry(inspector);
   expect(phone.right).toBe(390);
   expect(phone.left).toBeGreaterThan(0);
-  await expect(inspector.getByRole('button', { name: 'Hide ticket inspector' })).toBeInViewport({ ratio: 1 });
+  await expect(inspector.getByRole('button', { name: 'Hide Ticket Inspector' })).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: 'target/visual-captures/hs2-d2gc8q-390-inspector.png' });
-  await inspector.getByRole('button', { name: 'Hide ticket inspector' }).click();
+  await inspector.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
   await expect(inspector).toHaveAttribute('data-collapsed', 'true');
-  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
   await expect(sidebar).toHaveAttribute('data-collapsed', 'false');
   await settled();
   const phoneSidebar = await geometry(sidebar);
@@ -1490,7 +1490,7 @@ test('side panels settle cleanly across a 1280 -> 390 -> 1280 resize with the si
 test('pane chrome draws scroll dividers only while content scrolls beneath it (HS2-TAZJ0V)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 420 });
   await openDemoProject(page);
-  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
   const sidebar = page.locator('#app-left-rail [data-component="pane"]').first(),
     header = sidebar.locator('> .kui-pane__header'),
     footer = sidebar.locator('> .kui-pane__footer'),
@@ -1558,18 +1558,18 @@ test('opening project statistics on a phone leaves the UI interactive, with no s
     calibration = page.locator('[data-component="confidence-calibration"]');
   await expect(shell).toHaveAttribute('data-mobile', 'true');
   // Open stats from the open phone sidebar (its project summary) and from the strip's chart button.
-  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
   await expect(scrim).toBeVisible();
   await page.locator('[data-component="project-summary"]').click();
   await expect(shell).toHaveAttribute('data-mode', 'stats');
-  await expect(page.getByRole('region', { name: 'demo project statistics' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'demo Project Statistics' })).toBeVisible();
   await expect(scrim).toHaveCount(0);
   // Nothing covers the page: the topmost element at the centre belongs to the statistics region.
   const hit = await page.evaluate(() =>
     Boolean(
       document
         .elementFromPoint(window.innerWidth / 2, window.innerHeight / 2)
-        ?.closest('section[aria-label="demo project statistics"]'),
+        ?.closest('section[aria-label="demo Project Statistics"]'),
     ),
   );
   expect(hit).toBe(true);
@@ -1581,8 +1581,8 @@ test('opening project statistics on a phone leaves the UI interactive, with no s
   await expect(scrim).toHaveCount(0);
   // The project Select returns to the project, where the scrim follows the remembered rail again.
   const strip = page.locator('.project-tab-bar');
-  await strip.getByRole('button', { name: 'Cross-project stats' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Cross-project stats' })).toBeVisible();
+  await strip.getByRole('button', { name: 'Cross-Project Stats' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Cross-Project Stats' })).toBeVisible();
   await expect(scrim).toHaveCount(0);
   // Back to project stats at a wide viewport, with the same loaded report and no scrim.
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -1595,7 +1595,7 @@ test('opening project statistics on a phone leaves the UI interactive, with no s
   // Wide stats keeps the rails the user left in place, showing their empty states (HS2-MGQDY2).
   await expect(page.locator('#app-left-rail')).toHaveCount(1);
   await expect(page.locator('#app-right-rail')).toHaveCount(1);
-  await strip.getByRole('button', { name: 'Cross-project stats' }).click();
+  await strip.getByRole('button', { name: 'Cross-Project Stats' }).click();
   await expect(page.locator('#app-left-rail')).toHaveCount(1);
   await page.screenshot({ path: 'target/visual-captures/hs2-mgqdy2-cross-project-stats-wide.png' });
   await strip.getByRole('tab', { name: 'demo' }).click();

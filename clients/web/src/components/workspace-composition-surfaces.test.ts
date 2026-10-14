@@ -32,13 +32,13 @@ describe('workspace composition surfaces', () => {
         }),
       ),
     ).toContain('data-component="notification-center"');
-    expect(String(WorkspaceSurface({ kind: 'list', list: { tickets: [], label: 'Project tickets' } }))).toContain(
+    expect(String(WorkspaceSurface({ kind: 'list', list: { tickets: [], label: 'Project Tickets' } }))).toContain(
       'data-component="ticket-list"',
     );
   });
 
   it('owns global stats, optional drawers, and terminal summaries', () => {
-    expect(String(GlobalWorkspaceSurface({ kind: 'stats', projectName: 'Demo' }))).toContain('Demo project statistics');
+    expect(String(GlobalWorkspaceSurface({ kind: 'stats', projectName: 'Demo' }))).toContain('Demo Project Statistics');
     // Stats rails show empty states rather than being hidden (HS2-MGQDY2).
     expect(statsSidebarPanel().toggle.action).toBe('toggle-project-sidebar');
     expect(String(statsSidebarPanel().content)).toContain('Stats filters will appear here');

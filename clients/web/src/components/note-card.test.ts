@@ -146,7 +146,7 @@ describe('NoteCard', () => {
     expect(markup).toContain('aria-label="Response at character 7"');
     expect(markup).toContain('Reply after a character');
     expect(markup).toContain('data-action="remove-inline-feedback-reply"');
-    expect(markup).toContain('aria-label="Remove response at character 7"');
+    expect(markup).toContain('aria-label="Remove Response at Character 7"');
     expect(markup).toContain('aria-label="Feedback response"');
     expect(markup).toContain('placeholder="General response (optional)"');
   });
@@ -232,7 +232,7 @@ describe('NoteCard', () => {
     expect(needed).toContain('data-note-response="true"');
     expect(needed).toContain('Respond');
     expect(needed).toContain('data-action="dismiss-feedback"');
-    expect(needed).toContain('No response needed');
+    expect(needed).toContain('No Response Needed');
     expect(needed).toContain('size="small" appearance="outlined"');
     expect(needed).toContain('size="small" appearance="accent"');
     expect(needed).not.toContain('data-lucide="circle-check"');
@@ -417,7 +417,7 @@ describe('NoteEditor and RespondToFeedbackButton (HS2-3X404M)', () => {
     expect(markup).toContain('aria-label="Feedback response"');
     expect(markup).toContain('placeholder="Additional response (optional)"');
     expect(markup.match(/data-note-response="true"/g)).toHaveLength(2);
-    expect(markup).toContain('No response needed');
+    expect(markup).toContain('No Response Needed');
     expect(markup).toMatch(/data-note-id="details"[^>]*>\s*Respond\s*</);
   });
 

@@ -316,11 +316,16 @@ match their close direction.
 
 - Decide a voice and keep a terms list; match tone to context.
 - Buttons and menu items are verbs; never "Click here"; describe link destinations.
-- Capitalization by element type, applied consistently: **title case** for menu
-  items, menu titles, buttons, tab labels, column headings, alert titles that are
-  fragments; **sentence case** for body text, alert titles that are sentences,
-  tooltips, placeholders, box titles, settings labels (with a trailing colon for
-  introductory labels in settings panes).
+- Capitalization by element type, applied consistently, following Kerf UI's
+  [writing rules](../clients/web/node_modules/@kerfjs/ui/docs/writing.md) (enforced by
+  the UI doctor's `KUI-D040` since `@kerfjs/ui` beta.99, HS2-7Y2KRF): **title case** for
+  anything that names a command, control, view, region, or field — menu items, menu
+  titles, buttons, tab and segment labels, accessible names, headings, field labels,
+  column headings, and banner or empty-state titles that are fragments; **sentence
+  case** for body text, titles written as complete sentences (with a period),
+  tooltips, placeholders, checkbox/radio option text, and status text such as badges
+  and Started phases. User- and system-supplied data (ticket titles, view names, file
+  names) is never recapitalized.
 - Address people as "you"; never "the user"; never "we"; possessives sparingly
   ("Favorites", not "Your Favorites").
 - Errors: prevent first; show next to the problem; say how to fix it; no blame, no

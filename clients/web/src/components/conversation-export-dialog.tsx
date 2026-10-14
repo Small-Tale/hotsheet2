@@ -61,10 +61,10 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
   const submitLabel = busy
     ? 'Saving…'
     : draft.writeMode === 'reexport'
-      ? 'Re-export conversation'
+      ? 'Re-export Conversation'
       : draft.writeMode === 'overwrite'
-        ? 'Overwrite export'
-        : 'Save conversation';
+        ? 'Overwrite Export'
+        : 'Save Conversation';
   const active = step === 1 ? 'a' : 'b',
     transitionStyle = navigation === 'none' ? 'none' : 'push',
     direction = navigation === 'pop' ? 'backward' : 'forward';
@@ -103,7 +103,7 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
         {hasScopeChoice && (
           <FlowBackButton action="previous-conversation-export-step" label="Message scope" disabled={busy} />
         )}
-        <StepHeader step={hasScopeChoice ? 'Step 2 of 2' : 'Save conversation'} title="Bundle contents" />
+        <StepHeader step={hasScopeChoice ? 'Step 2 of 2' : 'Save Conversation'} title="Bundle Contents" />
         <fieldset class="conversation-export-dialog__section">
           <legend>Bundle contents</legend>
           <List gap="2xs">
@@ -224,7 +224,7 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
           {...COMMANDS_AND_AI_TARGETS.conversationExportDialog.attrs}
           data-step={step}
           data-navigation={navigation}
-          label="Save conversation"
+          label="Save Conversation"
           open
           with-footer
         >
@@ -232,7 +232,7 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
             active={active}
             style={transitionStyle}
             direction={direction}
-            label="Save conversation navigation"
+            label="Save Conversation Navigation"
             a={scopeScreen}
             b={bundleScreen}
           />
@@ -242,7 +242,7 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
             direction={direction}
             region="footer"
             sideLayout="actions"
-            label="Save conversation actions"
+            label="Save Conversation Actions"
             a={scopeActions}
             b={bundleActions}
           />

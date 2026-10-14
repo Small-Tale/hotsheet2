@@ -133,7 +133,7 @@ export function latestDemoConfidence(notes: readonly NoteCardProps[]): number | 
 export function NoteCardDemo() {
   return (
     <>
-      <CatalogExample label="Every note kind" viewport={{ layout: 'flex-column' }}>
+      <CatalogExample label="Every Note Kind" viewport={{ layout: 'flex-column' }}>
         <List gap="xs">
           {noteDemoNotes.value.map((note) => (
             <NoteCard
@@ -255,7 +255,7 @@ export function TicketReaderDemo() {
         blockedReason={inspectorBlockedReason.value}
         blockedReasonEditing={inspectorBlockedReasonEditing.value}
         blockedReasonDraft={inspectorBlockedReasonDraft.value}
-        providerName="Hot Sheet git"
+        providerName="Hot Sheet Git"
         updatedLabel="Updated now"
         activeTab={readerTab.value}
         attachments={readerAttachments.value}
@@ -348,7 +348,7 @@ export function MarkdownEditorSettings() {
         value={markdownInset.value}
         choices={[
           { value: 'padded', label: 'Padded' },
-          { value: 'flush', label: 'Flush (host owns the inset)' },
+          { value: 'flush', label: 'Flush (Host Owns the Inset)' },
         ]}
       />
       <wa-button type="button" {...DEMO_ACTIONS.resetSettings.attrs}>
@@ -432,16 +432,16 @@ export function MarkdownPreviewDemo() {
 export function AIContentLabelDemo() {
   return (
     <>
-      <CatalogExample label="Default (quiet)" align="glyph">
+      <CatalogExample label="Default (Quiet)" align="glyph">
         <AIContentLabel tool="Claude" />
       </CatalogExample>
       <CatalogExample label="mayContainErrors" align="glyph">
         <AIContentLabel mayContainErrors />
       </CatalogExample>
-      <CatalogExample label="With feedback" align="glyph">
+      <CatalogExample label="With Feedback" align="glyph">
         <AIContentLabel tool="Codex" feedbackTarget="demo:label" />
       </CatalogExample>
-      <CatalogExample label='tone="inherit" (heading color)'>
+      <CatalogExample label='tone="inherit" (Heading Color)'>
         <ToneSurface surface="heading">
           <AIContentLabel tool="Codex" tone="inherit" feedbackTarget="demo:inherit" />
         </ToneSurface>

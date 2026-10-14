@@ -64,7 +64,7 @@ test('demonstrates adjacent full-width A-B push/pop with chrome crossfades and r
     node.parentNode?.removeChild(node);
   });
 
-  await page.getByRole('button', { name: 'Show settings' }).first().click();
+  await page.getByRole('button', { name: 'Show Settings' }).first().click();
   const crossfadePause = await page.addStyleTag({ content: pausedMotion });
   for (const [name, value] of [
     ['transition-style', 'crossfade'],
@@ -140,7 +140,7 @@ test('lays out dialog footers through the ContentTransition action-row variant (
     const exportSide = await actionRow(
       page.locator('[data-component="conversation-export-dialog"] [data-transition-region="footer"]'),
     );
-    const submit = exportSide.getByRole('button', { name: 'Save conversation' });
+    const submit = exportSide.getByRole('button', { name: 'Save Conversation' });
     expect(await right(submit)).toBeCloseTo(await right(exportSide), 0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }

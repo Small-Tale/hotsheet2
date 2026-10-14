@@ -112,7 +112,7 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
           {
             connection_id: provider,
             provider: 'git',
-            display_name: target ? 'Hot Sheet git' : 'Kerf git',
+            display_name: target ? 'Hot Sheet Git' : 'Kerf git',
             locator: target ? '/work/target.hs2' : '/work/source.hs2',
             default: true,
             capabilities,
@@ -210,9 +210,9 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
 
   await page.setViewportSize({ width: 1080, height: 1190 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.getByRole('tab', { name: 'Hot Sheet 2' })).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('tab', { name: 'Kerf' }).click();
   await page.locator('[data-ticket-slug="KF-1AAYP9"]').click({ button: 'right' });
@@ -222,7 +222,7 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
   const reason = dialog.locator('wa-select[name="ticket-close-reason"]');
   await reason.click();
   await reason.locator('wa-option[value="duplicate"]').click();
-  const search = dialog.getByRole('textbox', { name: 'Existing ticket' });
+  const search = dialog.getByRole('textbox', { name: 'Existing Ticket' });
   await search.fill('HS2-1S6DS9');
   const candidate = dialog.getByRole('button', { name: /HS2-1S6DS9.*Hot Sheet 2.*Canonical checkout registry repair/ });
   await expect(dialog.getByRole('button', { name: /HS2-1S6DS9.*Kerf.*Different local ticket/ })).toBeVisible();
@@ -250,7 +250,7 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
     });
   const inspector = page.locator('#app-right-rail'),
     outcome = inspector.locator('[data-component="ticket-duplicate-target"]');
-  await expect(outcome).toContainText('Duplicate of');
+  await expect(outcome).toContainText('Duplicate Of');
   await expect(outcome).toContainText('Hot Sheet 2 · HS2-1S6DS9');
   await expect(outcome).toContainText('Canonical checkout registry repair');
   await expect(outcome).not.toContainText('git-target:canonical');
@@ -264,7 +264,7 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
   await outcome.getByRole('button', { name: 'Open duplicate target HS2-1S6DS9 from Hot Sheet 2' }).click();
   const reader = page.locator('[data-component="ticket-inspector"][data-presentation="reader"]');
   await expect(reader).toHaveAttribute('data-ticket-slug', 'HS2-1S6DS9');
-  await reader.getByRole('button', { name: 'Close ticket reader' }).click();
+  await reader.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await page.getByRole('tab', { name: 'Hot Sheet 2' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-1S6DS9"]')).toBeVisible();
   await page.locator('[data-ticket-slug="HS2-1S6DS9"]').click();

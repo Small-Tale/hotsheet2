@@ -64,7 +64,7 @@ export function DemoApp() {
             <CatalogExample viewport={{ width: 'full' }}>{Demo && <Demo />}</CatalogExample>
           ) : (
             <CatalogExampleStack
-              label={`${selected.name} examples`}
+              label={`${selected.name} Examples`}
               width={entry.stackWidth ?? (demoKind(selected.id) === 'composition' ? 'full' : undefined)}
             >
               {Demo && <Demo />}

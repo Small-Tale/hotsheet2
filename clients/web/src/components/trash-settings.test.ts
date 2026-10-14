@@ -8,7 +8,7 @@ describe('TrashSettings', () => {
     expect(markup).toContain('data-action="save-trash-settings"');
     expect(markup).toContain('name="trash-cleanup-days" type="number"');
     expect(markup).toContain('value="30" required');
-    expect(markup).toContain('label="Keep deleted tickets for (days)"');
+    expect(markup).toContain('label="Keep Deleted Tickets for (Days)"');
     expect(markup).toContain('The default is 30 days');
     expect(markup).toContain('Git history keeps every purged ticket file');
     expect(markup).toContain('Enter a positive whole number of days.');
@@ -17,9 +17,9 @@ describe('TrashSettings', () => {
     expect(markup).toContain('data-component="text"');
   });
 
-  it('puts "Apply now" beside the field and enables it only for an unapplied value (HS2-KPD942)', () => {
+  it('puts "Apply Now" beside the field and enables it only for an unapplied value (HS2-KPD942)', () => {
     const clean = String(TrashSettings({ days: 30 }));
-    expect(clean).toMatch(/<wa-button type="submit" variant="brand" disabled[^>]*>\s*Apply now/);
+    expect(clean).toMatch(/<wa-button type="submit" variant="brand" disabled[^>]*>\s*Apply Now/);
     expect(clean).not.toContain('Save retention');
     expect(clean).not.toContain('data-role="trash-purge-hint"');
     const same = String(TrashSettings({ days: 30, draft: { value: ' 30 ', purgeCount: 4 } }));

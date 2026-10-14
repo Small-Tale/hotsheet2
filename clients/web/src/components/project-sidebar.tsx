@@ -104,7 +104,7 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
           type="button"
           class="project-sidebar__conversation"
           {...COMMANDS_AND_AI_ACTIONS.openConversation.attrs}
-          aria-label={`Open ${driveToolLabel} conversation`}
+          aria-label={`Open ${driveToolLabel} Conversation`}
           title="Open chat without starting the Hot Sheet workflow"
           aria-pressed={props.conversationOpen ? 'true' : 'false'}
           disabled={props.conversationDisabled}
@@ -148,7 +148,7 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
   return {
     label: 'Project sidebar',
     toolbar: { label: 'Project sidebar toolbar', dividerSides: '' },
-    toggle: { action: 'toggle-project-sidebar', name: 'project sidebar' },
+    toggle: { action: 'toggle-project-sidebar', name: 'Project Sidebar' },
     content,
     footer,
     pane: {

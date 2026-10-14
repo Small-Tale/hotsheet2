@@ -59,7 +59,7 @@ describe('AiToolSettings (HS2-SW5S13, HS2-EK24KF)', () => {
     expect(selectValue(markup, 'ai-provider-effort-codex')).toBe('high');
   });
   it('explains the empty detected-plugin state', () => {
-    expect(String(AiToolSettings({ tools: [], selection: { tool: '' } }))).toContain('No AI tools detected');
+    expect(String(AiToolSettings({ tools: [], selection: { tool: '' } }))).toContain('No AI Tools Detected');
   });
   it('does not carry a stale model across a replaced provider catalog', () => {
     const markup = String(

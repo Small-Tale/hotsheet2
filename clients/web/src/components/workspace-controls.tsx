@@ -219,7 +219,7 @@ function workspaceModeChoices(
         const badge = value === 'notifications' ? count : 0;
         return {
           value,
-          label: `${label} view${badge ? `, ${badge} pending` : ''}`,
+          label: `${label} View${badge ? `, ${badge} pending` : ''}`,
           title: `${label} view`,
           content: (
             <span class="view-mode-switcher__content">
@@ -237,7 +237,7 @@ function workspaceModeChoices(
 }
 
 const sortOptions: ReadonlyArray<{ value: WorkspaceSort; label: string }> = [
-  { value: 'updated', label: 'Recently updated' },
+  { value: 'updated', label: 'Recently Updated' },
   { value: 'priority', label: 'Priority' },
   { value: 'title', label: 'Title' },
   { value: 'status', label: 'Status' },
@@ -355,7 +355,7 @@ function WorkspaceOverflowControls({
   const overflowIcon = (icon: IconNode, name: string) => <LucideIcon icon={icon} name={name} />;
   const menu = (
     <PopupMenu
-      label="More workspace controls"
+      label="More Workspace Controls"
       icon={<LucideIcon icon={MoreHorizontal} name="ellipsis" />}
       caret={false}
       placement="bottom-end"
@@ -510,7 +510,7 @@ export function WorkspaceControls({
           class="workspace-header__up-next-button"
           disabled={ticketActionsDisabled || !selectedTicketsUpNextEligible}
           {...TICKET_SELECTION_ACTIONS.toggleSelectedUpNext.attrs}
-          aria-label="Toggle Up Next for selected tickets"
+          aria-label="Toggle Up Next for Selected Tickets"
           aria-pressed={selectedTicketsUpNext === 'mixed' ? 'mixed' : String(selectedTicketsUpNext === 'all')}
           title="Toggle Up Next for selected tickets"
         >
@@ -520,7 +520,7 @@ export function WorkspaceControls({
           type="button"
           disabled={ticketActionsDisabled}
           {...TICKET_SELECTION_ACTIONS.openSelectedTicketActions.attrs}
-          aria-label="More actions for selected tickets"
+          aria-label="More Actions for Selected Tickets"
           title="More actions for selected tickets"
         >
           <LucideIcon icon={MoreHorizontal} name="ellipsis" />
@@ -595,7 +595,7 @@ export function WorkspaceControls({
       {rail ? (
         <ToolbarControlGroup
           className="workspace-header__utility-group workspace-header__utility-group--rail"
-          label="View actions"
+          label="View Actions"
           selectedChrome="outline"
           selectedTone="pop"
         >
@@ -604,7 +604,7 @@ export function WorkspaceControls({
       ) : (
         <ToolbarControlGroup
           className="workspace-header__utility-group"
-          label="View actions"
+          label="View Actions"
           selectedChrome="outline"
           selectedTone="pop"
           visibility="yield-to-expanded-sibling"

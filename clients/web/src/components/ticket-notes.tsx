@@ -56,7 +56,7 @@ function TicketNotesPlaceholder() {
         label="Notes"
         actionDisabled
         action="add-ticket-note"
-        actionLabel="Add note"
+        actionLabel="Add Note"
         actionIcon={<LucideIcon icon={Plus} name="plus" />}
       />
       <List gap="m">
@@ -162,7 +162,7 @@ function LoadedTicketNotes({
           count={visibleNotes.length}
           countLabel={`${visibleNotes.length} ${visibleNotes.length === 1 ? 'note' : 'notes'}`}
           action="add-ticket-note"
-          actionLabel="Add note"
+          actionLabel="Add Note"
           actionIcon={<LucideIcon icon={Plus} name="plus" />}
         />
       ) : (
@@ -207,7 +207,7 @@ function LoadedTicketNotes({
           className="ticket-notes__add"
           action="add-ticket-note"
           icon={<LucideIcon icon={Plus} name="plus" />}
-          label="Add note"
+          label="Add Note"
         />
       )}
     </section>

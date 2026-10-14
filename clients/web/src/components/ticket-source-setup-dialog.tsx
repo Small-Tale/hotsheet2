@@ -28,18 +28,18 @@ import type { ProjectTicketSource } from './ticket-sources-settings';
 
 /** The UX demo's preview-state picker choices (production callers pass no `previewScenario`). */
 const previewScenarioChoices: readonly SelectChoice[] = [
-  { value: 'root', label: 'Choose source' },
-  { value: 'signed-out', label: 'GitHub signed out' },
+  { value: 'root', label: 'Choose Source' },
+  { value: 'signed-out', label: 'GitHub Signed Out' },
   { value: 'waiting', label: 'Waiting for GitHub' },
-  { value: 'accounts', label: 'Reuse a signed-in account' },
-  { value: 'jira-account', label: 'Reuse a Jira account' },
-  { value: 'authorized', label: 'GitHub authorized' },
-  { value: 'authorized-existing-default', label: 'GitHub authorized, existing default' },
-  { value: 'editing', label: "Editing this project's source" },
-  { value: 'editing-shared', label: 'Editing a shared source' },
-  { value: 'removing', label: 'Confirm removal' },
-  { value: 'busy', label: 'Saving connection' },
-  { value: 'remote', label: 'Back up repository' },
+  { value: 'accounts', label: 'Reuse a Signed-In Account' },
+  { value: 'jira-account', label: 'Reuse a Jira Account' },
+  { value: 'authorized', label: 'GitHub Authorized' },
+  { value: 'authorized-existing-default', label: 'GitHub Authorized, Existing Default' },
+  { value: 'editing', label: "Editing This Project's Source" },
+  { value: 'editing-shared', label: 'Editing a Shared Source' },
+  { value: 'removing', label: 'Confirm Removal' },
+  { value: 'busy', label: 'Saving Connection' },
+  { value: 'remote', label: 'Back Up Repository' },
 ];
 
 export interface TicketSourceSetupProject {
@@ -171,7 +171,7 @@ export function TicketSourceSetupDialog({
           </>
         )}
       </Text>
-      <nav class="ticket-source-setup__options" aria-label="Ticket source options">
+      <nav class="ticket-source-setup__options" aria-label="Ticket Source Options">
         {option(
           'create-project-git-source',
           'Create a Hot Sheet 2 git ticket repository',
@@ -386,7 +386,7 @@ export function TicketSourceSetupDialog({
     detailActions = created ? (
       <>
         <wa-button appearance="plain" type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.attrs}>
-          Skip for now
+          Skip for Now
         </wa-button>
         <wa-button
           appearance="accent"
@@ -398,7 +398,7 @@ export function TicketSourceSetupDialog({
         </wa-button>
       </>
     ) : editingGit && removingProviderId === editingGit.connectionId ? (
-      <div class="ticket-source-setup__removal" role="group" aria-label="Confirm removal">
+      <div class="ticket-source-setup__removal" role="group" aria-label="Confirm Removal">
         <Text tone="quiet" role="alert" flush>
           <Text variant="span" tone="danger">
             <strong>
@@ -433,7 +433,7 @@ export function TicketSourceSetupDialog({
           disabled={providerBusy}
         >
           <LucideIcon slot="start" icon={Trash2} name="trash-2" />
-          Remove from this project…
+          Remove from This Project…
         </wa-button>
         <wa-button appearance="plain" type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.attrs}>
           Done
@@ -450,7 +450,7 @@ export function TicketSourceSetupDialog({
     ) : editing && removingProviderId === editing.id ? (
       // One wrapping group, so the morph replaces the edit actions instead of recycling the clicked
       // "Remove from this project…" button into "Keep" while that same click is still dispatching.
-      <div class="ticket-source-setup__removal" role="group" aria-label="Confirm removal">
+      <div class="ticket-source-setup__removal" role="group" aria-label="Confirm Removal">
         <Text tone="quiet" role="alert" flush>
           <Text variant="span" tone="danger">
             <strong>
@@ -495,7 +495,7 @@ export function TicketSourceSetupDialog({
             disabled={providerBusy}
           >
             <LucideIcon slot="start" icon={Trash2} name="trash-2" />
-            Remove from this project…
+            Remove from This Project…
           </wa-button>
         )}
         {editing && (

@@ -2391,7 +2391,7 @@ export async function startHotSheetWebClient() {
         conflict = {
           key: 'blocked_reason',
           field: 'blocked_reason',
-          label: 'Blocked reason',
+          label: 'Blocked Reason',
           base: previous.blocked_reason ?? '',
           mine: blockedReasonDraft.value,
           theirs: remote,
@@ -2416,7 +2416,7 @@ export async function startHotSheetWebClient() {
         conflict = {
           key: 'blocked_reason',
           field: 'blocked_reason',
-          label: 'Blocked reason',
+          label: 'Blocked Reason',
           base: previous.blocked_reason ?? '',
           mine: readerBlockedReasonDraft.value,
           theirs: remote,

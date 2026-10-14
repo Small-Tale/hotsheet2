@@ -26,7 +26,7 @@ export function ProjectRestoreError({ root, name, error, recoveryPid, busy = fal
   return (
     <EmptyState
       className="project-restore-error"
-      title={`${name} could not be reopened`}
+      title={`${name} could not be reopened.`}
       detail={`${error}${recovery} The project remains remembered. Retry after the local server is available; if the problem continues, verify the project folder and relaunch the Hot Sheet server and client. Project: ${root}`}
       icon={<LucideIcon icon={CircleAlert} name="circle-alert" />}
       action={

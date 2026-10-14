@@ -13,6 +13,7 @@ import { PanelBottomOpen } from 'lucide';
 
 import { APP_REGION_BOUNDS, TERMINAL_DRAWER_MIN_SIZE } from '../app-region-resize';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
+import { WORKSPACE_TOOLBAR_LABEL } from '../workspace-toolbar-visibility';
 import type { ProjectTabProps } from './project-tab';
 import type { ProjectTabBarMode } from './project-tab-bar';
 import { ProjectTabBar } from './project-tab-bar';
@@ -195,12 +196,12 @@ export function AppShell({
           // corner owns it). It is withheld while the drawer animates so it never flashes mid-motion.
           restoreControl: !terminalDrawerTransitioning ? (
             <div class="app-shell__restore-control-theme">
-              <FloatingToolbar label="Terminal drawer controls" position="bottom-end">
+              <FloatingToolbar label="Terminal Drawer Controls" position="bottom-end">
                 <ToolbarControlGroup single>
                   <button
                     type="button"
                     {...TERMINALS_ACTIONS.toggleTerminalDrawer.attrs}
-                    aria-label="Show terminal drawer"
+                    aria-label="Show Terminal Drawer"
                     title="Show terminal drawer"
                   >
                     <LucideIcon icon={PanelBottomOpen} name="panel-bottom-open" />
@@ -226,7 +227,7 @@ export function AppShell({
     >
       <Workbench
         id={APP_WORKBENCH_ID}
-        label="Hot Sheet workspace"
+        label="Hot Sheet Workspace"
         leftRail={leftRail}
         rightRail={rightRail}
         bottomDrawer={bottomDrawer}
@@ -252,7 +253,7 @@ export function AppShell({
           gridFullscreen
             ? undefined
             : {
-                label: 'Workspace toolbar',
+                label: WORKSPACE_TOOLBAR_LABEL,
                 dividerSides: '',
                 // Search stays in this row; width-aware controls yield space to it.
                 responsive: workspaceSearchOpen ? 'none' : 'trailing-priority',
@@ -308,7 +309,7 @@ export function AppShell({
                 // A phone column reaches the screen's bottom edge unless the expanded terminal drawer
                 // owns that edge; its ticket scrollers then inset their content (HS2-4A29RR).
                 data-bottom-edge={String(mobile && !terminalDrawerExpanded)}
-                aria-label="Ticket workspace"
+                aria-label="Ticket Workspace"
               >
                 {workspace}
               </section>

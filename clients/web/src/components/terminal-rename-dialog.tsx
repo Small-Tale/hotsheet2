@@ -36,7 +36,7 @@ export function TerminalRenameDialog({ target }: { target?: TerminalRenameTarget
           <wa-input
             data-key={`terminal-rename-${target?.session ?? 0}`}
             name="terminal-name"
-            label="Terminal name"
+            label="Terminal Name"
             value={target?.value ?? ''}
             hint={target?.defaultName ? `Default name: ${target.defaultName}` : undefined}
             required
@@ -45,7 +45,7 @@ export function TerminalRenameDialog({ target }: { target?: TerminalRenameTarget
           <Row vAlign="middle" gap="xs">
             {target?.defaultName ? (
               <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.resetTerminalRename.attrs}>
-                Reset to default
+                Reset to Default
               </wa-button>
             ) : undefined}
             <Spacer flex />

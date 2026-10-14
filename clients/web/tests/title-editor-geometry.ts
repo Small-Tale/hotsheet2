@@ -22,7 +22,7 @@ export async function editLongTitleThroughWrappingEditor(
   longTitle: string,
   editingScreenshot?: string,
 ): Promise<string> {
-  const editor = surface.getByRole('textbox', { name: 'Ticket title' }),
+  const editor = surface.getByRole('textbox', { name: 'Ticket Title' }),
     width = page.viewportSize()!.width;
   await openEditor();
   await expect(editor).toBeFocused();

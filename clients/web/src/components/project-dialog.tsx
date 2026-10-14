@@ -44,7 +44,7 @@ export function ProjectDialog({
   return (
     <div class="project-dialog" data-key="project-dialog">
       <DialogSurface preferredWidth={remify(768)} viewportGutter={remify(16)}>
-        <wa-dialog data-project-dialog label="Open project" open={open} data-controlled-open={String(open)}>
+        <wa-dialog data-project-dialog label="Open Project" open={open} data-controlled-open={String(open)}>
           <form {...REPOSITORY_ACTIONS.openProjectForm.attrs}>
             <List gap="m">
               <Text tone="quiet">
@@ -52,12 +52,12 @@ export function ProjectDialog({
                 ticket store. Override it when the project uses another store.
               </Text>
               <div class="project-dialog__path">
-                <wa-input name="project-root" label="Project folder" value={root} required />
+                <wa-input name="project-root" label="Project Folder" value={root} required />
                 <wa-button
                   appearance="outlined"
                   type="button"
                   {...PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.attrs}
-                  aria-label="Browse for project folder"
+                  aria-label="Browse for Project Folder"
                   title={hostOnlyDisabledReason('choose-folder', hostActionsAvailable) ?? 'Browse for project folder'}
                   disabled={!hostActionsAvailable}
                 >
@@ -67,14 +67,14 @@ export function ProjectDialog({
               <div class="project-dialog__path">
                 <wa-input
                   name="ticket-store"
-                  label="Ticket store (optional)"
+                  label="Ticket Store (Optional)"
                   placeholder="Automatically discover &lt;project&gt;.hs2"
                 />
                 <wa-button
                   appearance="outlined"
                   type="button"
                   {...PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.attrs}
-                  aria-label="Browse for ticket store"
+                  aria-label="Browse for Ticket Store"
                   title={hostOnlyDisabledReason('choose-folder', hostActionsAvailable) ?? 'Browse for ticket store'}
                   disabled={!hostActionsAvailable}
                 >
@@ -95,7 +95,7 @@ export function ProjectDialog({
                   urgency="alert"
                   copyLayout="stacked"
                   actionPlacement="below"
-                  title="Unresponsive local server"
+                  title="Unresponsive Local Server"
                   detail={`Hot Sheet cannot verify active work. Recovery first asks process ${recovery.expected.pid} to stop, then force-stops only that exact registered instance if necessary.`}
                   action={
                     <wa-button
@@ -115,7 +115,7 @@ export function ProjectDialog({
                     Cancel
                   </wa-button>
                   <wa-button appearance="accent" type="submit">
-                    Open project
+                    Open Project
                   </wa-button>
                 </Row>
               </footer>
@@ -180,7 +180,7 @@ export function RemoteProjectDialog({
               scrollable
               controlInsets="tb"
               className="remote-project-dialog__list"
-              rootAttributes={{ role: 'navigation', 'aria-label': 'Open projects' }}
+              rootAttributes={{ role: 'navigation', 'aria-label': 'Open Projects' }}
             >
               {checkouts.map((checkout) => (
                 <ListItem

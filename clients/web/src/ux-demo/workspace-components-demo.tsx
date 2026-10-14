@@ -124,7 +124,7 @@ export const composerCategory = signal('task');
 export const composerUpNext = signal(false);
 /** Writable ticket sources the demo composer can target (HS2-NZMJBJ). */
 export const composerSources = [
-  { value: 'git-local', label: 'Hot Sheet git', attachments: true },
+  { value: 'git-local', label: 'Hot Sheet Git', attachments: true },
   // GitHub issues cannot take attachments, so files staged for git stay listed but block Create
   // until removed or the user switches back (HS2-8HHHK3).
   { value: 'github-issues', label: 'GitHub issues', attachments: false },
@@ -421,14 +421,14 @@ function WorkspaceContent() {
     return (
       <>
         <NotificationCenter {...workspaceDemoNotifications.value} />
-        <wa-button data-action="reset-workspace-notifications">Reset notifications</wa-button>
+        <wa-button data-action="reset-workspace-notifications">Reset Notifications</wa-button>
       </>
     );
   const tickets = filteredWorkspaceTickets();
   if (workspaceMode.value === 'settings')
     return (
-      <section class="workspace-settings-preview" aria-label="Project settings">
-        <h2 class="workspace-settings-preview__title">Project settings</h2>
+      <section class="workspace-settings-preview" aria-label="Project Settings">
+        <h2 class="workspace-settings-preview__title">Project Settings</h2>
         <p class="workspace-settings-preview__description">
           Configure ticket providers, project defaults, commands, and local checkout behavior for Hot Sheet 2.
         </p>
@@ -437,7 +437,7 @@ function WorkspaceContent() {
           label="Default ticket provider"
           value="git"
           choices={[
-            { value: 'git', label: 'Hot Sheet git' },
+            { value: 'git', label: 'Hot Sheet Git' },
             { value: 'github', label: 'GitHub Issues' },
           ]}
         />
@@ -503,8 +503,8 @@ export function QuickTicketComposerSettings() {
         label="Writable ticket sources"
         value={composerMultipleSources.value ? 'several' : 'one'}
         choices={[
-          { value: 'one', label: 'One (plain text)' },
-          { value: 'several', label: 'Several (source Select)' },
+          { value: 'one', label: 'One (Plain Text)' },
+          { value: 'several', label: 'Several (Source Select)' },
         ]}
       />
       <wa-button type="button" data-action="reset-settings">
@@ -638,10 +638,10 @@ export function TicketInspectorSettings() {
         value={inspectorLiveClaim.value}
         choices={[
           { value: 'none', label: 'None' },
-          { value: 'estimate', label: 'With ETA estimate' },
-          { value: 'overrun', label: 'Past its ETA (Soon)' },
+          { value: 'estimate', label: 'With ETA Estimate' },
+          { value: 'overrun', label: 'Past Its ETA (Soon)' },
           { value: 'no-eta', label: 'Without an ETA' },
-          { value: 'generated-id', label: 'Generated worker id with ETA' },
+          { value: 'generated-id', label: 'Generated Worker Id with ETA' },
         ]}
       />
       <Select
@@ -650,9 +650,9 @@ export function TicketInspectorSettings() {
         value={inspectorDuplicates.value}
         choices={[
           { value: 'none', label: 'None' },
-          { value: 'target', label: 'Closed as a duplicate' },
-          { value: 'backlinks', label: 'Duplicated by other tickets' },
-          { value: 'backlinks-partial', label: 'Duplicates with an unchecked project' },
+          { value: 'target', label: 'Closed as a Duplicate' },
+          { value: 'backlinks', label: 'Duplicated by Other Tickets' },
+          { value: 'backlinks-partial', label: 'Duplicates with an Unchecked Project' },
         ]}
       />
       <Select
@@ -661,7 +661,7 @@ export function TicketInspectorSettings() {
         value={inspectorFieldConflict.value}
         choices={[
           { value: 'none', label: 'None' },
-          { value: 'details', label: 'Details changed elsewhere' },
+          { value: 'details', label: 'Details Changed Elsewhere' },
         ]}
       />
       <wa-button type="button" data-action="reset-settings">
@@ -680,7 +680,7 @@ function demoInspectorProps(slug?: string): TicketInspectorProps {
     collectionTickets.value[0];
   return {
     slug: ticket.slug,
-    source: { provider: 'git', name: 'Hot Sheet git' },
+    source: { provider: 'git', name: 'Hot Sheet Git' },
     title: inspectorTitle.value,
     titleEditing: inspectorTitleEditing.value,
     titleDraft: inspectorTitleDraft.value,
@@ -700,7 +700,7 @@ function demoInspectorProps(slug?: string): TicketInspectorProps {
     blockedReason: inspectorBlockedReason.value,
     blockedReasonEditing: inspectorBlockedReasonEditing.value,
     blockedReasonDraft: inspectorBlockedReasonDraft.value,
-    providerName: 'Hot Sheet git',
+    providerName: 'Hot Sheet Git',
     updatedLabel: 'Updated now',
     activeTab: inspectorTab.value,
     upNext: ticket.upNext,
@@ -719,7 +719,7 @@ export function TicketInspectorDemo({ collapseControl = true }: { collapseContro
       {inspectorOpen.value ? (
         <TicketInspector {...demoInspectorProps()} collapseControl={collapseControl} />
       ) : (
-        <wa-button data-action="toggle-ticket-inspector">Open ticket inspector</wa-button>
+        <wa-button data-action="toggle-ticket-inspector">Open Ticket Inspector</wa-button>
       )}
       <DemoEvent>{collectionEvent.value}</DemoEvent>
     </CatalogExample>

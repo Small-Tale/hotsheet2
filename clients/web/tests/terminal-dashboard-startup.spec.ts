@@ -131,7 +131,7 @@ test('reveals a restored terminal workspace atomically and separates All Project
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/tickets',
             default: true,
             capabilities,
@@ -217,13 +217,13 @@ test('reveals a restored terminal workspace atomically and separates All Project
   await expect.poll(() => claimsFor('other-shell')).not.toEqual([]);
   expect(await claimsFor('other-shell')).not.toContainEqual(expect.objectContaining({ cols: 80, rows: 24 }));
   await page.screenshot({ path: 'target/visual-captures/hs2-a0ykmh-project-switch-dedicated.png', fullPage: true });
-  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const sidebar = page.locator('#app-left-rail'),
     all = sidebar.locator('.terminal-operations-sidebar__group[data-project-id="all"]'),
     summaries = sidebar.locator('[data-component="project-summary"]'),
     demoSummary = sidebar.locator('[data-project-id="demo-checkout"] [data-component="project-summary"]'),
     otherSummary = sidebar.locator('[data-project-id="other-checkout"] [data-component="project-summary"]'),
-    dashboard = page.getByRole('region', { name: 'Workspace grid' });
+    dashboard = page.getByRole('region', { name: 'Workspace Grid' });
   await expect(dashboard.locator('[data-component="terminal-tile"]')).toHaveCount(2);
   await expect(
     dashboard.locator('[data-component="terminal-tile"]:has([data-project-id="demo-checkout"])'),

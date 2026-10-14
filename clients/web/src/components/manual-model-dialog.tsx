@@ -38,7 +38,7 @@ export function ManualModelDialog({ state }: { state?: ManualModelDialogState })
           <form {...COMMANDS_AND_AI_ACTIONS.submitManualModel.attrs}>
             <List className="manual-model-dialog__form" gap="l">
               <Text tone="quiet">Enter the exact model identifier accepted by {state.providerName}.</Text>
-              <wa-input name="manual-model" label="Model identifier" value={state.value} required autofocus />
+              <wa-input name="manual-model" label="Model Identifier" value={state.value} required autofocus />
               <footer>
                 <Row vAlign="middle" gap="xs">
                   <Spacer flex />
@@ -46,7 +46,7 @@ export function ManualModelDialog({ state }: { state?: ManualModelDialogState })
                     Cancel
                   </wa-button>
                   <wa-button appearance="accent" type="submit">
-                    Use model
+                    Use Model
                   </wa-button>
                 </Row>
               </footer>

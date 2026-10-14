@@ -75,7 +75,7 @@ test('each image in one note opens its own gallery attachment', async ({ page })
           {
             connection_id: 'git',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/work/demo.hs2',
             default: true,
             capabilities: { create: true, update: true, notes: true, attachments: true, watch: true, query_fields: [] },
@@ -109,8 +109,8 @@ test('each image in one note opens its own gallery attachment', async ({ page })
   });
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-IMAGES"]').click();
   const visibleInspector = page.locator('#app-right-rail'),
     details = visibleInspector.locator('.ticket-info-panel__details-surface');

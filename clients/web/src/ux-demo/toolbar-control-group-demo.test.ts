@@ -8,14 +8,14 @@ describe('ToolbarControlGroupDemo', () => {
     expect(markup.match(/data-component="toolbar"/g)).toHaveLength(8);
     expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(8);
     for (const label of [
-      'Segmented choices',
-      'Popup menu',
-      'Button group',
-      'Single button',
-      'Borderless group',
-      'Push button, resting',
-      'Push button, pressed',
-      'Dark group',
+      'Segmented Choices',
+      'Popup Menu',
+      'Button Group',
+      'Single Button',
+      'Borderless Group',
+      'Push Button, Resting',
+      'Push Button, Pressed',
+      'Dark Group',
     ])
       expect(markup).toContain(label);
   });

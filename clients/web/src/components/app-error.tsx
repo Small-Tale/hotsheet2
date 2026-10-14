@@ -14,7 +14,7 @@ export function AppError({ message }: { message: string }) {
         actionPlacement="below"
         action={
           <button type="button" {...NOTIFICATIONS_AND_LINKS_ACTIONS.dismissAppError.attrs}>
-            Dismiss error
+            Dismiss Error
           </button>
         }
       />

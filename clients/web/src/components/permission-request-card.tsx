@@ -136,7 +136,7 @@ export function PermissionRequestCard({
           {...NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.attrs}
           title="Stop permission popups in every project until you resume"
         >
-          Pause notifications
+          Pause Notifications
         </wa-button>
       )}
     </>
@@ -158,7 +158,7 @@ export function PermissionRequestCard({
             class="permission-request-card__stop-automation"
             {...NOTIFICATIONS_AND_LINKS_ACTIONS.cancelPermissionAutomation.attrs}
             data-request-key={item.key}
-            aria-label={`Stop auto-${countdownAction} countdown`}
+            aria-label={`Stop auto-${countdownAction} Countdown`}
             title={`Stop auto-${countdownAction} countdown for this request`}
           >
             <LucideIcon size={14.4} icon={Pause} name="pause" />
@@ -270,7 +270,7 @@ export function PermissionRequestPopup({ layer = 'inline', ...props }: Permissio
       popover="manual"
       {...{ [TOP_LAYER_OVERLAY_ATTRIBUTE]: '' }}
       tabindex={-1}
-      aria-label="Permission request"
+      aria-label="Permission Request"
     >
       {card}
     </dialog>
@@ -279,7 +279,7 @@ export function PermissionRequestPopup({ layer = 'inline', ...props }: Permissio
       class="permission-request-popup"
       data-component="permission-request-popup"
       data-layer={layer}
-      aria-label="Permission request"
+      aria-label="Permission Request"
     >
       {card}
     </aside>

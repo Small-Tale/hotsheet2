@@ -12,7 +12,7 @@ import { inspectorTags, inspectorTitle } from './workspace-components-demo';
 
 /** One project's linked ticket sources and the machine's connection catalog (HS2-3SCH1K). */
 export const DEMO_PROJECT_SOURCES = [
-  { connectionId: 'git-demo', name: 'Hot Sheet git', provider: 'git', locator: '/work/demo.hs2', default: false },
+  { connectionId: 'git-demo', name: 'Hot Sheet Git', provider: 'git', locator: '/work/demo.hs2', default: false },
   {
     connectionId: 'github-main',
     name: 'Product issues',

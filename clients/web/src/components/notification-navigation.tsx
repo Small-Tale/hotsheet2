@@ -78,14 +78,14 @@ export function notificationNavigationPanel({
         }
       >
         <LucideIcon size="s" slot="start" icon={paused ? Bell : BellOff} name={paused ? 'bell' : 'bell-off'} />
-        {paused ? 'Resume notifications' : 'Pause notifications'}
+        {paused ? 'Resume Notifications' : 'Pause Notifications'}
       </wa-button>
     </List>
   );
   return {
     label: 'Notification views',
     toolbar: { label: 'Notification sidebar toolbar', dividerSides: '' },
-    toggle: { action: 'toggle-project-sidebar', name: 'notification sidebar' },
+    toggle: { action: 'toggle-project-sidebar', name: 'Notification Sidebar' },
     content,
     footer,
     pane: { contentElement: 'nav', contentLabel: 'Notification views' },

@@ -220,7 +220,7 @@ export function ticketInspectorPanel({
   );
   // The reader modal is not a Workbench panel: it keeps its own close control (HS2-QQW6CT).
   const close = (
-    <button type="button" data-dialog="close" data-action="close-ticket-reader" aria-label="Close ticket reader">
+    <button type="button" data-dialog="close" data-action="close-ticket-reader" aria-label="Close Ticket Reader">
       <LucideIcon icon={X} name="x" />
     </button>
   );
@@ -232,7 +232,7 @@ export function ticketInspectorPanel({
             {star}
           </ToolbarControlGroup>
         )}
-        <ToolbarControlGroup appearance="borderless" buttonAppearance="push" label="Reader text size" single>
+        <ToolbarControlGroup appearance="borderless" buttonAppearance="push" label="Reader Text Size" single>
           <button
             type="button"
             {...INSPECTOR_AND_EDITOR_ACTIONS.toggleReaderTextSize.attrs}
@@ -248,12 +248,12 @@ export function ticketInspectorPanel({
         </ToolbarControlGroup>
       </>
     ) : (
-      <ToolbarControlGroup appearance="borderless" label="Ticket actions">
+      <ToolbarControlGroup appearance="borderless" label="Ticket Actions">
         {star}
         <button
           type="button"
           {...INSPECTOR_AND_EDITOR_ACTIONS.openTicketReader.attrs}
-          aria-label="Open ticket reader"
+          aria-label="Open Ticket Reader"
           title="Open ticket reader"
         >
           <LucideIcon icon={BookOpen} name="book-open" />
@@ -306,7 +306,7 @@ export function ticketInspectorPanel({
                 : 'ticket-inspector__title-input'
             }
             name="ticket-title"
-            aria-label="Ticket title"
+            aria-label="Ticket Title"
             rows={1}
             spellcheck="true"
           >
@@ -332,7 +332,7 @@ export function ticketInspectorPanel({
       {feedbackNeeded && (
         <div class="ticket-inspector__notice ticket-inspector__feedback">
           <StateBanner
-            title="Needs review"
+            title="Needs Review"
             tone="warning"
             icon={<LucideIcon icon={CircleAlert} name="circle-alert" size="s" />}
           />
@@ -363,7 +363,7 @@ export function ticketInspectorPanel({
         ) : (
           <div class="ticket-inspector__notice" data-close-reason="duplicate">
             <StateBanner
-              title="Duplicate of another ticket"
+              title="Duplicate of Another Ticket"
               icon={<LucideIcon size="s" icon={CopyX} name="copy-x" />}
             />
           </div>
@@ -378,7 +378,7 @@ export function ticketInspectorPanel({
       <div class="ticket-inspector__tabs-frame">
         <TabBar
           id={`ticket-inspector-${presentation}-${slug}`}
-          label="Ticket inspector sections"
+          label="Ticket Inspector Sections"
           className="ticket-inspector__tabs"
           activation="automatic"
           allocation="fill"
@@ -419,7 +419,7 @@ export function ticketInspectorPanel({
   const content = (
     <div class="ticket-inspector__body" data-component="ticket-inspector-body" {...identity}>
       {activeTab === 'info' && pendingOperations.length > 0 && (
-        <section class="ticket-inspector__outbox" aria-label="Jira sync status">
+        <section class="ticket-inspector__outbox" aria-label="Jira Sync Status">
           <strong>Jira sync</strong>
           {pendingOperations.map((operation) => (
             <div class="ticket-inspector__outbox-operation" data-state={operation.state}>
@@ -463,7 +463,7 @@ export function ticketInspectorPanel({
                   data-connection-id={operation.connection_id}
                   data-operation-id={operation.operation_id}
                 >
-                  Discard local edit
+                  Discard Local Edit
                 </wa-button>
               )}
             </div>
@@ -531,7 +531,7 @@ export function ticketInspectorPanel({
   return {
     label: `${slug} inspector`,
     toolbar: {
-      label: 'Ticket inspector toolbar',
+      label: 'Ticket Inspector Toolbar',
       dividerSides: '',
       leading: source ? (
         <Row gap="2xs" vAlign="middle" rootAttributes={{ 'data-source-identity': 'true' }}>
@@ -595,12 +595,12 @@ export function ticketInspectorSkeletonPanel({ slug }: { slug?: string } = {}): 
   return {
     label: 'Loading ticket',
     toolbar: {
-      label: 'Ticket inspector toolbar',
+      label: 'Ticket Inspector Toolbar',
       dividerSides: '',
       center: slug ? <ToolbarText text={slug} size="small" /> : <ToolbarText text="" size="small" placeholder />,
       trailing: (
-        <ToolbarControlGroup appearance="borderless" label="Ticket actions">
-          <button type="button" aria-label="Open ticket reader" title="Open ticket reader" tabIndex={-1}>
+        <ToolbarControlGroup appearance="borderless" label="Ticket Actions">
+          <button type="button" aria-label="Open Ticket Reader" title="Open ticket reader" tabIndex={-1}>
             <LucideIcon icon={BookOpen} name="book-open" />
           </button>
         </ToolbarControlGroup>
@@ -617,7 +617,7 @@ export function ticketInspectorSkeletonPanel({ slug }: { slug?: string } = {}): 
         <div class="ticket-inspector__tabs-frame">
           <TabBar
             id="ticket-inspector-loading"
-            label="Ticket inspector sections"
+            label="Ticket Inspector Sections"
             className="ticket-inspector__tabs"
             allocation="fill"
             presentation="inspector"
@@ -657,7 +657,7 @@ export function TicketInspectorSkeleton({
       class="ticket-inspector ticket-inspector--placeholder"
       data-component="ticket-inspector-skeleton"
       aria-busy="true"
-      aria-label="Loading ticket"
+      aria-label="Loading Ticket"
     >
       <SidebarPane
         parts={ticketInspectorSkeletonPanel({ slug })}

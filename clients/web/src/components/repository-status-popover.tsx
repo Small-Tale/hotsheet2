@@ -173,11 +173,11 @@ export function RepositoryStatusPopover({
   const actions = (
     <>
       {comparison && !recoveryStep && (
-        <ToolbarControlGroup label="Repository comparison" buttonAppearance="push" single>
+        <ToolbarControlGroup label="Repository Comparison" buttonAppearance="push" single>
           <button
             type="button"
             {...REPOSITORY_ACTIONS.toggleRepositoryComparison.attrs}
-            aria-label="Compare two commits"
+            aria-label="Compare Two Commits"
             title="Compare two commits"
             aria-pressed={String(comparison.active)}
           >
@@ -185,7 +185,7 @@ export function RepositoryStatusPopover({
           </button>
         </ToolbarControlGroup>
       )}
-      <ToolbarControlGroup label="Repository refresh" single>
+      <ToolbarControlGroup label="Repository Refresh" single>
         <button
           type="button"
           {...REPOSITORY_ACTIONS.refreshRepositoryStatus.attrs}
@@ -259,7 +259,7 @@ export function RepositoryStatusPopover({
           }
         />
       </ValueTable>
-      <nav aria-label="Repository views">
+      <nav aria-label="Repository Views">
         <ListHeader label="Views" />
         {viewDefinitions.map((item) => (
           <ListItem
@@ -352,7 +352,7 @@ export function RepositoryStatusPopover({
           detailActive={detailActive}
           listTitle={compact ? 'Repository Status' : 'Repository'}
           detailTitle={viewLabel}
-          backLabel="Back to repository views"
+          backLabel="Back to Repository Views"
           compactStack={{ list: { toolbar: { trailing: actions } }, detail: { toolbar: { trailing: actions } } }}
           list={
             compact ? (
@@ -394,7 +394,7 @@ export function RepositoryStatusPopover({
       ) : (
         <Pane label="Repository Status" header={heading}>
           {recoveryStep && <RepositorySetup step={recoveryStep} busy={setupBusy} error={setupError} />}
-          {!recoveryStep && !status && !error && <EmptyState busy title="Loading repository status…" />}
+          {!recoveryStep && !status && !error && <EmptyState busy title="Loading Repository Status…" />}
           {!recoveryStep && Boolean(error) && <StateBanner tone="danger" urgency="alert" title={error} />}
         </Pane>
       )}
@@ -507,7 +507,7 @@ export function ChangeEvidenceDialog({
             <LucideIcon color={uiColor('brand-on-quiet')} icon={GitCompare} name="git-compare" />
           </ToolbarControlGroup>
           <ToolbarText
-            text="Change evidence"
+            text="Change Evidence"
             id="change-evidence-title"
             size="xlarge"
             description="Files changed across the ticket's complete commit range"
@@ -517,7 +517,7 @@ export function ChangeEvidenceDialog({
     />
   );
   const navigation = (
-    <nav aria-label="Change evidence views">
+    <nav aria-label="Change Evidence Views">
       {compact ? <ListHeader label="Views" /> : <></>}
       {evidenceViews.map((item) => (
         <ListItem
@@ -556,25 +556,25 @@ export function ChangeEvidenceDialog({
       labelledBy="change-evidence-title"
     >
       {compact ? (
-        <Pane label="Change evidence" header={heading} contentLabel={`${view} change evidence`}>
+        <Pane label="Change Evidence" header={heading} contentLabel={`${view} Change Evidence`}>
           {navigation}
           {fileRows}
         </Pane>
       ) : (
         <SplitView
           id="change-evidence-split"
-          label="Change evidence"
+          label="Change Evidence"
           listWidth={{ size: 240, maxFraction: 0.4 }}
           list={
             <Pane
-              label="Change evidence views"
+              label="Change Evidence Views"
               header={<Toolbar label="Views" leading={<ToolbarText text="Views" />} />}
             >
               {navigation}
             </Pane>
           }
           detail={
-            <Pane label="Change evidence" header={heading} contentLabel={`${view} change evidence`}>
+            <Pane label="Change Evidence" header={heading} contentLabel={`${view} Change Evidence`}>
               {fileRows}
             </Pane>
           }
@@ -619,7 +619,7 @@ function RepositoryFileContextMenu({
     <PopupMenu
       context
       anchor={contextMenuAnchor(menu.x, menu.y)}
-      label="File actions"
+      label="File Actions"
       rootAttributes={{ 'data-context-menu': 'repository-file' }}
       items={[
         fileMenuItem('show-diff', menu.path, 'Show Diff', GitCompare, 'git-compare', !menu.diff),

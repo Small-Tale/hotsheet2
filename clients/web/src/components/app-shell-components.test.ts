@@ -16,6 +16,7 @@ import {
   shellMode,
   shellStatsProjectName,
 } from '../ux-demo/app-shell-demo';
+import { WORKSPACE_TOOLBAR_LABEL } from '../workspace-toolbar-visibility';
 import { AppShell } from './app-shell';
 import { ConnectionStateBanner } from './connection-state-banner';
 import { MainShell } from './main-shell';
@@ -32,15 +33,15 @@ import type { SidebarPanelParts } from './sidebar-panel';
 /** Minimal left-rail panel parts: the Workbench composes the toolbar and its collapse toggle. */
 const sidebarParts = (name: string): SidebarPanelParts => ({
   label: name,
-  toolbar: { label: `${name} toolbar` },
+  toolbar: { label: `${name} Toolbar` },
   toggle: { action: 'toggle-project-sidebar', name },
   content: 'side' as never,
   pane: {},
 });
 
-const inspectorParts = (content: string, name = 'ticket inspector'): SidebarPanelParts => ({
+const inspectorParts = (content: string, name = 'Ticket Inspector'): SidebarPanelParts => ({
   label: name,
-  toolbar: { label: `${name} toolbar` },
+  toolbar: { label: `${name} Toolbar` },
   toggle: { action: 'toggle-ticket-inspector', name },
   content: content as never,
   pane: {},
@@ -178,18 +179,18 @@ describe('application shell components', () => {
       mode: 'terminals' as const,
       sidebar: sidebarParts('operations'),
       inspector: inspectorParts('tickets', 'ticket rail'),
-      header: 'Workspace grid' as never,
+      header: 'Workspace Grid' as never,
       workspace: 'grid' as never,
     };
     const normal = String(AppShell(props)),
       fullscreen = String(AppShell({ ...props, gridFullscreen: true }));
     expect(normal).toContain('id="app-left-rail"');
     expect(normal).toContain('id="app-right-rail"');
-    expect(normal).toContain('aria-label="Workspace toolbar"');
+    expect(normal).toContain(`aria-label="${WORKSPACE_TOOLBAR_LABEL}"`);
     expect(fullscreen).toContain('data-grid-fullscreen="true"');
     expect(fullscreen).not.toContain('id="app-left-rail"');
     expect(fullscreen).not.toContain('id="app-right-rail"');
-    expect(fullscreen).not.toContain('aria-label="Workspace toolbar"');
+    expect(fullscreen).not.toContain(`aria-label="${WORKSPACE_TOOLBAR_LABEL}"`);
     expect(fullscreen).toContain('data-component="project-tab-bar"');
     expect(fullscreen).toContain('grid');
   });
@@ -281,7 +282,7 @@ describe('application shell components', () => {
     const withComposer = String(
       AppShell({
         tabs: [],
-        sidebar: sidebarParts('project sidebar'),
+        sidebar: sidebarParts('Project Sidebar'),
         header: 'head' as never,
         composer: 'compose' as never,
         workspace: 'work' as never,
@@ -290,7 +291,7 @@ describe('application shell components', () => {
     const withoutComposer = String(
       AppShell({
         tabs: [],
-        sidebar: sidebarParts('project sidebar'),
+        sidebar: sidebarParts('Project Sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
       }),
@@ -301,7 +302,7 @@ describe('application shell components', () => {
     expect(withComposer).toContain('data-has-composer="true"');
     expect(withoutComposer).toContain('data-has-composer="false"');
     expect(withoutSidebar).not.toContain('data-region-id="app-left-rail"');
-    expect(withoutSidebar).not.toContain('aria-label="Show project sidebar"');
+    expect(withoutSidebar).not.toContain('aria-label="Show Project Sidebar"');
     expect(css).toMatch(/\.app-shell__composer \{[^}]*padding: remify\(12px\) remify\(16px\);/);
     expect(css).toMatchSource(/data-has-composer="true"[^}]*app-shell__workspace \{[^}]*padding-top: 0;/);
     expect(css).toMatchSource(
@@ -493,25 +494,25 @@ describe('application shell components', () => {
       '<div class="project-tab-bar" data-component="project-tab-bar" data-mode="project" data-surface="lowered" data-divider="true"><nav class="kui-tab-bar"',
     );
     expect(markup).toContain('role="tablist"');
-    expect(markup).toContain('aria-label="Add project"');
+    expect(markup).toContain('aria-label="Add Project"');
     expect(markup).toContain('data-action="choose-project"');
     expect(markup).not.toContain('data-action="add-project"');
-    expect(markup).toContain('aria-label="Workspace grid"');
+    expect(markup).toContain('aria-label="Workspace Grid"');
     expect(markup).toContain('data-lucide="grid-3x3"');
-    expect(markup).toContain('aria-label="Cross-project stats"');
+    expect(markup).toContain('aria-label="Cross-Project Stats"');
     // The modes and Add project are borderless compact Kerf control groups of native buttons in the
     // TabBar's leading and trailing zones (HS2-PNCDAE).
     expect(markup).toMatch(
-      /kui-tab-bar__leading"><div class="kui-toolbar-control-group"[^>]*aria-label="Global dashboards" data-appearance="borderless"[^>]*data-size="compact"[^>]*><button type="button" data-action="set-shell-mode"/,
+      /kui-tab-bar__leading"><div class="kui-toolbar-control-group"[^>]*aria-label="Global Dashboards" data-appearance="borderless"[^>]*data-size="compact"[^>]*><button type="button" data-action="set-shell-mode"/,
     );
     expect(markup).toMatch(
-      /kui-tab-bar__trailing"><div class="kui-toolbar-control-group"[^>]*data-appearance="borderless"[^>]*data-single="true"[^>]*><button type="button" data-action="choose-project" aria-label="Add project">/,
+      /kui-tab-bar__trailing"><div class="kui-toolbar-control-group"[^>]*data-appearance="borderless"[^>]*data-single="true"[^>]*><button type="button" data-action="choose-project" aria-label="Add Project">/,
     );
     expect(markup).not.toContain('project-tab-bar__actions');
     expect(markup).not.toContain('project-tab-bar__modes');
     expect(markup).not.toContain('aria-label="Hide project sidebar"');
     expect(markup).toContain('data-project-id="one"');
-    expect(markup.indexOf('Global dashboards')).toBeLessThan(markup.indexOf('role="tablist"'));
+    expect(markup.indexOf('Global Dashboards')).toBeLessThan(markup.indexOf('role="tablist"'));
   });
 
   it('pins a desktop workspace action in the TabBar end zone without changing mobile', () => {
@@ -602,7 +603,7 @@ describe('application shell components', () => {
     expect(markup).toContain('<wa-option value="one"');
     expect(markup).toContain('<wa-option value="two"');
     // The dashboard mode switcher and Add-project action remain.
-    expect(markup).toContain('aria-label="Workspace grid"');
+    expect(markup).toContain('aria-label="Workspace Grid"');
     expect(markup).toContain('data-action="choose-project"');
   });
 
@@ -633,15 +634,15 @@ describe('application shell components', () => {
     const chat = String(AppTabContextMenu({ kind: 'ai-chat', id: 'chat', x: 10, y: 20 }));
     for (const label of ['Close Tab', 'Close Other Tabs', 'Close Tabs to the Right', 'Close All Tabs'])
       expect(project).toContain(label);
-    expect(project).toContain('aria-label="Project tab actions"');
+    expect(project).toContain('aria-label="Project Tab Actions"');
     expect(project).toContain('data-action="project-tab-context-action"');
     expect(project).not.toContain('Rename…');
-    expect(terminal).toContain('aria-label="Terminal tab actions"');
+    expect(terminal).toContain('aria-label="Terminal Tab Actions"');
     expect(terminal).toContain('Rename…');
     expect(terminal).toContain('data-tab-action="rename"');
     expect(terminal).toContain('Close Tabs to the Left');
     expect(terminal).toContain('data-action="terminal-tab-context-action"');
-    expect(chat).toContain('aria-label="AI chat tab actions"');
+    expect(chat).toContain('aria-label="AI Chat Tab Actions"');
     expect(chat).toContain('data-chat-id="chat"');
     expect(chat).toContain('data-action="terminal-tab-context-action"');
     expect(chat).not.toContain('Rename…');
@@ -666,7 +667,7 @@ describe('application shell components', () => {
     const open = String(
       AppShell({
         tabs: [],
-        sidebar: sidebarParts('project sidebar'),
+        sidebar: sidebarParts('Project Sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
         terminalDrawer: 'drawer' as never,
@@ -687,7 +688,7 @@ describe('application shell components', () => {
     const tall = String(
       AppShell({
         tabs: [],
-        sidebar: sidebarParts('project sidebar'),
+        sidebar: sidebarParts('Project Sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
         terminalDrawer: 'drawer' as never,
@@ -703,7 +704,7 @@ describe('application shell components', () => {
     const collapsed = String(
       AppShell({
         tabs: [],
-        sidebar: sidebarParts('project sidebar'),
+        sidebar: sidebarParts('Project Sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
         terminalDrawer: 'drawer' as never,
@@ -713,12 +714,12 @@ describe('application shell components', () => {
     expect(collapsed).toContain('class="kui-workbench__restore" data-panel="bottom" data-position="bottom-end"');
     expect(collapsed).toContain('class="kui-floating-toolbar" data-component="floating-toolbar"');
     expect(collapsed).toContain(
-      'class="kui-floating-toolbar" data-component="floating-toolbar" data-position="bottom-end" data-placement="floating" role="toolbar" aria-label="Terminal drawer controls"',
+      'class="kui-floating-toolbar" data-component="floating-toolbar" data-position="bottom-end" data-placement="floating" role="toolbar" aria-label="Terminal Drawer Controls"',
     );
     expect(collapsed).toContain('data-component="toolbar-control-group"');
     expect(collapsed).toContain('data-tone="default"');
     expect(collapsed).toContain('app-shell__restore-control-theme');
-    expect(collapsed).toContain('aria-label="Show terminal drawer"');
+    expect(collapsed).toContain('aria-label="Show Terminal Drawer"');
     const popup = String(
       AppShell({
         tabs: [],
@@ -736,7 +737,7 @@ describe('application shell components', () => {
     const markup = String(
       AppShell({
         tabs: [],
-        sidebar: sidebarParts('project sidebar'),
+        sidebar: sidebarParts('Project Sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
         inspector: inspectorParts('inspect'),
@@ -754,7 +755,7 @@ describe('application shell components', () => {
       AppShell({
         tabs: [],
         mode: 'terminals',
-        sidebar: sidebarParts('project sidebar'),
+        sidebar: sidebarParts('Project Sidebar'),
         header: 'Terminals' as never,
         workspace: 'dashboard' as never,
         inspector: inspectorParts('ticket rail', 'ticket rail'),
@@ -768,7 +769,7 @@ describe('application shell components', () => {
       AppShell({
         tabs: [],
         mode: 'terminals',
-        sidebar: sidebarParts('project sidebar'),
+        sidebar: sidebarParts('Project Sidebar'),
         header: 'Terminals' as never,
         workspace: 'dashboard' as never,
         inspector: inspectorParts('ticket rail', 'ticket rail'),
@@ -800,7 +801,7 @@ describe('application shell components', () => {
     const markup = String(
       AppShell({
         tabs: [],
-        sidebar: sidebarParts('project sidebar'),
+        sidebar: sidebarParts('Project Sidebar'),
         header: 'head' as never,
         headerActions: 'actions' as never,
         projectTabAction: { kind: 'new-ticket', label: 'tab-action' },
@@ -821,7 +822,7 @@ describe('application shell components', () => {
     expect(markup).toContain('aria-valuemin="250"');
     expect(markup).toContain('data-region-id="app-right-rail"');
     expect(markup.indexOf('viewport-overlay')).toBeGreaterThan(markup.indexOf('data-region-id="app-right-rail"'));
-    expect(markup).toContain('Ticket workspace');
+    expect(markup).toContain('Ticket Workspace');
     // HS2-H4MWDB: stable data-keys let the morph match the scroll-container chain by identity so
     // toggling the conditional overlay/banner siblings above it never rebuilds it (which would
     // reset the workspace scrollTop, e.g. when the ticket context menu opens).
@@ -831,11 +832,11 @@ describe('application shell components', () => {
     expect(markup).toContain('data-key="app-shell-workspace"');
     expect(markup).toContain('data-ticket-scroll-owner="workspace"');
     expect(markup).toContain('class="app-shell__composer">compose');
-    expect(markup.indexOf('app-shell__composer')).toBeLessThan(markup.indexOf('Ticket workspace'));
+    expect(markup.indexOf('app-shell__composer')).toBeLessThan(markup.indexOf('Ticket Workspace'));
     expect(markup).toContain('role="heading" aria-level="1"');
     expect(markup).toContain('class="kui-toolbar__leading">head');
     expect(markup).toContain('class="kui-toolbar__trailing">actions');
-    expect(markup).toContain('aria-label="Add project"');
+    expect(markup).toContain('aria-label="Add Project"');
     expect(markup).toMatch(
       /kui-tab-bar__end"><wa-button[^>]*quick-ticket-composer__launcher[^]*tab-action<\/wa-button>/,
     );
@@ -851,7 +852,7 @@ describe('application shell components', () => {
       AppShell({
         mode: 'stats',
         tabs: [],
-        sidebar: sidebarParts('project sidebar'),
+        sidebar: sidebarParts('Project Sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
         inspector: inspectorParts('inspect'),
@@ -866,7 +867,7 @@ describe('application shell components', () => {
         mode: 'stats',
         mobile: true,
         tabs: [],
-        sidebar: sidebarParts('project sidebar'),
+        sidebar: sidebarParts('Project Sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
         inspector: inspectorParts('inspect'),
@@ -878,7 +879,7 @@ describe('application shell components', () => {
       AppShell({
         mode: 'terminals',
         tabs: [],
-        sidebar: sidebarParts('operations sidebar'),
+        sidebar: sidebarParts('Operations Sidebar'),
         header: 'head' as never,
         workspace: 'terminals' as never,
         inspector: inspectorParts('tickets', 'ticket rail'),
@@ -890,17 +891,17 @@ describe('application shell components', () => {
       AppShell({
         mode: 'terminals',
         tabs: [],
-        sidebar: sidebarParts('operations sidebar'),
+        sidebar: sidebarParts('Operations Sidebar'),
         sidebarVisible: false,
         header: 'head' as never,
         workspace: 'terminals' as never,
       }),
     );
-    expect(collapsedTerminalMarkup).toContain('aria-label="Show operations sidebar"');
+    expect(collapsedTerminalMarkup).toContain('aria-label="Show Operations Sidebar"');
     const collapsedMarkup = String(
       AppShell({
         tabs: [],
-        sidebar: sidebarParts('project sidebar'),
+        sidebar: sidebarParts('Project Sidebar'),
         sidebarVisible: false,
         header: 'head' as never,
         workspace: 'work' as never,
@@ -908,21 +909,21 @@ describe('application shell components', () => {
     );
     expect(collapsedMarkup).toContain('data-region-id="app-left-rail"');
     expect(collapsedMarkup).toContain('data-collapsed="true"');
-    expect(collapsedMarkup).toContain('aria-label="Show project sidebar"');
-    expect(collapsedMarkup.indexOf('aria-label="Show project sidebar"')).toBeLessThan(
+    expect(collapsedMarkup).toContain('aria-label="Show Project Sidebar"');
+    expect(collapsedMarkup.indexOf('aria-label="Show Project Sidebar"')).toBeLessThan(
       collapsedMarkup.indexOf('data-component="tab-bar"'),
     );
     const hiddenInspectorMarkup = String(
       AppShell({
         tabs: [],
-        sidebar: sidebarParts('project sidebar'),
+        sidebar: sidebarParts('Project Sidebar'),
         header: 'head' as never,
         workspace: 'work' as never,
         inspector: inspectorParts('inspect'),
         inspectorVisible: false,
       }),
     );
-    expect(hiddenInspectorMarkup).toContain('aria-label="Show ticket inspector"');
+    expect(hiddenInspectorMarkup).toContain('aria-label="Show Ticket Inspector"');
     // The Workbench relocates the right rail's standard toggle to the trailing edge of the workspace
     // toolbar; the shell composes no Show control of its own (HS2-QQW6CT).
     expect(hiddenInspectorMarkup).not.toContain('open-ticket-inspector');

@@ -208,7 +208,7 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
       list: {
         tickets: shown.slice(0, renderedTicketLimit.value).map(row),
         totalCount: shown.length,
-        label: 'Project tickets',
+        label: 'Project Tickets',
         emptyState,
       },
       more,

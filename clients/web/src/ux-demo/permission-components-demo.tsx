@@ -233,9 +233,9 @@ export function PermissionRequestSettings() {
         value={permissionRequestSettings.presentation.value}
         choices={[
           { value: 'popup', label: 'Popup' },
-          { value: 'flow', label: 'In-flow popup (conversation foreground)' },
-          { value: 'top-layer', label: 'Shell popup (top layer)' },
-          { value: 'list', label: 'Notification list' },
+          { value: 'flow', label: 'In-Flow Popup (Conversation Foreground)' },
+          { value: 'top-layer', label: 'Shell Popup (Top Layer)' },
+          { value: 'list', label: 'Notification List' },
         ]}
       />
       <Select
@@ -247,9 +247,9 @@ export function PermissionRequestSettings() {
           { value: 'resolving', label: 'Resolving' },
           { value: 'failed', label: 'Failed' },
           { value: 'disconnected', label: 'Disconnected' },
-          { value: 'allowed', label: 'Allowed history' },
-          { value: 'denied', label: 'Denied history' },
-          { value: 'external', label: 'External decision' },
+          { value: 'allowed', label: 'Allowed History' },
+          { value: 'denied', label: 'Denied History' },
+          { value: 'external', label: 'External Decision' },
         ]}
       />
       <Select
@@ -257,10 +257,10 @@ export function PermissionRequestSettings() {
         label="Request type"
         value={permissionRequestSettings.request.value}
         choices={[
-          { value: 'command', label: 'Run command' },
-          { value: 'edit', label: 'Edit file' },
-          { value: 'read', label: 'Read file' },
-          { value: 'tool-without-details', label: 'Tool without details' },
+          { value: 'command', label: 'Run Command' },
+          { value: 'edit', label: 'Edit File' },
+          { value: 'read', label: 'Read File' },
+          { value: 'tool-without-details', label: 'Tool Without Details' },
         ]}
       />
       <Select
@@ -269,8 +269,8 @@ export function PermissionRequestSettings() {
         value={permissionRequestSettings.automation.value}
         choices={[
           { value: 'none', label: 'None' },
-          { value: 'allow', label: 'Allow countdown' },
-          { value: 'deny', label: 'Deny countdown' },
+          { value: 'allow', label: 'Allow Countdown' },
+          { value: 'deny', label: 'Deny Countdown' },
         ]}
       />
       <wa-checkbox name="always-supported" checked={permissionRequestSettings.alwaysSupported.value}>
@@ -288,7 +288,7 @@ export function PermissionRequestSettings() {
 
 export function NotificationCenterDemo() {
   return (
-    <CatalogExample label="Pending and history" viewport={{ width: 'full', height: 'app', layout: 'flex-column' }}>
+    <CatalogExample label="Pending and History" viewport={{ width: 'full', height: 'app', layout: 'flex-column' }}>
       <NotificationCenter pending={[pending]} history={history} countdowns={{ [pending.key]: '0:13' }} />
     </CatalogExample>
   );

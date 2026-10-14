@@ -84,7 +84,7 @@ async function mockBulkProject(page: Page, { conflictFirst = false }: { conflict
           {
             connection_id: 'git-local',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: '/work/demo.hs2',
             default: true,
             capabilities: {
@@ -215,9 +215,9 @@ async function mockBulkProject(page: Page, { conflictFirst = false }: { conflict
 
 async function openBulkProject(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await page.getByRole('button', { name: 'Columns view' }).click();
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Columns View' }).click();
 }
 
 test('serializes rapid Verified then Archive batches onto fresh concurrency tokens (HS2-0K2ZP3)', async ({ page }) => {
@@ -267,10 +267,10 @@ test('serializes rapid Verified then Archive batches onto fresh concurrency toke
 test('finishes queued bulk changes for their owning project after a project switch', async ({ page }) => {
   const mock = await mockBulkProject(page);
   await openBulkProject(page);
-  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.getByRole('tab', { name: 'Other project' })).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('tab', { name: 'Bulk status demo' }).click();
-  await page.getByRole('button', { name: 'Columns view' }).click();
+  await page.getByRole('button', { name: 'Columns View' }).click();
   const menu = page.locator('[data-context-menu="ticket"]'),
     completed = page.locator('[data-column-id="completed"]'),
     first = completed.locator('[data-ticket-slug="HS2-FAST01"]'),

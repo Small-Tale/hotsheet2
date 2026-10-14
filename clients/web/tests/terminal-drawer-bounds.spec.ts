@@ -94,7 +94,7 @@ async function installWorkspace(page: Page) {
           {
             connection_id: 'git',
             provider: 'git',
-            display_name: 'Hot Sheet git',
+            display_name: 'Hot Sheet Git',
             locator: project.stores[0],
             default: true,
             capabilities,
@@ -134,7 +134,7 @@ async function installWorkspace(page: Page) {
 
 const drawer = (page: Page) => page.locator('[data-component="terminal-drawer"]');
 const tile = (page: Page) => drawer(page).locator('[data-component="terminal-tile"]').first();
-const viewButton = (page: Page, label: string) => page.getByRole('button', { name: new RegExp(`^${label} view`) });
+const viewButton = (page: Page, label: string) => page.getByRole('button', { name: new RegExp(`^${label} View`) });
 
 /** At drawer zoom level one, a tile fills the drawer grid's full content height (5:3 preview). */
 async function expectTileFillsDrawerHeight(page: Page) {
@@ -190,8 +190,8 @@ for (const [width, height] of [
     const original = await boxOf(tile(page));
 
     // Hide + show binds the observer to the live drawer (the path the original report took).
-    await page.getByRole('button', { name: 'Hide terminal drawer' }).click();
-    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    await page.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     await expect(tile(page)).toBeVisible();
     await expectTileFillsDrawerHeight(page);
 

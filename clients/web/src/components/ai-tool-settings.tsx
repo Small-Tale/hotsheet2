@@ -50,7 +50,7 @@ function ProviderDefaults({
       data-ai-provider={tool.id}
       data-ai-provider-default={String(isDefault)}
       data-other-model-value={other}
-      aria-label={`${tool.display_name} defaults`}
+      aria-label={`${tool.display_name} Defaults`}
     >
       <List gap="xs">
         <Text variant="h3" size="compact">
@@ -91,7 +91,7 @@ export function AiToolSettings({
       <section data-component="ai-tool-settings">
         <EmptyState
           icon={<LucideIcon size="xl" icon={Bot} name="bot" />}
-          title="No AI tools detected"
+          title="No AI Tools Detected"
           detail="Install or enable a drivable AI-tool plugin to configure Drive, AI shells, and AI chat."
         />
       </section>

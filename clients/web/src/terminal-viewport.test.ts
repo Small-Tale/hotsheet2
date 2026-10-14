@@ -78,7 +78,7 @@ describe('terminal viewport protocol', () => {
   it('uses one explicit drawer-resize completion event', () => {
     expect(TERMINAL_DRAWER_RESIZE_END_EVENT).toBe('hotsheet-terminal-drawer-resize-end');
   });
-  it('focuses only the exact newly created project terminal', () => {
+  it('focuses only the exact newly created project Terminal', () => {
     const request = { projectId: 'project-a', terminalId: 'new-terminal' };
     expect(terminalViewportShouldAutoFocus(request, 'project-a', 'new-terminal')).toBe(true);
     expect(terminalViewportShouldAutoFocus(request, 'project-a', 'old-terminal')).toBe(false);

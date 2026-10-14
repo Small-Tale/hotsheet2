@@ -17,7 +17,7 @@ export type ProjectStripMode = 'project' | 'terminals' | 'stats';
 export function ProjectDashboardModes({ mode }: { mode: ProjectStripMode }) {
   return (
     <ToolbarControlGroup
-      label="Global dashboards"
+      label="Global Dashboards"
       appearance="borderless"
       size="compact"
       content="icon"
@@ -28,7 +28,7 @@ export function ProjectDashboardModes({ mode }: { mode: ProjectStripMode }) {
         type="button"
         {...NAVIGATION_AND_TABS_ACTIONS.setShellMode.attrs}
         data-shell-mode="terminals"
-        aria-label="Workspace grid"
+        aria-label="Workspace Grid"
         aria-pressed={String(mode === 'terminals')}
       >
         <LucideIcon size="s" icon={Grid3X3} name="grid-3x3" />
@@ -37,7 +37,7 @@ export function ProjectDashboardModes({ mode }: { mode: ProjectStripMode }) {
         type="button"
         {...NAVIGATION_AND_TABS_ACTIONS.setShellMode.attrs}
         data-shell-mode="stats"
-        aria-label="Cross-project stats"
+        aria-label="Cross-Project Stats"
         aria-pressed={String(mode === 'stats')}
       >
         <LucideIcon size="s" icon={ChartNoAxesCombined} name="chart-no-axes-combined" />
@@ -53,7 +53,7 @@ export function ProjectDashboardModes({ mode }: { mode: ProjectStripMode }) {
 export function AddProjectAction() {
   return (
     <ToolbarControlGroup single appearance="borderless" size="compact" content="icon">
-      <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.chooseProject.attrs} aria-label="Add project">
+      <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.chooseProject.attrs} aria-label="Add Project">
         <LucideIcon size="s" icon={Plus} name="plus" />
       </button>
     </ToolbarControlGroup>
