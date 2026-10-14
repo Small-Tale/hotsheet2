@@ -23657,9 +23657,10 @@ test('undoes, redoes, copies, pastes, and drags ticket mutations through the rea
   await page.keyboard.press(`${shortcut}+c`);
   await page.locator('.app-shell__work-area').focus();
   await page.keyboard.press(`${shortcut}+v`);
-  await expect(page.getByText('Use real project tickets (Copy)')).toBeVisible();
-  await expect.poll(() => creates.at(-1)?.status).toBe('not_started');
+  // Paste selects the pasted ticket, so its title also appears in the inspector; scope to the row.
   const copied = page.locator('[data-component="ticket-list-row"]', { hasText: 'Use real project tickets (Copy)' });
+  await expect(copied).toBeVisible();
+  await expect.poll(() => creates.at(-1)?.status).toBe('not_started');
   await expect(copied).toHaveAttribute('data-status', 'not_started');
   await page.screenshot({ path: 'target/visual-captures/hs2-skp8cw-pasted-completed-ticket.png', fullPage: true });
   await ticket.evaluate((node) => {
@@ -24314,7 +24315,9 @@ test('scopes ticket clipboard shortcuts to the focused work area and preserves n
   await workArea.focus();
   await expect(workArea).toHaveCSS('outline-width', '2px');
   await page.keyboard.press(`${shortcut}+v`);
-  await expect(page.getByText('Use real project tickets (Copy)')).toBeVisible();
+  await expect(
+    page.locator('[data-component="ticket-list-row"]', { hasText: 'Use real project tickets (Copy)' }),
+  ).toBeVisible();
   expect(creates).toHaveLength(1);
   await page.screenshot({ path: 'target/visual-captures/hs2-rg612c-work-area-focus-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
