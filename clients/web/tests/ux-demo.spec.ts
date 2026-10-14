@@ -7550,7 +7550,8 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await expect(topLayerPopup).toBeVisible();
   expect(await topLayerPopup.evaluate((element) => element.matches(':popover-open'))).toBe(true);
   const [stageBox, topLayerBox] = await Promise.all([
-    page.locator('.permission-request-demo').boundingBox(),
+    // Kerf's CatalogExample frame carries the `--app-shell-main` anchor (KF-D532S2, HS2-NE9R8S).
+    page.locator('[data-permission-request-demo] [data-catalog-example-viewport]').boundingBox(),
     topLayerPopup.boundingBox(),
   ]);
   expect(Math.round(topLayerBox!.y - stageBox!.y)).toBe(56);
@@ -7563,12 +7564,15 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await expect(flowPopup).toBeVisible();
   await expect(flowPopup).toHaveCSS('position', 'relative');
   await expect(flowPopup).toHaveCSS('pointer-events', 'auto');
-  const [flowColumn, flowBox] = await Promise.all([
-    page.locator('.permission-request-demo__list').boundingBox(),
+  // The frame's centered 640px content column stands in for the conversation foreground (KF-D532S2).
+  const [flowFrame, flowBox] = await Promise.all([
+    page.locator('[data-permission-request-demo] [data-catalog-example-viewport]').boundingBox(),
     flowPopup.boundingBox(),
   ]);
-  expect(Math.round(flowBox!.x)).toBe(Math.round(flowColumn!.x));
-  expect(Math.round(flowBox!.width)).toBe(Math.round(flowColumn!.width));
+  expect(Math.round(flowBox!.width)).toBe(Math.min(640, Math.round(flowFrame!.width)));
+  expect(
+    Math.abs(flowBox!.x - flowFrame!.x - (flowFrame!.x + flowFrame!.width - (flowBox!.x + flowBox!.width))),
+  ).toBeLessThanOrEqual(2);
   await choose(presentation, 'popup');
   await expect(page.locator('[data-component="permission-request-popup"]')).toHaveAttribute('data-layer', 'inline');
   await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();

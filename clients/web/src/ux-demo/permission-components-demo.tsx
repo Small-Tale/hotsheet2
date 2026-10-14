@@ -199,27 +199,33 @@ export function PermissionRequestDemo() {
           ? 'The agent disconnected before this request was answered.'
           : undefined,
   };
+  const columned = ['flow', 'list'].includes(permissionRequestSettings.presentation.value);
   return (
-    <CatalogExample label="Interactive" viewport={{ width: 'full' }}>
-      {/* The stage stands in for the shell's main column, which anchors the top-layer popup. */}
-      <div class="permission-request-demo">
-        {permissionRequestSettings.presentation.value === 'flow' ? (
-          // The in-flow popup is laid out by its host; this centered column stands in for the AI
-          // conversation's foreground (HS2-M2W2DP).
-          <div class="permission-request-demo__list">
-            <PermissionRequestPopup {...props} layer="flow" />
-          </div>
-        ) : permissionRequestSettings.presentation.value !== 'list' ? (
-          <PermissionRequestPopup
-            {...props}
-            layer={permissionRequestSettings.presentation.value === 'top-layer' ? 'top' : 'inline'}
-          />
-        ) : (
-          <div class="permission-request-demo__list">
-            <PermissionRequestCard {...props} presentation="list" />
-          </div>
-        )}
-      </div>
+    // The frame stands in for the shell's main column: it carries the `--app-shell-main` anchor the
+    // top-layer popup positions against, and its centered 640px content column stands in for the AI
+    // conversation's foreground that lays out the in-flow popup (KF-D532S2, HS2-ZESCM2, HS2-M2W2DP).
+    <CatalogExample
+      label="Interactive"
+      viewport={{
+        width: 'full',
+        minHeight: 'app',
+        anchorName: '--app-shell-main',
+        // Only the in-flow and list presentations sit in the conversation column; the corner popups
+        // keep the full main column.
+        ...(columned ? { contentWidth: 'medium' as const, contentAlign: 'center' as const } : {}),
+      }}
+      rootAttributes={{ 'data-permission-request-demo': '' }}
+    >
+      {permissionRequestSettings.presentation.value === 'flow' ? (
+        <PermissionRequestPopup {...props} layer="flow" />
+      ) : permissionRequestSettings.presentation.value !== 'list' ? (
+        <PermissionRequestPopup
+          {...props}
+          layer={permissionRequestSettings.presentation.value === 'top-layer' ? 'top' : 'inline'}
+        />
+      ) : (
+        <PermissionRequestCard {...props} presentation="list" />
+      )}
     </CatalogExample>
   );
 }

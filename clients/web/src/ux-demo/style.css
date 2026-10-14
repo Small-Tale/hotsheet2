@@ -68,17 +68,6 @@ body[data-resizing-project-sidebar='true'] {
 .workspace-settings-preview__description {
   margin: 0;
 }
-/* The demo stage stands in for the shell's main column, which anchors the top-layer popup. */
-.permission-request-demo {
-  position: relative;
-  anchor-name: --app-shell-main;
-  width: 100%;
-  min-height: remify(640px);
-}
-.permission-request-demo__list {
-  width: min(remify(704px), 100%);
-  margin: auto;
-}
 /* Demo-owned color contexts for the MarkdownPreview and AIContentLabel inherit/inverse tones; Kerf's
    CatalogExample surfaces cover only the default and lowered fills. */
 .demo-tone-surface {
