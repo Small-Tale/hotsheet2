@@ -166,15 +166,20 @@ async fn terminal_creation_kind_is_stable_across_http_reattach_and_osc_output() 
             "ai"
         );
 
-        let (status, _) = server
+        let (status, body) = server
             .request(
                 "POST",
                 "/terminals",
                 Some(json!({"id":"invalid","connect":"missing-agent"})),
             )
             .await;
-        assert_eq!(status, 400);
-        assert_eq!(server.list().await.as_array().unwrap().len(), 4);
+        assert_eq!(status, 400, "broker_mode={broker_mode} {body}");
+        let listed = server.list().await;
+        assert_eq!(
+            listed.as_array().unwrap().len(),
+            4,
+            "broker_mode={broker_mode} {listed}"
+        );
 
         // Reattaching with the opposite launch kind preserves each live PTY's origin.
         assert_eq!(
@@ -189,19 +194,19 @@ async fn terminal_creation_kind_is_stable_across_http_reattach_and_osc_output() 
         );
         for (id, kind) in [("shell", "shell"), ("ai", "ai")] {
             let input = format!("/terminals/{id}/input");
-            let (status, _) = server.request("POST", &input, Some(json!({"data":"\u{1b}]0;AI agent\u{7}\u{1b}]8;;https://ai.example/session\u{7}\n"}))).await;
-            assert_eq!(status, 204);
+            let (status, body) = server.request("POST", &input, Some(json!({"data":"\u{1b}]0;AI agent\u{7}\u{1b}]8;;https://ai.example/session\u{7}\n"}))).await;
+            assert_eq!(status, 204, "broker_mode={broker_mode} {id} {body}");
             server
                 .assert_output_kind(id, kind, Some("https://ai.example/session"))
                 .await;
-            let (status, _) = server
+            let (status, body) = server
                 .request(
                     "POST",
                     &input,
                     Some(json!({"data":"\u{1b}]0;Shell\u{7}\u{1b}]8;;\u{7}\n"})),
                 )
                 .await;
-            assert_eq!(status, 204);
+            assert_eq!(status, 204, "broker_mode={broker_mode} {id} {body}");
             server.assert_output_kind(id, kind, None).await;
         }
         let list = server.list().await;
@@ -219,8 +224,8 @@ async fn terminal_creation_kind_is_stable_across_http_reattach_and_osc_output() 
                 .unwrap()
                 .iter()
                 .find(|info| info["id"] == id)
-                .unwrap();
-            assert_eq!(info["kind"], kind);
+                .unwrap_or_else(|| panic!("broker_mode={broker_mode} {id} missing from {list}"));
+            assert_eq!(info["kind"], kind, "broker_mode={broker_mode} {info}");
             match tool {
                 Some(tool) => assert_eq!(info["tool"], tool, "{id} tool"),
                 None => assert!(info.get("tool").is_none(), "{id} reports no tool"),
