@@ -3097,6 +3097,10 @@ Default policy (= tmux `window-size latest`, which is exactly the maintainer's a
   resizes back. The interaction-recency tiebreak (advanced only by `interacting`
   claims — see §6.7.2) decides between two viewports that both believe they're focused,
   so one device's background heartbeats can never steal control (**HS2-3ZBQDG**).
+- An interaction that lands before a viewport's socket opens, its first geometry pass settles,
+  or it is reported visible (opening a zoomed Workspace Grid terminal focuses it at once) is
+  deferred, not dropped, and then sent as a visible interacting claim. The zoomed terminal
+  therefore takes over PTY sizing at its fitted grid on every zoom (**HS2-6179FV**).
 - Activating the read-only dashboard counts each visible fixed 80×24 tile as that
   PTY's local sizing claimant. A grid tile cannot accept keyboard input, but entering
   the terminal-specific surface is still a deliberate request to render its TUI at

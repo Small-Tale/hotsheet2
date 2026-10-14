@@ -111,7 +111,10 @@ vi.mock('@xterm/addon-webgl', () => ({
 }));
 
 const resize: Array<{ disconnect: ReturnType<typeof vi.fn>; callback: () => void }> = [],
-  intersections: Array<{ disconnect: ReturnType<typeof vi.fn> }> = [],
+  intersections: Array<{
+    disconnect: ReturnType<typeof vi.fn>;
+    callback: (entries: Array<{ isIntersecting: boolean }>) => void;
+  }> = [],
   sockets: Array<EventTarget & { close: ReturnType<typeof vi.fn>; readyState: number }> = [],
   scheduledTimeouts: Array<() => void> = [];
 const windowMock = {
@@ -167,7 +170,7 @@ beforeEach(() => {
     'IntersectionObserver',
     class {
       disconnect = vi.fn();
-      constructor() {
+      constructor(readonly callback: (entries: Array<{ isIntersecting: boolean }>) => void) {
         intersections.push(this);
       }
       observe() {}
@@ -1041,5 +1044,114 @@ describe('scaled-preview canvas fits its frame (HS2-S7E53Q)', () => {
       expect(viewport.dataset.fontSize).toBe('24');
       dispose();
     });
+  });
+});
+
+describe('an early interaction on a magnified terminal takes over PTY sizing (HS2-6179FV)', () => {
+  function mountMagnified(proposed: { cols: number; rows: number }) {
+    const frames: Array<() => void> = [],
+      sent: string[] = [];
+    // A desktop-width magnified overlay (the phone overlay uses the fixed 80×M grid instead).
+    windowMock.innerWidth = 1440;
+    windowMock.requestAnimationFrame.mockImplementation(((callback: () => void) => {
+      frames.push(callback);
+      return frames.length;
+    }) as never);
+    const { viewport, listeners } = element();
+    (viewport as unknown as { closest: (selector: string) => unknown }).closest = (selector: string) =>
+      selector.includes('magnified') ? {} : null;
+    allocated.proposed = proposed;
+    const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'viewer' }),
+      socket = sockets.at(-1) as unknown as EventTarget & { readyState: number; send: (value: string) => void },
+      terminal = allocated.terminals.at(-1)!,
+      observer = resize.at(-1)!,
+      intersection = intersections.at(-1)!;
+    socket.send = (value: string) => sent.push(value);
+    return {
+      viewport,
+      socket,
+      dispose,
+      show: () => {
+        intersection.callback([{ isIntersecting: true }]);
+      },
+      runFrames: () => {
+        for (const frame of frames.splice(0)) frame();
+      },
+      fit: (cols: number, rows: number) => {
+        allocated.proposed = { cols, rows };
+        (terminal.resize as unknown as (cols: number, rows: number) => void)(cols, rows);
+        observer.callback();
+      },
+      focusin: () => {
+        for (const [type, handler] of listeners.mock.calls as Array<[string, () => void]>)
+          if (type === 'focusin') handler();
+      },
+      claims: () =>
+        sent
+          .map((value) => (JSON.parse(value) as { resize?: Record<string, unknown> }).resize)
+          .filter((value): value is Record<string, unknown> => Boolean(value)),
+    };
+  }
+
+  it('defers a focus that lands before the socket opens, then sends it from the first settled pass', () => {
+    const view = mountMagnified({ cols: 180, rows: 50 });
+    expect(view.viewport.dataset.geometryReady).toBe('false');
+    // Opening the magnified overlay focuses the terminal immediately, while the socket is connecting.
+    view.focusin();
+    expect(view.claims()).toHaveLength(0);
+    view.socket.readyState = 1;
+    view.socket.dispatchEvent(new Event('open'));
+    view.fit(180, 50);
+    view.runFrames();
+    expect(view.viewport.dataset.geometryReady).toBe('true');
+    // Not yet reported visible: an interaction the arbiter would ignore is still held back.
+    expect(view.claims().some((claim) => claim.interacting)).toBe(false);
+    view.show();
+    // Before HS2-6179FV this early interaction was dropped, so the viewport only sent heartbeat
+    // claims and never took PTY sizing from the previous (smaller) driver.
+    expect(view.claims().filter((claim) => claim.interacting)).toEqual([
+      expect.objectContaining({ cols: 180, rows: 50, interacting: true, visible: true }),
+    ]);
+    // Later layout passes are heartbeat claims at the new fit, not repeated interactions.
+    view.fit(120, 30);
+    view.runFrames();
+    expect(view.claims().at(-1)).toMatchObject({ cols: 120, rows: 30, interacting: false });
+    // A settled terminal sends an interaction immediately.
+    view.focusin();
+    expect(view.claims().at(-1)).toMatchObject({ cols: 120, rows: 30, interacting: true });
+    view.dispose();
+  });
+
+  it('walks zoom → unzoom → zoom: each fresh magnified viewport takes over at its own fit', () => {
+    for (const size of [
+      { cols: 180, rows: 50 },
+      { cols: 150, rows: 40 },
+    ]) {
+      const view = mountMagnified(size);
+      view.focusin();
+      view.socket.readyState = 1;
+      view.socket.dispatchEvent(new Event('open'));
+      view.fit(size.cols, size.rows);
+      view.runFrames();
+      view.show();
+      expect(view.claims().filter((claim) => claim.interacting)).toEqual([
+        expect.objectContaining({ ...size, interacting: true, visible: true }),
+      ]);
+      // Un-zoom disposes the magnified viewport and closes its socket.
+      view.dispose();
+      expect(sockets.at(-1)!.close).toHaveBeenCalled();
+    }
+  });
+
+  it('sends no deferred interaction when nothing interacted before the first settle', () => {
+    const view = mountMagnified({ cols: 180, rows: 50 });
+    view.socket.readyState = 1;
+    view.socket.dispatchEvent(new Event('open'));
+    view.fit(180, 50);
+    view.runFrames();
+    view.show();
+    expect(view.claims().length).toBeGreaterThan(0);
+    expect(view.claims().every((claim) => claim.interacting === false)).toBe(true);
+    view.dispose();
   });
 });

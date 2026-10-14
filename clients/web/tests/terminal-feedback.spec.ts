@@ -879,6 +879,65 @@ test('marks genuine terminal interaction claims so the last-interacted viewport 
   await page.screenshot({ path: 'target/visual-captures/hs2-3zbqdg-mobile-terminal-grid.png', fullPage: true });
 });
 
+test('a zoomed Workspace Grid terminal takes over PTY sizing at its fitted grid across zoom, unzoom, zoom (HS2-6179FV)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // A real server round trip: the zoom focuses the terminal before its socket opens.
+  await installTerminalFixture(page, false, false, { openDelayMs: 300 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
+    tile = dashboard.locator('[data-component="terminal-tile"][data-terminal-key="terminal-feedback:nano"]'),
+    preview = tile.locator('[data-display-mode="scaled-preview"]'),
+    magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
+    viewport = magnified.locator('[data-display-mode="interactive"]');
+  await expect(preview).toHaveAttribute('data-pty-size', '80x24');
+  // The interacting claims sent by the newest nano socket (the magnified viewport's).
+  const newestInteractingClaims = () =>
+    page.evaluate(() => {
+      const sockets = (
+          window as unknown as { __terminalFeedbackSockets: Array<{ url: string; sent: unknown[] }> }
+        ).__terminalFeedbackSockets.filter((socket) => socket.url.includes('/terminals/nano/attach')),
+        newest = sockets.at(-1)!;
+      return newest.sent
+        .filter((value): value is string => typeof value === 'string' && value.startsWith('{'))
+        .map((value) => (JSON.parse(value) as { resize: { cols: number; rows: number; interacting: boolean } }).resize)
+        .filter((claim) => claim.interacting)
+        .map((claim) => `${claim.cols}x${claim.rows}`);
+    });
+  const zoomAndAssertFilled = async (capture: string) => {
+    await tile.click();
+    await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
+    await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();
+    await expect(viewport).not.toHaveAttribute('data-grid-size', '80x24');
+    const grid = (await viewport.getAttribute('data-grid-size'))!;
+    // Opening the zoom is a genuine interaction: its claim reaches the PTY at the zoomed fit, with
+    // no keystroke or click inside the terminal needed.
+    await expect.poll(newestInteractingClaims).toContain(grid);
+    await expect(viewport).toHaveAttribute('data-pty-size', grid);
+    await expect(viewport).toHaveAttribute('data-driving', 'true');
+    await expect(viewport.locator('.xterm-rows')).toContainText(`${grid.replace('x', ' columns × ')} rows`);
+    await page.screenshot({ path: `target/visual-captures/hs2-6179fv-${capture}.png`, fullPage: true });
+    return grid;
+  };
+  const unzoom = async () => {
+    await magnified.click({ position: { x: 5, y: 5 } });
+    await expect(magnified).toHaveCount(0);
+    // The restored tile preview reclaims its fixed dashboard grid.
+    await expect(tile.locator('[data-display-mode="scaled-preview"]')).toHaveAttribute('data-pty-size', '80x24');
+  };
+  const wide = await zoomAndAssertFilled('zoomed-wide-after');
+  await unzoom();
+  expect(await zoomAndAssertFilled('rezoomed-wide-after')).toBe(wide);
+  await unzoom();
+  await page.setViewportSize({ width: 1100, height: 640 });
+  expect(await zoomAndAssertFilled('zoomed-narrow-after')).not.toBe(wide);
+  await unzoom();
+});
+
 test('renders dedicated terminal glyphs at 80xM through DOM on Mobile Safari (HS2-3ZBQDG, HS2-S708S3)', async ({
   browser,
 }) => {

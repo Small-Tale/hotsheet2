@@ -34,10 +34,17 @@ export async function installTerminalFixture(
   page: import('@playwright/test').Page,
   leadingZshMarker = false,
   ticketLinks = false,
-  { nativeSocket = false }: { nativeSocket?: boolean } = {},
+  {
+    nativeSocket = false,
+    openDelayMs = 0,
+  }: {
+    nativeSocket?: boolean;
+    /** Delay before a fake socket opens, like a real server round trip (HS2-6179FV). */
+    openDelayMs?: number;
+  } = {},
 ) {
   await page.addInitScript(
-    ({ leadingZshMarker, ticketLinks, nativeSocket }) => {
+    ({ leadingZshMarker, ticketLinks, nativeSocket, openDelayMs }) => {
       if (nativeSocket) return;
       const nano = (cols = 80, rows = 24) => {
         const bar = (value: string) => `\u001b[7m${value.padEnd(cols).slice(0, cols)}\u001b[0m`,
@@ -64,7 +71,7 @@ export async function installTerminalFixture(
             this.dispatchEvent(new Event('open'));
             const output = leadingZshMarker ? '\u001b[1m\u001b[7m%\u001b[27m\u001b[1m\u001b[0m\r\nprompt % ' : nano();
             this.dispatchEvent(new MessageEvent('message', { data: new TextEncoder().encode(output).buffer }));
-          });
+          }, openDelayMs);
         }
         send(value: unknown) {
           this.sent.push(value);
@@ -98,7 +105,7 @@ export async function installTerminalFixture(
       }
       Object.assign(window, { WebSocket: FakeSocket, __terminalFeedbackSockets: sockets });
     },
-    { leadingZshMarker, ticketLinks, nativeSocket },
+    { leadingZshMarker, ticketLinks, nativeSocket, openDelayMs },
   );
   let createdTerminal = false;
   const ticketRow = (id: string, slug: string, title: string) => ({

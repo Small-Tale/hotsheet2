@@ -505,10 +505,23 @@ function initializeTerminalViewport(
   };
   // A genuine user interaction (tap/click/focus/keystroke) on THIS device: an interacting claim
   // makes this the "last interacted" viewport, so it takes over PTY sizing (HS2-3ZBQDG).
-  let lastInteractionAt = 0;
+  // An interaction that lands before the socket opens, the first geometry pass settles, or the
+  // viewport is reported visible (opening a magnified Workspace Grid terminal focuses it at once) is
+  // deferred, not dropped or sent as an invisible claim the arbiter ignores: the settled pass or the
+  // visibility report sends it, so this viewport takes over PTY sizing at its fitted grid (HS2-6179FV).
+  let lastInteractionAt = 0,
+    pendingInteraction = false;
   const signalInteraction = () => {
-    if (scaledPreview || socket?.readyState !== WebSocket.OPEN) return;
-    if (!fixedDashboardGrid && !mobile80xM() && element.dataset.geometryReady !== 'true') return;
+    if (scaledPreview) return;
+    if (
+      socket?.readyState !== WebSocket.OPEN ||
+      !visible ||
+      (!fixedDashboardGrid && !mobile80xM() && element.dataset.geometryReady !== 'true')
+    ) {
+      pendingInteraction = true;
+      return;
+    }
+    pendingInteraction = false;
     const sizingFocus = claimsSizing();
     element.dataset.sizingFocus = String(sizingFocus);
     element.dataset.viewportVisible = String(visible);
@@ -651,7 +664,8 @@ function initializeTerminalViewport(
     if (!fixedGrid && !mobile80xM()) lastSettledGeometry = { cols: terminal.cols, rows: terminal.rows };
     element.dataset.gridSize = `${terminal.cols}x${terminal.rows}`;
     reconcileScale();
-    claim();
+    if (pendingInteraction) signalInteraction();
+    else claim();
   };
   const drawerResizeActive = () => insideDrawer() && document.body.dataset.resizingRegion === 'vertical';
   // One geometry pass per frame of layout change. The ResizeObserver reports every later size
@@ -807,7 +821,9 @@ function initializeTerminalViewport(
     const next = entries[0]?.isIntersecting ?? false;
     if (next !== visible) {
       visible = next;
-      claim();
+      // The arbiter only follows a visible viewport, so an interaction waits for visibility too.
+      if (visible && pendingInteraction) signalInteraction();
+      else claim();
     }
   });
   own(() => {
