@@ -228,6 +228,18 @@ site cannot practically hold 100,000 issues, so larger sizes are extrapolated fr
 page counts. Run `jira_live_pushdown_profile` (ignored, `HOTSHEET_JIRA_LIVE_*` plus
 `HOTSHEET_JIRA_LIVE_PROFILE_LABEL=hs2-bench-hot`).
 
+Live result on the `HS2T` site (2026-10-15, 2,003 issues, one run):
+
+| Read (live Jira Cloud)              | Rows | Search requests | Elapsed |
+| ----------------------------------- | ---: | --------------: | ------: |
+| Full project (nothing pushable)     | 2003 |              21 | 9.84 s  |
+| `tags=[hs2-bench-hot]` pushed down  |   20 |               1 | 0.46 s  |
+| Label plus open-only, pushed down   |   20 |               1 | 0.37 s  |
+
+A pushable 1% filter therefore costs one search request instead of one per
+100 issues, about 21x faster at this size; at 100,000 issues the full read
+extrapolates to about 1,000 requests and 8 minutes.
+
 Opt-in synthetic Jira transport profile, 50-row title-sorted page, one pending
 title edit, separate processes per sample. Times exclude real network latency;
 peak RSS includes the Rust test harness and adapter. The transport returned 100
