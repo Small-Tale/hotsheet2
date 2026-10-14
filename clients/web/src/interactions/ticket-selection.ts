@@ -158,8 +158,21 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
           })
         )
           revealInspectorOverlay();
-        void selectTickets(slug, intent, ordered).then((ticket) => {
-          if (rail && ticket && selectedTicketSlugs.value.length === 1) terminalRailScreen.value = 'ticket';
+        const loading = selectTickets(slug, intent, ordered),
+          single = selectedTicketSlugs.value.length === 1 ? selectedTicketSlugs.value[0] : undefined;
+        // The rail pushes the detail at once; an uncached ticket shows its row-backed partial while
+        // the full detail loads (HS2-1ABEYX). A failed read pops back to the list.
+        if (rail && single) terminalRailScreen.value = 'ticket';
+        void loading.then((ticket) => {
+          const stillSingle =
+            single && selectedTicketSlugs.value.length === 1 && selectedTicketSlugs.value[0] === single;
+          if (rail && !ticket && stillSingle) terminalRailScreen.value = 'root';
+          // The inert partial leaves NavStack focusing the view through a generated tabindex that the
+          // loaded re-render drops, sending focus to <body>; move it into the loaded detail (KF-ADYAY9).
+          if (rail && ticket && stillSingle)
+            requestAnimationFrame(() => {
+              restoreRailDetailFocus(row);
+            });
         });
       },
       isSelectAll: (keyboard) =>
@@ -457,4 +470,14 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
   return () => {
     lifetime.dispose();
   };
+}
+
+function restoreRailDetailFocus(origin: HTMLElement) {
+  if (document.activeElement && document.activeElement !== document.body) return;
+  const view = origin
+    .closest('[data-component="nav-stack"]')
+    ?.querySelector<HTMLElement>('[data-nav-key][data-nav-active="true"]');
+  view
+    ?.querySelector<HTMLElement>('[data-nav-focus], [role="tab"][aria-selected="true"], button:not([disabled])')
+    ?.focus({ preventScroll: true });
 }

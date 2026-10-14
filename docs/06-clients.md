@@ -2476,7 +2476,9 @@ switch from a content-sized view selector in the page
 heading without a redundant separator above it. Selecting one ticket pushes the shared inspector
 onto the rail's NavStack (HS2-FY06N4): the detail's single toolbar row holds Kerf's back control,
 the ticket number, the ticket actions, and the rail toggle, its title, notices, and section tabs
-stay pinned, and Back pops to the stable list with Kerf's push/pop animation. Terminal sessions
+stay pinned, and Back pops to the stable list with Kerf's push/pop animation. An uncached ticket pushes
+at once with the inspector's row-backed partial detail while its full detail loads, and the loaded
+detail replaces it in the same NavStack view without a second push (HS2-1ABEYX). Terminal sessions
 and the dashboard grid remain mounted throughout rail navigation, visibility changes, and project
 switching.
 Every dashboard tile presents a read-only terminal card, while only visible and near-visible

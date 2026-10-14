@@ -3507,6 +3507,7 @@ export async function startHotSheetWebClient() {
     searchOpen,
     searchQuery,
     searchTokens,
+    previewInspectorProps,
     selectedInspectorProps,
     selectedRows,
     selectedTicket,

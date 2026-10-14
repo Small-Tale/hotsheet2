@@ -10633,6 +10633,56 @@ test('renders an uncached ticket from its list row while the full detail loads (
   await page.screenshot({ path: 'target/visual-captures/hs2-15833w-loaded-390.png' });
 });
 
+test('pushes an uncached ticket row-backed partial detail onto the terminal rail while it loads (HS2-1ABEYX)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await installFakeTerminalSockets(page, true);
+  await mockProject(page, true, false, 800);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace Grid' }).click();
+  const rail = page.locator('#app-right-rail');
+  await rail.locator('[data-ticket-slug="HS2-START02"]').click();
+  // The detail pushes at once from the list row, before the 800 ms detail read lands.
+  const view = rail.locator('.kui-nav-stack__view[data-nav-key="ticket:HS2-START02"]'),
+    body = view.locator('[data-component="ticket-inspector-body"][data-ticket-slug="HS2-START02"]');
+  await expect(view).toHaveAttribute('data-nav-active', 'true', { timeout: 400 });
+  await expect(body).toHaveAttribute('data-content-loading', 'true');
+  await expect(rail.getByRole('heading', { name: 'Second started ticket' })).toBeVisible();
+  await expect(rail.getByRole('button', { name: 'Open Ticket Reader' })).toBeDisabled();
+  await view.evaluate((node) => ((node as HTMLElement & { hs2Marker?: boolean }).hs2Marker = true));
+  await expect(rail.locator('[data-nav-chrome-copy]')).toHaveCount(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-1abeyx-rail-partial-1280.png' });
+  // The loaded detail replaces the partial in the same NavStack view: no second push.
+  await expect(body).not.toHaveAttribute('data-content-loading', 'true');
+  await expect(rail.getByRole('button', { name: 'Open Ticket Reader' })).toBeEnabled();
+  await expect(rail.locator('.kui-nav-stack__view[data-nav-key^="ticket:"]')).toHaveCount(1);
+  expect(await view.evaluate((node) => (node as HTMLElement & { hs2Marker?: boolean }).hs2Marker)).toBe(true);
+  // Focus stays inside the pushed view across the partial-to-loaded swap.
+  await expect.poll(() => view.evaluate((node) => node.contains(document.activeElement))).toBe(true);
+  await page.screenshot({ path: 'target/visual-captures/hs2-1abeyx-rail-loaded-1280.png' });
+  // Back pops to the list; another uncached ticket pushes its own partial at once.
+  await rail.getByRole('button', { name: 'Back to ticket list' }).click();
+  await expect(rail.locator('.kui-nav-stack__view[data-nav-key="root"]')).toHaveAttribute('data-nav-active', 'true');
+  await rail.locator('[data-ticket-slug="HS2-START03"]').click();
+  const third = rail.locator('[data-component="ticket-inspector-body"][data-ticket-slug="HS2-START03"]');
+  await expect(third).toHaveAttribute('data-content-loading', 'true', { timeout: 400 });
+  await expect(rail.getByRole('heading', { name: 'Second started ticket' })).toHaveCount(0);
+  await expect(third).not.toHaveAttribute('data-content-loading', 'true');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Show ticket rail' }).click();
+  await rail.getByRole('button', { name: 'Back to ticket list' }).click();
+  await rail.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const narrow = rail.locator('[data-component="ticket-inspector-body"][data-ticket-slug="HS2-DEMO01"]');
+  await expect(narrow).toHaveAttribute('data-content-loading', 'true', { timeout: 400 });
+  await expect(rail.locator('[data-nav-chrome-copy]')).toHaveCount(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-1abeyx-rail-partial-390.png' });
+  await expect(narrow).not.toHaveAttribute('data-content-loading', 'true');
+  await page.screenshot({ path: 'target/visual-captures/hs2-1abeyx-rail-loaded-390.png' });
+});
+
 test('reopens a recently viewed ticket without the loading skeleton (HS2-4Q04Z9)', async ({ page }) => {
   await mockProject(page, true, false, 300);
   await page.goto('/');

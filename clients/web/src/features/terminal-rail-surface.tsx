@@ -50,6 +50,7 @@ export interface TerminalRailSurfaceDependencies {
   searchQuery: Signal<string>;
   searchTokens: Signal<InlineSearchToken[]>;
   selectedInspectorProps: ReturnType<typeof createInspectorSurface>['selectedInspectorProps'];
+  previewInspectorProps: ReturnType<typeof createInspectorSurface>['previewInspectorProps'];
   selectedRows: () => WireTicketRow[];
   selectedTicket: Signal<FullTicket | null>;
   selectedTicketSlugs: Signal<string[]>;
@@ -68,6 +69,23 @@ export interface TerminalRailSurfaceDependencies {
   ticketViewTitle: (view: TicketView) => string;
   viewMode: Signal<WorkspaceViewMode>;
   workspaceSearchModel: TokenSearchModel;
+}
+
+/**
+ * Chooses what the rail's pushed ticket detail renders: the loaded ticket, or (HS2-1ABEYX) the
+ * selected row's partial detail while an uncached ticket's full detail loads.
+ */
+export function railDetailSource(
+  screen: 'root' | 'ticket',
+  selectedSlugs: readonly string[],
+  loadedSlug: string | undefined,
+  selectedRows: readonly WireTicketRow[],
+): { kind: 'loaded' } | { kind: 'preview'; row: WireTicketRow } | undefined {
+  if (screen !== 'ticket' || selectedSlugs.length !== 1) return undefined;
+  const slug = selectedSlugs[0];
+  if (loadedSlug === slug) return { kind: 'loaded' };
+  const row = selectedRows.find((ticket) => ticket.slug === slug);
+  return row ? { kind: 'preview', row } : undefined;
 }
 
 /**
@@ -92,6 +110,7 @@ export function createTerminalRailSurface(dependencies: TerminalRailSurfaceDepen
     searchQuery,
     searchTokens,
     selectedInspectorProps,
+    previewInspectorProps,
     selectedRows,
     selectedTicket,
     selectedTicketSlugs,
@@ -157,13 +176,21 @@ export function createTerminalRailSurface(dependencies: TerminalRailSurfaceDepen
           return mode satisfies never;
       }
     })();
-    // The pushed ticket detail is the rail NavStack's second view once its ticket is loaded
-    // (HS2-FY06N4); its key follows the ticket so a different ticket is a new push.
-    const ready =
-        terminalRailScreen.value === 'ticket' &&
-        selectedTicketSlugs.value.length === 1 &&
-        selectedTicket.value?.slug === selectedTicketSlugs.value[0],
-      railInspectorProps = ready ? selectedInspectorProps() : undefined;
+    // The pushed ticket detail is the rail NavStack's second view (HS2-FY06N4); its key follows
+    // the ticket so a different ticket is a new push. An uncached ticket pushes its row-backed
+    // partial detail while the full detail loads, under the same key (HS2-1ABEYX).
+    const railSource = railDetailSource(
+        terminalRailScreen.value,
+        selectedTicketSlugs.value,
+        selectedTicket.value?.slug,
+        selection,
+      ),
+      railInspectorProps =
+        railSource?.kind === 'loaded'
+          ? selectedInspectorProps()
+          : railSource
+            ? previewInspectorProps(railSource.row)
+            : undefined;
     return {
       rail: {
         projects: projects.value.map((item) => ({ id: item.id, name: item.name })),
