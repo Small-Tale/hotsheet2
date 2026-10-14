@@ -18672,6 +18672,65 @@ test.describe('phone touch annotation editing (HS2-BCA512)', () => {
   });
 });
 
+test('coalesces annotation-note typing into one gallery update per pause and on blur (HS2-WNMFCY)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('tab', { name: /Attachments/ }).click();
+  await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
+  const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ });
+  await gallery.getByRole('button', { name: 'Annotate media' }).click();
+  await gallery.getByRole('button', { name: 'Add rectangle' }).click();
+  const surface = gallery.locator('[data-gallery-annotation-surface="true"]'),
+    box = (await surface.boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.15, box.y + box.height * 0.2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.55);
+  await page.mouse.up();
+  const note = gallery.getByRole('textbox', { name: 'Annotation note' });
+  await expect(note).toBeFocused();
+  // Count every DOM mutation outside the textarea itself: the canvas label, notes list, and preview.
+  await page.evaluate(() => {
+    const state = window as unknown as { __galleryMutations: number };
+    state.__galleryMutations = 0;
+    new MutationObserver((records) => {
+      state.__galleryMutations += records.filter(
+        (record) =>
+          !(record.target instanceof Element ? record.target : record.target.parentElement)?.closest(
+            '.attachment-gallery__editor textarea',
+          ),
+      ).length;
+    }).observe(document.querySelector('.attachment-gallery')!, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+    });
+  });
+  const mutations = () => page.evaluate(() => (window as unknown as { __galleryMutations: number }).__galleryMutations);
+  await note.pressSequentially('Check alignment', { delay: 10 });
+  // Rapid typing re-renders nothing outside the textarea while the 150 ms debounce is pending.
+  expect(await mutations()).toBe(0);
+  await expect(note).toHaveValue('Check alignment');
+  const notes = gallery.getByRole('complementary', { name: 'Annotation Notes' });
+  await expect(notes.getByRole('button', { name: /Annotation 1.*Check alignment/ })).toBeVisible();
+  const afterPause = await mutations();
+  expect(afterPause).toBeGreaterThan(0);
+  // Caret position survives the debounced commit; a mid-debounce blur publishes the final draft.
+  await note.press('End');
+  await note.pressSequentially(' now', { delay: 10 });
+  await expect(note).toHaveValue('Check alignment now');
+  await note.evaluate((element: HTMLTextAreaElement) => {
+    element.blur();
+  });
+  await expect(notes.getByRole('button', { name: /Annotation 1.*Check alignment now/ })).toBeVisible();
+  await gallery.screenshot({ path: 'target/visual-captures/hs2-wnmfcy-annotation-note-wide.png' });
+});
+
 test('draws, edits, resizes, and deletes durable image annotations in the full-screen gallery', async ({ page }) => {
   const writes: unknown[] = [];
   await mockProject(page);

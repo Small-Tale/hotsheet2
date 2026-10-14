@@ -265,6 +265,7 @@ attachments-and-gallery	delegate	document.body	'click'	'[data-action="select-gal
 attachments-and-gallery	delegate	document.body	'click'	'[data-action="select-gallery-annotation"]'
 attachments-and-gallery	delegate	document.body	'dblclick'	'[data-action="edit-gallery-annotation"]'
 attachments-and-gallery	delegate	document.body	'input'	'[data-action="edit-gallery-note"]'
+attachments-and-gallery	delegate	document.body	'focusout'	'[data-action="edit-gallery-note"]'
 attachments-and-gallery	delegate	document.body	'click'	'[data-action="toggle-gallery-intent"]'
 attachments-and-gallery	delegate	document.body	'change'	'[data-action="toggle-gallery-closed"]'
 attachments-and-gallery	delegate	document.body	'click'	'[data-action="delete-gallery-annotation"]'

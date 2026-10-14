@@ -1745,6 +1745,10 @@ preview/download, server directory browser) are separate design work.
   While the annotation note has focus, its text-editing keys, including arrows and Escape,
   stay with the field and do not navigate or close the gallery. After markup finishes,
   gallery arrow navigation resumes when focus moves to the media stage.
+  Note typing is coalesced (HS2-WNMFCY): the field shows every keystroke, but the canvas
+  label, notes list, preview, and undo history update once typing pauses for 150 ms, or
+  immediately when the field loses focus, so long notes do not re-render the gallery per key.
+  The note is part of the markup session and is still saved by Finish markup.
   Duplicate (Command/Ctrl+D) copies the note
   and intents. Tab cycles annotations; Delete removes the selection; arrows nudge it
   by one screen point or ten with Shift; Escape cancels a gesture, tool, then selection.

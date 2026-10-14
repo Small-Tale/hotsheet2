@@ -423,6 +423,78 @@ it('keeps LAN annotation IDs distinct across repeated drawing and empty/refill (
   expect(annotations.value[0]).toMatchObject({ x: 1000, y: 2000, width: 1, height: 1 });
 });
 
+it('coalesces annotation-note keystrokes into one model update per pause or blur (HS2-WNMFCY)', () => {
+  vi.useFakeTimers();
+  try {
+    const annotations = signal<MediaAnnotation[]>([
+        { id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' },
+        { id: 'b', x: 0, y: 0, width: 10, height: 10, text: 'kept' },
+      ]),
+      selected = signal<string | undefined>('a');
+    let writes = 0;
+    annotations.subscribe(() => {
+      writes += 1;
+    });
+    writes = 0;
+    wireAttachmentAndGalleryInteractions({
+      attachmentGalleryMarkup: signal(true),
+      attachmentGalleryAnnotations: annotations,
+      attachmentGallerySelectedAnnotation: selected,
+      attachmentGalleryCrop: signal(undefined),
+      attachmentGalleryCropMode: signal(false),
+    } as unknown as AttachmentAndGalleryInteractionsDependencies);
+    const selector = '[data-action="edit-gallery-note"]',
+      input = handler('input', selector),
+      blur = handler('focusout', selector),
+      field = { value: '' } as HTMLTextAreaElement,
+      type = (value: string) => {
+        field.value = value;
+        const event = new Event('input');
+        Object.defineProperty(event, 'target', { value: field });
+        input(event, field);
+      };
+    // Rapid typing: ten keystrokes inside the debounce window publish nothing yet.
+    for (const text of ['H', 'He', 'Hel', 'Hell', 'Hello', 'Hello ', 'Hello w', 'Hello wo', 'Hello wor', 'Hello world'])
+      type(text);
+    expect(writes).toBe(0);
+    vi.advanceTimersByTime(149);
+    expect(writes).toBe(0);
+    vi.advanceTimersByTime(1);
+    expect(writes).toBe(1);
+    expect(annotations.value.map((item) => item.text)).toEqual(['Hello world', 'kept']);
+    // Blur mid-debounce publishes the latest draft immediately, exactly once.
+    type('Hello world!');
+    blur(new Event('focusout'), field);
+    expect(writes).toBe(2);
+    expect(annotations.value[0].text).toBe('Hello world!');
+    vi.advanceTimersByTime(500);
+    expect(writes).toBe(2);
+    // A repeated blur with nothing pending, and an edit with no selection, change nothing.
+    blur(new Event('focusout'), field);
+    selected.value = undefined;
+    type('ignored');
+    vi.advanceTimersByTime(500);
+    expect(writes).toBe(2);
+    // Empty-then-refill: clearing and retyping after a commit settles on the final value.
+    selected.value = 'a';
+    type('');
+    vi.advanceTimersByTime(150);
+    type('Again');
+    vi.advanceTimersByTime(150);
+    expect(writes).toBe(4);
+    expect(annotations.value[0].text).toBe('Again');
+    // Interleaved: a pending draft for one annotation lands before typing targets another.
+    type('Again!');
+    selected.value = 'b';
+    type('kept?');
+    expect(annotations.value.map((item) => item.text)).toEqual(['Again!', 'kept']);
+    vi.advanceTimersByTime(150);
+    expect(annotations.value.map((item) => item.text)).toEqual(['Again!', 'kept?']);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 describe('interaction group teardown (HS2-NZT3MT)', () => {
   it('removes every delegated and native listener the wired groups registered, once, newest group first', () => {
     const native = Object.assign(new EventTarget(), { body: {} }),

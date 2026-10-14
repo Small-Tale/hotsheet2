@@ -29,6 +29,7 @@ import { wireAttachmentGalleryControls } from '../components/attachment-gallery-
 import { wireTicketAttachmentActions } from '../components/ticket-attachments-interactions';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { copyText } from '../copy-text';
+import { AUTOSAVE_DELAY_MS } from '../debounced-autosave';
 import {
   clampAnnotationCoordinate,
   drawGalleryAnnotation,
@@ -531,6 +532,27 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     redoAnnotations.length = 0;
     editGroup = group;
   }
+  /** Coalesces annotation-note keystrokes into one model update per typing pause or on blur. */
+  let pendingNote: { id: string; text: string } | undefined,
+    pendingNoteTimer: ReturnType<typeof setTimeout> | undefined;
+  function flushGalleryNote() {
+    if (pendingNoteTimer) clearTimeout(pendingNoteTimer);
+    pendingNoteTimer = undefined;
+    const note = pendingNote;
+    pendingNote = undefined;
+    if (!note) return;
+    const before = snapshotAnnotations();
+    attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) =>
+      item.id === note.id ? { ...item, text: note.text } : item,
+    );
+    recordAnnotationChange(before, `note:${note.id}`);
+  }
+  function scheduleGalleryNote(id: string, text: string) {
+    if (pendingNote && pendingNote.id !== id) flushGalleryNote();
+    pendingNote = { id, text };
+    if (pendingNoteTimer) clearTimeout(pendingNoteTimer);
+    pendingNoteTimer = setTimeout(flushGalleryNote, AUTOSAVE_DELAY_MS);
+  }
   function recordCropChange(before: FullTicket['attachments'][number]['crop']) {
     if (JSON.stringify(before) === JSON.stringify(attachmentGalleryCrop.value)) return;
     undoAnnotations.push({ ...snapshotMarkup(), crop: before, cropMode: true });
@@ -676,13 +698,20 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       const id = attachmentGallerySelectedAnnotation.value,
         field = event.target as HTMLTextAreaElement;
       if (!id) return;
-      const before = snapshotAnnotations();
-      attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) =>
-        item.id === id ? { ...item, text: field.value } : item,
-      );
-      recordAnnotationChange(before, `note:${id}`);
+      // The textarea keeps the live draft; the annotation model (canvas label, notes list, overlay
+      // preview, undo history) catches up once typing pauses rather than on every keystroke (HS2-WNMFCY).
+      scheduleGalleryNote(id, field.value);
     }),
   );
+  lifetime.add(
+    delegate(document.body, 'focusout', ATTACHMENTS_AND_GALLERY_ACTIONS.editGalleryNote.selector, () => {
+      flushGalleryNote();
+    }),
+  );
+  lifetime.add(() => {
+    if (pendingNoteTimer) clearTimeout(pendingNoteTimer);
+    pendingNote = undefined;
+  });
   lifetime.add(
     delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryIntent.selector, (_event, target) => {
       const id = attachmentGallerySelectedAnnotation.value,
