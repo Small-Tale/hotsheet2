@@ -24284,7 +24284,12 @@ test('preserves attachments and atomically undoes and redoes cut-paste', async (
   await page.keyboard.press(`${shortcut}+x`);
   await page.locator('.app-shell__work-area').focus();
   await page.keyboard.press(`${shortcut}+v`);
-  await expect(page.getByText('Use real project tickets (Copy)')).toBeVisible();
+  // Paste selects the pasted ticket, so the title also appears in the inspector heading;
+  // assert on the list row only.
+  const pasted = page
+    .locator('[data-component="ticket-list-row"]')
+    .filter({ hasText: 'Use real project tickets (Copy)' });
+  await expect(pasted).toBeVisible();
   await expect.poll(() => copyRequests.length).toBe(1);
   expect(copyRequests[0]).toEqual({
     source: { connection_id: 'git-local', native_id: '01', attachment_id: 'A1' },
@@ -24293,10 +24298,10 @@ test('preserves attachments and atomically undoes and redoes cut-paste', async (
   await expect(source).toHaveCount(0);
   await page.keyboard.press(`${shortcut}+z`);
   await expect(source).toBeVisible();
-  await expect(page.getByText('Use real project tickets (Copy)')).toHaveCount(0);
+  await expect(pasted).toHaveCount(0);
   await page.keyboard.press(`${shortcut}+Shift+z`);
   await expect(source).toHaveCount(0);
-  await expect(page.getByText('Use real project tickets (Copy)')).toBeVisible();
+  await expect(pasted).toBeVisible();
 });
 
 test('shows and resolves cross-project permission notifications with badges and history', async ({ page }) => {
