@@ -64,6 +64,9 @@ jobs:
           # the Jira reopen test reads an operator-prepared issue.
           HOTSHEET_GITHUB_LIVE_REPO: ${{ secrets.HOTSHEET_GITHUB_LIVE_REPO }}
           HOTSHEET_GITHUB_LIVE_TOKEN: ${{ secrets.HOTSHEET_GITHUB_LIVE_TOKEN }}
+          # Attachment upload + crop-manifest CAS (HS2-VQSCA1, HS2-GWY4AK); the 1/10/100
+          # manifest measurement (HS2-QB6XJ4) stays manual behind HOTSHEET_GITHUB_LIVE_MANIFEST_SCALE.
+          HOTSHEET_GITHUB_LIVE_ASSETS_REPO: ${{ secrets.HOTSHEET_GITHUB_LIVE_ASSETS_REPO }}
           HOTSHEET_GITLAB_LIVE_PROJECT: ${{ secrets.HOTSHEET_GITLAB_LIVE_PROJECT }}
           HOTSHEET_GITLAB_LIVE_TOKEN: ${{ secrets.HOTSHEET_GITLAB_LIVE_TOKEN }}
           HOTSHEET_GITLAB_LIVE_WRITE: ${{ secrets.HOTSHEET_GITLAB_LIVE_WRITE }}

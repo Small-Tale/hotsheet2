@@ -518,7 +518,13 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   floor (`report --fail-under-lines`). A scheduled, creds-gated **`Live tier`**
   workflow (`live.yml`, nightly + manual dispatch) runs the `#[ignore]` live
   codex/claude turns (`HOTSHEET_CODEX_LIVE`/`HOTSHEET_CLAUDE_LIVE`) only on a runner
-  flagged `HOTSHEET_LIVE_RUNNER`, keeping the default tier fast. The normal `check` job
+  flagged `HOTSHEET_LIVE_RUNNER`, keeping the default tier fast. GitHub attachment
+  live tests (`crates/hotsheet-extsync/src/github_live_tests.rs`: upload round trip and
+  crop-manifest CAS) run there when `HOTSHEET_GITHUB_LIVE_REPO` and
+  `HOTSHEET_GITHUB_LIVE_ASSETS_REPO` name approved non-production repositories, and skip
+  otherwise; the 1/10/100 batched-manifest measurement also needs
+  `HOTSHEET_GITHUB_LIVE_MANIFEST_SCALE=1`. Locally the token comes from the keychain key
+  `github-live`. The normal `check` job
   runs a bounded Chromium Playwright smoke group covering deep links, gallery save retry,
   image/video freehand strokes, feedback replies, popup anchoring, concurrent autosave,
   bulk provider projection, and ticket context menus (HS2-28MBS9, HS2-ZHN7XS). The full browser suite
