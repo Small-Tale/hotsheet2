@@ -11,7 +11,11 @@ import {
   INSPECTOR_ATTACHMENT_LABEL_SCOPE,
 } from '../attachment-label-editing';
 import { browserRandomId } from '../browser-id';
-import { AttachmentContextMenu } from '../components/attachment-context-menu';
+import { AttachmentContextMenu, type AttachmentContextMenuKind } from '../components/attachment-context-menu';
+import {
+  type AttachmentContextMenuOrigin,
+  wireAttachmentContextMenuOpeners,
+} from '../components/attachment-context-menu-interactions';
 import { AttachmentGallery, attachmentGalleryZoomModel, GalleryVolumePanel } from '../components/attachment-gallery';
 import {
   type AttachmentGalleryControlBindings,
@@ -262,7 +266,10 @@ export function setGalleryDemoAnnotationEndpoint(endpoint: 'start' | 'end', mill
       : { ...annotation, end_ms: Math.max(annotation.start_ms, next) };
   });
 }
-export const attachmentDemoMenu = signal<{ x: number; y: number; remote?: boolean } | undefined>(undefined);
+export const attachmentDemoMenu = signal<
+  | { x: number; y: number; remote?: boolean; kind?: AttachmentContextMenuKind; origin?: AttachmentContextMenuOrigin }
+  | undefined
+>(undefined);
 /** The demo's open batch label editor, owned by state like production's (HS2-SG0AZY). */
 export const attachmentDemoLabelEditing = signal<AttachmentLabelEditing | undefined>(undefined);
 const attachmentDemoItems = signal<TicketAttachmentItem[]>([
@@ -281,8 +288,14 @@ const attachmentDemoItems = signal<TicketAttachmentItem[]>([
     thumbnailUrl: '/ux-gallery-preview.svg?variant=video',
   },
 ]);
-export function showAttachmentDemoMenu(x: number, y: number, remote = false) {
-  attachmentDemoMenu.value = { x, y, remote };
+export function showAttachmentDemoMenu(
+  x: number,
+  y: number,
+  remote = false,
+  kind: AttachmentContextMenuKind = 'item',
+  origin: AttachmentContextMenuOrigin = 'row',
+) {
+  attachmentDemoMenu.value = { x, y, remote, kind, origin };
 }
 export function closeAttachmentDemoMenu() {
   attachmentDemoMenu.value = undefined;
@@ -354,7 +367,9 @@ export function TicketAttachmentsDemo() {
             INSPECTOR_ATTACHMENT_LABEL_SCOPE,
           )}
         />
-        {menu && <AttachmentContextMenu x={menu.x} y={menu.y} hostActionsAvailable={!menu.remote} />}
+        {menu && menu.origin !== 'gallery' && (
+          <AttachmentContextMenu x={menu.x} y={menu.y} kind={menu.kind} hostActionsAvailable={!menu.remote} />
+        )}
       </CatalogExample>
       <CatalogExample
         label="Remote Device"
@@ -391,7 +406,8 @@ export function TicketAttachmentsDemo() {
   );
 }
 export function AttachmentGalleryDemo() {
-  const video = galleryDemoUrl.value === demoImages[2].url,
+  const galleryMenu = attachmentDemoMenu.value,
+    video = galleryDemoUrl.value === demoImages[2].url,
     animatedSvg = galleryDemoUrl.value === demoImages[1].url,
     timed = video || animatedSvg,
     showcase = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('annotation-shapes'),
@@ -429,6 +445,9 @@ export function AttachmentGalleryDemo() {
         <button type="button" data-action="open-gallery-demo">
           Open Gallery
         </button>
+      )}
+      {galleryMenu?.origin === 'gallery' && (
+        <AttachmentContextMenu x={galleryMenu.x} y={galleryMenu.y} kind={galleryMenu.kind} />
       )}
     </CatalogExample>
   );
@@ -555,7 +574,7 @@ function wireTicketMetadataDemo(root: HTMLElement): () => void {
         surface: 'attachment',
         isOpen: () => Boolean(attachmentDemoMenu.value),
         close: closeAttachmentDemoMenu,
-        ignore: '[data-action="open-attachment-menu"]',
+        ignore: '[data-action="open-attachment-menu"], [data-action="open-gallery-attachment-menu"]',
         hide: true,
       },
     ]),
@@ -650,28 +669,13 @@ function wireTicketMetadataDemo(root: HTMLElement): () => void {
       galleryDemoSelectedAnnotation.value = undefined;
     }),
   );
+  // Row, gallery, and reference menus open and position through production's wiring (HS2-1RQA1E).
   demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.openAttachmentMenu.selector, (event, target) => {
-      event.stopPropagation();
-      const rect = target.getBoundingClientRect();
-      showAttachmentDemoMenu(rect.right, rect.bottom, Boolean(target.closest('[data-attachment-remote-demo]')));
-    }),
-  );
-  demoListeners.add(
-    delegate(
-      root,
-      'contextmenu',
-      '[data-component="ticket-attachment-item"][data-attachment-menu-kind="item"]',
-      (event, target) => {
-        event.preventDefault();
-        const pointer = event as MouseEvent;
-        showAttachmentDemoMenu(
-          pointer.clientX,
-          pointer.clientY,
-          Boolean(target.closest('[data-attachment-remote-demo]')),
-        );
+    wireAttachmentContextMenuOpeners(root, {
+      open: ({ x, y, kind, origin, target }) => {
+        showAttachmentDemoMenu(x, y, Boolean(target.closest('[data-attachment-remote-demo]')), kind, origin);
       },
-    ),
+    }),
   );
   demoListeners.add(
     listen(window, 'pagehide', () => {

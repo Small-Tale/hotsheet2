@@ -249,12 +249,10 @@ attachments-and-gallery	document.addEventListener	'visibilitychange'
 attachments-and-gallery	wireTicketAttachmentActions	document.body
 attachments-and-gallery	delegate	document.body	'dblclick'	'[data-action="open-attachment-row"]'
 attachments-and-gallery	delegate	document.body	'click'	'[data-action="open-attachment-gallery"]'
-attachments-and-gallery	delegate	document.body	'click'	'[data-action="open-gallery-attachment-menu"]'
-attachments-and-gallery	delegate	document.body	'click'	'[data-action="open-attachment-menu"]'
+attachments-and-gallery	wireAttachmentContextMenuOpeners	document.body
 attachments-and-gallery	delegateCapture	document.body	'load'	'[data-gallery-image="true"]'
 attachments-and-gallery	delegateCapture	document.body	'loadedmetadata'	'[data-gallery-media="true"]'
 attachments-and-gallery	delegate	document.body	'click'	'[data-action="open-referenced-attachment"]'
-attachments-and-gallery	delegate	document.body	'contextmenu'	'[data-attachment-url]'
 attachments-and-gallery	delegate	document.body	'click'	'[data-action="attachment-menu-action"]'
 attachments-and-gallery	delegate	document.body	'click'	'[data-action="retry-gallery-save"]'
 attachments-and-gallery	delegate	document.body	'click'	'[data-action="discard-gallery-save"]'

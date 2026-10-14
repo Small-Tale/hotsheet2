@@ -12,7 +12,10 @@ import {
 } from '../api';
 import { type AttachmentLabelEditing, createAttachmentLabelEditor } from '../attachment-label-editing';
 import { browserRandomId } from '../browser-id';
-import { ATTACHMENT_CONTEXT_MENU_HEIGHT, type AttachmentContextMenuKind } from '../components/attachment-context-menu';
+import {
+  type AttachmentContextMenuRequest,
+  wireAttachmentContextMenuOpeners,
+} from '../components/attachment-context-menu-interactions';
 import {
   attachmentGalleryAnnotationVisible,
   attachmentGalleryDefaultRange,
@@ -32,7 +35,6 @@ import {
   wireGalleryVolumeSurface,
 } from '../components/attachment-gallery-interactions';
 import { wireTicketAttachmentActions } from '../components/ticket-attachments-interactions';
-import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { copyText } from '../copy-text';
 import { AUTOSAVE_DELAY_MS } from '../debounced-autosave';
 import {
@@ -324,56 +326,11 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       },
     ),
   );
+  // Row, gallery, and reference menus open and position through the wiring the UX demo shares (HS2-1RQA1E).
   lifetime.add(
-    delegate(
-      document.body,
-      'click',
-      ATTACHMENTS_AND_GALLERY_ACTIONS.openGalleryAttachmentMenu.selector,
-      (_event, target) => {
-        const active = attachmentGalleryUrl.value,
-          images = galleryImages(),
-          index = active ? attachmentGalleryImageIndex(images, active) : -1,
-          image = index >= 0 ? images[index] : undefined;
-        if (!image?.ticket) return;
-        const rect = target.getBoundingClientRect(),
-          position = viewportSafeContextMenuPosition(rect.right, rect.bottom, window.innerWidth, window.innerHeight, {
-            width: 224,
-            height: ATTACHMENT_CONTEXT_MENU_HEIGHT,
-          });
-        attachmentMenu.value = {
-          ...position,
-          ticket: image.ticket,
-          name: image.name,
-          url: image.url,
-          id: image.attachmentId,
-          kind: 'host',
-        };
-      },
-    ),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentMenu.selector, (event, target) => {
-      event.stopPropagation();
-      const item = target.closest<HTMLElement>('[data-component="ticket-attachment-item"]'),
-        ticket = selectedTicket.value,
-        name = item?.dataset.attachmentName,
-        url = item?.dataset.attachmentUrl,
-        id = item?.dataset.attachmentActionId;
-      if (!ticket || !name || !url || !id) return;
-      const rect = target.getBoundingClientRect(),
-        position = viewportSafeContextMenuPosition(rect.right, rect.bottom, window.innerWidth, window.innerHeight, {
-          width: 224,
-          height: ATTACHMENT_CONTEXT_MENU_HEIGHT,
-        });
-      attachmentMenu.value = {
-        ...position,
-        ticket: ticket.slug,
-        name,
-        url,
-        id,
-        kind: 'item',
-        reader: target.closest<HTMLElement>('[data-component="ticket-reader"]')?.dataset.readerFrameId,
-      };
+    wireAttachmentContextMenuOpeners(document.body, {
+      canOpenFromPointer: () => dependencies.canEditAttachments?.() ?? true,
+      open: openAttachmentContextMenu,
     }),
   );
   lifetime.add(
@@ -412,33 +369,41 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       },
     ),
   );
-  lifetime.add(
-    delegate(document.body, 'contextmenu', '[data-attachment-url]', (event, target) => {
-      if (!(dependencies.canEditAttachments?.() ?? true)) return;
-      event.preventDefault();
-      const ticket = data(target).attachmentTicket ?? selectedTicket.value?.slug,
-        name = data(target).attachmentName,
-        url = data(target).attachmentUrl,
-        pointer = event as MouseEvent,
-        kind: AttachmentContextMenuKind = data(target).attachmentMenuKind === 'item' ? 'item' : 'host',
-        id = data(target).attachmentActionId ?? data(target).galleryAttachmentId;
-      if (ticket && name && url)
+  function openAttachmentContextMenu({ x, y, kind, origin, target }: AttachmentContextMenuRequest) {
+    const reader = target.closest<HTMLElement>('[data-component="ticket-reader"]')?.dataset.readerFrameId;
+    if (origin === 'gallery' && target.matches(ATTACHMENTS_AND_GALLERY_ACTIONS.openGalleryAttachmentMenu.selector)) {
+      const active = attachmentGalleryUrl.value,
+        images = galleryImages(),
+        index = active ? attachmentGalleryImageIndex(images, active) : -1,
+        image = index >= 0 ? images[index] : undefined;
+      if (image?.ticket)
         attachmentMenu.value = {
-          ...viewportSafeContextMenuPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight, {
-            width: 224,
-            height: ATTACHMENT_CONTEXT_MENU_HEIGHT,
-          }),
-          ticket,
-          name,
-          url,
-          id,
+          x,
+          y,
+          ticket: image.ticket,
+          name: image.name,
+          url: image.url,
+          id: image.attachmentId,
           kind,
-          reader:
-            (target as HTMLElement).closest('[data-component="ticket-reader"]')?.getAttribute('data-reader-frame-id') ??
-            undefined,
         };
-    }),
-  );
+      return;
+    }
+    if (target.matches(ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentMenu.selector)) {
+      const item = target.closest<HTMLElement>('[data-component="ticket-attachment-item"]'),
+        ticket = selectedTicket.value,
+        name = item?.dataset.attachmentName,
+        url = item?.dataset.attachmentUrl,
+        id = item?.dataset.attachmentActionId;
+      if (ticket && name && url && id)
+        attachmentMenu.value = { x, y, ticket: ticket.slug, name, url, id, kind, reader };
+      return;
+    }
+    const ticket = data(target).attachmentTicket ?? selectedTicket.value?.slug,
+      name = data(target).attachmentName,
+      url = data(target).attachmentUrl,
+      id = data(target).attachmentActionId ?? data(target).galleryAttachmentId;
+    if (ticket && name && url) attachmentMenu.value = { x, y, ticket, name, url, id, kind, reader };
+  }
   async function attachmentMenuHostAction(menu: AttachmentMenu, action: 'open' | 'reveal' | 'path') {
     const current = project(),
       ticket = selectedTicket.value;

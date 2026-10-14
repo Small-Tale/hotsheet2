@@ -9600,3 +9600,48 @@ test('scrolls the AIConversation dialog transcript beneath its floating composer
       .toEqual({ beneath: true, clear: true });
   }
 });
+
+test('opens row, thumbnail, and gallery attachment menus through production opener wiring (HS2-1RQA1E)', async ({
+  page,
+}) => {
+  const menu = page.locator('[data-context-menu="attachment"]'),
+    insideViewport = async () => {
+      const box = (await menu.getByRole('menu').first().boundingBox())!,
+        viewport = page.viewportSize()!;
+      return box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.width && box.y + box.height <= viewport.height;
+    };
+  for (const viewport of [
+    { width: 1280, height: 900, name: 'wide' },
+    { width: 390, height: 844, name: 'phone' },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto('/ux-demo?component=ticket-attachments');
+    const editable = page.getByRole('region', { name: 'Editable', exact: true }),
+      item = editable.locator('[data-attachment-id="demo-video"]');
+    await item.getByRole('button', { name: 'More Actions for choppy.mov' }).click();
+    await expect(menu).toHaveAttribute('data-kind', 'item');
+    expect(await insideViewport()).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await item.click({ button: 'right' });
+    await expect(menu).toHaveAttribute('data-kind', 'item');
+    await page.keyboard.press('Escape');
+    // A media thumbnail is a reference to the attachment: the host menu, as in production.
+    const thumbnail = editable.locator('[data-action="open-attachment-gallery"][data-attachment-url]').first();
+    await thumbnail.click({ button: 'right' });
+    await expect(menu).toHaveAttribute('data-kind', 'host');
+    expect(await menu.getByRole('menuitem').allTextContents()).toContain('Copy path');
+    expect(await insideViewport()).toBe(true);
+    await page.screenshot({ path: `target/visual-captures/hs2-1rqa1e-demo-thumbnail-menu-${viewport.name}.png` });
+    await page.keyboard.press('Escape');
+    await page.goto('/ux-demo?component=attachment-gallery');
+    const gallery = page.locator('[data-component="attachment-gallery"]');
+    await gallery.getByRole('button', { name: /More (image|video) actions/ }).click();
+    await expect(menu).toHaveAttribute('data-kind', 'host');
+    await expect(menu.getByRole('menu').first()).toBeVisible();
+    expect(await insideViewport()).toBe(true);
+    await page.screenshot({ path: `target/visual-captures/hs2-1rqa1e-demo-gallery-menu-${viewport.name}.png` });
+    await menu.getByRole('menuitem', { name: 'Download' }).click();
+    await expect(menu).toHaveCount(0);
+  }
+});

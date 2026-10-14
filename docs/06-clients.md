@@ -1847,6 +1847,11 @@ preview/download, server directory browser) are separate design work.
   Double-clicking the attachment row remains a direct Open shortcut, while
   activating the ellipsis never opens the file. Upload/removal progress and failures remain visible in the
   attachment panel.
+  The row ellipsis, the gallery's More actions button, and right-clicks on rows, gallery
+  media, thumbnails, and Markdown attachment references all open and position the menu
+  through one shared opener (`wireAttachmentContextMenuOpeners`): rows offer Rename, other
+  origins offer Copy path, and every position is clamped to the viewport. The ticket-metadata
+  UX demo uses the same opener with fixture effects (HS2-1RQA1E).
   A provider that can add attachments but not edit them (`attachments: true`,
   `attachment_edit: false`, such as GitHub with an assets repository) keeps **Add** and the
   drop zone, while existing attachments are read-only: each name is a link that opens the file
