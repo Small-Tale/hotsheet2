@@ -27,6 +27,15 @@ export function ProjectRestoreState() {
   );
 }
 
+/** The workspace of a selected still-opening project tab, reusing the startup restore presentation (HS2-XGSSK1). */
+export function ProjectOpeningState({ name }: { name: string }) {
+  return (
+    <List fill hAlign="center" vAlign="middle" rootAttributes={{ 'data-project-opening-state': 'true' }}>
+      <EmptyState title={`Opening ${name}…`} detail="Restoring tickets and terminals…" busy />
+    </List>
+  );
+}
+
 export interface AppMessageStateProps {
   title: string;
   message: string;

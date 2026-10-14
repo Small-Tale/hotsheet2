@@ -114,7 +114,10 @@ describe('remembered project startup', () => {
         ['gamma', 2],
       ]);
     });
-    expect(settled.mock.calls).toEqual([['beta'], ['gamma']]);
+    expect(settled.mock.calls).toEqual([
+      ['beta', project('beta')],
+      ['gamma', project('gamma')],
+    ]);
     pending.get('alpha')!.resolve(success('alpha'));
     await restored;
     expect(state.wire.mock.calls.map(([root, , index]) => [root, index])).toEqual([
@@ -124,7 +127,12 @@ describe('remembered project startup', () => {
     ]);
     expect(state.activate).toHaveBeenCalledTimes(1);
     expect(activeReady).toHaveBeenCalledTimes(1);
-    expect(settled.mock.calls).toEqual([['beta'], ['gamma'], ['alpha']]);
+    // Each successful settle carries its registered project so a selected opening tab can be revealed (HS2-XGSSK1).
+    expect(settled.mock.calls).toEqual([
+      ['beta', project('beta')],
+      ['gamma', project('gamma')],
+      ['alpha', project('alpha')],
+    ]);
     expect(state.waitForRetry).not.toHaveBeenCalled();
   });
   it('settles a root that fails its retry exactly once, after the retry, and never settles a recovering root twice', async () => {
@@ -143,7 +151,7 @@ describe('remembered project startup', () => {
         return success(root);
       },
     });
-    expect(settled.mock.calls).toEqual([['beta'], ['alpha'], ['gamma']]);
+    expect(settled.mock.calls).toEqual([['beta', project('beta')], ['alpha'], ['gamma', project('gamma')]]);
     expect(state.retainFailure.mock.calls.map(([root]) => root)).toEqual(['alpha', 'gamma', 'alpha']);
     expect(state.waitForRetry).toHaveBeenCalledTimes(1);
   });

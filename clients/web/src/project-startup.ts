@@ -38,7 +38,8 @@ interface RestoreProjectsOptions {
   /** Called once the active project (or its failure) is presented; the rest may still be restoring. */
   activeReady?: () => void;
   /** Called once per root when it is registered or has failed its bounded retry (HS2-2BEJXD). */
-  settled?: (root: string) => void;
+  /** A root finished restoring; `project` is its registered project when the open succeeded. */
+  settled?: (root: string, project?: Project) => void;
   waitForRetry?: () => Promise<void>;
 }
 
@@ -73,7 +74,7 @@ export async function restoreRememberedProjects(options: RestoreProjectsOptions)
     await options.wire(root, result, roots.indexOf(root));
     registered.set(result.project.id, result.project);
     openedByRoot.set(root, registered.get(result.project.id)!);
-    options.settled?.(root);
+    options.settled?.(root, registered.get(result.project.id));
   };
 
   let activated: Project | undefined;

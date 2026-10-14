@@ -180,8 +180,10 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     restoreIndex?: number,
   ) {
     const { project: value, providers: descriptors } = opened;
+    const recoveredFailure = projectRestoreFailures.value.some((item) => item.root === root);
     projectRestoreFailures.value = projectRestoreFailures.value.filter((item) => item.root !== root);
-    if (selectedProjectRestoreRoot.value === root) selectedProjectRestoreRoot.value = '';
+    // A selected still-opening tab keeps its selection so startup can reveal it once settled (HS2-XGSSK1).
+    if (recoveredFailure && selectedProjectRestoreRoot.value === root) selectedProjectRestoreRoot.value = '';
     if (restoreIndex === undefined) projects.value = replaceTabInPlace(projects.value, (item) => item.id, value);
     else {
       // Startup registers the active project first; keep every tab in its remembered position.

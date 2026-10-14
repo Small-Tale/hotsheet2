@@ -903,12 +903,14 @@ preview/download, server directory browser) are separate design work.
   remembered roots are deduplicated and their project-open/metadata requests run concurrently.
   When the remembered active root opens on its first attempt, it is registered and activated
   immediately and the shell is revealed without waiting for the other projects. Each other
-  remembered project shows a dormant placeholder tab at its remembered position until its open
-  succeeds (it then registers at once, replacing the placeholder in place, without waiting for
-  slower projects) or fails its bounded retry (it then becomes the usual error tab). Placeholders
-  use Kerf's `AppTab` skeleton; the spinner's accessible label names the project, pending a Kerf
-  variant that keeps the visible name (KF-8913PN, HS2-XGSSK1). The mobile project select lists a
-  project once it registers, because Kerf's Select has no disabled choices. Still-opening roots
+  remembered project shows Kerf's named `pending` `AppTab` at its remembered position until its open
+  succeeds (it then registers at once, replacing the pending tab in place, without waiting for
+  slower projects) or fails its bounded retry (it then becomes the usual error tab). The pending tab
+  keeps the project name visible (dimmed) as its accessible name, is busy, has close and drag off,
+  and carries a decorative spinner (KF-8913PN, HS2-XGSSK1). It stays selectable: choosing it, from
+  the tab strip or the mobile project select (labeled "— Opening…"), shows an "Opening <name>…"
+  panel reusing the startup restore presentation, and the project is revealed as soon as it
+  registers; a failed open shows its error panel instead. Still-opening roots
   stay in the remembered set if it is saved mid-restore (HS2-X74D4B, HS2-2BEJXD). Otherwise failed opens
   receive one bounded parallel retry and successful projects are registered serially in remembered
   order before one project is activated. A project opened from Add project activates when its

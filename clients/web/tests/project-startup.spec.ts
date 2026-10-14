@@ -358,11 +358,18 @@ test('shows the active project while other remembered projects are still opening
   await expect
     .poll(() => tabHosts.evaluateAll((items) => items.map((item) => item.getAttribute('data-project-pending'))))
     .toEqual(['true', 'false', 'true']);
-  await expect(page.getByRole('img', { name: 'Opening alpha' })).toBeVisible();
-  await expect(page.getByRole('img', { name: 'Opening gamma' })).toBeVisible();
-  await expect(tabHosts.nth(0).getByRole('tab')).toBeDisabled();
+  // Kerf's named pending AppTab keeps the name as the visible and accessible name, busy, with close
+  // and drag off (HS2-XGSSK1).
+  const alphaPending = tabHosts.nth(0);
+  await expect(alphaPending.getByRole('tab', { name: 'alpha', exact: true })).toBeEnabled();
+  await expect(alphaPending.getByRole('tab', { name: 'gamma', exact: true })).toHaveCount(0);
+  await expect(tabHosts.nth(2).getByRole('tab', { name: 'gamma', exact: true })).toBeVisible();
+  await expect(alphaPending).toHaveAttribute('aria-busy', 'true');
+  await expect(alphaPending).toHaveAttribute('draggable', 'false');
+  await expect(alphaPending.getByRole('button', { name: 'Close alpha' })).toHaveCount(0);
   await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'true');
   await page.screenshot({ path: testInfo.outputPath('active-first-while-others-restore.png') });
+  await page.locator('.project-tab-bar').screenshot({ path: 'target/visual-captures/hs2-xgssk1-pending-tabs.png' });
   // Each placeholder is replaced in place as its project registers, without moving the selection.
   fixture.pending.get('gamma')!.release();
   await expect
@@ -370,13 +377,36 @@ test('shows the active project while other remembered projects are still opening
     .toEqual(['true', 'false', 'false']);
   await expect(tabs.nth(2)).toHaveText('gamma');
   await page.locator('.project-tab-bar').screenshot({ path: testInfo.outputPath('pending-tab-replaced-in-place.png') });
+  expect(heavyCalls(fixture.calls).every((path) => path.includes('/beta/'))).toBe(true);
+  // Selecting the still-opening alpha shows its opening panel, then the project once it is ready (HS2-XGSSK1).
+  await page.getByRole('tab', { name: 'alpha', exact: true }).click();
+  const opening = page.locator('[data-project-opening-state="true"]');
+  await expect(opening).toContainText('Opening alpha…');
+  await expect(page.getByRole('tab', { name: 'alpha', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'false');
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xgssk1-opening-panel-1280.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.project-tab-bar--mobile')).toBeVisible();
+  await expect(opening).toBeVisible();
+  await expect(page.locator('wa-select[name="mobile-project"]')).toHaveJSProperty(
+    'value',
+    `pending:${rootFor('alpha')}`,
+  );
+  await page.screenshot({ path: 'target/visual-captures/hs2-xgssk1-opening-panel-390.png' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // Returning to beta and back keeps the opening panel tied to the pending tab.
+  await page.getByRole('tab', { name: /^beta/ }).click();
+  await expect(opening).toHaveCount(0);
+  await expect(page.getByText('beta restored work', { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'alpha', exact: true }).click();
+  await expect(opening).toBeVisible();
   fixture.pending.get('alpha')!.release();
   await expect(tabs).toHaveText(['alpha', 'beta1', 'gamma']);
   await expect(page.locator('.project-tab-bar [data-project-pending="true"]')).toHaveCount(0);
-  await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'true');
-  expect(heavyCalls(fixture.calls).every((path) => path.includes('/beta/'))).toBe(true);
-  await page.getByRole('tab', { name: /^alpha/ }).click();
+  await expect(opening).toHaveCount(0);
   await expect(page.getByText('alpha restored work', { exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /^alpha/ })).toHaveAttribute('aria-selected', 'true');
 });
 
 test('retries failed roots in parallel and retains the original order when the active root recovers', async ({

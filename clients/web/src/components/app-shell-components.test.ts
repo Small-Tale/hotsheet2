@@ -357,11 +357,14 @@ describe('application shell components', () => {
       ProjectTab({ id: 'pending:/work/alpha', name: 'alpha', location: 'local', pending: true }),
     );
     expect(pendingTab).toContain('data-project-pending="true"');
-    expect(pendingTab).toContain('data-placeholder="true"');
+    // Kerf's named pending AppTab (HS2-XGSSK1): the visible name is the accessible name and it stays selectable.
+    expect(pendingTab).toContain('data-pending="true"');
+    expect(pendingTab).not.toContain('kui-skeleton');
     expect(pendingTab).toContain('aria-busy="true"');
     expect(pendingTab).toContain('draggable="false"');
-    expect(pendingTab).toMatch(/role="tab"[^>]*disabled/);
-    expect(pendingTab).toContain('aria-label="Opening alpha"');
+    expect(pendingTab).toMatch(/role="tab"[^>]*aria-label="alpha"[^>]*data-action="select-project-tab"/);
+    expect(pendingTab).not.toMatch(/role="tab"[^>]*disabled/);
+    expect(pendingTab).not.toContain('Opening alpha');
     // Both tab spinners are sized by Kerf LoadingSpinner `size`, not app CSS on its svg (HS2-JVPPVV).
     for (const tab of [markup, pendingTab]) expect(tab).toMatch(/<svg[^>]*class="kui-loading-spinner"[^>]*data-size/);
     expect(PROJECT_TAB_SPINNER_SIZE).toBe(12.8);
@@ -380,7 +383,7 @@ describe('application shell components', () => {
       }),
     );
     expect(mobileBar).toContain('value="beta"');
-    expect(mobileBar).not.toContain('pending:/work/alpha');
+    expect(mobileBar).toContain('pending:/work/alpha');
     const notificationMarkup = String(ProjectTab({ id: 'one', name: 'One', location: 'local', notificationCount: 2 }));
     expect(notificationMarkup).not.toContain('data-lucide="folder-git-2"');
     expect(notificationMarkup).toContain('aria-label="2 pending notifications"');

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { AppEmptyState, ProjectRestoreState } from './app-empty-state';
+import { AppEmptyState, ProjectOpeningState, ProjectRestoreState } from './app-empty-state';
 
 describe('app empty states', () => {
   it('offers project opening from the empty application', () => {
@@ -13,6 +13,14 @@ describe('app empty states', () => {
     const markup = String(ProjectRestoreState());
     expect(markup).toContain('data-project-restore-state="true"');
     expect(markup).toContain('role="status"');
+    expect(markup).toContain('aria-busy="true"');
+  });
+
+  it('names a selected still-opening project in a busy opening panel (HS2-XGSSK1)', () => {
+    const markup = String(ProjectOpeningState({ name: 'alpha' }));
+    expect(markup).toContain('data-project-opening-state="true"');
+    expect(markup).not.toContain('data-project-restore-state');
+    expect(markup).toContain('Opening alpha…');
     expect(markup).toContain('aria-busy="true"');
   });
 });

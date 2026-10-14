@@ -33,13 +33,13 @@ describe('ProjectTabBar actions (HS2-402AXQ, HS2-PNCDAE)', () => {
     expect(markup).toMatch(
       /kui-toolbar__leading"><div class="kui-toolbar-control-group"[^>]*aria-label="Global Dashboards"[^]*data-shell-mode="stats" aria-label="Cross-Project Stats" aria-pressed="true"[^]*name="mobile-project"[^]*data-action="choose-project" aria-label="Add Project"/,
     );
-    // Still-opening projects are not choices (HS2-2BEJXD).
-    expect(markup).not.toContain('value="opening"');
-    // With no choosable project, the Select group is omitted rather than left empty.
+    // Still-opening projects are selectable choices labeled as opening (HS2-XGSSK1).
+    expect(markup).toContain('value="opening"');
+    expect(markup).toContain('opening — Opening…');
     const empty = String(
       ProjectTabBar({ mobile: true, tabs: [{ id: 'opening', name: 'opening', location: 'local', pending: true }] }),
     );
-    expect(empty).not.toContain('mobile-project');
+    expect(empty).toContain('mobile-project');
     expect(empty).toContain('data-action="choose-project"');
   });
 

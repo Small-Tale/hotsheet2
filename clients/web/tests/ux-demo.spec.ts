@@ -582,6 +582,7 @@ test('represents the application states extracted from main.tsx in the UX catalo
   await expect(page.locator('[data-project-restore-state="true"]')).toContainText(
     'Restoring projects, tickets, and terminals',
   );
+  await expect(page.locator('[data-project-opening-state="true"]')).toContainText('Opening alpha…');
   await page.screenshot({ path: 'target/visual-captures/hs2-vbrc6a-app-empty-states.png', fullPage: true });
 });
 
@@ -6400,12 +6401,16 @@ test('catalogs project-tab states, progress, activity, and responsive geometry',
   await page.goto('/ux-demo?component=project-tab');
   const tabStates = page.locator('[data-tab-kind="project"]');
   await expect(tabStates).toHaveCount(16);
-  // A still-opening remembered project is a dormant placeholder with a named opening spinner (HS2-2BEJXD).
+  // A still-opening remembered project is Kerf's named pending tab: visible, accessible name, busy, with close
+  // and drag off and a decorative spinner (HS2-2BEJXD, HS2-XGSSK1).
   const pendingTab = page.locator('[data-tab-kind="project"][data-project-pending="true"]');
   await expect(pendingTab).toHaveCount(1);
   await expect(pendingTab).toHaveAttribute('aria-busy', 'true');
-  await expect(pendingTab.getByRole('tab')).toBeDisabled();
-  await expect(pendingTab.getByRole('img', { name: 'Opening Still opening' })).toBeVisible();
+  await expect(pendingTab).toHaveAttribute('data-pending', 'true');
+  await expect(pendingTab).toHaveAttribute('draggable', 'false');
+  await expect(pendingTab.getByRole('tab', { name: 'Still opening', exact: true })).toBeEnabled();
+  await expect(pendingTab.getByRole('button', { name: 'Close Still opening' })).toHaveCount(0);
+  await expect(pendingTab.getByRole('img')).toHaveCount(0);
   const measured = tabStates.filter({ hasText: 'Copying database' });
   await expect(measured.locator('.project-tab__operation')).toHaveAttribute(
     'aria-label',
@@ -9239,9 +9244,14 @@ test('composes startup and inspector feedback without app CSS (HS2-JMYRT3)', asy
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/ux-demo?component=app-empty-state');
     const variants = page.getByRole('region', { name: 'AppEmptyState Examples' });
-    await expect(variants.locator('[data-component="empty-state"]')).toHaveCount(3);
-    await expect(variants.locator('[data-busy="true"]')).toContainText('Opening Hot Sheet');
-    await expect(variants.locator('[data-busy="true"] [data-component="loading-spinner"]')).toBeVisible();
+    // Startup restore, the selected still-opening project panel (HS2-XGSSK1), empty, and message.
+    await expect(variants.locator('[data-component="empty-state"]')).toHaveCount(4);
+    const busy = variants.locator('[data-busy="true"]');
+    await expect(busy).toHaveCount(2);
+    await expect(busy.nth(0)).toContainText('Opening Hot Sheet');
+    await expect(busy.nth(1)).toContainText('Opening alpha…');
+    for (const state of await busy.all())
+      await expect(state.locator('[data-component="loading-spinner"]')).toBeVisible();
     await expect(variants.getByRole('button', { name: 'Open Project' })).toBeVisible();
     await expect(variants).toContainText('Project unavailable');
     const bounds = await variants.boundingBox();

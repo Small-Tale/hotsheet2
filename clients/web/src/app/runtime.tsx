@@ -84,7 +84,7 @@ import { createDriveConversationsController } from '../features/drive-conversati
 import { createGalleryController } from '../features/gallery';
 import { createHaltedSessionsController } from '../features/halted-sessions';
 import { createHotSheetApp } from '../features/hot-sheet-app';
-import { createHotSheetShell } from '../features/hot-sheet-shell';
+import { createHotSheetShell, PENDING_PROJECT_TAB_PREFIX } from '../features/hot-sheet-shell';
 import { createInspectorSurface } from '../features/inspector-surface';
 import { createPermissionsController } from '../features/permissions';
 import { createProjectChangeStreamsController } from '../features/project-change-streams';
@@ -1493,6 +1493,16 @@ export async function startHotSheetWebClient() {
     if (failure) {
       selectedProjectRestoreRoot.value = failure.root;
       saveActiveProjectRoot(localStorage, failure.root);
+      return;
+    }
+    // A still-opening project tab is selectable and shows its opening panel until it registers (HS2-XGSSK1).
+    const openingRoot = next.startsWith(PENDING_PROJECT_TAB_PREFIX)
+      ? next.slice(PENDING_PROJECT_TAB_PREFIX.length)
+      : undefined;
+    if (openingRoot !== undefined) {
+      if (!projectRestorePendingRoots.value.includes(openingRoot)) return;
+      selectedProjectRestoreRoot.value = openingRoot;
+      saveActiveProjectRoot(localStorage, openingRoot);
       return;
     }
     selectedProjectRestoreRoot.value = '';
@@ -4589,8 +4599,11 @@ export async function startHotSheetWebClient() {
         },
         // Show the active project as soon as it is ready; the others keep restoring behind it
         // (HS2-X74D4B). Both reconciles are idempotent and run again once every project is registered.
-        settled: (root) => {
+        settled: (root, ready) => {
           projectRestorePendingRoots.value = projectRestorePendingRoots.value.filter((item) => item !== root);
+          // The user selected this tab while it was opening: reveal the project now that it is ready (HS2-XGSSK1).
+          // A failed restore keeps the selection, so its retained failure panel shows instead.
+          if (selectedProjectRestoreRoot.value === root && ready) selectProjectTab(ready.id);
         },
         activeReady: () => {
           initialProjectRestorePending.value = false;

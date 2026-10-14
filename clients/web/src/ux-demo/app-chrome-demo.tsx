@@ -8,7 +8,12 @@ import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 import { Activity, FolderGit2, Minus, Plus, Terminal } from 'lucide';
 
-import { AppEmptyState, AppMessageState, ProjectRestoreState } from '../components/app-empty-state';
+import {
+  AppEmptyState,
+  AppMessageState,
+  ProjectOpeningState,
+  ProjectRestoreState,
+} from '../components/app-empty-state';
 import { AppError } from '../components/app-error';
 import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
 import { ProjectSetupWarningBanner } from '../components/project-setup-warning-banner';
@@ -147,6 +152,9 @@ export function AppEmptyStateDemo() {
       </CatalogExample>
       <CatalogExample label="Restoring">
         <ProjectRestoreState />
+      </CatalogExample>
+      <CatalogExample label="Opening Project">
+        <ProjectOpeningState name="alpha" />
       </CatalogExample>
       <CatalogExample label="Message">
         <AppMessageState title="Project unavailable" message="Open another project to continue working." />

@@ -13,7 +13,7 @@ import {
   type TicketRow as WireTicketRow,
 } from '../api';
 import { type AppRegionId } from '../app-region-resize';
-import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-state';
+import { AppEmptyState, ProjectOpeningState, ProjectRestoreState } from '../components/app-empty-state';
 import { type AppShellMobileView } from '../components/app-shell';
 import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
 import type { CorruptTicketRecoveryState } from '../components/corrupt-ticket-row';
@@ -85,6 +85,9 @@ import { canCreateTicketInView, customTicketViewId, type TicketView } from '../t
 import { hs1CleanupPromptDismissed } from '../workspace-session';
 
 /** Live application bindings createHotSheetShell reads (HS2-K0VC2C). */
+/** Tab id prefix of a remembered project that is still opening (HS2-2BEJXD, HS2-XGSSK1). */
+export const PENDING_PROJECT_TAB_PREFIX = 'pending:';
+
 export interface HotSheetShellDependencies {
   appRegionSize: (id: AppRegionId) => number;
   capabilitiesFor: (connectionId: string) => Capabilities;
@@ -239,11 +242,18 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     workspaceSearchModel,
     workspaceSurfaceProps,
   } = dependencies;
+  const pendingProjectName = (root: string) => root.split('/').filter(Boolean).at(-1) ?? root;
   function HotSheetShell() {
     if (initialProjectRestorePending.value) return <ProjectRestoreState />;
     const current = project(),
-      restoreFailure = projectRestoreFailures.value.find((item) => item.root === selectedProjectRestoreRoot.value);
-    if (!current && !restoreFailure) return <AppEmptyState />;
+      restoreFailure = projectRestoreFailures.value.find((item) => item.root === selectedProjectRestoreRoot.value),
+      // A selected still-opening project tab shows its opening panel until it registers (HS2-XGSSK1).
+      openingRoot = restoreFailure
+        ? undefined
+        : pendingRestoreEntries((root) => root)
+            .map((entry) => entry.item)
+            .find((root) => root === selectedProjectRestoreRoot.value);
+    if (!current && !restoreFailure && !openingRoot) return <AppEmptyState />;
     // The shell popup is a top-layer popover so the terminal drawer and the Workbench's main-pane clip
     // can never cover it (HS2-ZESCM2); the conversation's foreground keeps its own inline copy.
     const haltPopup = haltedSessionsController.popup(),
@@ -266,7 +276,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           id: item.id,
           name: item.name,
           location: 'local' as const,
-          selected: !restoreFailure && item.id === selectedProjectId.value,
+          selected: !restoreFailure && !openingRoot && item.id === selectedProjectId.value,
           notificationCount: permissionCount(item.id),
           // A halted session or unanswered AI question in this project's terminals needs the user.
           ...(terminalGroups.value.some(
@@ -289,16 +299,17 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
               : undefined,
         };
       }),
-      // Still-opening remembered projects sit at their remembered positions as dormant placeholders
-      // until they register or fail (HS2-2BEJXD).
+      // Still-opening remembered projects sit at their remembered positions as named pending tabs
+      // until they register or fail (HS2-2BEJXD, HS2-XGSSK1).
       rankedProjectTabs = interleaveByRank<{ tab: ProjectTabProps; rank?: number }>(
         projectTabs.map((tab) => ({ tab, rank: projectRestoreRank(tab.id) })),
         (entry) => entry.rank,
         pendingRestoreEntries((root) => ({
           tab: {
-            id: `pending:${root}`,
-            name: root.split('/').filter(Boolean).at(-1) ?? root,
+            id: `${PENDING_PROJECT_TAB_PREFIX}${root}`,
+            name: pendingProjectName(root),
             location: 'local' as const,
+            selected: root === openingRoot,
             pending: true,
           },
         })),
@@ -370,6 +381,21 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           viewportOverlay={viewportMobile.value ? popup : undefined}
         />
       );
+    if (openingRoot) {
+      const openingName = pendingProjectName(openingRoot);
+      return (
+        <MainShell
+          tabs={tabs}
+          mode="project"
+          header={<WorkspaceIdentity projectName={openingName} id="workspace-page-title" headingLevel={1} />}
+          mobile={viewportMobile.value}
+          workspace={<ProjectOpeningState name={openingName} />}
+          inspectorVisible={false}
+          overlay={viewportMobile.value ? undefined : popup}
+          viewportOverlay={viewportMobile.value ? popup : undefined}
+        />
+      );
+    }
     if (!current) return <AppEmptyState />;
     const selection = selectedRows(),
       selectedSlug = selectedTicketSlugs.value.length === 1 ? selectedTicketSlugs.value[0] : undefined,

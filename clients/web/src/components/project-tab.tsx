@@ -25,7 +25,9 @@ export interface ProjectTabProps {
   restoreFailure?: boolean;
   /**
    * A remembered project that is still opening in the background after startup revealed the active
-   * one (HS2-2BEJXD): a dormant placeholder tab (no select, close, or drag) with an opening spinner.
+   * one (HS2-2BEJXD): Kerf's named `pending` AppTab (HS2-XGSSK1) keeps the dimmed name as the visible and
+   * accessible name with a decorative opening spinner; it stays selectable (the app shows an opening panel)
+   * while close and drag are off.
    */
   pending?: boolean;
   closable?: boolean;
@@ -144,7 +146,7 @@ export function ProjectTab({
   );
   const trailing = pending ? (
     <span class="project-tab__busy">
-      <LoadingSpinner label={`Opening ${name}`} size={PROJECT_TAB_SPINNER_SIZE} />
+      <LoadingSpinner size={PROJECT_TAB_SPINNER_SIZE} />
     </span>
   ) : work || notification ? (
     <Row gap="2xs" vAlign="middle" className="project-tab__indicators">
@@ -172,7 +174,7 @@ export function ProjectTab({
       attention={attention}
       closable={closable && !pending}
       draggable={draggable && !pending}
-      placeholder={pending}
+      pending={pending}
       // The full name stays visible (the strip scrolls instead of truncating) and Kerf paints the
       // drop-target state the drag handler marks (beta.62 props, HS2-T67Z3N); no app class on the root.
       nameOverflow="visible"

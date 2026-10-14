@@ -4877,7 +4877,7 @@
       "id": "app-empty-state",
       "name": "AppEmptyState",
       "kind": "component",
-      "purpose": "Initial project-opening, busy restoration, and action-free messages composed from Kerf EmptyState and List.",
+      "purpose": "Initial project-opening, busy restoration, a selected still-opening project panel, and action-free messages composed from Kerf EmptyState and List.",
       "source": "src/components/app-empty-state.tsx",
       "publicExports": [
         {
