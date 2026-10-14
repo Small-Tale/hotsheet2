@@ -10,6 +10,7 @@ import { wireTicketCollection } from '../components/ticket-collection-interactio
 import { isPlainTicketReselection, selectAllTickets } from '../components/ticket-selection';
 import { wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
+import { createCoalescedInput } from '../debounced-autosave';
 import { routeFilePicker } from '../file-picker-routes';
 import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
@@ -123,6 +124,18 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     keyboardShortcutOverrides,
     appleShortcutPlatform,
   } = dependencies;
+  const closeTargetSearchInput = createCoalescedInput<string>((query) => {
+      searchTicketCloseTargets(query);
+    }),
+    notWorkingNoteInput = createCoalescedInput<string>((note) => {
+      notWorkingNote.value = note;
+      scheduleProjectSessionPersistence();
+      presentNotWorkingDialog();
+    });
+  lifetime.add(() => {
+    closeTargetSearchInput.cancel();
+    notWorkingNoteInput.cancel();
+  });
   const menuTicket = (slug: string) => tickets.value.find((item) => item.slug === slug);
   lifetime.add(
     wireTicketCollection(document.body, {
@@ -321,12 +334,19 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
       'input',
       TICKET_SELECTION_TARGETS.ticketCloseTargetSearchField.selector,
       (_event, target) => {
-        searchTicketCloseTargets((target as Control).value);
+        // The field keeps the live query; dialog state and the search catch up per typing pause (HS2-9CWDSB).
+        closeTargetSearchInput.schedule((target as Control).value);
       },
     ),
   );
   lifetime.add(
+    delegate(document.body, 'focusout', TICKET_SELECTION_TARGETS.ticketCloseTargetSearchField.selector, () => {
+      closeTargetSearchInput.flush();
+    }),
+  );
+  lifetime.add(
     delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.selectTicketCloseTarget.selector, (_event, target) => {
+      closeTargetSearchInput.cancel();
       const current = ticketCloseDialog.value,
         candidate = current?.candidates.find((item) => duplicateTargetKey(item) === data(target).itemId);
       if (current && candidate)
@@ -344,17 +364,21 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
   lifetime.add(
     delegate(document.body, 'submit', TICKET_SELECTION_ACTIONS.submitTicketClose.selector, (event) => {
       event.preventDefault();
+      closeTargetSearchInput.cancel();
       void submitTicketClose();
     }),
   );
   lifetime.add(
     delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.cancelTicketClose.selector, () => {
+      closeTargetSearchInput.cancel();
       closeTicketCloseDialog();
     }),
   );
   lifetime.add(
     delegate(document.body, 'wa-hide', TICKET_SELECTION_TARGETS.ticketCloseDialog.selector, (event, target) => {
-      if (event.composedPath()[0] === target) closeTicketCloseDialog();
+      if (event.composedPath()[0] !== target) return;
+      closeTargetSearchInput.cancel();
+      closeTicketCloseDialog();
     }),
   );
   lifetime.add(
@@ -365,9 +389,14 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
   );
   lifetime.add(
     delegate(document.body, 'input', TICKET_SELECTION_TARGETS.notWorkingNoteField.selector, (_event, target) => {
-      notWorkingNote.value = (target as HTMLTextAreaElement).value;
-      scheduleProjectSessionPersistence();
-      presentNotWorkingDialog();
+      // The textarea keeps the live draft; the note, session persistence, and dialog render catch
+      // up once typing pauses or the field loses focus (HS2-9CWDSB).
+      notWorkingNoteInput.schedule((target as HTMLTextAreaElement).value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'focusout', TICKET_SELECTION_TARGETS.notWorkingNoteField.selector, () => {
+      notWorkingNoteInput.flush();
     }),
   );
   lifetime.add(
@@ -408,6 +437,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
   lifetime.add(
     delegate(document.body, 'submit', TICKET_SELECTION_ACTIONS.submitNotWorking.selector, (event) => {
       event.preventDefault();
+      notWorkingNoteInput.flush();
       void submitNotWorking();
     }),
   );

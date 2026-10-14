@@ -230,8 +230,11 @@ describe('extracted handlers retain live application bindings', () => {
     const inputName = handler('input', '[name="saved-view-name"]');
     const hide = handler('wa-hide', '[data-component="saved-view-dialog"]');
     inputName(new Event('input'), Object.assign(target({}), { value: 'Named later' }));
-    expect(name.value).toBe('Named later');
+    // The stale error clears at once; the name publishes on the typing pause or blur (HS2-9CWDSB).
     expect(error.value).toBe('');
+    expect(name.value).toBe('');
+    handler('focusout', '[name="saved-view-name"]')(new Event('focusout'), target({}));
+    expect(name.value).toBe('Named later');
     busy.value = true;
     const prevented = new Event('wa-hide', { cancelable: true });
     hide(prevented, target({}));
@@ -497,6 +500,60 @@ it('coalesces annotation-note keystrokes into one model update per pause or blur
   } finally {
     vi.useRealTimers();
   }
+});
+
+describe('keystroke coalescing for re-rendering fields (HS2-9CWDSB)', () => {
+  const type = (input: ReturnType<typeof handler>, value: string) => {
+    input(new Event('input'), Object.assign(target({}), { value }));
+  };
+  it('publishes the saved-view name once per pause, flushes on blur and submit, and drops it on cancel', () => {
+    vi.useFakeTimers();
+    try {
+      const name = signal(''),
+        error = signal(''),
+        save = vi.fn();
+      let writes = 0;
+      name.subscribe(() => {
+        writes += 1;
+      });
+      writes = 0;
+      wireViewAndSavedViewInteractions({
+        savedViewName: name,
+        savedViewError: error,
+        savedViewBusy: signal(false),
+        closeSavedViewDialog: vi.fn(),
+        saveSavedView: save,
+      } as unknown as ViewAndSavedViewInteractionsDependencies);
+      const input = handler('input', '[name="saved-view-name"]');
+      for (const text of ['R', 'Re', 'Rev', 'Revi', 'Review']) type(input, text);
+      vi.advanceTimersByTime(149);
+      expect(writes).toBe(0);
+      vi.advanceTimersByTime(1);
+      expect([writes, name.value]).toEqual([1, 'Review']);
+      // Submit mid-debounce publishes the latest name before saving.
+      type(input, 'Review queue');
+      const submit = new Event('submit', { cancelable: true });
+      handler('submit', '[data-action="save-saved-view"]')(submit, target({}));
+      expect([writes, name.value]).toEqual([2, 'Review queue']);
+      expect(save).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(500);
+      expect(writes).toBe(2);
+      // Cancel discards a pending draft; a later blur has nothing to publish.
+      type(input, 'Discarded');
+      handler('click', '[data-action="cancel-saved-view"]')(new Event('click'), target({}));
+      handler('focusout', '[name="saved-view-name"]')(new Event('focusout'), target({}));
+      vi.advanceTimersByTime(500);
+      expect([writes, name.value]).toEqual([2, 'Review queue']);
+      // Empty-then-refill settles on the final value.
+      type(input, '');
+      vi.advanceTimersByTime(150);
+      type(input, 'Again');
+      vi.advanceTimersByTime(150);
+      expect([writes, name.value]).toEqual([4, 'Again']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('interaction group teardown (HS2-NZT3MT)', () => {

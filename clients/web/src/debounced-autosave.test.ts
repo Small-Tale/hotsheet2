@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AUTOSAVE_DELAY_MS, createDebouncedAutosave, createFocusLossAutosave } from './debounced-autosave';
+import {
+  AUTOSAVE_DELAY_MS,
+  createCoalescedInput,
+  createDebouncedAutosave,
+  createFocusLossAutosave,
+} from './debounced-autosave';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -123,5 +128,45 @@ describe('createFocusLossAutosave (HS2-RE1PS6)', () => {
     expect(autosave.pending()).toBe(false);
     await expect(autosave.flush()).resolves.toBe(true);
     expect(saved).toEqual(['one', 'two']);
+  });
+});
+
+describe('createCoalescedInput (HS2-9CWDSB)', () => {
+  it('walks schedule, pause, flush, cancel, and refill transitions with one publish per pause', () => {
+    vi.useFakeTimers();
+    try {
+      const published: string[] = [];
+      const input = createCoalescedInput<string>((value) => published.push(value));
+      // idle -> flush / cancel: nothing to publish.
+      input.flush();
+      input.cancel();
+      expect([published, input.pending()]).toEqual([[], false]);
+      // idle -> pending -> repeated schedule -> pause publishes only the latest value.
+      for (const value of ['a', 'ab', 'abc']) input.schedule(value);
+      expect(input.pending()).toBe(true);
+      vi.advanceTimersByTime(149);
+      expect(published).toEqual([]);
+      vi.advanceTimersByTime(1);
+      expect([published, input.pending()]).toEqual([['abc'], false]);
+      // pending -> flush publishes synchronously, exactly once, and cancels the timer.
+      input.schedule('abcd');
+      input.flush();
+      input.flush();
+      vi.advanceTimersByTime(500);
+      expect(published).toEqual(['abc', 'abcd']);
+      // pending -> cancel drops the draft.
+      input.schedule('dropped');
+      input.cancel();
+      vi.advanceTimersByTime(500);
+      expect(published).toEqual(['abc', 'abcd']);
+      // Empty-then-refill: an empty draft is a real value, then the refill publishes.
+      input.schedule('');
+      vi.advanceTimersByTime(150);
+      input.schedule('x');
+      input.flush();
+      expect(published).toEqual(['abc', 'abcd', '', 'x']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

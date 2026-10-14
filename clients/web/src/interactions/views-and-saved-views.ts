@@ -4,6 +4,7 @@ import { createScope } from 'kerfjs/scope';
 import { type FullTicket } from '../api';
 import { type SavedViewContextMenuState } from '../components/view-navigation';
 import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../context-menu-position';
+import { createCoalescedInput } from '../debounced-autosave';
 import {
   VIEWS_AND_SAVED_VIEWS_ACTIONS,
   VIEWS_AND_SAVED_VIEWS_TARGETS,
@@ -56,6 +57,12 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
     closeSavedViewDelete,
     savedViewDeleteBusy,
   } = dependencies;
+  const savedViewNameInput = createCoalescedInput<string>((name) => {
+    savedViewName.value = name;
+  });
+  lifetime.add(() => {
+    savedViewNameInput.cancel();
+  });
   lifetime.add(
     delegate(document.body, 'click', VIEWS_AND_SAVED_VIEWS_TARGETS.ticketSelectionRoot.selector, (event) => {
       const pointer = event as MouseEvent;
@@ -138,18 +145,26 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
   );
   lifetime.add(
     delegate(document.body, 'input', VIEWS_AND_SAVED_VIEWS_TARGETS.savedViewNameField.selector, (_event, target) => {
-      savedViewName.value = (target as Control).value;
-      savedViewError.value = '';
+      // A stale error clears at once; the name itself publishes per typing pause (HS2-9CWDSB).
+      if (savedViewError.value) savedViewError.value = '';
+      savedViewNameInput.schedule((target as Control).value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'focusout', VIEWS_AND_SAVED_VIEWS_TARGETS.savedViewNameField.selector, () => {
+      savedViewNameInput.flush();
     }),
   );
   lifetime.add(
     delegate(document.body, 'submit', VIEWS_AND_SAVED_VIEWS_ACTIONS.saveSavedView.selector, (event, target) => {
       event.preventDefault();
+      savedViewNameInput.flush();
       void saveSavedView(target as HTMLFormElement);
     }),
   );
   lifetime.add(
     delegate(document.body, 'click', VIEWS_AND_SAVED_VIEWS_ACTIONS.cancelSavedView.selector, () => {
+      savedViewNameInput.cancel();
       closeSavedViewDialog();
     }),
   );
@@ -159,6 +174,7 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
         event.preventDefault();
         return;
       }
+      savedViewNameInput.cancel();
       closeSavedViewDialog();
     }),
   );

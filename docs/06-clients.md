@@ -1758,6 +1758,11 @@ preview/download, server directory browser) are separate design work.
   label, notes list, preview, and undo history update once typing pauses for 150 ms, or
   immediately when the field loses focus, so long notes do not re-render the gallery per key.
   The note is part of the markup session and is still saved by Finish markup.
+  The same coalescing applies to other fields whose app-state write re-renders a surface
+  (HS2-9CWDSB): the Not Working note, the close dialog's duplicate-target search, the
+  inspector's field-conflict merge text, and the saved-view name publish once typing pauses
+  for 150 ms, or immediately on blur or submit; Cancel discards a pending draft. The inline
+  feedback reply field is tracked separately with the feedback reply flow.
   Duplicate (Command/Ctrl+D) copies the note
   and intents. Tab cycles annotations; Delete removes the selection; arrows nudge it
   by one screen point or ten with Shift; Escape cancels a gesture, tool, then selection.

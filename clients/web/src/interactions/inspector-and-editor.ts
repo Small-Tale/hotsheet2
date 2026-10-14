@@ -24,7 +24,7 @@ import { addTicketTag, openTicketTagSurface, removeTicketTag } from '../componen
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { maintainContextPopupMenuAnchor } from '../context-menu-position';
 import { copyText } from '../copy-text';
-import { type DebouncedAutosave } from '../debounced-autosave';
+import { createCoalescedInput, type DebouncedAutosave } from '../debounced-autosave';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
 import { combineFeedbackReply, type InlineFeedbackReply, sourceOffsetForVisibleOffset } from '../feedback-replies';
@@ -210,6 +210,12 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     codeReviewMessage,
     codeReview,
   } = dependencies;
+  const conflictResolutionInput = createCoalescedInput<string>((value) => {
+    fieldConflictResolution.value = value;
+  });
+  lifetime.add(() => {
+    conflictResolutionInput.cancel();
+  });
   let stopStatusMenuAnchor: (() => void) | undefined;
   lifetime.add(() => stopStatusMenuAnchor?.());
   lifetime.add(
@@ -338,12 +344,19 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       'input',
       INSPECTOR_AND_EDITOR_TARGETS.ticketConflictResolutionField.selector,
       (_event, target) => {
-        fieldConflictResolution.value = (target as HTMLTextAreaElement).value;
+        // The textarea keeps the live merge draft; the inspector re-renders per typing pause (HS2-9CWDSB).
+        conflictResolutionInput.schedule((target as HTMLTextAreaElement).value);
       },
     ),
   );
   lifetime.add(
+    delegate(document.body, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.ticketConflictResolutionField.selector, () => {
+      conflictResolutionInput.flush();
+    }),
+  );
+  lifetime.add(
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.acceptRemoteTicketField.selector, () => {
+      conflictResolutionInput.cancel();
       const conflict = fieldConflict.value;
       if (!conflict) return;
       updateConflictDraft(conflict.field, conflict.theirs);
@@ -353,6 +366,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   );
   lifetime.add(
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.applyTicketFieldMerge.selector, () => {
+      conflictResolutionInput.flush();
       const conflict = fieldConflict.value;
       if (!conflict) return;
       const value = fieldConflictResolution.value;

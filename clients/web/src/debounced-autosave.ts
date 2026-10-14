@@ -120,3 +120,46 @@ export function createFocusLossAutosave<T>(
     pending: () => hasQueuedValue || active !== undefined,
   };
 }
+
+export interface CoalescedInput<T> {
+  /** Records the latest draft and publishes it once `delay` passes without another keystroke. */
+  schedule(value: T): void;
+  /** Publishes a pending draft immediately (blur, submit, or a dependent action); no-op when idle. */
+  flush(): void;
+  /** Drops a pending draft without publishing it. */
+  cancel(): void;
+  pending(): boolean;
+}
+
+/**
+ * Synchronous keystroke coalescer for controls whose app-state write re-renders a surface
+ * (HS2-9CWDSB). The field keeps the live draft; app state catches up once typing pauses or when
+ * the caller flushes, so the render fan-out runs once per pause instead of once per key.
+ */
+export function createCoalescedInput<T>(publish: (value: T) => void, delay = AUTOSAVE_DELAY_MS): CoalescedInput<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let queued: { value: T } | undefined;
+  const clear = () => {
+    if (timer) clearTimeout(timer);
+    timer = undefined;
+  };
+  const flush = () => {
+    clear();
+    const next = queued;
+    queued = undefined;
+    if (next) publish(next.value);
+  };
+  return {
+    schedule(value) {
+      queued = { value };
+      clear();
+      timer = setTimeout(flush, delay);
+    },
+    flush,
+    cancel() {
+      clear();
+      queued = undefined;
+    },
+    pending: () => queued !== undefined,
+  };
+}

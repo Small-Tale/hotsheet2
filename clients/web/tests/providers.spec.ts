@@ -27867,3 +27867,55 @@ test('a terminal created from the desktop drawer menu takes input focus even und
   await page.waitForTimeout(1_200);
   await expect(drawer.locator('.terminal-session:not([hidden]) .xterm-helper-textarea')).toBeFocused();
 });
+
+test('coalesces Not Working note typing per pause and submits the latest draft (HS2-9CWDSB)', async ({ page }) => {
+  await mockProject(page);
+  const bodies: string[] = [];
+  await page.route('**/not-working', async (route) => {
+    bodies.push(route.request().postData() ?? '');
+    return route.fulfill({ status: 500, json: { error: 'kept open for inspection' } });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DONE01"]').click({ button: 'right' });
+  await page
+    .locator('[data-context-menu="ticket"]')
+    .getByRole('menuitem', { name: 'Not Working…', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog', { name: 'Not Working — HS2-DONE01' });
+  const note = dialog.getByRole('textbox', { name: 'What’s wrong?' });
+  await expect(note).toBeFocused();
+  // Count DOM mutations in the dialog outside the textarea itself.
+  await page.evaluate(() => {
+    const state = window as unknown as { __notWorkingMutations: number };
+    state.__notWorkingMutations = 0;
+    new MutationObserver((records) => {
+      state.__notWorkingMutations += records.filter(
+        (record) =>
+          !(record.target instanceof Element ? record.target : record.target.parentElement)?.closest(
+            'textarea[name="not-working-note"]',
+          ),
+      ).length;
+    }).observe(document.querySelector('[data-component="not-working-dialog"]')!, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+    });
+  });
+  const mutations = () =>
+    page.evaluate(() => (window as unknown as { __notWorkingMutations: number }).__notWorkingMutations);
+  await note.pressSequentially('Still broken', { delay: 10 });
+  expect(await mutations()).toBe(0);
+  await expect(note).toHaveValue('Still broken');
+  // The dialog render catches up once typing pauses.
+  await expect.poll(mutations).toBeGreaterThan(0);
+  // Typing more and submitting mid-debounce sends the complete draft.
+  await note.press('End');
+  await note.pressSequentially(' after reload', { delay: 10 });
+  await dialog.getByRole('button', { name: 'Report Not Working' }).click();
+  await expect.poll(() => bodies.length).toBe(1);
+  expect(bodies[0]).toContain('Still broken after reload');
+  await expect(note).toHaveValue('Still broken after reload');
+});
