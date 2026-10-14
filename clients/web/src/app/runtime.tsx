@@ -134,6 +134,7 @@ import { createProjectTabRefreshCoordinator } from '../project-tab-refresh';
 import {
   appendUniqueTicketRows,
   BOARD_COLUMN_PAGE_SIZE,
+  isStaleTicketCursorError,
   loadProjectTicketRefresh,
   type ProjectTicketRefresh,
 } from '../project-ticket-refresh';
@@ -216,6 +217,12 @@ import { wireHotSheetInteractions } from './wire-interactions';
  * Create and start one Hot Sheet browser application runtime. The returned `disposeInteractions`
  * removes every delegated and native interaction listener the runtime registered.
  */
+/** A warm project's list continuation: the cursor and the exact query that issued it (HS2-38MPMC). */
+interface TicketCursorPosition {
+  cursor?: string;
+  query: CheckoutTicketQuery;
+}
+
 export async function startHotSheetWebClient() {
   const deferContainedListScrollRestore = defersContainedListScrollRestore(navigator.userAgent);
   await installDevelopmentDiagnostics();
@@ -502,7 +509,9 @@ export async function startHotSheetWebClient() {
     bulkUpdateProgress.value = progress;
   });
   const ticketNextCursor = signal<string | undefined>(undefined),
-    ticketCursorsByProject = signal<Record<string, string | undefined>>({}),
+    // A cursor is only valid with the exact query that issued it (the server binds it to sort and filters), so a
+    // warm project keeps both together and a switch restores them as one unit (HS2-38MPMC).
+    ticketCursorsByProject = signal<Record<string, TicketCursorPosition | undefined>>({}),
     ticketPageLoading = signal(false);
   // Per-column board pagination (HS2-8NBGBX): each status column paginates independently. `boardColumnPages`
   // holds the next-page cursor + loaded count per column id; `boardColumnLoading` is the per-column
@@ -1594,7 +1603,10 @@ export async function startHotSheetWebClient() {
     // a warm projection: the next activation would paint "No tickets" instead of loading (HS2-AZZ9TF).
     if (loading.value && !Object.hasOwn(ticketRowsByProject.value, id)) return;
     ticketRowsByProject.value = { ...ticketRowsByProject.value, [id]: tickets.value };
-    ticketCursorsByProject.value = { ...ticketCursorsByProject.value, [id]: ticketNextCursor.value };
+    ticketCursorsByProject.value = {
+      ...ticketCursorsByProject.value,
+      [id]: { cursor: ticketNextCursor.value, query: ticketPageQuery.value },
+    };
     boardPagesByProject.value = { ...boardPagesByProject.value, [id]: boardColumnPages.value };
     projectProjectionById.value = {
       ...projectProjectionById.value,
@@ -1635,7 +1647,11 @@ export async function startHotSheetWebClient() {
       terminalDrawerSelected.value = drawerActivation.selectedId;
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
       tickets.value = rows ?? [];
-      ticketNextCursor.value = ticketCursorsByProject.value[next];
+      const position = ticketCursorsByProject.value[next];
+      ticketNextCursor.value = position?.cursor;
+      // Without the issuing query the cached cursor is unusable; an empty query also forces the next view
+      // refresh to reload page one instead of trusting a query it never fetched (HS2-38MPMC).
+      ticketPageQuery.value = position?.query ?? {};
       boardColumnPages.value = boardPagesByProject.value[next] ?? {};
       ticketCollectionState.value = undefined;
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
@@ -2564,7 +2580,15 @@ export async function startHotSheetWebClient() {
       resetProgressiveTicketRendering();
       scheduleClaimLeaseExpiry();
     } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
+      const text = reason instanceof Error ? reason.message : String(reason);
+      // A cursor the server no longer accepts cannot be repaired by retrying it; restart the visible
+      // collection from page one instead of surfacing a dead-end error (HS2-38MPMC).
+      if (isStaleTicketCursorError(text) && project()?.id === current.id && ticketNextCursor.value === cursor) {
+        ticketNextCursor.value = undefined;
+        ticketPageQuery.value = {};
+        if (workspaceSearchActive()) void refreshTicketSearch();
+        else void refreshTicketCollection(selectedView.value);
+      } else error.value = text;
     } finally {
       if (project()?.id === current.id) ticketPageLoading.value = false;
     }
@@ -2580,6 +2604,7 @@ export async function startHotSheetWebClient() {
       hideVerifiedByProject,
       boardColumnPages,
       boardColumnLoading,
+      ticketPageQuery,
       tickets,
       ticketRowsByProject,
       ticketCountsByProject,
@@ -2588,7 +2613,6 @@ export async function startHotSheetWebClient() {
       project,
       hideVerifiedColumn,
       workspaceSearchActive,
-      sortedTicketQuery,
       visibleTickets: () => visibleTickets(),
       refreshProject: (options) => refreshProject(options),
       loadNextTicketPage: () => loadNextTicketPage(),
@@ -2624,12 +2648,14 @@ export async function startHotSheetWebClient() {
       const view = loadProjectWorkspaceSession(localStorage, target.id)?.selectedView ?? 'all',
         rows = ticketRowsByProject.value[target.id] as WireTicketRow[] | undefined,
         pages = boardPagesByProject.value[target.id] as Record<string, BoardColumnPage> | undefined;
-      return loadProjectTicketRefresh(
+      const query = sortedTicketQuery(ticketViewQuery(view));
+      const snapshot = await loadProjectTicketRefresh(
         new Api(target.apiPath, '', { trackBusy: false }),
         target.id,
-        sortedTicketQuery(ticketViewQuery(view)),
+        query,
         boardRefreshSpec(view, target.id, rows && pages ? { rows, pages } : undefined),
       );
+      return { ...snapshot, nextCursorQuery: query };
     },
     publishBackground: (target, snapshot) => {
       // Rows stay resident only for warm projects (spare LRU capacity admits a live-refreshed background one); counts
@@ -2642,7 +2668,12 @@ export async function startHotSheetWebClient() {
             pendingCreatedTickets.retain(target.id, snapshot.tickets),
           ),
         };
-        ticketCursorsByProject.value = { ...ticketCursorsByProject.value, [target.id]: snapshot.nextCursor };
+        ticketCursorsByProject.value = {
+          ...ticketCursorsByProject.value,
+          [target.id]: snapshot.nextCursorQuery
+            ? { cursor: snapshot.nextCursor, query: snapshot.nextCursorQuery }
+            : undefined,
+        };
         boardPagesByProject.value = { ...boardPagesByProject.value, [target.id]: snapshot.boardPages ?? {} };
       }
       if (snapshot.ticketCounts) {

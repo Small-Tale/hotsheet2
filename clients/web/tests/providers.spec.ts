@@ -20144,6 +20144,63 @@ test('pages the Archive newest-first in the active sort and appends older rows a
   await page.screenshot({ path: 'target/visual-captures/hs2-9zz8qq-archive-390.png' });
 });
 
+test('recovers from a stale Archive cursor by reloading page one instead of erroring (HS2-38MPMC)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  const archived = Array.from({ length: 260 }, (_, index) => ({
+      ...row,
+      id: `arch-${index}`,
+      native_id: `arch-${index}`,
+      qualified_id: `git-local:arch-${index}`,
+      slug: `HS2-A${String(index).padStart(5, '0')}`,
+      title: `Archived ticket ${index}`,
+      status: 'archive',
+      up_next: false,
+      updated_at: new Date(Date.UTC(2026, 8, 30) - index * 3_600_000).toISOString(),
+    })),
+    requests: URL[] = [];
+  let rejectNextCursor = true;
+  await page.route('**/checkouts/demo-checkout/tickets*', (route) => {
+    const request = route.request(),
+      url = new URL(request.url());
+    if (request.method() !== 'GET' || url.searchParams.get('collection') !== 'archive') return route.fallback();
+    requests.push(url);
+    // The server rejects a cursor whose query no longer matches the one that issued it.
+    if (url.searchParams.get('cursor') && rejectNextCursor) {
+      rejectNextCursor = false;
+      return route.fulfill({ status: 400, json: { error: 'stale checkout ticket cursor' } });
+    }
+    const size = Number(url.searchParams.get('page_size') ?? 200),
+      start = Number(url.searchParams.get('cursor') ?? 0),
+      body: Record<string, unknown> = {
+        items: archived.slice(start, start + size),
+        counts: { total: 260, queued: 0, backlog: 0, archive: 260, open: 0, up_next: 0, active: 0, started: 0 },
+      };
+    if (start + size < archived.length) body.next_cursor = String(start + size);
+    return route.fulfill({ json: body });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: /Archive/ }).click();
+  const rows = page.locator('[data-component="ticket-list-row"]');
+  await expect(rows).toHaveCount(200);
+  const more = page.getByRole('button', { name: 'Load more tickets' });
+  await more.scrollIntoViewIfNeeded();
+  const firstPageLoads = requests.filter((url) => !url.searchParams.get('cursor')).length;
+  await more.click();
+  // The rejected cursor restarts the collection from page one; no error reaches the user.
+  await expect.poll(() => requests.filter((url) => !url.searchParams.get('cursor')).length).toBe(firstPageLoads + 1);
+  await expect(rows).toHaveCount(200);
+  await expect(page.getByText('stale checkout ticket cursor')).toHaveCount(0);
+  // The fresh cursor pages normally.
+  await more.scrollIntoViewIfNeeded();
+  await more.click();
+  await expect(rows).toHaveCount(260);
+  await expect(page.getByText('stale checkout ticket cursor')).toHaveCount(0);
+});
+
 /** Serve one status stream the way the server does: `page_size` rows after the numeric offset cursor. */
 function boardStatusPage(rows: readonly object[], url: URL, counts: object) {
   const size = Number(url.searchParams.get('page_size') ?? 200),

@@ -389,6 +389,11 @@ query(filter, sort, text?, paging) -> TicketRow[]
     fingerprint of the parsed filters (after `me` resolution, with set-valued filters such
     as `tags` sorted and de-duplicated, and paging/ordering parameters excluded), so an
     equivalent query in a different parameter order continues (HS2-Z1TQ7Z, **built**).
+    Store writes never stale a cursor. The web client keeps every cursor paired with the
+    exact query that issued it: a warm project switch restores the pair, board columns
+    continue with the base query they were loaded with, and clearing a search drops the
+    search cursor. If the server still rejects a cursor as stale, Load more reloads page
+    one of the visible list or board instead of showing an error (HS2-38MPMC, **built**).
 
   How sources resume (HS2-74H84S):
   - **Local stores** use `TicketQuery::after_key`, an exact SQL predicate that mirrors

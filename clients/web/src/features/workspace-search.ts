@@ -259,7 +259,10 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
     }
     if (!current || (!effective.text && !effective.tokens.length)) {
       updateSearchPartialWarning('');
+      // The search cursor belongs to the search query; drop both together until the base refresh pairs a
+      // fresh cursor with its own query (HS2-38MPMC).
       ticketPageQuery.value = {};
+      ticketNextCursor.value = undefined;
       searchMatchKeys.value = undefined;
       sidebarSearchCounts.value = undefined;
       if (current) void refreshProject({ showLoading: false });

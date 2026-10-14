@@ -104,6 +104,11 @@ async function installWorkspace(page: Page) {
   const gated = new Map<string, Route>();
   const sockets = new Map<string, WebSocketRoute[]>(),
     cursor = new Map<string, number>();
+  // Opt-in server-faithful paging (HS2-38MPMC): a project listed here answers with a continuation cursor
+  // bound to its request's sort, and rejects a cursor sent with any other sort as stale.
+  const pagedProjects = new Set<string>(),
+    staleCursorRejections: string[] = [],
+    cursorPages: string[] = [];
 
   await page.addInitScript(
     ({ roots }) => {
@@ -193,6 +198,19 @@ async function installWorkspace(page: Page) {
         held.set(id, route);
         return;
       }
+      if (pagedProjects.has(id)) {
+        const order = `${url.searchParams.get('sort')}:${url.searchParams.get('direction')}`,
+          sent = url.searchParams.get('cursor');
+        if (sent) {
+          if (sent !== `next:${order}`) {
+            staleCursorRejections.push(`${id} ${sent} with ${order}`);
+            return route.fulfill({ status: 400, json: { error: 'stale checkout ticket cursor' } });
+          }
+          cursorPages.push(`${id} ${order}`);
+          return route.fulfill({ json: ticketPage([row(`${projects.find((item) => item.id === id)!.name}B`)]) });
+        }
+        return route.fulfill({ json: { ...ticketPage(rows[id] ?? []), next_cursor: `next:${order}` } });
+      }
       return route.fulfill({ json: ticketPage(rows[id] ?? []) });
     }
     if (request.method() === 'GET') return route.fulfill({ json: [] });
@@ -206,6 +224,9 @@ async function installWorkspace(page: Page) {
   return {
     rows,
     requests,
+    pagedProjects,
+    staleCursorRejections,
+    cursorPages,
     tab,
     ticketRow,
     loading: page.locator('.ticket-empty-state--loading'),
@@ -447,4 +468,31 @@ test('rapid switching and leaving a cold load in flight never shows stale rows o
   await expect(workspace.ticketRow('HS2-P0A')).toHaveCount(0);
   await expect(workspace.ticketRow('HS2-P2A')).toHaveCount(0);
   await expect(workspace.loading).toHaveCount(0);
+});
+
+test('a warm switch restores the list cursor with the query that issued it, so Load more stays valid after a sort change (HS2-38MPMC)', async ({
+  page,
+}) => {
+  const workspace = await installWorkspace(page);
+  workspace.pagedProjects.add(projectId(1));
+  await bootWorkspace(page, workspace);
+  // P1 warms with a cursor issued for the default sort.
+  await warmUp(workspace, [1, 0]);
+  // Changing the (workspace-wide) sort in P0 leaves P1's cached cursor bound to the old sort.
+  const sort = page.locator('wa-select[name="workspace-sort"]');
+  await sort.click();
+  await sort.locator('wa-option[value="priority"]').click();
+  await expect(sort).toHaveJSProperty('value', 'priority');
+  // Park P1's own reload so Load more acts on the restored warm continuation, not a fresh first page.
+  workspace.hold(1);
+  await switchTo(workspace, 1);
+  await expect(workspace.ticketRow('HS2-P1A')).toBeVisible();
+  const more = page.getByRole('button', { name: 'Load more tickets' });
+  await more.click();
+  await expect(workspace.ticketRow('HS2-P1B')).toBeVisible();
+  expect(workspace.staleCursorRejections).toEqual([]);
+  await expect(page.getByText('stale checkout ticket cursor')).toHaveCount(0);
+  await workspace.release(1);
+  await expect(workspace.ticketRow('HS2-P1A')).toBeVisible();
+  expect(workspace.staleCursorRejections).toEqual([]);
 });

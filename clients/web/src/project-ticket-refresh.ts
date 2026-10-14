@@ -7,6 +7,8 @@ export interface ProjectTicketRefresh {
   tickets?: TicketRow[];
   ticketCounts?: CheckoutTicketCounts;
   nextCursor?: string;
+  /** The exact query `nextCursor` belongs to, when a caller records it with the cursor (HS2-38MPMC). */
+  nextCursorQuery?: CheckoutTicketQuery;
   ticketsError?: string;
   sourceErrors?: string[];
   /** Per-column paging state when the refresh loaded board columns independently (HS2-HNZZHC). */
@@ -173,4 +175,9 @@ export async function loadProjectTicketRefresh(
       ? { corruptTickets: corruptTickets.value }
       : { corruptTicketsError: message(corruptTickets.reason) }),
   };
+}
+
+/** Whether an API error is the server rejecting a checkout cursor its query no longer matches (HS2-38MPMC). */
+export function isStaleTicketCursorError(message: string) {
+  return message.includes('stale checkout ticket cursor');
 }

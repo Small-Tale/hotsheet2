@@ -11,9 +11,14 @@ import {
 } from '../board-pagination';
 import type { WorkspaceViewMode } from '../components/workspace-header';
 import type { Project } from '../interactions/types';
-import { appendUniqueTicketRows, BOARD_COLUMN_PAGE_SIZE, type BoardRefreshSpec } from '../project-ticket-refresh';
+import {
+  appendUniqueTicketRows,
+  BOARD_COLUMN_PAGE_SIZE,
+  type BoardRefreshSpec,
+  isStaleTicketCursorError,
+} from '../project-ticket-refresh';
 import { ticketBoardGroups, ticketBoardGroupTotal } from '../ticket-board-layout';
-import { type TicketView, ticketViewQuery } from '../ticket-views';
+import type { TicketView } from '../ticket-views';
 
 /** Live application bindings the board column paging owner reads and writes (HS2-H2R2JB). */
 export interface BoardColumnPagingDependencies {
@@ -23,6 +28,8 @@ export interface BoardColumnPagingDependencies {
   hideVerifiedByProject: Signal<Record<string, boolean>>;
   boardColumnPages: Signal<Record<string, BoardColumnPage>>;
   boardColumnLoading: Signal<Record<string, boolean>>;
+  /** The exact base query the loaded column cursors belong to (HS2-38MPMC). */
+  ticketPageQuery: Signal<CheckoutTicketQuery>;
   tickets: Signal<WireTicketRow[]>;
   ticketRowsByProject: Signal<Record<string, WireTicketRow[]>>;
   ticketCountsByProject: Signal<Record<string, CheckoutTicketCounts>>;
@@ -31,7 +38,6 @@ export interface BoardColumnPagingDependencies {
   project: () => Project | undefined;
   hideVerifiedColumn: () => boolean;
   workspaceSearchActive: () => boolean;
-  sortedTicketQuery: (query: CheckoutTicketQuery) => CheckoutTicketQuery;
   visibleTickets: () => WireTicketRow[];
   refreshProject: (options: { showLoading: boolean }) => Promise<void>;
   loadNextTicketPage: () => Promise<void>;
@@ -52,6 +58,7 @@ export function createBoardColumnPaging(dependencies: BoardColumnPagingDependenc
     hideVerifiedByProject,
     boardColumnPages,
     boardColumnLoading,
+    ticketPageQuery,
     tickets,
     ticketRowsByProject,
     ticketCountsByProject,
@@ -60,7 +67,6 @@ export function createBoardColumnPaging(dependencies: BoardColumnPagingDependenc
     project,
     hideVerifiedColumn,
     workspaceSearchActive,
-    sortedTicketQuery,
     visibleTickets,
     refreshProject,
     loadNextTicketPage,
@@ -165,7 +171,9 @@ export function createBoardColumnPaging(dependencies: BoardColumnPagingDependenc
     if (!target) return;
     boardColumnLoading.value = { ...boardColumnLoading.value, [columnId]: true };
     try {
-      const query = sortedTicketQuery({ ...ticketViewQuery(view), status: target.status });
+      // Continue a column with the query its cursor was issued for, not one recomputed from a sort or
+      // view that changed since: the server rejects a cursor whose query differs (HS2-38MPMC).
+      const query = { ...ticketPageQuery.value, status: target.status };
       const page = await new Api(current.apiPath).checkoutTicketPage(
         current.id,
         BOARD_COLUMN_PAGE_SIZE,
@@ -194,7 +202,11 @@ export function createBoardColumnPaging(dependencies: BoardColumnPagingDependenc
       // in the other columns. The appended rows render within the current cap and grow via continueProgressiveTicketRendering.
       scheduleClaimLeaseExpiry();
     } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
+      const text = reason instanceof Error ? reason.message : String(reason);
+      // A rejected cursor restarts the board from its first pages instead of surfacing a dead end.
+      if (isStaleTicketCursorError(text)) {
+        if (project()?.id === current.id) void refreshProject({ showLoading: false });
+      } else error.value = text;
     } finally {
       if (project()?.id === current.id) boardColumnLoading.value = { ...boardColumnLoading.value, [columnId]: false };
     }

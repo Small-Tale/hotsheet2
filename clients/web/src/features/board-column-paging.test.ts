@@ -1,7 +1,7 @@
 import { signal } from 'kerfjs';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { CheckoutTicketCounts, TicketRow } from '../api';
+import type { CheckoutTicketCounts, CheckoutTicketQuery, TicketRow } from '../api';
 import type { BoardColumnPage } from '../board-pagination';
 import type { WorkspaceViewMode } from '../components/workspace-header';
 import type { Project } from '../interactions/types';
@@ -21,6 +21,7 @@ function owner(options: { mode?: WorkspaceViewMode; view?: TicketView; search?: 
       hideVerifiedByProject: signal<Record<string, boolean>>({}),
       boardColumnPages: signal<Record<string, BoardColumnPage>>({}),
       boardColumnLoading: signal<Record<string, boolean>>({}),
+      ticketPageQuery: signal<CheckoutTicketQuery>({ sort: 'updated', direction: 'descending' }),
       tickets: signal<TicketRow[]>([]),
       ticketRowsByProject: signal<Record<string, TicketRow[]>>({}),
       ticketCountsByProject: signal<Record<string, CheckoutTicketCounts>>({}),
@@ -32,7 +33,6 @@ function owner(options: { mode?: WorkspaceViewMode; view?: TicketView; search?: 
     project: () => current,
     hideVerifiedColumn: () => false,
     workspaceSearchActive: () => options.search ?? false,
-    sortedTicketQuery: (query) => query,
     visibleTickets: () => bindings.tickets.value,
     refreshProject,
     loadNextTicketPage,
@@ -81,4 +81,45 @@ describe('board column paging owner (HS2-H2R2JB)', () => {
     await paging.loadBoardColumnMore('started');
     expect(bindings.boardColumnPages.value.started.visible).toBe(150);
   });
+
+  it('continues a column with the query its cursor was issued for and recovers a stale cursor (HS2-38MPMC)', async () => {
+    const urls: URL[] = [];
+    let stale = true;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input) => {
+        urls.push(
+          new URL(
+            typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+            'http://localhost',
+          ),
+        );
+        if (stale) return Response.json({ error: 'stale checkout ticket cursor' }, { status: 400 });
+        return Response.json({ items: [], counts: {} });
+      }),
+    );
+    const { paging, bindings, refreshProject } = owner();
+    bindings.boardColumnPages.value = {
+      started: { loaded: 0, streams: { started: { cursor: 'c1', exhausted: false } } },
+    };
+    await paging.loadBoardColumnMore('started');
+    expect(urls[0]?.searchParams.get('sort')).toBe('updated');
+    expect(urls[0]?.searchParams.get('direction')).toBe('descending');
+    expect(urls[0]?.searchParams.get('status')).toBe('started');
+    expect(urls[0]?.searchParams.get('cursor')).toBe('c1');
+    // The stale rejection restarts the board instead of surfacing an error.
+    expect(refreshProject).toHaveBeenCalledWith({ showLoading: false });
+    expect(bindings.error.value).toBe('');
+    expect(bindings.boardColumnLoading.value).toEqual({ started: false });
+    // Any other failure still reaches the user.
+    stale = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async () => Response.json({ error: 'boom' }, { status: 500 })),
+    );
+    await paging.loadBoardColumnMore('started');
+    expect(bindings.error.value).toContain('boom');
+  });
 });
+
+afterEach(() => vi.unstubAllGlobals());

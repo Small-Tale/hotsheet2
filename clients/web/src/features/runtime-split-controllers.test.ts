@@ -192,6 +192,8 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
       tickets = signal<TicketRow[]>([]),
       refreshProject = vi.fn(async () => undefined),
       fetchMock = vi.fn<typeof fetch>(async () => Response.json({ items: [], next_cursor: null })),
+      ticketPageQuery = signal<CheckoutTicketQuery>({}),
+      ticketNextCursor = signal<string | undefined>(undefined),
       persist = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const owner = createWorkspaceSearchController({
@@ -202,8 +204,8 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
       sidebarSearchCounts: signal<SidebarSearchCounts | undefined>(undefined),
       selectedView: signal<TicketView>('all'),
       error: signal(''),
-      ticketPageQuery: signal<CheckoutTicketQuery>({}),
-      ticketNextCursor: signal(undefined),
+      ticketPageQuery,
+      ticketNextCursor,
       tickets,
       ticketRowsByProject: signal({}),
       project: () => project('a'),
@@ -228,9 +230,15 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     expect(searches.length).toBeGreaterThanOrEqual(1);
     expect(searchMatchKeys.value).toEqual(new Set());
     expect(persist).toHaveBeenCalledTimes(2);
+    // A search page left a continuation bound to the search query.
+    ticketNextCursor.value = 'search-cursor';
+    ticketPageQuery.value = { text: 'ab' };
     replaceTicketSearch(owner.workspaceSearchModel, '');
     await owner.refreshTicketSearch();
     expect(searchMatchKeys.value).toBeUndefined();
+    // The search cursor leaves with its query, so Load more cannot send it with the base query (HS2-38MPMC).
+    expect(ticketNextCursor.value).toBeUndefined();
+    expect(ticketPageQuery.value).toEqual({});
     expect(refreshProject).toHaveBeenCalledWith({ showLoading: false });
   });
 });

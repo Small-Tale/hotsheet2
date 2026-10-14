@@ -4,6 +4,7 @@ import type { Api } from './api';
 import {
   appendUniqueTicketRows,
   BOARD_COLUMN_PAGE_SIZE,
+  isStaleTicketCursorError,
   loadBoardColumnRefresh,
   loadProjectTicketRefresh,
 } from './project-ticket-refresh';
@@ -309,5 +310,14 @@ describe('loadBoardColumnRefresh (HS2-HNZZHC)', () => {
     );
     expect(fallback.counts).toBe(counts);
     expect(legacy.checkoutTicketPage).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe('isStaleTicketCursorError (HS2-38MPMC)', () => {
+  it('recognizes only the server stale-cursor rejection', () => {
+    expect(isStaleTicketCursorError('stale checkout ticket cursor')).toBe(true);
+    expect(isStaleTicketCursorError('Request failed: stale checkout ticket cursor')).toBe(true);
+    expect(isStaleTicketCursorError('invalid checkout ticket cursor')).toBe(false);
+    expect(isStaleTicketCursorError('network error')).toBe(false);
   });
 });
