@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { ticketsJson } from './ticket-page-fixture';
+
 const project = {
   id: 'drawer-order',
   root: '/work/drawer-order',
@@ -126,12 +128,12 @@ async function installFixture(page: import('@playwright/test').Page) {
         },
       });
     }
+    if (path.endsWith('/tickets')) return route.fulfill({ json: ticketsJson(request, []) });
     if (
       path.endsWith('/connections') ||
       path.endsWith('/permissions') ||
       path.endsWith('/commands') ||
       path.endsWith('/command-runs') ||
-      path.endsWith('/tickets') ||
       path.endsWith('/corrupt-tickets')
     )
       return route.fulfill({ json: [] });
