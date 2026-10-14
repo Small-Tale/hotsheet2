@@ -11,7 +11,7 @@
 
 <!-- BEGIN hotsheet:agents-md -->
 <!-- hotsheet-shared-section: antigravity, codex, opencode -->
-<!-- hotsheet-instructions-version: 57 -->
+<!-- hotsheet-instructions-version: 58 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -48,7 +48,12 @@ lookups, a single-line fix, or a git commit. When in doubt, create the ticket.
 - `hotsheet-cli edit <slug> --status completed --note "what you did"` when done.
 - On git-backed Started tickets, keep `started_phase` current with
   `hotsheet-cli edit <slug> --started-phase <analyzing|planning|working|initial_testing|integrating|final_testing>`.
-  The phase is durable progress; only the live claim signals active work.
+  The phase is durable progress; only the live claim signals active work. **Record every
+  transition the moment it happens, not afterward:** set `initial_testing` before you run the
+  test suite or other gates, `integrating` before you merge/rebase/push, and `final_testing`
+  while waiting on remote CI; move back to `working` when a test failure sends you back to
+  code. A ticket left at `working` while its tests run misreports progress. `claim` and
+  `renew` print the current phase as a reminder.
 - Or the MCP tools: `hotsheet_claim_next` / `hotsheet_renew` / `hotsheet_release` for the lease,
   and `hotsheet_update` (it takes a `note`) / `hotsheet_close`.
 - Create work with `hotsheet-cli new --title "…" --category <bug|feature|task>` or
@@ -181,3 +186,58 @@ independent failure. This does not defer local gates, integration, or pushing.
 **Pushing is up to this repository.** Follow whatever push/PR/review conventions this project
 already uses; this default guidance does not require or forbid pushing on its own.
 <!-- END hotsheet:agents-md -->
+
+<!-- hotsheet:begin section=ticket-driven-work v=5 -->
+
+## Ticket-Driven Work
+
+Create a Hot Sheet ticket before substantial work described directly by a user, including features, bugs, refactors, and multi-step code changes. Claim it before editing, keep its phase and ETA current, and release the claim whenever work stops. A claim is the live activity signal; `claim_count` records past attempts and must not be used to infer current activity.
+
+- Create follow-up tickets immediately for unfinished steps, open decisions, known gaps, and designed but unbuilt behavior. Include their slugs in the current ticket's completion note.
+- Use `FEEDBACK NEEDED` only when the current ticket cannot proceed without a user decision or unavailable external state. Leave it Started, describe the blocker, and release its claim.
+- Before completing, verify the scope, update tests, coverage and docs, scan for placeholders and incomplete behavior, and record the result, verification, and every follow-up.
+- When a UI ticket has a problem or design image, capture and attach an after image of the matching component, state, and viewport. Explain any unavailable capture in the completion note.
+- Name every addressed ticket slug in its commit message.
+- Record `activity` notes when a meaningful subtask starts and finishes; keep repeated or reversed transitions as separate history entries. Put conclusions, decisions, and recommendations in `regular` Markdown notes, with a short activity entry pointing to them when useful.
+- Give each AI-authored activity note a one-line, outcome-oriented `note_summary` in the same update as its Markdown body. Keep the summary plain text and preferably under 80 characters; put implementation and verification detail in the body.
+- For multiline CLI Markdown, use `--note-file <path>` (or `--note-file -` for stdin) with real line breaks. Use `--allow-literal-backslash-n` only when literal backslash-n prose is intentional.
+
+<!-- hotsheet:end section=ticket-driven-work -->
+
+<!-- hotsheet:begin section=testing-philosophy v=4 -->
+
+## Testing Philosophy
+
+- Cover each feature with unit tests of its logic and end-to-end tests through the real shipped flow. Mock external dependencies in unit tests; keep browser fixtures faithful to real server shapes, optional fields, and status codes. Exercise each newly composed API surface against a real server as well as mocked client tests.
+- Aim to cover every documented feature and reach 100% line and branch coverage. Treat those numbers as a floor: executed lines do not prove behavior or sequences. For stateful modules, enumerate states and transitions, then test repeated, interleaved, out-of-order, reset, and empty-then-refill sequences.
+- Test stateful controls in both directions: control to application state and rendered output, and programmatic state changes back to live controls. Verify resets and a further edit. For custom elements, assert live properties and relevant focus/events. Check every part of a selected presentation, including icons, badges, counts, and other derived decoration.
+- Exercise child actions through each shipped parent composition. A demo or isolated preview is insufficient evidence that the real parent wires an enabled control; disable unsupported controls explicitly.
+- Maintain a feature-by-feature record of unit, end-to-end, and manual coverage as behavior changes. Keep a manual test plan for behavior that cannot be reliably automated. Broaden the affected-package test set for shared or high-risk changes.
+- Give every code package a working local lint command and configuration when it is added. Keep lint warning-free, fix lint and type errors before finishing, and document justified suppressions.
+
+<!-- hotsheet:end section=testing-philosophy -->
+
+<!-- hotsheet:begin section=requirements-documentation v=3 -->
+
+## Requirements Documentation
+
+Keep human-readable requirements as the source of truth for product behavior. Update them in the same change that adds, removes, or changes behavior. Create and cross-link documents for major new functional areas.
+
+Maintain two concise AI-readable synthesis documents at project-specific, repository-relative locations:
+
+- A codebase map of directory structure, entry points, schema, settings, build and test paths, and where to find important behavior. Update it when structure or contracts change.
+- A requirements summary covering each requirements document and marking what is shipped, partial, design-only, or deferred. Update it when requirements or implementation status change.
+
+If either document is absent, create a minimal, truthful version in the same change that first needs it; link it from the project's documentation index and record its relative path in local `hotsheet:specifics` guidance. Setup and refresh install these instructions but do not invent a map or product status. Preserve any existing document locations and prefer targeted updates over rewrites. Source requirements documents and code win if a summary conflicts with them.
+
+<!-- hotsheet:end section=requirements-documentation -->
+
+<!-- hotsheet:begin section=visual-qa v=1 -->
+
+## Visual QA
+
+For any change that can affect a rendered interface, inspect the real result in a browser at representative wide and narrow sizes before completing the ticket. Exercise the affected states and transitions, then review readability, clipping and overflow, alignment, spacing, typography, contrast, icons, responsive behavior, and consistency with adjacent components. Fix defects, rerun affected behavioral checks, and inspect the corrected result. DOM, accessibility, style, and geometry assertions support this review but do not replace looking at the rendered page.
+
+If the ticket has a problem or design image, capture the corresponding after state at the same component and viewport as closely as practical. Attach the image to the ticket and name it in the completion note. Screenshots supplement behavioral tests. If browser capture or attachment is unavailable after practical attempts, describe the exact blocker and leave the visual ticket open for review rather than claiming visual validation.
+
+<!-- hotsheet:end section=visual-qa -->

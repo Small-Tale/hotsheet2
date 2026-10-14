@@ -1,17 +1,13 @@
-<!-- hotsheet:begin section=ticket-driven-work v=3 -->
-
+<!-- hotsheet:begin section=ticket-driven-work v=1 -->
 ## Ticket-Driven Work
 
 When the user gives you work directly (not via the Hot Sheet channel or events), create Hot Sheet tickets before starting implementation — especially for substantial or multi-step work.
 
 - **Do create tickets** for: features, bug fixes, refactoring, multi-step tasks, anything changing code. **Don't** for: simple questions, git commits, quick lookups, trivial one-liners. **When in doubt, create them.**
 - Create via the Hot Sheet API (prefer the `hotsheet_*` MCP tools), mark Up Next, then work through them: set status `started` → implement → set `completed` with notes.
-- **Create every follow-up immediately — without asking.** As soon as you identify unfinished steps, open design questions, known gaps, out-of-scope work, or designed-but-unbuilt behavior, create a follow-up ticket. Do not ask permission, wait for confirmation, promise to file it later, or leave it only in a comment/TODO/note. Reference every follow-up slug in the current ticket's completing note, then continue.
-- **FEEDBACK NEEDED is for a blocker on the current ticket, not deferred work.** Use it only when the current ticket cannot proceed without a user decision or unavailable external state. Leave that ticket `started`, add a `FEEDBACK NEEDED:` note with the specific decision or state required, and wait after continuing any independent work. This does not replace a follow-up: create tickets first for every independently describable gap or later step.
-- **Completion checklist** — before marking a ticket `completed`: (1) finish and verify its scope; (2) update required tests, coverage, and docs; (3) scan for placeholders, TODO/FIXME comments, stubs/mock returns, documented-but-unimplemented behavior, open questions, and known gaps; (4) immediately create a follow-up for every incomplete item; (5) include the result, verification, and all follow-up slugs in the completing note.
-- **UI evidence continuity** — when a UI ticket already contains an image demonstrating the problem or requested design, reproduce that component/state/viewport after the change, attach the resulting screenshot to the ticket, and reference it in the completion note. Do not silently leave the evidence only in a local temporary path; if capture or attachment is genuinely impossible, say exactly why in the completion note.
-- **Commit traceability** — every commit for ticket-driven work must include every ticket slug addressed by that commit in its commit message. This applies to both single-ticket and intentionally combined commits.
-
+- **Always create follow-up tickets** for incomplete work (unfinished steps, open design questions, known gaps, designed-but-unbuilt features). If it's not in a ticket, it's forgotten.
+- **Incomplete-work checklist** — before marking a ticket `completed`, file follow-ups for any: (1) UI placeholder text ("coming soon"), (2) TODO/FIXME comments, (3) documented-but-unimplemented requirements, (4) empty/stub functions returning mock data.
+- **Use FEEDBACK NEEDED before deferring or asking about follow-ups.** When about to (a) defer a ticket needing more work, (b) ask whether to file follow-ups, or (c) close with a question buried in notes — DON'T. Leave the ticket `started`, add a `FEEDBACK NEEDED:` note (per `.hotsheet/worklist.md`), signal channel done, and wait. It's the only reliable way to surface a question.
 <!-- hotsheet:end section=ticket-driven-work -->
 
 ## Identity terminology
@@ -225,59 +221,17 @@ Every actionable context-menu item should carry a meaningful Lucide icon; separa
 and other non-action structure are the only ordinary exception.
 
 <!-- hotsheet:begin section=testing-philosophy v=2 -->
-
 ## Testing Philosophy
 
 - **Double coverage**: every feature covered by both unit tests AND E2E tests. Unit = logic in isolation; E2E = real user flows through the running app with minimal mocking.
 - **Unit tests**: Mock external deps (filesystem, network), test real logic.
 - **E2E tests**: As much as possible, use test automation tools to run realistic, user-facing flows. Minimize mocks.
-- **Mock the exact transport contract**: browser fixtures must use the server's real wire
-  shape, including flattening/envelopes, optional fields, and status codes. Do not invent a
-  more convenient response shape for a client test. For each newly composed real API
-  surface, run at least one integration or opt-in local-browser flow against the actual
-  server; a mocked UI test alone cannot validate the adapter boundary.
 - **Coverage**: Merge all test coverage (e.g. unit, E2E server, E2E browser) into one report. Low-coverage files should get more of both test types. Aim for 100% coverage of code lines, 100% coverage of branches, and 100% of features described in the requirements documentation.
-- **Coverage is a floor, not a ceiling**: 100% line/branch coverage shows every line _ran_, not that every _behavior_ — or every _sequence_ of behaviors — is _asserted_. It is structurally blind to a **missing state transition**: a bug living in an untested interaction sails through a green 100% report because the individual lines still get hit by isolated, single-operation tests.
+- **Coverage is a floor, not a ceiling**: 100% line/branch coverage shows every line *ran*, not that every *behavior* — or every *sequence* of behaviors — is *asserted*. It is structurally blind to a **missing state transition**: a bug living in an untested interaction sails through a green 100% report because the individual lines still get hit by isolated, single-operation tests.
 - **Transition-matrix testing for stateful modules**: for anything with modes / multiple code paths / a cache / a state machine, enumerate the states AND the transitions between them, then write tests that walk realistic multi-step sequences crossing state boundaries — not just each operation from a clean initial state.
 - **Adversarial pass on stateful changes**: when adding or altering a stateful code path, deliberately try to break it with out-of-order / interleaved / repeated / empty-then-refill sequences; pin any that would have failed as permanent regression tests.
-- **Client state synchronization is bidirectional**: for every stateful control, test
-  both control → application state/rendered output and programmatic application state
-  → the live control. A stateful client interaction test must establish the initial
-  state, change every exposed setting, verify output, reset/replace state, verify every
-  control and output again, then make another edit after reset. For custom elements,
-  assert live properties such as `value` and `checked` (plus focus and emitted events
-  when relevant), not attributes alone. Exercise every rendered action such as Reset,
-  Save, Cancel, Apply, Remove, and Undo. Prefer one tested binding/synchronization
-  abstraction over per-component repair code.
-- **Assert the complete selected presentation after transitions**: when a composite
-  control renders a label plus icon, color, badge, checkmark, count, or other derived
-  decoration, changing its value must assert every visible facet in the closed/current
-  state—not only the label, initial render, or popup options. Exercise the transition
-  through the real owning surface (for example an inspector), then verify stale
-  decorations disappeared and the new label and decorations agree with application
-  state. A menu containing correct icons does not prove its selected-value projection.
-- **Exercise child actions through every shipped composition**: a component demo proving
-  an action works does not prove a parent composition projects the changed state back
-  into that child. For each interactive child used by a composite surface, trigger its
-  real action through the composite, assert the owning state changed, and assert the
-  composite rerendered the correct child view. Never hardcode a controlled child prop
-  in a composition when a shared signal/controller owns that state.
 - **Manual test plan**: keep a manual test plan doc (e.g. `docs/manual-test-plan.md`) for features that can't be reliably automated. **Keep it up to date** — add such features there; when you add automated coverage for a previously-manual item, remove it and note it in an "Automated Coverage Summary".
-- **Feature coverage matrix**: update [`docs/TEST-COVERAGE.md`](docs/TEST-COVERAGE.md)
-  in the same change whenever a feature is added, shipped, changed, deferred, or gains
-  or loses unit, E2E, or manual coverage. `node scripts/check-test-coverage.mjs` is the
-  CI gate for valid statuses and live evidence paths; line coverage is not a substitute
-  for recording both behavioral layers.
 - **Always fix lint and type errors before finishing**: Fix as you go, don't batch.
-  Every client, server, tool, spike, and other code package must ship with a real
-  lint configuration and a package-local lint command from the moment code is added.
-  The web/TypeScript baseline is the shared Glassbox ESLint stack (ESLint recommended,
-  typed TypeScript rules, import ordering, TSDoc, and Kerf rules); Rust uses the pinned
-  toolchain's `rustfmt` and `cargo lint` alias (Clippy for the workspace/all targets/all
-  features, warnings plus debug/TODO/unimplemented macros denied). Do not push with a
-  lint warning or error. Suppress a rule only at a documented compatibility or external
-  boundary—not merely to make the command green—and tighten transitional exceptions as
-  touched code is made safe.
 
 <!-- hotsheet:begin specifics=testing-philosophy v=1 -->
 
@@ -328,7 +282,6 @@ and other non-action structure are the only ordinary exception.
 <!-- hotsheet:end section=testing-philosophy -->
 
 <!-- hotsheet:begin section=requirements-documentation v=1 -->
-
 ## Requirements Documentation
 
 Keep human-readable requirements documents as the source of truth for what the project does, and **keep them up to date in the same change as the code** (add/remove/modify a requirement → update its doc). Create new docs for major new functional areas. Cross-reference related docs with relative links.
@@ -432,7 +385,7 @@ References to the _original_ Hot Sheet (the predecessor at
 predecessor links; they do not attribute Hot Sheet 2.
 
 <!-- BEGIN hotsheet:claude -->
-<!-- hotsheet-instructions-version: 56 -->
+<!-- hotsheet-instructions-version: 58 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -467,6 +420,14 @@ lookups, a single-line fix, or a git commit. When in doubt, create the ticket.
   `--eta <duration>` (for example `--eta 45m`; MCP `eta`) with your honest estimate of when
   you will finish. If `renew` reports that the ETA has passed, renew again with a new `--eta`.
 - `hotsheet-cli edit <slug> --status completed --note "what you did"` when done.
+- On git-backed Started tickets, keep `started_phase` current with
+  `hotsheet-cli edit <slug> --started-phase <analyzing|planning|working|initial_testing|integrating|final_testing>`.
+  The phase is durable progress; only the live claim signals active work. **Record every
+  transition the moment it happens, not afterward:** set `initial_testing` before you run the
+  test suite or other gates, `integrating` before you merge/rebase/push, and `final_testing`
+  while waiting on remote CI; move back to `working` when a test failure sends you back to
+  code. A ticket left at `working` while its tests run misreports progress. `claim` and
+  `renew` print the current phase as a reminder.
 - Or the MCP tools: `hotsheet_claim_next` / `hotsheet_renew` / `hotsheet_release` for the lease,
   and `hotsheet_update` (it takes a `note`) / `hotsheet_close`.
 - Create work with `hotsheet-cli new --title "…" --category <bug|feature|task>` or
@@ -588,6 +549,24 @@ Keep the repo in a known-good state.
    or misleading.
 4. Get the worktree clean before starting the next ticket.
 
+**Final remote CI exception:** after local gates pass and the integrated commit is
+pushed, a Started ticket may enter `final_testing` while its remote CI run continues.
+Record the commit and run in a ticket note, release the claim, and work another ready
+ticket; automatic claim-next skips final-testing tickets. Reclaim the exact ticket
+when CI resolves and complete it after a green result. Repair failures caused by that
+ticket's own change before completion; create a prioritized follow-up bug for an
+independent failure. This does not defer local gates, integration, or pushing.
+
 **Pushing is up to this repository.** Follow whatever push/PR/review conventions this project
 already uses; this default guidance does not require or forbid pushing on its own.
 <!-- END hotsheet:claude -->
+
+<!-- hotsheet:begin section=visual-qa v=1 -->
+
+## Visual QA
+
+For any change that can affect a rendered interface, inspect the real result in a browser at representative wide and narrow sizes before completing the ticket. Exercise the affected states and transitions, then review readability, clipping and overflow, alignment, spacing, typography, contrast, icons, responsive behavior, and consistency with adjacent components. Fix defects, rerun affected behavioral checks, and inspect the corrected result. DOM, accessibility, style, and geometry assertions support this review but do not replace looking at the rendered page.
+
+If the ticket has a problem or design image, capture the corresponding after state at the same component and viewport as closely as practical. Attach the image to the ticket and name it in the completion note. Screenshots supplement behavioral tests. If browser capture or attachment is unavailable after practical attempts, describe the exact blocker and leave the visual ticket open for review rather than claiming visual validation.
+
+<!-- hotsheet:end section=visual-qa -->
