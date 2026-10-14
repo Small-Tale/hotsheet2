@@ -549,6 +549,13 @@ skipped, and the project carries `setupWarning`, shown as a dismissible **Projec
 skipped** warning banner with the reason and fix. Bootstrap and post-import setup still stop,
 because they would otherwise leave a project half set up.
 
+The stable local host (`npm run {prod,dev}:rebuild-lan`) runs startup copies of its
+binaries and marks them with `HOTSHEET_LOCAL_HOST_SNAPSHOT=1`. Its pinned CLI is expected to
+fall behind in-tree template edits, so a mismatched (but reported) digest still skips the
+refresh — the pinned CLI would write older guidance — while the warning says the templates
+changed after the host started and to restart the host, rather than asking for a rebuild
+(HS2-A3C894). A missing digest keeps the rebuild message.
+
 Protocol ranges assume unsynchronized rollout. A non-intersecting range stops project API
 use and identifies which side requires an update; exact build differences remain
 informational. Store attachment is also negotiated before mutation: a server validates

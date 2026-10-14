@@ -21,7 +21,7 @@ import { spawnSync } from './child-process';
 import { localClientUrl, publishClientUrl } from './client-discovery';
 import { createDevApp } from './dev-server';
 import { isRecord, parseJson } from './json-value';
-import { developmentRepositoryRoot } from './project-bridge';
+import { developmentRepositoryRoot, LOCAL_HOST_SNAPSHOT_ENV } from './project-bridge';
 import { installProjectWebSocketBridge } from './terminal-ws-bridge';
 
 export const LOCAL_HOST_DEFAULT_PORT = 4175;
@@ -157,6 +157,7 @@ export function snapshotLocalHostArtifacts(
       chmodSync(pinned, statSync(source).mode & 0o777);
       environment[variable] = pinned;
     }
+    environment[LOCAL_HOST_SNAPSHOT_ENV] = '1';
     return { distRoot: pinnedDistRoot, environment, dispose };
   } catch (error) {
     dispose();

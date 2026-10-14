@@ -247,6 +247,16 @@ describe('project setup compatibility', () => {
     expect(() => {
       requireCurrentSetupAssets({ ...cli, setup_assets_fingerprint: fingerprint }, fingerprint);
     }).not.toThrow();
+    // HS2-A3C894: a snapshot host keeps the protection but names the actual remedy.
+    expect(() => {
+      requireCurrentSetupAssets({ ...cli, setup_assets_fingerprint: '0'.repeat(64) }, fingerprint, true);
+    }).toThrow(/changed after this Hot Sheet host started.*Restart the host.*No setup files were changed/i);
+    expect(() => {
+      requireCurrentSetupAssets(cli, fingerprint, true);
+    }).toThrow(/does not report.*cargo build -p hotsheet-cli/i);
+    expect(() => {
+      requireCurrentSetupAssets({ ...cli, setup_assets_fingerprint: fingerprint }, fingerprint, true);
+    }).not.toThrow();
     const staleRunner = vi.fn().mockResolvedValue(JSON.stringify(cli));
     await expect(refreshLocalProjectSetup('/work/code', '/work/tickets.hs2', staleRunner)).rejects.toThrow(
       /No setup files were changed/i,

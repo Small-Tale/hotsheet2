@@ -190,6 +190,7 @@ describe('pinned production artifacts (HS2-6VQ5RV)', () => {
       expect(readFileSync(pinnedServer, 'utf8')).toBe('selected server');
       expect(statSync(pinnedServer).mode & 0o111).toBeTruthy();
       expect(snapshot.environment.HOT_SHEET_BUILD_REVISION).toBe('selected');
+      expect(snapshot.environment.HOTSHEET_LOCAL_HOST_SNAPSHOT).toBe('1');
 
       await rm(dist, { recursive: true });
       await rm(server);

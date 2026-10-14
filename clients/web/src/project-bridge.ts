@@ -338,8 +338,22 @@ export async function developmentSetupAssetsFingerprint(repositoryRoot = develop
   return hash.digest('hex');
 }
 
-export function requireCurrentSetupAssets(cli: CliCompatibility, sourceFingerprint: string): void {
+/** Set by `snapshotLocalHostArtifacts` when the host runs startup copies of its binaries (HS2-A3C894). */
+export const LOCAL_HOST_SNAPSHOT_ENV = 'HOTSHEET_LOCAL_HOST_SNAPSHOT';
+
+export function requireCurrentSetupAssets(
+  cli: CliCompatibility,
+  sourceFingerprint: string,
+  snapshotHost = process.env[LOCAL_HOST_SNAPSHOT_ENV] === '1',
+): void {
   if (cli.setup_assets_fingerprint === sourceFingerprint) return;
+  // A snapshot host's CLI is intentionally pinned at startup, so in-tree template edits are expected
+  // drift rather than a broken build. Still refuse the refresh (the pinned CLI would write older
+  // guidance), but say what actually fixes it (HS2-A3C894).
+  if (snapshotHost && cli.setup_assets_fingerprint)
+    throw new Error(
+      'Setup templates changed after this Hot Sheet host started. Restart the host to apply the newer project guidance. No setup files were changed.',
+    );
   const detail = cli.setup_assets_fingerprint
     ? 'does not match the current setup templates'
     : 'does not report a setup-template fingerprint';
