@@ -24,7 +24,7 @@ import { addTicketTag, openTicketTagSurface, removeTicketTag } from '../componen
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { maintainContextPopupMenuAnchor } from '../context-menu-position';
 import { copyText } from '../copy-text';
-import { createCoalescedInput, type DebouncedAutosave } from '../debounced-autosave';
+import { createCoalescedInput, createKeyedCoalescedInput, type DebouncedAutosave } from '../debounced-autosave';
 import { parseFeedbackChoices, updateFeedbackChoiceDocumentSelection } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
 import { combineFeedbackReply, type InlineFeedbackReply, sourceOffsetForVisibleOffset } from '../feedback-replies';
@@ -627,6 +627,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   }
   /** Save or answer a note inside a linked reader frame, against that frame's own ticket. */
   function saveLinkedReaderNote(frame: TicketReaderFrame, target: HTMLElement) {
+    inlineFeedbackReplyInput.flush();
     const id = frame.edit.editingNoteId ?? data(target).noteId,
       note = frame.ticket.notes.find((item) => item.id === id);
     if (!id || !note) return;
@@ -691,24 +692,40 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       },
     ),
   );
+  // Keystrokes coalesce for 150 ms before rebuilding the reply map (HS2-2YW8R3); blur, removal, and
+  // every submit path flush first so no typed text is lost or answered stale.
+  const inlineFeedbackReplyInput = createKeyedCoalescedInput<{ noteId: string; offset: number; text: string }>(
+    ({ noteId, offset }) => `${noteId}:${offset}`,
+    ({ noteId, offset, text }) => {
+      const existing = readerInlineFeedbackReplies.value[noteId] ?? [];
+      readerInlineFeedbackReplies.value = {
+        ...readerInlineFeedbackReplies.value,
+        [noteId]: existing.map((reply) => (reply.offset === offset ? { ...reply, text } : reply)),
+      };
+      scheduleProjectSessionPersistence();
+    },
+  );
+  lifetime.add(() => {
+    inlineFeedbackReplyInput.flush();
+  });
   lifetime.add(
     delegate(
       document.body,
       'input',
       INSPECTOR_AND_EDITOR_TARGETS.inlineFeedbackResponseField.selector,
       (_event, target) => {
-        const noteId = data(target).noteId!,
-          offset = Number(data(target).offset),
-          existing = readerInlineFeedbackReplies.value[noteId] ?? [];
-        readerInlineFeedbackReplies.value = {
-          ...readerInlineFeedbackReplies.value,
-          [noteId]: existing.map((reply) =>
-            reply.offset === offset ? { ...reply, text: (target as HTMLTextAreaElement).value } : reply,
-          ),
-        };
-        scheduleProjectSessionPersistence();
+        inlineFeedbackReplyInput.schedule({
+          noteId: data(target).noteId!,
+          offset: Number(data(target).offset),
+          text: (target as HTMLTextAreaElement).value,
+        });
       },
     ),
+  );
+  lifetime.add(
+    delegate(document.body, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.inlineFeedbackResponseField.selector, () => {
+      inlineFeedbackReplyInput.flush();
+    }),
   );
   lifetime.add(
     delegate(
@@ -716,6 +733,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       'click',
       INSPECTOR_AND_EDITOR_ACTIONS.removeInlineFeedbackReply.selector,
       (_event, target) => {
+        inlineFeedbackReplyInput.flush();
         const noteId = data(target).noteId!,
           offset = Number(data(target).offset),
           existing = readerInlineFeedbackReplies.value[noteId] ?? [];
@@ -797,6 +815,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         });
       },
       save: (target) => {
+        inlineFeedbackReplyInput.flush();
         const frame = linkedReaderFrame(target);
         if (frame) {
           saveLinkedReaderNote(frame, target);
@@ -835,6 +854,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.dismissFeedback.selector, (_event, target) => {
       const id = data(target).noteId;
       if (!id) return;
+      inlineFeedbackReplyInput.cancel();
       const frame = linkedReaderFrame(target),
         // A linked reader frame answers on its own ticket, not the workspace selection (HS2-04XTV5).
         saved = frame

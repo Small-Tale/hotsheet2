@@ -5,6 +5,7 @@ import {
   createCoalescedInput,
   createDebouncedAutosave,
   createFocusLossAutosave,
+  createKeyedCoalescedInput,
 } from './debounced-autosave';
 
 afterEach(() => {
@@ -165,6 +166,39 @@ describe('createCoalescedInput (HS2-9CWDSB)', () => {
       input.schedule('x');
       input.flush();
       expect(published).toEqual(['abc', 'abcd', '', 'x']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('createKeyedCoalescedInput (HS2-2YW8R3)', () => {
+  it('publishes a pending field before another field queues, and coalesces within one field', () => {
+    vi.useFakeTimers();
+    try {
+      const published: string[] = [];
+      const input = createKeyedCoalescedInput<{ key: string; text: string }>(
+        (value) => value.key,
+        (value) => published.push(`${value.key}=${value.text}`),
+      );
+      // Same field: repeated keys coalesce to one publish per pause.
+      input.schedule({ key: 'a', text: 'h' });
+      input.schedule({ key: 'a', text: 'hi' });
+      vi.advanceTimersByTime(150);
+      expect(published).toEqual(['a=hi']);
+      // Field switch mid-pause publishes the old field synchronously, then the new one after its pause.
+      input.schedule({ key: 'a', text: 'hi!' });
+      input.schedule({ key: 'b', text: 'x' });
+      expect(published).toEqual(['a=hi', 'a=hi!']);
+      vi.advanceTimersByTime(150);
+      expect(published).toEqual(['a=hi', 'a=hi!', 'b=x']);
+      // Switch after an idle pause publishes nothing extra; cancel drops; refill after cancel publishes.
+      input.schedule({ key: 'a', text: 'gone' });
+      input.cancel();
+      input.schedule({ key: 'b', text: 'y' });
+      input.flush();
+      input.flush();
+      expect([published, input.pending()]).toEqual([['a=hi', 'a=hi!', 'b=x', 'b=y'], false]);
     } finally {
       vi.useRealTimers();
     }

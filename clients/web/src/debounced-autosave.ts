@@ -163,3 +163,26 @@ export function createCoalescedInput<T>(publish: (value: T) => void, delay = AUT
     pending: () => queued !== undefined,
   };
 }
+
+/**
+ * A `createCoalescedInput` shared by several fields (HS2-2YW8R3): typing into a different field
+ * (by `keyOf`) publishes the previous field's pending draft before queueing its own, so switching
+ * fields mid-pause never drops text.
+ */
+export function createKeyedCoalescedInput<T>(
+  keyOf: (value: T) => string,
+  publish: (value: T) => void,
+  delay = AUTOSAVE_DELAY_MS,
+): CoalescedInput<T> {
+  const input = createCoalescedInput(publish, delay);
+  let queuedKey: string | undefined;
+  return {
+    ...input,
+    schedule(value) {
+      const key = keyOf(value);
+      if (input.pending() && queuedKey !== key) input.flush();
+      queuedKey = key;
+      input.schedule(value);
+    },
+  };
+}

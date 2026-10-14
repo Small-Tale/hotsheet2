@@ -304,6 +304,7 @@ inspector-and-editor	wireNoteComposer	document.body
 inspector-and-editor	delegate	document.body	'click'	'[data-action="add-inline-feedback-reply"]'
 inspector-and-editor	delegate	document.body	'keydown'	'[data-action="add-inline-feedback-reply"]'
 inspector-and-editor	delegate	document.body	'input'	'[name="inline-feedback-response"]'
+inspector-and-editor	delegate	document.body	'focusout'	'[name="inline-feedback-response"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="remove-inline-feedback-reply"]'
 inspector-and-editor	wireFeedbackChoices	document.body
 inspector-and-editor	wireNoteEditor	document.body

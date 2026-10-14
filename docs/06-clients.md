@@ -1761,8 +1761,10 @@ preview/download, server directory browser) are separate design work.
   The same coalescing applies to other fields whose app-state write re-renders a surface
   (HS2-9CWDSB): the Not Working note, the close dialog's duplicate-target search, the
   inspector's field-conflict merge text, and the saved-view name publish once typing pauses
-  for 150 ms, or immediately on blur or submit; Cancel discards a pending draft. The inline
-  feedback reply field is tracked separately with the feedback reply flow.
+  for 150 ms, or immediately on blur or submit; Cancel discards a pending draft. Inline
+  feedback reply fields coalesce the same way (HS2-2YW8R3); typing into a different reply
+  field, removing a reply, Respond, and No Response Needed flush or discard the pending text
+  first.
   Duplicate (Command/Ctrl+D) copies the note
   and intents. Tab cycles annotations; Delete removes the selection; arrows nudge it
   by one screen point or ten with Shift; Escape cancels a gesture, tool, then selection.

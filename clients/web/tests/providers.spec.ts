@@ -8992,11 +8992,17 @@ test('clicks exact feedback character positions, removes a split, and composes a
   expect(replyBox.x).toBeGreaterThanOrEqual(noteBox.x);
   expect(replyBox.x + replyBox.width).toBeLessThanOrEqual(noteBox.x + noteBox.width);
   await note.screenshot({ path: 'target/visual-captures/hs2-c5sab3-inline-feedback-replies-narrow.png' });
-  await note.getByRole('button', { name: 'Respond' }).click();
+  // Keystrokes coalesce (HS2-2YW8R3): Respond activated while the field still has focus and its
+  // last keys are pending must flush them rather than submit the stale reply.
+  await second.focus();
+  await page.keyboard.type(' now');
+  await note.getByRole('button', { name: 'Respond' }).evaluate((button) => {
+    (button as HTMLElement).click();
+  });
   await expect
     .poll(() => patches.find((patch) => patch.note_kind === 'regular')?.note)
     .toBe(
-      '> FEEDBACK NEEDED\n>\n> Hello there\n>\n> 1. Something\n\nMy first response\n\n> 2. Another thing\n\nMy second response',
+      '> FEEDBACK NEEDED\n>\n> Hello there\n>\n> 1. Something\n\nMy first response\n\n> 2. Another thing\n\nMy second response now',
     );
 });
 
