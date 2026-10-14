@@ -279,24 +279,33 @@ fn controlled_provider_latency_distributions_for_one_twenty_and_one_hundred() {
     println!("count=100 controlled_rate_limits={limited}");
 }
 
-#[test]
-#[ignore = "opt-in live mutation of a designated GitHub benchmark issue"]
-fn opt_in_real_github_mutation_latency() {
+fn require_real_bench() -> usize {
     assert_eq!(
         std::env::var("HOTSHEET_REAL_PROVIDER_BENCH").as_deref(),
         Ok("1"),
         "set HOTSHEET_REAL_PROVIDER_BENCH=1 to run this ignored test"
     );
-    let repository = std::env::var("HOTSHEET_BENCH_GITHUB_REPOSITORY").unwrap();
-    let token = std::env::var("HOTSHEET_BENCH_GITHUB_TOKEN").unwrap();
-    let issue = std::env::var("HOTSHEET_BENCH_GITHUB_ISSUE").unwrap();
-    let provider = GitHubProvider::live(GitHubConfig::new("github-bench", repository, token));
-    let mut current = provider.get(&issue).unwrap();
-    let mut samples: Vec<ProviderMutationTiming> = Vec::new();
-    for _ in 0..3 {
+    std::env::var("HOTSHEET_BENCH_SAMPLES")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(3)
+}
+
+/// Performs `samples` same-title edits against one designated benchmark issue and prints
+/// each phase plus median/p90 summaries in milliseconds.
+fn real_title_edit_latency(
+    provider: &dyn TicketProvider,
+    issue: &str,
+    samples: usize,
+    label: &str,
+) {
+    let mut current = provider.get(issue).unwrap();
+    let mut timings: Vec<(ProviderMutationTiming, f64)> = Vec::new();
+    for _ in 0..samples {
+        let started = Instant::now();
         let (ticket, timing) = provider
             .update_timed(
-                &issue,
+                issue,
                 Timestamp::new("2026-10-08T00:02:00Z"),
                 ProviderPatch {
                     expected_token: current.concurrency_token.clone(),
@@ -305,17 +314,72 @@ fn opt_in_real_github_mutation_latency() {
                 },
             )
             .unwrap();
+        timings.push((timing, started.elapsed().as_secs_f64() * 1000.0));
         current = ticket;
-        samples.push(timing);
     }
-    for (index, timing) in samples.iter().enumerate() {
+    let ms = |duration: Duration| duration.as_secs_f64() * 1000.0;
+    for (index, (timing, total)) in timings.iter().enumerate() {
         println!(
-            "real_sample={} read_ms={:.1} token_ms={:.1} write_ms={:.1} ack_ms={:.1}",
+            "{label} real_sample={} read_ms={:.1} token_ms={:.1} write_ms={:.1} ack_ms={:.1} total_ms={total:.1}",
             index + 1,
-            timing.remote_read.as_secs_f64() * 1000.0,
-            timing.token_check.as_secs_f64() * 1000.0,
-            timing.remote_write.as_secs_f64() * 1000.0,
-            timing.acknowledgement.as_secs_f64() * 1000.0,
+            ms(timing.remote_read),
+            ms(timing.token_check),
+            ms(timing.remote_write),
+            ms(timing.acknowledgement),
         );
     }
+    let summary = |name: &str, values: Vec<f64>| {
+        let mut sorted = values;
+        sorted.sort_by(f64::total_cmp);
+        let at = |fraction: f64| sorted[((sorted.len() - 1) as f64 * fraction).round() as usize];
+        println!(
+            "{label} summary op={name} n={} median_ms={:.1} p90_ms={:.1}",
+            sorted.len(),
+            at(0.5),
+            at(0.9)
+        );
+    };
+    summary(
+        "read",
+        timings.iter().map(|(t, _)| ms(t.remote_read)).collect(),
+    );
+    summary(
+        "write",
+        timings.iter().map(|(t, _)| ms(t.remote_write)).collect(),
+    );
+    summary(
+        "ack",
+        timings.iter().map(|(t, _)| ms(t.acknowledgement)).collect(),
+    );
+    summary("total", timings.iter().map(|(_, total)| *total).collect());
+}
+
+#[test]
+#[ignore = "opt-in live mutation of a designated GitHub benchmark issue"]
+fn opt_in_real_github_mutation_latency() {
+    let samples = require_real_bench();
+    let repository = std::env::var("HOTSHEET_BENCH_GITHUB_REPOSITORY").unwrap();
+    let token = std::env::var("HOTSHEET_BENCH_GITHUB_TOKEN").unwrap();
+    let issue = std::env::var("HOTSHEET_BENCH_GITHUB_ISSUE").unwrap();
+    let provider = GitHubProvider::live(GitHubConfig::new("github-bench", repository, token));
+    real_title_edit_latency(&provider, &issue, samples, "github");
+}
+
+#[test]
+#[ignore = "opt-in live mutation of a designated Jira benchmark issue"]
+fn opt_in_real_jira_mutation_latency() {
+    let samples = require_real_bench();
+    let var = |name: &str| std::env::var(name).unwrap_or_else(|_| panic!("set {name}"));
+    let issue = var("HOTSHEET_BENCH_JIRA_ISSUE");
+    let provider = JiraProvider::live(JiraConfig {
+        connection_id: "jira-bench".into(),
+        project_key: var("HOTSHEET_JIRA_LIVE_PROJECT"),
+        base_url: var("HOTSHEET_JIRA_LIVE_BASE_URL")
+            .trim_end_matches('/')
+            .into(),
+        email: var("HOTSHEET_JIRA_LIVE_EMAIL"),
+        token: var("HOTSHEET_JIRA_LIVE_TOKEN"),
+        default: false,
+    });
+    real_title_edit_latency(&provider, &issue, samples, "jira");
 }

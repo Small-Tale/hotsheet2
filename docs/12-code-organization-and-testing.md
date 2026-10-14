@@ -524,7 +524,11 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   `HOTSHEET_GITHUB_LIVE_ASSETS_REPO` name approved non-production repositories, and skip
   otherwise; the 1/10/100 batched-manifest measurement also needs
   `HOTSHEET_GITHUB_LIVE_MANIFEST_SCALE=1`. Locally the token comes from the keychain key
-  `github-live`. The normal `check` job
+  `github-live`. Opt-in live mutation-latency benchmarks
+  (`crates/hotsheet-extsync/tests/provider_latency.rs`, `HOTSHEET_REAL_PROVIDER_BENCH=1`)
+  may only edit designated throwaway issues: the Jira ones are `HS2T-1`..`HS2T-3`
+  (summary prefix `[HS2 benchmark]`, label `hs2-benchmark`), named in the local `.env` as
+  `HOTSHEET_BENCH_JIRA_ISSUES` / `HOTSHEET_BENCH_JIRA_ISSUE`. The normal `check` job
   runs a bounded Chromium Playwright smoke group covering deep links, gallery save retry,
   image/video freehand strokes, feedback replies, popup anchoring, concurrent autosave,
   bulk provider projection, and ticket context menus (HS2-28MBS9, HS2-ZHN7XS). The full browser suite
