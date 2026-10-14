@@ -87,3 +87,36 @@ test('uses one disclosure and aligned icon-label choices at wide and narrow size
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: test.info().outputPath('drive-options-menu-narrow.png'), fullPage: true });
 });
+
+test('keeps icon and label columns aligned across checked and plain rows (HS2-JFSAG0)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/ux-demo?component=drive-options-menu');
+    const menu = page.locator('[data-context-menu="drive-options"]');
+    await expect(menu).toHaveAttribute('open', '');
+    const columns = (item: import('@playwright/test').Locator) =>
+      item.evaluate((node) => {
+        const icon = node.querySelector(':scope > .kui-popup-menu__icon')?.getBoundingClientRect().left ?? NaN,
+          range = document.createRange();
+        const text = [...node.childNodes].find(
+          (child) => child.nodeType === Node.TEXT_NODE && child.textContent?.trim(),
+        );
+        if (text) range.selectNodeContents(text);
+        return { icon, label: text ? range.getBoundingClientRect().left : NaN };
+      });
+    const top = menu.locator(':scope > wa-dropdown-item');
+    const fallback = await columns(top.filter({ hasText: 'Default' }).first()),
+      provider = await columns(top.filter({ hasText: 'Provider' }).first());
+    expect(Math.abs(fallback.icon - provider.icon)).toBeLessThan(1);
+    const model = top.filter({ hasText: 'Model' }).first();
+    await model.hover();
+    const choices = model.locator(':scope > wa-dropdown-item[slot="submenu"]');
+    await expect(choices.first()).toBeVisible();
+    await page.waitForTimeout(400);
+    const checked = await columns(choices.first()),
+      other = await columns(choices.last());
+    expect(Math.abs(checked.icon - other.icon)).toBeLessThan(1);
+    expect(Math.abs(checked.label - other.label)).toBeLessThan(1);
+    await page.screenshot({ path: test.info().outputPath(`hs2-jfsag0-after-${width}.png`) });
+  }
+});
