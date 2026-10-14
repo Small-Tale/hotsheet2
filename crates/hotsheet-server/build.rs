@@ -28,13 +28,10 @@ fn main() {
     );
     println!("cargo:rustc-env=HOTSHEET_BUNDLED_GITHUB_APP_CLIENT_ID={bundled_github_client_id}");
 
-    if let Some(revision) =
-        std::env::var_os("HOT_SHEET_BUILD_REVISION").filter(|value| !value.is_empty())
-    {
-        println!(
-            "cargo:rustc-env=HOT_SHEET_BUILD_REVISION={}",
-            revision.to_string_lossy()
-        );
+    if let Some(revision) = source_revision::explicit_build_revision(
+        std::env::var_os("HOT_SHEET_BUILD_REVISION").as_deref(),
+    ) {
+        println!("cargo:rustc-env=HOT_SHEET_BUILD_REVISION={revision}");
         return;
     }
 

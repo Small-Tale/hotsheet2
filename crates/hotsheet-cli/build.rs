@@ -20,13 +20,10 @@ fn main() {
         println!("cargo:rerun-if-changed={path}");
     }
 
-    if let Some(revision) =
-        std::env::var_os("HOT_SHEET_BUILD_REVISION").filter(|value| !value.is_empty())
-    {
-        println!(
-            "cargo:rustc-env=HOT_SHEET_BUILD_REVISION={}",
-            revision.to_string_lossy()
-        );
+    if let Some(revision) = source_revision::explicit_build_revision(
+        std::env::var_os("HOT_SHEET_BUILD_REVISION").as_deref(),
+    ) {
+        println!("cargo:rustc-env=HOT_SHEET_BUILD_REVISION={revision}");
         return;
     }
 

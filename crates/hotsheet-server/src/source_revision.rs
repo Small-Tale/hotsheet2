@@ -110,6 +110,17 @@ impl SourceRevisionMonitor {
     }
 }
 
+/// The build-time `HOT_SHEET_BUILD_REVISION` override a build script should honour, if any
+/// (HS2-69JTBD). Empty values and `source-sha256:` values are ignored: the latter are the
+/// local-source scheme this build computes itself, and they leak into build environments
+/// because the local host exports its *selected runtime* revision under the same name to
+/// every process it launches (AI terminals included). Honouring that inherited value
+/// would turn an ordinary local build into an "explicit" one that monitors no source root.
+pub fn explicit_build_revision(value: Option<&std::ffi::OsStr>) -> Option<String> {
+    let value = value?.to_string_lossy();
+    (!value.is_empty() && !value.starts_with(REVISION_PREFIX)).then(|| value.into_owned())
+}
+
 /// Hash local workspace source independently of Git metadata. Covering every local crate
 /// is conservative: a change in a server dependency can never leave an old binary marked
 /// current, even when Cargo's workspace dependency graph changes later.
@@ -319,6 +330,23 @@ mod tests {
                 .source_unavailable_reason
                 .unwrap()
                 .contains("HOT_SHEET_BUILD_REVISION")
+        );
+    }
+
+    /// HS2-69JTBD: a local-source revision inherited from the host's runtime environment
+    /// is not an explicit build revision; release identifiers still are.
+    #[test]
+    fn inherited_source_revision_is_not_an_explicit_build_revision() {
+        use std::ffi::OsStr;
+        assert_eq!(explicit_build_revision(None), None);
+        assert_eq!(explicit_build_revision(Some(OsStr::new(""))), None);
+        assert_eq!(
+            explicit_build_revision(Some(OsStr::new("source-sha256:abc"))),
+            None
+        );
+        assert_eq!(
+            explicit_build_revision(Some(OsStr::new("release-1"))).as_deref(),
+            Some("release-1")
         );
     }
 
