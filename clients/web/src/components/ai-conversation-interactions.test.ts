@@ -15,6 +15,8 @@ vi.mock('kerfjs', async (original) => {
   };
   return { ...(await original<typeof import('kerfjs')>()), delegate: register, delegateCapture: register };
 });
+const wireComposers = vi.hoisted(() => vi.fn(() => () => undefined));
+vi.mock('@kerfjs/ui/wire-composers', () => ({ wireComposers }));
 const handler = (event: string, selector: string) =>
   registrations.find((item) => item.event === event && item.selector === selector)!.handle;
 const bindings = () => ({
@@ -37,18 +39,11 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('wireAiConversation (HS2-RWY78R)', () => {
-  it('submits the composer on Enter but not Shift+Enter or during IME composition', () => {
-    wireAiConversation({} as HTMLElement, bindings());
-    const requestSubmit = vi.fn(),
-      field = { closest: () => ({ requestSubmit }) } as unknown as Element,
-      keydown = handler('keydown', '[name="conversation-draft"]'),
-      key = (init: Record<string, unknown>) => ({ key: 'Enter', preventDefault: vi.fn(), ...init }) as unknown as Event;
-    keydown(key({ shiftKey: true }), field);
-    keydown(key({ isComposing: true }), field);
-    keydown(key({ key: 'a' }), field);
-    expect(requestSubmit).not.toHaveBeenCalled();
-    keydown(key({}), field);
-    expect(requestSubmit).toHaveBeenCalledOnce();
+  it('delegates Enter-to-send to Kerf wireComposers instead of an app keydown handler (HS2-94T958)', () => {
+    const root = {} as HTMLElement;
+    wireAiConversation(root, bindings());
+    expect(wireComposers).toHaveBeenCalledWith(root);
+    expect(registrations.some((item) => item.event === 'keydown')).toBe(false);
   });
 
   it('picks a message unless the click landed on a nested control', () => {

@@ -268,6 +268,7 @@ describe('AIConversation', () => {
     expect(markup).toContain('data-lucide="paperclip"');
     expect(markup).toContain('data-lucide="image"');
     expect(markup).toContain('href="/files/report" download="report.pdf"');
+    expect(markup).toMatch(/<a [^>]*data-component="chip"|<a [^>]*class="kui-chip/);
   });
 
   it('reuses the complete conversation surface as embedded drawer content', () => {
@@ -286,24 +287,31 @@ describe('AIConversation', () => {
     expect(markup).toContain('ai-conversation--embedded');
     expect(markup).toContain('Conversation Transcript');
     expect(markup).toContain('send-conversation-turn');
-    expect(markup).toContain('class="ai-conversation__composer-toolbar"');
+    expect(markup).toContain('data-component="composer"');
+    expect(markup).toContain('data-submit-on-enter="true"');
+    expect(markup).toContain('aria-keyshortcuts="Enter"');
     expect(markup).toContain('class="ai-conversation__send"');
     expect(markup).toContain('data-lucide="arrow-up"');
     expect(markup).not.toContain('wa-dialog');
   });
-  it('floats one bordered growing composer over a padded scrolling transcript', () => {
+  it('floats the Kerf Composer over a padded scrolling transcript without app composer chrome (HS2-94T958)', () => {
     expect(css).toMatch(
       /\.ai-conversation--embedded \{[^}]*display: flex[^}]*height: 100%[^}]*min-height: 0[^}]*overflow: clip[^}]*flex-direction: column/,
     );
     expect(css).toMatch(/\.ai-conversation--embedded > \.ai-conversation__transcript \{[^}]*flex: 1 1 0/);
     expect(css).toMatch(/\.ai-conversation__transcript \{[^}]*padding: remify\(16px\)[^}]*box-sizing: border-box/);
     expect(css).toMatch(
-      /\.ai-conversation\[data-read-only='false'\] \.ai-conversation__transcript \{[^}]*padding-bottom: remify\(176px\)/,
+      /\.ai-conversation--embedded\[data-read-only='false'\] \.ai-conversation__transcript \{[^}]*padding-bottom: remify\(176px\)/,
     );
-    expect(css).toMatch(/\.ai-conversation__composer \{[^}]*border: 1px solid[^}]*box-shadow:/);
-    expect(css).toMatch(
-      /\.ai-conversation__composer textarea \{[^}]*field-sizing: content[^}]*max-height: remify\(144px\)[^}]*border: 0/,
+    // Kerf owns the dialog body layout, floating footer, composer frame, and file chips.
+    expect(css).not.toContain('::part(');
+    expect(css).not.toMatch(/box-shadow|focus-within|textarea|field-sizing/);
+    expect(css).not.toContain('__files a');
+    const markup = String(
+      AIConversation({ open: true, tool: 'Codex', messages: [], draft: '', busy: false, interruptible: false }),
     );
+    expect(markup).toContain('data-footer-presentation="floating"');
+    expect(markup).toContain('data-body-layout="fill-last"');
   });
   it('sizes its dialog panel through Kerf DialogSurface with an 8px viewport gutter (HS2-MWMMCN, HS2-ADM62E)', () => {
     const markup = String(

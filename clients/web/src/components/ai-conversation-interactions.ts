@@ -1,3 +1,4 @@
+import { wireComposers } from '@kerfjs/ui/wire-composers';
 import { delegate, delegateCapture } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -51,14 +52,8 @@ export function wireAiConversation(root: HTMLElement, bindings: AiConversationBi
       bindings.setDraft((target as HTMLTextAreaElement).value);
     }),
   );
-  lifetime.add(
-    delegate(root, 'keydown', COMMANDS_AND_AI_TARGETS.conversationDraftField.selector, (event, target) => {
-      const keyboard = event as KeyboardEvent;
-      if (keyboard.key !== 'Enter' || keyboard.shiftKey || keyboard.isComposing) return;
-      keyboard.preventDefault();
-      target.closest<HTMLFormElement>('form')?.requestSubmit();
-    }),
-  );
+  // Kerf owns Enter-to-send (IME, empty, and auto-repeat guards) for the submitOnEnter Composer.
+  lifetime.add(wireComposers(root));
   lifetime.add(
     delegate(root, 'submit', COMMANDS_AND_AI_ACTIONS.sendConversationTurn.selector, (event) => {
       event.preventDefault();

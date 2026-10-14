@@ -1,10 +1,14 @@
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './ai-conversation.css';
+import '@kerfjs/ui/surface-scaffold/register';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 
 import { Badge } from '@kerfjs/ui/badge';
+import { Chip } from '@kerfjs/ui/chip';
+import { Composer } from '@kerfjs/ui/composer';
 import { ContentItem } from '@kerfjs/ui/content-item';
 import { remify, uiColor } from '@kerfjs/ui/css-values';
+import { deviceClass } from '@kerfjs/ui/device-class';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
@@ -13,6 +17,7 @@ import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
+import { computed, type ReadonlySignal } from 'kerfjs';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import {
   Activity,
@@ -148,14 +153,22 @@ export function ConversationMessages({
             <ul class="ai-conversation__files" aria-label="Referenced files">
               {message.files.map((file) => (
                 <li>
-                  <a href={file.url} download={file.filename}>
-                    <LucideIcon
-                      size={12.8}
-                      icon={file.kind === 'media' ? Image : Paperclip}
-                      name={file.kind === 'media' ? 'image' : 'paperclip'}
-                    />
-                    <span>{file.filename}</span>
-                  </a>
+                  {/* Kerf link Chip (KF-H658D6) inherits the bubble foreground on both tones (HS2-94T958). */}
+                  <Chip
+                    href={file.url}
+                    download={file.filename}
+                    tone="inherit"
+                    size="compact"
+                    truncate
+                    icon={
+                      <LucideIcon
+                        icon={file.kind === 'media' ? Image : Paperclip}
+                        name={file.kind === 'media' ? 'image' : 'paperclip'}
+                      />
+                    }
+                  >
+                    {file.filename}
+                  </Chip>
                 </li>
               ))}
             </ul>
@@ -213,6 +226,16 @@ function ConversationActivityGroup({
       </div>
     </ContentItem>
   );
+}
+
+let handset: ReadonlySignal<boolean> | undefined;
+/** Phones inset the floating composer 8px instead of 16px; read only the handset flag. */
+function handsetDevice(): ReadonlySignal<boolean> {
+  if (!handset) {
+    const device = deviceClass();
+    handset = computed(() => device.value.handset);
+  }
+  return handset;
 }
 
 export function AIConversation({
@@ -450,38 +473,39 @@ export function AIConversation({
       />
     </div>
   ) : null;
+  // Kerf Composer owns the raised frame, focus-within border, and the auto-growing borderless field;
+  // `submitOnEnter` with `wireComposers` sends on Enter (KF-S5EG5K, HS2-94T958). The app form submits.
   const composer = readOnly ? null : (
     <form
       slot={presentation === 'dialog' ? 'footer' : undefined}
       class="ai-conversation__composer"
       {...COMMANDS_AND_AI_ACTIONS.sendConversationTurn.attrs}
     >
-      <label>
-        <textarea
-          name="conversation-draft"
-          aria-label={`Message ${tool}`}
-          placeholder={`Message ${tool}…`}
-          rows={1}
-          disabled={busy}
-        >
-          {draft}
-        </textarea>
-      </label>
-      <div class="ai-conversation__composer-toolbar">
-        <small>Enter to send · Shift+Enter for a new line</small>
-        <wa-button
-          class="ai-conversation__send"
-          appearance="accent"
-          size="small"
-          pill
-          type="submit"
-          disabled={busy || !draft.trim()}
-          aria-label={`Send Message to ${tool}`}
-          title={busy ? `${tool} is still working` : `Send message to ${tool}`}
-        >
-          <LucideIcon size="s" icon={ArrowUp} name="arrow-up" />
-        </wa-button>
-      </div>
+      <Composer
+        label={`Message ${tool}`}
+        name="conversation-draft"
+        id={`ai-conversation-draft-${presentation}`}
+        value={draft}
+        placeholder={`Message ${tool}…`}
+        maxRows={6}
+        hint={handsetDevice().value ? undefined : 'Enter to send · Shift+Enter for a new line'}
+        disabled={busy}
+        submitOnEnter
+        actions={
+          <wa-button
+            class="ai-conversation__send"
+            appearance="accent"
+            size="small"
+            pill
+            type="submit"
+            disabled={busy || !draft.trim()}
+            aria-label={`Send Message to ${tool}`}
+            title={busy ? `${tool} is still working` : `Send message to ${tool}`}
+          >
+            <LucideIcon size="s" icon={ArrowUp} name="arrow-up" />
+          </wa-button>
+        }
+      />
     </form>
   );
   if (presentation === 'embedded')
@@ -532,6 +556,9 @@ export function AIConversation({
       viewportGutter={remify(8)}
       bodyInset="none"
       footerInset="none"
+      bodyLayout="fill-last"
+      footerPresentation="floating"
+      footerOffset={handsetDevice().value ? remify(8) : remify(16)}
       rootAttributes={{ 'data-key': 'ai-conversation-surface' }}
     >
       <wa-dialog

@@ -426,7 +426,12 @@ does not introduce polling or another network request.
     transcript order for this connection and uses the same global decision handlers/history
   - composer: multiline free-form input plus an explicit Send action; Enter sends while
     Shift+Enter inserts a line break; sending is disabled for blank input and while the same
-    connection is busy, with the reason exposed accessibly
+    connection is busy, with the reason exposed accessibly. Kerf `Composer` (KF-S5EG5K) owns the
+    raised frame, focus-within border, auto-growing borderless field, and hint row, and
+    `submitOnEnter` with `wireComposers` owns Enter-to-send (IME, empty, and auto-repeat guards).
+    The dialog floats it as a Kerf `DialogSurface` floating footer over a `fill-last` body
+    (KF-913AT2, 8 px offset on handsets), so no `::part()` rules remain. Referenced files render
+    as Kerf link `Chip`s (`href`, `download`, `tone="inherit"`, truncating; KF-H658D6) (HS2-94T958)
   - save/reopen: the header Save action reuses the live transcript selection. If a range exists,
     a compact `ConversationExportDialog` offers Entire conversation or the already-selected range
     without presenting another picker; if no range exists it skips directly to the vertically

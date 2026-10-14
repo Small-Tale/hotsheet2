@@ -244,9 +244,13 @@
       },
       "state": [],
       "wiring": {
-        "required": false,
-        "helpers": [],
-        "obligations": []
+        "required": true,
+        "helpers": [
+          "wireComposers"
+        ],
+        "obligations": [
+          "The submitOnEnter Composer needs wireComposers on the conversation root for Enter-to-send."
+        ]
       },
       "responsive": {
         "owner": "not-applicable",

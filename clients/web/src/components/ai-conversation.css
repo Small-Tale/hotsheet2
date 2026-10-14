@@ -1,23 +1,6 @@
-/* Kerf DialogSurface sizes the panel and clears the body and footer insets (HS2-ADM62E). The panel stays
-   the positioning context, the body lays out the heading, notices, and transcript rows, and the footer
-   floats the composer over the transcript: Kerf has no floating-footer dialog layout (KF-913AT2). */
-.ai-conversation::part(dialog) {
-  position: relative;
-}
-.ai-conversation::part(body) {
-  display: grid;
-  min-height: 0;
-  grid-template-rows: auto auto minmax(0, 1fr);
-}
-.ai-conversation::part(footer) {
-  position: absolute;
-  z-index: 2;
-  display: block;
-  border: 0;
-  background: transparent;
-  inset-inline: remify(16px);
-  bottom: remify(16px);
-}
+/* Kerf DialogSurface sizes the panel, stacks the heading and notices above the filling transcript
+   (`bodyLayout="fill-last"`), and floats the composer footer (`footerPresentation="floating"`,
+   KF-913AT2, HS2-94T958). */
 .ai-conversation--embedded {
   position: relative;
   display: flex;
@@ -110,7 +93,8 @@
   flex-direction: column;
   gap: remify(12.8px);
 }
-.ai-conversation[data-read-only='false'] .ai-conversation__transcript {
+/* The embedded drawer floats its own composer, so its transcript reserves room for it. */
+.ai-conversation--embedded[data-read-only='false'] .ai-conversation__transcript {
   padding-bottom: remify(176px);
 }
 .ai-conversation__selection {
@@ -172,26 +156,10 @@
   list-style: none;
   gap: var(--wa-space-3xs);
 }
-.ai-conversation__files a {
-  display: flex;
-  width: fit-content;
-  max-width: 100%;
-  padding: remify(4px) remify(7.2px);
-  border-radius: var(--wa-border-radius-s);
-  color: inherit;
-  background: color-mix(in srgb, currentcolor 10%, transparent);
-  align-items: center;
-  gap: remify(5.6px);
-  font-size: var(--wa-font-size-xs);
-  text-decoration: none;
-}
-.ai-conversation__files a:hover {
-  text-decoration: underline;
-}
-.ai-conversation__files span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* The app's list items drop the bubble's prose list indent and let a truncating link Chip shrink. */
+.ai-conversation__files > li {
+  min-width: 0;
+  margin: 0;
 }
 /* Usage is quiet relative to the surrounding foreground, so it reads on both the neutral and the
    brand-loud bubble without targeting the Kerf item. */
@@ -263,63 +231,20 @@
   gap: remify(7.2px);
   font-size: var(--wa-font-size-s);
 }
+/* The app's submitting form fills the floating footer row it is slotted into. */
 .ai-conversation__composer {
-  display: grid;
-  width: auto;
-  padding: remify(6px);
-  box-sizing: border-box;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-l);
-  background: var(--wa-color-surface-default);
-  box-shadow: var(--wa-shadow-l);
-  gap: var(--wa-space-3xs);
+  flex: 1 1 auto;
+  min-width: 0;
 }
+/* The embedded drawer positions the app's composer form over its transcript; Kerf Composer owns the
+   frame inside it (KF-S5EG5K). */
 .ai-conversation--embedded > .ai-conversation__composer {
   position: absolute;
   z-index: 2;
   inset-inline: remify(16px);
   bottom: remify(16px);
 }
-.ai-conversation__composer:focus-within {
-  border-color: var(--wa-color-brand-border-normal);
-}
-.ai-conversation__composer label {
-  display: grid;
-  min-width: 0;
-  gap: var(--wa-space-3xs);
-}
-.ai-conversation__composer small {
-  color: var(--wa-color-text-quiet);
-  font-size: var(--wa-font-size-xs);
-}
-.ai-conversation__composer textarea {
-  field-sizing: content;
-  min-width: 0;
-  min-height: remify(44px);
-  max-height: remify(144px);
-  padding: var(--wa-space-xs);
-  resize: none;
-  border: 0;
-  background: transparent;
-  color: var(--wa-color-text-normal);
-  font: inherit;
-  line-height: var(--wa-line-height-normal);
-}
-.ai-conversation__composer textarea:focus {
-  outline: none;
-}
-.ai-conversation__composer-toolbar {
-  display: flex;
-  min-height: remify(32px);
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--wa-space-xs);
-}
 @media (max-width: remify(640px)) {
-  .ai-conversation::part(footer) {
-    inset-inline: remify(8px);
-    bottom: remify(8px);
-  }
   .ai-conversation--embedded > .ai-conversation__composer {
     inset-inline: remify(8px);
     bottom: remify(8px);
@@ -333,8 +258,5 @@
   .ai-conversation__activity-body > header {
     align-items: flex-start;
     flex-direction: column;
-  }
-  .ai-conversation__composer small {
-    display: none;
   }
 }

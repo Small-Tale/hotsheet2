@@ -34,7 +34,21 @@ export function aiConversationProviderLabel(id = aiConversationProvider.value) {
 }
 
 const completed: ConversationMessage[] = [
-  { id: 'question-1', role: 'user', content: 'Review the client connection flow in `api.ts`.' },
+  {
+    id: 'question-1',
+    role: 'user',
+    content: 'Review the client connection flow in `api.ts`.',
+    // Referenced files render as Kerf link Chips on both bubble tones (HS2-94T958).
+    files: [
+      {
+        id: 'api-ts',
+        filename: 'api.ts',
+        mime_type: 'text/typescript',
+        kind: 'attachment',
+        url: '/ux-demo/fixtures/api.ts',
+      },
+    ],
+  },
   {
     id: 'answer-1',
     role: 'assistant',
@@ -42,6 +56,15 @@ const completed: ConversationMessage[] = [
     content:
       'The connection uses the project event stream, so the transcript updates without simple polling.\n\n- Turns stay in one session.\n- Permissions appear inline.',
     usage: { tokensIn: 18_234, tokensOut: 2_101, costUsd: 0.0423, model: 'codex-5.6' },
+    files: [
+      {
+        id: 'connection-diagram',
+        filename: 'connection-flow-diagram-with-a-long-descriptive-name.png',
+        mime_type: 'image/png',
+        kind: 'media',
+        url: '/ux-demo/fixtures/connection-flow.png',
+      },
+    ],
   },
 ];
 const activity: ConversationActivity[] = [
