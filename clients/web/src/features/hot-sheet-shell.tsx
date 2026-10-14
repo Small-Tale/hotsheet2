@@ -122,6 +122,7 @@ export interface HotSheetShellDependencies {
   searchOpen: Signal<boolean>;
   selectedCorruptKey: Signal<string | undefined>;
   selectedInspectorProps: () => TicketInspectorProps | undefined;
+  previewInspectorProps: (row: WireTicketRow) => TicketInspectorProps | undefined;
   selectedProjectId: Signal<string>;
   selectedProjectRestoreRoot: Signal<string>;
   selectedRows: () => WireTicketRow[];
@@ -204,6 +205,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     searchOpen,
     selectedCorruptKey,
     selectedInspectorProps,
+    previewInspectorProps,
     selectedProjectId,
     selectedProjectRestoreRoot,
     selectedRows,
@@ -373,7 +375,14 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
       selectedSlug = selectedTicketSlugs.value.length === 1 ? selectedTicketSlugs.value[0] : undefined,
       selectedReady = Boolean(selectedSlug && selectedTicket.value?.slug === selectedSlug),
       selectedTransitioning = Boolean(selectedSlug && selectedTicket.value && !selectedReady),
-      inspectorProps = selectedReady ? selectedInspectorProps() : undefined,
+      // An uncached ticket renders from its list row while the full detail loads (HS2-15833W).
+      previewRow =
+        selectedSlug && !selectedReady ? selection.find((ticket) => ticket.slug === selectedSlug) : undefined,
+      inspectorProps = selectedReady
+        ? selectedInspectorProps()
+        : previewRow
+          ? previewInspectorProps(previewRow)
+          : undefined,
       corruptKey = selectedCorruptKey.value,
       corruptTicket = corruptKey
         ? corruptTickets.value.find((item) => corruptTicketKey(item) === corruptKey)

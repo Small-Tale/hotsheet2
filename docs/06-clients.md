@@ -263,8 +263,14 @@ preview/download, server directory browser) are separate design work.
   project-scoped) cache of full ticket details, and selection presents the cached detail at
   once — overlaid with the live list row's summary fields when the row's `updated_at` shows it
   is stale — then refreshes it in the background with one detail read (no polling). A newer
-  revision replaces the shown ticket; an edit already begun keeps its draft. Only a ticket with
-  no cached detail shows the loading skeleton.
+  revision replaces the shown ticket; an edit already begun keeps its draft. A ticket with no
+  cached detail renders from its list row while the detail loads (HS2-15833W): the inspector's
+  `contentLoading` partial variant shows the row's title, status, priority, category, tags,
+  blocked reason, and notices at once, with Skeleton placeholders for details, notes, the
+  timeline, code review, and attachments; the partial surface is inert and `aria-busy` (its
+  reader and Up Next actions disabled) until the detail read presents the full ticket. The
+  value-free loading skeleton remains only for a selection whose list row is not available
+  (and for the terminal rail's pushed detail, which pushes once the detail is loaded).
   The shell and viewport roots clip offscreen panels without becoming scroll containers: opening,
   clearing, and typing in search must not pan the whole workspace, including across desktop/mobile
   resize. Embedded AI conversations also opt into flex shrink containment so their header,

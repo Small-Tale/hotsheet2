@@ -1,5 +1,6 @@
 import type { Signal } from 'kerfjs';
 
+import { phaseEstimatePresentation } from '../active-ticket-work';
 import type {
   Api,
   Capabilities,
@@ -69,6 +70,7 @@ export interface InspectorSurfaceDependencies {
   notes: (ticket: FullTicket) => {
     readonly id: string;
     readonly kind: 'regular' | 'activity' | 'feedback_needed' | 'feedback_draft' | 'status';
+    readonly feedbackPrompt: boolean;
     readonly author: string;
     readonly time: string;
     readonly body: string;
@@ -225,6 +227,7 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
       composerDraft: newNoteDraft.value,
       status: status(ticket.status),
       startedPhase: ticket.started_phase,
+      phaseEstimate: phaseEstimatePresentation(ticket),
       priority: priority(ticket.priority),
       category: ticket.category ?? 'issue',
       tags: ticket.tags,
@@ -265,5 +268,40 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
       fieldConflictResolution: fieldConflictResolution.value,
     };
   }
-  return { notWorkingSurfaceProps, attachmentItems, selectedInspectorProps };
+  /**
+   * The partial-detail inspector for a selected ticket whose full detail is not loaded yet (HS2-15833W):
+   * the list row's summary renders at once, and details, notes, the timeline, and attachments stay
+   * placeholders until the detail read presents the full ticket.
+   */
+  function previewInspectorProps(row: WireTicketRow): TicketInspectorProps | undefined {
+    const current = project();
+    if (!current) return;
+    const capabilities = capabilitiesFor(row.connection_id) as Capabilities | undefined,
+      canUpdate = capabilities?.update ?? true;
+    return {
+      slug: row.slug,
+      source: defaultProviders.value[current.id]?.sources.find((source) => source.connectionId === row.connection_id),
+      title: row.title,
+      liveClaim: liveClaimNotice(row),
+      canUpdate,
+      canAddNotes: capabilities?.notes ?? true,
+      status: status(row.status),
+      startedPhase: row.started_phase,
+      phaseEstimate: phaseEstimatePresentation(row),
+      priority: priority(row.priority),
+      category: row.category ?? 'issue',
+      tags: row.tags,
+      details: '',
+      blockedReason: row.blocked_reason,
+      updatedLabel: `Updated ${ago(row.updated_at)}`,
+      activeTab: inspectorTab.value,
+      upNext: row.up_next,
+      upNextEligible: row.status === 'not_started' || row.status === 'started',
+      feedbackNeeded: row.feedback_needed,
+      closeReason: row.close_reason,
+      latestConfidence: row.latest_confidence,
+      contentLoading: true,
+    };
+  }
+  return { notWorkingSurfaceProps, attachmentItems, selectedInspectorProps, previewInspectorProps };
 }

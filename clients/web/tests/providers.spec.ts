@@ -9042,6 +9042,8 @@ test('selects feedback choices with platform modifiers and preserves a freeform 
     .toBe(
       'Selected choices:\n- Keep the **current behavior**\n- Use `attachment:proof.png`\n\nThe two options can be combined.',
     );
+  // The choice reply is its own note; the prompt itself is never rewritten (HS2-MB2Q10).
+  expect(patches.filter((patch) => patch.note_id === 'N4')).toEqual([]);
 });
 
 test('responds to feedback choices embedded in the ticket description', async ({ page }) => {
@@ -9128,6 +9130,53 @@ test('records No response needed as a subtle regular response and clears review 
   const acknowledgement = page.locator('#app-right-rail [data-acknowledgement="true"]');
   await expect(acknowledgement).toBeVisible();
   await acknowledgement.screenshot({ path: 'target/visual-captures/hs2-yk27gp-no-response-needed.png' });
+});
+
+test('answers a feedback prompt with new notes and never rewrites the prompt', async ({ page }) => {
+  // HS2-MB2Q10: a reply typed into a click-opened prompt editor overwrote the AI's FEEDBACK NEEDED note.
+  const patches = await mockProject(page, true, true);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const inspector = page.locator('#app-right-rail'),
+    sidebarPrompt = inspector.locator('article[data-note-id="N4"]');
+  await sidebarPrompt.locator('.note-card__body').click();
+  await expect(sidebarPrompt.getByRole('textbox')).toHaveCount(0);
+  await expect(sidebarPrompt).not.toHaveAttribute('data-edit-on-click', 'true');
+  await inspector.getByRole('button', { name: 'Respond to Feedback' }).click();
+  const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ }),
+    prompt = reader.locator('article[data-note-id="N4"]'),
+    response = prompt.getByRole('textbox', { name: 'Feedback response' }),
+    promptEdits = () => patches.filter((patch) => patch.note_id === 'N4');
+  // Reply: blur keeps the draft local; Respond creates a separate regular note.
+  await response.fill('token stored');
+  await response.blur();
+  await page.waitForTimeout(400);
+  expect(promptEdits()).toEqual([]);
+  await prompt.getByRole('button', { name: 'Respond' }).click();
+  await expect
+    .poll(() => patches.filter((patch) => patch.note_kind === 'regular').map((patch) => patch.note))
+    .toEqual(['token stored']);
+  await expect(prompt).toContainText('Hello there');
+  const answer = reader.locator('article[data-kind="regular"]').filter({ hasText: 'token stored' });
+  await expect(answer).toHaveCount(1);
+  // The ticket leaves feedback-needed state, and the answered prompt is still not editable in place.
+  await expect(response).toHaveCount(0);
+  await expect(prompt).not.toHaveAttribute('data-edit-on-click', 'true');
+  await prompt.locator('.note-card__body').click();
+  await expect(prompt.getByRole('textbox')).toHaveCount(0);
+  // Reply, then edit the reply: the edit targets the reply note, never the prompt.
+  await answer.locator('.note-card__body').click();
+  const answerEditor = answer.getByRole('textbox', { name: 'Note body' });
+  await answerEditor.fill('token stored in the keychain');
+  await answerEditor.blur();
+  await expect
+    .poll(() => patches.find((patch) => typeof patch.note_id === 'string' && patch.note_id.startsWith('N-response-')))
+    .toMatchObject({ note: 'token stored in the keychain' });
+  expect(patches.filter((patch) => patch.note_kind === 'regular')).toHaveLength(1);
+  expect(promptEdits()).toEqual([]);
+  await expect(prompt).toContainText('Hello there');
 });
 
 test('opens reader at the active feedback note from its inspector action', async ({ page }) => {
@@ -10499,9 +10548,13 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.waitForTimeout(75);
   await expect(region).toBeVisible();
-  await expect(region.locator('.ticket-inspector-placeholder')).toBeVisible();
-  // The placeholder keeps the rail's standard toggle in the Workbench-composed toolbar (HS2-QQW6CT).
+  // An uncached ticket renders from its list row while the detail loads (HS2-15833W), keeping the
+  // rail's standard toggle in the Workbench-composed toolbar (HS2-QQW6CT).
+  await expect(
+    region.locator('[data-component="ticket-inspector-body"][data-ticket-slug="HS2-DEMO01"][data-content-loading]'),
+  ).toHaveAttribute('aria-busy', 'true');
   await expect(region.getByRole('button', { name: 'Hide Ticket Inspector' })).toBeVisible();
+  await expect(region.locator('[data-content-loading]')).toHaveCount(0);
   expect(await region.evaluate((node) => node.getBoundingClientRect().width)).toBe(before);
   await expect(region.locator('[data-component="ticket-inspector-header"]')).toBeVisible();
   await region.getByRole('button', { name: 'Copy ticket number HS2-DEMO01' }).click();
@@ -10511,14 +10564,15 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
   const widthBeforeSwitch = await region.evaluate((node) => node.getBoundingClientRect().width);
   await page.locator('[data-ticket-slug="HS2-START02"]').click();
   await page.waitForTimeout(75);
-  // Switching to another ticket keeps the inspector region mounted at the same width and shows the
-  // value-free loading skeleton (aria-busy) — not the previous ticket's stale data. Updated for the
-  // inspector-loading-skeleton behavior that replaced the dimmed stale inspector (HS2-YSHZQK; the old
-  // `.ticket-inspector-transition` dimmed-stale presentation is gone, per the inspector-loading-skeleton feature).
-  await expect(region.locator('[data-component="ticket-inspector-skeleton-body"]')).toHaveAttribute(
-    'aria-busy',
-    'true',
+  // Switching to another uncached ticket keeps the inspector region mounted at the same width and renders
+  // the new ticket's list row (aria-busy) with placeholders for its details and notes — not the previous
+  // ticket's stale data (HS2-YSHZQK, HS2-15833W).
+  const partialBody = region.locator(
+    '[data-component="ticket-inspector-body"][data-ticket-slug="HS2-START02"][data-content-loading]',
   );
+  await expect(partialBody).toHaveAttribute('aria-busy', 'true');
+  await expect(partialBody.locator('[data-details-loading]')).toBeVisible();
+  await expect(region.locator('[data-component="ticket-inspector-skeleton-body"]')).toHaveCount(0);
   await expect(region.locator('.ticket-inspector-placeholder')).toHaveCount(0);
   expect(await region.evaluate((node) => node.getBoundingClientRect().width)).toBe(widthBeforeSwitch);
   await expect(region).not.toContainText('Use real project tickets');
@@ -10526,6 +10580,42 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
   await expect(
     region.locator('[data-component="ticket-inspector-header"][data-ticket-slug="HS2-START02"]'),
   ).toBeVisible();
+});
+
+test('renders an uncached ticket from its list row while the full detail loads (HS2-15833W)', async ({ page }) => {
+  await mockProject(page, true, false, 800);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const region = page.locator('#app-right-rail');
+  await page.locator('[data-ticket-slug="HS2-START02"]').click();
+  // The list row's summary renders at once; details and notes are placeholders and nothing is actionable.
+  const header = region.locator('[data-component="ticket-inspector-header"][data-ticket-slug="HS2-START02"]'),
+    body = region.locator('[data-component="ticket-inspector-body"][data-ticket-slug="HS2-START02"]');
+  await expect(header.getByRole('heading', { name: 'Second started ticket' })).toBeAttached({ timeout: 300 });
+  await expect(body).toHaveAttribute('data-content-loading', 'true');
+  await expect(body.locator('[data-details-loading]')).toBeVisible();
+  await expect(body.locator('[data-component="ticket-notes"][data-placeholder]')).toBeAttached();
+  await expect(region.locator('[data-component="ticket-inspector-skeleton-body"]')).toHaveCount(0);
+  await expect(region.getByRole('button', { name: 'Open Ticket Reader' })).toBeDisabled();
+  await page.screenshot({ path: 'target/visual-captures/hs2-15833w-partial-wide.png' });
+  // The detail read lands and fills the same inspector in place.
+  await expect(body).not.toHaveAttribute('data-content-loading', 'true');
+  await expect(body.locator('[data-details-loading]')).toHaveCount(0);
+  await expect(region.getByRole('button', { name: 'Open Ticket Reader' })).toBeEnabled();
+  await expect(header.getByRole('heading', { name: 'Second started ticket' })).toBeVisible();
+  // A switch between two uncached tickets shows the new row immediately, never the previous ticket.
+  await page.locator('[data-ticket-slug="HS2-START03"]').click();
+  const third = region.locator('[data-component="ticket-inspector-body"][data-ticket-slug="HS2-START03"]');
+  await expect(third).toHaveAttribute('data-content-loading', 'true', { timeout: 300 });
+  await expect(region.getByRole('heading', { name: 'Second started ticket' })).toHaveCount(0);
+  await expect(third).not.toHaveAttribute('data-content-loading', 'true');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.waitForTimeout(150);
+  await page.screenshot({ path: 'target/visual-captures/hs2-15833w-partial-390.png' });
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: 'target/visual-captures/hs2-15833w-loaded-390.png' });
 });
 
 test('reopens a recently viewed ticket without the loading skeleton (HS2-4Q04Z9)', async ({ page }) => {

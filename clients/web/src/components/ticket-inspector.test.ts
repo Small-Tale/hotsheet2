@@ -16,6 +16,32 @@ const base = {
 };
 
 describe('TicketInspector', () => {
+  it('renders the row-backed partial variant with placeholders for loaded-only content (HS2-15833W)', () => {
+    const partial = { ...base, blockedReason: 'Waiting on review', contentLoading: true, details: '' };
+    const info = String(TicketInspector({ ...partial, activeTab: 'info', notes: [] }));
+    // The row summary renders as real values.
+    expect(info).toContain('Inspect this ticket');
+    expect(info).toContain('Waiting on review');
+    expect(info).toContain('>client<');
+    // Details and notes are placeholders, and the whole surface is inert while busy.
+    expect(info).toContain('data-details-loading="true"');
+    expect(info).not.toContain('Ticket details');
+    expect(info).toContain('data-component="ticket-notes"');
+    expect(info).toMatch(/data-component="ticket-inspector-header"[^>]*\binert\b/);
+    expect(info).toMatch(/data-component="ticket-inspector-body"[^>]*aria-busy="true"/);
+    expect(info).toMatch(/aria-label="Open Ticket Reader"[^>]*disabled/);
+    for (const tab of ['timeline', 'code-review', 'attachments'] as const) {
+      const markup = String(TicketInspector({ ...partial, activeTab: tab }));
+      expect(markup).toContain(`data-component="ticket-inspector-section-loading" data-inspector-section="${tab}"`);
+      expect(markup).not.toContain('data-component="ticket-attachments"');
+      expect(markup).not.toContain('data-component="ticket-timeline"');
+    }
+    // Loaded: none of the partial markers remain.
+    const loaded = String(TicketInspector({ ...base, activeTab: 'info' }));
+    expect(loaded).not.toContain('data-content-loading');
+    expect(loaded).not.toContain('data-details-loading');
+    expect(loaded).not.toMatch(/data-component="ticket-inspector-body"[^>]*\binert\b/);
+  });
   it('shows the source mark beside the ticket number in the shared inspector toolbar', () => {
     const markup = String(
       TicketInspector({

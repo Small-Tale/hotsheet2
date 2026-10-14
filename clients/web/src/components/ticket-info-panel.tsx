@@ -13,6 +13,7 @@ import { Skeleton } from '@kerfjs/ui/skeleton';
 import { Text } from '@kerfjs/ui/text';
 import { CircleAlert, Plus } from 'lucide';
 
+import type { PhaseEstimatePresentation } from '../active-ticket-work';
 import type { StartedPhase } from '../api';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import { DETAILS_FEEDBACK_ID, textRequestsFeedback } from '../feedback-needed';
@@ -34,6 +35,8 @@ const WARNING_TEXT = foregroundColorVar('--wa-color-warning-on-quiet');
 export interface TicketInfoPanelProps {
   status: TicketStatus;
   startedPhase?: StartedPhase;
+  /** Estimated time left in the current testing phase (HS2-YDGM04). */
+  phaseEstimate?: PhaseEstimatePresentation;
   priority: TicketPriority;
   category: string;
   tags: string[];
@@ -63,6 +66,8 @@ export interface TicketInfoPanelProps {
   providerName?: string;
   updatedLabel?: string;
   attachmentContext?: AttachmentReferenceContext;
+  /** The row-backed partial variant (HS2-15833W): details and notes are placeholders until they load. */
+  contentLoading?: boolean;
 }
 /**
  * The info panel, or its value-free loading state (HS2-XBHADT). The `placeholder` variant keeps the
@@ -141,6 +146,7 @@ function TicketInfoPanelPlaceholder({ readerPresentation = false }: { readerPres
 function LoadedTicketInfoPanel({
   status,
   startedPhase,
+  phaseEstimate,
   priority,
   category,
   tags,
@@ -170,6 +176,7 @@ function LoadedTicketInfoPanel({
   providerName = 'Hot Sheet Git',
   updatedLabel = 'Updated now',
   attachmentContext,
+  contentLoading = false,
 }: TicketInfoPanelProps) {
   const detailsFeedback =
     feedbackNeeded && textRequestsFeedback(details) && !notes.some((note) => note.kind === 'feedback_needed');
@@ -197,6 +204,7 @@ function LoadedTicketInfoPanel({
                     <TicketStatusMenu
                       value={status}
                       startedPhase={startedPhase}
+                      phaseEstimate={phaseEstimate}
                       disabled={!canUpdate}
                       canEditStartedPhase={canEditStartedPhase}
                     />
@@ -241,7 +249,11 @@ function LoadedTicketInfoPanel({
       <section class="ticket-info-panel__section ticket-info-panel__details-section">
         <ListHeader label="Details" />
         <div class="ticket-info-panel__details-surface" data-feedback-needed={detailsFeedback ? 'true' : undefined}>
-          {detailsFeedback && readerPresentation && canAddNotes ? (
+          {contentLoading ? (
+            <div class="ticket-info-panel__details-placeholder" data-details-loading="true">
+              <Skeleton lines={3} />
+            </div>
+          ) : detailsFeedback && readerPresentation && canAddNotes ? (
             <List gap="xs" rootAttributes={{ 'data-details-feedback': 'true' }}>
               <Row gap="2xs" vAlign="middle" rootAttributes={{ 'data-details-feedback-header': 'true' }}>
                 <LucideIcon size={15.2} icon={CircleAlert} name="circle-alert" color={WARNING_TEXT} />
@@ -304,20 +316,24 @@ function LoadedTicketInfoPanel({
           popoverId={resolvedTagPopoverId}
         />
       </List>
-      <TicketNotes
-        notes={notes}
-        editingNoteId={editingNoteId}
-        noteDraft={noteDraft}
-        composing={composingNote}
-        composerDraft={composerDraft}
-        canAdd={canAddNotes}
-        canEdit={canEditNotes}
-        canDelete={canDeleteNotes}
-        readerMode={readerPresentation}
-        inlineFeedbackReplies={inlineFeedbackReplies}
-        feedbackChoiceSelections={feedbackChoiceSelections}
-        attachmentContext={attachmentContext}
-      />
+      {contentLoading ? (
+        <TicketNotes placeholder />
+      ) : (
+        <TicketNotes
+          notes={notes}
+          editingNoteId={editingNoteId}
+          noteDraft={noteDraft}
+          composing={composingNote}
+          composerDraft={composerDraft}
+          canAdd={canAddNotes}
+          canEdit={canEditNotes}
+          canDelete={canDeleteNotes}
+          readerMode={readerPresentation}
+          inlineFeedbackReplies={inlineFeedbackReplies}
+          feedbackChoiceSelections={feedbackChoiceSelections}
+          attachmentContext={attachmentContext}
+        />
+      )}
       <Row hAlign="full" gap="2xs" textInsets="rl" rootAttributes={{ 'data-provenance': 'true' }}>
         <Text variant="span" tone="quiet" size="compact">
           {providerName}

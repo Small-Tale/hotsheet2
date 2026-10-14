@@ -27,6 +27,7 @@ import {
   X,
 } from 'lucide';
 
+import type { PhaseEstimatePresentation } from '../active-ticket-work';
 import type { CodeReview, DuplicateBacklink, ProviderOutboxOperation, StartedPhase, TicketCloseReason } from '../api';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import type { InlineFeedbackReply } from '../feedback-replies';
@@ -49,6 +50,7 @@ import {
 } from './ticket-duplicate-backlinks';
 import { TicketFieldConflict } from './ticket-field-conflict';
 import { TicketInfoPanel } from './ticket-info-panel';
+import { TicketInspectorPanel } from './ticket-inspector-panel';
 import type { TicketPriority } from './ticket-row';
 import { TicketSourceIcon, type TicketSourceIdentity } from './ticket-source-icon';
 import { TicketTimeline, type TicketTimelineEntry } from './ticket-timeline';
@@ -71,6 +73,8 @@ export interface TicketInspectorProps {
   composerDraft?: string;
   status: TicketStatus;
   startedPhase?: StartedPhase;
+  /** Estimated time left in the current testing phase (HS2-YDGM04). */
+  phaseEstimate?: PhaseEstimatePresentation;
   priority: TicketPriority;
   category: string;
   tags: string[];
@@ -122,6 +126,13 @@ export interface TicketInspectorProps {
   largeText?: boolean;
   fieldConflict?: TicketFieldConflictState;
   fieldConflictResolution?: string;
+  /**
+   * Partial-detail variant (HS2-15833W): the props come from the ticket's list row while its full detail
+   * loads. The row's summary (title, status, priority, tags, notices) renders normally; details, notes,
+   * the timeline, and attachments show placeholders, and the whole surface is inert until the detail
+   * read lands and replaces it.
+   */
+  contentLoading?: boolean;
 }
 
 const tabs = [
@@ -153,6 +164,7 @@ export function ticketInspectorPanel({
   composerDraft = '',
   status,
   startedPhase,
+  phaseEstimate,
   priority,
   category,
   tags,
@@ -198,7 +210,10 @@ export function ticketInspectorPanel({
   largeText = false,
   fieldConflict,
   fieldConflictResolution = fieldConflict?.mine ?? '',
+  contentLoading = false,
 }: TicketInspectorProps): SidebarPanelParts {
+  // While the detail loads nothing is actionable: the row-backed chrome is shown for continuity only.
+  const loadingAttributes = contentLoading ? { inert: true, 'aria-busy': 'true', 'data-content-loading': 'true' } : {};
   const star = (
     <>
       {upNextEligible && (
@@ -206,6 +221,7 @@ export function ticketInspectorPanel({
           type="button"
           class={`ticket-inspector__star${upNext ? ' ticket-inspector__star--active' : ''}`}
           {...INSPECTOR_AND_EDITOR_ACTIONS.toggleInspectorUpNext.attrs}
+          disabled={contentLoading}
           aria-label={upNext ? 'Remove from Up Next' : 'Add to Up Next'}
         >
           <LucideIcon
@@ -255,6 +271,7 @@ export function ticketInspectorPanel({
           {...INSPECTOR_AND_EDITOR_ACTIONS.openTicketReader.attrs}
           aria-label="Open Ticket Reader"
           title="Open ticket reader"
+          disabled={contentLoading}
         >
           <LucideIcon icon={BookOpen} name="book-open" />
         </button>
@@ -286,7 +303,7 @@ export function ticketInspectorPanel({
     'data-attachment-drop-target': 'true',
   };
   const header = (
-    <div class="ticket-inspector__header" data-component="ticket-inspector-header" {...identity}>
+    <div class="ticket-inspector__header" data-component="ticket-inspector-header" {...identity} {...loadingAttributes}>
       {titleEditing ? (
         // A one-row textarea wraps a long title the way the static heading does (HS2-98ZVPE). The frame
         // mirrors the controlled draft in a hidden grid twin, so the editor grows with its wrapped lines
@@ -417,7 +434,7 @@ export function ticketInspectorPanel({
     </div>
   );
   const content = (
-    <div class="ticket-inspector__body" data-component="ticket-inspector-body" {...identity}>
+    <div class="ticket-inspector__body" data-component="ticket-inspector-body" {...identity} {...loadingAttributes}>
       {activeTab === 'info' && pendingOperations.length > 0 && (
         <section class="ticket-inspector__outbox" aria-label="Jira Sync Status">
           <strong>Jira sync</strong>
@@ -474,6 +491,7 @@ export function ticketInspectorPanel({
         <TicketInfoPanel
           status={status}
           startedPhase={startedPhase}
+          phaseEstimate={phaseEstimate}
           priority={priority}
           category={category}
           tags={tags}
@@ -503,10 +521,22 @@ export function ticketInspectorPanel({
           providerName={providerName}
           updatedLabel={updatedLabel}
           attachmentContext={attachmentContext}
+          contentLoading={contentLoading}
         />
       )}
-      {activeTab === 'timeline' && <TicketTimeline entries={timelineEntries} presentation={presentation} />}
-      {activeTab === 'code-review' && (
+      {contentLoading && activeTab !== 'info' && (
+        <TicketInspectorPanel
+          component="ticket-inspector-section-loading"
+          presentation={presentation}
+          attributes={{ 'data-inspector-section': activeTab }}
+        >
+          <Skeleton lines={3} />
+        </TicketInspectorPanel>
+      )}
+      {!contentLoading && activeTab === 'timeline' && (
+        <TicketTimeline entries={timelineEntries} presentation={presentation} />
+      )}
+      {!contentLoading && activeTab === 'code-review' && (
         <TicketCodeReview
           review={codeReview}
           loading={codeReviewLoading}
@@ -515,7 +545,7 @@ export function ticketInspectorPanel({
           presentation={presentation}
         />
       )}
-      {activeTab === 'attachments' && (
+      {!contentLoading && activeTab === 'attachments' && (
         <TicketAttachments
           attachments={attachments}
           enabled={attachmentsEnabled}
