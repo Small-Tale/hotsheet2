@@ -14,7 +14,7 @@
   min-width: 0;
 }
 /* Surface content (app-owned markup inside Kerf's anchored surface): a readable width clamped
-   to the viewport beside the surface's own inset, and a scrolling help body. */
+   to the viewport beside the surface's own inset. */
 .ticket-search-field__date {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
@@ -22,10 +22,9 @@
   align-items: end;
   width: min(remify(384px), calc(100vw - remify(64px)));
 }
+/* Kerf's anchored surface caps its height to the room beside the field and scrolls (KF-K4GE6K). */
 .ticket-search-field__help {
   width: min(remify(448px), calc(100vw - remify(64px)));
-  max-height: min(remify(512px), calc(100dvh - remify(224px)));
-  overflow: auto;
 }
 .ticket-search-field__help code {
   padding: var(--wa-space-3xs) var(--wa-space-xs);
@@ -35,18 +34,7 @@
   background: var(--wa-color-neutral-fill-quiet);
   font-size: var(--wa-font-size-xs);
 }
-/* Kerf's anchored surface flips and clamps horizontally but not by height, so the help body keeps
-   its own short-viewport clamps (follow-up KF ticket) for the host header above the field and a
-   pinned footer below it (the UX catalog's display controls and footer pane, HS2-JEKRXN). */
-@media (max-height: remify(704px)) {
-  .ticket-search-field__help {
-    max-height: calc(100dvh - remify(368px));
-  }
-}
 @media (max-width: remify(480px)) {
-  .ticket-search-field__help {
-    max-height: min(remify(448px), calc(100dvh - remify(448px)));
-  }
   .ticket-search-field__date {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

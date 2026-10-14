@@ -4120,10 +4120,12 @@ test('organizes search syntax help in the WorkspaceHeader demo', async ({ page }
     .toBe(true);
   expect(await helpBody.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-pv2ag1-search-phone.png', fullPage: true });
-  await helpBody.evaluate((node) => {
+  // Kerf's anchored surface itself scrolls, fitted to the room beside the field inside an 8px
+  // viewport gutter (KF-K4GE6K, HS2-GZBJQP); it is top layer, so it may cover the catalog footer.
+  await help.evaluate((node) => {
     node.scrollTop = node.scrollHeight;
   });
-  await expect.poll(() => helpBody.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+  await expect.poll(() => help.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
   // Kerf repositions the anchored surface on the frame after a resize or scroll, so poll for the settled box.
   await expect
     .poll(() =>
@@ -4133,10 +4135,7 @@ test('organizes search syntax help in the WorkspaceHeader demo', async ({ page }
           finalNote = node
             .querySelector('.ticket-search-field__help')!
             .lastElementChild!.lastElementChild!.getBoundingClientRect();
-        // The panel ends above the catalog's fixed footer pane (HS2-HMVBZW: the header now also carries
-        // Kerf's display controls, so measure the footer instead of a fixed allowance).
-        const footer = document.querySelector('.kui-workbench__main > .kui-pane > .kui-pane__footer')!;
-        return panel.bottom <= footer.getBoundingClientRect().top && finalNote.bottom <= panel.bottom - 4;
+        return panel.top >= 7.5 && innerHeight - panel.bottom >= 7.5 && finalNote.bottom <= panel.bottom - 4;
       }),
     )
     .toBe(true);
@@ -9100,6 +9099,22 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
     path: 'target/visual-captures/hs2-n5g6js-ticket-search-field-demo-narrow.png',
     fullPage: true,
   });
+  // On a short phone Kerf keeps an 8px viewport gutter and fits the help's height to the room
+  // beside the field, scrolling it, with no app media queries (KF-K4GE6K, HS2-GZBJQP).
+  await page.setViewportSize({ width: 390, height: 520 });
+  await expect
+    .poll(() =>
+      help.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return {
+          gutter: box.left >= 7.5 && innerWidth - box.right >= 7.5,
+          fits: box.top >= 7.5 && innerHeight - box.bottom >= 7.5,
+          scrolls: node.scrollHeight > node.clientHeight,
+        };
+      }),
+    )
+    .toEqual({ gutter: true, fits: true, scrolls: true });
+  await page.setViewportSize({ width: 600, height: 760 });
   await helpButton.click();
   await expect(help).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 1100 });

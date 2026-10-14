@@ -56,15 +56,6 @@ function applyDate(id: string, surface: Element, handlers: TicketSearchFieldHand
   if (prefix && token) handlers.applyDate(id, prefix, `${date}${time ? `T${time}` : ''}`);
 }
 
-/**
- * Surfaces hang from the field's end edge, extending over the toolbar rather than cramping their
- * content; on phones they hang from its start edge so a field near the end still leaves a gutter
- * (Kerf clamps to the bare viewport edge).
- */
-function surfaceAlign(): 'start' | 'end' {
-  return matchMedia('(max-width: 480px)').matches ? 'start' : 'end';
-}
-
 interface OpenSurface {
   readonly handle: OverlayHandle;
   readonly anchor: Element;
@@ -92,7 +83,9 @@ function wireTicketSearchSurfaces(root: HTMLElement, handlers: TicketSearchField
     const handle = openAnchoredSurface(anchor, TicketSearchDateHelper({ id, prefix }), {
       label: 'Search date helper',
       placement: 'bottom',
-      align: surfaceAlign(),
+      // Hang from the field's end edge; Kerf keeps an 8px viewport gutter and fits the height to
+      // the room beside the field, scrolling the surface (KF-K4GE6K, HS2-GZBJQP).
+      align: 'end',
       initialFocus: false,
       dismiss: false,
     });
@@ -114,7 +107,7 @@ function wireTicketSearchSurfaces(root: HTMLElement, handlers: TicketSearchField
       handle = openAnchoredSurface(anchor, TicketSearchHelp({ id }), {
         label: 'Search syntax',
         placement: 'bottom',
-        align: surfaceAlign(),
+        align: 'end',
         initialFocus: false,
         dismiss: ['escape', 'outside'],
         // The field's own controls (help toggle, clear, chips) and its date helper are not outside.
