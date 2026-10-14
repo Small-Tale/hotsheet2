@@ -80,6 +80,8 @@ export interface InspectorAndEditorInteractionsDependencies {
     details: DebouncedAutosave<string>;
     note: DebouncedAutosave<{ id: string; value: string }>;
     blocked: DebouncedAutosave<string>;
+    /** Answer a feedback request in the frame's ticket with a new regular note. */
+    respond: (value: string) => Promise<boolean>;
   };
   readonly readerDetailsAutosave: DebouncedAutosave<string>;
   readonly detailsAutosave: DebouncedAutosave<string>;
@@ -521,6 +523,9 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   function beginNoteEdit(id: string, reader = false, frame?: TicketReaderFrame) {
     const note = (frame?.ticket ?? selectedTicket.value)?.notes.find((item) => item.id === id);
     if (!note) return;
+    // A FEEDBACK NEEDED prompt, answered or not, is replied to with a new note from the reader's
+    // response editor and never edited in place (HS2-MB2Q10).
+    if (note.kind === 'feedback_needed') return;
     if (frame) {
       if (!frame.capabilities.note_edit) return;
       replaceLinkedReaderFrame(frame.id, (current) => ({
@@ -543,8 +548,8 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     const editing = reader ? readerEditingNoteId : editingNoteId,
       draft = reader ? readerNoteDraft : noteDraft;
     editing.value = id;
-    const initial = reader && note.kind === 'feedback_needed' ? '' : note.text,
-      restoredNote = initial === note.text ? restoreTicketDraft('note', note.text, id) : undefined;
+    const initial = note.text,
+      restoredNote = restoreTicketDraft('note', note.text, id);
     draft.value = restoredNote?.draft ?? initial;
     if (reader) dependencies.readerNoteDraftBase = restoredNote?.base ?? initial;
     else dependencies.noteDraftBase = restoredNote?.base ?? initial;
@@ -600,6 +605,37 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         )
         ?.focus(),
     );
+  }
+  function clearFeedbackReplyState(id: string) {
+    readerInlineFeedbackReplies.value = { ...readerInlineFeedbackReplies.value, [id]: [] };
+    readerFeedbackChoiceSelections.value = { ...readerFeedbackChoiceSelections.value, [id]: [] };
+    readerFeedbackChoiceAnchors.delete(id);
+  }
+  /** Save or answer a note inside a linked reader frame, against that frame's own ticket. */
+  function saveLinkedReaderNote(frame: TicketReaderFrame, target: HTMLElement) {
+    const id = frame.edit.editingNoteId ?? data(target).noteId,
+      note = frame.ticket.notes.find((item) => item.id === id);
+    if (!id || !note) return;
+    const response = data(target).noteResponse === 'true' || note.kind === 'feedback_needed',
+      value = response
+        ? combineFeedbackReply(
+            note.text,
+            readerInlineFeedbackReplies.value[id] ?? [],
+            frame.edit.noteDraft,
+            readerFeedbackChoiceSelections.value[id] ?? [],
+          )
+        : frame.edit.noteDraft;
+    if (!value.trim()) return;
+    const saves = linkedReaderSaves(frame.id),
+      saved = response ? saves.respond(value) : saves.note.flush();
+    void saved.then((ok) => {
+      if (!ok) return;
+      replaceLinkedReaderFrame(frame.id, (current) => ({
+        ...current,
+        edit: { ...current.edit, editingNoteId: undefined, noteDraft: '', noteBase: '' },
+      }));
+      if (response) clearFeedbackReplyState(id);
+    });
   }
   function feedbackSource(noteId: string) {
     return noteId === DETAILS_FEEDBACK_ID
@@ -706,7 +742,8 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
             ...current,
             edit: { ...current.edit, editingNoteId: id, noteDraft: value },
           }));
-          linkedReaderSaves(frame.id).note.schedule({ id, value });
+          // A feedback response is only a draft until Respond creates its own note (HS2-MB2Q10).
+          if (!response) linkedReaderSaves(frame.id).note.schedule({ id, value });
           return;
         }
         const reader = isReaderSurface(field),
@@ -715,7 +752,9 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
           autosave = reader ? readerNoteAutosave : noteAutosave;
         editing.value = id;
         draft.value = value;
-        if (!response && editing.value) autosave.schedule({ id: editing.value, value: draft.value });
+        const prompt =
+          selectedTicket.value?.notes.find((item) => item.id === editing.value)?.kind === 'feedback_needed';
+        if (!response && !prompt && editing.value) autosave.schedule({ id: editing.value, value: draft.value });
         else scheduleProjectSessionPersistence();
       },
       finish: (field) => {
@@ -744,12 +783,18 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         });
       },
       save: (target) => {
+        const frame = linkedReaderFrame(target);
+        if (frame) {
+          saveLinkedReaderNote(frame, target);
+          return;
+        }
         const reader = isReaderSurface(target),
           editing = reader ? readerEditingNoteId : editingNoteId,
           draft = reader ? readerNoteDraft : noteDraft,
           id = editing.value ?? data(target).noteId,
           note = selectedTicket.value?.notes.find((item) => item.id === id),
-          response = data(target).noteResponse === 'true' || note?.kind === 'feedback_draft',
+          response =
+            data(target).noteResponse === 'true' || note?.kind === 'feedback_draft' || note?.kind === 'feedback_needed',
           source = id ? feedbackSource(id) : undefined,
           value =
             source && response
@@ -766,9 +811,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
           if (saved) {
             editing.value = undefined;
             draft.value = '';
-            readerInlineFeedbackReplies.value = { ...readerInlineFeedbackReplies.value, [id]: [] };
-            readerFeedbackChoiceSelections.value = { ...readerFeedbackChoiceSelections.value, [id]: [] };
-            readerFeedbackChoiceAnchors.delete(id);
+            clearFeedbackReplyState(id);
           }
         });
       },

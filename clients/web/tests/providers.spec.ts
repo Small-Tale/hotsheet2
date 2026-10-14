@@ -9042,6 +9042,8 @@ test('selects feedback choices with platform modifiers and preserves a freeform 
     .toBe(
       'Selected choices:\n- Keep the **current behavior**\n- Use `attachment:proof.png`\n\nThe two options can be combined.',
     );
+  // The choice reply is its own note; the prompt itself is never rewritten (HS2-MB2Q10).
+  expect(patches.filter((patch) => patch.note_id === 'N4')).toEqual([]);
 });
 
 test('responds to feedback choices embedded in the ticket description', async ({ page }) => {
@@ -9128,6 +9130,59 @@ test('records No response needed as a subtle regular response and clears review 
   const acknowledgement = page.locator('#app-right-rail [data-acknowledgement="true"]');
   await expect(acknowledgement).toBeVisible();
   await acknowledgement.screenshot({ path: 'target/visual-captures/hs2-yk27gp-no-response-needed.png' });
+});
+
+test('answers a feedback prompt with new notes and never rewrites the prompt', async ({ page }) => {
+  // HS2-MB2Q10: a reply typed into a click-opened prompt editor overwrote the AI's FEEDBACK NEEDED note.
+  const patches = await mockProject(page, true, true);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const inspector = page.locator('#app-right-rail'),
+    sidebarPrompt = inspector.locator('article[data-note-id="N4"]');
+  await sidebarPrompt.locator('.note-card__body').click();
+  await expect(sidebarPrompt.getByRole('textbox')).toHaveCount(0);
+  await expect(sidebarPrompt).not.toHaveAttribute('data-edit-on-click', 'true');
+  await sidebarPrompt.screenshot({ path: 'target/visual-captures/hs2-mb2q10-sidebar-prompt.png' });
+  await inspector.getByRole('button', { name: 'Respond to Feedback' }).click();
+  const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ }),
+    prompt = reader.locator('article[data-note-id="N4"]'),
+    response = prompt.getByRole('textbox', { name: 'Feedback response' }),
+    promptEdits = () => patches.filter((patch) => patch.note_id === 'N4');
+  // Reply: blur keeps the draft local; Respond creates a separate regular note.
+  await response.fill('token stored');
+  await response.blur();
+  await page.waitForTimeout(400);
+  expect(promptEdits()).toEqual([]);
+  await prompt.getByRole('button', { name: 'Respond' }).click();
+  await expect
+    .poll(() => patches.filter((patch) => patch.note_kind === 'regular').map((patch) => patch.note))
+    .toEqual(['token stored']);
+  await expect(prompt).toContainText('Hello there');
+  const answer = reader.locator('article[data-kind="regular"]').filter({ hasText: 'token stored' });
+  await expect(answer).toHaveCount(1);
+  // The ticket leaves feedback-needed state, and the answered prompt is still not editable in place.
+  await expect(response).toHaveCount(0);
+  await expect(prompt).not.toHaveAttribute('data-edit-on-click', 'true');
+  await prompt.locator('.note-card__body').click();
+  await expect(prompt.getByRole('textbox')).toHaveCount(0);
+  // Reply, then edit the reply: the edit targets the reply note, never the prompt.
+  await answer.locator('.note-card__body').click();
+  const answerEditor = answer.getByRole('textbox', { name: 'Note body' });
+  await answerEditor.fill('token stored in the keychain');
+  await answerEditor.blur();
+  await expect
+    .poll(() => patches.find((patch) => typeof patch.note_id === 'string' && patch.note_id.startsWith('N-response-')))
+    .toMatchObject({ note: 'token stored in the keychain' });
+  expect(patches.filter((patch) => patch.note_kind === 'regular')).toHaveLength(1);
+  expect(promptEdits()).toEqual([]);
+  await expect(prompt).toContainText('Hello there');
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await prompt.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `target/visual-captures/hs2-mb2q10-answered-prompt-${width}.png` });
+  }
 });
 
 test('opens reader at the active feedback note from its inspector action', async ({ page }) => {
@@ -15967,14 +16022,10 @@ test('creates, cancels, edits, and deletes notes through the shared inspector an
     .poll(() => patches.some((patch) => patch.note === 'Created note' && patch.note_kind === 'regular'))
     .toBe(true);
   const feedbackSurface = inspector.locator('[data-note-id="N2"] .note-card__body');
+  // An AI feedback prompt is answered with a new note, never edited in place (HS2-MB2Q10).
   await feedbackSurface.click({ position: { x: 4, y: 4 } });
-  const feedbackEditor = inspector.getByRole('textbox', { name: 'Note body' });
-  await expect(feedbackEditor).toHaveValue('Should this reader preserve the current draft?');
-  await feedbackEditor.fill('Revised feedback question');
-  await feedbackEditor.blur();
-  await expect
-    .poll(() => patches.some((patch) => patch.note_id === 'N2' && patch.note === 'Revised feedback question'))
-    .toBe(true);
+  await expect(inspector.getByRole('textbox', { name: 'Note body' })).toHaveCount(0);
+  expect(patches.some((patch) => patch.note_id === 'N2')).toBe(false);
   const noteSurface = inspector.locator('[data-note-id="N3"] .note-card__body');
   await expect(noteSurface).toHaveAttribute('aria-label', 'Edit note');
   await noteSurface

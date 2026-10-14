@@ -69,6 +69,7 @@ export interface InspectorSurfaceDependencies {
   notes: (ticket: FullTicket) => {
     readonly id: string;
     readonly kind: 'regular' | 'activity' | 'feedback_needed' | 'feedback_draft' | 'status';
+    readonly feedbackPrompt: boolean;
     readonly author: string;
     readonly time: string;
     readonly body: string;

@@ -193,6 +193,11 @@ pub enum StoreError {
     UnsupportedStoreSchema { found: u32, supported: u32 },
     #[error("git {0}")]
     Git(String),
+    /// A human tried to rewrite an AI's FEEDBACK NEEDED prompt; a reply must be a new note.
+    #[error(
+        "note {0} is an AI FEEDBACK NEEDED request; reply with a new note instead of editing it"
+    )]
+    FeedbackNoteEdit(String),
 }
 
 impl StoreError {

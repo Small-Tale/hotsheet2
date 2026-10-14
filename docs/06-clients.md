@@ -3351,8 +3351,12 @@ unsupported, so they cannot create this state through Hot Sheet.
   reader mode** (you can answer the ask / continue your draft). A new response starts
   empty; a saved draft is prefilled.
 - **Explicitly editing an existing note is a different action from responding.** Direct
-  editing is prefilled with that note's complete Markdown—including for
-  `feedback_needed`—and autosaves the replacement by note id.
+  editing is prefilled with that note's complete Markdown and autosaves the replacement
+  by note id. A stored `feedback_needed` prompt—answered or not, sidebar, reader, or
+  linked reader frame—is never offered for in-place editing: every reply (typed, inline,
+  or chosen) becomes its own new `regular` note and the prompt keeps its text
+  (HS2-MB2Q10). The server enforces this too: a human text edit of an AI-authored
+  `feedback_needed` note is refused with 409 Conflict.
 - **Feedback prompts support user-chosen inline reply points.** In reader mode, the
   client maps a click in the rendered Markdown to the corresponding source-character
   boundary and inserts a focused reply field at that exact point. Enter/Space on the

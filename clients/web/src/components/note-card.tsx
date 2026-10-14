@@ -32,6 +32,8 @@ export interface NoteCardProps {
   editing?: boolean;
   draft?: string;
   readerMode?: boolean;
+  /** The stored note is an AI FEEDBACK NEEDED prompt, even when an answer presents it as regular. */
+  feedbackPrompt?: boolean;
   respondToFeedback?: boolean;
   inlineReplies?: readonly InlineFeedbackReply[];
   selectedChoices?: readonly string[];
@@ -308,6 +310,7 @@ export function NoteCard({
   editing = false,
   draft,
   readerMode = false,
+  feedbackPrompt = kind === 'feedback_needed',
   respondToFeedback = false,
   inlineReplies = [],
   selectedChoices = [],
@@ -326,10 +329,12 @@ export function NoteCard({
   const feedbackEditor = readerMode && (kind === 'feedback_needed' || kind === 'feedback_draft');
   const feedbackResponse = readerMode && kind === 'feedback_needed';
   const editorOpen = editing || feedbackEditor;
+  // An AI FEEDBACK NEEDED prompt is answered with a new note, never rewritten in place (HS2-MB2Q10).
+  const editInPlace = editable && !feedbackPrompt;
   const source = draft ?? (feedbackResponse ? '' : body);
   const choiceGroup = feedbackResponse ? parseFeedbackChoices(body) : undefined;
   const editAttributes =
-    editable && !editorOpen
+    editInPlace && !editorOpen
       ? {
           'data-edit-on-click': 'true',
           role: 'button',
@@ -354,8 +359,8 @@ export function NoteCard({
           : undefined
       }
       data-acknowledgement={acknowledgement ? 'true' : undefined}
-      data-edit-on-click={editable && !editorOpen && !aiFeedback.length ? 'true' : undefined}
-      title={editable && !editorOpen ? 'Click to edit' : undefined}
+      data-edit-on-click={editInPlace && !editorOpen && !aiFeedback.length ? 'true' : undefined}
+      title={editInPlace && !editorOpen ? 'Click to edit' : undefined}
     >
       <header class="note-card__header">
         <span class="note-card__kind">

@@ -101,19 +101,23 @@ describe('NoteCard', () => {
     expect(markup).not.toContain('data-action="cancel-note-edit"');
   });
 
-  it('prefills direct feedback-note edits while keeping reader responses empty', () => {
-    const editing = String(
+  it('never offers in-place editing of a feedback prompt and keeps reader responses empty', () => {
+    // HS2-MB2Q10: clicking the prompt opened the plain note editor, so a typed reply overwrote it.
+    const sidebar = String(
       NoteCard({
         id: 'feedback-edit',
         kind: 'feedback_needed',
         author: 'Codex',
         time: 'Now',
         body: 'Existing feedback question',
-        editing: true,
+        respondToFeedback: true,
       }),
     );
-    expect(editing).toContain('aria-label="Note body"');
-    expect(editing).toContain('Existing feedback question');
+    expect(sidebar).toContain('Existing feedback question');
+    expect(sidebar).not.toContain('data-edit-on-click');
+    expect(sidebar).not.toContain('aria-label="Edit note"');
+    expect(sidebar).not.toContain('name="note-body"');
+    expect(sidebar).toContain('data-action="respond-to-feedback"');
     const responding = String(
       NoteCard({
         id: 'feedback-response',

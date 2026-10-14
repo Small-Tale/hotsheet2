@@ -1458,6 +1458,19 @@ pub fn edit_note_with_metadata(
                     format!("note {note_id}"),
                 ))
             })?;
+        if text.as_ref().is_some_and(|text| *text != note.text) {
+            let human_editor = edit
+                .actor
+                .as_ref()
+                .is_some_and(|actor| actor.role == hotsheet_model::AttachmentActorRole::Human);
+            let ai_prompt = note
+                .actor
+                .as_ref()
+                .is_some_and(|actor| actor.role == hotsheet_model::AttachmentActorRole::Ai);
+            if human_editor && ai_prompt && note.kind == NoteKind::FeedbackNeeded {
+                return Err(StoreError::FeedbackNoteEdit(note_id.to_string()));
+            }
+        }
         if let Some(text) = text {
             let legacy_distillation =
                 note.actor.is_none() && note.text.contains("hotsheet:activity-distillation:v1:");
@@ -2459,6 +2472,72 @@ mod tests {
 
     fn ts(s: &str) -> Timestamp {
         Timestamp::new(s)
+    }
+
+    #[test]
+    fn human_cannot_rewrite_an_ai_feedback_needed_prompt() {
+        // HS2-MB2Q10: a reply overwrote the AI prompt; replies must be new notes.
+        let (_dir, store) = store();
+        let ticket = create(
+            &store,
+            Ulid::new(),
+            "HS",
+            ts("2026-10-14T00:00:00Z"),
+            NewTicket {
+                title: "needs feedback".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let actor = |role| hotsheet_model::NoteActor {
+            role,
+            id: Some("someone".into()),
+        };
+        let note_id = Ulid::new();
+        add_note_with_metadata(
+            &store,
+            &ticket.id,
+            note_id,
+            ts("2026-10-14T00:01:00Z"),
+            NoteKind::FeedbackNeeded,
+            NoteMetadataInput {
+                actor: Some(actor(hotsheet_model::AttachmentActorRole::Ai)),
+                ..Default::default()
+            },
+            "Which token should I use?".into(),
+        )
+        .unwrap();
+        let edit = |role, text: &str| {
+            edit_note_with_metadata(
+                &store,
+                &ticket.id,
+                &note_id,
+                ts("2026-10-14T00:02:00Z"),
+                NoteEditInput {
+                    text: Some(text.into()),
+                    actor: Some(actor(role)),
+                    ..Default::default()
+                },
+            )
+        };
+        let refused = edit(hotsheet_model::AttachmentActorRole::Human, "token stored").unwrap_err();
+        assert!(matches!(refused, StoreError::FeedbackNoteEdit(_)));
+        let read = store.read_ticket(&ticket.id).unwrap();
+        assert_eq!(read.notes[0].text, "Which token should I use?");
+        assert!(!read.notes[0].human_edited);
+        // An unchanged human save is a no-op, and the AI may still revise its own prompt.
+        edit(
+            hotsheet_model::AttachmentActorRole::Human,
+            "Which token should I use?",
+        )
+        .unwrap();
+        let revised = edit(
+            hotsheet_model::AttachmentActorRole::Ai,
+            "Which PAT should I use?",
+        )
+        .unwrap();
+        assert_eq!(revised.notes[0].text, "Which PAT should I use?");
+        assert_eq!(revised.notes[0].kind, NoteKind::FeedbackNeeded);
     }
 
     #[test]
