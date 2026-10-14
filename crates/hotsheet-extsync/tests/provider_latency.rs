@@ -383,3 +383,20 @@ fn opt_in_real_jira_mutation_latency() {
     });
     real_title_edit_latency(&provider, &issue, samples, "jira");
 }
+
+#[test]
+#[ignore = "opt-in live mutation of a designated GitLab benchmark issue"]
+fn opt_in_real_gitlab_mutation_latency() {
+    let samples = require_real_bench();
+    let var = |name: &str| std::env::var(name).unwrap_or_else(|_| panic!("set {name}"));
+    let issue = var("HOTSHEET_BENCH_GITLAB_ISSUE");
+    let provider = GitLabProvider::live(GitLabConfig {
+        connection_id: "gitlab-bench".into(),
+        project: var("HOTSHEET_GITLAB_LIVE_PROJECT"),
+        api_base: std::env::var("HOTSHEET_GITLAB_LIVE_API_BASE")
+            .unwrap_or_else(|_| "https://gitlab.com/api/v4".into()),
+        token: var("HOTSHEET_GITLAB_LIVE_TOKEN"),
+        default: false,
+    });
+    real_title_edit_latency(&provider, &issue, samples, "gitlab");
+}

@@ -129,17 +129,20 @@ GitHub status updates use the same read/write path. Single-ticket edits and the 
 Git batch do not yet justify an outbox. Jira status transitions use a separate action
 and were not measured in this field-edit fixture.
 
-Ignored opt-in tests, `opt_in_real_github_mutation_latency` and
-`opt_in_real_jira_mutation_latency`, perform `HOTSHEET_BENCH_SAMPLES` (default 3)
+Ignored opt-in tests, `opt_in_real_github_mutation_latency`,
+`opt_in_real_jira_mutation_latency`, and `opt_in_real_gitlab_mutation_latency`, perform `HOTSHEET_BENCH_SAMPLES` (default 3)
 serial same-title edits against one designated issue and print per-phase median/p90.
-Both require `HOTSHEET_REAL_PROVIDER_BENCH=1`. GitHub also needs
+All require `HOTSHEET_REAL_PROVIDER_BENCH=1`. GitHub also needs
 `HOTSHEET_BENCH_GITHUB_REPOSITORY`, `HOTSHEET_BENCH_GITHUB_ISSUE`, and
 `HOTSHEET_BENCH_GITHUB_TOKEN`; Jira uses the `HOTSHEET_JIRA_LIVE_*` settings plus
 `HOTSHEET_BENCH_JIRA_ISSUE` (designated issues `HS2T-1`..`HS2T-3`, see
-[12](12-code-organization-and-testing.md)). Run them only against benchmark issues.
+[12](12-code-organization-and-testing.md)); GitLab uses the `HOTSHEET_GITLAB_LIVE_*`
+settings plus `HOTSHEET_BENCH_GITLAB_ISSUE` (designated issue `#1` in the throwaway
+testing project, labeled `hs2-benchmark`). Run them only against benchmark issues.
 
 Live measurement (HS2-EQMB0Y, 2026-10-14, one developer machine, 20 serial edits each;
-GitHub on a throwaway issue in the testing ticket repository, Jira Cloud on `HS2T-1`):
+GitHub on a throwaway issue in the testing ticket repository, Jira Cloud on `HS2T-1`,
+gitlab.com on benchmark issue `#1`):
 
 | Provider | Operation       |   n |    Median |       p90 | Controlled fake p50 |
 | :------- | :-------------- | --: | --------: | --------: | ------------------: |
@@ -151,14 +154,19 @@ GitHub on a throwaway issue in the testing ticket repository, Jira Cloud on `HS2
 | Jira     | Write (PUT)     |  20 |  442.4 ms |  519.6 ms |              4.6 ms |
 | Jira     | Ack (readback)  |  20 |  571.1 ms |  712.6 ms |              6.5 ms |
 | Jira     | End-to-end edit |  20 | 1308.5 ms | 1639.7 ms |             14.3 ms |
+| GitLab   | Read            |  20 |  690.7 ms |  789.7 ms |              3.2 ms |
+| GitLab   | Write (PUT)     |  20 |  668.5 ms |  998.3 ms |              4.6 ms |
+| GitLab   | Ack (decode)    |  20 |    0.1 ms |    0.1 ms |              0.1 ms |
+| GitLab   | End-to-end edit |  20 | 1355.4 ms | 1722.3 ms |              7.8 ms |
 
 Real round trips are roughly 100-250x the controlled fakes, so a serial 20-ticket
 field edit costs about 26 s on Jira and 38 s on GitHub, and 100 tickets several
 minutes. That confirms the prediction that multi-ticket provider edits need
 write-behind, but reverses the expected ordering: GitHub, not Jira, was the slowest
 single edit in this sample because its PATCH dominated, despite Jira's extra
-acknowledgement readback. No rate limit was hit at this volume. GitLab has not been
-measured live yet (no approved credentials or throwaway project).
+acknowledgement readback. GitLab (median 1.36 s) lands close to Jira: its read is the
+slowest of the three, but its PUT is about half of GitHub's PATCH and it needs no
+readback. No rate limit was hit at this volume on any provider.
 
 ### Phase 2 durable Jira admission (HS2-056R8P)
 
