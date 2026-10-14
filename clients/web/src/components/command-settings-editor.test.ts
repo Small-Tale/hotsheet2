@@ -97,6 +97,20 @@ describe('CommandSettingsEditor', () => {
     expect(markup).toContain('data-command-group-drop=""');
   });
 
+  it('renders each row icon in a Kerf filled color tile, neutral for a transparent command (HS2-RDX8ZY)', () => {
+    const markup = String(
+      CommandSettingsEditor({
+        commands: [
+          { id: 'c', title: 'Verify', kind: 'shell' as const, command: 'npm test', color: '#22c55e', icon: 'test' },
+          { id: 't', title: 'Plain', kind: 'shell' as const, command: 'true', color: 'transparent', icon: 'test' },
+        ],
+      }),
+    );
+    expect(markup).toContain('data-icon-tile');
+    expect(markup).toMatch(/icon-tile-fill:\s*#22c55e/);
+    expect(markup).toContain('data-icon-tile-tone="neutral"');
+  });
+
   it('opens a details dialog only for the edited command, marking its row', () => {
     const props = {
       commands: [

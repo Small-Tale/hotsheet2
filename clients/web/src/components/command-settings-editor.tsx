@@ -5,7 +5,7 @@ import '@kerfjs/ui/surface-scaffold.css';
 import './command-settings-editor.css';
 
 import { ChoiceChips, type ChoiceChipsChoice } from '@kerfjs/ui/choice-chips';
-import { foregroundColor, foregroundColorVar, px, uiColor } from '@kerfjs/ui/css-values';
+import { fillColor, foregroundColor, foregroundColorVar, px, uiColor } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
@@ -77,19 +77,18 @@ function CommandRow({
     label = command.title || 'Untitled command';
   // A draggable Kerf ListActionRow with a trailing overflow PopupMenu (KF-HWYE11, KF-VWTCYB, HS2-7BBRJT):
   // Kerf owns the row geometry, hover/selected states, and the dragging and drop-position marks the
-  // reorder wiring paints; the colored icon tile is the app's own decorative content.
+  // reorder wiring paints. The leading icon repeats the sidebar button's filled color tile through
+  // Kerf's `iconTile` (KF-77AVAJ, HS2-RDX8ZY); a transparent command uses the quiet neutral tile.
+  const color = resolveCommandColor(command.color);
   return (
     <ListActionRow
       label={label}
       description={TYPE_LABELS[kind(command)]}
-      // The glyph takes the button's color; Kerf's 24px icon slot has no colored-tile presentation
-      // yet (KF-77AVAJ), so the sidebar button's tile is not repeated here.
-      icon={
-        <LucideIcon
-          icon={icon.icon}
-          name={icon.name}
-          color={transparent ? uiColor('neutral-on-normal') : foregroundColor(resolveCommandColor(command.color))}
-        />
+      icon={<LucideIcon icon={icon.icon} name={icon.name} />}
+      iconTile={
+        transparent
+          ? 'neutral'
+          : { color: fillColor(color), foreground: foregroundColor(customizationContrastColor(color)) }
       }
       action={COMMANDS_AND_AI_ACTIONS.selectCommandSetting.value}
       itemId={command.id}
