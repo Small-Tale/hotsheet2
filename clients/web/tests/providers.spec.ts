@@ -10482,7 +10482,7 @@ test('copies the ticket number when the browser refuses the Clipboard API (HS2-1
   const region = page.locator('#app-right-rail');
   await expect(region.locator('[data-component="ticket-inspector-header"]')).toBeVisible();
   await region.getByRole('button', { name: 'Copy ticket number HS2-DEMO01' }).click();
-  await expect(page.getByText('HS2-DEMO01 copied to clipboard.', { exact: true })).toBeVisible();
+  await expect(page.locator('.app-toast')).toHaveText('HS2-DEMO01 copied to clipboard.');
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('HS2-DEMO01');
   await expect(page.getByText(/Copy failed/)).toHaveCount(0);
 });
@@ -10509,7 +10509,7 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
   expect(await region.evaluate((node) => node.getBoundingClientRect().width)).toBe(before);
   await expect(region.locator('[data-component="ticket-inspector-header"]')).toBeVisible();
   await region.getByRole('button', { name: 'Copy ticket number HS2-DEMO01' }).click();
-  await expect(page.getByText('HS2-DEMO01 copied to clipboard.', { exact: true })).toBeVisible();
+  await expect(page.locator('.app-toast')).toHaveText('HS2-DEMO01 copied to clipboard.');
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('HS2-DEMO01');
   await page.setViewportSize({ width: 1024, height: 600 });
   const widthBeforeSwitch = await region.evaluate((node) => node.getBoundingClientRect().width);
