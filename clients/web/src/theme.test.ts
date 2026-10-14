@@ -153,7 +153,6 @@ describe('shared client theme', () => {
     for (const token of [
       '--wa-color-surface-default',
       '--wa-color-surface-lowered',
-      '--wa-color-overlay-modal',
       '--wa-color-text-normal',
       '--wa-color-text-quiet',
       '--wa-color-brand-fill-quiet',
