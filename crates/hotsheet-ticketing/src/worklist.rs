@@ -47,7 +47,10 @@ pub fn render_with_auto_context(tickets: &[Ticket], entries: &[AutoContextEntry]
     out.push_str("## Workflow\n\n");
     out.push_str(
         "Work these tickets in priority order, where reasonable. Before starting, read \
-         the ticket in full and set it to `started`. Before completion, finish and verify \
+         the ticket in full and set it to `started`. On git-backed tickets, record each \
+         `started_phase` transition as it happens (`initial_testing` before running tests \
+         or gates, `integrating` before merging or pushing, `final_testing` while CI runs). \
+         Before completion, finish and verify \
          its scope, update required tests/coverage/docs, and scan for incomplete work. \
          Create every follow-up immediately, without asking: unfinished steps, open \
          questions, known gaps, out-of-scope work, and designed-but-unbuilt behavior each \
@@ -491,6 +494,14 @@ mod tests {
         assert!(md.contains("every follow-up slug"));
         assert!(md.contains("`FEEDBACK NEEDED` only when"));
         assert!(md.contains("FEEDBACK NEEDED never replaces follow-ups"));
+    }
+
+    #[test]
+    fn render_requires_live_started_phase_transitions() {
+        let md = render(&[]);
+
+        assert!(md.contains("record each `started_phase` transition as it happens"));
+        assert!(md.contains("`initial_testing` before running tests"));
     }
 
     #[test]

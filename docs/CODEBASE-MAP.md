@@ -212,6 +212,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/annotation-intents.ts # Shape-derived default/primary intent and named colour family for media annotations (HS2-GNQPT4)
     src/search-collapse.ts # Whitespace-only search collapse predicate used on workspace focus handoff (HS2-Y4SHXY)
     src/ticket-blocking.ts   #   Collection-aware unresolved dependency projection matching core Completed/Verified semantics
+    src/ticket-detail-cache.ts # Bounded LRU cache of recently viewed full ticket details for skeleton-free reopen (HS2-4Q04Z9)
     src/ticket-operations.ts #   Checkout-scoped field/external undo/redo and structured attachment-aware ticket clipboard operations
     src/new-ticket-attachments.ts # Post-create staged attachment upload with partial-failure accounting
     src/attachment-label-editing.ts # Per-surface open attachment batch label editor state (begin/restore/end) and its autosave controller (controlled draft, recovery copy, one merged write on blur/page hide), shared by the app and the UX demo (HS2-SG0AZY, HS2-0QQHSZ)

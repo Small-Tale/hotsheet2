@@ -66,6 +66,7 @@ import {
   ticketCloseReasonLabel,
   validateTicketClose,
 } from '../ticket-close';
+import { createTicketDetailCache, sameTicketRevision } from '../ticket-detail-cache';
 import {
   clearTicketDraft,
   loadTicketDraft,
@@ -367,6 +368,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     ticketCloseSearchTimer: number | undefined,
     composerAttachmentEpoch = 0;
   const activeComposerScreenings = new Set<symbol>();
+  /** Recently viewed ticket details rendered without a loading view on reopen (HS2-4Q04Z9). */
+  const detailCache = createTicketDetailCache();
   interface DraftSlot {
     base: () => string;
     draft: Signal<string>;
@@ -1757,23 +1760,44 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     if (selected.length !== 1) return Promise.resolve(undefined);
     const ticket = tickets.value.find((item) => item.slug === selected[0]),
       current = project();
-    if (ticket && current)
-      return api()
-        .checkoutTicket(current.id, ticket.qualified_id)
-        .then((result) => {
-          if (
-            project()?.id === current.id &&
-            selectedTicketSlugs.value.length === 1 &&
-            selectedTicketSlugs.value[0] === result.ticket.slug
-          )
-            presentTicket(result.ticket);
-          return result.ticket;
-        })
-        .catch((reason: unknown) => {
-          error.value = reason instanceof Error ? reason.message : String(reason);
-          return undefined;
-        });
-    return Promise.resolve(undefined);
+    if (!ticket || !current) return Promise.resolve(undefined);
+    // Remember the outgoing detail (it carries any edits made while it was open), then render a recently
+    // viewed ticket immediately and refresh it in the background without a loading view (HS2-4Q04Z9).
+    if (loaded && loaded.qualified_id !== ticket.qualified_id) detailCache.put(current.id, loaded);
+    const cached = detailCache.get(current.id, ticket);
+    if (cached) presentTicket(cached.ticket);
+    const stillSelected = (slug: string) =>
+      project()?.id === current.id && selectedTicketSlugs.value.length === 1 && selectedTicketSlugs.value[0] === slug;
+    const refresh = api()
+      .checkoutTicket(current.id, ticket.qualified_id)
+      .then((result) => {
+        detailCache.put(current.id, result.ticket);
+        if (!stillSelected(result.ticket.slug)) return result.ticket;
+        const shown = selectedTicket.value;
+        if (!cached || shown?.qualified_id !== result.ticket.qualified_id) presentTicket(result.ticket);
+        else if (!sameTicketRevision(shown, result.ticket)) {
+          // Replace stale cached content; keep an edit the user already began against the shown copy.
+          if (ticketEditInProgress()) selectedTicket.value = result.ticket;
+          else presentTicket(result.ticket);
+        }
+        return result.ticket;
+      })
+      .catch((reason: unknown) => {
+        if (!cached) error.value = reason instanceof Error ? reason.message : String(reason);
+        return undefined;
+      });
+    return cached ? Promise.resolve(cached.ticket) : refresh;
+  }
+  function ticketEditInProgress() {
+    return Boolean(
+      detailsMode.value === 'write' ||
+      readerDetailsMode.value === 'write' ||
+      titleEditingSurface.value ||
+      editingNoteId.value ||
+      readerEditingNoteId.value ||
+      blockedReasonEditing.value ||
+      readerBlockedReasonEditing.value,
+    );
   }
   async function openTicketReader(slug: string, ordered?: string[], trigger?: HTMLElement) {
     const ticket = await selectTickets(slug, {}, ordered);

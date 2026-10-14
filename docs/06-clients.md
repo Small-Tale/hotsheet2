@@ -258,6 +258,13 @@ preview/download, server directory browser) are separate design work.
   focus into the new view. The
   reader modal is not a Workbench panel: it renders the same parts through `SidebarPane` with
   its own close and text-size controls instead of the rail toggle.
+  Reopening a recently viewed ticket renders immediately, without the loading skeleton
+  (HS2-4Q04Z9): `clients/web/src/ticket-detail-cache.ts` keeps a bounded (50-entry, LRU,
+  project-scoped) cache of full ticket details, and selection presents the cached detail at
+  once — overlaid with the live list row's summary fields when the row's `updated_at` shows it
+  is stale — then refreshes it in the background with one detail read (no polling). A newer
+  revision replaces the shown ticket; an edit already begun keeps its draft. Only a ticket with
+  no cached detail shows the loading skeleton.
   The shell and viewport roots clip offscreen panels without becoming scroll containers: opening,
   clearing, and typing in search must not pan the whole workspace, including across desktop/mobile
   resize. Embedded AI conversations also opt into flex shrink containment so their header,

@@ -1,9 +1,9 @@
 import './connection-details-dialog.css';
-import './native-popover-dialog.css';
 
-import { uiColor } from '@kerfjs/ui/css-values';
+import { remify, uiColor } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopoverDialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -55,16 +55,20 @@ export function ConnectionDetailsDialog({
       ? 'The running server build differs from this development checkout.'
       : 'Hot Sheet could not confirm compatible build metadata.');
   return (
-    <section
-      popover={embedded ? undefined : 'auto'}
+    // Kerf's PopoverDialogSurface owns the native popover chrome, viewport-bounded width, and the
+    // embedded in-flow variant (HS2-F3F44W, KF-SKVEQW).
+    <PopoverDialogSurface
       id={embedded ? undefined : 'connection-details-dialog'}
-      class="dialog-surface connection-details-dialog"
-      data-component="connection-details-dialog"
-      data-kind={assessment.kind}
-      data-embedded={embedded ? 'true' : undefined}
-      role="dialog"
-      aria-labelledby="connection-details-title"
-      aria-describedby="connection-details-summary"
+      className="connection-details-dialog"
+      presentation={embedded ? 'embedded' : 'overlay'}
+      preferredWidth={remify(672)}
+      labelledBy="connection-details-title"
+      describedBy="connection-details-summary"
+      rootAttributes={{
+        'data-connection-details-dialog': 'true',
+        'data-kind': assessment.kind,
+        ...(embedded ? { 'data-embedded': 'true' } : {}),
+      }}
     >
       <Toolbar
         dividerSides=""
@@ -139,6 +143,6 @@ export function ConnectionDetailsDialog({
           </List>
         </section>
       </div>
-    </section>
+    </PopoverDialogSurface>
   );
 }

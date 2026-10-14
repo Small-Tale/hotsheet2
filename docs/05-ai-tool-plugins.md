@@ -710,7 +710,12 @@ renew or same-worker retry keeps it, `--eta` on renew re-estimates, and release,
 takeover, or a terminal status clears it with the claim. Renewal is the re-estimate prompt:
 once the ETA has passed, CLI `renew` prints `ETA passed; pass --eta with a new estimate.` and
 MCP `hotsheet_renew` returns `eta_expired: true`. The bundled instructions ask agents to
-pass an ETA when claiming non-trivial work. Claims are git-store coordination, so the ETA
+pass an ETA when claiming non-trivial work. Claims are also the phase-transition prompt (HS2-7P14DC): CLI `claim`,
+`claim-next`, and `renew` print `Phase: <started_phase|unset>.` with a reminder to record
+each `started_phase` transition as it happens (`initial_testing` before tests or gates,
+`integrating` before merge/push, `final_testing` while CI runs), and the bundled instructions,
+`hotsheet` skill, and generated `worklist.md` carry the same rule so a ticket is not left at
+`working` while its tests run. Claims are git-store coordination, so the ETA
 lives only on git-provider tickets. Ticket list and column rows show progress toward the ETA
 and the time left, or `Soon` once it passes, and the inspector and reader headers show who holds
 the live claim with the same estimate (HS2-XQMDQB, HS2-QKNQXC; see

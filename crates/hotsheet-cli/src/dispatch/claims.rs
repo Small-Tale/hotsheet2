@@ -68,11 +68,14 @@ pub(crate) fn cmd_claim_next(
     let lease = lease_until(now_dt, lease_minutes);
     let eta = eta.map(|raw| ops::parse_claim_eta(&now, raw)).transpose()?;
     match ops::claim_next_with_eta(&store, &now, lease, worker, label, eta)? {
-        Some(ticket) => println!(
-            "Claimed {} for {worker} (lease {lease_minutes}m{})",
-            ticket.slug,
-            eta_suffix(&ticket)
-        ),
+        Some(ticket) => {
+            println!(
+                "Claimed {} for {worker} (lease {lease_minutes}m{})",
+                ticket.slug,
+                eta_suffix(&ticket)
+            );
+            println!("{}", phase_hint(&ticket));
+        }
         None => println!("No claimable tickets."),
     }
     Ok(())
@@ -100,6 +103,7 @@ pub(crate) fn cmd_claim(
         claimed.slug,
         eta_suffix(&claimed)
     );
+    println!("{}", phase_hint(&claimed));
     Ok(())
 }
 
@@ -146,7 +150,24 @@ pub(crate) fn cmd_renew(
     if ops::claim_eta_expired(&renewed, &now) {
         println!("ETA passed; pass --eta with a new estimate.");
     }
+    println!("{}", phase_hint(&renewed));
     Ok(())
+}
+
+/// Nudge the worker to keep `started_phase` current at every claim touchpoint
+/// (HS2-7P14DC): agents otherwise leave a ticket at `working` while they run tests.
+pub(crate) fn phase_hint(ticket: &hotsheet_model::Ticket) -> String {
+    let phase = ticket
+        .started_phase
+        .and_then(|phase| serde_json::to_value(phase).ok())
+        .and_then(|value| value.as_str().map(str::to_owned))
+        .unwrap_or_else(|| "unset".to_owned());
+    format!(
+        "Phase: {phase}. Record each transition as it happens with `edit {} --started-phase <phase>` \
+         (set initial_testing before running tests, integrating before merging/pushing, \
+         final_testing while waiting on CI).",
+        ticket.slug
+    )
 }
 
 /// The suffix that reports a claim's ETA, if it has one.

@@ -1165,7 +1165,7 @@ test('keeps repository file action menus visible at wide and narrow sizes', asyn
 test('represents every server-build details state with shared dialog geometry', async ({ page }) => {
   await page.setViewportSize({ width: 1728, height: 971 });
   await page.goto('/ux-demo?component=connection-details-dialog');
-  const dialog = page.locator('[data-component="connection-details-dialog"]'),
+  const dialog = page.locator('[data-connection-details-dialog]'),
     header = dialog.locator('[data-component="toolbar"]:has(.kui-toolbar-text__description)');
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveAttribute('data-embedded', 'true');

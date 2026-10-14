@@ -227,7 +227,10 @@ Supporting components:
   and `ValueTable` presentation. Safely recoverable details dismiss through the native
   popover light-dismiss behavior rather than a redundant Close action. Its body uses the
   canonical 24 px major-region rhythm; narrow metadata rows use 8 px insets and 4 px between
-  their connected key/value pair (HS2-4Y6SM9).
+  their connected key/value pair (HS2-4Y6SM9). Kerf `PopoverDialogSurface` owns the native
+  popover chrome, the 672 px viewport-capped width, the `aria-describedby` summary link
+  (`describedBy`, KF-SKVEQW), and the embedded demo flow; the app-owned
+  `native-popover-dialog.css` was deleted with that move (HS2-F3F44W).
 - `ProjectDialog` — **demo built**: local folder/store inputs and remote server-known
   checkout choices retain native Web Awesome dialog/input/button behavior while the
   app-owned composition uses 16 px dialog spacing, 8 px field/action clusters, and 4 px

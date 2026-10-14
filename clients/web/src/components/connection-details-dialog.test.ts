@@ -36,7 +36,9 @@ describe('ConnectionDetailsDialog', () => {
     expect(markup).toContain('source-sha256:current');
     expect(markup).toContain('source-sha256:client');
     expect(markup).toContain('Client 1–1 · Server 1–1');
-    expect(markup).toContain('class="dialog-surface connection-details-dialog"');
+    expect(markup).toContain('data-component="popover-dialog-surface"');
+    expect(markup).toContain('data-connection-details-dialog="true"');
+    expect(markup).not.toContain('class="dialog-surface');
     expect(markup).toContain('class="kui-toolbar-text__description" id="connection-details-summary"');
     expect(markup).toContain('data-component="value-table"');
     expect(markup.match(/class="kui-value-table__row"/g)).toHaveLength(6);
@@ -56,12 +58,15 @@ describe('ConnectionDetailsDialog', () => {
       /__metadata \{[^}]*--kui-value-table-row-columns: 1fr;[^}]*--kui-value-table-row-gap: var\(--kui-space-2xs\);[^}]*--kui-value-table-row-padding-block: var\(--kui-space-xs\)/,
     );
     expect(css).not.toContain('.kui-value-table__row');
+    // Kerf PopoverDialogSurface owns width, height cap, and embedded flow (HS2-F3F44W).
+    expect(css).not.toMatch(/max-height|data-embedded|width: min/);
   });
 
   it('supports an embedded deterministic demo without changing production dismissal', () => {
     expect(String(ConnectionDetailsDialog({ assessment: stale }))).toContain('popover="auto"');
     const embedded = String(ConnectionDetailsDialog({ assessment: stale, embedded: true }));
     expect(embedded).toContain('data-embedded="true"');
+    expect(embedded).toContain('data-presentation="embedded"');
     expect(embedded).not.toContain('popover="auto"');
   });
 

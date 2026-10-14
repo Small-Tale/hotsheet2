@@ -10516,6 +10516,57 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
   ).toBeVisible();
 });
 
+test('reopens a recently viewed ticket without the loading skeleton (HS2-4Q04Z9)', async ({ page }) => {
+  await mockProject(page, true, false, 300);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const region = page.locator('#app-right-rail'),
+    skeleton = region.locator('[data-component="ticket-inspector-skeleton-body"]');
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await expect(
+    region.locator('[data-component="ticket-inspector-header"][data-ticket-slug="HS2-DEMO01"]'),
+  ).toBeVisible();
+  await page.locator('[data-ticket-slug="HS2-START02"]').click();
+  await expect(
+    region.locator('[data-component="ticket-inspector-header"][data-ticket-slug="HS2-START02"]'),
+  ).toBeVisible();
+  // The detail read still takes 300 ms, but the recently viewed ticket renders from the bounded cache
+  // at once and refreshes in the background without ever showing the loading skeleton.
+  let sawSkeleton = false;
+  const watch = setInterval(() => {
+    void skeleton
+      .count()
+      .then((count) => {
+        if (count) sawSkeleton = true;
+      })
+      .catch(() => undefined);
+  }, 10);
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await expect(region.locator('[data-component="ticket-inspector-header"][data-ticket-slug="HS2-DEMO01"]')).toBeVisible(
+    {
+      timeout: 100,
+    },
+  );
+  await page.locator('[data-ticket-slug="HS2-START02"]').click();
+  await expect(
+    region.locator('[data-component="ticket-inspector-header"][data-ticket-slug="HS2-START02"]'),
+  ).toBeVisible({
+    timeout: 100,
+  });
+  await page.waitForTimeout(400);
+  clearInterval(watch);
+  expect(sawSkeleton).toBe(false);
+  await expect(skeleton).toHaveCount(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-4q04z9-cached-reopen-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: 'target/visual-captures/hs2-4q04z9-cached-reopen-390.png' });
+  await expect(
+    region.locator('[data-component="ticket-inspector-header"][data-ticket-slug="HS2-START02"]'),
+  ).toBeVisible();
+});
+
 test('keeps an active editor stable when its already-selected ticket is clicked again', async ({ page }) => {
   const patches = await mockProject(page);
   let detailReads = 0;

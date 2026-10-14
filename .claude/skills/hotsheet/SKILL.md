@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 60 -->
+<!-- hotsheet-skill-version: 61 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -51,6 +51,10 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
    For git-backed Started tickets, keep `started_phase` current as work moves through
    analyzing, planning, working, initial_testing, integrating, and final_testing;
    use `hotsheet-cli edit <id> --started-phase <phase>` or the equivalent MCP update.
+   Record each transition when it happens: `initial_testing` before running tests or
+   gates, `integrating` before merging or pushing, `final_testing` while CI runs, and
+   back to `working` when a failure sends you back to code. Never leave a ticket at
+   `working` while its tests run.
 4. **Create every follow-up immediately, without asking.** As soon as you identify an
    unfinished step, open question, known gap, out-of-scope task, or designed-but-unbuilt
    behavior, create its ticket. Do not ask permission, wait, promise to file it later, or

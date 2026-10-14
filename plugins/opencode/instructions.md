@@ -1,4 +1,4 @@
-<!-- hotsheet-instructions-version: 57 -->
+<!-- hotsheet-instructions-version: 58 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -35,7 +35,12 @@ lookups, a single-line fix, or a git commit. When in doubt, create the ticket.
 - `hotsheet-cli edit <slug> --status completed --note "what you did"` when done.
 - On git-backed Started tickets, keep `started_phase` current with
   `hotsheet-cli edit <slug> --started-phase <analyzing|planning|working|initial_testing|integrating|final_testing>`.
-  The phase is durable progress; only the live claim signals active work.
+  The phase is durable progress; only the live claim signals active work. **Record every
+  transition the moment it happens, not afterward:** set `initial_testing` before you run the
+  test suite or other gates, `integrating` before you merge/rebase/push, and `final_testing`
+  while waiting on remote CI; move back to `working` when a test failure sends you back to
+  code. A ticket left at `working` while its tests run misreports progress. `claim` and
+  `renew` print the current phase as a reminder.
 - Or the MCP tools: `hotsheet_claim_next` / `hotsheet_renew` / `hotsheet_release` for the lease,
   and `hotsheet_update` (it takes a `note`) / `hotsheet_close`.
 - Create work with `hotsheet-cli new --title "…" --category <bug|feature|task>` or

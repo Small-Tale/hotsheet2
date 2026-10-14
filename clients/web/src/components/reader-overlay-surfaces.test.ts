@@ -47,7 +47,7 @@ describe('reader and overlay composition surfaces', () => {
           },
         }),
       ),
-    ).toContain('data-component="connection-details-dialog"');
+    ).toContain('data-connection-details-dialog="true"');
   });
 
   it('owns optional conversations, galleries, and context menus', () => {

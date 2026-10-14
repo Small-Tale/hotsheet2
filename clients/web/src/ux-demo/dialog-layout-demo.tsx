@@ -1,5 +1,3 @@
-import '../components/native-popover-dialog.css';
-
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { delegate, signal } from 'kerfjs';

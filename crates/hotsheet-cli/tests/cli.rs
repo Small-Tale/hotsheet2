@@ -1644,11 +1644,11 @@ fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 58 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 59 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "<!-- hotsheet-skill-version: 61 -->\nnewer skill\n";
+    let skill = "<!-- hotsheet-skill-version: 62 -->\nnewer skill\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)
@@ -1688,11 +1688,11 @@ fn setup_refresh_preserves_an_equal_version_customized_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 57 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 58 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 60 -->\n\nRead the canonical project workflow.\n";
+    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 61 -->\n\nRead the canonical project workflow.\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)
@@ -4091,7 +4091,20 @@ fn claim_eta_is_recorded_kept_reestimated_and_cleared_headlessly() {
         .assert()
         .success()
         .stdout(predicate::str::contains(", ETA "));
-    let first = eta_line(p).expect("claim records the ETA");
+    // Every claim touchpoint reminds the worker to record phase transitions (HS2-7P14DC).
+    hs(p)
+        .args(["edit", &slug, "--started-phase", "initial_testing"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["renew", &slug, "--worker", "agent-1", "--eta", "2s"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Phase: initial_testing."))
+        .stdout(predicate::str::contains(
+            "set initial_testing before running tests",
+        ));
+    let first = eta_line(p).expect("renew keeps an ETA");
 
     // A plain renew keeps the estimate; once it has passed, renew asks for a new one.
     std::thread::sleep(std::time::Duration::from_millis(2500));
