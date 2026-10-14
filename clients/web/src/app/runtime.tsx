@@ -1087,7 +1087,7 @@ export async function startHotSheetWebClient() {
     commandRefreshGeneration = 0,
     projectSessionRestoreRun = 0;
   const ticketCollectionRefreshTask = createTrailingTask<TicketView>(250, (view) => {
-    const query = ticketViewQuery(view);
+    const query = sortedTicketQuery(ticketViewQuery(view));
     const boardPagesMissing =
       viewMode.value === 'board' &&
       isPerColumnBoardView(view, workspaceSearchActive()) &&
@@ -1251,21 +1251,16 @@ export async function startHotSheetWebClient() {
 
   async function refreshTicketCollection(view: TicketView) {
     const current = project(),
-      query = ticketViewQuery(view),
+      query = sortedTicketQuery(ticketViewQuery(view)),
       generation = ++ticketCollectionGeneration;
     if (!current) return;
     const active = () =>
       generation === ticketCollectionGeneration && project()?.id === current.id && selectedView.value === view;
     try {
-      // Board columns page in the active sort so each column's cursor continues its own order; the list keeps
-      // its view query, which its continuation cursor is bound to.
+      // Lists and board columns both page in the active sort: the server's keyset cursor is bound to that
+      // sort, so page one is the head of the order the user sees and Load more appends below it (HS2-9ZZ8QQ).
       const board = boardRefreshSpec(view, current.id),
-        index = await loadProjectTicketRefresh(
-          new Api(current.apiPath),
-          current.id,
-          board ? sortedTicketQuery(query) : query,
-          board,
-        );
+        index = await loadProjectTicketRefresh(new Api(current.apiPath), current.id, query, board);
       if (!active()) return;
       if (index.tickets)
         partialSourcesByProject.value = {
@@ -2496,6 +2491,7 @@ export async function startHotSheetWebClient() {
     tickets,
     ticketRowsByProject,
     ticketNextCursor,
+    ticketPageQuery,
     ticketCountsByProject,
     partialSourcesByProject,
     boardColumnPages,

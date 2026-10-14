@@ -9007,12 +9007,21 @@ test('selects feedback choices with platform modifiers and preserves a freeform 
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const note = page.getByRole('dialog').locator('article[data-note-id="N4"]'),
-    choices = note.getByRole('group', { name: 'Feedback choices' }).locator('.note-card__choice');
+    choices = note.getByRole('grid', { name: 'Feedback choices' }).locator('[data-component="content-item"]');
   await expect(choices).toHaveCount(3);
   await choices.nth(0).click();
-  await expect(choices.nth(0)).toHaveAttribute('aria-pressed', 'true');
+  await expect(choices.nth(0)).toHaveAttribute('aria-selected', 'true');
   await choices.nth(1).click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
-  await expect(choices.nth(1)).toHaveAttribute('aria-pressed', 'true');
+  await expect(choices.nth(1)).toHaveAttribute('aria-selected', 'true');
+  await expect(choices.nth(0)).toHaveAttribute('aria-selected', 'true');
+  // Kerf ContentItem keyboard activation: Enter on a focused choice is a plain (replacing) selection.
+  await choices.nth(2).focus();
+  await page.keyboard.press('Enter');
+  await expect(choices.nth(2)).toHaveAttribute('aria-selected', 'true');
+  await expect(choices.nth(0)).toHaveAttribute('aria-selected', 'false');
+  await choices.nth(0).click();
+  await choices.nth(1).click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
+  await expect(choices.nth(2)).toHaveAttribute('aria-selected', 'false');
   await expect(choices.nth(1).locator('img')).toHaveAttribute('src', /\/tickets\/HS2-DEMO01\/attachments\/A1$/);
   await note.getByRole('textbox', { name: 'Feedback response' }).fill('The two options can be combined.');
   const refreshedTicket = page.waitForResponse(
@@ -9059,7 +9068,7 @@ test('responds to feedback choices embedded in the ticket description', async ({
   const reader = page.getByRole('dialog'),
     readerSurface = reader.locator('.ticket-info-panel__details-surface[data-feedback-needed="true"]'),
     details = reader.locator('[data-details-feedback="true"]'),
-    choices = details.getByRole('group', { name: 'Feedback choices' }).locator('.note-card__choice');
+    choices = details.getByRole('grid', { name: 'Feedback choices' }).locator('[data-component="content-item"]');
   await expect(details.locator('[data-details-feedback-header]')).toContainText('Feedback needed');
   await expect(details.locator('[data-details-feedback-header] [data-lucide="circle-alert"]')).toBeVisible();
   await expect(readerSurface).toHaveCSS('background-color', 'color(srgb 1 0.982 0.91)');
@@ -20044,6 +20053,76 @@ test('loads ticket rows beyond the first 200 from the visible queue continuation
     ),
   ).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-q9yq2b-load-more.png', fullPage: true });
+});
+
+test('pages the Archive newest-first in the active sort and appends older rows at the bottom (HS2-9ZZ8QQ)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  // 260 archived tickets, index 0 the most recently updated.
+  const archived = Array.from({ length: 260 }, (_, index) => ({
+      ...row,
+      id: `arch-${index}`,
+      native_id: `arch-${index}`,
+      qualified_id: `git-local:arch-${index}`,
+      slug: `HS2-A${String(index).padStart(5, '0')}`,
+      title: `Archived ticket ${index}`,
+      status: 'archive',
+      up_next: false,
+      updated_at: new Date(Date.UTC(2026, 8, 30) - index * 3_600_000).toISOString(),
+    })),
+    requests: URL[] = [];
+  await page.route('**/checkouts/demo-checkout/tickets*', (route) => {
+    const request = route.request(),
+      url = new URL(request.url());
+    if (request.method() !== 'GET' || url.searchParams.get('collection') !== 'archive') return route.fallback();
+    requests.push(url);
+    // Like the server: an unsorted request gets storage order (oldest first here), and the cursor
+    // continues whichever order the request names.
+    const sorted =
+        url.searchParams.get('sort') === 'updated' && url.searchParams.get('direction') === 'descending'
+          ? archived
+          : [...archived].reverse(),
+      size = Number(url.searchParams.get('page_size') ?? 200),
+      start = Number(url.searchParams.get('cursor') ?? 0),
+      body: Record<string, unknown> = {
+        items: sorted.slice(start, start + size),
+        counts: { total: 260, queued: 0, backlog: 0, archive: 260, open: 0, up_next: 0, active: 0, started: 0 },
+      };
+    if (start + size < sorted.length) body.next_cursor = String(start + size);
+    return route.fulfill({ json: body });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: /Archive/ }).click();
+  const rows = page.locator('[data-component="ticket-list-row"]'),
+    slugs = () => rows.evaluateAll((items) => items.map((item) => item.getAttribute('data-ticket-slug')));
+  await expect(rows).toHaveCount(200);
+  // The first page is the head of the visible order, not an arbitrary slice of the archive.
+  expect((await slugs())[0]).toBe('HS2-A00000');
+  expect((await slugs())[199]).toBe('HS2-A00199');
+  const more = page.getByRole('button', { name: 'Load more tickets' });
+  await more.scrollIntoViewIfNeeded();
+  await more.click();
+  await expect(rows).toHaveCount(260);
+  const after = await slugs();
+  // Load more leaves the top alone and appends the older rows below.
+  expect(after[0]).toBe('HS2-A00000');
+  expect(after.slice(200)).toEqual(archived.slice(200).map((item) => item.slug));
+  for (const url of requests) {
+    expect(url.searchParams.get('sort')).toBe('updated');
+    expect(url.searchParams.get('direction')).toBe('descending');
+  }
+  expect(requests.some((url) => url.searchParams.get('cursor') === '200')).toBe(true);
+  await rows.first().scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-9zz8qq-archive-wide.png' });
+  // A fresh narrow load pages the same way.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await expect(rows.first()).toHaveAttribute('data-ticket-slug', 'HS2-A00000');
+  await expect(rows.first()).toBeInViewport();
+  await page.screenshot({ path: 'target/visual-captures/hs2-9zz8qq-archive-390.png' });
 });
 
 /** Serve one status stream the way the server does: `page_size` rows after the numeric offset cursor. */

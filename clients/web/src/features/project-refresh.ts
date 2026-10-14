@@ -46,6 +46,8 @@ export interface ProjectRefreshDependencies {
   tickets: Signal<WireTicketRow[]>;
   ticketRowsByProject: Signal<Record<string, WireTicketRow[]>>;
   ticketNextCursor: Signal<string | undefined>;
+  /** The exact query `ticketNextCursor` continues; Load more must resend it (HS2-9ZZ8QQ). */
+  ticketPageQuery: Signal<CheckoutTicketQuery>;
   ticketCountsByProject: Signal<Record<string, CheckoutTicketCounts>>;
   partialSourcesByProject: Signal<Record<string, boolean>>;
   boardColumnPages: Signal<Record<string, BoardColumnPage>>;
@@ -94,6 +96,7 @@ export function createProjectRefresh(dependencies: ProjectRefreshDependencies) {
     tickets,
     ticketRowsByProject,
     ticketNextCursor,
+    ticketPageQuery,
     ticketCountsByProject,
     partialSourcesByProject,
     boardColumnPages,
@@ -226,6 +229,7 @@ export function createProjectRefresh(dependencies: ProjectRefreshDependencies) {
           boardColumnPages.value = boardPagesWithVisibleLimit(index.boardPages ?? {});
           tickets.value = finalTickets;
           ticketNextCursor.value = index.nextCursor;
+          ticketPageQuery.value = query;
           ticketRowsByProject.value = { ...ticketRowsByProject.value, [current.id]: finalTickets };
           const live = new Set(finalTickets.map((ticket) => ticket.slug)),
             selected = selectedTicketSlugs.value.filter((slug) => live.has(slug));

@@ -1,7 +1,7 @@
 import { signal } from 'kerfjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { CheckoutTicketCounts, CorruptTicket, FullTicket, TicketRow } from '../api';
+import type { CheckoutTicketCounts, CheckoutTicketQuery, CorruptTicket, FullTicket, TicketRow } from '../api';
 import type { BoardColumnPage } from '../board-pagination';
 import type { Project } from '../interactions/types';
 import type { ProjectTicketSources } from '../new-ticket-source';
@@ -31,6 +31,7 @@ function owner() {
     tickets: signal<TicketRow[]>([]),
     ticketRowsByProject: signal<Record<string, TicketRow[]>>({}),
     ticketNextCursor: signal<string | undefined>(undefined),
+    ticketPageQuery: signal<CheckoutTicketQuery>({ collection: 'queue' }),
     ticketCountsByProject: signal<Record<string, CheckoutTicketCounts>>({}),
     partialSourcesByProject: signal<Record<string, boolean>>({}),
     boardColumnPages: signal<Record<string, BoardColumnPage>>({}),
@@ -58,7 +59,7 @@ function owner() {
       },
     },
     project: () => current,
-    sortedTicketQuery: (query) => query,
+    sortedTicketQuery: (query) => ({ ...query, sort: 'updated', direction: 'descending' }),
     boardRefreshSpec: () => undefined,
     boardPagesWithVisibleLimit: (pages) => pages,
     workspaceSearchActive: () => false,
@@ -88,6 +89,21 @@ describe('selected project refresh owner (HS2-BSSWGV)', () => {
     expect(anchor()).toBeUndefined();
     expect(bindings.projectProjectionById.value.p1).toMatchObject({ corruptTickets: [], repository: null });
     expect(bindings.loading.value).toBe(false);
+  });
+
+  it('pairs the continuation cursor with the sorted query it was issued for (HS2-9ZZ8QQ)', async () => {
+    const { refresh, bindings } = owner();
+    load.mockResolvedValue({ tickets: [row('A')], ticketCounts: counts, nextCursor: 'c-sorted' });
+    await refresh.refreshProject();
+    const requested = load.mock.calls[0] as unknown as [unknown, string, CheckoutTicketQuery];
+    expect(requested[2]).toMatchObject({ sort: 'updated', direction: 'descending' });
+    expect(bindings.ticketNextCursor.value).toBe('c-sorted');
+    expect(bindings.ticketPageQuery.value).toEqual(requested[2]);
+    // A later sort change refreshes again: cursor and query move together.
+    load.mockResolvedValue({ tickets: [row('B')], ticketCounts: counts, nextCursor: 'c-next' });
+    await refresh.refreshProject();
+    expect(bindings.ticketPageQuery.value).toEqual((load.mock.calls[1] as unknown as unknown[])[2]);
+    expect(bindings.ticketNextCursor.value).toBe('c-next');
   });
 
   it('drops a refresh invalidated by a local write that began while it waited', async () => {
