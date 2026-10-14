@@ -94,8 +94,8 @@ describe('TerminalDrawer', () => {
     expect(markup).toContain('data-tab-bar-id="terminal-drawer"');
     expect(markup).toContain('data-tab-activation="manual"');
     expect(markup).toContain('data-trailing-placement="adjacent"');
-    // Kerf beta.90 snap padding still pushes drawer actions under the inspector with 12 tabs (HS2-3P7TZV).
-    expect(markup).not.toContain('data-snap-tabs="true"');
+    // Kerf beta.99 keeps snap end room inside the strip, so whole-tab snapping is on (HS2-3P7TZV).
+    expect(markup).toContain('data-snap-tabs="true"');
     expect(markup).toContain('>Project grid</span>');
     expect(markup).toContain('data-lucide="layout-grid"');
     expect(markup).not.toContain('data-lucide="grid-3x3"');

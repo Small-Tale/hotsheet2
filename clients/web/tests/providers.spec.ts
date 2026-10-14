@@ -8291,6 +8291,8 @@ test('keeps drawer creation and hide actions reachable with twelve terminal tabs
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.locator('[data-tab-kind="terminal"]').first().click();
+  // Whole-tab snapping is on again; its end room must stay inside the strip (HS2-3P7TZV).
+  await expect(drawer.locator('.terminal-drawer__views .kui-tab-bar__tabs')).toHaveAttribute('data-snap-tabs', 'true');
   for (const width of [1440, 760]) {
     await page.setViewportSize({ width, height: 900 });
     const geometry = await drawer.evaluate((element) => {
@@ -8307,6 +8309,7 @@ test('keeps drawer creation and hide actions reachable with twelve terminal tabs
     expect(geometry.stripRight).toBeLessThanOrEqual(geometry.drawerRight);
     expect(geometry.createRight).toBeLessThanOrEqual(geometry.drawerRight);
     expect(geometry.hideRight).toBeLessThanOrEqual(geometry.drawerRight);
+    await drawer.screenshot({ path: test.info().outputPath(`hs2-3p7tzv-twelve-tabs-snap-${width}.png`) });
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await expect(drawer.locator('[data-terminal-drawer-create]')).toHaveAttribute('open');
     await page.keyboard.press('Escape');

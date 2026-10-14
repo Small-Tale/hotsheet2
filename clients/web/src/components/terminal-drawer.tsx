@@ -339,6 +339,8 @@ export function TerminalDrawer({
               // Terminal selection replaces the controlled tab nodes and changes a live work surface.
               // Keep arrow-key navigation focus-only; Enter/Space performs the explicit activation.
               activation="manual"
+              // Kerf beta.99 keeps snap end room inside the strip (KF-3Q98FJ, HS2-3P7TZV).
+              snapTabs
               trailingPlacement="adjacent"
               trailing={
                 <ToolbarControlGroup size="compact" appearance="borderless" single nestedDropdown>

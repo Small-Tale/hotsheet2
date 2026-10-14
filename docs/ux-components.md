@@ -2519,7 +2519,8 @@ clarifies event-driven server-backed updates, timer cleanup, and enabled-action 
 keyboard, focus, and disabled cues. Hot Sheet keeps its existing component APIs and
 checks the upgrade with Kerf UI doctor and browser flows. Beta.90 still pushes a
 twelve-tab drawer strip 115px past its rail when `snapTabs` is enabled, so Hot Sheet
-keeps that option disabled pending HS2-3P7TZV.
+kept that option disabled until Kerf beta.99 (KF-3Q98FJ) kept the snap end room inside
+the strip; HS2-3P7TZV re-enabled `snapTabs` on the terminal drawer TabBar.
 
 Beta.80's component-style doctor checks recognize explicit classes matching five application
 component roots: AppLoadingIndicator, SettingsWorkspace, TicketRowContextMenu,

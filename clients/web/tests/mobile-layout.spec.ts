@@ -1128,7 +1128,7 @@ test('keeps every tab strip horizontally scrollable only (HS2-QG4K9W)', async ({
   }
 });
 
-test('keeps overflowing phone drawer tabs and actions reachable without snap (HS2-3P7TZV)', async ({
+test('keeps overflowing phone drawer tabs and actions reachable with whole-tab snap (HS2-3P7TZV)', async ({
   browser,
 }, testInfo) => {
   const context = await browser.newContext({
@@ -1149,8 +1149,10 @@ test('keeps overflowing phone drawer tabs and actions reachable without snap (HS
     gridTab = drawer.getByRole('tab', { name: 'Project grid' }),
     peers = drawer.locator('.terminal-drawer__views [data-tab-kind="terminal"]');
   await expect(peers).toHaveCount(3);
-  await expect(strip).not.toHaveAttribute('data-snap-tabs', 'true');
+  await expect(strip).toHaveAttribute('data-snap-tabs', 'true');
   expect(await strip.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeGreaterThan(0);
+  const createBox = await drawer.locator('[data-terminal-drawer-create]').boundingBox();
+  expect((createBox?.x ?? Infinity) + (createBox?.width ?? 0)).toBeLessThanOrEqual(390);
   await peers.last().tap();
   await expect(peers.last()).toHaveAttribute('data-selected', 'true');
   await expect.poll(() => strip.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
