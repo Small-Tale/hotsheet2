@@ -246,23 +246,18 @@ function handsetDevice(): ReadonlySignal<boolean> {
   return handset;
 }
 
-export function AIConversation({
-  open,
+/**
+ * The conversation's toolbar controls: the provider/model/effort selector, Save, and Stop. The
+ * dialog renders them in its header toolbar; the bottom drawer renders them in its tab toolbar,
+ * so the embedded presentation carries no title bar or settings row (HS2-DMH8MX, HS2-59F7WK).
+ * Every control dispatches the same delegated actions `wireAiConversation` handles.
+ */
+export function AIConversationToolbar({
   tool,
-  selectionId,
-  selectedMessageIds = [],
   messages,
-  draft,
   busy,
-  progress,
   interruptible,
-  permissions = [],
-  activity = [],
-  totalUsage,
-  error,
-  feedbackAvailable = false,
   presentation = 'dialog',
-  foreground,
   providerId,
   providers = [],
   canChangeProvider = false,
@@ -274,21 +269,14 @@ export function AIConversation({
   canChangeEffort = false,
   readOnly = false,
   readOnlyContext = 'saved',
-  savedSource,
   hostActionsAvailable = hostActionsAvailableHere(),
 }: AIConversationProps) {
   const previewOnly = readOnly && readOnlyContext === 'preview',
-    previewConfiguration = [model && `Model ${model}`, effort && `Effort ${effort}`].filter(Boolean).join(' · '),
-    summary = previewOnly
-      ? 'Read-only preview'
-      : readOnly
-        ? 'Saved read-only transcript'
-        : busy
-          ? `${tool} is working`
-          : messages.length === 0
-            ? 'Ready for your first message'
-            : // Totals sit inline with the count instead of in a separate header pill (HS2-P415F0).
-              conversationHeaderSummary(messages.length, totalUsage);
+    // The drawer's tab toolbar uses compact borderless groups beside its own controls, and its
+    // menu opens upward from the bottom drawer; the dialog header keeps contained default groups
+    // and opens the menu downward.
+    embedded = presentation === 'embedded',
+    groupStyle = embedded ? ({ appearance: 'borderless', size: 'compact' } as const) : {};
   const saveAction = previewOnly ? null : (
     <button
       type="button"
@@ -314,12 +302,113 @@ export function AIConversation({
         <LucideIcon icon={Square} name="square" />
       </button>
     ) : null;
-  const actions = (
+  const activeModel = models.find((item) => item.id === model),
+    currentModelLabel = activeModel?.label ?? model ?? '',
+    customModel = model && !activeModel ? model : undefined,
+    currentEffort = effort ?? (efforts.length ? efforts[0] : undefined);
+  const providerChoices = providers.filter((item) => item.id !== providerId),
+    providerChangeable = canChangeProvider && providerChoices.length > 0,
+    currentProviderLabel = providers.find((item) => item.id === providerId)?.label ?? tool;
+  const sessionControls =
+    !readOnly && (providerChangeable || (canChangeModel && models.length) || (canChangeEffort && efforts.length)) ? (
+      <>
+        {/* The current-model label and its popup trigger group are siblings in the host toolbar zone,
+            so the Kerf group keeps its cataloged Toolbar parent. */}
+        <span class="ai-conversation__model" data-component="conversation-model-control">
+          <LucideIcon icon={Brain} name="brain" color={uiColor('neutral-on-quiet')} />
+          {canChangeModel && currentModelLabel && (
+            <span class="ai-conversation__model-name" title={model}>
+              {currentModelLabel}
+            </span>
+          )}
+          {canChangeEffort && currentEffort && (
+            <Badge
+              className="ai-conversation__model-effort"
+              tone="neutral"
+              size="compact"
+              label={`Effort ${currentEffort}`}
+            >
+              {currentEffort}
+            </Badge>
+          )}
+        </span>
+        <ToolbarControlGroup single nestedDropdown {...groupStyle}>
+          <PopupMenu
+            label="Change Provider, Model, and Effort"
+            icon={<LucideIcon icon={ChevronDown} name="chevron-down" />}
+            caret={false}
+            placement={embedded ? 'top-end' : 'bottom-end'}
+            rootAttributes={{ 'data-conversation-model-menu': 'true' }}
+            items={providerModelEffortEntries({
+              actions: {
+                provider: 'select-conversation-provider',
+                model: 'select-conversation-model',
+                effort: 'select-conversation-effort',
+                manualModel: 'open-conversation-manual-model',
+              },
+              providers: providerChangeable
+                ? { choices: providers, currentId: providerId, currentLabel: currentProviderLabel }
+                : undefined,
+              model:
+                canChangeModel && models.length > 0
+                  ? { choices: models, currentId: activeModel?.id, currentLabel: currentModelLabel, customModel }
+                  : undefined,
+              effort: canChangeEffort && efforts.length > 0 ? { efforts, current: currentEffort } : undefined,
+            })}
+          />
+        </ToolbarControlGroup>
+      </>
+    ) : null;
+  return (
     <>
-      {saveAction}
-      {stopAction}
+      {sessionControls}
+      {(saveAction || stopAction) && (
+        <ToolbarControlGroup label={`${tool} Conversation Actions`} {...groupStyle}>
+          <>
+            {saveAction}
+            {stopAction}
+          </>
+        </ToolbarControlGroup>
+      )}
     </>
   );
+}
+
+export function AIConversation(props: AIConversationProps) {
+  const {
+    open,
+    tool,
+    selectionId,
+    selectedMessageIds = [],
+    messages,
+    draft,
+    busy,
+    progress,
+    permissions = [],
+    activity = [],
+    totalUsage,
+    error,
+    feedbackAvailable = false,
+    presentation = 'dialog',
+    foreground,
+    model,
+    effort,
+    readOnly = false,
+    readOnlyContext = 'saved',
+    savedSource,
+  } = props;
+  const previewOnly = readOnly && readOnlyContext === 'preview',
+    previewConfiguration = [model && `Model ${model}`, effort && `Effort ${effort}`].filter(Boolean).join(' · '),
+    summary = previewOnly
+      ? 'Read-only preview'
+      : readOnly
+        ? 'Saved read-only transcript'
+        : busy
+          ? `${tool} is working`
+          : messages.length === 0
+            ? 'Ready for your first message'
+            : // Totals sit inline with the count instead of in a separate header pill (HS2-P415F0).
+              conversationHeaderSummary(messages.length, totalUsage);
   const inlinePermissions = presentation === 'dialog' && foreground ? [] : permissions,
     selectedIds = new Set(selectedMessageIds),
     selectionEnabled = Boolean(selectionId) && messages.length > 0,
@@ -419,61 +508,6 @@ export function AIConversation({
         </div>
       </List>
     );
-  const activeModel = models.find((item) => item.id === model),
-    currentModelLabel = activeModel?.label ?? model ?? '',
-    customModel = model && !activeModel ? model : undefined,
-    currentEffort = effort ?? (efforts.length ? efforts[0] : undefined);
-  const providerChoices = providers.filter((item) => item.id !== providerId),
-    providerChangeable = canChangeProvider && providerChoices.length > 0,
-    currentProviderLabel = providers.find((item) => item.id === providerId)?.label ?? tool;
-  const sessionControls =
-    !readOnly && (providerChangeable || (canChangeModel && models.length) || (canChangeEffort && efforts.length)) ? (
-      <div class="ai-conversation__model" data-component="conversation-model-control" aria-label="AI session settings">
-        <span class="ai-conversation__model-current">
-          <span class="ai-conversation__model-icon">
-            <LucideIcon icon={Brain} name="brain" color={uiColor('neutral-on-quiet')} />
-          </span>
-          {canChangeModel && currentModelLabel && (
-            <span class="ai-conversation__model-name" title={model}>
-              {currentModelLabel}
-            </span>
-          )}
-          {canChangeEffort && currentEffort && (
-            <Badge
-              className="ai-conversation__model-effort"
-              tone="neutral"
-              size="compact"
-              label={`Effort ${currentEffort}`}
-            >
-              {currentEffort}
-            </Badge>
-          )}
-        </span>
-        <PopupMenu
-          label="Change Provider, Model, and Effort"
-          icon={<LucideIcon icon={ChevronDown} name="chevron-down" />}
-          caret={false}
-          placement="top-end"
-          rootAttributes={{ 'data-conversation-model-menu': 'true' }}
-          items={providerModelEffortEntries({
-            actions: {
-              provider: 'select-conversation-provider',
-              model: 'select-conversation-model',
-              effort: 'select-conversation-effort',
-              manualModel: 'open-conversation-manual-model',
-            },
-            providers: providerChangeable
-              ? { choices: providers, currentId: providerId, currentLabel: currentProviderLabel }
-              : undefined,
-            model:
-              canChangeModel && models.length > 0
-                ? { choices: models, currentId: activeModel?.id, currentLabel: currentModelLabel, customModel }
-                : undefined,
-            effort: canChangeEffort && efforts.length > 0 ? { efforts, current: currentEffort } : undefined,
-          })}
-        />
-      </div>
-    ) : null;
   const savedNotice = readOnly ? (
     <div class="ai-conversation__saved-notice">
       <StateBanner
@@ -533,31 +567,9 @@ export function AIConversation({
         data-selection-id={selectionId}
         aria-label={`${tool} Conversation`}
       >
-        {/* A compact (40px) Kerf Toolbar keeps the drawer header short enough that the transcript clears
-            the floating composer (KF-0QDF0V, HS2-P16J04). */}
-        <Toolbar
-          density="compact"
-          dividerSides="b"
-          className="ai-conversation__embedded-header"
-          leading={
-            <>
-              <LucideIcon icon={Bot} name="bot" size={16} />
-              <ToolbarText text={`${tool} conversation`} />
-            </>
-          }
-          trailing={
-            saveAction || stopAction ? (
-              <ToolbarControlGroup label={`${tool} Conversation Actions`} appearance="borderless" size="compact">
-                <>
-                  {saveAction}
-                  {stopAction}
-                </>
-              </ToolbarControlGroup>
-            ) : undefined
-          }
-        />
+        {/* No title bar: the drawer tab already names the chat, and its model, Save, and Stop controls
+            render in the drawer's tab toolbar through AIConversationToolbar (HS2-DMH8MX, HS2-59F7WK). */}
         {savedNotice}
-        {sessionControls}
         {transcript}
         {composer}
       </section>
@@ -605,11 +617,10 @@ export function AIConversation({
               />
             </>
           }
-          trailing={<ToolbarControlGroup label={`${tool} Conversation Actions`}>{actions}</ToolbarControlGroup>}
+          trailing={<AIConversationToolbar {...props} presentation="dialog" />}
         />
         {foreground && <div class="ai-conversation__foreground">{foreground}</div>}
         {savedNotice}
-        {sessionControls}
         {transcript}
         {composer}
       </wa-dialog>

@@ -1566,8 +1566,14 @@ preview/download, server directory browser) are separate design work.
   reader's scroll position, so a range can be picked while scrolled back through history. Sending a
   message is an explicit continuation, so it returns the transcript to its latest edge and pins it.
 
-  Dialog and embedded conversation headers use native Save/Stop buttons in Kerf
-  `ToolbarControlGroup`; the group owns button geometry and keyboard focus treatment.
+  The conversation's model/effort selector and native Save/Stop buttons render through
+  `AIConversationToolbar`: in the dialog's header toolbar, and, for a bottom-drawer chat, in
+  the drawer's tab toolbar beside its own actions. The embedded drawer chat has no title bar
+  or settings row of its own, since its tab already names it (HS2-DMH8MX, HS2-59F7WK). The
+  selector's popup opens upward from the drawer and downward from the dialog header, and at
+  phone widths only its trigger remains (the menu shows the current provider, model, and
+  effort). Buttons sit in Kerf `ToolbarControlGroup`s (compact borderless in the drawer); the
+  group owns button geometry and keyboard focus treatment.
   Save is disabled for empty or active transcripts, and Stop appears only for an
   interruptible active response. Both controls preserve their production actions and
   keyboard activation. The dialog subtitle carries the conversation totals inline with the

@@ -8,7 +8,7 @@ import {
   EMPTY_CONVERSATION,
 } from '../ai-conversation';
 import { type ToolConnection } from '../api';
-import { AIConversation } from '../components/ai-conversation';
+import { AIConversation, type AIConversationProps, AIConversationToolbar } from '../components/ai-conversation';
 import type { ConfidenceCalibrationState } from '../components/confidence-calibration';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
 import { AIConversationSurface } from '../components/reader-overlay-surfaces';
@@ -180,7 +180,37 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           tool = aiToolLabel(chat.tool),
           selectedMessageIds = conversationSelectedMessages(chat.connectionId, state.messages).map(
             (message) => message.id,
-          );
+          ),
+          conversation: AIConversationProps = {
+            open: true,
+            presentation: 'embedded',
+            tool,
+            sessionId: connection?.session_id ?? chat.sourceSessionId,
+            selectionId: chat.connectionId,
+            selectedMessageIds,
+            messages: state.messages,
+            draft: conversationDrafts.value[chat.connectionId] ?? '',
+            busy: connection?.busy ?? false,
+            progress: state.progress,
+            interruptible: Boolean(connection?.actions?.includes('interrupt')),
+            permissions: pendingPermissions().filter(
+              (item) => item.projectId === current.id && item.connection === chat.connectionId,
+            ),
+            activity: state.activity,
+            totalUsage: conversationUsage(state),
+            error: conversationError(state, connection),
+            providerId: chat.tool,
+            providers: aiToolOptions(),
+            canChangeProvider: !chat.readOnly && aiTools.value.length > 1,
+            model: selection.model,
+            effort: selection.effort,
+            models: descriptor?.models,
+            efforts: selection.efforts,
+            canChangeModel: descriptor?.actions?.includes('change_model'),
+            canChangeEffort: descriptor?.actions?.includes('change_effort'),
+            readOnly: chat.readOnly,
+            savedSource: chat.savedSource,
+          };
         return {
           id: chat.id,
           name: chat.name,
@@ -188,38 +218,8 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           busy: connection?.busy ?? false,
           error: conversationError(state, connection),
           summary: state.progress ?? state.messages.at(-1)?.content ?? state.activity?.at(-1)?.summary,
-          content: (
-            <AIConversation
-              open
-              presentation="embedded"
-              tool={tool}
-              sessionId={connection?.session_id ?? chat.sourceSessionId}
-              selectionId={chat.connectionId}
-              selectedMessageIds={selectedMessageIds}
-              messages={state.messages}
-              draft={conversationDrafts.value[chat.connectionId] ?? ''}
-              busy={connection?.busy ?? false}
-              progress={state.progress}
-              interruptible={Boolean(connection?.actions?.includes('interrupt'))}
-              permissions={pendingPermissions().filter(
-                (item) => item.projectId === current.id && item.connection === chat.connectionId,
-              )}
-              activity={state.activity}
-              totalUsage={conversationUsage(state)}
-              error={conversationError(state, connection)}
-              providerId={chat.tool}
-              providers={aiToolOptions()}
-              canChangeProvider={!chat.readOnly && aiTools.value.length > 1}
-              model={selection.model}
-              effort={selection.effort}
-              models={descriptor?.models}
-              efforts={selection.efforts}
-              canChangeModel={descriptor?.actions?.includes('change_model')}
-              canChangeEffort={descriptor?.actions?.includes('change_effort')}
-              readOnly={chat.readOnly}
-              savedSource={chat.savedSource}
-            />
-          ),
+          content: <AIConversation {...conversation} />,
+          toolbar: <AIConversationToolbar {...conversation} />,
         };
       });
     const focused = mobileTerminalFocus.value,

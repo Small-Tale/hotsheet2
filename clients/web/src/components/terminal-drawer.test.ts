@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { AIConversation } from './ai-conversation';
+import { AIConversation, type AIConversationProps, AIConversationToolbar } from './ai-conversation';
 import type { TerminalDashboardSession } from './terminal-dashboard';
 import { aiShellMenuItem, TerminalDrawer } from './terminal-drawer';
 
@@ -149,6 +149,61 @@ describe('TerminalDrawer', () => {
     expect(chat).not.toContain('data-component="list-header"');
     expect(chat).not.toContain('data-lucide="chevron-right"');
     expect(chat.match(/<wa-dropdown-item/g)).toHaveLength(4);
+  });
+  it('shows the selected chat toolbar controls in the tab toolbar, not a title bar (HS2-DMH8MX, HS2-59F7WK)', () => {
+    const conversation: AIConversationProps = {
+        open: true,
+        presentation: 'embedded',
+        tool: 'Claude',
+        messages: [{ id: 'answer', role: 'assistant', content: 'Done.', status: 'completed' }],
+        draft: '',
+        busy: true,
+        interruptible: true,
+        model: 'opus',
+        effort: 'medium',
+        models: [{ id: 'opus', label: 'Opus' }],
+        efforts: ['low', 'medium'],
+        canChangeModel: true,
+        canChangeEffort: true,
+      },
+      drawer = (selectedId: string) =>
+        String(
+          TerminalDrawer({
+            projectId: 'project',
+            projectName: 'Project',
+            sessions,
+            chatTabs: [
+              {
+                id: 'chat:one',
+                name: 'Claude chat',
+                tool: 'Claude',
+                content: AIConversation(conversation),
+                toolbar: AIConversationToolbar(conversation),
+              },
+            ],
+            width: 900,
+            height: 320,
+            fitAcross: 2,
+            fitHigh: 2,
+            selectedId,
+          }),
+        );
+    const chat = drawer('chat:one'),
+      end = chat.slice(chat.indexOf('kui-tab-bar__end'), chat.indexOf('class="terminal-drawer__content"')),
+      content = chat.slice(chat.indexOf('class="terminal-drawer__content"'));
+    // The model selector, Save, and Stop sit in the tab toolbar's end zone, before Hide Terminal Drawer.
+    expect(end).toMatch(
+      /data-component="conversation-model-control"[\s\S]*data-conversation-model-menu[\s\S]*data-action="save-conversation"[\s\S]*data-action="stop-conversation"[\s\S]*Hide Terminal Drawer/,
+    );
+    expect(end).toContain('placement="top-end"');
+    // The chat body carries no title bar or settings row.
+    expect(content).not.toContain('Claude conversation');
+    expect(content).not.toContain('data-component="conversation-model-control"');
+    expect(content).not.toContain('data-action="save-conversation"');
+    expect(content).not.toContain('data-component="toolbar"');
+    // A terminal or the grid shows no chat controls.
+    expect(drawer('one')).not.toContain('data-component="conversation-model-control"');
+    expect(drawer('grid')).not.toContain('data-action="save-conversation"');
   });
   it('renders the grid tile More actions menu with Open only, and only for its own tiles (HS2-V2CCN6)', () => {
     const withMenu = (key: string) =>

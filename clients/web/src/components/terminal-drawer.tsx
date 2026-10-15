@@ -47,6 +47,11 @@ export interface TerminalDrawerChatTab {
   name: string;
   tool: string;
   content: SafeHtml;
+  /**
+   * The selected chat's own controls (model selector, Save, Stop), shown in the tab toolbar
+   * beside the drawer's actions instead of a title bar inside the chat (HS2-59F7WK).
+   */
+  toolbar?: SafeHtml;
   busy?: boolean;
   summary?: string;
   error?: string;
@@ -380,40 +385,43 @@ export function TerminalDrawer({
                 </ToolbarControlGroup>
               }
               end={
-                <ToolbarControlGroup
-                  className="terminal-drawer__actions"
-                  appearance="borderless"
-                  single={!railClipboard}
-                >
-                  {railClipboard && (
-                    <button
-                      type="button"
-                      {...TERMINALS_ACTIONS.copyTerminalText.attrs}
-                      aria-label="Copy Terminal Text"
-                      title="Copy terminal text"
-                    >
-                      <LucideIcon icon={Copy} name="copy" />
-                    </button>
-                  )}
-                  {railClipboard && (
-                    <button
-                      type="button"
-                      {...TERMINALS_ACTIONS.pasteTerminalText.attrs}
-                      aria-label="Paste"
-                      title="Paste"
-                    >
-                      <LucideIcon icon={ClipboardPaste} name="clipboard-paste" />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    {...TERMINALS_ACTIONS.toggleTerminalDrawer.attrs}
-                    aria-label="Hide Terminal Drawer"
-                    title="Hide terminal drawer"
+                <>
+                  {selectedChat?.toolbar}
+                  <ToolbarControlGroup
+                    className="terminal-drawer__actions"
+                    appearance="borderless"
+                    single={!railClipboard}
                   >
-                    <LucideIcon icon={PanelBottomClose} name="panel-bottom-close" />
-                  </button>
-                </ToolbarControlGroup>
+                    {railClipboard && (
+                      <button
+                        type="button"
+                        {...TERMINALS_ACTIONS.copyTerminalText.attrs}
+                        aria-label="Copy Terminal Text"
+                        title="Copy terminal text"
+                      >
+                        <LucideIcon icon={Copy} name="copy" />
+                      </button>
+                    )}
+                    {railClipboard && (
+                      <button
+                        type="button"
+                        {...TERMINALS_ACTIONS.pasteTerminalText.attrs}
+                        aria-label="Paste"
+                        title="Paste"
+                      >
+                        <LucideIcon icon={ClipboardPaste} name="clipboard-paste" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      {...TERMINALS_ACTIONS.toggleTerminalDrawer.attrs}
+                      aria-label="Hide Terminal Drawer"
+                      title="Hide terminal drawer"
+                    >
+                      <LucideIcon icon={PanelBottomClose} name="panel-bottom-close" />
+                    </button>
+                  </ToolbarControlGroup>
+                </>
               }
             >
               {tabs}

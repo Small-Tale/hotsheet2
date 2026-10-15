@@ -5791,9 +5791,8 @@ test('changes the chat provider and re-seeds the new provider with the prior tra
   await conversation.getByLabel('Message Codex').press('Enter');
   await expect(conversation.getByText('The event stream remains authoritative.')).toBeVisible();
   // Change provider to Claude via the conversation popup's provider submenu.
-  await conversation
-    .locator('[data-component="conversation-model-control"] [data-conversation-model-menu] [slot="trigger"]')
-    .click();
+  // The chat's model control lives in the drawer's tab toolbar (HS2-59F7WK).
+  await drawer.locator('[data-conversation-model-menu] [slot="trigger"]').click();
   await expect(page.getByRole('menuitem', { name: /Provider/ })).toBeVisible();
   await page.locator('[data-action="select-conversation-provider"][data-value="claude"]').dispatchEvent('click');
   // A fresh Claude chat is created, selected, and seeded with the prior transcript as one context turn.
@@ -6760,7 +6759,7 @@ test('selects and copies chat messages before saving that range without choosing
     .toContain('The referenced proof is ready.');
   expect(await page.evaluate(() => navigator.clipboard.readText())).not.toContain('Export the referenced proof.');
   await conversation.screenshot({ path: 'target/visual-captures/hs2-eqhary-selected-chat-wide.png' });
-  const saveConversation = conversation.getByRole('button', { name: 'Save Conversation' });
+  const saveConversation = drawer.getByRole('button', { name: 'Save Conversation' });
   await expect(saveConversation).toHaveJSProperty('tagName', 'BUTTON');
   await saveConversation.focus();
   await expect(saveConversation).toBeFocused();
@@ -7883,8 +7882,8 @@ test('restores a kept-running AI chat tab and its live server session when the p
   conversation = drawer.locator('[data-component="ai-conversation"]');
   await expect(conversation.locator('[data-message-id]')).toHaveCount(2);
   await expect(conversation.getByText('The event stream remains authoritative.')).toBeVisible();
-  await expect(conversation.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'gpt-6-astra');
-  await expect(conversation.locator('.ai-conversation__model-effort')).toHaveText('medium');
+  await expect(drawer.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'gpt-6-astra');
+  await expect(drawer.locator('.ai-conversation__model-effort')).toHaveText('medium');
   await page.screenshot({ path: 'target/visual-captures/hs2-d34c2v-restored-chat-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 640 });
   await expect(restoredTab).toBeVisible();
@@ -17655,6 +17654,117 @@ test('shows a spinner instead of an empty assistant bubble while a turn is think
   await dialog.screenshot({ path: 'target/visual-captures/hs2-77kjkr-dialog-thinking-390.png' });
 });
 
+test('moves the chat model selector and export into the drawer and dialog toolbars (HS2-59F7WK, HS2-DMH8MX)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+  const embedded = drawer.locator('[data-component="ai-conversation"]'),
+    rail = drawer.locator('.terminal-drawer__rail');
+  await expect(embedded).toBeVisible();
+  // No title bar or settings row inside the chat; the tab toolbar hosts the controls instead.
+  await expect(embedded).not.toContainText('Codex conversation');
+  await expect(embedded.locator('[data-component="toolbar"]')).toHaveCount(0);
+  await expect(embedded.locator('[data-component="conversation-model-control"]')).toHaveCount(0);
+  await expect(embedded.getByRole('button', { name: 'Save Conversation' })).toHaveCount(0);
+  const railModel = rail.locator('[data-component="conversation-model-control"]'),
+    railSave = rail.getByRole('button', { name: 'Save Conversation' });
+  await expect(railModel).toBeVisible();
+  await expect(railSave).toBeDisabled();
+  // The selector stays keyboard operable from the tab toolbar.
+  const trigger = rail.locator('[data-conversation-model-menu] [slot="trigger"]');
+  // Park the pointer away from where the menu opens so it does not hover a submenu open.
+  await page.mouse.move(1, 1);
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  const modelSubmenu = rail.locator('[data-conversation-model-menu] > wa-dropdown-item').filter({ hasText: 'Model' });
+  await expect(modelSubmenu).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-59f7wk-drawer-menu-open-1280.png' });
+  await modelSubmenu.hover();
+  await modelSubmenu.locator('[data-action="select-conversation-model"][data-value="gpt-5.6-sol"]').click();
+  await expect(railModel.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'gpt-5.6-sol');
+  // The drawer stays maximized: a dropdown press is not a rail double-click.
+  await expect(drawer).toHaveAttribute('data-maximized', 'true');
+  await embedded.getByLabel('Message Codex').fill('What time is it in California?');
+  await embedded.getByLabel('Message Codex').press('Enter');
+  await expect(embedded).toContainText('The event stream remains authoritative.');
+  await expect(railSave).toBeEnabled();
+  await page.screenshot({ path: 'target/visual-captures/hs2-59f7wk-drawer-toolbar-1280.png' });
+  await railSave.click();
+  const exportDialog = page.locator('[data-component="conversation-export-dialog"]');
+  await expect(exportDialog).toHaveJSProperty('open', true);
+  await page.keyboard.press('Escape');
+  await expect(exportDialog).toHaveCount(0);
+  // The conversation dialog carries the same selector next to its export control in the header.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
+  const host = page.locator('[data-component="ai-conversation"][data-presentation="dialog"]'),
+    dialog = host.getByRole('dialog'),
+    header = host.locator('[data-component="toolbar"]').first();
+  await expect(dialog).toBeVisible();
+  await expect(header.locator('[data-component="conversation-model-control"]')).toBeVisible();
+  await expect(header.getByRole('button', { name: 'Save Conversation' })).toBeVisible();
+  await expect(host.locator('[data-component="conversation-model-control"]')).toHaveCount(1);
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-59f7wk-dialog-header-1280.png' });
+  await header.locator('[data-conversation-model-menu] [slot="trigger"]').click();
+  await expect(header.locator('[data-conversation-model-menu] > wa-dropdown-item').first()).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-59f7wk-dialog-menu-open-1280.png' });
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(header.locator('[data-conversation-model-menu] [slot="trigger"]')).toBeVisible();
+  // At phone widths only the trigger remains; its menu shows the current choices.
+  await expect(header.locator('[data-component="conversation-model-control"]')).toBeHidden();
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-59f7wk-dialog-header-390.png' });
+});
+
+test('keeps the drawer chat toolbar controls inside a phone-width tab toolbar (HS2-59F7WK)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+  const rail = drawer.locator('.terminal-drawer__rail'),
+    embedded = drawer.locator('[data-component="ai-conversation"]');
+  await expect(embedded).toBeVisible();
+  await embedded.getByLabel('Message Codex').fill('What time is it in California?');
+  await embedded.getByLabel('Message Codex').press('Enter');
+  await expect(embedded).toContainText('The event stream remains authoritative.');
+  const controls = [
+    rail.locator('[data-conversation-model-menu] [slot="trigger"]'),
+    rail.getByRole('button', { name: 'Save Conversation' }),
+    rail.getByRole('button', { name: 'Hide Terminal Drawer' }),
+  ];
+  for (const control of controls) {
+    await expect(control).toBeVisible();
+    await expect
+      .poll(async () => {
+        const box = await control.boundingBox();
+        return box ? box.x >= 0 && box.x + box.width <= 390 : false;
+      })
+      .toBe(true);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-59f7wk-drawer-toolbar-390.png' });
+  await controls[0].click();
+  await expect(rail.locator('[data-conversation-model-menu] > wa-dropdown-item').first()).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-59f7wk-drawer-menu-open-390.png' });
+});
+
 test('omits effort after selecting a model that does not support it', async ({ page }) => {
   const turns: Array<Record<string, unknown>> = [];
   await mockProject(page);
@@ -17690,16 +17800,16 @@ test('omits effort after selecting a model that does not support it', async ({ p
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const host = drawer.locator('[data-component="ai-conversation"]');
   await expect(host).toBeVisible();
-  await expect(host.locator('.ai-conversation__model-effort')).toHaveText('medium');
+  await expect(drawer.locator('.ai-conversation__model-effort')).toHaveText('medium');
   await expect(host).not.toContainText('Enter to send');
   await expect(host.getByLabel('Message Claude')).toHaveAttribute('aria-keyshortcuts', 'Enter');
   await page.screenshot({ path: 'target/visual-captures/hs2-3vqszd-drawer-composer-1280.png' });
-  await host.locator('[data-conversation-model-menu] [slot="trigger"]').click();
-  const modelSubmenu = host.locator('[data-conversation-model-menu] > wa-dropdown-item').filter({ hasText: 'Model' });
+  await drawer.locator('[data-conversation-model-menu] [slot="trigger"]').click();
+  const modelSubmenu = drawer.locator('[data-conversation-model-menu] > wa-dropdown-item').filter({ hasText: 'Model' });
   await modelSubmenu.hover();
   await modelSubmenu.locator('[data-action="select-conversation-model"][data-value="haiku"]').click();
-  await expect(host.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'haiku');
-  await expect(host.locator('.ai-conversation__model-effort')).toHaveCount(0);
+  await expect(drawer.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'haiku');
+  await expect(drawer.locator('.ai-conversation__model-effort')).toHaveCount(0);
   await host.getByLabel('Message Claude').fill('What time is it in California?');
   await host.getByLabel('Message Claude').press('Enter');
   await expect
@@ -17715,7 +17825,7 @@ test('omits effort after selecting a model that does not support it', async ({ p
   await page.screenshot({ path: 'target/visual-captures/hs2-3vqszd-drawer-composer-390.png' });
   await page.setViewportSize({ width: 760, height: 800 });
   await expect(host).toBeVisible();
-  await expect(host.locator('.ai-conversation__model-effort')).toHaveCount(0);
+  await expect(drawer.locator('.ai-conversation__model-effort')).toHaveCount(0);
   await host.locator('.ai-conversation__transcript').evaluate((element) => {
     element.scrollTop = 0;
   });
@@ -28218,10 +28328,10 @@ test('keeps an accepted new conversation turn streaming after an older idle conn
     await host.getByLabel('Message Codex').fill('background-output-only');
     await host.getByLabel('Message Codex').press('Enter');
     expect((await accepted).status()).toBe(202);
-    await expect(host.getByRole('button', { name: 'Stop Codex', exact: true })).toBeVisible();
+    await expect(drawer.getByRole('button', { name: 'Stop Codex', exact: true })).toBeVisible();
     release();
     await expect(host).toContainText('background event 19');
-    await expect(host.getByRole('button', { name: 'Stop Codex', exact: true })).toBeVisible();
+    await expect(drawer.getByRole('button', { name: 'Stop Codex', exact: true })).toBeVisible();
     await expect(host.getByRole('alert')).toHaveCount(0);
   } finally {
     release();

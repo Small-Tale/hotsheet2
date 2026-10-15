@@ -17,31 +17,19 @@
 .ai-conversation--embedded > :not(.ai-conversation__transcript) {
   flex: none;
 }
-/* Compact current-model label + popup trigger for changing model/effort, mirroring the drive
-   button (HS2-R5F7A5). */
 /* The read-only notice is a Kerf StateBanner; this app wrapper only spaces it below the header. */
 .ai-conversation__saved-notice {
   padding-top: var(--kui-space-xs);
 }
+/* The current-model label before its popup trigger group in the dialog header or the drawer tab
+   toolbar (HS2-R5F7A5, HS2-59F7WK). */
 .ai-conversation__model {
-  display: flex;
-  min-width: 0;
-  padding: var(--wa-space-2xs) var(--wa-space-s);
-  border-bottom: 1px solid var(--wa-color-neutral-border-quiet);
-  align-items: center;
-  gap: var(--wa-space-2xs);
-}
-.ai-conversation__model-current {
   display: inline-flex;
   min-width: 0;
   align-items: center;
   gap: var(--wa-space-2xs);
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
-}
-.ai-conversation__model-icon {
-  display: inline-flex;
-  flex: none;
 }
 .ai-conversation__model-name {
   min-width: 0;
@@ -243,6 +231,11 @@
   bottom: remify(16px);
 }
 @media (max-width: remify(640px)) {
+  /* At phone widths the toolbar keeps only the selector's trigger, whose menu shows the current
+     provider, model, and effort, so the drawer tabs and the dialog title keep their room (HS2-59F7WK). */
+  .ai-conversation__model {
+    display: none;
+  }
   .ai-conversation--embedded > .ai-conversation__composer {
     inset-inline: remify(8px);
     bottom: remify(8px);

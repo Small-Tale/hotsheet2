@@ -3482,11 +3482,14 @@
       "id": "ai-conversation",
       "name": "AIConversation",
       "kind": "component",
-      "purpose": "Dialog and embedded AI conversation with native Save/Stop toolbar controls, inline permissions, and interruption.",
+      "purpose": "Dialog and embedded AI conversation with inline permissions and interruption; AIConversationToolbar renders its model selector and native Save/Stop controls in the dialog header or the drawer tab toolbar.",
       "source": "src/components/ai-conversation.tsx",
       "publicExports": [
         {
           "name": "AIConversation"
+        },
+        {
+          "name": "AIConversationToolbar"
         }
       ],
       "sourceLinks": ["src/components/ai-conversation.tsx"],
@@ -3537,7 +3540,7 @@
       },
       "selection": {
         "useWhen": [
-          "Hot Sheet needs dialog and embedded AI conversation with native Save/Stop toolbar controls, inline permissions, and interruption."
+          "Hot Sheet needs dialog and embedded AI conversation with inline permissions and interruption, plus its model selector and native Save/Stop controls placed in a host toolbar."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific AIConversation behavior."],
         "documentation": "../../docs/ux-components.md"
@@ -4134,7 +4137,7 @@
       "id": "terminal-drawer",
       "name": "TerminalDrawer",
       "kind": "composition",
-      "purpose": "Project grid, terminal, and embedded AI-chat tabs with a typed creation menu, and tab states for busy, halted terminals, failed or recovered driven chats, Hot Sheet-connected or unconnected AI sessions, and hook-only sessions whose hotsheet-mcp is not connected.",
+      "purpose": "Project grid, terminal, and embedded AI-chat tabs with a typed creation menu, the selected chat's toolbar controls in its tab toolbar, and tab states for busy, halted terminals, failed or recovered driven chats, Hot Sheet-connected or unconnected AI sessions, and hook-only sessions whose hotsheet-mcp is not connected.",
       "source": "src/components/terminal-drawer.tsx",
       "publicExports": [
         {

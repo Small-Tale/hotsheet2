@@ -219,10 +219,13 @@
       "id": "ai-conversation",
       "name": "AIConversation",
       "kind": "component",
-      "purpose": "Dialog and embedded AI conversation with native Save/Stop toolbar controls, inline permissions, and interruption.",
+      "purpose": "Dialog and embedded AI conversation with inline permissions and interruption; AIConversationToolbar renders its model selector and native Save/Stop controls in the dialog header or the drawer tab toolbar.",
       "publicExports": [
         {
           "name": "AIConversation"
+        },
+        {
+          "name": "AIConversationToolbar"
         }
       ],
       "sourceLinks": [
@@ -4816,7 +4819,7 @@
       "id": "terminal-drawer",
       "name": "TerminalDrawer",
       "kind": "composition",
-      "purpose": "Project grid, terminal, and embedded AI-chat tabs with a typed creation menu, and tab states for busy, halted terminals, failed or recovered driven chats, Hot Sheet-connected or unconnected AI sessions, and hook-only sessions whose hotsheet-mcp is not connected.",
+      "purpose": "Project grid, terminal, and embedded AI-chat tabs with a typed creation menu, the selected chat's toolbar controls in its tab toolbar, and tab states for busy, halted terminals, failed or recovered driven chats, Hot Sheet-connected or unconnected AI sessions, and hook-only sessions whose hotsheet-mcp is not connected.",
       "publicExports": [
         {
           "name": "TerminalDrawer"

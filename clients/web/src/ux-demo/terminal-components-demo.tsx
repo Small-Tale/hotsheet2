@@ -3,6 +3,7 @@ import { Row } from '@kerfjs/ui/row';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
+import { AIConversationToolbar } from '../components/ai-conversation';
 import { wireContextMenuDismissal } from '../components/context-menu-dismissal';
 import {
   TerminalCopyDialog,
@@ -249,6 +250,44 @@ export function TerminalDrawerDemo() {
           fitAcross={2}
           fitHigh={2}
           selectedId="failed-chat"
+        />
+      </CatalogExample>
+      {/* The selected chat's model selector, Save, and Stop render in the tab toolbar (HS2-59F7WK). */}
+      <CatalogExample label="AI Chat Toolbar Controls" viewport={drawerFrame}>
+        <TerminalDrawer
+          projectId="demo-chat-toolbar"
+          projectName="Demo project"
+          sessions={[]}
+          chatTabs={[
+            {
+              id: 'working-chat',
+              name: 'Claude chat',
+              tool: 'Claude',
+              content: <p>Claude is working.</p>,
+              toolbar: (
+                <AIConversationToolbar
+                  open
+                  presentation="embedded"
+                  tool="Claude"
+                  messages={[{ id: 'answer', role: 'assistant', content: 'Done.', status: 'completed' }]}
+                  draft=""
+                  busy
+                  interruptible
+                  model="opus"
+                  effort="medium"
+                  models={[{ id: 'opus', label: 'Opus' }]}
+                  efforts={['low', 'medium', 'high']}
+                  canChangeModel
+                  canChangeEffort
+                />
+              ),
+            },
+          ]}
+          width={900}
+          height={96}
+          fitAcross={2}
+          fitHigh={2}
+          selectedId="working-chat"
         />
       </CatalogExample>
       {/* A touch-first desktop (coarse primary pointer) adds rail Copy and Paste (HS2-5DHHPV). */}

@@ -1,11 +1,13 @@
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { List } from '@kerfjs/ui/list';
 import { Select } from '@kerfjs/ui/select';
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { type ConversationActivity, type ConversationMessage, conversationUsage } from '../ai-conversation';
-import { AIConversation } from '../components/ai-conversation';
+import { AIConversation, type AIConversationProps, AIConversationToolbar } from '../components/ai-conversation';
 import { wireAiConversation } from '../components/ai-conversation-interactions';
 import type { PermissionItem } from '../permission-notifications';
 import { DemoEvent } from './components/demo-event';
@@ -168,6 +170,37 @@ function scenarioState() {
 export function AIConversationDemo() {
   const state = scenarioState();
   const embedded = aiConversationPresentation.value === 'embedded';
+  const conversation: AIConversationProps = {
+    presentation: aiConversationPresentation.value,
+    open: aiConversationDemoOpen.value,
+    tool: aiConversationProviderLabel(),
+    sessionId: '019-demo-session',
+    messages: state.messages,
+    draft: aiConversationDraft.value,
+    busy: state.busy,
+    progress: state.progress,
+    interruptible: state.interruptible,
+    permissions: state.permissions,
+    activity: state.activity,
+    totalUsage: conversationUsage({ messages: state.messages }),
+    error: state.error,
+    feedbackAvailable: true,
+    providerId: aiConversationProvider.value,
+    providers: AI_CONVERSATION_PROVIDERS,
+    canChangeProvider: true,
+    model: 'gpt-5.6',
+    effort: 'high',
+    models: [
+      { id: 'gpt-5.6', label: 'GPT-5.6' },
+      { id: 'gpt-5.6-codex', label: 'GPT-5.6 Codex' },
+    ],
+    efforts: ['medium', 'high', 'xhigh'],
+    canChangeModel: true,
+    canChangeEffort: true,
+    readOnly: aiConversationScenario.value === 'saved',
+    savedSource: aiConversationScenario.value === 'saved' ? 'client-review.hotsheet-chat' : undefined,
+    hostActionsAvailable: aiConversationDevice.value === 'host',
+  };
   // Embedded, the Kerf app-height viewport is the definite height the conversation fills; the List
   // stack owns the status row and the flexing conversation (HS2-H1DRJB), so no demo stage CSS remains.
   return (
@@ -193,37 +226,17 @@ export function AIConversationDemo() {
             : ''}
         </DemoEvent>
         <List flex={embedded}>
-          <AIConversation
-            presentation={aiConversationPresentation.value}
-            open={aiConversationDemoOpen.value}
-            tool={aiConversationProviderLabel()}
-            sessionId="019-demo-session"
-            messages={state.messages}
-            draft={aiConversationDraft.value}
-            busy={state.busy}
-            progress={state.progress}
-            interruptible={state.interruptible}
-            permissions={state.permissions}
-            activity={state.activity}
-            totalUsage={conversationUsage({ messages: state.messages })}
-            error={state.error}
-            feedbackAvailable
-            providerId={aiConversationProvider.value}
-            providers={AI_CONVERSATION_PROVIDERS}
-            canChangeProvider
-            model="gpt-5.6"
-            effort="high"
-            models={[
-              { id: 'gpt-5.6', label: 'GPT-5.6' },
-              { id: 'gpt-5.6-codex', label: 'GPT-5.6 Codex' },
-            ]}
-            efforts={['medium', 'high', 'xhigh']}
-            canChangeModel
-            canChangeEffort
-            readOnly={aiConversationScenario.value === 'saved'}
-            savedSource={aiConversationScenario.value === 'saved' ? 'client-review.hotsheet-chat' : undefined}
-            hostActionsAvailable={aiConversationDevice.value === 'host'}
-          />
+          {/* The drawer renders these controls in its tab toolbar; this compact Kerf Toolbar stands in
+              for that row so the embedded demo exposes every control (HS2-59F7WK). */}
+          {embedded && (
+            <Toolbar
+              density="compact"
+              dividerSides="b"
+              leading={<ToolbarText text="Drawer tab toolbar" size="small" />}
+              trailing={<AIConversationToolbar {...conversation} />}
+            />
+          )}
+          <AIConversation {...conversation} />
         </List>
       </List>
     </CatalogExample>

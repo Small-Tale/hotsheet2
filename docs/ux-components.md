@@ -400,12 +400,18 @@ does not introduce polling or another network request.
   - header: tool identity, ready/working/message-count context with the conversation's totals
     inline (`2 messages • 39K tokens • $0.23`; absent, zero, or unpriced totals are omitted, and
     no separate usage pill remains; HS2-P415F0), and native Save/Stop buttons inside Kerf
-    `ToolbarControlGroup` in both dialog and embedded presentations. Save is disabled for empty or active transcripts; Stop appears only
+    `ToolbarControlGroup`. The exported `AIConversationToolbar` renders the model selector and
+    Save/Stop in the dialog header's trailing zone and, for a drawer chat, in the
+    `TerminalDrawer` tab toolbar's end zone (`TerminalDrawerChatTab.toolbar`) before Hide
+    Terminal Drawer; the embedded presentation renders no title bar or settings row
+    (HS2-DMH8MX, HS2-59F7WK). Save is disabled for empty or active transcripts; Stop appears only
     while the active connection advertises `interrupt`. The group owns button geometry
     and keyboard focus treatment. The dialog uses light-dismiss/Escape without a redundant
     close action. The demo exposes both presentations and exercises save/interruption
     through its deterministic state (HS2-WXVAF3).
-  - session controls: visibly labeled model and effort choices appear only for plugin-declared live-change
+  - session controls: a toolbar control (current model label and effort badge beside a
+    `ToolbarControlGroup single nestedDropdown` PopupMenu trigger; the label hides at 640px and
+    below) whose visibly labeled model and effort choices appear only for plugin-declared live-change
     capabilities and apply to subsequent turns; popup hide events stay scoped to
     the nested select and never dismiss the conversation surface; selecting a model revalidates effort and
     removes both the control and request field when that model declares no supported effort levels

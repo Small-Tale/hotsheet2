@@ -3,7 +3,12 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import type { PermissionItem } from '../permission-notifications';
-import { AIConversation, isConversationSurfaceLifecycleEvent } from './ai-conversation';
+import {
+  AIConversation,
+  type AIConversationProps,
+  AIConversationToolbar,
+  isConversationSurfaceLifecycleEvent,
+} from './ai-conversation';
 import { PermissionRequestPopup } from './permission-request-card';
 
 const permission: PermissionItem = {
@@ -22,25 +27,26 @@ const permission: PermissionItem = {
 };
 const css = readFileSync(new URL('./ai-conversation.css', import.meta.url), 'utf8');
 const previewCss = readFileSync(new URL('./markdown-preview.css', import.meta.url), 'utf8');
+/** The drawer composes an embedded conversation with its toolbar controls in the tab toolbar (HS2-59F7WK). */
+const withToolbar = (props: AIConversationProps) =>
+  String(AIConversation(props)) + (props.presentation === 'embedded' ? String(AIConversationToolbar(props)) : '');
 
 describe('AIConversation', () => {
   it.each(['dialog', 'embedded'] as const)(
     'keeps native toolbar actions and eligibility in the %s presentation',
     (presentation) => {
       const render = (busy: boolean, interruptible: boolean, populated: boolean, preview = false) =>
-        String(
-          AIConversation({
-            open: true,
-            presentation,
-            tool: 'Codex',
-            draft: '',
-            busy,
-            interruptible,
-            messages: populated ? [{ id: 'answer', role: 'assistant', content: 'Done.', status: 'completed' }] : [],
-            readOnly: preview,
-            readOnlyContext: 'preview',
-          }),
-        );
+        withToolbar({
+          open: true,
+          presentation,
+          tool: 'Codex',
+          draft: '',
+          busy,
+          interruptible,
+          messages: populated ? [{ id: 'answer', role: 'assistant', content: 'Done.', status: 'completed' }] : [],
+          readOnly: preview,
+          readOnlyContext: 'preview',
+        });
       const save = (markup: string) => markup.match(/<button[^>]*data-action="save-conversation"[^>]*>/)?.[0];
       const ready = render(false, false, true);
       expect(save(ready)).toContain('type="button"');
@@ -380,33 +386,29 @@ describe('AIConversation', () => {
       content: 'Saved result.',
       status: 'completed' as const,
     };
-    const active = String(
-      AIConversation({
-        open: true,
-        presentation: 'embedded',
-        tool: 'Codex',
-        messages: [message],
-        draft: 'Continue',
-        busy: false,
-        interruptible: false,
-      }),
-    );
+    const active = withToolbar({
+      open: true,
+      presentation: 'embedded',
+      tool: 'Codex',
+      messages: [message],
+      draft: 'Continue',
+      busy: false,
+      interruptible: false,
+    });
     expect(active).toContain('data-action="save-conversation"');
     expect(active).toContain('aria-label="Save Conversation"');
     expect(active).toContain('send-conversation-turn');
-    const saved = String(
-      AIConversation({
-        open: true,
-        presentation: 'embedded',
-        tool: 'Codex',
-        messages: [message],
-        draft: '',
-        busy: false,
-        interruptible: false,
-        readOnly: true,
-        savedSource: '/Exports/review.hotsheet-chat',
-      }),
-    );
+    const saved = withToolbar({
+      open: true,
+      presentation: 'embedded',
+      tool: 'Codex',
+      messages: [message],
+      draft: '',
+      busy: false,
+      interruptible: false,
+      readOnly: true,
+      savedSource: '/Exports/review.hotsheet-chat',
+    });
     expect(saved).toContain('data-read-only="true"');
     expect(saved).toContain('Saved transcript');
     expect(saved).toContain('/Exports/review.hotsheet-chat');
@@ -418,19 +420,17 @@ describe('AIConversation', () => {
         { id: 'request', role: 'user' as const, content: 'Inspect this.' },
         { id: 'answer', role: 'assistant' as const, content: 'Done.', status: 'completed' as const },
       ],
-      markup = String(
-        AIConversation({
-          open: true,
-          presentation: 'embedded',
-          tool: 'Codex',
-          selectionId: 'connection-1',
-          selectedMessageIds: ['request', 'answer'],
-          messages,
-          draft: '',
-          busy: false,
-          interruptible: false,
-        }),
-      );
+      markup = withToolbar({
+        open: true,
+        presentation: 'embedded',
+        tool: 'Codex',
+        selectionId: 'connection-1',
+        selectedMessageIds: ['request', 'answer'],
+        messages,
+        draft: '',
+        busy: false,
+        interruptible: false,
+      });
     expect(markup).toContain('data-selection-id="connection-1"');
     expect(markup.match(/data-action="pick-conversation-message"/g)).toHaveLength(2);
     expect(markup.match(/data-selected="true"/g)).toHaveLength(2);
@@ -439,19 +439,17 @@ describe('AIConversation', () => {
     expect(markup).toContain('data-action="clear-conversation-selection"');
   });
   it('renders live read-only previews without saved-transcript or mutation affordances', () => {
-    const markup = String(
-      AIConversation({
-        open: true,
-        presentation: 'embedded',
-        tool: 'Codex',
-        messages: [{ id: 'answer', role: 'assistant', content: 'Previewed result.', status: 'completed' }],
-        draft: '',
-        busy: false,
-        interruptible: false,
-        readOnly: true,
-        readOnlyContext: 'preview',
-      }),
-    );
+    const markup = withToolbar({
+      open: true,
+      presentation: 'embedded',
+      tool: 'Codex',
+      messages: [{ id: 'answer', role: 'assistant', content: 'Previewed result.', status: 'completed' }],
+      draft: '',
+      busy: false,
+      interruptible: false,
+      readOnly: true,
+      readOnlyContext: 'preview',
+    });
     expect(markup).toContain('data-read-only="true"');
     expect(markup).toContain('Read-only preview');
     expect(markup).toContain('Return to the AI chat to continue this conversation.');
@@ -461,18 +459,16 @@ describe('AIConversation', () => {
     expect(markup).not.toContain('send-conversation-turn');
   });
   it('promotes a permission popup into the dialog top layer without duplicating its inline card', () => {
-    const markup = String(
-      AIConversation({
-        open: true,
-        tool: 'Codex',
-        messages: [],
-        draft: '',
-        busy: true,
-        interruptible: true,
-        permissions: [permission],
-        foreground: PermissionRequestPopup({ item: permission, layer: 'flow' }),
-      }),
-    );
+    const markup = withToolbar({
+      open: true,
+      tool: 'Codex',
+      messages: [],
+      draft: '',
+      busy: true,
+      interruptible: true,
+      permissions: [permission],
+      foreground: PermissionRequestPopup({ item: permission, layer: 'flow' }),
+    });
     expect(markup).toContain('ai-conversation__foreground');
     // The foreground lays out an in-flow popup through the popup's own layer variant (HS2-M2W2DP).
     expect(markup).toContain('data-layer="flow"');
@@ -480,24 +476,22 @@ describe('AIConversation', () => {
     expect(markup.match(/data-component="permission-request-card"/g)).toHaveLength(1);
   });
   it('shows the current model/effort with a popup to change them, including custom and Other, only when the plugin declares support', () => {
-    const markup = String(
-      AIConversation({
-        open: true,
-        presentation: 'embedded',
-        selectionId: 'chat-one',
-        tool: 'Codex',
-        messages: [],
-        draft: '',
-        busy: false,
-        interruptible: false,
-        model: 'legacy model',
-        effort: 'high',
-        models: [{ id: 'gpt', label: 'GPT' }],
-        efforts: ['medium', 'high'],
-        canChangeModel: true,
-        canChangeEffort: true,
-      }),
-    );
+    const markup = withToolbar({
+      open: true,
+      presentation: 'embedded',
+      selectionId: 'chat-one',
+      tool: 'Codex',
+      messages: [],
+      draft: '',
+      busy: false,
+      interruptible: false,
+      model: 'legacy model',
+      effort: 'high',
+      models: [{ id: 'gpt', label: 'GPT' }],
+      efforts: ['medium', 'high'],
+      canChangeModel: true,
+      canChangeEffort: true,
+    });
     expect(markup).toContain('data-component="conversation-model-control"');
     // Current model + effort shown as a compact label.
     expect(markup).toContain('class="ai-conversation__model-name" title="legacy model">legacy model');
@@ -514,40 +508,36 @@ describe('AIConversation', () => {
     expect(markup).not.toContain('data-action="stop-conversation"');
   });
   it('omits the model popup when the plugin declares no model/effort support', () => {
-    const markup = String(
-      AIConversation({
-        open: true,
-        presentation: 'embedded',
-        tool: 'Codex',
-        messages: [],
-        draft: '',
-        busy: false,
-        interruptible: false,
-        model: 'gpt',
-        models: [{ id: 'gpt', label: 'GPT' }],
-      }),
-    );
+    const markup = withToolbar({
+      open: true,
+      presentation: 'embedded',
+      tool: 'Codex',
+      messages: [],
+      draft: '',
+      busy: false,
+      interruptible: false,
+      model: 'gpt',
+      models: [{ id: 'gpt', label: 'GPT' }],
+    });
     expect(markup).not.toContain('data-component="conversation-model-control"');
   });
   it('offers a provider submenu that lists other providers when more than one is configured (HS2-PRBGRB)', () => {
-    const markup = String(
-      AIConversation({
-        open: true,
-        presentation: 'embedded',
-        selectionId: 'chat-one',
-        tool: 'Codex',
-        messages: [],
-        draft: '',
-        busy: false,
-        interruptible: false,
-        providerId: 'codex',
-        providers: [
-          { id: 'codex', label: 'Codex' },
-          { id: 'claude', label: 'Claude' },
-        ],
-        canChangeProvider: true,
-      }),
-    );
+    const markup = withToolbar({
+      open: true,
+      presentation: 'embedded',
+      selectionId: 'chat-one',
+      tool: 'Codex',
+      messages: [],
+      draft: '',
+      busy: false,
+      interruptible: false,
+      providerId: 'codex',
+      providers: [
+        { id: 'codex', label: 'Codex' },
+        { id: 'claude', label: 'Claude' },
+      ],
+      canChangeProvider: true,
+    });
     // The popup renders even with no model/effort support because provider change is available.
     expect(markup).toContain('data-component="conversation-model-control"');
     expect(markup).toContain(
@@ -561,41 +551,70 @@ describe('AIConversation', () => {
   });
   it('hides the provider submenu for read-only chats or a single configured provider (HS2-PRBGRB)', () => {
     expect(
-      String(
-        AIConversation({
-          open: true,
-          presentation: 'embedded',
-          tool: 'Codex',
-          messages: [],
-          draft: '',
-          busy: false,
-          interruptible: false,
-          providerId: 'codex',
-          providers: [{ id: 'codex', label: 'Codex' }],
-          canChangeProvider: true,
-        }),
-      ),
+      withToolbar({
+        open: true,
+        presentation: 'embedded',
+        tool: 'Codex',
+        messages: [],
+        draft: '',
+        busy: false,
+        interruptible: false,
+        providerId: 'codex',
+        providers: [{ id: 'codex', label: 'Codex' }],
+        canChangeProvider: true,
+      }),
     ).not.toContain('data-action="select-conversation-provider"');
     expect(
-      String(
-        AIConversation({
-          open: true,
-          presentation: 'embedded',
-          tool: 'Codex',
-          messages: [{ id: 'm', role: 'user', content: 'hi' }],
-          draft: '',
-          busy: false,
-          interruptible: false,
-          readOnly: true,
-          providerId: 'codex',
-          providers: [
-            { id: 'codex', label: 'Codex' },
-            { id: 'claude', label: 'Claude' },
-          ],
-          canChangeProvider: true,
-        }),
-      ),
+      withToolbar({
+        open: true,
+        presentation: 'embedded',
+        tool: 'Codex',
+        messages: [{ id: 'm', role: 'user', content: 'hi' }],
+        draft: '',
+        busy: false,
+        interruptible: false,
+        readOnly: true,
+        providerId: 'codex',
+        providers: [
+          { id: 'codex', label: 'Codex' },
+          { id: 'claude', label: 'Claude' },
+        ],
+        canChangeProvider: true,
+      }),
     ).not.toContain('data-action="select-conversation-provider"');
+  });
+  it('places the model selector and export control in the dialog header toolbar (HS2-59F7WK)', () => {
+    const props: AIConversationProps = {
+        open: true,
+        tool: 'Claude',
+        messages: [{ id: 'answer', role: 'assistant', content: 'Done.', status: 'completed' }],
+        draft: '',
+        busy: false,
+        interruptible: false,
+        model: 'opus',
+        effort: 'medium',
+        models: [{ id: 'opus', label: 'Opus' }],
+        efforts: ['low', 'medium'],
+        canChangeModel: true,
+        canChangeEffort: true,
+      },
+      dialog = String(AIConversation(props)),
+      trailing = dialog.slice(dialog.indexOf('kui-toolbar__trailing'), dialog.indexOf('ai-conversation__transcript'));
+    expect(trailing).toMatch(
+      /data-component="conversation-model-control"[\s\S]*data-conversation-model-menu[\s\S]*data-action="save-conversation"/,
+    );
+    // The dialog's menu opens downward from its header; the dropdown trigger sits in a nested-dropdown group.
+    expect(trailing).toContain('placement="bottom-end"');
+    expect(dialog.match(/data-component="conversation-model-control"/g)).toHaveLength(1);
+    // The embedded presentation has no title bar: the drawer hosts these controls instead (HS2-DMH8MX).
+    const embedded = String(AIConversation({ ...props, presentation: 'embedded' }));
+    expect(embedded).not.toContain('Claude conversation');
+    expect(embedded).not.toContain('data-component="toolbar"');
+    expect(embedded).not.toContain('data-component="conversation-model-control"');
+    expect(embedded).not.toContain('data-action="save-conversation"');
+    const toolbar = String(AIConversationToolbar({ ...props, presentation: 'embedded' }));
+    expect(toolbar).toContain('placement="top-end"');
+    expect(toolbar).toContain('data-action="save-conversation"');
   });
   it('distinguishes the conversation lifecycle from a nested model popup closing', () => {
     const surface = {} as Element,

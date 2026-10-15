@@ -8024,7 +8024,7 @@ test('shows the chat model/effort as a label with a popup to change them', async
   await expect(control).toBeVisible();
   await expect(control.locator('.ai-conversation__model-name')).toContainText('GPT-5.6');
   await expect(control.locator('.ai-conversation__model-effort')).toContainText('high');
-  await control.locator('[data-conversation-model-menu] [slot="trigger"]').click();
+  await page.locator('[data-conversation-model-menu] [slot="trigger"]').first().click();
   await expect(page.getByRole('menuitem', { name: /Provider/ })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: /Model/ })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: /Effort/ })).toBeVisible();
@@ -8516,8 +8516,8 @@ for (const theme of ['light', 'dark'] as const) {
     }, theme);
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/ux-demo?component=ai-conversation');
-    const host = page.locator('[data-component="ai-conversation"]'),
-      save = host.getByRole('button', { name: 'Save Conversation' }),
+    const host = page.locator('[data-component="ai-conversation"]');
+    let save = host.getByRole('button', { name: 'Save Conversation' }),
       stop = host.getByRole('button', { name: 'Stop Codex' });
     await expect(host.getByRole('dialog')).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
@@ -8548,12 +8548,18 @@ for (const theme of ['light', 'dark'] as const) {
       node.dispatchEvent(new Event('change', { bubbles: true }));
     });
     await expect(host).toHaveAttribute('data-presentation', 'embedded');
+    // Embedded, the conversation has no title bar; its Save and Stop render in the drawer tab toolbar,
+    // which the demo composes above it (HS2-DMH8MX, HS2-59F7WK).
+    await expect(host.getByRole('button', { name: 'Save Conversation' })).toHaveCount(0);
+    const demo = page.locator('.ai-conversation-demo');
+    save = demo.getByRole('button', { name: 'Save Conversation' });
+    stop = demo.getByRole('button', { name: 'Stop Codex' });
     await settings.locator('[name="scenario"]').evaluate((node: HTMLElement & { value: string }) => {
       node.value = 'streaming';
       node.dispatchEvent(new Event('change', { bubbles: true }));
     });
     await setDemoSettingsOpen(page, false);
-    await host.screenshot({ path: `target/visual-captures/hs2-wxvaf3-embedded-${theme}-wide.png` });
+    await demo.screenshot({ path: `target/visual-captures/hs2-wxvaf3-embedded-${theme}-wide.png` });
     await page.setViewportSize({ width: 390, height: 850 });
     await expect(save).toBeDisabled();
     await expect(stop).toBeVisible();
@@ -8564,7 +8570,7 @@ for (const theme of ['light', 'dark'] as const) {
         return box ? box.x >= 0 && box.x + box.width <= 390 : false;
       })
       .toBe(true);
-    await host.screenshot({ path: `target/visual-captures/hs2-wxvaf3-embedded-${theme}-narrow.png` });
+    await demo.screenshot({ path: `target/visual-captures/hs2-wxvaf3-embedded-${theme}-narrow.png` });
     await stop.click();
     await expect(save).toBeEnabled();
     await save.click();

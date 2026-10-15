@@ -702,7 +702,12 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   );
   lifetime.add(
     delegate(document.body, 'dblclick', TERMINALS_ACTIONS.toggleTerminalDrawerMaximize.selector, (event) => {
-      if ((event.target as Element).closest('button, input, textarea, select, a, [data-tab-kind="terminal"]')) return;
+      if (
+        (event.target as Element).closest(
+          'button, input, textarea, select, a, wa-button, wa-dropdown, [data-tab-kind="terminal"]',
+        )
+      )
+        return;
       toggleTerminalDrawerMaximized();
     }),
   );
