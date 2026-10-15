@@ -130,10 +130,15 @@
   margin-bottom: remify(4px);
   font-size: var(--wa-font-size-xs);
 }
+/* The thinking turn's spinner sits on one text line inside the bubble (HS2-77KJKR). */
 .ai-conversation__awaiting {
+  display: flex;
+  min-height: 1lh;
+  align-items: center;
+}
+.ai-conversation__empty-message {
   margin: 0;
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 .ai-conversation__message-meta {
   display: flex;

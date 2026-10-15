@@ -1487,7 +1487,9 @@ preview/download, server directory browser) are separate design work.
   remains above the result that resumes afterward; output already shown before later activity
   keeps its earlier position. Replayed events are deduplicated without changing that order, and
   legacy saved conversations normalize to their previous messages-then-activity presentation
-  before a new turn is appended. Native activity and permission
+  before a new turn is appended. Until a turn streams its first text, its assistant bubble shows
+  a labeled Kerf `LoadingSpinner` ("Awaiting response") rather than an empty bubble, in the
+  drawer chat and the conversation dialog (HS2-77KJKR). Native activity and permission
   events provide specific progress text, and connection-matched permission requests reuse the
   standard decision card inline. Completed, failed, and interrupted outcomes remain on their
   turn. A turn that ends without text but recorded tool activity after its prompt says what

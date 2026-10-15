@@ -17616,6 +17616,45 @@ test('presents a legible, aligned AI chat without exposing its session id', asyn
   await dialog.screenshot({ path: 'target/visual-captures/hs2-wj3yr2-ai-chat-polish-narrow.png' });
 });
 
+test('shows a spinner instead of an empty assistant bubble while a turn is thinking (HS2-77KJKR)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const expectThinking = async (host: Locator) => {
+    const pending = host.locator('.ai-conversation__message--assistant').last();
+    await expect(pending).toHaveAttribute('data-status', 'streaming');
+    await expect(pending.getByRole('img', { name: 'Awaiting response' })).toBeVisible();
+    await expect(pending.locator('.ai-conversation__empty-message')).toHaveCount(0);
+  };
+  // Drawer chat tab.
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+  const embedded = drawer.locator('[data-component="ai-conversation"]');
+  await embedded.getByLabel('Message Codex').fill('Start sustained output');
+  await embedded.getByLabel('Message Codex').press('Enter');
+  await expectThinking(embedded);
+  await page.screenshot({ path: 'target/visual-captures/hs2-77kjkr-drawer-thinking-1280.png' });
+  // Conversation dialog.
+  await page.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
+  const host = page.locator('[data-component="ai-conversation"][data-presentation="dialog"]'),
+    dialog = host.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await host.getByLabel('Message Codex').fill('Start sustained output');
+  await host.getByLabel('Message Codex').press('Enter');
+  await expectThinking(host);
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-77kjkr-dialog-thinking-1280.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectThinking(host);
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-77kjkr-dialog-thinking-390.png' });
+});
+
 test('omits effort after selecting a model that does not support it', async ({ page }) => {
   const turns: Array<Record<string, unknown>> = [];
   await mockProject(page);

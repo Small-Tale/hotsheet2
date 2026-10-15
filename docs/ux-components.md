@@ -421,7 +421,9 @@ does not introduce polling or another network request.
     selection state plus Copy and Clear actions that preserve ordinary text selection
   - working row: an icon plus specific live text (`Reviewing the project…`, `Responding…`,
     `Waiting for permission…`, or a bounded native-activity description), never a generic
-    spinner without explanation
+    spinner without explanation. Until a thinking turn streams its first text, its assistant
+    bubble holds a Kerf `LoadingSpinner` labeled "Awaiting response" instead of rendering as an
+    empty pill, in both presentations (HS2-77KJKR)
   - permission requests: the existing `PermissionRequestCard` list presentation appears in
     transcript order for this connection and uses the same global decision handlers/history
   - composer: multiline free-form input plus an explicit Send action; Enter sends while

@@ -55,6 +55,41 @@ describe('AIConversation', () => {
       expect(render(false, false, true, true)).not.toContain('data-action="save-conversation"');
     },
   );
+  it.each(['dialog', 'embedded'] as const)(
+    'shows a labeled spinner, not an empty bubble, while a %s turn is thinking (HS2-77KJKR)',
+    (presentation) => {
+      const render = (content: string, status: 'streaming' | 'completed') =>
+        String(
+          AIConversation({
+            open: true,
+            presentation,
+            tool: 'Claude',
+            draft: '',
+            busy: status === 'streaming',
+            interruptible: false,
+            progress: 'Reviewing the project and planning the next steps…',
+            messages: [
+              { id: 'question', role: 'user', content: 'What day is it?' },
+              { id: 'answer', role: 'assistant', content, status },
+            ],
+          }),
+        );
+      const pending = render('', 'streaming');
+      expect(pending).toMatch(
+        /data-message-id="answer"[\s\S]*class="ai-conversation__awaiting" role="status"[\s\S]*kui-loading-spinner/,
+      );
+      expect(pending).toContain('aria-label="Awaiting response"');
+      expect(pending).not.toContain('ai-conversation__empty-message');
+      // Once text streams in, the spinner gives way to the reply.
+      const streaming = render('Today is Thursday.', 'streaming');
+      expect(streaming).not.toContain('ai-conversation__awaiting');
+      expect(streaming).toContain('Today is Thursday.');
+      // A finished empty turn never spins.
+      const finished = render('', 'completed');
+      expect(finished).not.toContain('ai-conversation__awaiting');
+      expect(finished).toContain('ai-conversation__empty-message');
+    },
+  );
   it('renders ordered Markdown turns, progress, and an inline permission request', () => {
     const markup = String(
       AIConversation({

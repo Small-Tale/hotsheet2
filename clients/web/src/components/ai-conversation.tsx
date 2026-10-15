@@ -11,6 +11,7 @@ import { flex, px, remify, uiColor } from '@kerfjs/ui/css-values';
 import { deviceClass } from '@kerfjs/ui/device-class';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
+import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { StateBanner } from '@kerfjs/ui/state-banner';
@@ -145,8 +146,13 @@ export function ConversationMessages({
               tone={message.role === 'user' ? 'inverse' : 'inherit'}
               density="compact"
             />
+          ) : message.role === 'assistant' && message.status === 'streaming' ? (
+            // A thinking turn shows a labeled Kerf spinner inside its bubble, never an empty pill (HS2-77KJKR).
+            <span class="ai-conversation__awaiting" role="status">
+              <LoadingSpinner label="Awaiting response" size="s" />
+            </span>
           ) : (
-            <p class="ai-conversation__awaiting" aria-label="Awaiting response">
+            <p class="ai-conversation__empty-message" aria-label="Empty response">
               {' '}
             </p>
           )}
