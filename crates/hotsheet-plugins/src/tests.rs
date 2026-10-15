@@ -289,7 +289,7 @@ fn codex_declares_its_project_local_skill() {
         .drive
         .expect("claude declares a channel drive");
     assert_eq!(cd.transport, "claude-channel");
-    assert!(!cd.interrupt, "no channel interrupt in phase 1");
+    assert!(cd.interrupt, "Stop ends the per-turn process (HS2-V0SWSM)");
     assert_eq!(
         cd.models
             .iter()

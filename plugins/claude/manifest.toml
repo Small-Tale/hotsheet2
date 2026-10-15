@@ -37,12 +37,12 @@ args = ["--path", "{store}"]
 # Claude is driven the HS1 play-button way: a turn injected into a running `claude`
 # stream-json session (docs/13 §13.6). transport = claude-channel; the host owns the
 # live process, so `program`/`args` here are informational (the drive uses the injected
-# ClaudeChannelClient, not this launch line). No interrupt in phase 1 (HS2-116).
+# ClaudeChannelClient, not this launch line). Stop ends the per-turn process (HS2-V0SWSM).
 transport = "claude-channel"
 program = "claude"
 args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json"]
 content = "stdin"
-interrupt = false
+interrupt = true
 models = [
   { id = "fable", label = "Fable", effort_levels = ["low", "medium", "high", "xhigh", "max"] },
   { id = "opus", label = "Opus", effort_levels = ["low", "medium", "high", "xhigh", "max"] },

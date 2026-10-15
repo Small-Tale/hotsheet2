@@ -22,13 +22,16 @@ use serde_json::{Value, json};
 
 use crate::drive::{
     ClaudeChannelClient, DoneReason, Drive, DriveCtx, DriveError, DriveInfo, Target, Transport,
-    TurnEvent, TurnHandle,
+    TurnControl, TurnEvent, TurnHandle,
 };
-use crate::ports::{RpcReader, RpcTransport, RpcWriter};
-use crate::procio::StreamChild;
+use crate::ports::{ProcessSignals, RpcReader, RpcTransport, RpcWriter};
+use crate::procio::{StreamChild, stop_process};
 
-/// How long a turn may run before we stop waiting for its `result`.
+/// How long a turn may wait without a new event before its process is stopped.
 const TURN_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// How long a stopped `claude` process gets to exit after SIGTERM before SIGKILL.
+const TERMINATE_GRACE: Duration = Duration::from_secs(5);
 
 // ---- the channel engine ----------------------------------------------------------
 
@@ -42,6 +45,12 @@ struct Inner {
     closed: AtomicBool,
     /// The running session id (from `system`/`init`), for `Target`/resume.
     session_id: Mutex<Option<String>>,
+    /// Signals the backing `claude` process, when the transport owns one (HS2-V0SWSM).
+    signals: Mutex<Option<Box<dyn ProcessSignals>>>,
+    /// Set by a [`TurnControl`] wake callback; the blocked turn stops the process.
+    interrupt_requested: AtomicBool,
+    turn_timeout: Duration,
+    terminate_grace: Duration,
 }
 
 impl Inner {
@@ -82,9 +91,34 @@ impl Inner {
     fn close_input(&self) {
         self.writer.lock_or_recover().close();
     }
+
+    /// Wake a blocked turn so it observes a Stop request (runs on the requesting thread).
+    fn request_interrupt(&self) {
+        self.interrupt_requested.store(true, Ordering::SeqCst);
+        let _guard = self.events.lock_or_recover();
+        self.cvar.notify_all();
+    }
+
+    /// Stop the backing process: SIGTERM, then SIGKILL after the grace period. Returns
+    /// whether a process handle exists (a transport without one cannot be stopped).
+    fn stop_process(&self) -> bool {
+        let mut signals = self.signals.lock_or_recover();
+        match signals.as_mut() {
+            Some(signals) => {
+                stop_process(signals.as_mut(), self.terminate_grace);
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn can_stop(&self) -> bool {
+        self.signals.lock_or_recover().is_some()
+    }
 }
 
-fn start_reader(transport: Box<dyn RpcTransport>) -> Arc<Inner> {
+fn start_reader(transport: Box<dyn RpcTransport>, timing: ChannelTiming) -> Arc<Inner> {
+    let signals = transport.process_signals();
     let (writer, mut reader) = transport.split();
     let inner = Arc::new(Inner {
         writer: Mutex::new(writer),
@@ -92,6 +126,10 @@ fn start_reader(transport: Box<dyn RpcTransport>) -> Arc<Inner> {
         cvar: Condvar::new(),
         closed: AtomicBool::new(false),
         session_id: Mutex::new(None),
+        signals: Mutex::new(signals),
+        interrupt_requested: AtomicBool::new(false),
+        turn_timeout: timing.turn_timeout,
+        terminate_grace: timing.terminate_grace,
     });
     let ri = inner.clone();
     std::thread::spawn(move || {
@@ -108,6 +146,24 @@ fn start_reader(transport: Box<dyn RpcTransport>) -> Arc<Inner> {
     inner
 }
 
+/// How long a channel waits for turn events and for a stopped process to exit.
+#[derive(Debug, Clone, Copy)]
+pub struct ChannelTiming {
+    /// The longest wait for the next event before the turn times out and its process stops.
+    pub turn_timeout: Duration,
+    /// How long a stopped process gets after SIGTERM before SIGKILL.
+    pub terminate_grace: Duration,
+}
+
+impl Default for ChannelTiming {
+    fn default() -> Self {
+        Self {
+            turn_timeout: TURN_TIMEOUT,
+            terminate_grace: TERMINATE_GRACE,
+        }
+    }
+}
+
 // ---- the ClaudeChannelClient over the engine -------------------------------------
 
 /// A live, persistent `claude` stream-json session, implementing [`ClaudeChannelClient`]:
@@ -122,7 +178,7 @@ impl ClaudeChannel {
     /// Attach to a running `claude` session over `transport` (starts the reader thread).
     pub fn connect(transport: Box<dyn RpcTransport>) -> Self {
         Self {
-            inner: start_reader(transport),
+            inner: start_reader(transport, ChannelTiming::default()),
             single_turn: false,
         }
     }
@@ -133,10 +189,30 @@ impl ClaudeChannel {
     /// produced after an early or extra `result` reach the turn instead of an unobserved
     /// orphaned process (HS2-M5GN19). The last `result` decides the outcome.
     pub fn connect_single_turn(transport: Box<dyn RpcTransport>) -> Self {
+        Self::connect_single_turn_with(transport, ChannelTiming::default())
+    }
+
+    /// [`Self::connect_single_turn`] with explicit timing (tests shorten the waits).
+    pub fn connect_single_turn_with(
+        transport: Box<dyn RpcTransport>,
+        timing: ChannelTiming,
+    ) -> Self {
         Self {
-            inner: start_reader(transport),
+            inner: start_reader(transport, timing),
             single_turn: true,
         }
+    }
+
+    /// Wake this channel's running turn the moment `control` requests an interrupt, so a
+    /// Stop reaches a turn blocked waiting for Claude's next event (HS2-V0SWSM). The turn
+    /// then stops the process on its owner thread and reports [`DoneReason::Interrupted`].
+    pub fn wake_on_interrupt(&self, control: &TurnControl) {
+        let inner = Arc::downgrade(&self.inner);
+        control.on_interrupt(move || {
+            if let Some(inner) = inner.upgrade() {
+                inner.request_interrupt();
+            }
+        });
     }
 }
 
@@ -377,9 +453,16 @@ impl ClaudeTurn {
             return None;
         }
         let inner = self.inner.clone();
-        let deadline = Instant::now() + TURN_TIMEOUT;
+        let deadline = Instant::now() + inner.turn_timeout;
         let mut events = inner.events.lock_or_recover();
         loop {
+            if inner.interrupt_requested.load(Ordering::SeqCst) && inner.can_stop() {
+                // Stop requested while the turn waits: end the process on this thread
+                // (the reader needs the event lock to observe its exit).
+                drop(events);
+                self.interrupt();
+                return self.pending.pop_front().map(|event| self.emit(event));
+            }
             while self.cursor < events.len() {
                 let ev = &events[self.cursor];
                 if ev.get("type").and_then(Value::as_str) == Some("result") {
@@ -426,8 +509,18 @@ impl ClaudeTurn {
             }
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
+                // Never leave a timed-out process working unobserved (HS2-V0SWSM).
+                drop(events);
+                let stopped = inner.stop_process();
                 let reason = self.settled.take().unwrap_or_else(|| {
-                    DoneReason::failed(1, "Timed out waiting for Claude turn result")
+                    DoneReason::failed(
+                        1,
+                        if stopped {
+                            "Timed out waiting for Claude turn result; the Claude process was stopped"
+                        } else {
+                            "Timed out waiting for Claude turn result"
+                        },
+                    )
                 });
                 self.finish(reason);
                 return self.pending.pop_front().map(|event| self.emit(event));
@@ -475,6 +568,19 @@ impl TurnHandle for ClaudeTurn {
             .any(|e| e.get("type").and_then(Value::as_str) == Some("result"))
     }
 
+    fn interrupt(&mut self) -> bool {
+        if self.done.is_some() || self.pending.iter().any(|e| matches!(e, TurnEvent::Done(_))) {
+            return false;
+        }
+        if !self.inner.stop_process() {
+            return false;
+        }
+        // Output already queued stays ahead of the terminal event.
+        self.pending
+            .push_back(TurnEvent::Done(DoneReason::Interrupted));
+        true
+    }
+
     fn wait(&mut self) -> DoneReason {
         if let Some(r) = &self.done {
             return r.clone();
@@ -512,6 +618,11 @@ impl Drive for ClaudeChannelDrive {
         DriveInfo {
             transport: Transport::ClaudeChannel,
         }
+    }
+
+    /// A turn is stopped by ending its `claude` process (HS2-V0SWSM).
+    fn supports_interrupt(&self) -> bool {
+        true
     }
 
     fn run(
@@ -608,6 +719,10 @@ impl RpcTransport for ClaudeStreamTransport {
     fn split(self: Box<Self>) -> (Box<dyn RpcWriter>, Box<dyn RpcReader>) {
         self.0.into_halves()
     }
+
+    fn process_signals(&self) -> Option<Box<dyn ProcessSignals>> {
+        Some(self.0.signals())
+    }
 }
 
 // ---- a scripted claude for tests (no live claude) --------------------------------
@@ -638,20 +753,25 @@ pub(crate) mod scripted {
         ToolOnly,
         /// The process exits on the user message without emitting a `result`.
         Crash,
+        /// Emit some output, then keep working (no `result`, ignores stdin EOF) until a
+        /// signal stops it — a long turn the user stops (HS2-V0SWSM).
+        Hang,
+        /// Like [`ClaudeMode::Hang`], but SIGTERM is ignored; only SIGKILL ends it.
+        HangIgnoringTerm,
     }
+
+    /// The scripted process's output pipe: `None` once it has exited.
+    type Pipe = Arc<Mutex<Option<Sender<String>>>>;
 
     pub struct ScriptedClaude {
         mode: ClaudeMode,
+        pipe: Pipe,
+        rx: Receiver<String>,
+        signal_log: Arc<Mutex<Vec<&'static str>>>,
     }
 
     impl ScriptedClaude {
         pub fn new(mode: ClaudeMode) -> Box<Self> {
-            Box::new(Self { mode })
-        }
-    }
-
-    impl RpcTransport for ScriptedClaude {
-        fn split(self: Box<Self>) -> (Box<dyn RpcWriter>, Box<dyn RpcReader>) {
             let (tx, rx) = channel::<String>();
             // `system`/`init` is emitted once at process start (carries the session id).
             let _ = tx.send(
@@ -659,26 +779,76 @@ pub(crate) mod scripted {
                         "session_id": "sess-abc", "tools": [] })
                 .to_string(),
             );
+            Box::new(Self {
+                mode,
+                pipe: Arc::new(Mutex::new(Some(tx))),
+                rx,
+                signal_log: Arc::default(),
+            })
+        }
+
+        /// The signals the scripted process received, in order (`"TERM"`, `"KILL"`).
+        pub fn signal_log(&self) -> Arc<Mutex<Vec<&'static str>>> {
+            self.signal_log.clone()
+        }
+    }
+
+    impl RpcTransport for ScriptedClaude {
+        fn split(self: Box<Self>) -> (Box<dyn RpcWriter>, Box<dyn RpcReader>) {
             (
                 Box::new(ClaudeWriter {
-                    out: Some(tx),
+                    out: self.pipe,
                     mode: self.mode,
                 }),
-                Box::new(ClaudeReader { inbox: rx }),
+                Box::new(ClaudeReader { inbox: self.rx }),
             )
+        }
+
+        fn process_signals(&self) -> Option<Box<dyn ProcessSignals>> {
+            Some(Box::new(ScriptedSignals {
+                pipe: self.pipe.clone(),
+                ignore_term: matches!(self.mode, ClaudeMode::HangIgnoringTerm),
+                log: self.signal_log.clone(),
+            }))
+        }
+    }
+
+    /// Signals for the scripted process: exiting drops its output pipe (reader EOF).
+    struct ScriptedSignals {
+        pipe: Pipe,
+        ignore_term: bool,
+        log: Arc<Mutex<Vec<&'static str>>>,
+    }
+    impl ProcessSignals for ScriptedSignals {
+        fn terminate(&mut self) {
+            self.log.lock_or_recover().push("TERM");
+            if !self.ignore_term {
+                self.pipe.lock_or_recover().take();
+            }
+        }
+        fn kill(&mut self) {
+            self.log.lock_or_recover().push("KILL");
+            self.pipe.lock_or_recover().take();
+        }
+        fn has_exited(&mut self) -> bool {
+            self.pipe.lock_or_recover().is_none()
         }
     }
 
     struct ClaudeWriter {
         /// Dropped on `close`, which ends the reader like a process exiting after stdin EOF.
-        out: Option<Sender<String>>,
+        out: Pipe,
         mode: ClaudeMode,
     }
     impl ClaudeWriter {
         fn push(&self, v: Value) {
-            if let Some(out) = &self.out {
+            if let Some(out) = self.out.lock_or_recover().as_ref() {
                 let _ = out.send(v.to_string());
             }
+        }
+
+        fn exit(&self) {
+            self.out.lock_or_recover().take();
         }
 
         fn tool_use(&self) -> Value {
@@ -692,7 +862,10 @@ pub(crate) mod scripted {
     }
     impl RpcWriter for ClaudeWriter {
         fn close(&mut self) {
-            self.out = None;
+            // A hanging process keeps working after stdin EOF.
+            if !matches!(self.mode, ClaudeMode::Hang | ClaudeMode::HangIgnoringTerm) {
+                self.exit();
+            }
         }
 
         fn send(&mut self, msg: &str) -> std::io::Result<()> {
@@ -705,7 +878,15 @@ pub(crate) mod scripted {
                     .unwrap_or("");
                 match self.mode {
                     ClaudeMode::Crash => {
-                        self.out = None;
+                        self.exit();
+                        return Ok(());
+                    }
+                    ClaudeMode::Hang | ClaudeMode::HangIgnoringTerm => {
+                        self.push(json!({ "type": "assistant",
+                            "message": { "role": "assistant", "id": "msg-working",
+                                         "content": [{ "type": "text",
+                                                       "text": format!("working: {content}") }] },
+                            "session_id": "sess-abc" }));
                         return Ok(());
                     }
                     ClaudeMode::PrematureResult => {
@@ -751,7 +932,9 @@ pub(crate) mod scripted {
                     | ClaudeMode::RichSuccess
                     | ClaudeMode::PrematureResult
                     | ClaudeMode::ToolOnly
-                    | ClaudeMode::Crash => ("success", false, "done"),
+                    | ClaudeMode::Crash
+                    | ClaudeMode::Hang
+                    | ClaudeMode::HangIgnoringTerm => ("success", false, "done"),
                     ClaudeMode::Failure => (
                         "error_during_execution",
                         true,

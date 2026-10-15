@@ -232,11 +232,25 @@ stream-json [--resume <id>]`; input `{"type":"user",…}`; output `system`/`init
 > model work (zero tokens and no cost) contributes no usage. When a successful turn streamed
 > no assistant text, its final `result` text becomes the turn's output. The persistent
 > multi-turn mode (`ClaudeChannel::connect`) still ends a turn at its first `result`.
+> **Stopping a turn (HS2-V0SWSM):** Claude's stream-json channel has no interrupt message,
+> so the drive stops a turn by ending its process. `StreamChild` keeps the spawned `Child`
+> shared between the reader half and a `ProcessSignals` handle
+> (`RpcTransport::process_signals`); `procio::stop_process` sends SIGTERM, waits a 5 s grace
+> period, then SIGKILLs a process that ignored it. Exit is observed with `try_wait`, which
+> reaps the child, so a signal can never reach a recycled pid. `ClaudeChannelDrive` therefore
+> reports `supports_interrupt`, and the plugin manifest declares `interrupt = true`.
+> `TurnHandle::interrupt` stops the process and reports `Done(Interrupted)`. A Stop request
+> also wakes a turn blocked waiting for Claude's next event: the live drive registers a
+> `TurnControl::on_interrupt` callback that only wakes the turn, which then stops the process
+> on its owner thread. When no event arrives within the 600 s turn timeout, the turn stops the
+> process the same way and fails with a timeout diagnostic instead of leaving it working
+> unobserved. Only the `claude` process itself is signalled; tool subprocesses that a
+> force-killed Claude leaves behind are tracked by HS2-M08WMC.
 > **Live-verified (2026-08-21, isolated temp cwd + strict empty MCP config → nothing else
 > reachable):** a real turn streamed `Output("pong")` then `Done(Completed)` with the
 > session id captured and the HS1 dev instance untouched; gated ignored test
-> (`HOTSHEET_CLAUDE_LIVE=1`). Follow-ups: the permission bridge (§5.7, HS2-113 — the drive
-> emits `PermissionAsked` but runs a safe mode) and a channel interrupt.
+> (`HOTSHEET_CLAUDE_LIVE=1`). Follow-up: the permission bridge (§5.7, HS2-113 — the drive
+> emits `PermissionAsked` but runs a safe mode).
 
 The interface is only real if the tool it was **not** designed around fits. Checks:
 
@@ -250,8 +264,10 @@ The interface is only real if the tool it was **not** designed around fits. Chec
   tool-use payloads in its verified hook contract. Mapping and ticket/project/session
   attribution remain host responsibilities, so the drive crate stays independent of the
   ticket activity model.
-- **Codex** needs **`interrupt`** and a **backing service**; Claude declares neither,
-  and nothing breaks — absence is the signal.
+- **Codex** needs **`interrupt`** and a **backing service**; Claude declares no backing
+  service, and nothing breaks — absence is the signal. Claude's interrupt is implemented by
+  ending its per-turn process rather than by a protocol message (HS2-V0SWSM), which the
+  interface absorbs without a new method.
 - **ACP** needs permission-_as-a-response_ (not a hook) → the `PermissionSink` adapter
   is per-transport; the bridge sees a uniform `PermReq`.
 - If a **fourth** shape needs a _new required_ method or a third `run` allowance, the

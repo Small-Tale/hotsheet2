@@ -2737,6 +2737,33 @@ async fn client_drive_delete_is_authenticated_scoped_idempotent_and_interrupts()
     }
 }
 
+/// HS2-V0SWSM: the native backend's Claude drive stops a turn by ending its per-turn
+/// process, so a Claude chat connection advertises the interrupt (Stop) action.
+#[tokio::test]
+async fn native_claude_connection_advertises_the_interrupt_action() {
+    let (dir, base) = state();
+    // Preparing a Claude drive requires the project's MCP config (HS2-103 isolation);
+    // no `claude` binary is needed until a turn runs.
+    std::fs::write(dir.path().join(".mcp.json"), r#"{"mcpServers":{}}"#).unwrap();
+    let router = app(base);
+    let created = router
+        .oneshot(authed(
+            "POST",
+            "/drive/connections",
+            Some(r#"{"tool":"claude","connection_id":"claude-chat"}"#),
+        ))
+        .await
+        .unwrap();
+    let status = created.status();
+    let created = body_json(created).await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    assert_eq!(created["tool"], "claude");
+    assert_eq!(
+        created["actions"],
+        serde_json::json!(["send_turn", "interrupt", "close"])
+    );
+}
+
 #[tokio::test]
 async fn client_drive_omits_and_rejects_an_unsupported_interrupt() {
     let (_dir, base) = state();

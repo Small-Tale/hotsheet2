@@ -134,6 +134,24 @@ pub enum AppServerError {
 /// background thread drains for responses + notifications.
 pub trait RpcTransport {
     fn split(self: Box<Self>) -> (Box<dyn RpcWriter>, Box<dyn RpcReader>);
+    /// A handle that can signal the process behind this transport, when there is one
+    /// (HS2-V0SWSM). Taken before [`split`](Self::split); the default — a loopback or
+    /// socket transport with no owned process — returns `None`, so the caller cannot stop it.
+    fn process_signals(&self) -> Option<Box<dyn ProcessSignals>> {
+        None
+    }
+}
+
+/// Signal a transport's backing process so a stopped or timed-out turn cannot keep working
+/// unobserved (HS2-V0SWSM). The real impl wraps the spawned `Child`; tests inject a fake
+/// that can ignore the polite request. Escalation lives in [`crate::procio::stop_process`].
+pub trait ProcessSignals: Send {
+    /// Ask the process to stop (SIGTERM on Unix).
+    fn terminate(&mut self);
+    /// Force it to stop (SIGKILL on Unix) and reap it.
+    fn kill(&mut self);
+    /// Whether it has exited (non-blocking; reaps an exited child).
+    fn has_exited(&mut self) -> bool;
 }
 
 /// The write half of an [`RpcTransport`] — sends one JSON message at a time.

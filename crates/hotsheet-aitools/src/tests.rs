@@ -398,8 +398,12 @@ fn claude_is_drivable_via_the_channel_transport() {
     let drive = drive_for(&claude).expect("claude declares a channel drive");
     assert_eq!(drive.info().transport, Transport::ClaudeChannel);
     assert!(
-        !drive.supports_interrupt(),
-        "no channel interrupt in phase 1"
+        drive.supports_interrupt(),
+        "Stop ends the per-turn claude process (HS2-V0SWSM)"
+    );
+    assert!(
+        claude.manifest.drive.as_ref().unwrap().interrupt,
+        "the manifest declares the interrupt capability"
     );
 }
 
@@ -1011,6 +1015,162 @@ fn single_turn_channel_reports_a_process_that_exits_without_a_result() {
     assert_eq!(turn.usage(), None);
 }
 
+// ---- stopping a Claude turn by ending its process (HS2-V0SWSM) -------------------
+
+use crate::claude::ChannelTiming;
+
+fn quick_timing(turn_timeout_ms: u64, grace_ms: u64) -> ChannelTiming {
+    ChannelTiming {
+        turn_timeout: std::time::Duration::from_millis(turn_timeout_ms),
+        terminate_grace: std::time::Duration::from_millis(grace_ms),
+    }
+}
+
+#[test]
+fn claude_channel_drive_declares_interrupt_support() {
+    assert!(ClaudeChannelDrive.supports_interrupt());
+}
+
+#[test]
+fn stopping_a_claude_turn_mid_work_terminates_its_process_and_reports_interrupted() {
+    let claude = ScriptedClaude::new(ClaudeMode::Hang);
+    let signals = claude.signal_log();
+    let ch = ClaudeChannel::connect_single_turn_with(claude, quick_timing(30_000, 5_000));
+    let mut turn = ch.start_turn("long job").unwrap();
+    assert_eq!(
+        turn.next_event(),
+        Some(TurnEvent::Output("working: long job".into()))
+    );
+    assert!(turn.is_busy(), "the process keeps working without a result");
+
+    assert!(turn.interrupt(), "a live process can be stopped");
+    assert_eq!(*signals.lock().unwrap(), vec!["TERM"], "SIGTERM was enough");
+    assert_eq!(
+        turn.next_event(),
+        Some(TurnEvent::Done(DoneReason::Interrupted))
+    );
+    assert_eq!(turn.next_event(), None);
+    assert_eq!(turn.wait(), DoneReason::Interrupted);
+    assert!(!turn.is_busy());
+    assert!(!turn.interrupt(), "a finished turn has nothing to stop");
+    assert_eq!(signals.lock().unwrap().len(), 1, "no second signal");
+}
+
+#[test]
+fn a_stop_request_wakes_a_claude_turn_blocked_waiting_for_events() {
+    let claude = ScriptedClaude::new(ClaudeMode::Hang);
+    let signals = claude.signal_log();
+    let ch = ClaudeChannel::connect_single_turn_with(claude, quick_timing(30_000, 5_000));
+    let control = TurnControl::default();
+    ch.wake_on_interrupt(&control);
+    let mut turn = ch.start_turn("long job").unwrap();
+    assert!(matches!(turn.next_event(), Some(TurnEvent::Output(_))));
+
+    let request = control.clone();
+    let requester = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        request.request_interrupt();
+    });
+    let started = std::time::Instant::now();
+    // Blocks inside the channel (no events arrive) until the Stop request wakes it.
+    assert_eq!(
+        turn.next_event(),
+        Some(TurnEvent::Done(DoneReason::Interrupted))
+    );
+    requester.join().unwrap();
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(10),
+        "Stop is observed promptly, not after the turn timeout"
+    );
+    assert_eq!(*signals.lock().unwrap(), vec!["TERM"]);
+}
+
+#[test]
+fn a_stop_requested_before_the_turn_waits_is_honoured_at_once() {
+    let claude = ScriptedClaude::new(ClaudeMode::Hang);
+    let signals = claude.signal_log();
+    let ch = ClaudeChannel::connect_single_turn_with(claude, quick_timing(30_000, 5_000));
+    let control = TurnControl::default();
+    control.request_interrupt();
+    ch.wake_on_interrupt(&control);
+    let mut turn = ch.start_turn("x").unwrap();
+    assert_eq!(turn.wait(), DoneReason::Interrupted);
+    assert_eq!(*signals.lock().unwrap(), vec!["TERM"]);
+}
+
+#[test]
+fn a_claude_process_that_ignores_sigterm_is_killed_after_the_grace_period() {
+    let claude = ScriptedClaude::new(ClaudeMode::HangIgnoringTerm);
+    let signals = claude.signal_log();
+    let ch = ClaudeChannel::connect_single_turn_with(claude, quick_timing(30_000, 100));
+    let mut turn = ch.start_turn("x").unwrap();
+    assert!(matches!(turn.next_event(), Some(TurnEvent::Output(_))));
+    let started = std::time::Instant::now();
+    assert!(turn.interrupt());
+    assert!(started.elapsed() >= std::time::Duration::from_millis(100));
+    assert_eq!(*signals.lock().unwrap(), vec!["TERM", "KILL"]);
+    assert_eq!(turn.wait(), DoneReason::Interrupted);
+}
+
+#[test]
+fn a_timed_out_claude_turn_stops_its_process_instead_of_abandoning_it() {
+    let claude = ScriptedClaude::new(ClaudeMode::Hang);
+    let signals = claude.signal_log();
+    let ch = ClaudeChannel::connect_single_turn_with(claude, quick_timing(150, 100));
+    let mut turn = ch.start_turn("x").unwrap();
+    assert_eq!(
+        turn.wait(),
+        DoneReason::failed(
+            1,
+            "Timed out waiting for Claude turn result; the Claude process was stopped"
+        )
+    );
+    assert_eq!(*signals.lock().unwrap(), vec!["TERM"]);
+}
+
+#[test]
+fn a_timed_out_turn_that_ignores_sigterm_is_killed() {
+    let claude = ScriptedClaude::new(ClaudeMode::HangIgnoringTerm);
+    let signals = claude.signal_log();
+    let ch = ClaudeChannel::connect_single_turn_with(claude, quick_timing(150, 100));
+    let mut turn = ch.start_turn("x").unwrap();
+    assert!(matches!(turn.wait(), DoneReason::Failed { .. }));
+    assert_eq!(*signals.lock().unwrap(), vec!["TERM", "KILL"]);
+}
+
+#[test]
+fn a_completed_claude_turn_sends_no_signal() {
+    let claude = ScriptedClaude::new(ClaudeMode::Success);
+    let signals = claude.signal_log();
+    let ch = ClaudeChannel::connect_single_turn(claude);
+    let mut turn = ch.start_turn("x").unwrap();
+    assert_eq!(turn.wait(), DoneReason::Completed);
+    assert!(!turn.interrupt());
+    assert!(signals.lock().unwrap().is_empty());
+}
+
+#[test]
+fn turn_control_wakers_run_on_request_and_immediately_when_already_requested() {
+    let control = TurnControl::default();
+    let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let early = hits.clone();
+    control.on_interrupt(move || {
+        early.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    });
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 0);
+    control.request_interrupt();
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+    let late = hits.clone();
+    control.on_interrupt(move || {
+        late.fetch_add(10, std::sync::atomic::Ordering::SeqCst);
+    });
+    assert_eq!(
+        hits.load(std::sync::atomic::Ordering::SeqCst),
+        11,
+        "a waker registered after the request runs at once"
+    );
+}
+
 #[test]
 fn claude_channel_drive_runs_a_turn_end_to_end() {
     let ch = ClaudeChannel::connect(ScriptedClaude::new(ClaudeMode::Success));
@@ -1200,6 +1360,95 @@ fn live(prompt: &str, cwd: &std::path::Path) -> LiveTrigger {
         permission_bridge: None,
         now_ms: 1_000,
     }
+}
+
+/// HS2-V0SWSM end to end over a real process: a stand-in `claude` (a shell script speaking
+/// the stream-json channel) works forever without a `result`; a Stop request through the
+/// live `run_trigger_controlled` wiring terminates it and the turn reports `Interrupted`.
+#[cfg(unix)]
+#[test]
+fn stop_ends_a_real_claude_channel_process_through_the_live_trigger() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let script = tmp.path().join("fake-claude.sh");
+    std::fs::write(
+        &script,
+        r#"#!/bin/sh
+echo '{"type":"system","subtype":"init","session_id":"sess-real"}'
+read line
+echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"working"}]}}'
+while :; do sleep 0.05; done
+"#,
+    )
+    .unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let plugin_dir = tmp.path().join("fakeclaude");
+    std::fs::create_dir_all(&plugin_dir).unwrap();
+    std::fs::write(
+        plugin_dir.join("manifest.toml"),
+        format!(
+            r#"id = "fakeclaude"
+display_name = "Fake Claude"
+product_name = "Fake Claude"
+tier = "cli-agent"
+[detection]
+binaries = ["sh"]
+[instructions]
+target = "CLAUDE.md"
+section = "instructions.md"
+[mcp]
+target = ".mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{{store}}"]
+[drive]
+transport = "claude-channel"
+program = "{}"
+content = "stdin"
+interrupt = true
+"#,
+            script.display()
+        ),
+    )
+    .unwrap();
+    std::fs::write(plugin_dir.join("instructions.md"), "## Hot Sheet\n").unwrap();
+    let plugin = hotsheet_plugins::Plugin::from_fs_dir(&plugin_dir).unwrap();
+
+    let control = crate::drive::TurnControl::default();
+    let mut reg = ConnectionRegistry::new(5_000);
+    let mut events = Vec::new();
+    let request = control.clone();
+    let requester = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        request.request_interrupt();
+    });
+    let started = std::time::Instant::now();
+    let done = crate::live::run_trigger_controlled(
+        &plugin,
+        &live("long job", tmp.path()),
+        &mut reg,
+        Some(&control),
+        &mut |event| events.push(event.clone()),
+    )
+    .unwrap();
+    requester.join().unwrap();
+
+    assert_eq!(done.reason, DoneReason::Interrupted);
+    assert_eq!(done.session_id.as_deref(), Some("sess-real"));
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(5),
+        "SIGTERM ended the process without waiting for the kill grace"
+    );
+    assert_eq!(
+        events,
+        vec![
+            TurnEvent::Output("working".into()),
+            TurnEvent::Done(DoneReason::Interrupted)
+        ]
+    );
+    assert!(!reg.is_busy("conn-1", 1_000));
 }
 
 #[test]

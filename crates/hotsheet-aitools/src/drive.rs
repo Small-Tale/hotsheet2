@@ -136,16 +136,41 @@ pub enum TurnEvent {
 
 /// Thread-safe external control for a running turn. The owning pump consumes the request
 /// and invokes the concrete handle, so protocol/process handles never cross threads.
+///
+/// A drive whose turn blocks between events (the Claude channel) registers a wake callback
+/// with [`on_interrupt`](Self::on_interrupt) so a Stop request reaches the owner thread
+/// immediately instead of after the next streamed event (HS2-V0SWSM). Callbacks only wake;
+/// the owning thread still does the work.
 #[derive(Clone, Default)]
-pub struct TurnControl(Arc<AtomicBool>);
+pub struct TurnControl(Arc<ControlState>);
+
+#[derive(Default)]
+struct ControlState {
+    requested: AtomicBool,
+    wakers: std::sync::Mutex<Vec<Box<dyn Fn() + Send + Sync>>>,
+}
 
 impl TurnControl {
     pub fn request_interrupt(&self) {
-        self.0.store(true, Ordering::SeqCst);
+        self.0.requested.store(true, Ordering::SeqCst);
+        let wakers = hotsheet_sync::LockExt::lock_or_recover(&self.0.wakers);
+        for wake in wakers.iter() {
+            wake();
+        }
     }
 
     pub fn interrupt_requested(&self) -> bool {
-        self.0.load(Ordering::SeqCst)
+        self.0.requested.load(Ordering::SeqCst)
+    }
+
+    /// Run `wake` whenever an interrupt is requested — immediately when one already was.
+    /// It must be cheap and non-blocking (it runs on the requesting thread).
+    pub fn on_interrupt(&self, wake: impl Fn() + Send + Sync + 'static) {
+        let mut wakers = hotsheet_sync::LockExt::lock_or_recover(&self.0.wakers);
+        if self.interrupt_requested() {
+            wake();
+        }
+        wakers.push(Box::new(wake));
     }
 }
 

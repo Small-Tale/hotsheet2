@@ -30,8 +30,8 @@ pub mod system;
 pub use acp::{AcpDrive, AcpSession, AcpStdio, usage as acp_usage, validate_opencode_transcript};
 pub use appserver::AppServerDrive;
 pub use claude::{
-    ClaudeChannel, ClaudeChannelDrive, ClaudeStreamSpawnOptions, ClaudeStreamTransport,
-    claude_result_usage,
+    ChannelTiming, ClaudeChannel, ClaudeChannelDrive, ClaudeStreamSpawnOptions,
+    ClaudeStreamTransport, claude_result_usage,
 };
 pub use codex::{
     CodexAppServer, CodexDaemonService, PermissionPolicy, ProxyTransport, StdioTransport,
@@ -57,8 +57,8 @@ pub use permission::{
     load_rules as load_permission_rules,
 };
 pub use ports::{
-    AcpClient, AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, ProcessSpawner,
-    RpcReader, RpcTransport, RpcWriter, SpawnSpec, SpawnedProcess,
+    AcpClient, AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, ProcessSignals,
+    ProcessSpawner, RpcReader, RpcTransport, RpcWriter, SpawnSpec, SpawnedProcess,
 };
 pub use registry::{Connection, ConnectionRegistry, Role};
 pub use safe_trigger::{

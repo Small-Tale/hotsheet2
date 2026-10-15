@@ -127,6 +127,10 @@ pub fn run_trigger_controlled(
             })?;
             // One process per turn: drain it to exit so nothing runs unobserved (HS2-M5GN19).
             let channel = ClaudeChannel::connect_single_turn(transport);
+            // Stop ends the process even while the turn waits for Claude (HS2-V0SWSM).
+            if let Some(control) = control {
+                channel.wake_on_interrupt(control);
+            }
             let ctx = DriveCtx {
                 cwd: t.cwd.clone(),
                 model: t.model.clone(),
@@ -588,6 +592,56 @@ mod pump_tests {
         requester.join().unwrap();
 
         assert_eq!(reason, DoneReason::Interrupted);
+        assert!(!reg.is_busy("c1", 1_001));
+    }
+
+    /// The live Claude wiring (HS2-V0SWSM): a Stop request while the per-turn process is
+    /// silent wakes the pump's blocked `next_event`, ends the process, and reports
+    /// `Interrupted` — the same composition `run_trigger_controlled` builds.
+    #[test]
+    fn controlled_claude_turn_stops_its_process_while_waiting_for_events() {
+        use crate::claude::scripted::{ClaudeMode, ScriptedClaude};
+        use crate::claude::{ChannelTiming, ClaudeChannel};
+        use crate::drive::ClaudeChannelClient;
+
+        let claude = ScriptedClaude::new(ClaudeMode::Hang);
+        let signals = claude.signal_log();
+        let channel = ClaudeChannel::connect_single_turn_with(
+            claude,
+            ChannelTiming {
+                turn_timeout: std::time::Duration::from_secs(30),
+                terminate_grace: std::time::Duration::from_secs(5),
+            },
+        );
+        let control = TurnControl::default();
+        channel.wake_on_interrupt(&control);
+        let mut turn = channel.start_turn("long job").unwrap();
+        let request = control.clone();
+        let requester = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            request.request_interrupt();
+        });
+        let mut reg = reg_with("c1");
+        let mut seen = Vec::new();
+        let reason = pump_turn(
+            turn.as_mut(),
+            "c1",
+            &mut reg,
+            &mut || 1_000,
+            Some(&control),
+            &mut |event| seen.push(event.clone()),
+        );
+        requester.join().unwrap();
+
+        assert_eq!(reason, DoneReason::Interrupted);
+        assert_eq!(*signals.lock().unwrap(), vec!["TERM"]);
+        assert_eq!(
+            seen,
+            vec![
+                TurnEvent::Output("working: long job".into()),
+                TurnEvent::Done(DoneReason::Interrupted)
+            ]
+        );
         assert!(!reg.is_busy("c1", 1_001));
     }
 }
