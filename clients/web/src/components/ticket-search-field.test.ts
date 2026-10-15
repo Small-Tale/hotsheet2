@@ -104,7 +104,15 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(help).toContain('<strong>Content</strong>');
     expect(help).toContain('<strong>Workflow</strong>');
     expect(help).toContain('<strong>Dates</strong>');
-    expect(help).toContain('<code>is:duplicate</code>');
+    // Every example is an activatable Kerf action Chip carrying its token (HS2-FR1Y70).
+    expect(help).toMatch(
+      new RegExp(
+        `<button[^>]*data-action="${TICKET_SEARCH_ACTIONS.insertSyntax.value}"[^>]*data-item-id="is:duplicate"`,
+      ),
+    );
+    expect(help).toContain('aria-label="Add is:duplicate to the search"');
+    expect(help.match(/data-item-id="/g)).toHaveLength(22);
+    expect(help).toContain('data-item-id="(client OR server) AND NOT is:archived"');
     expect(help).toContain('<strong>Combine filters</strong>');
     expect(help).toContain('updated-after:2026-09-01T11:05');
     expect(help).toContain('local, relative, and ISO 8601 dates work');

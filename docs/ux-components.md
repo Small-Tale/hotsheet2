@@ -1043,7 +1043,9 @@ date (and time) format (`created after 9/1/26, 11:05 AM`) while relative, zoned,
 locale-typed values keep the text as written (HS2-074E0P). Kerf (5.0.0-beta.64, `KF-Q2G9QS`)
 restores the caret itself after a model-mode Backspace/Delete beside a chip and after a model
 field's clear, so the app no longer snapshots chip offsets or refocuses a cleared field
-(HS2-45F8WW). The date helper and syntax help are Kerf `openAnchoredSurface` surfaces
+(HS2-45F8WW). Syntax-help examples are Kerf action Chips (`insert-ticket-search-syntax`, the
+example in `data-item-id`); the shared `insertSearchSyntax` helper appends and commits it through
+the field's model in the app and the UX demo alike (HS2-FR1Y70). The date helper and syntax help are Kerf `openAnchoredSurface` surfaces
 (HS2-8TE69P): the field renders only a hidden `data-ticket-search-surface-state` marker (active
 date prefix, help open), and `wireTicketSearchFields` keeps one surface per field and kind in sync
 with it through a `MutationObserver` on its root. The surfaces anchor to the field's group (end

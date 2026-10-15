@@ -21,7 +21,7 @@ import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { saveLastTicketCategory } from '../ticket-category-preference';
 import { type TicketHistory } from '../ticket-operations';
 import { deleteDraftFiles } from '../workspace-session';
-import { wireTicketSearchFields } from './ticket-search-field';
+import { insertSearchSyntax, wireTicketSearchFields } from './ticket-search-field';
 import { type PendingEvidence, type Project } from './types';
 
 /** Live application bindings used by this handler group. */
@@ -134,6 +134,16 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
       applyDate: (id, _prefix, value) => {
         modelFor(id)?.commit(value);
         focusField(id);
+      },
+      insertSyntax: (id, token) => {
+        const model = modelFor(id);
+        if (!model) return;
+        insertSearchSyntax(model, token);
+        if (id === 'workspace-search') searchHelpOpen.value = false;
+        else if (id === 'saved-view-query') savedViewHelpOpen.value = false;
+        requestAnimationFrame(() => {
+          focusField(id);
+        });
       },
       toggleHelp: (id) => {
         if (id === 'workspace-search') searchHelpOpen.value = !searchHelpOpen.value;

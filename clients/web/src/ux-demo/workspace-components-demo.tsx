@@ -49,7 +49,7 @@ import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { orderedSearchText } from '../inline-search';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
-import { wireTicketSearchFields } from '../interactions/ticket-search-field';
+import { insertSearchSyntax, wireTicketSearchFields } from '../interactions/ticket-search-field';
 import { type PermissionDecision, PermissionInbox, type PermissionScope } from '../permission-notifications';
 import { keepSearchOpenForShadowTarget } from '../search-collapse';
 import { createTicketSearchModel, inlineSearchTokens } from '../ticket-search-model';
@@ -749,6 +749,17 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
       toggleHelp: (id) => {
         if (id === 'workspace-search') workspaceSearchHelpOpen.value = !workspaceSearchHelpOpen.value;
         else toggleDemoHelp(id);
+      },
+      // The same insertion as the app; the chosen chip closes its open help (HS2-FR1Y70).
+      insertSyntax: (id, token) => {
+        const model = demoSearchModel(id);
+        if (model) insertSearchSyntax(model, token);
+        if (id === 'workspace-search') {
+          workspaceSearchHelpOpen.value = false;
+          queueMicrotask(() => {
+            focusWorkspaceSearch(root);
+          });
+        } else toggleDemoHelp(id);
       },
       clear: (id) => {
         if (id === 'workspace-search') {

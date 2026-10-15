@@ -4130,7 +4130,9 @@ test('organizes search syntax help in the WorkspaceHeader demo', async ({ page }
   await help.evaluate((node) => {
     node.scrollTop = node.scrollHeight;
   });
-  await expect.poll(() => help.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+  // The compact example chips (HS2-FR1Y70) may fit without scrolling; only an overflowing panel scrolls.
+  if (await help.evaluate((node) => node.scrollHeight > node.clientHeight + 1))
+    await expect.poll(() => help.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
   // Kerf repositions the anchored surface on the frame after a resize or scroll, so poll for the settled box.
   await expect
     .poll(() =>

@@ -1,5 +1,6 @@
 import { openAnchoredSurface } from '@kerfjs/ui/anchored-surface';
 import { placeTokenSearchCaret } from '@kerfjs/ui/token-search-field';
+import { type TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { delegate } from 'kerfjs';
 import { type OverlayHandle } from 'kerfjs/overlay';
 import { createScope } from 'kerfjs/scope';
@@ -30,12 +31,27 @@ export interface TicketSearchFieldHandlers {
    */
   readonly applyDate: (id: string, prefix: SearchDatePrefix, value: string) => void;
   readonly toggleHelp: (id: string) => void;
+  /**
+   * A syntax-help example chip was chosen: add `token` to the field's search, keep its other
+   * tokens, close the help, and return focus to the field (HS2-FR1Y70).
+   */
+  readonly insertSyntax: (id: string, token: string) => void;
   /** Kerf's managed clear emptied the model; close the app's helper surfaces and restore focus. */
   readonly clear: (id: string) => void;
   /** A chip's remove button was pressed (Kerf removes it); restore the caret where the chip sat. */
   readonly removeToken: (id: string, raw: string) => void;
   /** A chip's edit button was pressed (Kerf expands it to text); place the caret after that text. */
   readonly editToken: (id: string, raw: string) => void;
+}
+
+/**
+ * Add a syntax-help example to a field's search (HS2-FR1Y70): append it as typed text and let the
+ * model commit it, so a filter becomes a chip beside the existing ones, plain words stay words,
+ * and existing tokens (anchored at earlier offsets) are kept.
+ */
+export function insertSearchSyntax(model: Pick<TokenSearchModel, 'state' | 'edit'>, token: string) {
+  const { query, tokens } = model.state.value;
+  model.edit({ query: `${query.trimEnd()}${query.trim() ? ' ' : ''}${token} `, tokens }, true);
 }
 
 /** The element whose descendants belong to one field: its group or form-field wrapper. */
@@ -119,6 +135,12 @@ function wireTicketSearchSurfaces(root: HTMLElement, handlers: TicketSearchField
         },
       });
     handle.el.setAttribute('data-token-search-keep-open', '');
+    // Example chips are native buttons, so a click covers pointer, Enter, and Space (HS2-FR1Y70).
+    handle.el.addEventListener('click', (event) => {
+      const chip = (event.target as Element).closest<HTMLElement>(TICKET_SEARCH_ACTIONS.insertSyntax.selector);
+      const token = chip?.dataset.itemId;
+      if (token) handlers.insertSyntax(id, token);
+    });
     return handle;
   };
   const sync = () => {

@@ -1,6 +1,7 @@
 import './ticket-search-field.css';
 import '@kerfjs/ui/token-search-field.css';
 
+import { Chip } from '@kerfjs/ui/chip';
 import { flex, rem } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -28,6 +29,8 @@ export const TICKET_SEARCH_ACTIONS = {
   clear: action('clear-ticket-search'),
   toggleHelp: action('toggle-ticket-search-help'),
   applyDate: action('apply-ticket-search-date'),
+  /** A syntax-help example chip: add its token to the field's search (HS2-FR1Y70). */
+  insertSyntax: action('insert-ticket-search-syntax'),
 } as const;
 
 // Kerf keeps a collapsible field visually open while its model has content. A disabled
@@ -90,7 +93,7 @@ export function ticketSearchFieldId(target: Element): string | undefined {
   );
 }
 
-/** The syntax examples, grouped; each example renders as a code chip (HS2-65XJ6C). */
+/** The syntax examples, grouped; each example renders as an insertable chip (HS2-65XJ6C, HS2-FR1Y70). */
 const SEARCH_SYNTAX_GROUPS: readonly { label: string; examples: readonly string[] }[] = [
   { label: 'Tags', examples: ['tag:client', 'tag:"needs design"'] },
   { label: 'Content', examples: ['has:attachment', 'has:media-annotation', 'has:commit', 'attachment:*.png'] },
@@ -120,6 +123,26 @@ const SEARCH_SYNTAX_GROUPS: readonly { label: string; examples: readonly string[
     ],
   },
 ];
+
+/**
+ * One activatable syntax example: Kerf's action Chip (a native button, so Enter and Space work)
+ * carrying the example as its item id; choosing it adds the example to the search (HS2-FR1Y70).
+ */
+function SyntaxChip({ example }: { example: string }) {
+  return (
+    <Chip
+      action={TICKET_SEARCH_ACTIONS.insertSyntax.attrs['data-action']}
+      actionLabel={`Add ${example} to the search`}
+      itemId={example}
+      size="compact"
+      // Its label reads like the token chip it inserts, and truncates rather than overflowing a
+      // phone-width popover; the action label keeps the whole example.
+      truncate
+    >
+      {example}
+    </Chip>
+  );
+}
 
 /**
  * The syntax-help content. Kerf `openAnchoredSurface` hosts it (the non-modal `Search syntax`
@@ -152,7 +175,7 @@ export function TicketSearchHelp({ id }: { id: string }) {
               </Row>
               <Row gap="2xs" wrap flex={flex(1, 1, rem(12.5))}>
                 {group.examples.map((example) => (
-                  <code>{example}</code>
+                  <SyntaxChip example={example} />
                 ))}
               </Row>
             </Row>
@@ -164,7 +187,7 @@ export function TicketSearchHelp({ id }: { id: string }) {
             and parentheses.
           </Text>
           <Row>
-            <code>(client OR server) AND NOT is:archived</code>
+            <SyntaxChip example="(client OR server) AND NOT is:archived" />
           </Row>
           <Text tone="quiet" size="compact" flush>
             NOT binds before AND, and AND before OR.

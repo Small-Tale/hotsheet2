@@ -22046,6 +22046,68 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
   await page.screenshot({ path: 'target/visual-captures/hs2-pv2ag1-production-date-phone.png', fullPage: true });
 });
 
+for (const width of [1280, 390])
+  test(`inserts a search syntax example from the help as a filter chip at ${width}px (HS2-FR1Y70)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const requests: URL[] = [];
+    await mockProject(page);
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (request.method() === 'GET' && /\/checkouts\/demo-checkout\/tickets$/.test(url.pathname)) requests.push(url);
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Search tickets' }).first().click();
+    const query = page.getByRole('searchbox', { name: 'Search tickets' });
+    await query.fill('tag:client ');
+    const field = page.locator('.ticket-search-field').filter({ has: query });
+    const chips = field.locator('[data-component="token-search-token"]');
+    await expect(chips).toHaveCount(1);
+    await field.getByRole('button', { name: 'Search Syntax Help' }).click();
+    const help = page.getByRole('dialog', { name: 'Search syntax' });
+    await expect(help).toBeVisible();
+    // Every example is an activatable chip, including the combined-filter example.
+    await expect(help.getByRole('button', { name: /^Add .+ to the search$/ })).toHaveCount(22);
+    await page.screenshot({ path: `target/visual-captures/hs2-fr1y70-syntax-help-${width}.png` });
+    expect(
+      await help.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return box.left >= 0 && box.right <= innerWidth && node.scrollWidth <= node.clientWidth + 1;
+      }),
+    ).toBe(true);
+    requests.length = 0;
+    await help.getByRole('button', { name: 'Add is:up-next to the search' }).click();
+    // The example becomes a chip beside the existing one, the help closes, and focus is back in the field.
+    await expect(help).toBeHidden();
+    await expect(chips).toHaveCount(2);
+    await expect(chips.nth(0)).toHaveAttribute('data-token-value', 'tag:client');
+    await expect(chips.nth(1)).toHaveAttribute('data-token-value', 'is:up-next');
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.closest('.ticket-search-field') !== null))
+      .toBe(true);
+    await expect(page.getByText('Searching tickets')).toHaveCount(0);
+    await page.screenshot({ path: `target/visual-captures/hs2-fr1y70-after-insert-${width}.png` });
+    // Keyboard: Enter on a focused example chip inserts it too.
+    await field.getByRole('button', { name: 'Search Syntax Help' }).click();
+    await expect(help).toBeVisible();
+    await help.getByRole('button', { name: 'Add has:attachment to the search' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(help).toBeHidden();
+    await expect(chips).toHaveCount(3);
+    await expect(chips.nth(2)).toHaveAttribute('data-token-value', 'has:attachment');
+    // The list re-queries with the inserted server-side filter beside the earlier ones.
+    await expect
+      .poll(() =>
+        requests.some(
+          (url) => url.searchParams.get('has_attachment') === 'true' && url.searchParams.get('tags') === 'client',
+        ),
+      )
+      .toBe(true);
+  });
+
 test('distinguishes pending and empty ticket search feedback in list and board views', async ({ page }) => {
   await mockProject(page);
   // Hold searches until the pending feedback has been asserted (HS2-ZZX0CV).

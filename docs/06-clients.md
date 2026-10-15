@@ -2516,7 +2516,13 @@ rail, the workspace header, and the saved-view dialog's query field (as the form
 variant `TicketSearchFormField`, aligned with the View name input, HS2-E40KC0) all render the one
 shared `TicketSearchField` module over a Kerf-managed `TokenSearchModel` (HS2-5JXBQY), so
 tag completion (Kerf's anchored suggestion popover), the date helper, and syntax help are
-available wherever tickets are searched (HS2-N5G6JS). A
+available wherever tickets are searched (HS2-N5G6JS). Every syntax-help example, including the
+combined-filter example, is an activatable Kerf action `Chip` (a native button, so pointer,
+Enter, and Space all work). Choosing one appends that example to the field's search and lets the
+model commit it, so a filter becomes a chip beside the existing tokens. The help then closes and
+focus returns to the field (HS2-FR1Y70). The labels read like the token chips they insert and
+truncate rather than overflow at phone width; each chip's accessible name carries the whole
+example ("Add is:up-next to the search"). A
 well-formed structured value becomes a chip only after an explicit impossible continuation
 such as trailing whitespace or Enter; incidental focus loss never commits a partial value.
 Whitespace used only to commit a trailing chip is consumed with the token, so the caret is
