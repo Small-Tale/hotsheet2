@@ -75,6 +75,7 @@ import {
 } from '../components/workspace-header';
 import { withControlledOpen } from '../controlled-open';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
+import { flushDraftInputs } from '../draft-input-coalescing';
 import { createAiConfigurationController } from '../features/ai-configuration';
 import { createBoardColumnPaging } from '../features/board-column-paging';
 import { createClaimClockController } from '../features/claim-clock';
@@ -2330,6 +2331,8 @@ export async function startHotSheetWebClient() {
     error.value = '';
   }
   function reconcileRefreshedSelected(previous: FullTicket, refreshed: FullTicket) {
+    // A merge must see the text the user typed, not a draft still waiting for a typing pause (HS2-EQTXTJ).
+    flushDraftInputs();
     let conflict: TicketFieldConflict | undefined, settledConflictKey: string | undefined;
     if (detailsMode.value === 'write' && !detailsAutosave.pending()) {
       const next = reconcileActiveDraft(detailsDraftBase, detailsDraft.value, refreshed.details);

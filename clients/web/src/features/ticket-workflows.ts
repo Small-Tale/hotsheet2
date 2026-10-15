@@ -32,6 +32,7 @@ import type { TicketLinkChoice } from '../components/ticket-link-choice-dialog';
 import { isPlainTicketReselection, updateTicketSelection } from '../components/ticket-selection';
 import { copyWithSelection } from '../copy-text';
 import { createDebouncedAutosave, createFocusLossAutosave, type DebouncedAutosave } from '../debounced-autosave';
+import { flushDraftInputs } from '../draft-input-coalescing';
 import { presentedNoteKind } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { syncFocusedDraftControl } from '../focused-draft-sync';
@@ -1683,6 +1684,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       : visibleTickets().map((ticket) => ticket.slug);
   }
   function presentTicket(ticket: FullTicket) {
+    flushDraftInputs();
     const changed = selectedTicket.value?.id !== ticket.id,
       current = project(),
       backlinkKey = current ? `${current.id}:${ticket.qualified_id}` : '';
@@ -1761,6 +1763,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   }
   /** Send every unsaved text edit now (page hide, explicit save); each keeps its local copy until it commits. */
   function flushTicketDrafts(): Promise<boolean> {
+    flushDraftInputs();
     return Promise.all([
       detailsAutosave.flush(),
       readerDetailsAutosave.flush(),

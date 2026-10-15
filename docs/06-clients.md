@@ -594,6 +594,11 @@ preview/download, server directory browser) are separate design work.
   that begins mid-refresh drops that refresh's results. A read that raced a save therefore
   never lands afterward carrying the user's own older text, which would otherwise look like
   a remote edit and raise a spurious merge prompt (HS2-RE1PS6).
+  The focused textarea is the live draft: workspace and reader editors publish keystrokes into
+  their draft signals at typing pauses (150 ms) instead of re-rendering the workspace on every
+  key, and every finish, save, submit, editor switch, refresh merge, ticket switch, and page hide
+  flushes pending drafts first; the title's auto-height mirror still updates per keystroke
+  (HS2-EQTXTJ; linked reader frames follow in HS2-WV0VPE).
   Text fields (details, title, blocked reason, notes, in the inspector, the reader, and
   linked readers) never write to the server while the user is typing. Keystrokes update the
   controlled draft and, after a 150 ms debounce, a local recovery copy in `localStorage`

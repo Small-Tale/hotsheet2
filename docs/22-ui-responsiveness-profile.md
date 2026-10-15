@@ -278,6 +278,25 @@ viewports, and conversation presentation stay on the main thread. The
 existing warm-project cache prevents a broad worker-owned ticket-store
 rewrite from being necessary for the first stage.
 
+## Typing latency in text editors (HS2-EQTXTJ)
+
+`HOTSHEET_TYPING_PROFILE=1 npx playwright test tests/typing-latency-profile.spec.ts` opens a real
+server with 400 tickets and types 43 characters at 60 ms intervals into the search field, title,
+details editor, and new-note composer, recording Chromium Event Timing (`keydown`/`input` duration
+to next paint). Each draft keystroke used to write a draft signal that re-rendered the whole
+workspace; the editors now publish drafts at typing pauses. Same machine and load, before and after:
+
+| Editor   | Keystrokes over 16 ms | `input` handlers (avg)                    |
+| -------- | --------------------- | ----------------------------------------- |
+| Title    | 43/43 to 3/43         | 11.2 ms to 0.2 ms                         |
+| Details  | 43/43 to 2/43         | 10.7 ms to 0.1 ms                         |
+| New note | 43/43 to 0/43         | 14.1 ms to 0 ms                           |
+| Search   | 43/43 to 43/43        | 5.8 ms (unchanged; tracked in HS2-X72PD6) |
+
+Headless Chromium on a fast machine understates Safari and large live projects, where the same
+per-keystroke render scaled into the 50–100 ms the report describes. Run the profile on a quiet
+machine; concurrent builds shift the paint component by several milliseconds.
+
 ## Rollout criteria
 
 First reduce the measured ticket and terminal rendering cost and capture

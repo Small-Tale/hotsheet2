@@ -25,6 +25,7 @@ import { type WorkspaceViewMode } from '../components/workspace-header';
 import { maintainContextPopupMenuAnchor } from '../context-menu-position';
 import { copyText } from '../copy-text';
 import { createCoalescedInput, createKeyedCoalescedInput, type DebouncedAutosave } from '../debounced-autosave';
+import { coalescedDraft, flushDraftInputs } from '../draft-input-coalescing';
 import { parseFeedbackChoices, updateFeedbackChoiceDocumentSelection } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
 import { beginFeedbackPromptEdit, endFeedbackPromptEdit, isFeedbackPromptEdit } from '../feedback-prompt-edits';
@@ -311,7 +312,28 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       },
     ),
   );
+  // Keystrokes reach the draft signals through typing-pause coalescers (HS2-EQTXTJ).
+  const titleDraftInput = coalescedDraft<string>((value) => {
+      titleDraft.value = value;
+    }),
+    detailsDraftInput = coalescedDraft<{ reader: boolean; value: string }>(({ reader, value }) => {
+      (reader ? readerDetailsDraft : detailsDraft).value = value;
+    }),
+    noteDraftInput = coalescedDraft<{ reader: boolean; value: string }>(({ reader, value }) => {
+      (reader ? readerNoteDraft : noteDraft).value = value;
+    }),
+    newNoteDraftInput = coalescedDraft<string>((value) => {
+      newNoteDraft.value = value;
+      scheduleProjectSessionPersistence();
+    }),
+    blockedReasonDraftInput = coalescedDraft<{ reader: boolean; value: string }>(({ reader, value }) => {
+      (reader ? readerBlockedReasonDraft : blockedReasonDraft).value = value;
+    });
+  lifetime.add(() => {
+    flushDraftInputs();
+  });
   function updateConflictDraft(field: string, value: string, base = value) {
+    flushDraftInputs();
     if (field === 'details' && readerOpen.value) {
       readerDetailsDraft.value = value;
       dependencies.readerDetailsDraftBase = base;
@@ -407,12 +429,19 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   }
   lifetime.add(
     wireTicketTitleEditor(document.body, {
-      begin: beginTitleEdit,
-      input: (value) => {
-        titleDraft.value = value;
-        if (titleDraft.value.trim()) titleAutosave.schedule(titleDraft.value);
+      begin: (target) => {
+        flushDraftInputs();
+        beginTitleEdit(target);
+      },
+      input: (value, field) => {
+        // The wrapping title grows from its frame's mirror text; keep that immediate while the
+        // draft signal waits for the typing pause (HS2-EQTXTJ, HS2-98ZVPE).
+        field.closest<HTMLElement>('[data-title-mirror]')?.setAttribute('data-title-mirror', value);
+        titleDraftInput.schedule(value);
+        if (value.trim()) titleAutosave.schedule(value);
       },
       finish: () => {
+        flushDraftInputs();
         if (!titleDraft.value.trim()) return;
         void titleAutosave.flush().then((saved) => {
           if (saved) titleEditingSurface.value = undefined;
@@ -504,6 +533,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   lifetime.add(
     wireMarkdownDetailsEditor(document.body, {
       begin: (target) => {
+        flushDraftInputs();
         beginDetailsEdit(isReaderSurface(target), linkedReaderFrame(target));
       },
       input: (field) => {
@@ -518,12 +548,12 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
           return;
         }
         const reader = isReaderSurface(field),
-          draft = reader ? readerDetailsDraft : detailsDraft,
           autosave = reader ? readerDetailsAutosave : detailsAutosave;
-        draft.value = value;
-        autosave.schedule(draft.value);
+        detailsDraftInput.schedule({ reader, value });
+        autosave.schedule(value);
       },
       focusLeave: (field, next, insideEditor) => {
+        flushDraftInputs();
         const frame = linkedReaderFrame(field);
         if (frame) {
           void linkedReaderSaves(frame.id)
@@ -600,15 +630,16 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         queueMicrotask(() => activeTicketSurface().querySelector<HTMLElement>('[name="new-note-body"]')?.focus());
       },
       setDraft: (value) => {
-        newNoteDraft.value = value;
-        scheduleProjectSessionPersistence();
+        newNoteDraftInput.schedule(value);
       },
       cancel: () => {
+        flushDraftInputs();
         composingNote.value = false;
         newNoteDraft.value = '';
         scheduleProjectSessionPersistence();
       },
       submit: () => {
+        flushDraftInputs();
         const text = newNoteDraft.value.trim();
         if (!text || !canAddNotes()) return;
         void updateSelected({ note: text, note_kind: 'regular' }).then((saved) => {
@@ -781,9 +812,11 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   lifetime.add(
     wireNoteEditor(document.body, {
       begin: (noteId, target) => {
+        flushDraftInputs();
         beginNoteEdit(noteId, isReaderSurface(target), linkedReaderFrame(target));
       },
       beginPrompt: (noteId, target) => {
+        flushDraftInputs();
         beginNoteEdit(noteId, isReaderSurface(target), linkedReaderFrame(target), true);
       },
       input: (field, id, response) => {
@@ -800,18 +833,18 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         }
         const reader = isReaderSurface(field),
           editing = reader ? readerEditingNoteId : editingNoteId,
-          draft = reader ? readerNoteDraft : noteDraft,
           autosave = reader ? readerNoteAutosave : noteAutosave;
-        editing.value = id;
-        draft.value = value;
+        if (editing.value !== id) editing.value = id;
+        noteDraftInput.schedule({ reader, value });
         const prompt =
           selectedTicket.value?.notes.find((item) => item.id === editing.value)?.kind === 'feedback_needed';
         // A prompt autosaves only while it is explicitly open for editing (HS2-ZXGEFE).
         if (!response && (!prompt || isFeedbackPromptEdit(id)) && editing.value)
-          autosave.schedule({ id: editing.value, value: draft.value });
+          autosave.schedule({ id: editing.value, value });
         else scheduleProjectSessionPersistence();
       },
       finish: (field) => {
+        flushDraftInputs();
         const frame = linkedReaderFrame(field);
         if (frame) {
           void linkedReaderSaves(frame.id)
@@ -839,6 +872,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         });
       },
       save: (target) => {
+        flushDraftInputs();
         inlineFeedbackReplyInput.flush();
         const frame = linkedReaderFrame(target);
         if (frame) {
@@ -958,6 +992,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   lifetime.add(
     wireBlockedReasonEditor(document.body, {
       begin: (target, trigger) => {
+        flushDraftInputs();
         // The keyboard path has always opened the inline editor even inside a linked reader frame.
         beginBlockedReasonEdit(isReaderSurface(target), trigger === 'key' ? undefined : linkedReaderFrame(target));
       },
@@ -972,12 +1007,12 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
           return;
         }
         const reader = isReaderSurface(target),
-          draft = reader ? readerBlockedReasonDraft : blockedReasonDraft,
           autosave = reader ? readerBlockedReasonAutosave : blockedReasonAutosave;
-        draft.value = value;
-        autosave.schedule(draft.value);
+        blockedReasonDraftInput.schedule({ reader, value });
+        autosave.schedule(value);
       },
       finish: (target) => {
+        flushDraftInputs();
         const frame = linkedReaderFrame(target);
         if (frame) {
           void linkedReaderSaves(frame.id)
