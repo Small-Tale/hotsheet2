@@ -47,6 +47,24 @@ export function keptEffort(levels: readonly string[] | undefined, previous: stri
   return levels?.length ? compatibleAiEffort(levels, previous) : undefined;
 }
 
+/**
+ * The machine server's `/connections` lists every connection on the machine. A project keeps
+ * only the ones registered to its checkout root or to one of its ticket stores (terminal hooks
+ * register under the store root); anything else belongs to another project and must never
+ * surface in this project's drawer, sidebar drive state, or close dialog (HS2-6GHSCY,
+ * HS2-5AGPWE).
+ */
+export function projectConnections<T extends Pick<ToolConnection, 'project'>>(
+  connections: readonly T[],
+  project: { root: string; stores: readonly string[] },
+): T[] {
+  return connections.filter(
+    (connection) =>
+      connection.project.length > 0 &&
+      (connection.project === project.root || project.stores.includes(connection.project)),
+  );
+}
+
 export function sidebarDriveConnectionId(checkout: string, tool: ProjectDriveTool): string {
   return `${SIDEBAR_DRIVE_CONNECTION_ID}-${tool}-${checkout}`;
 }

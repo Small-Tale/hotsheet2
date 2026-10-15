@@ -6,6 +6,7 @@ import {
   keptEffort,
   prepareProjectConversation,
   projectChatConnectionId,
+  projectConnections,
   projectDriveConnection,
   projectDriveControlState,
   recoverProjectConnections,
@@ -127,6 +128,20 @@ describe('production project drive control', () => {
       },
       { id: `ai-chat:${saved.id}`, connectionId: saved.id, tool: 'codex', name: 'CODEX saved chat', readOnly: false },
     ]);
+  });
+  it('keeps only the connections registered to the project root or one of its stores (HS2-6GHSCY, HS2-5AGPWE)', () => {
+    const own = connection({ id: 'hotsheet-drawer-chat-own', project: '/work/demo' }),
+      viaStore = connection({ id: 'hotsheet-saved-chat-store', project: '/work/demo.hs2' }),
+      foreign = connection({ id: 'hotsheet-drawer-chat-foreign', project: '/work/other' }),
+      foreignSaved = connection({ id: 'hotsheet-saved-chat-foreign', project: '/work/other.hs2' }),
+      unscoped = connection({ id: 'hotsheet-drawer-chat-legacy', project: '' });
+    expect(
+      projectConnections([foreign, own, foreignSaved, viaStore, unscoped], {
+        root: '/work/demo',
+        stores: ['/work/demo.hs2'],
+      }),
+    ).toEqual([own, viaStore]);
+    expect(projectConnections([foreign], { root: '/work/demo', stores: [] })).toEqual([]);
   });
   it('does not project modal project chats, terminal connections, or unrelated driven work', () => {
     const local = {

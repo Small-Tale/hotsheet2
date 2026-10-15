@@ -22,6 +22,7 @@ import {
   type DrawerAIChat,
   prepareProjectConversation,
   projectChatConnectionId,
+  projectConnections,
   recoverProjectConnections,
   restoreDrawerAIChats,
   runProjectDrive,
@@ -109,8 +110,9 @@ export function createDriveConversationsController(dependencies: DriveConversati
         pendingAtRequest = new Set(pendingConversationStarts),
         client = new Api(current.apiPath, '', { trackBusy: !quiet }),
         [active, sessions] = await Promise.all([client.activeToolConnections(), client.toolSessions().catch(() => [])]),
-        activeIds = new Set(active.map((connection) => connection.id)),
-        connections = await recoverProjectConnections(client, active, sessions, current.id, current.root);
+        own = projectConnections(active, current),
+        activeIds = new Set(own.map((connection) => connection.id)),
+        connections = await recoverProjectConnections(client, own, sessions, current.id, current.root);
       if (startGeneration === conversationStartGeneration && projects.value.some((item) => item.id === current.id)) {
         for (const connection of connections)
           if (

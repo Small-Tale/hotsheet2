@@ -2258,7 +2258,11 @@ inset and 8px viewport gutter while preserving all preview/control geometry (HS2
 **Keep Running** removes only the local project tab. Reopening the project reconciles
 eligible drawer Chat, Drive, and resumed-saved-chat connection ids from the server into
 their original AI-chat tabs, including provider, model, effort, busy, action, and session
-state (HS2-D34C2V). Transcript state already received in the same app window remains keyed
+state (HS2-D34C2V). The machine server's connection list spans every checkout on the machine, so
+a project keeps only the connections registered to its own checkout root or to one of its
+ticket stores; another project's drawer chats, saved chats, and running sessions never appear
+in its drawer, sidebar drive state, or close dialog (HS2-6GHSCY, HS2-5AGPWE). Transcript state
+already received in the same app window remains keyed
 to that connection and returns with the tab; after an app or server restart, validated
 device-local transcript state is paired with the latest durable provider session and returns
 with the reconstructed tab (HS2-YHQCS2). **Stop & Close** explicitly deletes

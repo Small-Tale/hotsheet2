@@ -167,6 +167,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ux-demo/terminal-demo.ts # Deterministic ANSI-backed real-xterm fixtures for terminal component demos
     src/project-ticket-refresh.ts # Independent healthy/corrupt ticket loading so either result remains usable when the other request fails
     tests/project-sidebar-state.spec.ts # Atomic new-project activation, project-keyed sidebar count/trend isolation, and stale background-snapshot rejection
+    tests/project-chat-scope.spec.ts # AI chat tabs and close-dialog chats stay scoped to the project whose root or store registered the connection (HS2-6GHSCY, HS2-5AGPWE)
     src/project-change-poll.ts # Replay-safe per-open-project change transport (WebSocket-first, long-poll fallback, `resume`) plus the main-thread consumer it feeds (HS2-SH9179); ticket invalidation, overflow/reconnect recovery, onResync hook (initial/reconnect/overflow) that replaces permission polling (HS2-NKCXW4), and abortable lifecycle
     src/change-stream-worker-protocol.ts # Versioned main<->worker change-stream messages (generation tokens, acks), their validators, and the bounded coalescing per-project delivery queue (HS2-SH9179)
     src/change-stream-worker-runtime.ts # Worker-side runtime: one transport per open project, worker poll client, open/close/ack handling (HS2-SH9179)
