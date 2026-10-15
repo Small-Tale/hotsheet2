@@ -1,0 +1,8 @@
+/* Repository size (HS2-QF44T7). Kerf List, ListHeader, ValueTable, Badge, StateBanner, and Text own
+   every stack, heading, row, and tone; this rule only gives the section the same readable width as
+   the confidence calibration panel beside it. */
+.repository-size {
+  width: 100%;
+  max-width: remify(960px);
+  min-width: 0;
+}

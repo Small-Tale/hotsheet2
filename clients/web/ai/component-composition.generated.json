@@ -4005,6 +4005,74 @@
       }
     },
     {
+      "key": "hotsheet-web:repository-size",
+      "package": "hotsheet-web",
+      "id": "repository-size",
+      "name": "RepositorySize",
+      "kind": "component",
+      "purpose": "A project's repository size: git object and ticket-attachment sizes for the code repository and each ticket store against GitHub's size limits.",
+      "publicExports": [
+        {
+          "name": "RepositorySize"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/repository-size.tsx"
+      ],
+      "source": "src/components/repository-size.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "repository-size"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "repository-size"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/repository-size.tsx",
+        "composition": "src/components/repository-size.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:repository-status-popover",
       "package": "hotsheet-web",
       "id": "repository-status-popover",

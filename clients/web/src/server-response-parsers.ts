@@ -26,6 +26,8 @@ import type {
   QueuedProviderResult,
   RepositoryFile,
   RepositoryPage,
+  RepositorySizeEntry,
+  RepositorySizeReport,
   RepositoryStatus,
   SourceDetach,
   TerminalInfo,
@@ -361,6 +363,27 @@ export const parseCalibrationReport = shape<CalibrationReport>('confidence repor
   scored: isNumber,
   bands: listOf(isObject),
   events: listOf(isObject),
+});
+
+const isSizeLevel: Check = (field) => field === 'ok' || field === 'warning' || field === 'critical';
+const repositorySizeEntry = shape<RepositorySizeEntry>(
+  'repository size entry',
+  { kind: isString, label: isString, locator: isString, status: isString, level: isSizeLevel },
+  {
+    connection_id: isString,
+    provider: isString,
+    git: shape('git object size', { total_bytes: isNumber, packed_bytes: isNumber, loose_bytes: isNumber }).check,
+    attachments: shape('attachment size', { bytes: isNumber, files: isNumber, truncated: isBoolean }).check,
+    shared_with_code: isBoolean,
+    detail: isString,
+  },
+);
+/** `GET /checkouts/{id}/repository/size` (HS2-QF44T7). */
+export const parseRepositorySizeReport = shape<RepositorySizeReport>('repository size', {
+  checkout_id: isString,
+  thresholds: shape('size thresholds', { warning_bytes: isNumber, critical_bytes: isNumber }).check,
+  level: isSizeLevel,
+  entries: listOf(repositorySizeEntry.check),
 });
 
 export const parseCorruptTicket = shape<CorruptTicket>(

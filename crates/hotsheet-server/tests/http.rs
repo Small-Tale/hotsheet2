@@ -8950,6 +8950,93 @@ async fn repository_status_endpoint_reports_real_git_state() {
 }
 
 #[tokio::test]
+async fn repository_size_reports_code_repo_and_linked_store_with_attachments() {
+    let (store_dir, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let run = |dir: &std::path::Path, args: &[&str]| {
+        let status = hotsheet_ticketing::git::command()
+            .arg("-C")
+            .arg(dir)
+            .args(["-c", "user.name=Test", "-c", "user.email=test@example.com"])
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(status.success());
+    };
+    run(checkout.path(), &["init", "-q"]);
+    std::fs::write(checkout.path().join("code.txt"), "code\n").unwrap();
+    run(checkout.path(), &["add", "code.txt"]);
+    run(checkout.path(), &["commit", "-qm", "initial"]);
+    run(store_dir.path(), &["init", "-q"]);
+    let attachments = store_dir
+        .path()
+        .join("attachments/01M44Y4Z8H1CR7GD24AZ7PWB1P");
+    std::fs::create_dir_all(&attachments).unwrap();
+    std::fs::write(attachments.join("shot.png"), vec![7u8; 4096]).unwrap();
+    let registry_home = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry_home.path().join("checkouts.json")));
+    let body = serde_json::json!({
+        "root": checkout.path(), "alias": "sized", "stores": [store_dir.path()]
+    })
+    .to_string();
+    let created = app
+        .clone()
+        .oneshot(authed("POST", "/checkouts", Some(&body)))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/checkouts/sized/repository/size", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let report = body_json(resp).await;
+    assert_eq!(report["level"], "ok");
+    assert_eq!(
+        report["thresholds"]["warning_bytes"],
+        hotsheet_ticketing::repository_size::WARNING_BYTES
+    );
+    assert_eq!(
+        report["thresholds"]["critical_bytes"],
+        hotsheet_ticketing::repository_size::CRITICAL_BYTES
+    );
+    let entries = report["entries"].as_array().unwrap();
+    assert_eq!(entries.len(), 2, "{report}");
+    assert_eq!(entries[0]["kind"], "code");
+    assert_eq!(entries[0]["label"], "sized");
+    assert_eq!(entries[0]["status"], "measured");
+    assert!(entries[0]["git"]["total_bytes"].as_u64().unwrap() > 0);
+    assert!(entries[0].get("attachments").is_none());
+    assert_eq!(entries[1]["kind"], "ticket_store");
+    assert_eq!(entries[1]["provider"], "git");
+    assert_eq!(entries[1]["status"], "measured");
+    assert_eq!(entries[1]["shared_with_code"], false);
+    assert_eq!(entries[1]["attachments"]["bytes"], 4096);
+    assert_eq!(entries[1]["attachments"]["files"], 1);
+    assert_eq!(entries[1]["level"], "ok");
+
+    let missing = app
+        .clone()
+        .oneshot(authed("GET", "/checkouts/no-such/repository/size", None))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    let denied = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/checkouts/sized/repository/size")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn repository_setup_initializes_only_the_checkout_and_preserves_existing_origin() {
     let (_d, st) = state();
     let checkout = tempfile::tempdir().unwrap();

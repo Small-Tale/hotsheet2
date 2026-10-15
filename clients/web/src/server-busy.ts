@@ -17,16 +17,16 @@ const IDLE_LINGER_MS = 300;
 let idleTimer: ReturnType<typeof setTimeout> | undefined;
 
 function sync(): void {
-  if (inFlight.value > 0) {
+  if (inFlight.peek() > 0) {
     if (idleTimer !== undefined) {
       clearTimeout(idleTimer);
       idleTimer = undefined;
     }
     serverBusy.value = true;
-  } else if (idleTimer === undefined && serverBusy.value) {
+  } else if (idleTimer === undefined && serverBusy.peek()) {
     idleTimer = setTimeout(() => {
       idleTimer = undefined;
-      if (inFlight.value === 0) {
+      if (inFlight.peek() === 0) {
         serverBusy.value = false;
         serverBusyMessage.value = '';
       }
@@ -39,14 +39,14 @@ function sync(): void {
  * An optional human-readable `label` becomes the current {@link serverBusyMessage}.
  */
 export function beginServerRequest(label?: string): void {
-  inFlight.value += 1;
+  inFlight.value = inFlight.peek() + 1;
   if (label) serverBusyMessage.value = label;
   sync();
 }
 
 /** Mark one server request as finished (success or failure). */
 export function endServerRequest(): void {
-  inFlight.value = Math.max(0, inFlight.value - 1);
+  inFlight.value = Math.max(0, inFlight.peek() - 1);
   sync();
 }
 

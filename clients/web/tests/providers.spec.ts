@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { expect, type Locator, type Page, test } from '@playwright/test';
@@ -27424,6 +27424,81 @@ test('shows the project confidence calibration from the real server (HS2-Q1WCCY)
     );
     expect(pageOverflow).toBeLessThanOrEqual(0);
     await page.screenshot({ path: 'target/visual-captures/claude/hs2-q1wccy-calibration-narrow.png' });
+  } finally {
+    await server.stop();
+  }
+});
+
+test('shows the project repository size from the real server (HS2-QF44T7)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer({
+    seed: async ({ store, root, env }) => {
+      const git = (cwd: string, ...args: string[]) => {
+        const result = spawnSync('git', ['-C', cwd, ...args], { env });
+        if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${String(result.stderr)}`);
+      };
+      git(root, 'init', '-q');
+      writeFileSync(join(root, 'readme.md'), 'sized project\n');
+      git(root, 'add', 'readme.md');
+      git(root, 'commit', '-qm', 'initial');
+      mkdirSync(join(store, 'attachments', '01M44Y4Z8H1CR7GD24AZ7PWB1P'), { recursive: true });
+      writeFileSync(join(store, 'attachments', '01M44Y4Z8H1CR7GD24AZ7PWB1P', 'shot.png'), Buffer.alloc(1500));
+    },
+  });
+  try {
+    await mockProject(page);
+    let sizeRequests = 0,
+      calibrationRequests = 0;
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url()),
+        path = incoming.pathname.replace(
+          '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+          `/checkouts/${server.checkoutId}`,
+        );
+      if (path.endsWith('/repository/size')) sizeRequests += 1;
+      if (path.endsWith('/confidence-report')) calibrationRequests += 1;
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.locator('[data-component="project-summary"]').first().click();
+    const panel = page.locator('[data-component="repository-size"]');
+    await expect(panel).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
+    await expect(panel).toHaveAttribute('data-level', 'ok');
+    const code = panel.locator('.repository-size__entry[data-kind="code"]'),
+      store = panel.locator('.repository-size__entry[data-kind="ticket_store"]');
+    await expect(code).toHaveAttribute('data-status', 'measured');
+    await expect(code).toContainText('Within limits');
+    await expect(code).toContainText(/Git objects\s*[\d.]+ (B|kB|MB)/u);
+    await expect(store).toHaveCount(1);
+    await expect(store).toContainText('1.5 kB in 1 file');
+    await expect(panel.locator('[data-component="state-banner"]')).toHaveCount(0);
+    await panel.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'target/visual-captures/claude/hs2-qf44t7-real-server-wide.png' });
+    // Opened once, measured once: the section never polls.
+    await page.waitForTimeout(1500);
+    expect({ sizeRequests, calibrationRequests }).toEqual({ sizeRequests: 1, calibrationRequests: 1 });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(500); // let the responsive shell settle before capturing evidence
+    await panel.scrollIntoViewIfNeeded();
+    const pageOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(pageOverflow).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: 'target/visual-captures/claude/hs2-qf44t7-real-server-narrow.png' });
   } finally {
     await server.stop();
   }

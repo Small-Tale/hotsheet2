@@ -532,6 +532,28 @@ pub(crate) async fn checkout_repository_status(
         .map_err(repository_browser_api_error)
 }
 
+/// Git object and attachment sizes for the checkout's code repository and each linked
+/// ticket source, with GitHub-limit levels (HS2-QF44T7). Measured on the blocking pool:
+/// `git count-objects` plus a bounded attachment walk per store.
+pub(crate) async fn checkout_repository_size(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<hotsheet_ticketing::repository_size::RepositorySizeReport>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    tokio::task::spawn_blocking(move || hotsheet_ticketing::repository_size::report(&checkout))
+        .await
+        .map(Json)
+        .map_err(|error| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("repository size task failed: {error}"),
+            )
+        })
+}
+
 pub(crate) async fn initialize_checkout_repository(
     State(state): State<AppState>,
     Path(reference): Path<String>,

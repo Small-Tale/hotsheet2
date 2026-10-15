@@ -221,6 +221,29 @@ The authenticated server exposes checkout-scoped repository snapshots at
 and commits at the sibling `/repository/files` and `/repository/commits` endpoints,
 current ticket-flow aggregates at
 `/analytics/tickets`, and settled-plus-live usage totals at `/analytics/usage`.
+
+**Repository size (HS2-QF44T7).** `GET /checkouts/{id}/repository/size` measures the
+checkout's code repository and every linked ticket source. The CLI twin,
+`hotsheet checkout repo-size [reference] [--json]`, calls the same function in
+`hotsheet-ticketing::repository_size`, prints the same JSON shape, and defaults the
+reference to the current directory.
+
+- **Git objects:** loose plus packed bytes from `git count-objects -v`. This is what a push
+  to GitHub carries.
+- **Attachments:** for each git ticket store, the on-disk `attachments/` payload. The walk
+  stops after 200,000 directory entries and reports `truncated: true`, so `bytes` becomes a
+  lower bound.
+- **Levels:** `ok`, `warning` at 5 GB or more (GitHub's soft limit), and `critical` at
+  10 GB or more (its hard limit). The thresholds are named constants (`WARNING_BYTES`,
+  `CRITICAL_BYTES`) echoed in the response. Each entry carries its own level, and the
+  report carries the highest one. Clients display levels; they never recompute them.
+- **Explicit non-measurement:** a store kept inside the code repository is flagged
+  `shared_with_code`, since its git size is the code repository's. A non-repository directory
+  reports `not_repository`, a missing path `unavailable`, and a non-git provider source
+  (GitHub Issues, Jira, ...) `unsupported`; each carries a `detail` sentence.
+- **Cost:** the server measures on the blocking pool. Nothing polls it; the web statistics
+  view requests it once when it opens.
+
 Historical cumulative-flow data is explicitly reported unavailable because current ticket
 files do not preserve status transitions.
 The CLI exposes the same live feed through the selected `-C` store's running server:
@@ -610,6 +633,7 @@ hotsheet ls --up-next --status started
 hotsheet ls --max-confidence 69 --sort confidence   # low-confidence completions first (HS2-RD4M29)
 hotsheet confidence-report [--json]        # reported confidence vs. later reopen/verified outcomes per band
                                            # (also GET /confidence-report, /checkouts/{ref}/confidence-report, MCP hotsheet_confidence_report)
+hotsheet checkout repo-size [ref] [--json] # git object + attachment sizes vs. GitHub's 5 GB / 10 GB limits (HS2-QF44T7)
 hotsheet ls --text "flicker"              # text search via the local index
 hotsheet show HS-7f3k9q
 hotsheet attach HS-7f3k9q ./proof.png       # stable id + RFC3339 created_at
@@ -651,6 +675,7 @@ hotsheet checkout source-color web github-main              # JSON: checkout_id,
 hotsheet checkout set-source-color web github-main '#3b82f6' # set this project's source accent
 hotsheet checkout set-source-color web github-main '#6b7280' # restore the default Gray mark
 hotsheet checkout review-source web <git-source-id> [--store <path>] [--yes] # review/record a Git store identity; writes only with --yes
+hotsheet checkout repo-size web [--json]  # code repo + each store: git objects, attachments, GitHub-limit level (HS2-QF44T7)
 hotsheet account list [--json]            # machine-wide sign-ins, their sources, and the projects using each
 hotsheet account backfill-logins [--limit 5] # resolve missing managed GitHub usernames in a bounded batch
 hotsheet account sign-out github-app-<id> # refused while a ticket source still uses it

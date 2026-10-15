@@ -12,6 +12,7 @@ import { AIConversation, type AIConversationProps, AIConversationToolbar } from 
 import type { ConfidenceCalibrationState } from '../components/confidence-calibration';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
 import { AIConversationSurface } from '../components/reader-overlay-surfaces';
+import type { RepositorySizeState } from '../components/repository-size';
 import { type MobileMagnifiedTerminal, type TerminalDashboardGroup } from '../components/terminal-dashboard';
 import { type TerminalDrawerChatTab, type TerminalDrawerProps } from '../components/terminal-drawer';
 import { type GlobalWorkspaceSurfaceProps } from '../components/workspace-composition-surfaces';
@@ -29,6 +30,8 @@ export interface TerminalPresentationDependencies {
   statsProjectId: Signal<string | undefined>;
   /** Calibration report state per project for the stats view (HS2-Q1WCCY). */
   confidenceReportByProject: Signal<Record<string, ConfidenceCalibrationState>>;
+  /** Repository size state per project for the stats view (HS2-QF44T7). */
+  repositorySizeByProject: Signal<Record<string, RepositorySizeState>>;
   canGiveFeedback: () => boolean;
   terminals: {
     terminalGroups: Signal<TerminalDashboardGroup[]>;
@@ -75,7 +78,15 @@ export interface TerminalPresentationDependencies {
 }
 /** Project terminal/chat surfaces from live feature owners during the root render. */
 export function createTerminalPresentation(dependencies: TerminalPresentationDependencies) {
-  const { projects, project, shellMode, statsProjectId, confidenceReportByProject, canGiveFeedback } = dependencies;
+  const {
+    projects,
+    project,
+    shellMode,
+    statsProjectId,
+    confidenceReportByProject,
+    repositorySizeByProject,
+    canGiveFeedback,
+  } = dependencies;
   const {
     terminalGroups,
     terminalGridFullscreen,
@@ -162,6 +173,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       kind: 'stats',
       projectName: statsProject?.name,
       calibration: statsProject ? confidenceReportByProject.value[statsProject.id] : undefined,
+      repositorySize: statsProject ? repositorySizeByProject.value[statsProject.id] : undefined,
     };
   }
 

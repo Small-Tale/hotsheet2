@@ -50,6 +50,7 @@ import { projectRestoreTabId } from '../components/project-restore-error';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
 import { type AppTabKind } from '../components/project-tab-context-menu';
 import { focusQuickTicketComposerTitle, showQuickTicketComposer } from '../components/quick-ticket-composer';
+import type { RepositorySizeState } from '../components/repository-size';
 import { ServerBusyBars, ServerBusyMessage } from '../components/server-busy-bars';
 import { type SettingsCategory } from '../components/settings-navigation';
 import type { TicketStatus } from '../components/status-badge';
@@ -322,7 +323,9 @@ export async function startHotSheetWebClient() {
   const shellMode = signal<ProjectTabBarMode>('project'),
     statsProjectId = signal<string | undefined>(undefined),
     // Per-project completion-confidence calibration shown in the stats view (HS2-Q1WCCY).
-    confidenceReportByProject = signal<Record<string, ConfidenceCalibrationState>>({});
+    confidenceReportByProject = signal<Record<string, ConfidenceCalibrationState>>({}),
+    // Per-project repository size shown in the stats view, measured when it opens (HS2-QF44T7).
+    repositorySizeByProject = signal<Record<string, RepositorySizeState>>({});
   /** Load a project's calibration report, keeping the last report visible while refreshing. */
   async function loadConfidenceReport(target: Project) {
     const previous = confidenceReportByProject.peek()[target.id] as ConfidenceCalibrationState | undefined;
@@ -336,10 +339,31 @@ export async function startHotSheetWebClient() {
     }
     confidenceReportByProject.value = { ...confidenceReportByProject.peek(), [target.id]: next };
   }
+  /** Measure a project's repositories, keeping the last report visible while it refreshes. */
+  async function loadRepositorySize(target: Project) {
+    const previous = repositorySizeByProject.peek()[target.id] as RepositorySizeState | undefined;
+    if (previous?.status !== 'ready')
+      repositorySizeByProject.value = { ...repositorySizeByProject.peek(), [target.id]: { status: 'loading' } };
+    let next: RepositorySizeState;
+    try {
+      next = { status: 'ready', report: await new Api(target.apiPath).checkoutRepositorySize(target.id) };
+    } catch (error) {
+      next = { status: 'error', message: error instanceof Error ? error.message : String(error) };
+    }
+    repositorySizeByProject.value = { ...repositorySizeByProject.peek(), [target.id]: next };
+  }
   effect(() => {
     if (shellMode.value !== 'stats' || !statsProjectId.value) return;
     const target = projects.peek().find((item) => item.id === statsProjectId.value);
-    if (target) void loadConfidenceReport(target);
+    if (!target) return;
+    // Start the loads outside this effect's tracking scope: a request's synchronous start reads
+    // and writes the server-busy counter, and tracking it re-ran this effect on every response,
+    // turning one load into a tight request loop (HS2-QF44T7).
+    queueMicrotask(() => {
+      void loadConfidenceReport(target);
+      // Size changes with commits rather than ticket events, so it refreshes on open only.
+      void loadRepositorySize(target);
+    });
   });
   const terminalRailScreen = signal<'root' | 'ticket'>('root');
   const terminalGridFullscreen = signal(false);
@@ -3340,6 +3364,7 @@ export async function startHotSheetWebClient() {
       shellMode,
       statsProjectId,
       confidenceReportByProject,
+      repositorySizeByProject,
       canGiveFeedback: () => Boolean(selectedTicket.value && noteCapabilities()?.ai_feedback),
       terminals: {
         terminalGroups,

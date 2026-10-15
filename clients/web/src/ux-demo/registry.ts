@@ -26,6 +26,7 @@ import { demoModule as permissionComponents } from './permission-components-demo
 import { demoModule as projectDialog } from './project-dialog-demo';
 import { demoModule as projectSidebar } from './project-sidebar-demo';
 import { demoModule as providerIcon } from './provider-icon-demo';
+import { demoModule as repositorySize } from './repository-size-demo';
 import { demoModule as repositoryStatus } from './repository-status-demo';
 import { demoModule as select } from './select-demo';
 import { demoModule as setupSettings } from './setup-settings-demo';
@@ -71,6 +72,7 @@ export const demoModules: readonly DemoModule[] = [
   tagChip,
   statusBadge,
   confidenceCalibration,
+  repositorySize,
   confidenceBadge,
   toolbarControlGroup,
   contentComponents,

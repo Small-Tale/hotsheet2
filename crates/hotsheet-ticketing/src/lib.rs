@@ -135,4 +135,5 @@ pub mod checkouts;
 pub mod commands;
 pub mod connection_removal;
 mod file_lock;
+pub mod repository_size;
 pub mod repository_status;

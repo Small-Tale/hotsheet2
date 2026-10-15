@@ -2334,6 +2334,86 @@ fn import_retry_repairs_attachments_without_rewriting_edits_and_commits_recovery
 }
 
 #[test]
+fn checkout_repo_size_reports_code_store_attachments_and_unsupported_sources() {
+    let checkout = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    for dir in [checkout.path(), store.path()] {
+        let status = hotsheet_ticketing::git::command_in(dir)
+            .args(["init", "-q"])
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+    std::fs::create_dir_all(store.path().join("attachments/01ABC")).unwrap();
+    std::fs::write(
+        store.path().join("attachments/01ABC/shot.png"),
+        vec![0u8; 1500],
+    )
+    .unwrap();
+    std::fs::write(
+        home.path().join("providers.json"),
+        r#"{"connections":[{"id":"github-main","provider":"github","locator":"acme/web","default":false,"settings":{}}]}"#,
+    )
+    .unwrap();
+    let cli = || {
+        let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
+        cmd.env("HOTSHEET_HOME", home.path());
+        cmd
+    };
+    cli()
+        .args(["checkout", "register"])
+        .arg(checkout.path())
+        .args(["--alias", "sized", "--store"])
+        .arg(store.path())
+        .assert()
+        .success();
+    cli()
+        .arg("-C")
+        .arg(home.path())
+        .args([
+            "checkout",
+            "add-source",
+            "sized",
+            "github-main",
+            "github",
+            "acme/web",
+        ])
+        .assert()
+        .success();
+
+    let output = cli()
+        .args(["checkout", "repo-size", "sized", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["level"], "ok");
+    let entries = report["entries"].as_array().unwrap();
+    assert_eq!(entries.len(), 3, "{report}");
+    assert_eq!(entries[0]["kind"], "code");
+    assert_eq!(entries[0]["status"], "measured");
+    assert_eq!(entries[1]["status"], "measured");
+    assert_eq!(entries[1]["attachments"]["bytes"], 1500);
+    assert_eq!(entries[2]["provider"], "github");
+    assert_eq!(entries[2]["status"], "unsupported");
+
+    // The default reference is the current directory; the text report names each entry.
+    cli()
+        .current_dir(checkout.path())
+        .args(["checkout", "repo-size"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("code     sized"))
+        .stdout(predicate::str::contains("attachments 1.5 kB in 1 files"))
+        .stdout(predicate::str::contains("unsupported"));
+    cli()
+        .args(["checkout", "repo-size", "no-such-checkout"])
+        .assert()
+        .failure();
+}
+
+#[test]
 fn checkout_register_list_and_resolve_are_store_independent() {
     let checkout = tempfile::tempdir().unwrap();
     let store = tempfile::tempdir().unwrap();

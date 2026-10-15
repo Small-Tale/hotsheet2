@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 
+import { effect } from 'kerfjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ServerBusyBars, ServerBusyMessage } from './components/server-busy-bars';
@@ -134,6 +135,24 @@ describe('serverBusyMessage', () => {
     while (serverInFlightCount() > 0) endServerRequest();
     vi.runAllTimers();
     vi.useRealTimers();
+  });
+  it('never subscribes the effect that starts or finishes a request (HS2-QF44T7)', () => {
+    // A request started inside an effect used to make that effect depend on the in-flight
+    // counter, so every response re-ran it and it issued the request again in a tight loop.
+    let runs = 0;
+    const dispose = effect(() => {
+      runs += 1;
+      beginServerRequest('Measuring repositories');
+    });
+    expect(runs).toBe(1);
+    endServerRequest();
+    beginServerRequest();
+    endServerRequest();
+    vi.advanceTimersByTime(400);
+    expect(runs).toBe(1);
+    dispose();
+    endServerRequest();
+    expect(serverInFlightCount()).toBe(0);
   });
   it('reflects the latest labeled request and clears after the idle linger', () => {
     beginServerRequest('Loading tickets');

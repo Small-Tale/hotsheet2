@@ -1205,6 +1205,7 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
     shellMode,
     statsProjectId: signal<string | undefined>('b'),
     confidenceReportByProject: signal({}),
+    repositorySizeByProject: signal({}),
     canGiveFeedback: () => false,
     ai: state.ai,
     permissions,

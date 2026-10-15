@@ -163,6 +163,7 @@ export const demoCatalog: DemoCategory[] = [
           cataloged('status-badge'),
           cataloged('confidence-badge'),
           cataloged('confidence-calibration', ['confidence-badge']),
+          cataloged('repository-size', ['state-banner', 'value-table', 'badge']),
           cataloged('tag-chip'),
           cataloged('choice-card'),
         ],

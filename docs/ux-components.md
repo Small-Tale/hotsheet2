@@ -1396,6 +1396,12 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     HS2-Q1WCCY): a project's per-band calibration table, with a reopen-rate bar and
     recent completions. Its `/ux-demo` entry exposes the report, empty, loading, and error
     states.
+  - `RepositorySize` — **built** (`components/repository-size.tsx`, HS2-QF44T7): git object
+    and attachment sizes for a project's code repository and each ticket store against
+    GitHub's limits. It composes `ListHeader`, `ValueTable`, `Badge`, and a warning or
+    danger `StateBanner`. Its `/ux-demo` entry exposes these states: within limits, over
+    the soft limit, over the hard limit, unsupported and unmeasured sources (including a
+    store that shares the code repository), loading, and error.
   - `ConfidenceBadge` — **built** (`components/confidence-badge.tsx`, HS2-A0Q6G6): the
     banded AI completion confidence. The `compact` pill is used on note cards and ticket
     list/board summaries; `labeled` is used in the inspector/reader header. Its own

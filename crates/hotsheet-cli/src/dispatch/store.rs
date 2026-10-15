@@ -823,6 +823,18 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
                 serde_json::to_string_pretty(&registry.set_default_source(&reference, selected)?)?
             );
         }
+        CheckoutCmd::RepoSize { reference, json } => {
+            let report =
+                hotsheet_ticketing::repository_size::report(&registry.describe(&reference)?);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                print!(
+                    "{}",
+                    hotsheet_ticketing::repository_size::render_text(&report)
+                );
+            }
+        }
     }
     Ok(())
 }
@@ -979,6 +991,17 @@ pub(crate) enum CheckoutCmd {
         connection_id: Option<String>,
         #[arg(long, conflicts_with = "connection_id")]
         clear: bool,
+    },
+    /// Report git object size (what a push to GitHub carries) for the code repository and
+    /// each linked ticket store, plus each store's attachment payload. Entries at or over
+    /// GitHub's 5 GB soft limit are flagged WARNING, and over its 10 GB hard limit CRITICAL.
+    RepoSize {
+        /// Checkout id, id prefix, alias, or path (default: the current directory).
+        #[arg(default_value = ".")]
+        reference: String,
+        /// Print the report as JSON (the same shape as the server endpoint).
+        #[arg(long)]
+        json: bool,
     },
 }
 

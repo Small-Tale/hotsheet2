@@ -1891,6 +1891,76 @@ test('round-trips ConfidenceCalibration states through reset and a post-reset ed
   await expect(panel).toHaveAttribute('data-state', 'empty');
 });
 
+test('round-trips RepositorySize states through reset and a post-reset edit at wide and narrow sizes (HS2-QF44T7)', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width: 1280, height: 1500 });
+  await page.goto('/ux-demo?component=repository-size');
+  const panel = page.locator('[data-catalog-example] [data-component="repository-size"]');
+  await expect(panel).toHaveAttribute('data-state', 'ready');
+  await expect(panel).toHaveAttribute('data-level', 'ok');
+  await expect(panel.locator('.repository-size__entry')).toHaveCount(2);
+  await expect(panel).toContainText('Within limits');
+  await expect(panel).toContainText('1.1 GB in 3,412 files');
+  await expect(panel.locator('[data-component="state-banner"]')).toHaveCount(0);
+  await page.locator('[data-action="toggle-settings"]').first().click();
+  const inspector = page.getByRole('complementary', { name: 'RepositorySize Settings' });
+  const state = inspector.locator('wa-select[name="state"]');
+  const set = (value: string) =>
+    state.evaluate((node: HTMLElement & { value: string }, next) => {
+      node.value = next;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+  const capture = async (name: string) => {
+    await setDemoSettingsOpen(page, false);
+    await panel.scrollIntoViewIfNeeded();
+    // The whole section, including entries below the demo stage's fold.
+    await panel.screenshot({ path: `target/visual-captures/claude/hs2-qf44t7-${name}.png` });
+  };
+  await set('warning');
+  await expect(panel).toHaveAttribute('data-level', 'warning');
+  const banner = panel.locator('[data-component="state-banner"]');
+  await expect(banner).toHaveAttribute('data-tone', 'warning');
+  await expect(banner).toContainText("Ticket store: hotsheet2.hs2 is over GitHub's 5 GB soft limit.");
+  await expect(panel.locator('[data-size-level="warning"]')).toHaveText('Over soft limit');
+  await capture('warning-wide');
+  await setDemoSettingsOpen(page, true);
+  await set('critical');
+  await expect(banner).toHaveAttribute('data-tone', 'danger');
+  await expect(banner).toHaveAttribute('role', 'alert');
+  await expect(banner).toContainText("over GitHub's 10 GB hard limit.");
+  await capture('critical-wide');
+  await setDemoSettingsOpen(page, true);
+  await set('unsupported');
+  await expect(panel.locator('.repository-size__entry')).toHaveCount(4);
+  await expect(panel.locator('[data-status="unsupported"]')).toContainText('Not measured');
+  await expect(panel.locator('[data-status="not_repository"]')).toContainText('Not a Git repository');
+  await expect(panel).toContainText('Shared with the code repository');
+  await capture('unsupported-wide');
+  await setDemoSettingsOpen(page, true);
+  await set('loading');
+  await expect(panel).toHaveAttribute('data-state', 'loading');
+  await set('error');
+  await expect(panel).toHaveAttribute('data-state', 'error');
+  await expect(panel).toContainText('Repository size is unavailable.');
+  await setDemoSettingsOpen(page, true);
+  await inspector.getByRole('button', { name: 'Reset' }).click();
+  await expect(state).toHaveJSProperty('value', 'ok');
+  await expect(panel).toHaveAttribute('data-level', 'ok');
+  await set('critical');
+  await expect(panel).toHaveAttribute('data-level', 'critical');
+  // Narrow (tall so the capture holds every entry): tables stack and long locations truncate in place.
+  await page.setViewportSize({ width: 390, height: 1900 });
+  await page.waitForTimeout(300);
+  await capture('critical-narrow');
+  const overflow = await panel.evaluate((node) => node.scrollWidth - node.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  await setDemoSettingsOpen(page, true);
+  await set('unsupported');
+  await capture('unsupported-narrow');
+});
+
 test('round-trips ConfidenceBadge appearance and band controls through reset and a post-reset edit (HS2-A0Q6G6)', async ({
   page,
 }) => {

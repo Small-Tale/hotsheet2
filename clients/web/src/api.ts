@@ -34,6 +34,7 @@ import {
   parseQueuedProviderResult,
   parseRepositoryCommitPage,
   parseRepositoryFilePage,
+  parseRepositorySizeReport,
   parseRepositoryStatus,
   parseServerCompatibility,
   parseSourceDetach,
@@ -226,6 +227,40 @@ export interface CalibrationReport {
   scored: number;
   bands: CalibrationBand[];
   events: CalibrationEvent[];
+}
+/** How close a repository is to GitHub's size limits; computed by the server (HS2-QF44T7). */
+export type RepositorySizeLevel = 'ok' | 'warning' | 'critical';
+/** Whether one repository could be measured. */
+export type RepositorySizeStatus = 'measured' | 'not_repository' | 'unsupported' | 'unavailable';
+/** One entry of `GET /checkouts/{id}/repository/size`: the code repository or one ticket source. */
+export interface RepositorySizeEntry {
+  kind: 'code' | 'ticket_store';
+  connection_id?: string;
+  provider?: string;
+  label: string;
+  locator: string;
+  status: RepositorySizeStatus;
+  /** `git count-objects -v` in bytes: loose plus packed is what a push carries. */
+  git?: {
+    loose_objects: number;
+    loose_bytes: number;
+    packed_objects: number;
+    packs: number;
+    packed_bytes: number;
+    total_bytes: number;
+  };
+  /** A ticket store's on-disk `attachments/` payload; `truncated` makes `bytes` a lower bound. */
+  attachments?: { bytes: number; files: number; truncated: boolean };
+  shared_with_code: boolean;
+  level: RepositorySizeLevel;
+  detail?: string;
+}
+/** `GET /checkouts/{id}/repository/size` (HS2-QF44T7). */
+export interface RepositorySizeReport {
+  checkout_id: string;
+  thresholds: { warning_bytes: number; critical_bytes: number };
+  level: RepositorySizeLevel;
+  entries: RepositorySizeEntry[];
 }
 /** A note's recorded author: the acting role and an optional stable id (HS2-32QDZ3). */
 export interface NoteActor {
@@ -1140,6 +1175,9 @@ export class Api {
   /** Completion-confidence calibration across the checkout's git stores (HS2-Q1WCCY). */
   checkoutConfidenceReport = (checkout: string) =>
     this.parsed(parseCalibrationReport, `/checkouts/${encodeURIComponent(checkout)}/confidence-report`);
+  /** Git object and attachment sizes with GitHub-limit levels (HS2-QF44T7). */
+  checkoutRepositorySize = (checkout: string) =>
+    this.parsed(parseRepositorySizeReport, `/checkouts/${encodeURIComponent(checkout)}/repository/size`);
   checkoutCorruptTickets = (checkout: string) =>
     this.parsed(parseCorruptTicket.list, `/checkouts/${encodeURIComponent(checkout)}/corrupt-tickets`);
   createCorruptTicketRepair = (checkout: string, path: string) =>
