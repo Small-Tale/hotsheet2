@@ -281,6 +281,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/jira.rs              #   Jira Cloud issue/ADF mapping, token pagination/incremental JQL, honest workflow capabilities, fake + opt-in live drift tests (HS2-0RK4YC)
       src/github_attachments.rs #   GitHub assets-repository attachments: HS1 setting keys/defaults, evidence and per-attachment revision-manifest paths, raw link URL, marked link comment write/parse (HS2-HSA64D/HS2-X09EJ1)
       src/github_live_tests.rs #   opt-in (#[ignore]) live GitHub attachment tests: upload round trip, crop-manifest CAS, 1/10/100 batched-manifest measurement (HS2-VQSCA1/HS2-GWY4AK/HS2-QB6XJ4)
+      src/native_id.rs         #   unqualified_native_id: offline GitHub/GitLab issue-number and Jira project-key shape check that gates provider probes for unqualified checkout ids (HS2-FXGKBD)
       src/note_trailer.rs      #   shared comment encoding for external trackers: note-id marker + strict `Confidence: NN%` trailer write/parse, latest_confidence for comment-only providers (HS2-5YNASC)
     hotsheet-model/          # pure domain model + ticket file format (no I/O)
       src/lib.rs             #   re-exports; SCHEMA_VERSION

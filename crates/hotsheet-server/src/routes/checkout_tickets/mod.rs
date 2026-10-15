@@ -71,6 +71,28 @@ pub(crate) fn checkout_source_for_create(
     ))
 }
 
+/// The sources an unqualified ticket id can belong to, each with the native id to ask it
+/// for. Local git sources come first and always qualify. A remote provider qualifies only
+/// when `id` has that provider's native shape (an issue number, or a Jira key of its
+/// project), so a git slug or ULID never costs a third-party network call (HS2-FXGKBD).
+fn unqualified_candidates(
+    sources: Vec<hotsheet_ticketing::checkouts::TicketSource>,
+    id: &str,
+) -> Vec<(hotsheet_ticketing::checkouts::TicketSource, String)> {
+    let (local, remote): (Vec<_>, Vec<_>) = sources
+        .into_iter()
+        .partition(|source| source.provider == "git");
+    local
+        .into_iter()
+        .map(|source| (source, id.to_string()))
+        .chain(remote.into_iter().filter_map(|source| {
+            let native_id =
+                hotsheet_extsync::unqualified_native_id(&source.provider, &source.locator, id)?;
+            Some((source, native_id))
+        }))
+        .collect()
+}
+
 pub(crate) fn checkout_ticket_owner(
     state: &AppState,
     reference: &str,
@@ -94,17 +116,17 @@ pub(crate) fn checkout_ticket_owner(
     }
     let mut found = Vec::new();
     let mut unavailable = None;
-    for source in checkout.sources {
+    for (source, native_id) in unqualified_candidates(checkout.sources, id) {
         let exists = if source.provider == "git" {
             state
                 .host
                 .get(&source.connection_id)
-                .map(|entry| entry.resolve(id))
+                .map(|entry| entry.resolve(&native_id))
                 .transpose()?
                 .flatten()
                 .is_some()
         } else {
-            match probe_provider_source(state, &source.connection_id, id) {
+            match probe_provider_source(state, &source.connection_id, &native_id) {
                 Ok(ticket) => ticket.is_some(),
                 // A source that could not answer only matters when no other source owns the id.
                 Err(error) => {
@@ -114,11 +136,11 @@ pub(crate) fn checkout_ticket_owner(
             }
         };
         if exists {
-            found.push(source);
+            found.push((source, native_id));
         }
     }
     match found.as_slice() {
-        [source] => Ok((source.clone(), id.to_string())),
+        [(source, native_id)] => Ok((source.clone(), native_id.clone())),
         [] => Err(unavailable.unwrap_or_else(|| ApiError::not_found(id))),
         _ => Err(ApiError::new(
             StatusCode::CONFLICT,
@@ -220,9 +242,9 @@ fn resolve_checkout_ticket(
     let (checkout, _) = checkout_settings(state, reference)?;
     let mut found = None;
     let mut unavailable = None;
-    for source in &checkout.sources {
+    for (source, native_id) in unqualified_candidates(checkout.sources.clone(), id) {
         // A source that could not answer only matters when no other source owns the id.
-        let ticket = match read_checkout_ticket_source(state, source, id, false) {
+        let ticket = match read_checkout_ticket_source(state, &source, &native_id, false) {
             Ok(ticket) => ticket,
             Err(error) => {
                 unavailable.get_or_insert(error);
@@ -238,7 +260,7 @@ fn resolve_checkout_ticket(
                     ),
                 ));
             }
-            found = Some((source.clone(), ticket));
+            found = Some((source, ticket));
         }
     }
     let (source, ticket) =

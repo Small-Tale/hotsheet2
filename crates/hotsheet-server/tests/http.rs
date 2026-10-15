@@ -20432,3 +20432,207 @@ async fn slug_routes_resolve_through_the_index_and_survive_a_stale_index() {
     assert_eq!(unindexed.status(), StatusCode::OK);
     assert_eq!(body_json(unindexed).await["id"], external.id.to_string());
 }
+
+/// A provider transport that answers by URL suffix (404 otherwise) and records every
+/// requested URL, so a test can prove which ids reached a third-party API.
+struct RoutedTransport {
+    routes: Vec<(&'static str, serde_json::Value)>,
+    urls: Mutex<Vec<String>>,
+}
+
+impl RoutedTransport {
+    fn new(routes: Vec<(&'static str, serde_json::Value)>) -> Arc<Self> {
+        Arc::new(Self {
+            routes,
+            urls: Mutex::new(Vec::new()),
+        })
+    }
+
+    fn urls(&self) -> Vec<String> {
+        self.urls.lock().unwrap().clone()
+    }
+}
+
+impl GitHubTransport for RoutedTransport {
+    fn request(
+        &self,
+        _: &str,
+        url: &str,
+        _: &[(&str, String)],
+        _: Option<&serde_json::Value>,
+    ) -> Result<HttpResponse, String> {
+        self.urls.lock().unwrap().push(url.to_string());
+        let path = url.split('?').next().unwrap_or(url);
+        Ok(self
+            .routes
+            .iter()
+            .find(|(suffix, _)| path.ends_with(suffix))
+            .map_or_else(
+                || github_response(404, serde_json::json!({"message":"Not Found"})),
+                |(_, body)| github_response(200, body.clone()),
+            ))
+    }
+}
+
+/// HS2-FXGKBD: an unqualified checkout ticket id is resolved from local git sources first,
+/// and a remote provider is asked only for an id with its native shape, so a git slug or
+/// ULID never costs a third-party network call inside a local request.
+#[tokio::test]
+async fn unqualified_checkout_ids_only_probe_providers_whose_id_shape_they_have() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("mixed");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(
+        workspace.path().join("mixed.hs2"),
+        &StoreMetadata::new("MIX"),
+    )
+    .unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let github = RoutedTransport::new(vec![
+        ("/repos/acme/repo/issues/7", github_issue(7, "GitHub issue")),
+        ("/repos/acme/repo/issues/7/comments", serde_json::json!([])),
+    ]);
+    let jira = RoutedTransport::new(vec![
+        (
+            "/issue/ENG-9",
+            serde_json::json!({
+                "key":"ENG-9","fields":{"summary":"Jira issue","description":null,
+                "status":{"statusCategory":{"key":"new"}},"priority":{"name":"Medium"},
+                "issuetype":{"name":"Task"},"labels":[],"assignee":null,
+                "created":"2026-08-26T00:00:00Z","updated":"2026-08-26T00:01:00Z",
+                "resolutiondate":null}
+            }),
+        ),
+        (
+            "/issue/ENG-9/comment",
+            serde_json::json!({"comments":[],"total":0}),
+        ),
+    ]);
+    let router = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(GitHubProvider::new(
+            GitHubConfig::new("github-mixed", "acme/repo", "fixture-token"),
+            github.clone(),
+        )))
+        .with_ticket_provider(Arc::new(JiraProvider::new(
+            JiraConfig {
+                connection_id: "jira-eng".into(),
+                project_key: "ENG".into(),
+                base_url: "https://jira.test".into(),
+                email: "dev@example.com".into(),
+                token: "fixture".into(),
+                default: false,
+            },
+            jira.clone(),
+        ))));
+    register_test_provider_records(&router, &[("github-mixed", "acme/repo")]).await;
+    let jira_record = serde_json::json!({
+        "id":"jira-eng","provider":"jira","locator":"ENG","default":false,
+        "settings":{"base_url":"https://jira.test","email":"dev@example.com",
+            "credential":{"secret":"fixture-token"}}
+    });
+    let registered = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/provider-connections",
+            Some(&jira_record.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(registered.status(), StatusCode::CREATED);
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap().to_string();
+    let created = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/tickets"),
+                Some(r#"{"title":"Local ticket"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_string();
+    let slug = created["slug"].as_str().unwrap().to_string();
+    for (connection, body) in [
+        (
+            "github-mixed",
+            r#"{"provider":"github","locator":"acme/repo"}"#,
+        ),
+        ("jira-eng", r#"{"provider":"jira","locator":"ENG"}"#),
+    ] {
+        let linked = router
+            .clone()
+            .oneshot(authed(
+                "PUT",
+                &format!("/checkouts/{checkout_id}/sources/{connection}"),
+                Some(body),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(linked.status(), StatusCode::OK, "{connection}");
+    }
+    let get = |id: String| {
+        let router = router.clone();
+        let uri = format!("/checkouts/{checkout_id}/tickets/{id}");
+        async move { router.oneshot(authed("GET", &uri, None)).await.unwrap() }
+    };
+
+    // Git slugs (any case) and ULIDs, for reads and owner-resolved writes: no remote call.
+    for needle in [slug.clone(), slug.to_lowercase(), id.clone()] {
+        let read = get(needle.clone()).await;
+        assert_eq!(read.status(), StatusCode::OK, "{needle}");
+        assert_eq!(body_json(read).await["id"], id.as_str());
+    }
+    let updated = router
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/checkouts/{checkout_id}/tickets/{slug}"),
+            Some(r#"{"title":"Still local"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(updated.status(), StatusCode::OK);
+    assert_eq!(body_json(updated).await["title"], "Still local");
+    // Another project's Jira key is not this source's shape either.
+    assert_eq!(get("OPS-4".into()).await.status(), StatusCode::NOT_FOUND);
+    assert!(github.urls().is_empty(), "{:?}", github.urls());
+    assert!(jira.urls().is_empty(), "{:?}", jira.urls());
+
+    // Provider-shaped ids still resolve, and only the matching provider is asked.
+    let jira_issue = get("ENG-9".into()).await;
+    assert_eq!(jira_issue.status(), StatusCode::OK);
+    assert_eq!(body_json(jira_issue).await["title"], "Jira issue");
+    assert!(github.urls().is_empty(), "{:?}", github.urls());
+    for needle in ["7", "acme%2Frepo%237"] {
+        let issue = get(needle.into()).await;
+        assert_eq!(issue.status(), StatusCode::OK, "{needle}");
+        assert_eq!(body_json(issue).await["title"], "GitHub issue");
+    }
+    assert!(
+        github.urls().iter().all(|url| url.contains("/issues/7")),
+        "{:?}",
+        github.urls()
+    );
+    assert!(
+        jira.urls().iter().all(|url| url.contains("ENG-9")),
+        "{:?}",
+        jira.urls()
+    );
+}

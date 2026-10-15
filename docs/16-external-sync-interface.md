@@ -179,11 +179,21 @@ Queries can target one connection or aggregate all connections in a project. The
 fans out, normalizes, applies capability-aware filters, and returns a stable page with
 qualified ids. Mutations always route to exactly one connection. New tickets use the
 explicit connection or the project's configured default; ambiguity is an error.
-An unqualified id is probed against every linked source. A source whose native-id shape
-cannot represent the id (a git ULID sent to GitHub, which numbers its issues) simply does not
-hold it; a source that fails to answer (auth, rate limit, network) only surfaces its error
-when no other source owns the id. Id-shape errors name the provider that raised them
-(HS2-GKERTK).
+An unqualified id is resolved against local git sources first. A remote provider is asked only
+when the id has that provider's native shape, checked offline from the linked source without
+building a client or reading a credential (`hotsheet_extsync::unqualified_native_id`,
+HS2-FXGKBD):
+
+- GitHub and GitLab: an issue number (`42`), `#42`, or `<locator>#42` for the source's own
+  repository or project. Each is probed as `42`.
+- Jira: `<KEY>-<number>`, where the key is the source's project key (its locator).
+- Any other provider: probed with the id unchanged.
+
+A git slug or ULID therefore never makes a synchronous third-party network call inside a
+local request. A source whose shape cannot represent the id simply does not hold it. A source
+that fails to answer (auth, rate limit, network) surfaces its error only when no other source
+owns the id. Id-shape errors name the provider that raised them (HS2-GKERTK). Qualified ids
+(`<connection>:<native>`) go straight to their source, unaffected by this check.
 Checkout lists tolerate an unavailable external source: they return available tickets
 with a partial-data warning instead of failing the entire collection. The web client
 begins a mixed-source project's first ticket load with a `source=git` checkout
