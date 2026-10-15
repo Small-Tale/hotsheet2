@@ -17849,7 +17849,7 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
         connection_id: 'hotsheet-sidebar-codex-demo-checkout',
         model: driveCustom,
       },
-      { content: '$hotsheet', model: driveCustom },
+      { content: '$hotsheet', model: driveCustom, turn_id: expect.any(String) },
     ]);
 });
 
