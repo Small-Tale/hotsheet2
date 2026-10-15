@@ -3435,7 +3435,10 @@ unsupported, so they cannot create this state through Hot Sheet.
   labeled multi-select grid of Kerf `ContentItem` rows (`selectionMode="multiple"`,
   HS2-3XV34B). A note may hold several groups (HS2-83YCDP): prose between groups renders
   in order, `CHOICE` text inside fenced code is ignored, and each group is its own list
-  labeled by the prose line preceding its header. Selection modifiers act within one
+  labeled by the prose line preceding its header, or by the question written after the colon
+  on the header line itself (`CHOICE: Which approach?`, optionally bold), which then renders as
+  a visible paragraph above the options (HS2-3MHSBS); text after a colon-less `CHOICE` stays
+  prose. Selection modifiers act within one
   group and leave other groups' selections intact. A normal click selects one option or clears the sole selection; Command on
   macOS and Ctrl elsewhere toggles additional options, while Shift selects a range.
   Enter or Space on a focused option acts as a normal click, and arrow keys move between

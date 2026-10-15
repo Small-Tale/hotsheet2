@@ -55,6 +55,49 @@ describe('feedback choices', () => {
     expect(parseFeedbackChoices('CHOICE\n1. First\n2. Second')?.groups[0].choices).toHaveLength(2);
   });
 
+  it('reads a question written on the CHOICE: header line, plain or bold (HS2-3MHSBS)', () => {
+    const source = [
+      'FEEDBACK NEEDED: the eviction is real. Choose how to treat it.',
+      '',
+      '| Arm | Paints |',
+      '|---|---|',
+      '| a | b |',
+      '',
+      'CHOICE: How should Domotion handle GC eviction?',
+      '- **Leave it unmodeled (recommended).** Keep the strong model.',
+      '- **Force a known GC state.** Call collectGarbage before each capture.',
+      "- **Record Chrome's answer.** Read getPlatformFontsForNode.",
+    ].join('\n');
+    const parsed = parseFeedbackChoices(source)!;
+    expect(parsed.groups).toHaveLength(1);
+    expect(parsed.groups[0]).toMatchObject({
+      question: 'How should Domotion handle GC eviction?',
+      inlineQuestion: true,
+    });
+    expect(parsed.groups[0].choices.map((choice) => choice.markdown)).toEqual([
+      '**Leave it unmodeled (recommended).** Keep the strong model.',
+      '**Force a known GC state.** Call collectGarbage before each capture.',
+      "**Record Chrome's answer.** Read getPlatformFontsForNode.",
+    ]);
+    // The header line is not repeated in the preceding prose.
+    expect(parsed.regions[0].source).not.toContain('CHOICE');
+    expect(parseFeedbackChoices('**CHOICE:** Which store?\n- Git\n- Jira')!.groups[0]).toMatchObject({
+      question: 'Which store?',
+      inlineQuestion: true,
+    });
+    expect(parseFeedbackChoices('CHOICE: **Which store?**\n- Git')!.groups[0].question).toBe('Which store?');
+    // A bare header keeps taking its question from the preceding prose.
+    const prose = parseFeedbackChoices('Which store?\nCHOICE:\n- Git')!.groups[0];
+    expect(prose.question).toBe('Which store?');
+    expect(prose.inlineQuestion).toBeUndefined();
+    // Text after a colon-less CHOICE is prose, not a header.
+    expect(parseFeedbackChoices('CHOICE the best one\n- A')).toBeUndefined();
+    // Several inline groups label themselves.
+    expect(
+      parseFeedbackChoices('CHOICE: First?\n- A\n\nCHOICE: Second?\n- B')!.groups.map((group) => group.question),
+    ).toEqual(['First?', 'Second?']);
+  });
+
   it('does not interpret casual, empty, or fenced choice text as a choice block', () => {
     expect(parseFeedbackChoices('Choice:\n- Not uppercase')).toBeUndefined();
     expect(parseFeedbackChoices('CHOICE:\nNo list follows')).toBeUndefined();

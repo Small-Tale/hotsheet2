@@ -195,6 +195,12 @@ export function FeedbackPrompt({
             replies={inlineReplies}
             attachmentContext={attachmentContext}
           />
+          {group.inlineQuestion && group.question && (
+            // A `CHOICE: question` header carries its question on the header line (HS2-3MHSBS).
+            <div class="note-card__feedback-question">
+              <MarkdownPreview source={group.question} attachmentContext={attachmentContext} />
+            </div>
+          )}
           <List
             selectionMode="multiple"
             ariaLabel={

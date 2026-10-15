@@ -184,9 +184,11 @@ fn codex_declares_its_project_local_skill() {
     let (skill_target, skill_body) = p.skill().expect("codex declares its Hot Sheet skill");
     assert_eq!(skill_target, ".agents/skills/hotsheet/SKILL.md");
     assert!(skill_body.contains("name: hotsheet"));
-    assert!(skill_body.contains("<!-- hotsheet-skill-version: 62 -->"));
+    assert!(skill_body.contains("<!-- hotsheet-skill-version: 63 -->"));
     // Several CHOICE groups per FEEDBACK NEEDED note (HS2-83YCDP).
     assert!(skill_body.contains("one or more uppercase `CHOICE` or `CHOICE:` lines"));
+    // The question may sit on the CHOICE: line itself (HS2-3MHSBS).
+    assert!(skill_body.contains("(`CHOICE: Which approach should we take?`)"));
     // Phase transitions are recorded as they happen, not left at working (HS2-7P14DC).
     assert!(skill_body.contains("Never leave a ticket at\n   `working` while its tests run."));
     assert!(skill_body.contains("inspect the actual capture"));

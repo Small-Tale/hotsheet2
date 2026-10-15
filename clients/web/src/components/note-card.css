@@ -122,6 +122,11 @@
   display: grid;
   gap: var(--kui-space-2xs);
 }
+/* A `CHOICE: question` header's question (HS2-3MHSBS): aligned with the prose blocks' inset, but not
+   a response target, since replies attach to prose. */
+.note-card__feedback-question {
+  padding: var(--kui-space-2xs);
+}
 .note-card__feedback-block {
   position: relative;
   padding: var(--kui-space-2xs);

@@ -51,12 +51,12 @@ const row = {
   updated_at: '2026-10-14T00:00:00Z',
 };
 
-async function mock(page: Page, where: 'note' | 'details') {
+async function mock(page: Page, where: 'note' | 'details', prompt = PROMPT) {
   const writes: Array<Record<string, unknown>> = [];
   const ticket = {
     store: 'git',
     ...row,
-    details: where === 'details' ? `FEEDBACK NEEDED: ${PROMPT}` : 'Ticket context.',
+    details: where === 'details' ? `FEEDBACK NEEDED: ${prompt}` : 'Ticket context.',
     blocked_reason: null,
     concurrency_token: 'token',
     notes:
@@ -67,7 +67,7 @@ async function mock(page: Page, where: 'note' | 'details') {
               kind: 'feedback_needed',
               created_at: '2026-10-14T00:01:00Z',
               edited_at: '2026-10-14T00:01:00Z',
-              text: PROMPT,
+              text: prompt,
             },
           ]
         : [],
@@ -196,4 +196,48 @@ test('answers several choice groups embedded in the ticket description from the 
   await answerGroups(page, details, 'details-reader');
   await details.getByRole('button', { name: 'Respond' }).click();
   await expect.poll(() => writes.find((write) => write.note_kind === 'regular')?.note).toBe(EXPECTED);
+});
+
+// HS2-3MHSBS: an AI wrote the question on the CHOICE: line itself, after a Markdown table and with
+// bold-led options. The prompt must still render as a selectable group with its question visible.
+const INLINE_PROMPT = [
+  'FEEDBACK NEEDED: the eviction is real, but it happens only when Oilpan runs a GC.',
+  '',
+  '| Arm | U+4E00 paints |',
+  '|---|---|',
+  '| removed, no GC | HiraginoSans-W3 |',
+  '| removed, forced GC | **PingFangSC-Regular** |',
+  '',
+  'CHOICE: How should Domotion handle GC eviction of macOS ideograph fallback entries?',
+  '- **Leave it unmodeled (recommended).** Keep the strong model and document it.',
+  '- **Force a known GC state at capture boundaries and model it.** Deterministic, but perturbs the page.',
+  "- **Record Chrome's answer at capture time.** Exact without perturbing GC.",
+].join('\n');
+
+test('renders a CHOICE: header that carries its own question as a selectable group (HS2-3MHSBS)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const writes = await mock(page, 'note', INLINE_PROMPT);
+  await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
+  const note = page.getByRole('dialog').locator('article[data-note-id="N4"]');
+  const grid = note.getByRole('grid', { name: 'Feedback Choices' });
+  await expect(grid).toBeVisible();
+  const options = grid.locator('[data-component="content-item"]');
+  await expect(options).toHaveCount(3);
+  await expect(
+    note.getByText('How should Domotion handle GC eviction of macOS ideograph fallback entries?', { exact: true }),
+  ).toBeVisible();
+  // Neither the header keyword nor the raw list survives as prose.
+  await expect(note.getByText(/CHOICE/)).toHaveCount(0);
+  await expect(note.locator('table')).toBeVisible();
+  await options.nth(0).click();
+  await expect(options.nth(0)).toHaveAttribute('aria-selected', 'true');
+  await note.screenshot({ path: 'target/visual-captures/hs2-3mhsbs-inline-choice-1280.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(options.nth(0)).toBeVisible();
+  await note.screenshot({ path: 'target/visual-captures/hs2-3mhsbs-inline-choice-390.png' });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await note.getByRole('button', { name: 'Respond' }).click();
+  await expect
+    .poll(() => writes.find((write) => write.note_kind === 'regular')?.note)
+    .toBe('Selected choice:\n- **Leave it unmodeled (recommended).** Keep the strong model and document it.');
 });

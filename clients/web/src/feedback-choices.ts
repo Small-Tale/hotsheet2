@@ -7,8 +7,11 @@ export interface FeedbackChoiceGroup {
   index: number;
   start: number;
   end: number;
-  /** The last prose line before the `CHOICE` header, used to label the group and its response. */
+  /** The question written after `CHOICE:` on the header line, else the last prose line before
+   * the header; labels the group and its response. */
   question?: string;
+  /** The question was written on the `CHOICE:` line itself, so no prose region shows it. */
+  inlineQuestion?: boolean;
   choices: FeedbackChoice[];
 }
 /** Prose that surrounds the choice groups, kept with its source offset for inline replies. */
@@ -47,7 +50,24 @@ function sourceLines(source: string): SourceLine[] {
   return lines;
 }
 
-const CHOICE_HEADER = /^\s*CHOICE:?\s*$/;
+/**
+ * A choice group header: an uppercase `CHOICE` or `CHOICE:` line, optionally bold, optionally
+ * carrying the group's question after the colon (`CHOICE: Which approach?`, HS2-3MHSBS). Text
+ * after a bare `CHOICE` without a colon is ordinary prose, not a header.
+ */
+const CHOICE_HEADER = /^\s*(?:\*\*|__)?CHOICE(:)?(?:\*\*|__)?(?:\s+(.*?))?\s*$/;
+
+function choiceHeader(text: string): { question?: string } | undefined {
+  const match = text.match(CHOICE_HEADER);
+  if (!match) return undefined;
+  // Optional capture groups are undefined when they do not participate in the match.
+  const colon = match.at(1),
+    inline = match.at(2)?.trim();
+  if (!inline) return {};
+  if (!colon) return undefined;
+  const question = inline.replace(/^(\*\*|__)(.*)\1$/, '$2').trim();
+  return question ? { question } : {};
+}
 const LIST_ITEM = /^\s*([-+*]|\d+[.)])\s+(.+?)\s*$/;
 const FENCE = /^\s*(`{3,}|~{3,})/;
 
@@ -77,9 +97,9 @@ function region(source: string, from: number, to: number): FeedbackChoiceRegion 
 }
 
 /**
- * Parse every uppercase `CHOICE` (or `CHOICE:`) header followed by a Markdown list. Blank lines may
- * separate the header from its list and the list items from each other; headers inside fenced code
- * are ignored. Returns undefined when the note has no choice group.
+ * Parse every uppercase `CHOICE` (or `CHOICE:`, optionally `CHOICE: <question>`) header followed by a
+ * Markdown list. Blank lines may separate the header from its list and the list items from each
+ * other; headers inside fenced code are ignored. Returns undefined when the note has no choice group.
  */
 export function parseFeedbackChoices(source: string): FeedbackChoiceDocument | undefined {
   const lines = sourceLines(source),
@@ -98,7 +118,8 @@ export function parseFeedbackChoices(source: string): FeedbackChoiceDocument | u
       fence = fenceMatch[1];
       continue;
     }
-    if (!CHOICE_HEADER.test(text)) continue;
+    const header = choiceHeader(text);
+    if (!header) continue;
     const choices: FeedbackChoice[] = [],
       groupIndex = groups.length + 1;
     let end = lines[lineIndex].end,
@@ -118,7 +139,14 @@ export function parseFeedbackChoices(source: string): FeedbackChoiceDocument | u
     const start = lines[lineIndex].start,
       before = region(source, proseStart, start);
     regions.push(before);
-    groups.push({ index: groupIndex, start, end, question: questionLine(before.source), choices });
+    groups.push({
+      index: groupIndex,
+      start,
+      end,
+      question: header.question ?? questionLine(before.source),
+      ...(header.question ? { inlineQuestion: true } : {}),
+      choices,
+    });
     proseStart = end;
     lineIndex = lastItem;
   }

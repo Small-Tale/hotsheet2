@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 62 -->
+<!-- hotsheet-skill-version: 63 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -182,8 +182,9 @@ Notes:
   tickets, and return if the answer becomes available.
 - When a genuine user decision can be narrowed to concise, distinct options, a
   `FEEDBACK NEEDED` note may include one or more uppercase `CHOICE` or `CHOICE:` lines, each
-  followed by a Markdown list (blank lines allowed). Put each group's question on the line
-  before its `CHOICE`. Options may include attachment references. Use choices
+  followed by a Markdown list (blank lines allowed). Write each group's question after the
+  colon on the same line (`CHOICE: Which approach should we take?`) or as the last line before
+  a bare `CHOICE:`. Options may include attachment references. Use choices
   to make a decision easier, not to offload ordinary implementation judgment or replace
   an open-ended question. Users may select zero or multiple options and may always add a
   freeform response, so do not describe the list as exhaustive or require a selection.
