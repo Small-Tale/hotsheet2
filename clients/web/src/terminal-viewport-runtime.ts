@@ -664,8 +664,12 @@ function initializeTerminalViewport(
     if (!fixedGrid && !mobile80xM()) lastSettledGeometry = { cols: terminal.cols, rows: terminal.rows };
     element.dataset.gridSize = `${terminal.cols}x${terminal.rows}`;
     reconcileScale();
-    if (pendingInteraction) signalInteraction();
-    else claim();
+    // The settled grid always reaches the arbiter: a deferred interaction that still cannot be sent
+    // (the viewport is not yet reported visible) must not swallow the geometry claim, or the PTY keeps
+    // another viewport's size and a bottom-drawer terminal under-fills its frame (HS2-KRQRWH).
+    const deferred = pendingInteraction;
+    if (deferred) signalInteraction();
+    if (!deferred || pendingInteraction) claim();
   };
   const drawerResizeActive = () => insideDrawer() && document.body.dataset.resizingRegion === 'vertical';
   // One geometry pass per frame of layout change. The ResizeObserver reports every later size
@@ -695,6 +699,18 @@ function initializeTerminalViewport(
   own(() => {
     window.removeEventListener(MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT, refitMobileColumns);
   });
+  // A closed socket only reconnected on its own backoff timer (up to 8 s), and keystrokes typed
+  // meanwhile were dropped silently, so a drawer terminal whose socket died (server restart, sleep,
+  // a LAN drop) read as locked up until a page reload (HS2-KRQRWH). Any sign that the user is back
+  // (typing, a pointer, focus, the page becoming visible, the network returning) reconnects at once.
+  const reconnectNow = () => {
+    if (disposed || parked || scaledPreview) return;
+    if (socket && socket.readyState !== WebSocket.CLOSED) return;
+    if (reconnect !== undefined) window.clearTimeout(reconnect);
+    reconnect = undefined;
+    attempt = 0;
+    connect();
+  };
   const connect = () => {
     if (disposed) return;
     initialReplay = true;
@@ -813,6 +829,22 @@ function initializeTerminalViewport(
   own(() => {
     resize.disconnect();
   });
+  // The unit harness stubs `window` without a document; a real page always has one.
+  const pageDocument: Document | undefined = (window as unknown as { document?: Document }).document;
+  const reconnectWhenShown = () => {
+    if (pageDocument?.visibilityState === 'hidden') return;
+    reconnectNow();
+  };
+  pageDocument?.addEventListener('visibilitychange', reconnectWhenShown);
+  window.addEventListener('pageshow', reconnectWhenShown);
+  window.addEventListener('focus', reconnectWhenShown);
+  window.addEventListener('online', reconnectWhenShown);
+  own(() => {
+    pageDocument?.removeEventListener('visibilitychange', reconnectWhenShown);
+    window.removeEventListener('pageshow', reconnectWhenShown);
+    window.removeEventListener('focus', reconnectWhenShown);
+    window.removeEventListener('online', reconnectWhenShown);
+  });
   // A scaled preview fits its frame (the parent); other viewports fit themselves.
   const observedTarget = () => (scaledPreview ? (element.parentElement ?? element) : element);
   resize.observe(observedTarget());
@@ -822,8 +854,12 @@ function initializeTerminalViewport(
     if (next !== visible) {
       visible = next;
       // The arbiter only follows a visible viewport, so an interaction waits for visibility too.
-      if (visible && pendingInteraction) signalInteraction();
-      else claim();
+      const deferred = visible && pendingInteraction;
+      if (deferred) signalInteraction();
+      if (!deferred || pendingInteraction) claim();
+      // A viewport that comes back into view on a socket its backoff is still waiting to reopen
+      // reconnects now (HS2-KRQRWH).
+      if (visible) reconnectNow();
     }
   });
   own(() => {
@@ -998,7 +1034,11 @@ function initializeTerminalViewport(
     element.addEventListener('focusout', focus);
     element.addEventListener('pointerdown', signalInteraction);
     element.addEventListener('focusin', signalInteraction);
+    element.addEventListener('pointerdown', reconnectNow);
+    element.addEventListener('focusin', reconnectNow);
     own(() => {
+      element.removeEventListener('pointerdown', reconnectNow);
+      element.removeEventListener('focusin', reconnectNow);
       element.removeEventListener('click', focusTerminal);
       element.removeEventListener('focusin', focus);
       element.removeEventListener('focusout', focus);
@@ -1007,10 +1047,13 @@ function initializeTerminalViewport(
     });
   }
   const sendInput = (value: string) => {
-    if (!scaledPreview && socket?.readyState === WebSocket.OPEN) {
+    if (scaledPreview) return;
+    if (socket?.readyState === WebSocket.OPEN) {
       socket.send(value);
       signalInteractionThrottled();
+      return;
     }
+    reconnectNow();
   };
   let pasting = false;
   const input = terminal.onData((value) => {

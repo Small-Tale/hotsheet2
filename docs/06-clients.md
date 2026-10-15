@@ -3114,7 +3114,15 @@ Default policy (= tmux `window-size latest`, which is exactly the maintainer's a
 - An interaction that lands before a viewport's socket opens, its first geometry pass settles,
   or it is reported visible (opening a zoomed Workspace Grid terminal focuses it at once) is
   deferred, not dropped, and then sent as a visible interacting claim. The zoomed terminal
-  therefore takes over PTY sizing at its fitted grid on every zoom (**HS2-6179FV**).
+  therefore takes over PTY sizing at its fitted grid on every zoom (**HS2-6179FV**). While
+  that interaction is still deferred, every settled geometry pass and visibility change still
+  sends its ordinary geometry claim, so a bottom-drawer terminal never stops reporting its
+  grid and under-fills its frame (**HS2-KRQRWH**).
+- A closed viewport socket no longer waits out its reconnect backoff (up to 8 s) while
+  keystrokes are dropped silently. Typing, a pointer, focus, the page becoming visible,
+  `pageshow`, or the network coming back reconnects a closed socket immediately (attempt
+  reset, pending timer cancelled); a parked viewport is left to its owner's eviction
+  (**HS2-KRQRWH**).
 - Activating the read-only dashboard counts each visible fixed 80×24 tile as that
   PTY's local sizing claimant. A grid tile cannot accept keyboard input, but entering
   the terminal-specific surface is still a deliberate request to render its TUI at

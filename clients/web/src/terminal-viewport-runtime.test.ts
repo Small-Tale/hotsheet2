@@ -180,6 +180,7 @@ beforeEach(() => {
     'WebSocket',
     class extends EventTarget {
       static OPEN = 1;
+      static CLOSED = 3;
       readyState = 0;
       close = vi.fn();
       constructor() {
@@ -201,6 +202,7 @@ function element() {
     closest: () => null,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
   };
   return {
     viewport: mock as unknown as HTMLElement,
@@ -246,8 +248,12 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
     expect(allocated.terminals[0].input).toHaveBeenCalledTimes(1);
     expect(resize[0].disconnect).toHaveBeenCalledTimes(1);
     expect(intersections[0].disconnect).toHaveBeenCalledTimes(1);
-    // Drawer resize-end plus the HS2-WMN626 mobile column-change listener.
+    // The HS2-KRQRWH page-lifecycle reconnect hooks, drawer resize-end, and the HS2-WMN626 mobile
+    // column-change listener.
     expect(windowMock.removeEventListener.mock.calls.map(([name]) => name as string)).toEqual([
+      'pageshow',
+      'focus',
+      'online',
       MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT,
       TERMINAL_DRAWER_RESIZE_END_EVENT,
     ]);
@@ -260,6 +266,9 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
         'contextmenu',
         'focusin',
         'focusin',
+        // HS2-KRQRWH: focus and pointer activity reconnect a closed socket.
+        'focusin',
+        'pointerdown',
         'focusout',
         'hotsheet-terminal-key',
         'hotsheet-terminal-paste',
@@ -1047,6 +1056,71 @@ describe('scaled-preview canvas fits its frame (HS2-S7E53Q)', () => {
   });
 });
 
+describe('a closed socket reconnects on user activity instead of waiting out its backoff (HS2-KRQRWH)', () => {
+  function mountDedicated() {
+    const { viewport, listeners } = element();
+    const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'viewer' });
+    const open = () => {
+      const socket = sockets.at(-1)!;
+      socket.readyState = 1;
+      socket.dispatchEvent(new Event('open'));
+      return socket;
+    };
+    const close = () => {
+      const socket = sockets.at(-1)!;
+      socket.readyState = 3;
+      socket.dispatchEvent(new Event('close'));
+    };
+    const fire = (type: string) => {
+      for (const [name, handler] of listeners.mock.calls as Array<[string, () => void]>) if (name === type) handler();
+    };
+    const fireWindow = (type: string) => {
+      for (const [name, handler] of windowMock.addEventListener.mock.calls as Array<[string, () => void]>)
+        if (name === type) handler();
+    };
+    return { viewport, dispose, open, close, fire, fireWindow };
+  }
+
+  it('reconnects at once on window focus, pointer, or focus while the backoff timer is pending', () => {
+    const view = mountDedicated();
+    view.open();
+    expect(sockets).toHaveLength(1);
+    view.close();
+    expect(view.viewport.dataset.connection).toBe('reconnecting');
+    expect(scheduledTimeouts).toHaveLength(1);
+    const timer = windowMock.setTimeout.mock.results[0].value;
+    view.fireWindow('focus');
+    expect(sockets, 'the backoff timer is cancelled and a new socket opens now').toHaveLength(2);
+    expect(windowMock.clearTimeout).toHaveBeenCalledWith(timer);
+    expect(view.viewport.dataset.connection).toBe('connecting');
+    // Activity on a socket that is already connecting or open does not open another one.
+    view.fire('pointerdown');
+    view.fire('focusin');
+    expect(sockets).toHaveLength(2);
+    view.open();
+    view.fireWindow('pageshow');
+    view.fireWindow('online');
+    expect(sockets).toHaveLength(2);
+    // A later drop recovers through the same path from a pointer on the terminal.
+    view.close();
+    view.fire('pointerdown');
+    expect(sockets).toHaveLength(3);
+    view.dispose();
+  });
+
+  it('leaves a parked viewport alone: its owner evicts it instead', () => {
+    const view = mountDedicated();
+    view.open();
+    view.fire(TERMINAL_VIEWPORT_PARK_EVENT);
+    view.close();
+    expect(view.viewport.dataset.connection).toBe('closed');
+    view.fireWindow('focus');
+    view.fire('pointerdown');
+    expect(sockets).toHaveLength(1);
+    view.dispose();
+  });
+});
+
 describe('an early interaction on a magnified terminal takes over PTY sizing (HS2-6179FV)', () => {
   function mountMagnified(proposed: { cols: number; rows: number }) {
     const frames: Array<() => void> = [],
@@ -1141,6 +1215,25 @@ describe('an early interaction on a magnified terminal takes over PTY sizing (HS
       view.dispose();
       expect(sockets.at(-1)!.close).toHaveBeenCalled();
     }
+  });
+
+  it('keeps sending geometry claims while a deferred interaction waits for visibility (HS2-KRQRWH)', () => {
+    const view = mountMagnified({ cols: 180, rows: 50 });
+    view.focusin();
+    view.socket.readyState = 1;
+    view.socket.dispatchEvent(new Event('open'));
+    view.fit(180, 50);
+    view.runFrames();
+    // The interaction is still held back, but the settled grid reaches the arbiter anyway; before
+    // this fix the deferral swallowed every geometry claim and the PTY kept another viewport's size.
+    expect(view.claims().at(-1)).toMatchObject({ cols: 180, rows: 50, interacting: false, visible: false });
+    view.fit(120, 30);
+    view.runFrames();
+    expect(view.claims().at(-1)).toMatchObject({ cols: 120, rows: 30, interacting: false, visible: false });
+    expect(view.claims().some((claim) => claim.interacting)).toBe(false);
+    view.show();
+    expect(view.claims().at(-1)).toMatchObject({ cols: 120, rows: 30, interacting: true, visible: true });
+    view.dispose();
   });
 
   it('sends no deferred interaction when nothing interacted before the first settle', () => {
