@@ -1696,6 +1696,25 @@ test('keeps rail view tabs above search and parks the closed trigger at the righ
   await expect(stage.locator('[data-workspace-overflow-action="set-view-mode"]')).toHaveCount(3);
 });
 
+test('insets the rail controls by the toolbar 8px on both sides (HS2-5BE8NE)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=terminal-ticket-rail');
+  const stage = page.getByRole('region', { name: 'Interactive', exact: true });
+  const toolbar = stage.locator('.terminal-ticket-rail__controls');
+  // The closed view group fills the leading zone, which now spans the whole toolbar (KF-RNB8BB).
+  const viewInsets = () =>
+    toolbar.evaluate((node) => {
+      const toolbarBox = node.getBoundingClientRect();
+      const viewBox = node.querySelector('.view-mode-switcher')!.getBoundingClientRect();
+      return [Math.round(viewBox.left - toolbarBox.left), Math.round(toolbarBox.right - viewBox.right)];
+    });
+  await expect.poll(viewInsets).toEqual([8, 8]);
+  await stage.screenshot({ path: 'target/visual-captures/hs2-5be8ne-after-wide.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(viewInsets).toEqual([8, 8]);
+  await stage.screenshot({ path: 'target/visual-captures/hs2-5be8ne-after-narrow.png', animations: 'disabled' });
+});
+
 test('catalogs every FixedAspectTerminalCard variant and its dashboard relationship', async ({ page }) => {
   await page.setViewportSize({ width: 1728, height: 971 });
   await page.goto('/ux-demo?component=fixed-aspect-terminal-card');
