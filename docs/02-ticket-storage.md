@@ -826,7 +826,11 @@ engine** so the user effectively never runs git by hand:
   stage/check/commit attempt, so one writer cannot replace the shared index between
   another writer's stage and no-op check. The lock releases before retry backoff and
   automatically on process exit. Retrying rechecks for an already-committed no-op and
-  preserves path-scoped commits.
+  preserves path-scoped commits. The sync cycle holds the same lock for its local Git
+  steps — the stray-change commit and the rebase (re-committing any write that landed
+  during fetch first) — while fetch and push run unlocked, so a sync pass never
+  collides with a concurrent autocommit on `index.lock` and a slow remote never blocks
+  local writes (HS2-V454FB).
   Hot Sheet never deletes another process's Git lock. Exhausted contention or any
   other Git failure warns while preserving the successful ticket write; network
   publication remains asynchronous (HS2-C71XN1).

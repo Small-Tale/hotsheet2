@@ -14,6 +14,8 @@
 
 use std::path::Path;
 
+use crate::store::lock_git_transaction;
+
 /// The outcome of one [`sync_once`] cycle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyncReport {
@@ -38,7 +40,15 @@ pub fn sync_once(store_path: &Path) -> SyncReport {
     }
     // Belt-and-suspenders: commit any stray working-tree changes so the tree is clean for a
     // rebase (Hot Sheet edits already auto-commit, but an external edit may not have).
-    commit_pending(store_path);
+    // Every local Git transaction holds the store's autocommit lock (HS2-V454FB) so a
+    // concurrent path-scoped autocommit never collides on `index.lock`; the network
+    // steps (fetch/push) run unlocked so a slow remote never blocks local writes.
+    {
+        let Ok(_lock) = lock_git_transaction(store_path) else {
+            return SyncReport::Offline;
+        };
+        commit_pending(store_path);
+    }
 
     // Fetch; an unreachable remote is not an error — stay offline-tolerant.
     if !git_ok(store_path, &["fetch", "--quiet"]) {
@@ -62,6 +72,12 @@ pub fn sync_once(store_path: &Path) -> SyncReport {
     // Integrate incoming commits by rebasing onto the upstream (uses the merge driver).
     let mut pulled = false;
     if behind > 0 {
+        let Ok(_lock) = lock_git_transaction(store_path) else {
+            return SyncReport::Offline;
+        };
+        // A Hot Sheet write that landed its file while fetch ran commits only once it
+        // takes this lock; commit it here so the rebase never sees a dirty tree.
+        commit_pending(store_path);
         if git_ok(store_path, &["rebase", "--quiet", "@{u}"]) {
             pulled = true;
         } else {
@@ -168,5 +184,200 @@ mod tests {
             &["remote", "add", "origin", "/no/such/repo.git"],
         ));
         assert_eq!(sync_once(dir.path()), SyncReport::Offline);
+    }
+
+    fn ok(root: &Path, args: &[&str]) {
+        assert!(
+            git_ok(root, args),
+            "git {args:?} failed in {}",
+            root.display()
+        );
+    }
+
+    fn identity(root: &Path) {
+        ok(root, &["config", "user.name", "Sync Test"]);
+        ok(root, &["config", "user.email", "sync@test.invalid"]);
+    }
+
+    /// A bare remote with one commit, plus two clones of it: `store` (the synced store)
+    /// and `peer` (another collaborator).
+    fn remote_with_two_clones() -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let remote = dir.path().join("remote.git");
+        let store = dir.path().join("store");
+        let peer = dir.path().join("peer");
+        let remote_arg = remote.to_str().unwrap();
+        ok(dir.path(), &["init", "--quiet", "--bare", remote_arg]);
+        ok(
+            dir.path(),
+            &["clone", "--quiet", remote_arg, peer.to_str().unwrap()],
+        );
+        identity(&peer);
+        std::fs::write(peer.join("seed.md"), "seed\n").unwrap();
+        ok(&peer, &["add", "-A"]);
+        ok(&peer, &["commit", "--quiet", "-m", "seed"]);
+        ok(&peer, &["push", "--quiet", "-u", "origin", "HEAD"]);
+        ok(
+            dir.path(),
+            &["clone", "--quiet", remote_arg, store.to_str().unwrap()],
+        );
+        identity(&store);
+        (dir, store, peer)
+    }
+
+    fn head(root: &Path) -> String {
+        git_stdout(root, &["rev-parse", "HEAD"]).unwrap()
+    }
+
+    fn clean(root: &Path) -> bool {
+        git_stdout(root, &["status", "--porcelain"])
+            .unwrap()
+            .is_empty()
+    }
+
+    fn peer_pushes(peer: &Path, file: &str) {
+        std::fs::write(peer.join(file), "from peer\n").unwrap();
+        ok(peer, &["add", "-A"]);
+        ok(peer, &["commit", "--quiet", "-m", file]);
+        // The store may push concurrently (sync or a best-effort autocommit push), so a
+        // collaborator integrates and retries like a real one would.
+        for _ in 0..20 {
+            ok(peer, &["pull", "--quiet", "--rebase"]);
+            if git_ok(peer, &["push", "--quiet"]) {
+                return;
+            }
+        }
+        panic!("peer could not push {file}");
+    }
+
+    /// Run `sync_once` on a thread while the test holds the store's Git transaction
+    /// lock; `held_check` runs while sync is blocked, before the lock is released.
+    fn sync_while_locked(store: &Path, held_check: impl FnOnce()) -> SyncReport {
+        use std::sync::mpsc::{RecvTimeoutError, sync_channel};
+        use std::time::Duration;
+
+        let held = lock_git_transaction(store).unwrap();
+        let (sender, receiver) = sync_channel(1);
+        let root = store.to_path_buf();
+        let worker = std::thread::spawn(move || sender.send(sync_once(&root)).unwrap());
+        assert!(matches!(
+            receiver.recv_timeout(Duration::from_millis(300)),
+            Err(RecvTimeoutError::Timeout)
+        ));
+        held_check();
+        drop(held);
+        let report = receiver.recv_timeout(Duration::from_secs(30)).unwrap();
+        worker.join().unwrap();
+        report
+    }
+
+    #[test]
+    fn the_pending_commit_waits_for_the_autocommit_lock() {
+        let (_dir, store, _peer) = remote_with_two_clones();
+        let before = head(&store);
+        std::fs::write(store.join("external.md"), "edited outside Hot Sheet\n").unwrap();
+        let report = sync_while_locked(&store, || {
+            // Still blocked on the lock: nothing staged, nothing committed.
+            assert_eq!(head(&store), before);
+            assert!(git_ok(&store, &["diff", "--cached", "--quiet"]));
+            assert!(!store.join(".git/index.lock").exists());
+        });
+        assert_eq!(
+            report,
+            SyncReport::Synced {
+                pulled: false,
+                pushed: true
+            }
+        );
+        assert_ne!(head(&store), before);
+        assert!(clean(&store));
+    }
+
+    #[test]
+    fn the_rebase_waits_for_the_autocommit_lock() {
+        let (_dir, store, peer) = remote_with_two_clones();
+        // A local commit plus an incoming one forces a real rebase.
+        std::fs::write(store.join("local.md"), "local\n").unwrap();
+        ok(&store, &["add", "-A"]);
+        ok(&store, &["commit", "--quiet", "-m", "local"]);
+        peer_pushes(&peer, "incoming.md");
+        let before = head(&store);
+        let report = sync_while_locked(&store, || {
+            assert_eq!(
+                head(&store),
+                before,
+                "sync moved HEAD while the lock was held"
+            );
+            assert!(!store.join(".git/rebase-merge").exists());
+            assert!(!store.join(".git/rebase-apply").exists());
+            // A Hot Sheet write lands its file while sync waits; the rebase must not
+            // fail on the now-dirty tree.
+            std::fs::write(store.join("late.md"), "written while sync waited\n").unwrap();
+        });
+        assert_eq!(
+            report,
+            SyncReport::Synced {
+                pulled: true,
+                pushed: true
+            }
+        );
+        assert!(store.join("incoming.md").is_file());
+        assert!(clean(&store));
+        ok(&peer, &["pull", "--quiet"]);
+        assert!(peer.join("local.md").is_file());
+        assert!(peer.join("late.md").is_file());
+    }
+
+    /// Adversarial interleaving: path-scoped autocommits race repeated sync cycles
+    /// (pending commit, fetch, rebase, push) against a remote that keeps moving. Every
+    /// autocommit must commit, the tree must end clean, and the remote must receive
+    /// every write.
+    #[test]
+    fn concurrent_autocommits_and_sync_cycles_never_lose_or_fail_a_write() {
+        let (_dir, store_root, peer) = remote_with_two_clones();
+        let store =
+            crate::store::FsStore::init(&store_root, &crate::store::StoreMetadata::new("HS"))
+                .unwrap();
+        assert!(store.autocommit("init store").unwrap());
+        let writes = 12;
+        let writer = {
+            let root = store_root.clone();
+            std::thread::spawn(move || {
+                for n in 0..writes {
+                    let path = root.join(format!("write-{n}.md"));
+                    std::fs::write(&path, format!("write {n}\n")).unwrap();
+                    // A sync cycle's pending commit may already have taken the file; the
+                    // write must still succeed either way.
+                    store
+                        .autocommit_paths(&format!("write {n}"), &[path])
+                        .unwrap();
+                }
+            })
+        };
+        let mut cycles = 0;
+        while !writer.is_finished() || cycles < 3 {
+            if cycles % 2 == 0 {
+                peer_pushes(&peer, &format!("peer-{cycles}.md"));
+            }
+            let report = sync_once(&store_root);
+            assert!(
+                matches!(report, SyncReport::Synced { .. } | SyncReport::UpToDate),
+                "cycle {cycles}: {report:?}"
+            );
+            cycles += 1;
+        }
+        writer.join().unwrap();
+        assert!(matches!(
+            sync_once(&store_root),
+            SyncReport::Synced { .. } | SyncReport::UpToDate
+        ));
+        assert!(clean(&store_root));
+        ok(&peer, &["pull", "--quiet"]);
+        for n in 0..writes {
+            assert!(
+                peer.join(format!("write-{n}.md")).is_file(),
+                "write {n} never reached the remote"
+            );
+        }
     }
 }

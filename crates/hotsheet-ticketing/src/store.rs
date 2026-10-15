@@ -776,44 +776,7 @@ impl FsStore {
     /// this store. The OS releases the lock if a writer exits unexpectedly. The file
     /// lives in Git's private directory and is never staged as ticket content.
     fn lock_autocommit(&self) -> Result<FileLock, StoreError> {
-        let out = crate::git::command()
-            .arg("-C")
-            .arg(&self.root)
-            .args(["rev-parse", "--absolute-git-dir"])
-            .output()?;
-        if !out.status.success() {
-            return Err(StoreError::Git(format!(
-                "`git rev-parse --absolute-git-dir` failed: {}",
-                String::from_utf8_lossy(&out.stderr).trim()
-            )));
-        }
-        let git_dir = PathBuf::from(
-            String::from_utf8_lossy(&out.stdout)
-                .trim_end_matches(['\n', '\r'])
-                .to_string(),
-        );
-        let git_dir = fs::canonicalize(&git_dir).map_err(|source| StoreError::IoAt {
-            operation: "resolving Git directory",
-            path: git_dir,
-            source,
-        })?;
-        let path = git_dir.join("hotsheet-autocommit.lock");
-        let file = fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&path)
-            .map_err(|source| StoreError::IoAt {
-                operation: "opening autocommit lock",
-                path: path.clone(),
-                source,
-            })?;
-        FileLock::acquire(file).map_err(|source| StoreError::IoAt {
-            operation: "locking autocommit transaction",
-            path,
-            source,
-        })
+        lock_git_transaction(&self.root)
     }
 
     fn autocommit_attempt(
@@ -2134,6 +2097,52 @@ fn coalesce_commit_jobs(jobs: Vec<CommitJob>) -> Vec<CommitJob> {
 /// no store in this process uses [`FsStore::with_background_autocommit`].
 pub fn flush_background_commits() {
     background_committer().flush();
+}
+
+/// Take the store-wide Git transaction lock (`<git-dir>/hotsheet-autocommit.lock`). Every
+/// local Git sequence that stages, commits, or moves `HEAD` (autocommits and the sync
+/// loop's commit/rebase, HS2-V454FB) holds it, so they never race on `index.lock` or
+/// replace each other's index. Blocks until the lock is free; the OS releases it when the
+/// holder exits.
+pub(crate) fn lock_git_transaction(root: &Path) -> Result<FileLock, StoreError> {
+    let out = crate::git::command()
+        .arg("-C")
+        .arg(root)
+        .args(["rev-parse", "--absolute-git-dir"])
+        .output()?;
+    if !out.status.success() {
+        return Err(StoreError::Git(format!(
+            "`git rev-parse --absolute-git-dir` failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        )));
+    }
+    let git_dir = PathBuf::from(
+        String::from_utf8_lossy(&out.stdout)
+            .trim_end_matches(['\n', '\r'])
+            .to_string(),
+    );
+    let git_dir = fs::canonicalize(&git_dir).map_err(|source| StoreError::IoAt {
+        operation: "resolving Git directory",
+        path: git_dir,
+        source,
+    })?;
+    let path = git_dir.join("hotsheet-autocommit.lock");
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)
+        .map_err(|source| StoreError::IoAt {
+            operation: "opening autocommit lock",
+            path: path.clone(),
+            source,
+        })?;
+    FileLock::acquire(file).map_err(|source| StoreError::IoAt {
+        operation: "locking autocommit transaction",
+        path,
+        source,
+    })
 }
 
 fn retry_autocommit(
