@@ -22,7 +22,7 @@ export const choiceCardSettings = {
 
 const DEMO_OPTIONS = [
   { value: 'entire', title: 'Entire conversation', description: 'All 12 messages, in their original order.' },
-  { value: 'range', title: 'Selected range', description: '3 messages selected in the chat.' },
+  { value: 'selected', title: 'Selected messages', description: '3 messages selected in the chat.' },
   { value: 'overwrite', title: 'Overwrite the existing bundle', description: 'Replace its files in this destination.' },
 ] as const;
 

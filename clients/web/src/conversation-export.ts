@@ -2,7 +2,8 @@ import type { ConversationActivity, ConversationMessage } from './ai-conversatio
 
 export const CONVERSATION_EXPORT_MANIFEST_VERSION = 1;
 
-export type ConversationExportScope = { kind: 'all' } | { kind: 'range'; startMessageId: string; endMessageId: string };
+/** The whole transcript, or the messages selected in the chat (any set, kept in transcript order; HS2-WV88W3). */
+export type ConversationExportScope = { kind: 'all' } | { kind: 'messages'; messageIds: readonly string[] };
 
 export type ConversationExportWriteMode = 'create' | 'overwrite' | 'reexport';
 
@@ -184,30 +185,8 @@ export function selectedConversationMessages(
   scope: ConversationExportScope,
 ): readonly ConversationMessage[] {
   if (scope.kind === 'all') return messages;
-  const startIndex = messages.findIndex((message) => message.id === scope.startMessageId);
-  const endIndex = messages.findIndex((message) => message.id === scope.endMessageId);
-  if (startIndex < 0 || endIndex < 0 || startIndex > endIndex) return [];
-  return messages.slice(startIndex, endIndex + 1);
-}
-
-/** Two-click visual range selection: the first pick anchors, the second completes an ordered range, and a third starts over. */
-export function conversationExportScopeAfterMessagePick(
-  messages: readonly ConversationMessage[],
-  scope: ConversationExportScope,
-  messageId: string,
-): ConversationExportScope {
-  const picked = messages.findIndex((message) => message.id === messageId);
-  if (picked < 0) return scope;
-  if (scope.kind === 'all') return { kind: 'range', startMessageId: messageId, endMessageId: messageId };
-  const start = messages.findIndex((message) => message.id === scope.startMessageId);
-  const end = messages.findIndex((message) => message.id === scope.endMessageId);
-  if (start < 0 || end < 0 || start !== end || picked === start)
-    return { kind: 'range', startMessageId: messageId, endMessageId: messageId };
-  return {
-    kind: 'range',
-    startMessageId: messages[Math.min(start, picked)].id,
-    endMessageId: messages[Math.max(start, picked)].id,
-  };
+  const ids = new Set(scope.messageIds);
+  return messages.filter((message) => ids.has(message.id));
 }
 
 export function conversationExportValidation(
@@ -217,7 +196,7 @@ export function conversationExportValidation(
 ): string | undefined {
   const selected = selectedConversationMessages(messages, draft.scope);
   if (selected.length === 0)
-    return messages.length === 0 ? 'There are no messages to save.' : 'Choose a valid message range.';
+    return messages.length === 0 ? 'There are no messages to save.' : 'Select at least one message to save.';
   if (!draft.destination?.selectionToken) return 'Choose where to save the conversation.';
   if (draft.writeMode === 'create' && draft.destination.existing)
     return 'Choose re-export or overwrite for the existing bundle.';
@@ -292,14 +271,20 @@ function quotedBlock(value: string): string {
     .join('\n');
 }
 
-/** Human-readable companion to the lossless structured transcript. */
+/**
+ * Human-readable companion to the lossless structured transcript. `skippedBefore` maps a message id
+ * to how many unselected messages preceded it inside a non-contiguous selection (HS2-WV88W3).
+ */
 export function conversationTranscriptMarkdown(
   source: ConversationExportSource,
   messages: readonly ConversationMessage[],
   activity: readonly ConversationActivity[] = [],
+  skippedBefore: ReadonlyMap<string, number> = new Map(),
 ): string {
   const lines = [`# ${source.tool} conversation`, ''];
   for (const message of messages) {
+    const skipped = skippedBefore.get(message.id);
+    if (skipped) lines.push(`_${skipped} message${skipped === 1 ? '' : 's'} skipped_`, '');
     lines.push(
       `## ${message.role === 'user' ? 'You' : 'Assistant'}`,
       '',

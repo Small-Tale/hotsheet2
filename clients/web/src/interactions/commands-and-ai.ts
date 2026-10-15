@@ -25,6 +25,7 @@ import { wireTrashSettings } from '../components/trash-settings-interactions';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
 import { type ConversationExportDraft } from '../conversation-export';
+import { type ConversationSelectionModifiers } from '../conversation-selection';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
@@ -74,7 +75,11 @@ export interface CommandAndAiInteractionsDependencies {
   readonly openSidebarConversation: () => Promise<void>;
   readonly conversationOpen: Signal<boolean>;
   readonly openConversationExport: () => void;
-  readonly pickConversationMessage: (connectionId: string, messageId: string) => void;
+  readonly pickConversationMessage: (
+    connectionId: string,
+    messageId: string,
+    modifiers?: ConversationSelectionModifiers,
+  ) => void;
   readonly copyConversationSelection: (connectionId: string) => Promise<void>;
   readonly clearConversationSelection: (connectionId: string) => void;
   readonly conversationExportDialog: Signal<ConversationExportDialogState | undefined>;
@@ -463,8 +468,8 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       if (!state) return;
       const kind = (target as HTMLInputElement).value;
       if (kind === 'all') updateConversationExportDraft((draft) => ({ ...draft, scope: { kind: 'all' } }));
-      else if (state.selectedRange)
-        updateConversationExportDraft((draft) => ({ ...draft, scope: state.selectedRange! }));
+      else if (state.selectedScope)
+        updateConversationExportDraft((draft) => ({ ...draft, scope: state.selectedScope! }));
     }),
   );
   lifetime.add(

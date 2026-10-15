@@ -8134,7 +8134,7 @@ test('keeps AI chat activity borderless until the selected range spans it (HS2-7
   // The question, then its answer: the activity between them joins the selected span and is outlined.
   await host.locator('[data-message-id="question-1"]').click();
   await expect(activity).toHaveAttribute('data-selected-range', 'false');
-  await host.locator('[data-message-id="answer-1"]').click();
+  await host.locator('[data-message-id="answer-1"]').click({ modifiers: ['Shift'] });
   await expect(activity).toHaveAttribute('data-selected-range', 'true');
   await expect.poll(async () => (await frame()).border).not.toBe('rgba(0, 0, 0, 0)');
   await expect.poll(async () => (await frame()).background).toBe('rgba(0, 0, 0, 0)');
@@ -9494,9 +9494,9 @@ test('drives every ChoiceCard presentation from its demo settings (HS2-V7PCS6)',
     await expect(cards).toHaveCount(3);
     // Radio cards: one checked, brand tone, and equal full-width cards in their column.
     await expect(stage.getByRole('radio', { name: /Entire conversation/ })).toBeChecked();
-    await stage.getByText('Selected range').click();
-    await expect(stage.getByRole('radio', { name: /Selected range/ })).toBeChecked();
-    await expect(event).toHaveText('Checked: range');
+    await stage.getByText('Selected messages').click();
+    await expect(stage.getByRole('radio', { name: /Selected messages/ })).toBeChecked();
+    await expect(event).toHaveText('Checked: selected');
     const widths = await cards.evaluateAll((nodes) =>
       nodes.map((node) => Math.round(node.getBoundingClientRect().width)),
     );
@@ -9513,15 +9513,15 @@ test('drives every ChoiceCard presentation from its demo settings (HS2-V7PCS6)',
     await page.screenshot({ path: `target/visual-captures/hs2-v7pcs6-choice-card-radio-${width}.png` });
     // Checkbox cards toggle independently.
     await setSetting('type', 'checkbox');
-    await stage.getByText('Selected range').click();
-    await expect(event).toHaveText('Checked: entire, range');
+    await stage.getByText('Selected messages').click();
+    await expect(event).toHaveText('Checked: entire, selected');
     await stage.getByText('Entire Conversation').click();
-    await expect(event).toHaveText('Checked: range');
+    await expect(event).toHaveText('Checked: selected');
     // Without descriptions, then disabled.
     await setChecked('description', false);
     await expect(stage.locator('.choice-card__copy small')).toHaveCount(0);
     await setChecked('disabled', true);
-    await expect(stage.getByRole('checkbox', { name: /Selected range/ })).toBeDisabled();
+    await expect(stage.getByRole('checkbox', { name: /Selected messages/ })).toBeDisabled();
     await expect(cards.first()).toHaveCSS('cursor', 'not-allowed');
     await page.screenshot({ path: `target/visual-captures/hs2-v7pcs6-choice-card-checkbox-${width}.png` });
   }

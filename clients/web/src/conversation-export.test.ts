@@ -5,7 +5,6 @@ import {
   buildConversationExportRequest,
   conversationExportAssets,
   conversationExportBundleEntries,
-  conversationExportScopeAfterMessagePick,
   conversationExportValidation,
   conversationSummaryMarkdown,
   conversationTranscriptMarkdown,
@@ -23,33 +22,14 @@ const messages: ConversationMessage[] = [
 ];
 
 describe('conversation export contract', () => {
-  it('selects an inclusive ordered range and rejects reversed or missing boundaries', () => {
+  it('selects the chosen messages in transcript order, ignoring unknown ids (HS2-WV88W3)', () => {
     expect(
-      selectedConversationMessages(messages, {
-        kind: 'range',
-        startMessageId: 'message-2',
-        endMessageId: 'message-3',
-      }).map((message) => message.id),
-    ).toEqual(['message-2', 'message-3']);
-    expect(
-      selectedConversationMessages(messages, { kind: 'range', startMessageId: 'message-3', endMessageId: 'message-2' }),
-    ).toEqual([]);
-    expect(
-      selectedConversationMessages(messages, { kind: 'range', startMessageId: 'missing', endMessageId: 'message-4' }),
-    ).toEqual([]);
-  });
-
-  it('builds a visual range with two message picks and starts over on the third', () => {
-    const first = conversationExportScopeAfterMessagePick(messages, { kind: 'all' }, 'message-3');
-    expect(first).toEqual({ kind: 'range', startMessageId: 'message-3', endMessageId: 'message-3' });
-    const second = conversationExportScopeAfterMessagePick(messages, first, 'message-1');
-    expect(second).toEqual({ kind: 'range', startMessageId: 'message-1', endMessageId: 'message-3' });
-    expect(conversationExportScopeAfterMessagePick(messages, second, 'message-2')).toEqual({
-      kind: 'range',
-      startMessageId: 'message-2',
-      endMessageId: 'message-2',
-    });
-    expect(conversationExportScopeAfterMessagePick(messages, second, 'missing')).toEqual(second);
+      selectedConversationMessages(messages, { kind: 'messages', messageIds: ['message-3', 'message-1'] }).map(
+        (message) => message.id,
+      ),
+    ).toEqual(['message-1', 'message-3']);
+    expect(selectedConversationMessages(messages, { kind: 'messages', messageIds: ['missing'] })).toEqual([]);
+    expect(selectedConversationMessages(messages, { kind: 'all' })).toHaveLength(4);
   });
 
   it('describes a portable bundle without inventing individual attachment paths', () => {
@@ -81,7 +61,7 @@ describe('conversation export contract', () => {
       },
       messages,
       {
-        scope: { kind: 'range', startMessageId: 'message-2', endMessageId: 'message-4' },
+        scope: { kind: 'messages', messageIds: ['message-2', 'message-3', 'message-4'] },
         destination: {
           selectionToken: 'opaque-selection',
           displayPath: '/Exports/release-review',
@@ -114,7 +94,7 @@ describe('conversation export contract', () => {
         messages,
         {
           ...defaultConversationExportDraft(),
-          scope: { kind: 'range', startMessageId: 'message-1', endMessageId: 'message-2' },
+          scope: { kind: 'messages', messageIds: ['message-1', 'message-2'] },
           destination: { selectionToken: 'new-selection', displayPath: '/Exports/partial', kind: 'directory' },
         },
       ).reopen.resumesOriginalSession,
@@ -196,7 +176,7 @@ describe('conversation export contract', () => {
     ];
     const draft = {
       ...defaultConversationExportDraft(),
-      scope: { kind: 'range' as const, startMessageId: 'message-1', endMessageId: 'message-2' },
+      scope: { kind: 'messages' as const, messageIds: ['message-1', 'message-2'] },
     };
     expect(selectedConversationFileReferences(withFiles, draft.scope, draft.bundle).map((file) => file.id)).toEqual([
       'document-1',

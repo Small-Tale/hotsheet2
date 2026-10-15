@@ -6579,6 +6579,9 @@ test('remeasures a reopened search after a closed resize without restyling the a
   });
 });
 
+/** The empty-selection hint names Cmd on macOS and Ctrl elsewhere (HS2-WV88W3). */
+const SELECTION_HINT = /Click to select\. (Cmd|Ctrl)-click to add or remove, Shift-click for a range\./;
+
 test('keeps a scrolled-back transcript in place while selecting a message range', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
@@ -6643,13 +6646,14 @@ test('keeps a scrolled-back transcript in place while selecting a message range'
   await expect(conversation).toContainText('1 message selected');
   await settle();
   await expectReadingPosition();
-  await messages.nth(endIndex).click();
+  // Shift-click extends from the anchor (HS2-WV88W3).
+  await messages.nth(endIndex).click({ modifiers: ['Shift'] });
   await expect(conversation).toContainText(`${anchorIndex - endIndex + 1} messages selected`);
   await settle();
   await expectReadingPosition();
   await conversation.screenshot({ path: 'target/visual-captures/hs2-eqhary-scroll-selection-after.png' });
   await conversation.getByRole('button', { name: 'Clear Message Selection' }).click();
-  await expect(conversation).toContainText('Select a message, then another to select a range.');
+  await expect(conversation).toContainText(SELECTION_HINT);
   await settle();
   await expectReadingPosition();
   // Sending is an explicit request to continue the conversation, so it returns to and follows the latest edge.
@@ -6795,7 +6799,7 @@ test('selects and copies chat messages before saving that range without choosing
   await expect(dialog).toHaveJSProperty('open', true);
   await expect(dialog).toContainText('Step 1 of 2');
   await expect(dialog).toContainText('Choose scope');
-  await expect(dialog.locator('input[name="conversation-export-scope"][value="range"]')).toBeChecked();
+  await expect(dialog.locator('input[name="conversation-export-scope"][value="selected"]')).toBeChecked();
   await expect(dialog).toContainText('1 message selected in the chat.');
   await expect(dialog.locator('[data-action="pick-conversation-export-message"]')).toHaveCount(0);
   await dialogPanel.screenshot({ path: 'target/visual-captures/hs2-eqhary-save-selected-range-wide.png' });
@@ -6922,7 +6926,7 @@ test('shows selection in the main chat and skips export scope after it is cleare
     .screenshot({ path: 'target/visual-captures/hs2-eqhary-main-chat-selection-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 900 });
   await conversation.getByRole('button', { name: 'Clear Message Selection' }).click();
-  await expect(conversation).toContainText('Select a message, then another to select a range.');
+  await expect(conversation).toContainText(SELECTION_HINT);
   await conversation.getByRole('button', { name: 'Save Conversation' }).click();
   const dialog = page.locator('[data-component="conversation-export-dialog"]'),
     activeScreen = dialog.locator('[data-transition-region="content"] > [data-active="true"]');
@@ -6931,6 +6935,164 @@ test('shows selection in the main chat and skips export scope after it is cleare
   await expect(activeScreen).not.toContainText('Step 1 of 2');
   await expect(activeScreen.locator('input[name="conversation-export-scope"]')).toHaveCount(0);
   await dialog.getByRole('dialog').screenshot({ path: 'target/visual-captures/hs2-eqhary-save-entire-chat.png' });
+});
+
+/**
+ * Conventional message selection (HS2-WV88W3): plain click selects one, Cmd/Ctrl-click toggles,
+ * Shift-click extends from the anchor, and Shift or Cmd/Ctrl with Enter/Space do the same from the
+ * keyboard. Copy marks the runs a non-contiguous selection skips.
+ */
+async function exerciseConversationSelection(
+  page: Page,
+  conversation: Locator,
+  capture: (name: string) => Promise<unknown>,
+) {
+  const messages = conversation.locator('[data-action="pick-conversation-message"]'),
+    selectedFlags = () => messages.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-selected'))),
+    status = conversation.locator('.ai-conversation__selection');
+  await expect(status).toContainText(SELECTION_HINT);
+  await messages.nth(0).click();
+  await expect(status).toContainText('1 message selected');
+  await messages.nth(3).click({ modifiers: ['ControlOrMeta'] });
+  await expect.poll(selectedFlags).toEqual(['true', 'false', 'false', 'true']);
+  await expect(status).toContainText('2 messages selected');
+  // The modified click picked a message without leaving a page text selection behind.
+  expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe('');
+  await conversation.locator('.ai-conversation__transcript').evaluate((node) => {
+    node.scrollTop = 0;
+  });
+  await capture('gap');
+  await conversation.getByRole('button', { name: 'Copy Selected Messages' }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain('_2 messages skipped_');
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied.match(/skipped/g)).toHaveLength(1);
+  // Shift extends from the toggled anchor and replaces the rest; Cmd/Ctrl-click removes one again.
+  await messages.nth(2).click({ modifiers: ['Shift'] });
+  await expect.poll(selectedFlags).toEqual(['false', 'false', 'true', 'true']);
+  await messages.nth(3).click({ modifiers: ['ControlOrMeta'] });
+  await expect.poll(selectedFlags).toEqual(['false', 'false', 'true', 'false']);
+  // Keyboard: Shift+Enter extends from the anchor (the message just toggled off), Cmd/Ctrl+Space
+  // toggles, and plain Enter selects only one.
+  await messages.nth(0).focus();
+  await page.keyboard.press('Shift+Enter');
+  await expect.poll(selectedFlags).toEqual(['true', 'true', 'true', 'true']);
+  await messages.nth(1).focus();
+  await page.keyboard.press('ControlOrMeta+Space');
+  await expect.poll(selectedFlags).toEqual(['true', 'false', 'true', 'true']);
+  await expect(messages.nth(1)).toBeFocused();
+  await messages.nth(3).focus();
+  await page.keyboard.press('Enter');
+  await expect.poll(selectedFlags).toEqual(['false', 'false', 'false', 'true']);
+  // Clicking the sole selected message again clears the selection and restores the hint.
+  await messages.nth(3).click();
+  await expect.poll(selectedFlags).toEqual(['false', 'false', 'false', 'false']);
+  await expect(status).toContainText(SELECTION_HINT);
+}
+
+test('selects single and non-contiguous messages with modifier keys in the drawer chat (HS2-WV88W3)', async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
+  await expect(drawer).toHaveAttribute('data-maximized', 'true');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
+  const conversation = drawer.locator('[data-component="ai-conversation"][data-presentation="embedded"]'),
+    composer = conversation.getByLabel('Message Codex'),
+    messages = conversation.locator('[data-action="pick-conversation-message"]');
+  for (let turn = 1; turn <= 2; turn += 1) {
+    await composer.fill('What time is it in California?');
+    await composer.press('Enter');
+    await expect(messages).toHaveCount(turn * 2);
+    await expect(conversation.getByText('The event stream remains authoritative.', { exact: true })).toHaveCount(turn);
+  }
+  await exerciseConversationSelection(page, conversation, (name) =>
+    conversation.screenshot({ path: `target/visual-captures/hs2-wv88w3-drawer-${name}-1280.png` }),
+  );
+});
+
+test('selects non-contiguous messages in a phone-width drawer chat (HS2-WV88W3)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
+  await expect(drawer).toHaveAttribute('data-maximized', 'true');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+  const conversation = drawer.locator('[data-component="ai-conversation"]'),
+    composer = conversation.getByLabel('Message Codex'),
+    messages = conversation.locator('[data-action="pick-conversation-message"]');
+  for (let turn = 1; turn <= 2; turn += 1) {
+    await composer.fill('What time is it in California?');
+    await composer.press('Enter');
+    await expect(messages).toHaveCount(turn * 2);
+    await expect(conversation.getByText('The event stream remains authoritative.', { exact: true })).toHaveCount(turn);
+  }
+  await conversation.locator('.ai-conversation__transcript').evaluate((node) => {
+    node.scrollTop = 0;
+  });
+  await expect(conversation.locator('.ai-conversation__selection')).toContainText(SELECTION_HINT);
+  await page.screenshot({ path: 'target/visual-captures/hs2-wv88w3-drawer-hint-390.png' });
+  await messages.nth(0).click();
+  await messages.nth(3).click({ modifiers: ['ControlOrMeta'] });
+  await expect(conversation.locator('.ai-conversation__selection')).toContainText('2 messages selected');
+  await conversation.locator('.ai-conversation__transcript').evaluate((node) => {
+    node.scrollTop = 0;
+  });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-wv88w3-drawer-gap-390.png' });
+});
+
+test('selects single and non-contiguous messages with modifier keys in the main chat dialog (HS2-WV88W3)', async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
+  const conversation = page.locator('[data-component="ai-conversation"]'),
+    composer = conversation.getByLabel('Message Codex'),
+    messages = conversation.locator('[data-action="pick-conversation-message"]');
+  for (let turn = 1; turn <= 2; turn += 1) {
+    await composer.fill('What time is it in California?');
+    await composer.press('Enter');
+    await expect(messages).toHaveCount(turn * 2);
+    await expect(conversation.getByText('The event stream remains authoritative.', { exact: true })).toHaveCount(turn);
+  }
+  await exerciseConversationSelection(page, conversation, (name) =>
+    conversation.getByRole('dialog').screenshot({ path: `target/visual-captures/hs2-wv88w3-dialog-${name}-1280.png` }),
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await messages.nth(0).click();
+  await messages.nth(3).click({ modifiers: ['ControlOrMeta'] });
+  await expect(conversation.locator('.ai-conversation__selection')).toContainText('2 messages selected');
+  await conversation.locator('.ai-conversation__transcript').evaluate((node) => {
+    node.scrollTop = 0;
+  });
+  await page.screenshot({ path: 'target/visual-captures/hs2-wv88w3-dialog-gap-390.png' });
+  // A non-contiguous selection is offered as the export scope.
+  await conversation.getByRole('button', { name: 'Save Conversation' }).click();
+  const exportDialog = page.locator('[data-component="conversation-export-dialog"]');
+  await expect(exportDialog.locator('input[name="conversation-export-scope"][value="selected"]')).toBeChecked();
+  await expect(exportDialog).toContainText('Selected messages');
+  await expect(exportDialog).toContainText('2 messages selected in the chat.');
 });
 
 test('shows AI chats in the project and workspace grids and reopens them from the global grid', async ({ page }) => {

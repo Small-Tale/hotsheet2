@@ -453,9 +453,13 @@ does not introduce polling or another network request.
     The dialog floats it as a Kerf `DialogSurface` floating footer over a `fill-last` body
     (KF-913AT2, 8 px offset on handsets), so no `::part()` rules remain. Referenced files render
     as Kerf link `Chip`s (`href`, `download`, `tone="inherit"`, truncating; KF-H658D6) (HS2-94T958)
-  - save/reopen: the header Save action reuses the live transcript selection. If a range exists,
-    a compact `ConversationExportDialog` offers Entire conversation or the already-selected range
-    without presenting another picker; if no range exists it skips directly to the vertically
+  - selection: plain click selects one message, Cmd/Ctrl-click (Cmd on Apple platforms) toggles one,
+    Shift-click extends from the anchor, and Shift or Cmd/Ctrl with Enter/Space do the same from the
+    keyboard. Selections may be non-contiguous; Copy marks each skipped interior run
+    (`clients/web/src/conversation-selection.ts`, HS2-WV88W3)
+  - save/reopen: the header Save action reuses the live transcript selection. If messages are selected,
+    a compact `ConversationExportDialog` offers Entire conversation or the already-selected messages
+    without presenting another picker; if nothing is selected it skips directly to the vertically
     stacked set of optional local summary/attachments/original-media
     contents and invokes the host `.hotsheet-chat` folder picker from Save; nested popup hide events do
     not close the wizard;

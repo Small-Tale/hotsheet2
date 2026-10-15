@@ -47,15 +47,15 @@ describe('ConversationExportDialog', () => {
     expect(markup).not.toContain('previous-conversation-export-step');
   });
 
-  it('offers the already-selected chat range without asking users to pick it again', () => {
-    const selectedRange = { kind: 'range' as const, startMessageId: 'message-2', endMessageId: 'message-3' };
+  it('offers the messages already selected in the chat without asking users to pick it again', () => {
+    const selectedScope = { kind: 'messages' as const, messageIds: ['message-2', 'message-3'] };
     const markup = String(
       ConversationExportDialog({
         state: {
           source,
           messages,
-          draft: { ...defaultConversationExportDraft(), scope: selectedRange },
-          selectedRange,
+          draft: { ...defaultConversationExportDraft(), scope: selectedScope },
+          selectedScope,
           step: 1,
         },
       }),
@@ -66,7 +66,7 @@ describe('ConversationExportDialog', () => {
     expect(markup).toContain('Choose scope');
     expect(markup).toContain('name="conversation-export-scope" value="all"');
     expect(markup).not.toContain('name="conversation-export-scope" value="all" checked');
-    expect(markup).toContain('name="conversation-export-scope" value="range" checked');
+    expect(markup).toContain('name="conversation-export-scope" value="selected" checked');
     expect(markup).toContain('2 messages selected in the chat.');
     expect(markup).not.toContain('class="ai-conversation__message');
     expect(markup).not.toContain('pick-conversation-export-message');
@@ -74,14 +74,14 @@ describe('ConversationExportDialog', () => {
   });
 
   it('pushes forward and pops backward with the shared in-content back affordance', () => {
-    const selectedRange = { kind: 'range' as const, startMessageId: 'message-2', endMessageId: 'message-3' };
+    const selectedScope = { kind: 'messages' as const, messageIds: ['message-2', 'message-3'] };
     const forward = String(
       ConversationExportDialog({
         state: {
           source,
           messages,
-          draft: { ...defaultConversationExportDraft(), scope: selectedRange },
-          selectedRange,
+          draft: { ...defaultConversationExportDraft(), scope: selectedScope },
+          selectedScope,
           step: 2,
           navigation: 'push',
         },
@@ -99,8 +99,8 @@ describe('ConversationExportDialog', () => {
         state: {
           source,
           messages,
-          draft: { ...defaultConversationExportDraft(), scope: selectedRange },
-          selectedRange,
+          draft: { ...defaultConversationExportDraft(), scope: selectedScope },
+          selectedScope,
           step: 1,
           navigation: 'pop',
         },
@@ -110,15 +110,15 @@ describe('ConversationExportDialog', () => {
     expect(backward).toContain('data-transition-direction="backward"');
   });
 
-  it('reviews an inclusive range and a same-conversation re-export choice', () => {
-    const selectedRange = { kind: 'range' as const, startMessageId: 'message-2', endMessageId: 'message-3' };
+  it('reviews a selected-messages scope and a same-conversation re-export choice', () => {
+    const selectedScope = { kind: 'messages' as const, messageIds: ['message-2', 'message-3'] };
     const markup = String(
       ConversationExportDialog({
         state: {
           source,
           messages,
           draft: {
-            scope: selectedRange,
+            scope: selectedScope,
             destination: {
               selectionToken: 'opaque-selection',
               displayPath: '/Users/me/Exports/release-review',
@@ -129,7 +129,7 @@ describe('ConversationExportDialog', () => {
             bundle: { ...defaultConversationExportDraft().bundle, includeSummary: true },
           },
           step: 2,
-          selectedRange,
+          selectedScope,
         },
       }),
     );

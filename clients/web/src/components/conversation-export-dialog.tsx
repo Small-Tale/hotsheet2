@@ -33,7 +33,8 @@ export interface ConversationExportDialogState {
   summaryAvailable?: boolean;
   step?: 1 | 2;
   navigation?: 'none' | 'push' | 'pop';
-  selectedRange?: Extract<ConversationExportScope, { kind: 'range' }>;
+  /** The messages selected in the chat, offered as the export scope (any set; HS2-WV88W3). */
+  selectedScope?: Extract<ConversationExportScope, { kind: 'messages' }>;
 }
 
 export function ConversationExportDialog({ state }: { state?: ConversationExportDialogState }) {
@@ -47,12 +48,12 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
     summaryAvailable = true,
     step = 1,
     navigation = 'none',
-    selectedRange,
+    selectedScope,
   } = state;
-  const range = draft.scope.kind === 'range';
+  const selectedChoice = draft.scope.kind === 'messages';
   const selectedMessages = selectedConversationMessages(messages, draft.scope);
-  const presetMessages = selectedRange ? selectedConversationMessages(messages, selectedRange) : [];
-  const hasScopeChoice = Boolean(selectedRange);
+  const presetMessages = selectedScope ? selectedConversationMessages(messages, selectedScope) : [];
+  const hasScopeChoice = Boolean(selectedScope);
   const existing = draft.destination?.existing;
   const sameConversation = existing?.sourceConversationId === source.conversationId;
   const validation = conversationExportValidation(messages, draft, source);
@@ -78,7 +79,7 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
             type="radio"
             name="conversation-export-scope"
             value="all"
-            checked={!range}
+            checked={!selectedChoice}
             disabled={busy}
             title="Entire conversation"
             description={`All ${messages.length} messages, in their original order.`}
@@ -86,10 +87,10 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
           <ChoiceCard
             type="radio"
             name="conversation-export-scope"
-            value="range"
-            checked={range}
+            value="selected"
+            checked={selectedChoice}
             disabled={busy}
-            title="Selected range"
+            title="Selected messages"
             description={`${presetMessages.length} message${presetMessages.length === 1 ? '' : 's'} selected in the chat.`}
           />
         </fieldset>

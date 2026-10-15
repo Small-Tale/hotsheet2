@@ -1565,8 +1565,9 @@ preview/download, server directory browser) are separate design work.
   stream's normalized activity events are session/connection matched into the shared bounded
   transcript sequence, grouping adjacent activity while preserving their position between
   messages. Activity groups are borderless and transparent, like the ticket sidebar's activity
-  notes, and gain an outline only while they lie inside the selected message range (between the
-  first and last selected messages; HS2-72GEX0). Each group starts collapsed to its most recent
+  notes, and gain an outline only while they lie inside the selection: both the nearest message
+  before the group and the nearest message after it are selected, so a skipped gap in a
+  non-contiguous selection never outlines its activity (HS2-72GEX0, HS2-WV88W3). Each group starts collapsed to its most recent
   item; clicking the group, or its header disclosure button (`aria-expanded`, keyboard
   operable), toggles between that line and every item. A new item arriving while the group is
   collapsed replaces the visible line, and an expanded group stays open as items append. Clicks
@@ -1596,8 +1597,8 @@ preview/download, server directory browser) are separate design work.
   actionable instead of collapsing to an unexplained exit status. Opening a populated transcript
   starts at its latest message; streamed growth remains pinned while the reader is already at the
   bottom, but never pulls them away from older messages they intentionally scrolled back to read.
-  Rerenders that do not add content — selecting, extending, or clearing a message range — keep the
-  reader's scroll position, so a range can be picked while scrolled back through history. Sending a
+  Rerenders that do not add content — selecting, extending, or clearing a message selection — keep the
+  reader's scroll position, so messages can be picked while scrolled back through history. Sending a
   message is an explicit continuation, so it returns the transcript to its latest edge and pins it.
 
   The conversation's model/effort selector and native Save/Stop buttons render through
@@ -1617,10 +1618,27 @@ preview/download, server directory browser) are separate design work.
   available (HS2-WXVAF3, HS2-P415F0).
 
   Completed transcripts can be saved from either conversation presentation. Messages remain
-  directly selectable in the live transcript: one pick anchors a range, a second includes every
-  message between the boundaries, and the selected range can be copied to the system clipboard.
-  Save reuses that selection instead of asking for it again. With a selection, the compact wizard
-  first offers only Entire conversation or Selected range; with no selection it skips that scope
+  directly selectable in the live transcript, in the drawer and the dialog alike, with
+  conventional single and multi-selection (HS2-WV88W3). The toggle modifier is normalized per
+  host platform: Cmd on Apple platforms, Ctrl elsewhere (Ctrl-click stays the macOS context menu).
+  - A plain click selects only that message; clicking the sole selected message again clears it.
+  - Cmd/Ctrl-click adds or removes one message and makes it the anchor, so a selection may skip
+    messages.
+  - Shift-click selects every message from the anchor to the clicked one, replacing the rest;
+    Cmd/Ctrl+Shift-click adds that range to the existing selection. Without an anchor, Shift-click
+    acts like a plain click.
+  - On a focused message, plain Enter/Space selects only it; Shift or Cmd/Ctrl with Enter/Space
+    extends or toggles exactly like the matching click.
+  - Modified clicks never extend the page's text selection, while a plain click that ends a text
+    drag is treated as reading and leaves the selection alone.
+  - Ranges, gaps, and copies follow the transcript's displayed (sequence) order.
+  - With nothing selected, the sticky bar shows the platform's hint ("Click to select. Cmd-click to
+    add or remove, Shift-click for a range."). Otherwise it shows the count with Copy and Clear.
+
+  Copy writes the selected messages as Markdown and inserts an italic `N messages skipped` line
+  wherever a run of unselected messages lies between two selected ones. Leading and trailing
+  exclusions get no marker (saved bundle transcripts do not mark skipped runs yet; HS2-BZB93V). Save reuses that selection instead of asking for it again. With a selection, the compact wizard
+  first offers only Entire conversation or Selected messages (any set, contiguous or not); with no selection it skips that scope
   step because the full transcript is the only possible result. The bundle-contents step presents
   optional contents as one vertical list and opens the host folder picker from Save, without a
   redundant review step or internal bundle-file inventory. Popup lifecycle events from
@@ -1631,7 +1649,7 @@ preview/download, server directory browser) are separate design work.
   readable `transcript.md`, and lossless `conversation.json`; optional `summary.md`, attachment,
   and original-media entries are explicit. Structured file references emitted with assistant
   messages retain stable ids, filenames, MIME types, and source URLs in conversation state; only
-  references from the selected message range and enabled bundle categories are fetched byte-for-byte
+  references from the selected messages and enabled bundle categories are fetched byte-for-byte
   and sent to the already validated asset writer. The browser receives only an opaque destination token,
   while the trusted local bridge validates sizes and identities and owns all filesystem reads and
   writes. Selecting an existing bundle requires an explicit overwrite or same-conversation

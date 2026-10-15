@@ -1150,7 +1150,7 @@ describe('conversation feature transitions (HS2-DHYGXJ)', () => {
     const state = chatOwners(),
       { archive } = state;
     archive.pickConversationMessage('chat-a', 'two');
-    archive.pickConversationMessage('chat-a', 'one');
+    archive.pickConversationMessage('chat-a', 'one', { toggle: false, extend: true });
     expect(
       archive.conversationSelectedMessages('chat-a', state.conversationStates.value['chat-a'].messages),
     ).toHaveLength(2);
@@ -1185,6 +1185,57 @@ describe('conversation feature transitions (HS2-DHYGXJ)', () => {
     expect(
       archive.conversationSelectedMessages('chat-b', state.conversationStates.value['chat-b'].messages),
     ).toHaveLength(1);
+  });
+});
+
+describe('conversation message selection (HS2-WV88W3)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('copies a non-contiguous selection with skipped-message markers and offers it as the export scope', async () => {
+    const state = chatOwners(),
+      { archive } = state,
+      writeText = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('navigator', { userAgent: navigator.userAgent, clipboard: { writeText } });
+    state.conversationStates.value = {
+      'chat-a': {
+        messages: ['one', 'two', 'three', 'four', 'five'].map((id, index) => ({
+          id,
+          role: index % 2 ? ('assistant' as const) : ('user' as const),
+          content: `Message ${id}`,
+        })),
+      },
+    };
+    const selected = () =>
+      archive
+        .conversationSelectedMessages('chat-a', state.conversationStates.value['chat-a'].messages)
+        .map((message) => message.id);
+    archive.pickConversationMessage('chat-a', 'one');
+    archive.pickConversationMessage('chat-a', 'four', { toggle: true, extend: false });
+    archive.pickConversationMessage('chat-a', 'five', { toggle: true, extend: false });
+    expect(selected()).toEqual(['one', 'four', 'five']);
+    await archive.copyConversationSelection('chat-a');
+    const copied = (writeText.mock.calls[0] as unknown as [string])[0];
+    expect(copied).toContain('Message one');
+    expect(copied).toContain('_2 messages skipped_');
+    expect(copied).not.toContain('Message two');
+    expect(copied.indexOf('_2 messages skipped_')).toBeLessThan(copied.indexOf('Message four'));
+    expect(copied.match(/skipped/g)).toHaveLength(1);
+    expect(state.showToast).toHaveBeenCalledWith('3 selected messages copied to clipboard.');
+    archive.openConversationExport();
+    expect(archive.conversationExportDialog.value).toMatchObject({
+      step: 1,
+      selectedScope: { kind: 'messages', messageIds: ['one', 'four', 'five'] },
+      draft: { scope: { kind: 'messages', messageIds: ['one', 'four', 'five'] } },
+    });
+    // Toggling the last pick off and empty-then-refill both leave a consistent selection.
+    archive.pickConversationMessage('chat-a', 'five', { toggle: true, extend: false });
+    expect(selected()).toEqual(['one', 'four']);
+    archive.clearConversationSelection('chat-a');
+    await archive.copyConversationSelection('chat-a');
+    expect(writeText).toHaveBeenCalledTimes(1);
+    archive.pickConversationMessage('chat-a', 'two', { toggle: false, extend: true });
+    archive.pickConversationMessage('chat-a', 'four', { toggle: false, extend: true });
+    expect(selected()).toEqual(['two', 'three', 'four']);
   });
 });
 

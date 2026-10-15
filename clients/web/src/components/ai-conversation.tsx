@@ -48,6 +48,7 @@ import {
   formatConversationTokens,
 } from '../ai-conversation';
 import { activityGroupExpanded } from '../conversation-activity-disclosure';
+import { conversationSelectionHint } from '../conversation-selection';
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import type { PermissionItem } from '../permission-notifications';
@@ -205,7 +206,7 @@ function ConversationActivityGroup({
 }: {
   activity: readonly ConversationActivity[];
   feedbackAvailable: boolean;
-  /** Inside the selected message range: the only state that outlines the group (HS2-72GEX0). */
+  /** Between two selected messages: the only state that outlines the group (HS2-72GEX0). */
   selected?: boolean;
   connectionId?: string;
 }) {
@@ -280,18 +281,28 @@ function ConversationActivityGroup({
 }
 
 /**
- * The first and last timeline positions holding a selected message; an activity group strictly
- * between them is part of the selected span. With fewer than two selected messages nothing lies
- * between, so `first` is greater than or equal to `last`.
+ * Timeline positions of activity groups inside the selection: a group belongs to it only when the
+ * nearest message before it and the nearest message after it are both selected, so the gaps of a
+ * non-contiguous selection never outline skipped activity (HS2-72GEX0, HS2-WV88W3).
  */
-export function selectedTimelineSpan(
+export function selectedActivityGroups(
   timeline: ReturnType<typeof conversationTimeline>,
   selectedIds: ReadonlySet<string>,
-): { first: number; last: number } {
-  const positions = timeline.flatMap((group, index) =>
-    group.kind === 'message' && selectedIds.has(group.message.id) ? [index] : [],
-  );
-  return positions.length ? { first: positions[0], last: positions.at(-1)! } : { first: 0, last: 0 };
+): Set<number> {
+  const inside = new Set<number>();
+  let previousSelected = false,
+    pending: number[] = [];
+  timeline.forEach((group, index) => {
+    if (group.kind !== 'message') {
+      if (previousSelected) pending.push(index);
+      return;
+    }
+    const selected = selectedIds.has(group.message.id);
+    if (selected) for (const position of pending) inside.add(position);
+    pending = [];
+    previousSelected = selected;
+  });
+  return inside;
 }
 
 let handset: ReadonlySignal<boolean> | undefined;
@@ -476,7 +487,7 @@ export function AIConversation(props: AIConversationProps) {
       <span>
         {selectedCount
           ? `${selectedCount} message${selectedCount === 1 ? '' : 's'} selected`
-          : 'Select a message, then another to select a range.'}
+          : conversationSelectionHint()}
       </span>
       {selectedCount > 0 && (
         <span class="ai-conversation__selection-actions">
@@ -503,7 +514,7 @@ export function AIConversation(props: AIConversationProps) {
     </div>
   ) : null;
   const timeline = conversationTimeline(messages, activity),
-    selectedSpan = selectedTimelineSpan(timeline, selectedIds),
+    selectedActivity = selectedActivityGroups(timeline, selectedIds),
     transcript = (
       // Kerf List is the transcript scroller: in the dialog its block-end scrollClearance lets messages
       // scroll beneath the floating Composer footer while the last one still rests above it
@@ -542,7 +553,7 @@ export function AIConversation(props: AIConversationProps) {
               <ConversationActivityGroup
                 activity={group.activity}
                 feedbackAvailable={feedbackAvailable}
-                selected={index > selectedSpan.first && index < selectedSpan.last}
+                selected={selectedActivity.has(index)}
                 connectionId={selectionId}
               />
             ),

@@ -3,6 +3,7 @@ import { delegate, delegateCapture } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { toggleActivityGroup } from '../conversation-activity-disclosure';
+import { type ConversationSelectionModifiers, conversationSelectionModifiers } from '../conversation-selection';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import { isConversationSurfaceLifecycleEvent } from './ai-conversation';
 
@@ -14,7 +15,8 @@ export interface AiConversationBindings {
   /** The conversation surface itself (not a nested popup) finished hiding. */
   readonly onHidden: () => void;
   readonly save: () => void;
-  readonly pickMessage: (connectionId: string, messageId: string) => void;
+  /** Plain, toggle (Cmd on Apple platforms, Ctrl elsewhere), or Shift-extend pick (HS2-WV88W3). */
+  readonly pickMessage: (connectionId: string, messageId: string, modifiers: ConversationSelectionModifiers) => void;
   readonly setDraft: (value: string) => void;
   readonly send: () => void;
   readonly stop: () => void;
@@ -25,6 +27,15 @@ export interface AiConversationBindings {
 }
 
 const valueOf = (target: Element) => (target as HTMLElement).dataset.value ?? '';
+
+const NESTED_MESSAGE_CONTROL = 'a,button,input,select,textarea';
+
+function pickedMessage(target: Element) {
+  return {
+    connectionId: target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId,
+    messageId: (target as HTMLElement).dataset.messageId,
+  };
+}
 
 /** Wire the AIConversation surface, composer, and AI menus under `root`. */
 export function wireAiConversation(root: HTMLElement, bindings: AiConversationBindings): () => void {
@@ -39,13 +50,36 @@ export function wireAiConversation(root: HTMLElement, bindings: AiConversationBi
       bindings.save();
     }),
   );
+  // Shift- and Cmd/Ctrl-clicks pick messages instead of extending the page's text selection.
+  lifetime.add(
+    delegateCapture(root, 'mousedown', COMMANDS_AND_AI_ACTIONS.pickConversationMessage.selector, (event) => {
+      const modifiers = conversationSelectionModifiers(event as MouseEvent);
+      if ((modifiers.extend || modifiers.toggle) && !(event.target as Element).closest(NESTED_MESSAGE_CONTROL))
+        event.preventDefault();
+    }),
+  );
   lifetime.add(
     delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.pickConversationMessage.selector, (event, target) => {
-      if ((event.target as Element).closest('a,button,input,select,textarea') || window.getSelection()?.toString())
-        return;
-      const connectionId = target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId,
-        messageId = (target as HTMLElement).dataset.messageId;
-      if (connectionId && messageId) bindings.pickMessage(connectionId, messageId);
+      const modifiers = conversationSelectionModifiers(event as MouseEvent);
+      if ((event.target as Element).closest(NESTED_MESSAGE_CONTROL)) return;
+      // A plain click that ends a text drag is reading, not picking; a modified click is always a pick.
+      if (!modifiers.extend && !modifiers.toggle && window.getSelection()?.toString()) return;
+      const { connectionId, messageId } = pickedMessage(target);
+      if (connectionId && messageId) bindings.pickMessage(connectionId, messageId, modifiers);
+    }),
+  );
+  // Kerf activates a focused message on plain Enter/Space as a click without modifiers; Shift or
+  // Cmd/Ctrl with Enter/Space is handled here first and cancelled so Kerf skips it (KF-45RNDS).
+  lifetime.add(
+    delegateCapture(root, 'keydown', COMMANDS_AND_AI_ACTIONS.pickConversationMessage.selector, (event, target) => {
+      const keyboard = event as KeyboardEvent,
+        modifiers = conversationSelectionModifiers(keyboard);
+      if (event.target !== target || keyboard.altKey || !(modifiers.extend || modifiers.toggle)) return;
+      if (keyboard.key !== 'Enter' && keyboard.key !== ' ' && keyboard.key !== 'Spacebar') return;
+      event.preventDefault();
+      if (keyboard.repeat) return;
+      const { connectionId, messageId } = pickedMessage(target);
+      if (connectionId && messageId) bindings.pickMessage(connectionId, messageId, modifiers);
     }),
   );
   // A click anywhere in an activity group toggles it collapsed/expanded, except on its nested

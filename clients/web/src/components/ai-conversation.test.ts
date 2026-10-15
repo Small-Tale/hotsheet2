@@ -3,12 +3,14 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { expandedActivityGroups, toggleActivityGroup } from '../conversation-activity-disclosure';
+import { conversationSelectionHint } from '../conversation-selection';
 import type { PermissionItem } from '../permission-notifications';
 import {
   AIConversation,
   type AIConversationProps,
   AIConversationToolbar,
   isConversationSurfaceLifecycleEvent,
+  selectedActivityGroups,
 } from './ai-conversation';
 import { PermissionRequestPopup } from './permission-request-card';
 
@@ -439,6 +441,19 @@ describe('AIConversation', () => {
     expect(markup).toContain('2 messages selected');
     expect(markup).toContain('data-action="copy-conversation-selection"');
     expect(markup).toContain('data-action="clear-conversation-selection"');
+    // With nothing selected the bar names the click, toggle, and range gestures instead (HS2-WV88W3).
+    const idle = withToolbar({
+      open: true,
+      presentation: 'embedded',
+      tool: 'Codex',
+      selectionId: 'connection-1',
+      messages,
+      draft: '',
+      busy: false,
+      interruptible: false,
+    });
+    expect(idle).toContain(conversationSelectionHint());
+    expect(idle).not.toContain('data-action="copy-conversation-selection"');
   });
   it('renders live read-only previews without saved-transcript or mutation affordances', () => {
     const markup = withToolbar({
@@ -660,6 +675,23 @@ describe('AIConversation', () => {
     expect(activityRoots(render(['question', 'answer', 'follow-up'])).every((root) => root.includes('--framed'))).toBe(
       true,
     );
+    // A non-contiguous selection skipping the answer outlines neither group: both border the gap (HS2-WV88W3).
+    expect(activityRoots(render(['question', 'follow-up'])).some((root) => root.includes('--framed'))).toBe(false);
+    expect(activityRoots(render(['answer', 'follow-up'])).map((root) => root.includes('--framed'))).toEqual([
+      false,
+      true,
+    ]);
+  });
+  it('outlines activity groups only between two selected neighbors (HS2-WV88W3)', () => {
+    const message = (id: string) => ({ kind: 'message' as const, message: { id, role: 'user' as const, content: id } }),
+      activity = { kind: 'activity' as const, activity: [] },
+      timeline = [message('a'), activity, activity, message('b'), activity, message('c'), activity];
+    expect([...selectedActivityGroups(timeline, new Set(['a', 'b']))]).toEqual([1, 2]);
+    expect([...selectedActivityGroups(timeline, new Set(['a', 'c']))]).toEqual([]);
+    expect([...selectedActivityGroups(timeline, new Set(['b', 'c']))]).toEqual([4]);
+    // Trailing activity after the last selected message has no selected neighbor after it.
+    expect([...selectedActivityGroups(timeline, new Set(['a', 'b', 'c']))]).toEqual([1, 2, 4]);
+    expect([...selectedActivityGroups(timeline, new Set())]).toEqual([]);
   });
   it('collapses activity to its latest item by default and toggles through every transition (HS2-Y3SGH3)', () => {
     const item = (id: string, summary: string, sequence: number) => ({

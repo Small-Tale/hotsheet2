@@ -9,6 +9,12 @@ import { createScope } from 'kerfjs/scope';
 import { type ConversationActivity, type ConversationMessage, conversationUsage } from '../ai-conversation';
 import { AIConversation, type AIConversationProps, AIConversationToolbar } from '../components/ai-conversation';
 import { wireAiConversation } from '../components/ai-conversation-interactions';
+import {
+  type ConversationMessageSelection,
+  conversationSelectionAfterPick,
+  EMPTY_CONVERSATION_SELECTION,
+  selectedConversationMessagesFor,
+} from '../conversation-selection';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import type { PermissionItem } from '../permission-notifications';
 import { DemoEvent } from './components/demo-event';
@@ -26,15 +32,10 @@ export const aiConversationDevice = signal<DemoDevice>('host');
 export const aiConversationDemoOpen = signal(true);
 export const aiConversationPresentation = signal<'dialog' | 'embedded'>('dialog');
 export const aiConversationSaveCount = signal(0);
-/** Transcript selection: one pick anchors, a second extends to an inclusive range, a third restarts. */
-export const aiConversationSelection = signal<{ anchor?: string; focus?: string }>({});
+/** Transcript selection, driven by the production plain / Cmd-Ctrl / Shift pick rules (HS2-WV88W3). */
+export const aiConversationSelection = signal<ConversationMessageSelection>(EMPTY_CONVERSATION_SELECTION);
 function demoSelectedMessageIds(messages: readonly ConversationMessage[]): string[] {
-  const { anchor, focus } = aiConversationSelection.value,
-    ids = messages.map((message) => message.id),
-    from = anchor ? ids.indexOf(anchor) : -1,
-    to = focus ? ids.indexOf(focus) : from;
-  if (from < 0 || to < 0) return [];
-  return ids.slice(Math.min(from, to), Math.max(from, to) + 1);
+  return selectedConversationMessagesFor(messages, aiConversationSelection.value).map((message) => message.id);
 }
 export const aiConversationDraft = signal('Can you also explain the compatibility boundary?');
 export const aiConversationProvider = signal('codex');
@@ -265,7 +266,7 @@ export function AIConversationDemo() {
 export function resetAIConversationDemo(root?: ParentNode): void {
   aiConversationPresentation.value = 'dialog';
   aiConversationScenario.value = 'streaming';
-  aiConversationSelection.value = {};
+  aiConversationSelection.value = EMPTY_CONVERSATION_SELECTION;
   aiConversationDevice.value = 'host';
   aiConversationDemoOpen.value = true;
   if (root)
@@ -338,7 +339,7 @@ function wireAiConversationDemo(root: HTMLElement): () => void {
   demoListeners.add(
     delegate(root, 'change', '[data-settings="ai-conversation"] [name="scenario"]', (_event, target) => {
       aiConversationScenario.value = (target as FormControl).value as typeof aiConversationScenario.value;
-      aiConversationSelection.value = {};
+      aiConversationSelection.value = EMPTY_CONVERSATION_SELECTION;
       openAIConversationDemo(root);
     }),
   );
@@ -356,7 +357,7 @@ function wireAiConversationDemo(root: HTMLElement): () => void {
   // The selection actions use the production action attributes; the demo keeps its own range.
   demoListeners.add(
     delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.clearConversationSelection.selector, () => {
-      aiConversationSelection.value = {};
+      aiConversationSelection.value = EMPTY_CONVERSATION_SELECTION;
     }),
   );
   demoListeners.add(
@@ -373,10 +374,13 @@ function wireAiConversationDemo(root: HTMLElement): () => void {
       save: () => {
         aiConversationSaveCount.value++;
       },
-      pickMessage: (_connectionId, messageId) => {
-        const current = aiConversationSelection.value;
-        aiConversationSelection.value =
-          current.anchor && !current.focus ? { ...current, focus: messageId } : { anchor: messageId };
+      pickMessage: (_connectionId, messageId, modifiers) => {
+        aiConversationSelection.value = conversationSelectionAfterPick(
+          scenarioState().messages,
+          aiConversationSelection.value,
+          messageId,
+          modifiers,
+        );
         sidebarEvent.value = `Picked conversation message ${messageId}.`;
       },
       setDraft: (value) => {

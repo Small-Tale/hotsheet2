@@ -10,12 +10,19 @@ import {
   conversationExportAssets,
   type ConversationExportDraft,
   type ConversationExportScope,
-  conversationExportScopeAfterMessagePick,
   conversationTranscriptMarkdown,
   defaultConversationExportDraft,
   selectedConversationMessages,
   suggestedConversationExportName,
 } from '../conversation-export';
+import {
+  type ConversationMessageSelection,
+  conversationSelectionAfterPick,
+  conversationSelectionGaps,
+  type ConversationSelectionModifiers,
+  EMPTY_CONVERSATION_SELECTION,
+  selectedConversationMessagesFor,
+} from '../conversation-selection';
 import type { Project } from '../interactions/types';
 import { localBridge } from '../local-bridge-client';
 import { type DrawerAIChat } from '../project-drive';
@@ -55,39 +62,47 @@ export function createConversationArchiveController(dependencies: ConversationAr
     selectDrawerItem,
     setTerminalDrawerVisible,
   } = dependencies;
-  const conversationSelectionScopes = signal<Record<string, ConversationExportScope | undefined>>({});
+  const conversationSelections = signal<Record<string, ConversationMessageSelection | undefined>>({});
   const conversationExportDialog = signal<ConversationExportDialogState | undefined>(undefined);
 
   function conversationSelectedMessages(connectionId: string, messages: readonly ConversationMessage[]) {
-    const scope = conversationSelectionScopes.value[connectionId];
-    return scope?.kind === 'range' ? [...selectedConversationMessages(messages, scope)] : [];
+    return selectedConversationMessagesFor(messages, conversationSelections.value[connectionId]);
   }
 
-  function pickConversationMessage(connectionId: string, messageId: string) {
+  /** Plain, Cmd/Ctrl (toggle), and Shift (range) picks in a chat transcript (HS2-WV88W3). */
+  function pickConversationMessage(
+    connectionId: string,
+    messageId: string,
+    modifiers: ConversationSelectionModifiers = { toggle: false, extend: false },
+  ) {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
     const messages = conversationStates.peek()[connectionId]?.messages ?? [],
-      scope = conversationSelectionScopes.value[connectionId] ?? { kind: 'all' as const },
-      next = conversationExportScopeAfterMessagePick(messages, scope, messageId);
-    conversationSelectionScopes.value = { ...conversationSelectionScopes.value, [connectionId]: next };
+      current = conversationSelections.value[connectionId] ?? EMPTY_CONVERSATION_SELECTION,
+      next = conversationSelectionAfterPick(messages, current, messageId, modifiers);
+    conversationSelections.value = { ...conversationSelections.value, [connectionId]: next };
   }
 
   function clearConversationSelection(connectionId: string) {
-    conversationSelectionScopes.value = Object.fromEntries(
-      Object.entries(conversationSelectionScopes.value).filter(([id]) => id !== connectionId),
+    conversationSelections.value = Object.fromEntries(
+      Object.entries(conversationSelections.value).filter(([id]) => id !== connectionId),
     );
   }
 
   async function copyConversationSelection(connectionId: string) {
-    const messages = conversationSelectedMessages(
-      connectionId,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      conversationStates.peek()[connectionId]?.messages ?? [],
-    );
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    const transcript = conversationStates.peek()[connectionId]?.messages ?? [],
+      messages = conversationSelectedMessages(connectionId, transcript);
     if (!messages.length) return;
     const tool = aiToolLabel(conversationAiSelection(connectionId).tool);
     try {
+      // Runs of unselected messages inside the selection are marked, never silently dropped.
       await navigator.clipboard.writeText(
-        conversationTranscriptMarkdown({ conversationId: connectionId, tool }, messages),
+        conversationTranscriptMarkdown(
+          { conversationId: connectionId, tool },
+          messages,
+          [],
+          conversationSelectionGaps(transcript, messages),
+        ),
       );
       showToast(`${messages.length} selected message${messages.length === 1 ? '' : 's'} copied to clipboard.`);
     } catch (reason) {
@@ -110,10 +125,11 @@ export function createConversationArchiveController(dependencies: ConversationAr
       chat = (terminalDrawerChatsByProject.value[current.id] ?? []).find((item) => item.connectionId === connectionId),
       selection = conversationAiSelection(connectionId),
       tool = chat?.tool ?? connection?.tool ?? selection.tool,
-      scope = conversationSelectionScopes.value[connectionId],
-      selectedRange =
-        scope?.kind === 'range' && selectedConversationMessages(state.messages, scope).length ? scope : undefined,
-      draft = { ...defaultConversationExportDraft(), ...(selectedRange ? { scope: selectedRange } : {}) };
+      picked = conversationSelectedMessages(connectionId, state.messages),
+      selectedScope: Extract<ConversationExportScope, { kind: 'messages' }> | undefined = picked.length
+        ? { kind: 'messages', messageIds: picked.map((message) => message.id) }
+        : undefined,
+      draft = { ...defaultConversationExportDraft(), ...(selectedScope ? { scope: selectedScope } : {}) };
     conversationExportDialog.value = {
       source: {
         conversationId: chat?.sourceConversationId ?? connectionId,
@@ -128,9 +144,9 @@ export function createConversationArchiveController(dependencies: ConversationAr
       activity: [...(state.activity ?? [])],
       draft,
       summaryAvailable: true,
-      step: selectedRange ? 1 : 2,
+      step: selectedScope ? 1 : 2,
       navigation: 'none',
-      selectedRange,
+      selectedScope,
     };
   }
 
