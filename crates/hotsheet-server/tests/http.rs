@@ -2343,6 +2343,9 @@ async fn health_needs_no_secret() {
     assert_eq!(health["listing"], "fresh");
     assert_eq!(health["tickets"], 0);
     assert_eq!(health["corrupt"], serde_json::json!([]));
+    // HS2-GWFEAA: who launched the server and which executable it runs from, unauthenticated.
+    assert_eq!(health["launcher"], "unspecified");
+    assert!(health["executable"].is_string());
 }
 
 #[tokio::test]
@@ -3070,6 +3073,38 @@ async fn compatibility_is_authenticated_and_reports_ranges_with_safe_restart() {
     }
     assert_eq!(value["source_stale"], false);
     assert!(value.get("started_at").is_some());
+    assert_eq!(value["launcher"], "unspecified");
+    assert!(value["executable"].is_string());
+}
+
+/// HS2-GWFEAA: the launcher label the binary sets is reported by both probes.
+#[tokio::test]
+async fn health_and_compatibility_report_the_named_launcher() {
+    let (_d, st) = state();
+    st.set_launcher("local-host-snapshot");
+    let router = app(st);
+    let health = body_json(
+        router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(health["launcher"], "local-host-snapshot");
+    let compatibility = body_json(
+        router
+            .oneshot(authed("GET", "/compatibility", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(compatibility["launcher"], "local-host-snapshot");
 }
 
 #[tokio::test]

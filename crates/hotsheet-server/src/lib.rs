@@ -302,6 +302,10 @@ pub struct AppState {
     notifications: notifications::NotificationHub,
     tts: tts::TtsProviders,
     source_revision: source_revision::SourceRevisionMonitor,
+    /// Who launched this server process, reported by `/health`, `/compatibility`, and every
+    /// instance registration so a maintainer can see which host owns the machine server
+    /// (HS2-GWFEAA). Set once by the binary before publishing instances.
+    launcher: Arc<Mutex<String>>,
     /// Candidate windows for the built-in deterministic local adapter. Project-attributed
     /// events are keyed by checkout and re-read that checkout's machine-local settings on
     /// every event; unattributed legacy events retain store-only compatibility behavior.
@@ -351,7 +355,14 @@ struct InstanceMeta {
     url: String,
     secret: String,
     started_at: String,
+    /// Registration identity shared by every hosted store's discovery file (HS2-GWFEAA).
+    build_revision: Option<String>,
+    executable: Option<String>,
+    launcher: String,
 }
+
+/// The launcher label a server reports when nobody named one (HS2-GWFEAA).
+pub const UNSPECIFIED_LAUNCHER: &str = "unspecified";
 
 impl AppState {
     /// State over a store + a prepared index, guarded by `secret`. The caller decides
@@ -501,6 +512,7 @@ impl AppState {
             notifications: Default::default(),
             tts: Default::default(),
             source_revision: source_revision::SourceRevisionMonitor::current_build(),
+            launcher: Arc::new(Mutex::new(UNSPECIFIED_LAUNCHER.to_owned())),
             activity_distillation: Arc::new(Mutex::new(std::collections::HashMap::new())),
             activity_volume: Arc::new(Mutex::new(
                 hotsheet_ticketing::ActivityVolumeGuard::default(),
@@ -755,6 +767,26 @@ impl AppState {
         self.client_drives =
             client_drive::ClientDriveManager::with_persistence(backend, session_path, home_root)?;
         Ok(self)
+    }
+
+    /// Name who launched this server (`cli`, `dev-bridge`, `stable-dev`,
+    /// `local-host-snapshot`, or any explicit label). Reported by `/health`,
+    /// `/compatibility`, and every instance registration published afterwards (HS2-GWFEAA).
+    pub fn set_launcher(&self, launcher: impl Into<String>) {
+        let mut current = self.launcher.lock_or_recover();
+        *current = launcher.into();
+    }
+
+    /// The launcher label this server reports (HS2-GWFEAA).
+    pub fn launcher(&self) -> String {
+        self.launcher.lock_or_recover().clone()
+    }
+
+    /// The executable this server process started from, when the OS can tell (HS2-GWFEAA).
+    pub fn executable(&self) -> Option<String> {
+        std::env::current_exe()
+            .ok()
+            .map(|path| path.display().to_string())
     }
 
     /// Override local-build source monitoring (primarily for embedders and tests).

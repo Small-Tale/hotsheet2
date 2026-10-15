@@ -42,6 +42,13 @@ struct Cli {
     #[arg(long)]
     revision_status: bool,
 
+    /// Who is launching this server (`cli`, `dev-bridge`, `stable-dev`,
+    /// `local-host-snapshot`, or any label). Recorded in every instance registration and
+    /// reported by `/health` so `hotsheet-cli serve --list` can show which host owns the
+    /// machine server (HS2-GWFEAA). Falls back to `HOTSHEET_SERVER_LAUNCHER`.
+    #[arg(long, value_name = "LABEL")]
+    launcher: Option<String>,
+
     /// With --stop, also kill every terminal retained by this project's detached broker.
     #[arg(long, requires = "stop")]
     kill_all_terminals: bool,
@@ -136,9 +143,18 @@ async fn main() -> Result<()> {
 
     // Explicit shutdown (HS2-59): signal the running server for this store and exit.
     if cli.stop {
+        let running = hotsheet_server::lifecycle::find_instance(&cli.path);
         let stopped = hotsheet_server::lifecycle::stop_instance(&cli.path);
         if stopped {
             println!("stopped the running server for {}", cli.path.display());
+            if let Some(running) = running {
+                println!(
+                    "  pid={} launcher={} build={}",
+                    running.pid,
+                    running.launcher.as_deref().unwrap_or("unknown"),
+                    running.build_revision.as_deref().unwrap_or("unknown")
+                );
+            }
         } else {
             println!("no running server found for {}", cli.path.display());
         }
@@ -373,6 +389,13 @@ async fn main() -> Result<()> {
         hotsheet_aitools::probe::set_probe_timeout(std::time::Duration::from_millis(ms));
     }
     let started_at = Timestamp::from_datetime(OffsetDateTime::now_utc());
+    state.set_launcher(
+        cli.launcher
+            .clone()
+            .or_else(|| std::env::var("HOTSHEET_SERVER_LAUNCHER").ok())
+            .filter(|label| !label.trim().is_empty())
+            .unwrap_or_else(|| hotsheet_server::UNSPECIFIED_LAUNCHER.to_owned()),
+    );
     state.publish_instances(url, started_at.as_str().to_string());
     // Warm the AI model catalog now, in the background, so the first client's startup path
     // finds it already discovered instead of paying the cold subprocess discovery inline

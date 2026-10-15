@@ -1116,6 +1116,16 @@ export function createServerHealthProbe(
   };
 }
 
+/**
+ * The launcher label the bridge records on the machine server it starts (HS2-GWFEAA), so
+ * `hotsheet-cli serve --list` and `/health` can say which host owns the shared server.
+ */
+export function serverLauncherLabel(environment: Readonly<Record<string, string | undefined>> = process.env): string {
+  if (environment[LOCAL_HOST_SNAPSHOT_ENV] === '1') return 'local-host-snapshot';
+  if (environment.HOTSHEET_WEB_STABLE_DEV === '1') return 'stable-dev';
+  return 'dev-bridge';
+}
+
 function serverPlatform(store: string): ServerSupervisorPlatform {
   const repoRoot = developmentRepositoryRoot();
   const binary = process.env.HOTSHEET_SERVER_BIN || resolve(repoRoot, 'target/debug/hotsheet-server');
@@ -1126,7 +1136,7 @@ function serverPlatform(store: string): ServerSupervisorPlatform {
       if (!(await exists(binary)))
         throw new Error(`Hot Sheet server is not built at ${binary}. Run cargo build -p hotsheet-server.`);
       await new Promise<void>((resolveLaunch, reject) => {
-        const child = spawn(binary, ['-C', store, '--bind', '127.0.0.1:0'], {
+        const child = spawn(binary, ['-C', store, '--bind', '127.0.0.1:0', '--launcher', serverLauncherLabel()], {
           cwd: repoRoot,
           detached: true,
           stdio: 'ignore',

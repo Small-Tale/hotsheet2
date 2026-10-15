@@ -63,6 +63,7 @@ pub(crate) fn cmd_serve(
         secret.as_deref(),
         stop,
         kill_all_terminals,
+        (!stop).then_some("cli"),
     ));
     let status = cmd.status().map_err(|e| {
         anyhow::anyhow!(
@@ -318,6 +319,13 @@ pub(crate) struct RegisteredServer {
     url: String,
     store_path: String,
     started_at: String,
+    /// Launch identity recorded by newer servers (HS2-GWFEAA); absent in legacy records.
+    #[serde(default)]
+    launcher: Option<String>,
+    #[serde(default)]
+    build_revision: Option<String>,
+    #[serde(default)]
+    executable: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -338,6 +346,10 @@ pub(crate) struct ServerInventoryEntry {
     identity: ServerIdentity,
     status: &'static str,
     stores: Vec<String>,
+    /// Launch identity from the registration (HS2-GWFEAA); `None` for legacy records.
+    launcher: Option<String>,
+    build_revision: Option<String>,
+    executable: Option<String>,
 }
 
 pub(crate) fn cmd_list_servers() -> Result<()> {
@@ -348,7 +360,7 @@ pub(crate) fn cmd_list_servers() -> Result<()> {
         .timeout_connect(std::time::Duration::from_millis(300))
         .timeout_read(std::time::Duration::from_millis(500))
         .build();
-    let (servers, invalid) = server_inventory(records, process_is_alive, |url| {
+    let inventory = server_inventory(records, process_is_alive, |url| {
         match agent
             .get(&format!("{}/health", url.trim_end_matches('/')))
             .call()
@@ -370,7 +382,8 @@ pub(crate) fn cmd_list_servers() -> Result<()> {
             Err(_) => false,
         }
     });
-    print!("{}", render_server_inventory(&servers, &invalid));
+    let pruned = prune_stale_records(&inventory.stale_records);
+    print!("{}", render_server_inventory(&inventory, pruned));
     Ok(())
 }
 
@@ -398,12 +411,31 @@ pub(crate) fn read_registry_records(directory: &Path) -> Result<Vec<RegistryReco
     Ok(records)
 }
 
+/// The registry inventory: live and stale servers, unparseable records, and the files of
+/// dead registrations that `serve --list` prunes (HS2-GWFEAA).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ServerInventory {
+    pub(crate) servers: Vec<ServerInventoryEntry>,
+    pub(crate) invalid: Vec<PathBuf>,
+    /// Registration files whose recorded pid is no longer alive.
+    pub(crate) stale_records: Vec<PathBuf>,
+}
+
+#[derive(Default)]
+struct GroupedRegistration {
+    stores: BTreeSet<String>,
+    sources: Vec<PathBuf>,
+    launcher: Option<String>,
+    build_revision: Option<String>,
+    executable: Option<String>,
+}
+
 pub(crate) fn server_inventory(
     records: Vec<RegistryRecord>,
     is_alive: impl Fn(u32) -> bool,
     is_healthy: impl Fn(&str) -> bool,
-) -> (Vec<ServerInventoryEntry>, Vec<PathBuf>) {
-    let mut grouped = BTreeMap::<ServerIdentity, BTreeSet<String>>::new();
+) -> ServerInventory {
+    let mut grouped = BTreeMap::<ServerIdentity, GroupedRegistration>::new();
     let mut invalid = Vec::new();
     for record in records {
         let Some(server) = record.server else {
@@ -415,15 +447,19 @@ pub(crate) fn server_inventory(
             url: server.url,
             started_at: server.started_at,
         };
-        grouped
-            .entry(identity)
-            .or_default()
-            .insert(server.store_path);
+        let group = grouped.entry(identity).or_default();
+        group.stores.insert(server.store_path);
+        group.sources.push(record.source);
+        group.launcher = group.launcher.take().or(server.launcher);
+        group.build_revision = group.build_revision.take().or(server.build_revision);
+        group.executable = group.executable.take().or(server.executable);
     }
+    let mut stale_records = Vec::new();
     let mut servers = grouped
         .into_iter()
-        .map(|(identity, stores)| {
+        .map(|(identity, group)| {
             let status = if !is_alive(identity.pid) {
+                stale_records.extend(group.sources);
                 "stale"
             } else if is_healthy(&identity.url) {
                 "healthy"
@@ -433,7 +469,10 @@ pub(crate) fn server_inventory(
             ServerInventoryEntry {
                 identity,
                 status,
-                stores: stores.into_iter().collect(),
+                stores: group.stores.into_iter().collect(),
+                launcher: group.launcher,
+                build_revision: group.build_revision,
+                executable: group.executable,
             }
         })
         .collect::<Vec<_>>();
@@ -447,22 +486,35 @@ pub(crate) fn server_inventory(
             server.identity.pid,
         )
     });
-    (servers, invalid)
+    stale_records.sort();
+    ServerInventory {
+        servers,
+        invalid,
+        stale_records,
+    }
 }
 
-pub(crate) fn render_server_inventory(
-    servers: &[ServerInventoryEntry],
-    invalid: &[PathBuf],
-) -> String {
+pub(crate) fn render_server_inventory(inventory: &ServerInventory, pruned: usize) -> String {
+    let ServerInventory {
+        servers, invalid, ..
+    } = inventory;
     if servers.is_empty() && invalid.is_empty() {
         return "no registered Hot Sheet servers\n".into();
     }
     let mut output = String::new();
     for server in servers {
         output.push_str(&format!(
-            "{:<9} pid={} url={} started={}\n",
-            server.status, server.identity.pid, server.identity.url, server.identity.started_at
+            "{:<9} pid={} url={} started={} launcher={} build={}\n",
+            server.status,
+            server.identity.pid,
+            server.identity.url,
+            server.identity.started_at,
+            server.launcher.as_deref().unwrap_or("unknown"),
+            server.build_revision.as_deref().unwrap_or("unknown"),
         ));
+        if let Some(executable) = &server.executable {
+            output.push_str(&format!("  executable: {executable}\n"));
+        }
         for store in &server.stores {
             output.push_str(&format!("  store: {store}\n"));
         }
@@ -473,7 +525,24 @@ pub(crate) fn render_server_inventory(
             path.display()
         ));
     }
+    if pruned > 0 {
+        output.push_str(&format!(
+            "pruned {pruned} stale registration file(s) whose server process is gone\n"
+        ));
+    }
     output
+}
+
+/// Remove the registration files of dead servers (HS2-GWFEAA). Live and unparseable
+/// records are never touched; a file that disappears meanwhile counts as pruned.
+pub(crate) fn prune_stale_records(stale_records: &[PathBuf]) -> usize {
+    stale_records
+        .iter()
+        .filter(|path| match std::fs::remove_file(path) {
+            Ok(()) => true,
+            Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+        })
+        .count()
 }
 
 #[cfg(unix)]
@@ -547,6 +616,7 @@ pub(crate) fn server_args(
     secret: Option<&str>,
     stop: bool,
     kill_all_terminals: bool,
+    launcher: Option<&str>,
 ) -> Vec<std::ffi::OsString> {
     let mut args = vec![
         "-C".into(),
@@ -562,6 +632,9 @@ pub(crate) fn server_args(
     }
     if kill_all_terminals {
         args.push("--kill-all-terminals".into());
+    }
+    if let Some(launcher) = launcher {
+        args.extend(["--launcher".into(), launcher.into()]);
     }
     args
 }
@@ -640,7 +713,8 @@ mod tests {
                 "127.0.0.1:0",
                 Some("secret"),
                 true,
-                true
+                true,
+                None
             ),
             [
                 "-C",
@@ -654,6 +728,18 @@ mod tests {
             ]
             .map(std::ffi::OsString::from)
         );
+        // HS2-GWFEAA: a launch names its launcher so the registration can say who owns it.
+        assert_eq!(
+            server_args(
+                Path::new("s"),
+                "127.0.0.1:0",
+                None,
+                false,
+                false,
+                Some("cli")
+            ),
+            ["-C", "s", "--bind", "127.0.0.1:0", "--launcher", "cli"].map(std::ffi::OsString::from)
+        );
     }
 
     #[test]
@@ -662,7 +748,7 @@ mod tests {
         let records = [
             (
                 "one.json",
-                r#"{"pid":42,"url":"http://127.0.0.1:8787","secret":"never-print-me","store_path":"/stores/one","started_at":"2026-09-10T01:00:00Z"}"#,
+                r#"{"pid":42,"url":"http://127.0.0.1:8787","secret":"never-print-me","store_path":"/stores/one","started_at":"2026-09-10T01:00:00Z","launcher":"local-host-snapshot","build_revision":"source-sha256:abc","executable":"/tmp/snapshot/bin/hotsheet-server"}"#,
             ),
             (
                 "two.json",
@@ -678,7 +764,7 @@ mod tests {
             std::fs::write(dir.path().join(name), contents).unwrap();
         }
         let health_checks = std::cell::Cell::new(0);
-        let (servers, invalid) = server_inventory(
+        let inventory = server_inventory(
             read_registry_records(dir.path()).unwrap(),
             |pid| pid == 42,
             |url| {
@@ -686,19 +772,55 @@ mod tests {
                 url.ends_with(":8787")
             },
         );
+        let servers = &inventory.servers;
         assert_eq!(servers.len(), 2, "two registrations share one live server");
         assert_eq!(health_checks.get(), 1, "stale processes are not probed");
         assert_eq!(servers[0].status, "healthy");
         assert_eq!(servers[0].stores, ["/stores/one", "/stores/two"]);
+        // HS2-GWFEAA: identity fields come from whichever registration carries them.
+        assert_eq!(servers[0].launcher.as_deref(), Some("local-host-snapshot"));
+        assert_eq!(
+            servers[0].build_revision.as_deref(),
+            Some("source-sha256:abc")
+        );
         assert_eq!(servers[1].status, "stale");
-        assert_eq!(invalid, [dir.path().join("broken.json")]);
-        let rendered = render_server_inventory(&servers, &invalid);
+        assert_eq!(servers[1].launcher, None, "legacy records have no launcher");
+        assert_eq!(inventory.invalid, [dir.path().join("broken.json")]);
+        assert_eq!(inventory.stale_records, [dir.path().join("stale.json")]);
+        let rendered = render_server_inventory(&inventory, 0);
         assert!(rendered.contains("healthy   pid=42"));
+        assert!(rendered.contains("launcher=local-host-snapshot build=source-sha256:abc"));
+        assert!(rendered.contains("  executable: /tmp/snapshot/bin/hotsheet-server"));
         assert!(rendered.contains("stale     pid=99"));
+        assert!(rendered.contains("launcher=unknown build=unknown"));
         assert!(rendered.contains("invalid registry record"));
+        assert!(!rendered.contains("pruned"));
         assert!(!rendered.contains("never-print-me"));
         assert!(!rendered.contains("also-private"));
         assert!(!rendered.contains("secret"));
+
+        // HS2-GWFEAA: listing prunes only the dead server's files; live and invalid stay.
+        let pruned = prune_stale_records(&inventory.stale_records);
+        assert_eq!(pruned, 1);
+        assert!(!dir.path().join("stale.json").exists());
+        assert!(dir.path().join("one.json").exists());
+        assert!(dir.path().join("two.json").exists());
+        assert!(dir.path().join("broken.json").exists());
+        assert!(
+            render_server_inventory(&inventory, pruned).contains("pruned 1 stale registration")
+        );
+        assert_eq!(
+            prune_stale_records(&inventory.stale_records),
+            1,
+            "a vanished file still counts"
+        );
+        let again = server_inventory(
+            read_registry_records(dir.path()).unwrap(),
+            |pid| pid == 42,
+            |_| true,
+        );
+        assert_eq!(again.servers.len(), 1);
+        assert!(again.stale_records.is_empty());
     }
 
     #[test]

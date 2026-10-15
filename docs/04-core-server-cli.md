@@ -489,7 +489,15 @@ Socket ownership, stale-path handling, and cleanup are described in [05](05-ai-t
 §5.4. `hotsheet-cli serve --list` works without
 selecting a store: it deduplicates registrations by server identity, health-checks live
 processes, labels stale/unhealthy/invalid records, lists every hosted store, and never
-prints bearer secrets. The Vite platform bridge supplies the client-side half: detached
+prints bearer secrets. Every registration a server writes also carries its `launcher`
+label, `build_revision`, and `executable` path (HS2-GWFEAA): the binary takes
+`--launcher <label>` (or `HOTSHEET_SERVER_LAUNCHER`), the CLI passes `cli`, and the web
+bridge passes `local-host-snapshot`, `stable-dev`, or `dev-bridge` for the host kind that
+started it; `GET /health` and `GET /compatibility` report the same `launcher` and
+`executable`, so a maintainer can tell at a glance whether the pinned LAN host's server is
+the one running. `serve --list` prints those fields per server and prunes registration
+files whose recorded pid is dead (invalid records are kept for inspection), and
+`hotsheet-server --stop` prints the launcher and build of the process it signals. The Vite platform bridge supplies the client-side half: detached
 launch, health-checked discovery, and event-driven supervision after project-open, API,
 or terminal-WebSocket failures. It never starts a duplicate beside a registered live
 process; the server is already separate, so it outlives the client by construction.

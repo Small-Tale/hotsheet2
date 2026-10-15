@@ -218,6 +218,9 @@ impl AppState {
                 url,
                 secret: self.secret.clone(),
                 started_at,
+                build_revision: self.source_revision.status().build_revision,
+                executable: self.executable(),
+                launcher: self.launcher(),
             });
         }
         for (_, root) in self.host.locations() {
@@ -247,6 +250,9 @@ impl AppState {
             store_path: store_path.display().to_string(),
             index_path,
             started_at: meta.started_at,
+            build_revision: meta.build_revision,
+            executable: meta.executable,
+            launcher: Some(meta.launcher),
         };
         // Hold this store's index-writer lock too, so a second machine server can't
         // double-write its index (HS2-AYCA1W). The primary store's lock is already held by

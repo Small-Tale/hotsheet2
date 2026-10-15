@@ -43,6 +43,7 @@ import {
   revealCommand,
   runGitCommand,
   safelyRestartServer,
+  serverLauncherLabel,
   serverNeedsSelectedBuild,
   setupRefreshNotices,
   storeNeedsServerUpgrade,
@@ -1336,6 +1337,16 @@ describe('machine server supervision', () => {
         'current',
       ),
     ).toBe(false);
+  });
+});
+
+describe('serverLauncherLabel (HS2-GWFEAA)', () => {
+  it('names the host kind that starts the machine server', () => {
+    expect(serverLauncherLabel({})).toBe('dev-bridge');
+    expect(serverLauncherLabel({ HOTSHEET_WEB_STABLE_DEV: '1' })).toBe('stable-dev');
+    expect(serverLauncherLabel({ HOTSHEET_LOCAL_HOST_SNAPSHOT: '1', HOTSHEET_WEB_STABLE_DEV: '1' })).toBe(
+      'local-host-snapshot',
+    );
   });
 });
 

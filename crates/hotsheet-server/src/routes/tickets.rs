@@ -41,6 +41,8 @@ pub(crate) async fn health(
         "tickets": listing.tickets,
         "corrupt": listing.corrupt,
         "listing": source,
+        "launcher": state.launcher(),
+        "executable": state.executable(),
     })))
 }
 
@@ -221,7 +223,9 @@ pub(crate) async fn compatibility(State(state): State<AppState>) -> Json<serde_j
             "lifecycle_restart": true,
             "lifecycle_quiescence": true
         },
-        "started_at": started_at
+        "started_at": started_at,
+        "launcher": state.launcher(),
+        "executable": state.executable()
     }))
 }
 

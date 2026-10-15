@@ -34,6 +34,17 @@ pub struct InstanceInfo {
     pub store_path: String,
     pub index_path: String,
     pub started_at: String,
+    /// The server's embedded build revision, so an inventory can tell which build is
+    /// running without an authenticated request (HS2-GWFEAA). Absent in legacy records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_revision: Option<String>,
+    /// The executable the server started from (HS2-GWFEAA). Absent in legacy records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executable: Option<String>,
+    /// Who launched this server: `cli`, `dev-bridge`, `stable-dev`, `local-host-snapshot`,
+    /// or an explicit `--launcher` label (HS2-GWFEAA). Absent in legacy records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launcher: Option<String>,
 }
 
 /// A stable per-store id (hash of the canonical store path) — the same key the index uses.
@@ -391,7 +402,42 @@ mod tests {
             store_path: store.display().to_string(),
             index_path: "/idx".into(),
             started_at: "2026-01-01T00:00:00Z".into(),
+            build_revision: None,
+            executable: None,
+            launcher: None,
         }
+    }
+
+    /// HS2-GWFEAA: a registration records who launched the server and which build it is,
+    /// and a legacy record without those fields still parses.
+    #[test]
+    fn registrations_carry_launcher_and_build_identity_and_legacy_records_still_parse() {
+        let (_home, registry) = isolated_registry();
+        let store = tempfile::tempdir().unwrap();
+        let described = InstanceInfo {
+            build_revision: Some("source-sha256:abc".into()),
+            executable: Some("/opt/hotsheet/bin/hotsheet-server".into()),
+            launcher: Some("local-host-snapshot".into()),
+            ..info(std::process::id(), store.path())
+        };
+        let _guard = registry
+            .register_instance(&described, store.path())
+            .unwrap();
+        let text = std::fs::read_to_string(registry.instance_path(store.path())).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(json["launcher"], "local-host-snapshot");
+        assert_eq!(json["build_revision"], "source-sha256:abc");
+        assert_eq!(json["executable"], "/opt/hotsheet/bin/hotsheet-server");
+        assert_eq!(registry.find_instance(store.path()), Some(described));
+
+        let legacy = r#"{"pid":1,"url":"http://127.0.0.1:1","secret":"s","store_path":"/s","index_path":"/i","started_at":"2026-01-01T00:00:00Z"}"#;
+        let parsed: InstanceInfo = serde_json::from_str(legacy).unwrap();
+        assert_eq!(parsed.launcher, None);
+        assert_eq!(parsed.build_revision, None);
+        assert_eq!(parsed.executable, None);
+        // Unknown fields never appear when absent, so older readers see the same shape.
+        let bare = serde_json::to_value(info(1, Path::new("/s"))).unwrap();
+        assert!(bare.get("launcher").is_none());
     }
 
     #[test]
