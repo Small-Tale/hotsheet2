@@ -241,3 +241,69 @@ test('renders a CHOICE: header that carries its own question as a selectable gro
     .poll(() => writes.find((write) => write.note_kind === 'regular')?.note)
     .toBe('Selected choice:\n- **Leave it unmodeled (recommended).** Keep the strong model and document it.');
 });
+
+// HS2-ZXGEFE: a FEEDBACK NEEDED prompt can be edited, but only on purpose. A double-click on the
+// prompt body (sidebar) or its Edit Note action (sidebar and reader) opens the ordinary note editor;
+// the save says it is an explicit prompt edit. A single click still never opens it (HS2-MB2Q10).
+const EDIT_PROMPT = 'Which token should I use for the Jira site?';
+
+test('edits a feedback prompt in place from a sidebar double-click (HS2-ZXGEFE)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const writes = await mock(page, 'note', EDIT_PROMPT);
+  const note = page.locator('#app-right-rail article[data-note-id="N4"]');
+  const body = note.locator('[data-feedback-prompt-body="true"]');
+  await expect(body).toContainText(EDIT_PROMPT);
+  await body.click();
+  await expect(note.locator('[name="note-body"]')).toHaveCount(0);
+  await body.dblclick();
+  const editor = note.locator('[name="note-body"]');
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue(EDIT_PROMPT);
+  await expect(editor).not.toHaveAttribute('data-note-response', 'true');
+  await editor.fill('Which PAT should I use for the HS2T Jira site?');
+  await note.screenshot({ path: 'target/visual-captures/hs2-zxgefe-sidebar-editing-1280.png' });
+  await editor.evaluate((field) => {
+    (field as HTMLTextAreaElement).blur();
+  });
+  await expect
+    .poll(() => writes.find((write) => write.note_id === 'N4'))
+    .toMatchObject({
+      note_id: 'N4',
+      note: 'Which PAT should I use for the HS2T Jira site?',
+      edit_feedback_prompt: true,
+    });
+  expect(writes.some((write) => write.note_kind === 'regular')).toBe(false);
+});
+
+test('edits a feedback prompt from the reader Edit Note action without posting a reply (HS2-ZXGEFE)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const writes = await mock(page, 'note', EDIT_PROMPT);
+  await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
+  const note = page.getByRole('dialog').locator('article[data-note-id="N4"]');
+  await expect(note.locator('textarea[data-note-response="true"]')).toBeVisible();
+  await note.hover();
+  const edit = note.getByRole('button', { name: 'Edit Note' });
+  await expect(edit).toBeVisible();
+  await note.screenshot({ path: 'target/visual-captures/hs2-zxgefe-reader-edit-action-1280.png' });
+  await edit.click();
+  const editor = note.locator('[name="note-body"]');
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue(EDIT_PROMPT);
+  // The response editor and its actions give way to the plain editor while the prompt is edited.
+  await expect(note.locator('textarea[data-note-response="true"]')).toHaveCount(0);
+  await expect(note.getByRole('button', { name: 'Respond' })).toHaveCount(0);
+  await editor.fill('Which PAT should I use?');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(editor).toBeVisible();
+  await note.screenshot({ path: 'target/visual-captures/hs2-zxgefe-reader-editing-390.png' });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await editor.evaluate((field) => {
+    (field as HTMLTextAreaElement).blur();
+  });
+  await expect
+    .poll(() => writes.find((write) => write.note_id === 'N4'))
+    .toMatchObject({ note_id: 'N4', note: 'Which PAT should I use?', edit_feedback_prompt: true });
+  expect(writes.some((write) => write.note_kind === 'regular')).toBe(false);
+});

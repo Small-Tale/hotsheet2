@@ -20288,3 +20288,64 @@ async fn checkout_ticket_usage_lists_attributed_events_in_order_and_keeps_settle
         .unwrap();
     assert_eq!(missing.status(), StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn human_edits_an_ai_feedback_prompt_only_when_explicitly_requested() {
+    // HS2-MB2Q10 refuses a human text edit of an AI FEEDBACK NEEDED prompt; HS2-ZXGEFE allows
+    // it when the client explicitly opened the prompt for editing.
+    let (_d, st) = state();
+    let app = app(st);
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/tickets",
+                Some(r#"{"title":"Needs a decision","category":"task"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_owned();
+    let prompt = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/tickets/{id}"),
+                Some(
+                    &serde_json::json!({
+                        "note": "Which token should I use?",
+                        "note_kind": "feedback_needed",
+                        "actor": {"role": "ai", "id": "claude-test"}
+                    })
+                    .to_string(),
+                ),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let note_id = prompt["notes"][0]["id"].as_str().unwrap().to_owned();
+    let human_edit = |explicit: bool| {
+        let mut body = serde_json::json!({
+            "note_id": note_id,
+            "note": "Which PAT should I use for the Jira site?",
+            "actor": {"role": "human", "id": "reviewer"}
+        });
+        if explicit {
+            body["edit_feedback_prompt"] = serde_json::Value::Bool(true);
+        }
+        authed("PATCH", &format!("/tickets/{id}"), Some(&body.to_string()))
+    };
+    let refused = app.clone().oneshot(human_edit(false)).await.unwrap();
+    assert_eq!(refused.status(), StatusCode::CONFLICT);
+    let edited = app.clone().oneshot(human_edit(true)).await.unwrap();
+    assert_eq!(edited.status(), StatusCode::OK);
+    let edited = body_json(edited).await;
+    assert_eq!(
+        edited["notes"][0]["text"],
+        "Which PAT should I use for the Jira site?"
+    );
+    assert_eq!(edited["notes"][0]["kind"], "feedback_needed");
+    assert_eq!(edited["notes"][0]["human_edited"], true);
+}

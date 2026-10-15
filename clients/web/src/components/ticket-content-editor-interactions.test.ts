@@ -46,7 +46,7 @@ describe('ticket content editor wiring (HS2-KM3DNM)', () => {
   });
 
   it('begins note edits only when the click or key qualifies and the note has an id', () => {
-    const bindings = { begin: vi.fn(), input: vi.fn(), finish: vi.fn(), save: vi.fn() };
+    const bindings = { begin: vi.fn(), beginPrompt: vi.fn(), input: vi.fn(), finish: vi.fn(), save: vi.fn() };
     wireNoteEditor({} as HTMLElement, bindings);
     const body = { closest: () => ({ dataset: { noteId: 'n1' } }) },
       orphan = { closest: () => null };
@@ -69,8 +69,28 @@ describe('ticket content editor wiring (HS2-KM3DNM)', () => {
     expect(ignored.preventDefault).not.toHaveBeenCalled();
   });
 
+  it('opens a FEEDBACK NEEDED prompt only from its Edit Note action or a body double-click (HS2-ZXGEFE)', () => {
+    const bindings = { begin: vi.fn(), beginPrompt: vi.fn(), input: vi.fn(), finish: vi.fn(), save: vi.fn() };
+    wireNoteEditor({} as HTMLElement, bindings);
+    const button = { closest: () => ({ dataset: { noteId: 'p1' } }) },
+      body = { closest: () => ({ dataset: { noteId: 'p1' } }) },
+      orphan = { closest: () => null },
+      onLink = { target: { closest: (selector: string) => (selector.includes('a') ? {} : null) } },
+      onText = { target: { closest: () => null } };
+    handler('click', 'edit-feedback-prompt')({}, button);
+    handler('click', 'edit-feedback-prompt')({}, orphan);
+    handler('dblclick', 'data-feedback-prompt-body')(onText, body);
+    // A double-click on a link inside the prompt keeps the link's own action.
+    handler('dblclick', 'data-feedback-prompt-body')(onLink, body);
+    expect(bindings.beginPrompt.mock.calls).toEqual([
+      ['p1', button],
+      ['p1', body],
+    ]);
+    expect(bindings.begin).not.toHaveBeenCalled();
+  });
+
   it('drafts notes and replies, finishes only note edits on focus-leave, and saves', () => {
-    const bindings = { begin: vi.fn(), input: vi.fn(), finish: vi.fn(), save: vi.fn() };
+    const bindings = { begin: vi.fn(), beginPrompt: vi.fn(), input: vi.fn(), finish: vi.fn(), save: vi.fn() };
     wireNoteEditor({} as HTMLElement, bindings);
     const edit = { dataset: { noteId: 'n1' } },
       reply = { dataset: { noteId: 'n2', noteResponse: 'true' } };

@@ -218,6 +218,7 @@ pub(crate) fn do_update_with_ticket(
                 text: note_text_edit,
                 confidence: confidence_change,
                 actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
+                allow_feedback_prompt_edit: req.edit_feedback_prompt,
             };
             if edit.is_empty() {
                 updated

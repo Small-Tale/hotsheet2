@@ -14,6 +14,7 @@ import { Activity, MessageSquareText, Plus } from 'lucide';
 
 import type { AttachmentReferenceContext } from '../attachment-references';
 import { isAiThumbsFeedback } from '../feedback-needed';
+import { isFeedbackPromptEdit } from '../feedback-prompt-edits';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { NoteCard, type NoteCardProps } from './note-card';
 import { NoteComposer } from './note-composer';
@@ -181,6 +182,7 @@ function LoadedTicketNotes({
               editable={canEdit}
               deletable={canDelete}
               editing={note.id === editingNoteId}
+              editingPrompt={note.id === editingNoteId && isFeedbackPromptEdit(note.id)}
               draft={note.id === editingNoteId ? noteDraft : undefined}
               readerMode={readerMode}
               respondToFeedback={!readerMode && note.id === activeFeedbackNoteId}

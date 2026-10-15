@@ -1636,6 +1636,7 @@ impl TicketProvider for GitProvider {
                 text: Some(text),
                 confidence: None,
                 actor: None,
+                allow_feedback_prompt_edit: false,
             },
         )
     }
@@ -2868,6 +2869,7 @@ mod tests {
                         role: hotsheet_model::AttachmentActorRole::Human,
                         id: None,
                     }),
+                    allow_feedback_prompt_edit: false,
                 },
             )
             .unwrap();
@@ -3264,6 +3266,7 @@ mod tests {
                     text: None,
                     confidence: Some(Some(Confidence::new(10).unwrap())),
                     actor: None,
+                    allow_feedback_prompt_edit: false,
                 },
             )
             .unwrap_err();
@@ -3285,6 +3288,7 @@ mod tests {
                         text: text.map(str::to_owned),
                         confidence,
                         actor: None,
+                        allow_feedback_prompt_edit: false,
                     },
                 )
                 .unwrap()

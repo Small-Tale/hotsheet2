@@ -53,6 +53,11 @@ export function wireNoteComposer(root: HTMLElement, bindings: NoteComposerBindin
 export interface NoteEditorBindings {
   /** A click or Enter/Space on a rendered note body began editing note `noteId`. */
   readonly begin: (noteId: string, target: HTMLElement) => void;
+  /**
+   * The explicit Edit Note action, or a double-click on the prompt body, opened a FEEDBACK NEEDED
+   * prompt for editing (HS2-ZXGEFE). Replies still go through the response editor.
+   */
+  readonly beginPrompt: (noteId: string, target: HTMLElement) => void;
   /** A keystroke in a note editor; `response` marks a feedback reply rather than an edit. */
   readonly input: (field: HTMLTextAreaElement, noteId: string | undefined, response: boolean) => void;
   /** Focus left a note edit (never a feedback reply): write it once and close it. */
@@ -78,6 +83,22 @@ export function wireNoteEditor(root: HTMLElement, bindings: NoteEditorBindings):
       if (!keyBeginsMarkdownEdit(event as KeyboardEvent, target)) return;
       event.preventDefault();
       begin(target);
+    }),
+  );
+  const beginPrompt = (target: Element) => {
+    const note = target.closest<HTMLElement>('[data-note-id]');
+    if (note?.dataset.noteId) bindings.beginPrompt(note.dataset.noteId, target as HTMLElement);
+  };
+  lifetime.add(
+    delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.editFeedbackPrompt.selector, (_event, target) => {
+      beginPrompt(target);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'dblclick', INSPECTOR_AND_EDITOR_TARGETS.feedbackPromptBody.selector, (event, target) => {
+      // A link or control inside the rendered prompt keeps its own action.
+      if ((event.target as Element).closest('a, button, input, textarea, [role="button"]')) return;
+      beginPrompt(target);
     }),
   );
   lifetime.add(

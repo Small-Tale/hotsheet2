@@ -665,6 +665,7 @@ pub(crate) fn cmd_provider_edit(
             text: input.note,
             confidence: input.note_confidence,
             actor: hotsheet_ticketing::actor::note_actor(actor),
+            allow_feedback_prompt_edit: false,
         };
         if !edit.is_empty() {
             ticket = provider.edit_note_with_metadata(id, &note_id, now, edit)?;

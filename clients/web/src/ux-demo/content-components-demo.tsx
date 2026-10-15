@@ -25,6 +25,7 @@ import type { InspectorTab } from '../components/ticket-inspector';
 import { showTicketReaderDialog, TicketReader } from '../components/ticket-reader';
 import { addTicketTag, openTicketTagSurface, removeTicketTag } from '../components/ticket-tag-editor';
 import { parseFeedbackChoices, updateFeedbackChoiceDocumentSelection } from '../feedback-choices';
+import { beginFeedbackPromptEdit } from '../feedback-prompt-edits';
 import { DemoEvent } from './components/demo-event';
 import { selectDemo, selectedId } from './components/demo-state';
 import { DEMO_ACTIONS, DEMO_COMPONENTS } from './demo-actions';
@@ -592,15 +593,22 @@ function wireContentComponentsDemo(root: HTMLElement): () => void {
       },
     }),
   );
+  function beginDemoNoteEdit(id: string) {
+    editingNoteId.value = id;
+    noteDraft.value =
+      readerNotes.value.find((note) => note.id === id)?.body ??
+      noteDemoNotes.value.find((note) => note.id === id)?.body ??
+      '';
+    queueMicrotask(() => root.querySelector<HTMLElement>(`[name="note-body"][data-note-id="${id}"]`)?.focus());
+  }
   demoListeners.add(
     wireNoteEditor(root, {
       begin: (id) => {
-        editingNoteId.value = id;
-        noteDraft.value =
-          readerNotes.value.find((note) => note.id === id)?.body ??
-          noteDemoNotes.value.find((note) => note.id === id)?.body ??
-          '';
-        queueMicrotask(() => root.querySelector<HTMLElement>(`[name="note-body"][data-note-id="${id}"]`)?.focus());
+        beginDemoNoteEdit(id);
+      },
+      beginPrompt: (id) => {
+        beginFeedbackPromptEdit(id);
+        beginDemoNoteEdit(id);
       },
       input: (field, id, response) => {
         editingNoteId.value = id;

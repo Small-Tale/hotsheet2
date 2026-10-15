@@ -252,6 +252,10 @@ pub(crate) struct UpdateReq {
     pub(crate) ai_feedback: Option<AiFeedbackReq>,
     /// Existing note ULID to edit; absent appends a new note.
     pub(crate) note_id: Option<String>,
+    /// The human explicitly opened an AI FEEDBACK NEEDED prompt for editing (HS2-ZXGEFE);
+    /// without it a human text edit of such a prompt is refused with 409 (HS2-MB2Q10).
+    #[serde(default)]
+    pub(crate) edit_feedback_prompt: bool,
     /// Kind of the appended note; defaults to regular for older clients.
     pub(crate) note_kind: Option<NoteKind>,
     /// Optional concise plain-text headline used by timeline presentations.
@@ -289,6 +293,7 @@ impl UpdateReq {
             || self.blocked_reason.is_some()
             || self.note.is_some()
             || self.note_id.is_some()
+            || self.edit_feedback_prompt
             || self.note_kind.is_some()
             || self.note_summary.is_some()
             || self.note_confidence.is_some()

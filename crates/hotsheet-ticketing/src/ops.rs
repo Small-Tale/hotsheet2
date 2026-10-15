@@ -1416,6 +1416,7 @@ pub fn edit_note(
             text: Some(text),
             confidence: None,
             actor: None,
+            allow_feedback_prompt_edit: false,
         },
     )
 }
@@ -1430,6 +1431,10 @@ pub struct NoteEditInput {
     pub confidence: Option<Option<Confidence>>,
     /// Actor making this edit; only an explicit human actor can mark AI text edited.
     pub actor: Option<hotsheet_model::NoteActor>,
+    /// The human explicitly chose to edit an AI `feedback_needed` prompt (HS2-ZXGEFE). Without
+    /// it such an edit is refused, so a reply typed into the wrong field can never overwrite the
+    /// prompt (HS2-MB2Q10).
+    pub allow_feedback_prompt_edit: bool,
 }
 
 impl NoteEditInput {
@@ -1472,7 +1477,11 @@ pub fn edit_note_with_metadata(
                 .actor
                 .as_ref()
                 .is_some_and(|actor| actor.role == hotsheet_model::AttachmentActorRole::Ai);
-            if human_editor && ai_prompt && note.kind == NoteKind::FeedbackNeeded {
+            if human_editor
+                && ai_prompt
+                && note.kind == NoteKind::FeedbackNeeded
+                && !edit.allow_feedback_prompt_edit
+            {
                 return Err(StoreError::FeedbackNoteEdit(note_id.to_string()));
             }
         }
@@ -2543,6 +2552,34 @@ mod tests {
         .unwrap();
         assert_eq!(revised.notes[0].text, "Which PAT should I use?");
         assert_eq!(revised.notes[0].kind, NoteKind::FeedbackNeeded);
+        // HS2-ZXGEFE: an explicit human edit of the prompt is allowed, keeps the prompt a
+        // FEEDBACK NEEDED note, and records the human edit; the refusal returns without it.
+        let explicit = edit_note_with_metadata(
+            &store,
+            &ticket.id,
+            &note_id,
+            ts("2026-10-14T00:03:00Z"),
+            NoteEditInput {
+                text: Some("Which PAT should I use for the Jira site?".into()),
+                actor: Some(actor(hotsheet_model::AttachmentActorRole::Human)),
+                allow_feedback_prompt_edit: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            explicit.notes[0].text,
+            "Which PAT should I use for the Jira site?"
+        );
+        assert_eq!(explicit.notes[0].kind, NoteKind::FeedbackNeeded);
+        assert!(explicit.notes[0].human_edited);
+        assert_eq!(
+            explicit.notes[0].actor.as_ref().map(|actor| actor.role),
+            Some(hotsheet_model::AttachmentActorRole::Ai)
+        );
+        let refused_again =
+            edit(hotsheet_model::AttachmentActorRole::Human, "token stored").unwrap_err();
+        assert!(matches!(refused_again, StoreError::FeedbackNoteEdit(_)));
     }
 
     #[test]
@@ -4071,6 +4108,7 @@ mod tests {
                     text: text.map(str::to_owned),
                     confidence: None,
                     actor,
+                    allow_feedback_prompt_edit: false,
                 },
             )
             .unwrap()
@@ -4116,6 +4154,7 @@ mod tests {
                     role: hotsheet_model::AttachmentActorRole::Human,
                     id: None,
                 }),
+                allow_feedback_prompt_edit: false,
             },
         )
         .unwrap();

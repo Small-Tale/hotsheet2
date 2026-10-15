@@ -845,6 +845,7 @@ pub(crate) fn cmd_edit(
             text: note,
             confidence: note_confidence,
             actor: hotsheet_ticketing::actor::note_actor(actor),
+            allow_feedback_prompt_edit: false,
         };
         if !edit.is_empty() {
             updated = ops::edit_note_with_metadata(&store, &ticket.id, &note_id, now_ts(), edit)?;

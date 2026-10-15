@@ -7,7 +7,7 @@ import { rem, uiColor } from '@kerfjs/ui/css-values';
 import { DisclosureArrow } from '@kerfjs/ui/disclosure-arrow';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Activity, CircleAlert, FilePenLine, MessageSquareText, Plus, RefreshCw, Trash2, X } from 'lucide';
+import { Activity, CircleAlert, FilePenLine, MessageSquareText, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide';
 
 import type { AttachmentReferenceContext } from '../attachment-references';
 import { parseFeedbackChoices } from '../feedback-choices';
@@ -30,6 +30,8 @@ export interface NoteCardProps {
   editable?: boolean;
   deletable?: boolean;
   editing?: boolean;
+  /** The edit open on this FEEDBACK NEEDED prompt is an explicit Edit Note, not a reply draft (HS2-ZXGEFE). */
+  editingPrompt?: boolean;
   draft?: string;
   readerMode?: boolean;
   /** The stored note is an AI FEEDBACK NEEDED prompt, even when an answer presents it as regular. */
@@ -327,6 +329,7 @@ export function NoteCard({
   editable = true,
   deletable = true,
   editing = false,
+  editingPrompt = false,
   draft,
   readerMode = false,
   feedbackPrompt = kind === 'feedback_needed',
@@ -345,11 +348,15 @@ export function NoteCard({
 }: NoteCardProps) {
   const presentation = presentations[kind];
   const showAiAttribution = aiAuthored && hasAiAuthoredText(kind, body);
-  const feedbackEditor = readerMode && (kind === 'feedback_needed' || kind === 'feedback_draft');
-  const feedbackResponse = readerMode && kind === 'feedback_needed';
+  // Editing the prompt itself replaces the response editor with the ordinary note editor (HS2-ZXGEFE).
+  const promptEdit = editing && editingPrompt && feedbackPrompt;
+  const feedbackEditor = readerMode && !promptEdit && (kind === 'feedback_needed' || kind === 'feedback_draft');
+  const feedbackResponse = readerMode && !promptEdit && kind === 'feedback_needed';
   const editorOpen = editing || feedbackEditor;
-  // An AI FEEDBACK NEEDED prompt is answered with a new note, never rewritten in place (HS2-MB2Q10).
+  // An AI FEEDBACK NEEDED prompt is answered with a new note, never rewritten by a plain click
+  // (HS2-MB2Q10); only its explicit Edit Note action or a double-click opens it (HS2-ZXGEFE).
   const editInPlace = editable && !feedbackPrompt;
+  const editPrompt = editable && feedbackPrompt && !editing;
   const source = draft ?? (feedbackResponse ? '' : body);
   const choiceGroup = feedbackResponse ? parseFeedbackChoices(body) : undefined;
   const editAttributes =
@@ -387,17 +394,30 @@ export function NoteCard({
           {title ?? presentation.label}
         </span>
         <span class="note-card__header-end">
-          {!editorOpen && deletable && (
+          {(editPrompt || (!editorOpen && deletable)) && (
             <span class="note-card__actions">
-              <button
-                type="button"
-                {...INSPECTOR_AND_EDITOR_ACTIONS.deleteNote.attrs}
-                data-note-id={id}
-                aria-label="Delete Note"
-                title="Delete note"
-              >
-                <LucideIcon size={12.8} icon={Trash2} name="trash-2" />
-              </button>
+              {editPrompt && (
+                <button
+                  type="button"
+                  {...INSPECTOR_AND_EDITOR_ACTIONS.editFeedbackPrompt.attrs}
+                  data-note-id={id}
+                  aria-label="Edit Note"
+                  title="Edit note"
+                >
+                  <LucideIcon size={12.8} icon={Pencil} name="pencil" />
+                </button>
+              )}
+              {!editorOpen && deletable && (
+                <button
+                  type="button"
+                  {...INSPECTOR_AND_EDITOR_ACTIONS.deleteNote.attrs}
+                  data-note-id={id}
+                  aria-label="Delete Note"
+                  title="Delete note"
+                >
+                  <LucideIcon size={12.8} icon={Trash2} name="trash-2" />
+                </button>
+              )}
             </span>
           )}
           {confidence !== undefined && <ConfidenceBadge value={confidence} />}
@@ -428,11 +448,16 @@ export function NoteCard({
           }
         />
       ) : (
-        <div class="note-card__body" {...editAttributes}>
+        <div
+          class="note-card__body"
+          {...editAttributes}
+          data-feedback-prompt-body={editPrompt ? 'true' : undefined}
+          title={editPrompt ? 'Double-click to edit' : editAttributes.title}
+        >
           <MarkdownPreview source={visibleNoteBody(kind, body)} attachmentContext={attachmentContext} size="inherit" />
         </div>
       )}
-      {respondToFeedback && !readerMode && <RespondToFeedbackButton id={id} />}
+      {respondToFeedback && !readerMode && !promptEdit && <RespondToFeedbackButton id={id} />}
       <footer class="note-card__footer">
         {showAiAttribution ? (
           <AIContentLabel

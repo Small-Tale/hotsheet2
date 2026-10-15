@@ -296,6 +296,7 @@ pub(crate) fn do_provider_update(
     let note_id = req.note_id.clone();
     let note_kind = req.note_kind.unwrap_or(NoteKind::Regular);
     let note_summary = req.note_summary.clone();
+    let allow_feedback_prompt_edit = req.edit_feedback_prompt;
     let (mut ticket, timing) = provider
         .update_timed(
             id,
@@ -324,6 +325,7 @@ pub(crate) fn do_provider_update(
         text: note,
         confidence: confidence_change,
         actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
+        allow_feedback_prompt_edit,
     };
     match (note_id, edit) {
         (Some(note_id), edit) if !edit.is_empty() => {

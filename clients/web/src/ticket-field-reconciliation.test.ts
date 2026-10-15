@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FullTicket } from './api';
+import { beginFeedbackPromptEdit, endFeedbackPromptEdit } from './feedback-prompt-edits';
 import {
   isTicketConcurrencyConflict,
+  noteEditPatch,
   rebaseDraftValue,
   reconcileActiveDraft,
   reconcileReaderNoteDraft,
@@ -84,6 +86,34 @@ describe('field-aware ticket reconciliation', () => {
         note: 'Mine',
       }).conflicts[0],
     ).toMatchObject({ key: 'note:N1', mine: 'Mine', theirs: 'Theirs' });
+  });
+
+  it('marks only an explicitly opened FEEDBACK NEEDED prompt edit and keeps the mark on retry (HS2-ZXGEFE)', () => {
+    const withPrompt = ticket({
+      notes: [{ ...ticket().notes[0], id: 'P1', kind: 'feedback_needed', text: 'Which token?' }, ...ticket().notes],
+    });
+    // A prompt that was not opened through Edit Note gets no flag, so the server keeps refusing it.
+    expect(noteEditPatch(withPrompt, 'P1', 'Mine')).toEqual({ note_id: 'P1', note: 'Mine' });
+    beginFeedbackPromptEdit('P1');
+    try {
+      expect(noteEditPatch(withPrompt, 'P1', 'Mine')).toEqual({
+        note_id: 'P1',
+        note: 'Mine',
+        edit_feedback_prompt: true,
+      });
+      // Regular notes never carry the flag, even while a prompt edit is open.
+      expect(noteEditPatch(withPrompt, 'N1', 'Mine')).toEqual({ note_id: 'N1', note: 'Mine' });
+      const remote = ticket({
+        notes: [...withPrompt.notes, { ...ticket().notes[0], id: 'N2', text: 'Remote extra' }],
+      });
+      expect(reconcileTicketPatch(withPrompt, remote, noteEditPatch(withPrompt, 'P1', 'Mine'))).toEqual({
+        retry: { note: 'Mine', note_id: 'P1', edit_feedback_prompt: true },
+        conflicts: [],
+      });
+    } finally {
+      endFeedbackPromptEdit('P1');
+    }
+    expect(noteEditPatch(withPrompt, 'P1', 'Mine')).toEqual({ note_id: 'P1', note: 'Mine' });
   });
 
   it('keeps activity summary metadata attached to a retried note write', () => {

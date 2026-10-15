@@ -77,6 +77,7 @@ import {
 } from '../ticket-draft-store';
 import {
   isTicketConcurrencyConflict,
+  noteEditPatch,
   rebaseDraftValue,
   reconcileActiveDraft,
   reconcileTicketPatch,
@@ -790,7 +791,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   const noteAutosave = createFocusLossAutosave(
     savingDraft(
       'note',
-      ({ id, value }: { id: string; value: string }) => updateSelected({ note_id: id, note: value }),
+      ({ id, value }: { id: string; value: string }) => updateSelected(noteEditPatch(selectedTicket.value, id, value)),
       noteText,
       ({ id }) => id,
     ),
@@ -803,7 +804,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   const readerNoteAutosave = createFocusLossAutosave(
     savingDraft(
       'note',
-      ({ id, value }: { id: string; value: string }) => updateSelected({ note_id: id, note: value }),
+      ({ id, value }: { id: string; value: string }) => updateSelected(noteEditPatch(selectedTicket.value, id, value)),
       noteText,
       ({ id }) => id,
     ),
@@ -914,7 +915,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       saves = {
         details: createFocusLossAutosave((value) => updateLinkedReader(id, { details: value })),
         note: createFocusLossAutosave(({ id: noteId, value }) =>
-          updateLinkedReader(id, { note_id: noteId, note: value }),
+          updateLinkedReader(
+            id,
+            noteEditPatch(linkedReaderStack.value.find((frame) => frame.id === id)?.ticket, noteId, value),
+          ),
         ),
         blocked: createFocusLossAutosave((value) => updateLinkedReader(id, { blocked_reason: value.trim() || null })),
         respond: (value) => updateLinkedReader(id, { note: value, note_kind: 'regular' }),

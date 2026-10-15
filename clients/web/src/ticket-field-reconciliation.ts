@@ -1,4 +1,5 @@
 import type { FullTicket } from './api';
+import { isFeedbackPromptEdit } from './feedback-prompt-edits';
 import { mergeSet, mergeText } from './text-merge';
 import type { TicketPatch } from './ticket-operations';
 
@@ -105,6 +106,7 @@ export function reconcileTicketPatch(
     (field) =>
       field !== 'expected_token' &&
       field !== 'note_id' &&
+      field !== 'edit_feedback_prompt' &&
       field !== 'note_kind' &&
       field !== 'note_summary' &&
       field !== 'note_confidence',
@@ -135,11 +137,24 @@ export function reconcileTicketPatch(
     });
   }
   if (noteId && Object.hasOwn(retry, 'note')) retry.note_id = noteId;
+  // An explicit FEEDBACK NEEDED prompt edit stays explicit on retry (HS2-ZXGEFE).
+  if (noteId && Object.hasOwn(retry, 'note') && patch.edit_feedback_prompt === true) retry.edit_feedback_prompt = true;
   if (Object.hasOwn(retry, 'note') && patch.note_kind !== undefined) retry.note_kind = patch.note_kind;
   if (Object.hasOwn(retry, 'note') && patch.note_summary !== undefined) retry.note_summary = patch.note_summary;
   if (Object.hasOwn(retry, 'note') && patch.note_confidence !== undefined)
     retry.note_confidence = patch.note_confidence;
   return { retry, conflicts };
+}
+
+/**
+ * The patch for an in-place note edit. A FEEDBACK NEEDED prompt the user explicitly opened with Edit
+ * Note says so; the server refuses a human rewrite of an AI prompt without it (HS2-MB2Q10,
+ * HS2-ZXGEFE), so any other path that reaches a prompt still fails safe.
+ */
+export function noteEditPatch(ticket: FullTicket | null | undefined, noteId: string, note: string): TicketPatch {
+  const prompt =
+    isFeedbackPromptEdit(noteId) && ticket?.notes.some((item) => item.id === noteId && item.kind === 'feedback_needed');
+  return prompt ? { note_id: noteId, note, edit_feedback_prompt: true } : { note_id: noteId, note };
 }
 
 /** The draft-backed text value of `field` (a note's text for `note`), as the editors hold it. */

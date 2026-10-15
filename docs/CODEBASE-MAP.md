@@ -144,6 +144,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/note-authorship.ts # Note author/AI-label facets from the recorded note actor (tool name from the worker-id prefix; HS2-32QDZ3)
     src/components/confidence-badge.tsx # Shared banded AI completion ConfidenceBadge + colocated CSS: compact pill (note header, TicketRow list/board summaries, HS2-A0Q6G6) and labeled inspector/reader header (HS2-DWTJ43); demo in src/ux-demo/confidence-badge-demo.tsx
     src/ticket-timeline-data.ts # Timeline entries from activity notes + lifecycle backfill; appends each completion cycle's confidence to its Completed headline
+    src/feedback-prompt-edits.ts # Note ids of FEEDBACK NEEDED prompts the user explicitly opened with Edit Note; only their saves carry edit_feedback_prompt (HS2-ZXGEFE)
     src/ticket-usage-timeline.ts # Buckets a ticket's AI usage events into the timeline gaps and formats the per-gap and total token/model/cost labels (HS2-ZA7W6E, HS2-J14225)
     src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, shell/AI/chat type filtering and scoped bulk inclusion rules
     src/terminal-visibility-filter.ts # Controlled native multi-select array binding that preserves its open popup through list rerenders

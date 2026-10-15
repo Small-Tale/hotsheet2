@@ -134,6 +134,47 @@ describe('NoteCard', () => {
     );
   });
 
+  it('opens a feedback prompt for editing only through its explicit Edit Note action (HS2-ZXGEFE)', () => {
+    const prompt = { id: 'p1', kind: 'feedback_needed' as const, author: 'Codex', time: 'Now', body: 'Which token?' };
+    const sidebar = String(NoteCard({ ...prompt, respondToFeedback: true }));
+    expect(sidebar).toContain('data-action="edit-feedback-prompt"');
+    expect(sidebar).toContain('aria-label="Edit Note"');
+    expect(sidebar).toContain('data-lucide="pencil"');
+    expect(sidebar).toContain('data-feedback-prompt-body="true"');
+    expect(sidebar).toContain('title="Double-click to edit"');
+    // A plain click still never edits the prompt (HS2-MB2Q10).
+    expect(sidebar).not.toContain('data-edit-on-click');
+    // The reader keeps its response editor and offers the same explicit edit action.
+    const reader = String(NoteCard({ ...prompt, readerMode: true }));
+    expect(reader).toContain('data-note-response="true"');
+    expect(reader).toContain('data-action="edit-feedback-prompt"');
+    // While the prompt is being edited, the ordinary note editor replaces the response editor.
+    for (const readerMode of [false, true]) {
+      const editing = String(
+        NoteCard({
+          ...prompt,
+          readerMode,
+          editing: true,
+          editingPrompt: true,
+          draft: 'Which PAT?',
+          respondToFeedback: true,
+        }),
+      );
+      expect(editing).not.toContain('data-action="respond-to-feedback"');
+      expect(editing).toContain('name="note-body"');
+      expect(editing).toContain('Which PAT?');
+      expect(editing).not.toContain('data-note-response="true"');
+      expect(editing).not.toContain('data-action="edit-feedback-prompt"');
+      expect(editing).not.toContain('No Response Needed');
+    }
+    // A reply being drafted also sets `editing`; without an explicit prompt edit the reader keeps its response editor.
+    expect(String(NoteCard({ ...prompt, readerMode: true, editing: true, draft: 'token stored' }))).toContain(
+      'data-note-response="true"',
+    );
+    // A note that cannot be edited never offers the action.
+    expect(String(NoteCard({ ...prompt, editable: false }))).not.toContain('edit-feedback-prompt');
+  });
+
   it('turns feedback text into character-position insertion targets with removable responses', () => {
     const markup = String(
       NoteCard({

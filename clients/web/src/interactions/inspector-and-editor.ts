@@ -27,13 +27,14 @@ import { copyText } from '../copy-text';
 import { createCoalescedInput, createKeyedCoalescedInput, type DebouncedAutosave } from '../debounced-autosave';
 import { parseFeedbackChoices, updateFeedbackChoiceDocumentSelection } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
+import { beginFeedbackPromptEdit, endFeedbackPromptEdit, isFeedbackPromptEdit } from '../feedback-prompt-edits';
 import { combineFeedbackReply, type InlineFeedbackReply, sourceOffsetForVisibleOffset } from '../feedback-replies';
 import { HostOnlyActionError } from '../host-only-actions';
 import { inlineEditorEscape } from '../inline-editor-escape';
 import { ATTACHMENTS_AND_GALLERY_TARGETS } from '../interaction-attrs/attachments-and-gallery';
 import { INSPECTOR_AND_EDITOR_ACTIONS, INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
 import { manuallyResizedTicketEditorHeight, saveTicketEditorSize, ticketEditorKind } from '../ticket-editor-size';
-import { type TicketFieldConflict } from '../ticket-field-reconciliation';
+import { noteEditPatch, type TicketFieldConflict } from '../ticket-field-reconciliation';
 import { type TicketPatch } from '../ticket-operations';
 import { ticketEditTarget, type TicketReaderFrame } from '../ticket-reader-stack';
 import { type TicketTitleEditSurface, ticketTitleEditSurfaceOf } from '../ticket-title-editing';
@@ -338,7 +339,8 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     return Boolean(target.closest('[data-component="ticket-reader"]'));
   }
   function resolvedConflictPatch(conflict: TicketFieldConflict, value: string): TicketPatch {
-    if (conflict.field === 'note') return { note_id: conflict.key.slice('note:'.length), note: value };
+    if (conflict.field === 'note')
+      return noteEditPatch(selectedTicket.value, conflict.key.slice('note:'.length), value);
     if (conflict.field === 'tags')
       return {
         tags: value
@@ -548,12 +550,13 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       },
     }),
   );
-  function beginNoteEdit(id: string, reader = false, frame?: TicketReaderFrame) {
+  function beginNoteEdit(id: string, reader = false, frame?: TicketReaderFrame, feedbackPrompt = false) {
     const note = (frame?.ticket ?? selectedTicket.value)?.notes.find((item) => item.id === id);
     if (!note) return;
-    // A FEEDBACK NEEDED prompt, answered or not, is replied to with a new note from the reader's
-    // response editor and never edited in place (HS2-MB2Q10).
-    if (note.kind === 'feedback_needed') return;
+    // A FEEDBACK NEEDED prompt is replied to with a new note from the reader's response editor
+    // (HS2-MB2Q10); only the explicit Edit Note action opens the prompt itself (HS2-ZXGEFE).
+    if (note.kind === 'feedback_needed' && !feedbackPrompt) return;
+    if (note.kind === 'feedback_needed') beginFeedbackPromptEdit(id);
     if (frame) {
       if (!frame.capabilities.note_edit) return;
       replaceLinkedReaderFrame(frame.id, (current) => ({
@@ -780,6 +783,9 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       begin: (noteId, target) => {
         beginNoteEdit(noteId, isReaderSurface(target), linkedReaderFrame(target));
       },
+      beginPrompt: (noteId, target) => {
+        beginNoteEdit(noteId, isReaderSurface(target), linkedReaderFrame(target), true);
+      },
       input: (field, id, response) => {
         const frame = linkedReaderFrame(field),
           value = field.value;
@@ -800,7 +806,9 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         draft.value = value;
         const prompt =
           selectedTicket.value?.notes.find((item) => item.id === editing.value)?.kind === 'feedback_needed';
-        if (!response && !prompt && editing.value) autosave.schedule({ id: editing.value, value: draft.value });
+        // A prompt autosaves only while it is explicitly open for editing (HS2-ZXGEFE).
+        if (!response && (!prompt || isFeedbackPromptEdit(id)) && editing.value)
+          autosave.schedule({ id: editing.value, value: draft.value });
         else scheduleProjectSessionPersistence();
       },
       finish: (field) => {
@@ -821,8 +829,10 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
           editing = reader ? readerEditingNoteId : editingNoteId,
           draft = reader ? readerNoteDraft : noteDraft,
           autosave = reader ? readerNoteAutosave : noteAutosave;
+        const finishedId = editing.value;
         void autosave.flush().then((saved) => {
           if (saved) {
+            endFeedbackPromptEdit(finishedId);
             editing.value = undefined;
             draft.value = '';
           }
@@ -841,7 +851,9 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
           id = editing.value ?? data(target).noteId,
           note = selectedTicket.value?.notes.find((item) => item.id === id),
           response =
-            data(target).noteResponse === 'true' || note?.kind === 'feedback_draft' || note?.kind === 'feedback_needed',
+            data(target).noteResponse === 'true' ||
+            note?.kind === 'feedback_draft' ||
+            (note?.kind === 'feedback_needed' && !isFeedbackPromptEdit(id)),
           source = id ? feedbackSource(id) : undefined,
           value =
             source && response
@@ -853,9 +865,12 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
                 )
               : draft.value;
         if (!id || !value.trim()) return;
-        const patch = response ? { note: value, note_kind: 'regular' } : { note_id: id, note: value };
+        const patch = response
+          ? { note: value, note_kind: 'regular' }
+          : noteEditPatch(linkedReaderFrame(target)?.ticket ?? selectedTicket.value, id, value);
         void updateSelected(patch).then((saved) => {
           if (saved) {
+            endFeedbackPromptEdit(id);
             editing.value = undefined;
             draft.value = '';
             clearFeedbackReplyState(id);

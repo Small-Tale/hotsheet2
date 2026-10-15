@@ -790,7 +790,10 @@ provider ticket routes, and MCP `hotsheet_update` take the equivalent `note_conf
 JSON integer with identical validation (400 for a non-integer, out-of-range, or orphan
 append value; 409 when the provider's `note_confidence` capability is off). With `note_id`,
 an absent `note_confidence` leaves the score unchanged, an integer replaces it, and JSON
-`null` clears it; on an append, `null` simply means "no score". Correcting a score does not
+`null` clears it; on an append, `null` simply means "no score". A human text edit of an
+AI-authored `feedback_needed` note through `note_id` is refused with 409 unless the body also
+sets `edit_feedback_prompt: true`, the client's signal that the user explicitly opened the
+prompt for editing rather than replying to it (HS2-MB2Q10, HS2-ZXGEFE). Correcting a score does not
 rewrite the note's `## Confidence` prose, so an author fixing a mistyped score should edit
 both in the same call.
 Every command accepts the global `--actor-role human|ai|system` and `--actor-id <id>`

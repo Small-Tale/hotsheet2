@@ -3407,11 +3407,19 @@ unsupported, so they cannot create this state through Hot Sheet.
 - **Explicitly editing an existing note is a different action from responding.** Direct
   editing is prefilled with that note's complete Markdown and autosaves the replacement
   by note id. A stored `feedback_needed` prompt—answered or not, sidebar, reader, or
-  linked reader frame—is never offered for in-place editing: every reply (typed, inline,
-  or chosen) becomes its own new `regular` note and the prompt keeps its text
-  (HS2-MB2Q10). In a linked reader frame, Respond and No Response Needed both post
-  to that frame's own ticket, never to the workspace selection (HS2-04XTV5). The server enforces this too: a human text edit of an AI-authored
-  `feedback_needed` note is refused with 409 Conflict.
+  linked reader frame—is never opened for editing by a plain click or by typing a reply:
+  every reply (typed, inline, or chosen) becomes its own new `regular` note and the prompt
+  keeps its text (HS2-MB2Q10). Editing the prompt itself is a deliberate action
+  (HS2-ZXGEFE): its header carries an **Edit Note** pencil (sidebar, reader, and linked
+  frames), and a double-click on the prompt body in the sidebar does the same (the reader's
+  single clicks stay inline-reply targets). Either opens the ordinary note editor in place
+  of the response editor and hides Respond to Feedback; the edit autosaves on blur like any
+  note and keeps the note a `feedback_needed` prompt marked as human-edited. In a linked
+  reader frame, Respond and No Response Needed both post to that frame's own ticket, never
+  to the workspace selection (HS2-04XTV5). The server enforces the split too: a human text
+  edit of an AI-authored `feedback_needed` note is refused with 409 Conflict unless the
+  request carries `edit_feedback_prompt: true`, which the client sends only for a prompt
+  the user opened with Edit Note.
 - **Feedback prompts support user-chosen inline reply points.** In reader mode, the
   client maps a click in the rendered Markdown to the corresponding source-character
   boundary and inserts a focused reply field at that exact point. Enter/Space on the
