@@ -170,6 +170,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/project-ticket-refresh.ts # Independent healthy/corrupt ticket loading so either result remains usable when the other request fails
     tests/project-sidebar-state.spec.ts # Atomic new-project activation, project-keyed sidebar count/trend isolation, and stale background-snapshot rejection
     tests/project-chat-scope.spec.ts # AI chat tabs and close-dialog chats stay scoped to the project whose root or store registered the connection (HS2-6GHSCY, HS2-5AGPWE)
+    tests/archive-load-more.spec.ts # Real-server regression: rows appended by Load more survive a concurrent change's list refresh (HS2-9DF0DA)
     tests/ticket-timeline-usage.spec.ts # Timeline gap labels carry tokens and models and the total line sums the ticket, at 1280 and 390 px (HS2-ZA7W6E, HS2-J14225)
     src/project-change-poll.ts # Replay-safe per-open-project change transport (WebSocket-first, long-poll fallback, `resume`) plus the main-thread consumer it feeds (HS2-SH9179); ticket invalidation, overflow/reconnect recovery, onResync hook (initial/reconnect/overflow) that replaces permission polling (HS2-NKCXW4), and abortable lifecycle
     src/change-stream-worker-protocol.ts # Versioned main<->worker change-stream messages (generation tokens, acks), their validators, and the bounded coalescing per-project delivery queue (HS2-SH9179)

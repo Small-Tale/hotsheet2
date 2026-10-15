@@ -1069,7 +1069,11 @@ preview/download, server directory browser) are separate design work.
   Workspace collection refreshes retain one bounded compact page and expose a visible
   **Load more tickets** cursor continuation below lists and after the final loaded row in its column instead of
   downloading every ticket. Continuation pages append without duplicating overlapping
-  provider rows, and the action disappears when the cursor is exhausted. SQL aggregate counts keep the
+  provider rows, and the action disappears when the cursor is exhausted. A refresh of a list the user
+  already paged (a live change from another writer, or a warm background tab's refresh) reloads every
+  row already loaded for that same query, in pages of at most 500, and keeps the continuation cursor
+  after them, so appended rows never snap back to the first page (HS2-9DF0DA); a different view or
+  sort still starts from page one. SQL aggregate counts keep the
   sidebar and background project tabs authoritative even when most rows are not resident.
   Every initial and continuation request carries the active list/board sort field and direction;
   switching sort or switching between independently sorted list and board modes refreshes the bounded

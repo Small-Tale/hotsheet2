@@ -88,6 +88,13 @@ export interface ProjectRefreshDependencies {
  * selected ticket's reconcile. Extracted from the application runtime without behavior changes
  * (HS2-BSSWGV).
  */
+/** Whether two checkout ticket queries select the same rows in the same order. */
+export function sameTicketQuery(left: CheckoutTicketQuery, right: CheckoutTicketQuery): boolean {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]) as Set<keyof CheckoutTicketQuery>;
+  for (const key of keys) if (JSON.stringify(left[key] ?? null) !== JSON.stringify(right[key] ?? null)) return false;
+  return true;
+}
+
 export function createProjectRefresh(dependencies: ProjectRefreshDependencies) {
   const {
     loading,
@@ -147,7 +154,10 @@ export function createProjectRefresh(dependencies: ProjectRefreshDependencies) {
         query = sortedTicketQuery(ticketViewQuery(view)),
         board = boardRefreshSpec(view, current.id, { rows: tickets.value, pages: boardColumnPages.value });
       let fullSettled = false;
-      const fullRefresh = loadProjectTicketRefresh(client, current.id, query, board);
+      // A list the user already paged keeps its loaded rows across event-driven refreshes (HS2-9DF0DA),
+      // but only when those rows came from this same query; a different view starts from page one.
+      const loadedRows = board || !sameTicketQuery(ticketPageQuery.value, query) ? 0 : tickets.value.length,
+        fullRefresh = loadProjectTicketRefresh(client, current.id, query, board, loadedRows);
       void fullRefresh.then(
         () => {
           fullSettled = true;

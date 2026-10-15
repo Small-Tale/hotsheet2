@@ -9,7 +9,7 @@ import { PendingCreatedTickets } from '../pending-created-tickets';
 import type { ProjectTicketRefresh } from '../project-ticket-refresh';
 import { createRefreshBarrier } from '../refresh-barrier';
 import type { TicketView } from '../ticket-views';
-import { type CachedProjectProjection, createProjectRefresh } from './project-refresh';
+import { type CachedProjectProjection, createProjectRefresh, sameTicketQuery } from './project-refresh';
 
 const load = vi.hoisted(() => vi.fn<() => Promise<ProjectTicketRefresh>>());
 vi.mock('../project-ticket-refresh', async (original) => ({
@@ -124,5 +124,20 @@ describe('selected project refresh owner (HS2-BSSWGV)', () => {
     await refresh.refreshProject();
     expect(bindings.error.value).toBe('offline');
     expect(bindings.loading.value).toBe(false);
+  });
+});
+
+describe('sameTicketQuery (HS2-9DF0DA)', () => {
+  it('matches queries that select the same rows in the same order', () => {
+    expect(
+      sameTicketQuery({ collection: 'archive', sort: 'updated' }, { sort: 'updated', collection: 'archive' }),
+    ).toBe(true);
+    expect(sameTicketQuery({ collection: 'archive' }, { collection: 'archive', tags: undefined })).toBe(true);
+    expect(sameTicketQuery({ collection: 'archive' }, { collection: 'queue' })).toBe(false);
+    expect(sameTicketQuery({ collection: 'archive', sort: 'updated' }, { collection: 'archive', sort: 'title' })).toBe(
+      false,
+    );
+    expect(sameTicketQuery({ tags: 'a,b' }, { tags: 'b,a' })).toBe(false);
+    expect(sameTicketQuery({}, {})).toBe(true);
   });
 });

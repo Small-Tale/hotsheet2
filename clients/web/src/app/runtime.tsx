@@ -95,6 +95,7 @@ import {
   type CachedProjectProjection,
   createProjectRefresh,
   type ProjectRefreshOptions,
+  sameTicketQuery,
 } from '../features/project-refresh';
 import { createProjectTeardown } from '../features/project-teardown';
 import { createReaderLayersSurface } from '../features/reader-layers-surface';
@@ -2666,12 +2667,19 @@ export async function startHotSheetWebClient() {
       const view = loadProjectWorkspaceSession(localStorage, target.id)?.selectedView ?? 'all',
         rows = ticketRowsByProject.value[target.id] as WireTicketRow[] | undefined,
         pages = boardPagesByProject.value[target.id] as Record<string, BoardColumnPage> | undefined;
-      const query = sortedTicketQuery(ticketViewQuery(view));
+      const query = sortedTicketQuery(ticketViewQuery(view)),
+        board = boardRefreshSpec(view, target.id, rows && pages ? { rows, pages } : undefined),
+        // A warm background tab keeps the rows it had paged (HS2-9DF0DA).
+        loadedRows =
+          !board && sameTicketQuery(ticketCursorsByProject.value[target.id]?.query ?? {}, query)
+            ? (rows?.length ?? 0)
+            : 0;
       const snapshot = await loadProjectTicketRefresh(
         new Api(target.apiPath, '', { trackBusy: false }),
         target.id,
         query,
-        boardRefreshSpec(view, target.id, rows && pages ? { rows, pages } : undefined),
+        board,
+        loadedRows,
       );
       return { ...snapshot, nextCursorQuery: query };
     },

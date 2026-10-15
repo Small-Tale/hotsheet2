@@ -41,6 +41,55 @@ describe('loadProjectTicketRefresh', () => {
     expect(checkoutTicketPage).toHaveBeenCalledWith('checkout', 200, undefined, { collection: 'queue' });
   });
 
+  it('brings back every row a paged list already loaded, page by page (HS2-9DF0DA)', async () => {
+    const row = (index: number) => ({
+      connection_id: 'git',
+      native_id: `R${index}`,
+      id: `R${index}`,
+      slug: `HS2-R${index}`,
+      title: `Row ${index}`,
+      tags: [],
+    });
+    const all = Array.from({ length: 1300 }, (_, index) => row(index));
+    const page = (size: number, cursor?: string) => {
+      const start = cursor ? Number(cursor) : 0,
+        end = Math.min(all.length, start + size);
+      return { items: all.slice(start, end), next_cursor: end < all.length ? String(end) : undefined };
+    };
+    const checkoutTicketPage = vi.fn(async (_checkout: string, size: number, cursor?: string) => ({
+      ...page(size, cursor),
+      counts,
+    }));
+    const checkoutTicketRowsPage = vi.fn(async (_checkout: string, size: number, cursor?: string) =>
+      page(size, cursor),
+    );
+    const client = {
+        checkoutTicketPage,
+        checkoutTicketRowsPage,
+        checkoutCorruptTickets: vi.fn().mockResolvedValue([]),
+      } as unknown as Pick<Api, 'checkoutCorruptTickets' | 'checkoutTicketPage' | 'checkoutTicketRowsPage'>,
+      query = { collection: 'archive' as const };
+    // 1,100 loaded rows: one counted request, then count-free continuations capped at 500 rows.
+    const result = await loadProjectTicketRefresh(client, 'checkout', query, undefined, 1100);
+    expect(result.tickets).toHaveLength(1100);
+    expect(result.nextCursor).toBe('1100');
+    expect(result.ticketCounts).toEqual(counts);
+    expect(checkoutTicketPage.mock.calls).toEqual([['checkout', 500, undefined, query]]);
+    expect(checkoutTicketRowsPage.mock.calls.map((call) => [call[1], call[2]])).toEqual([
+      [500, '500'],
+      [100, '1000'],
+    ]);
+    // A collection that shrank ends early without a cursor.
+    all.length = 300;
+    const shrunk = await loadProjectTicketRefresh(client, 'checkout', query, undefined, 1100);
+    expect(shrunk.tickets).toHaveLength(300);
+    expect(shrunk.nextCursor).toBeUndefined();
+    // Up to one page loaded keeps the ordinary single 200-row request.
+    checkoutTicketPage.mockClear();
+    await loadProjectTicketRefresh(client, 'checkout', query, undefined, 200);
+    expect(checkoutTicketPage.mock.calls).toEqual([['checkout', 200, undefined, query]]);
+  });
+
   it('preserves a local-only source query and its partial counts', async () => {
     const ticket = { id: '01', slug: 'HS2-LOCAL', title: 'Local', tags: [] };
     const checkoutTicketPage = vi.fn().mockResolvedValue({ items: [ticket], counts });

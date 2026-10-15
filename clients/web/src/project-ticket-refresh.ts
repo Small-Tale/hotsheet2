@@ -125,11 +125,49 @@ export interface BoardRefreshSpec {
  * Load healthy and corrupt ticket indexes without either request suppressing the other. With a board
  * spec, healthy rows load per column (`loadBoardColumnRefresh`) instead of as one global page.
  */
+/** Rows a single-collection refresh requests when nothing has been paged yet. */
+export const TICKET_PAGE_SIZE = 200;
+
+/**
+ * One single-collection page sequence of at least `target` rows (fewer when the collection ends):
+ * the first request carries counts, later ones skip them, and each asks for at most the server's
+ * maximum page size. A refresh of a list the user already paged keeps every loaded row instead of
+ * snapping back to the first page (HS2-9DF0DA).
+ */
+async function loadCollectionRows(
+  client: Pick<Api, 'checkoutTicketPage'> & Partial<Pick<Api, 'checkoutTicketRowsPage'>>,
+  checkout: string,
+  query: CheckoutTicketQuery,
+  target: number,
+) {
+  const first = await client.checkoutTicketPage(checkout, Math.min(MAX_CHECKOUT_PAGE_SIZE, target), undefined, query);
+  const items = [...first.items],
+    sourceErrors = new Set(first.source_errors ?? []);
+  let cursor = first.next_cursor;
+  while (cursor && items.length < target) {
+    const size = Math.min(MAX_CHECKOUT_PAGE_SIZE, target - items.length),
+      page = client.checkoutTicketRowsPage
+        ? await client.checkoutTicketRowsPage(checkout, size, cursor, query)
+        : await client.checkoutTicketPage(checkout, size, cursor, query);
+    items.push(...page.items);
+    page.source_errors?.forEach((error) => sourceErrors.add(error));
+    cursor = page.next_cursor;
+  }
+  return {
+    ...first,
+    items: appendUniqueTicketRows([], items),
+    next_cursor: cursor,
+    ...(sourceErrors.size ? { source_errors: [...sourceErrors] } : {}),
+  };
+}
+
 export async function loadProjectTicketRefresh(
   client: Pick<Api, 'checkoutCorruptTickets' | 'checkoutTicketPage'> & Partial<Pick<Api, 'checkoutTicketRowsPage'>>,
   checkout: string,
   query: CheckoutTicketQuery = { collection: 'queue' },
   board?: BoardRefreshSpec,
+  /** Rows already loaded for this collection; a refresh brings back at least this many (HS2-9DF0DA). */
+  loadedRows = 0,
 ): Promise<ProjectTicketRefresh> {
   if (board) {
     const [columns, corruptTickets] = await Promise.allSettled([
@@ -154,7 +192,9 @@ export async function loadProjectTicketRefresh(
     };
   }
   const [tickets, corruptTickets] = await Promise.allSettled([
-    client.checkoutTicketPage(checkout, 200, undefined, query),
+    loadedRows > TICKET_PAGE_SIZE
+      ? loadCollectionRows(client, checkout, query, loadedRows)
+      : client.checkoutTicketPage(checkout, TICKET_PAGE_SIZE, undefined, query),
     client.checkoutCorruptTickets(checkout),
   ]);
   const diagnostics = corruptTickets.status === 'fulfilled' ? corruptTickets.value : undefined;
