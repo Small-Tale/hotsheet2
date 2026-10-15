@@ -528,7 +528,20 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   (`crates/hotsheet-extsync/tests/provider_latency.rs`, `HOTSHEET_REAL_PROVIDER_BENCH=1`)
   may only edit designated throwaway issues: the Jira ones are `HS2T-1`..`HS2T-3`
   (summary prefix `[HS2 benchmark]`, label `hs2-benchmark`), named in the local `.env` as
-  `HOTSHEET_BENCH_JIRA_ISSUES` / `HOTSHEET_BENCH_JIRA_ISSUE`. The normal `check` job
+  `HOTSHEET_BENCH_JIRA_ISSUES` / `HOTSHEET_BENCH_JIRA_ISSUE`.
+- **Local live-provider settings (HS2-5PC0WA):** live-provider tests read their settings
+  from a gitignored `.env` at the repo root whose secret values are 1Password references
+  (`op://…`), resolved only at run time with
+  `op run --env-file=.env -- cargo nextest run -p hotsheet-extsync --all-features --run-ignored only -E '<filter>'`.
+  Never commit resolved values. The variables, which mirror the `live.yml` Actions
+  secrets, are: Jira `HOTSHEET_JIRA_LIVE_BASE_URL`, `HOTSHEET_JIRA_LIVE_EMAIL`,
+  `HOTSHEET_JIRA_LIVE_PROJECT` (the `HS2T` test project), `HOTSHEET_JIRA_LIVE_TOKEN`
+  (classic API token, Basic auth), and the operator-prepared reopen pair
+  `HOTSHEET_JIRA_LIVE_REOPENED_ISSUE` / `HOTSHEET_JIRA_LIVE_REOPENED_EXPECTED` (a score or
+  `none`); GitLab `HOTSHEET_GITLAB_LIVE_TOKEN`, `HOTSHEET_GITLAB_LIVE_PROJECT`,
+  `HOTSHEET_GITLAB_LIVE_WRITE`; benchmark targets `HOTSHEET_BENCH_JIRA_ISSUES`,
+  `HOTSHEET_BENCH_JIRA_ISSUE`, `HOTSHEET_BENCH_GITLAB_ISSUE`. In CI the same names come
+  from repository Actions secrets; a test whose variables are unset skips. The normal `check` job
   runs a bounded Chromium Playwright smoke group covering deep links, gallery save retry,
   image/video freehand strokes, feedback replies, popup anchoring, concurrent autosave,
   bulk provider projection, and ticket context menus (HS2-28MBS9, HS2-ZHN7XS). The full browser suite
