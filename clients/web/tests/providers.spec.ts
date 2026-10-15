@@ -17791,6 +17791,78 @@ test('keeps the drawer chat toolbar controls inside a phone-width tab toolbar (H
   await page.screenshot({ path: 'target/visual-captures/hs2-59f7wk-drawer-menu-open-390.png' });
 });
 
+test('reflows the shell and drawer chat across the phone breakpoint without a reload (HS2-ZFXYYX)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const shell = page.locator('[data-component="app-shell"]'),
+    drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+  const embedded = drawer.locator('[data-component="ai-conversation"]'),
+    composer = embedded.getByLabel('Message Codex');
+  await expect(embedded).toBeVisible();
+  await composer.fill('What time is it in California?');
+  await composer.press('Enter');
+  await expect(embedded).toContainText('The event stream remains authoritative.');
+  const desktop = async () => {
+    await expect(shell).toHaveAttribute('data-mobile', 'false');
+    await expect(page.locator('wa-select[name="mobile-project"]')).toHaveCount(0);
+    await expect(page.locator('#app-left-rail')).not.toHaveAttribute('data-presentation', 'overlay');
+  };
+  await desktop();
+  // Shrinking the open page yields the same phone shell a fresh phone-width load renders.
+  const resizedAt = Date.now();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(shell).toHaveAttribute('data-mobile', 'true');
+  await expect(page.locator('wa-select[name="mobile-project"]')).toBeVisible();
+  await expect(page.locator('[data-tab-kind="project"]')).toHaveCount(0);
+  await expect(page.locator('#app-left-rail')).toHaveAttribute('data-presentation', 'overlay');
+  await expect(page.locator('#app-right-rail')).toHaveAttribute('data-collapsed', 'true');
+  await expect(embedded).toContainText('The event stream remains authoritative.');
+  await expect
+    .poll(() =>
+      composer.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return box.left >= 0 && box.right <= innerWidth;
+      }),
+    )
+    .toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
+  // The rails slide out as overlays; once settled, the workspace spans the whole phone width.
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        [20, innerWidth - 20].every((x) => {
+          const hit = document.elementFromPoint(x, innerHeight / 2);
+          return Boolean(hit) && !hit!.closest('#app-left-rail, #app-right-rail');
+        }),
+      ),
+    )
+    .toBe(true);
+  console.log(`HS2-ZFXYYX phone shell settled ${Date.now() - resizedAt} ms after the resize`);
+  await page.screenshot({ path: 'target/visual-captures/hs2-zfxyyx-resized-390.png', animations: 'disabled' });
+  // And growing back restores the desktop shell, still without a reload.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await desktop();
+  await expect(embedded).toBeVisible();
+  // The restored inspector settles fully inside the viewport once its slide-in finishes.
+  await expect
+    .poll(() =>
+      page.locator('#app-right-rail').evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return box.width > 250 && box.right <= innerWidth + 1;
+      }),
+    )
+    .toBe(true);
+  await page.screenshot({ path: 'target/visual-captures/hs2-zfxyyx-restored-1280.png', animations: 'disabled' });
+});
+
 test('collapses streamed chat activity to its latest item and toggles it on click (HS2-Y3SGH3)', async ({ page }) => {
   await mockProject(page);
   let connectionId = '';
