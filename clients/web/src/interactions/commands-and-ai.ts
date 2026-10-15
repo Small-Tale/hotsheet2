@@ -733,13 +733,14 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
         checked = (target as HTMLInputElement).checked;
       if (!current) return;
       inheritGlobalShellHistory.value = checked;
-      terminalSettingsMessage.value = 'Saving…';
+      // Progress is the global server-busy indicator and success is silent; only a failure shows
+      // in the status line (HS2-GHA1D3).
+      terminalSettingsMessage.value = '';
       void new Api(current.apiPath)
         .saveTerminalSettings({ inherit_global_shell_history: checked })
         .then((value) => {
           if (project()?.id !== current.id) return;
           inheritGlobalShellHistory.value = value.inherit_global_shell_history;
-          terminalSettingsMessage.value = 'Saved locally. New terminals will use this setting.';
         })
         .catch((reason: unknown) => {
           if (project()?.id !== current.id) return;

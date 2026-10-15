@@ -221,7 +221,8 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     const current = project(),
       ticket = selectedTicket.value;
     if (!current || !ticket || !ids.length) return false;
-    attachmentMessage.value = 'Updating attachment group…';
+    // No inline progress line: the global server-busy indicator covers the request (HS2-GHA1D3).
+    attachmentMessage.value = '';
     try {
       const result = await api().updateCheckoutAttachmentMetadata(current.id, ticket.qualified_id, [...ids], metadata);
       selectedTicket.value = result.ticket;
@@ -1295,7 +1296,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     const current = project(),
       ticket = selectedTicket.value;
     if (!current || !ticket || !id || !canUseAttachments()) return;
-    attachmentMessage.value = 'Removing attachment…';
+    attachmentMessage.value = '';
     try {
       const result = await api().deleteCheckoutAttachment(current.id, ticket.qualified_id, id);
       selectedTicket.value = result.ticket;

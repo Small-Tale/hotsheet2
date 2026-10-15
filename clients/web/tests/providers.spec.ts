@@ -5830,7 +5830,9 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
   const claudeModel = page.locator('wa-select[name="ai-provider-model-claude"]');
   await claudeModel.click();
   await claudeModel.locator('wa-option[value="opus"]').click();
-  await expect(page.locator('[data-component="ai-tool-settings"]')).toContainText('Saved for this project');
+  await expect(claudeModel).toHaveJSProperty('value', 'opus');
+  // Autosave success is silent: no inline Saving…/Saved line (HS2-GHA1D3).
+  await expect(page.locator('[data-component="ai-tool-settings"] [role="status"]')).toHaveText('');
   // Opus supports Claude's previous (default) medium effort, so the model change keeps it (HS2-M0HWPH).
   await expect(page.locator('wa-select[name="ai-provider-effort-claude"]')).toHaveJSProperty('value', 'medium');
   await page.getByLabel('List View').click();
@@ -17623,11 +17625,14 @@ test('omits effort after selecting a model that does not support it', async ({ p
     tool = settings.locator('wa-select[name="ai-default-tool"]');
   await tool.click();
   await tool.locator('wa-option[value="claude"]').click();
-  await expect(settings).toContainText('Saved for this project on this machine.');
-  await page.screenshot({ path: test.info().outputPath('ai-tools-project-saved-wide.png') });
+  await expect(tool).toHaveJSProperty('value', 'claude');
+  // Autosave success is silent: no inline Saving…/Saved line (HS2-GHA1D3).
+  await expect(settings.locator('[role="status"]')).toHaveText('');
+  await expect(settings).not.toContainText('Saving');
+  await page.screenshot({ path: 'target/visual-captures/hs2-gha1d3-ai-tools-after-save-1280.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(300);
-  await page.screenshot({ path: test.info().outputPath('ai-tools-project-saved-narrow.png') });
+  await page.screenshot({ path: 'target/visual-captures/hs2-gha1d3-ai-tools-after-save-390.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByLabel('List View').click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
@@ -17758,7 +17763,7 @@ test('configures per-provider AI defaults and exposes Claude Fable effort (HS2-E
   await tool.locator('wa-option[value="codex"]').click();
   await expect.poll(() => saves.at(-1)).toMatchObject({ tool: 'codex', model: 'gpt-6-astra', effort: 'medium' });
   await expect(model('claude')).toHaveAttribute('value', 'fable');
-  await expect(settings).toContainText('Saved for this project on this machine.');
+  await expect(settings.locator('[role="status"]')).toHaveText('');
 });
 
 test('chooses Other for a literal manual model and forgets it after a catalog selection', async ({ page }) => {
@@ -21142,9 +21147,9 @@ test('stores the shell-history inheritance opt-out locally and applies it only t
   await expect(page.getByText(/each terminal keeps private/)).toBeVisible();
   await page.locator('wa-checkbox', { hasText: 'Use my global shell history' }).click({ position: { x: 8, y: 8 } });
   await expect.poll(() => writes).toEqual([{ inherit_global_shell_history: true }]);
-  await expect(page.getByText('Saved locally. New terminals will use this setting.', { exact: true })).toContainText(
-    'Saved locally. New terminals will use this setting.',
-  );
+  // The save is silent on success (HS2-GHA1D3): no inline Saving…/Saved line under the option.
+  await expect(option).toBeChecked();
+  await expect(page.getByText(/^Saving|^Saved locally/)).toHaveCount(0);
   await page.screenshot({
     path: 'target/visual-captures/hs2-a5v801-terminal-history-setting-wide.png',
     fullPage: true,

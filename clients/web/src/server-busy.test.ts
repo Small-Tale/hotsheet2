@@ -116,6 +116,9 @@ describe('describeServerRequest', () => {
     expect(describeServerRequest('GET', '/__hotsheet/project-api/p/repository-status')).toBe('Checking repository');
     expect(describeServerRequest('POST', '/__hotsheet/project-api/p/search')).toBe('Searching tickets');
     expect(describeServerRequest('POST', '/__hotsheet/tool/turn')).toBe('Talking to the AI tool');
+    // Saving AI defaults is a write, not a load (HS2-GHA1D3).
+    expect(describeServerRequest('PUT', '/__hotsheet/project-api/p/ai-settings')).toBe('Saving AI settings');
+    expect(describeServerRequest('GET', '/__hotsheet/project-api/p/ai-settings')).toBe('Loading AI tools');
     expect(describeServerRequest('GET', '/__hotsheet/unknown')).toBe('Loading…');
     expect(describeServerRequest('POST', '/__hotsheet/unknown')).toBe('Saving changes');
   });

@@ -430,14 +430,15 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     const current = project();
     if (!current) return;
     aiSettingsLoading.value = true;
-    aiSettingsMessage.value = 'Saving…';
+    // Autosave reports progress through the global server-busy indicator and success silently; the
+    // status line only carries a failure (HS2-GHA1D3, like the command settings in HS2-656XJ2).
+    aiSettingsMessage.value = '';
     try {
       const saved = await new Api(current.apiPath).saveAiSettings(value);
       const cachedConfiguration = aiConfigurationByProject.get(current.id);
       if (cachedConfiguration) aiConfigurationByProject.set(current.id, { ...cachedConfiguration, defaults: saved });
       if (project()?.id !== current.id) return;
       aiDefaults.value = saved;
-      aiSettingsMessage.value = 'Saved for this project on this machine.';
     } catch (reason) {
       if (project()?.id === current.id)
         aiSettingsMessage.value = reason instanceof Error ? reason.message : String(reason);

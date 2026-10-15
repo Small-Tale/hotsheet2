@@ -29,4 +29,18 @@ describe('transient operation feedback', () => {
     // like ticket editing (HS2-MTBMH8) and the status line only carries validation or save errors.
     expect(source).not.toContain("commandSettingsMessage.value='Saved locally.'");
   });
+
+  it('keeps autosave progress and success out of inline status lines (HS2-GHA1D3)', () => {
+    const source = [
+      './features/ai-configuration.tsx',
+      './interactions/commands-and-ai.ts',
+      './interactions/attachments-and-gallery.ts',
+    ]
+      .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
+      .join('\n');
+    // Progress shows in the global server-busy indicator; success is silent or a toast; the status
+    // line keeps only failures.
+    expect(source).not.toMatch(/Message\.value = '(?:Saving|Updating|Removing)[^']*…'/);
+    expect(source).not.toMatch(/Message\.value = 'Saved/);
+  });
 });

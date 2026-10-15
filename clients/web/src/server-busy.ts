@@ -73,7 +73,7 @@ export function describeServerRequest(method: string, path: string): string {
   if (has('/turn') || has('/drive') || has('/conversation') || has('/tool')) return 'Talking to the AI tool';
   if (has('/terminals') || has('/terminal')) return 'Preparing terminals';
   if (has('/commands') || has('/command')) return writing ? 'Running command' : 'Loading commands';
-  if (has('/providers') || has('/models') || has('/ai')) return 'Loading AI tools';
+  if (has('/providers') || has('/models') || has('/ai')) return writing ? 'Saving AI settings' : 'Loading AI tools';
   if (has('/permission')) return 'Updating permissions';
   if (has('/setup') || has('/projects/open') || has('/bootstrap')) return 'Preparing project';
   if (has('/tickets') || has('/checkout')) return writing ? 'Saving ticket' : 'Loading tickets';

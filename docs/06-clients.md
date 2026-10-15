@@ -880,7 +880,13 @@ preview/download, server directory browser) are separate design work.
   page with an unapplied draft is held behind a dialog that applies or reverts it, then
   continues; dismissing the dialog stays on Lifecycle with the draft (HS2-F55956). Command
   settings autosave silently on success like ticket editing; their status line only carries
-  validation or save errors (HS2-MTBMH8).
+  validation or save errors (HS2-MTBMH8). The same holds for every autosaving settings control
+  and in-place save (HS2-GHA1D3): AI tool defaults, the terminal shell-history opt-out, and
+  attachment group updates and removal show no inline "Saving…" or "Saved" line. Progress
+  appears in the global server-busy indicator, whose label names a write as a save (for example
+  "Saving AI settings"). Success is silent, or a toast for a completed action, and the status
+  line only reports a failure. Explicit submission buttons in dialogs (for example "Saving…" on a
+  Save location button while it submits) remain, since they confirm the action the user started.
   Right-sidebar toolbars are divider-free in every state—ticket, loading, multi-selection,
   Settings, and Notifications—so content sections, not the shell toolbar, own separators.
   The ticket inspector uses an 8px horizontal content gutter. Details, Tags, Notes,
