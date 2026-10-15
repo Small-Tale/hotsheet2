@@ -27,6 +27,7 @@ import {
   Bot,
   Brain,
   ChevronDown,
+  ChevronRight,
   CircleAlert,
   Copy,
   Download,
@@ -46,6 +47,7 @@ import {
   formatConversationCost,
   formatConversationTokens,
 } from '../ai-conversation';
+import { activityGroupExpanded } from '../conversation-activity-disclosure';
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import type { PermissionItem } from '../permission-notifications';
@@ -199,12 +201,21 @@ function ConversationActivityGroup({
   activity,
   feedbackAvailable,
   selected = false,
+  connectionId,
 }: {
   activity: readonly ConversationActivity[];
   feedbackAvailable: boolean;
   /** Inside the selected message range: the only state that outlines the group (HS2-72GEX0). */
   selected?: boolean;
+  connectionId?: string;
 }) {
+  // Collapsed by default to the latest item; the group keeps its first activity id while items
+  // append, so a new item arriving while collapsed replaces the visible line (HS2-Y3SGH3).
+  const groupId = activity[0].id,
+    expanded = activityGroupExpanded(connectionId, groupId),
+    visible = expanded ? activity : activity.slice(-1),
+    listId = `ai-conversation-activity-${connectionId ?? 'conversation'}-${groupId}`,
+    count = activity.length;
   return (
     // A borderless, transparent Kerf ContentItem like the sidebar's activity notes; it frames only
     // while it lies inside the selected message range (HS2-ADM62E, HS2-72GEX0).
@@ -213,20 +224,46 @@ function ConversationActivityGroup({
       frame={selected ? 'framed' : 'none'}
       className="ai-conversation__activity"
       ariaLabel="AI-generated activity summaries; may contain errors"
-      rootAttributes={{ 'data-selected-range': String(selected) }}
+      rootAttributes={{
+        'data-selected-range': String(selected),
+        'data-activity-group': groupId,
+        'data-expanded': String(expanded),
+      }}
     >
-      <div class="ai-conversation__activity-body">
+      {/* Clicking anywhere in the group toggles it; the header button is its keyboard and
+          assistive-technology control. */}
+      <div
+        class="ai-conversation__activity-body"
+        {...COMMANDS_AND_AI_ACTIONS.toggleConversationActivity.attrs}
+        data-activity-group={groupId}
+      >
         <header>
-          <span>
+          <button
+            type="button"
+            class="ai-conversation__activity-toggle"
+            aria-expanded={String(expanded)}
+            aria-controls={listId}
+            aria-label={
+              expanded
+                ? `Collapse activity to the latest of ${count} item${count === 1 ? '' : 's'}`
+                : `Show all ${count} activity item${count === 1 ? '' : 's'}`
+            }
+          >
             <LucideIcon icon={Activity} name="activity" size={14.4} />
             <strong>Activity</strong>
-          </span>
+            {count > 1 && <span class="ai-conversation__activity-count">{count}</span>}
+            <LucideIcon
+              icon={expanded ? ChevronDown : ChevronRight}
+              name={expanded ? 'chevron-down' : 'chevron-right'}
+              size={14.4}
+            />
+          </button>
           <span class="ai-conversation__activity-disclosure">
             <AIContentLabel mayContainErrors />
           </span>
         </header>
-        <ol class="ai-conversation__activity-list">
-          {activity.map((item) => (
+        <ol class="ai-conversation__activity-list" id={listId}>
+          {visible.map((item) => (
             <li class="ai-conversation__activity-item" data-activity-id={item.id} data-importance={item.importance}>
               <MarkdownPreview source={item.summary} density="flush" />
               {feedbackAvailable && (
@@ -506,6 +543,7 @@ export function AIConversation(props: AIConversationProps) {
                 activity={group.activity}
                 feedbackAvailable={feedbackAvailable}
                 selected={index > selectedSpan.first && index < selectedSpan.last}
+                connectionId={selectionId}
               />
             ),
           )}

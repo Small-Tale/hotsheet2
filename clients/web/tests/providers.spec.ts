@@ -1700,6 +1700,32 @@ async function mockProject(
         return route.fulfill({ status: 202, json: running });
       }
       if (body.content === 'Start sustained output') return route.fulfill({ status: 202, json: running });
+      // Streams tool activity in steps for the collapsible activity group (HS2-Y3SGH3).
+      const stepActivity = (id: string, summary: string) => {
+        pushDriveEvent({
+          kind: 'activity',
+          id,
+          slug: '',
+          activity: {
+            id,
+            ts: '2026-09-08T00:00:00Z',
+            tool: 'codex',
+            session: running.session_id,
+            kind: 'tool',
+            summary,
+            importance: 'normal',
+          },
+        });
+      };
+      if (body.content === 'Research with tools.') {
+        stepActivity('activity-step-1', 'codex called WebSearch');
+        stepActivity('activity-step-2', 'codex called WebFetch');
+        return route.fulfill({ status: 202, json: running });
+      }
+      if (body.content === 'One more tool call.') {
+        stepActivity('activity-step-3', 'codex called Agent');
+        return route.fulfill({ status: 202, json: running });
+      }
       if (body.content === 'Export the referenced proof.') {
         turnEvent(running, {
           type: 'output',
@@ -17763,6 +17789,62 @@ test('keeps the drawer chat toolbar controls inside a phone-width tab toolbar (H
   await controls[0].click();
   await expect(rail.locator('[data-conversation-model-menu] > wa-dropdown-item').first()).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-59f7wk-drawer-menu-open-390.png' });
+});
+
+test('collapses streamed chat activity to its latest item and toggles it on click (HS2-Y3SGH3)', async ({ page }) => {
+  await mockProject(page);
+  let connectionId = '';
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/drive/connections'))
+      connectionId = request.postDataJSON().connection_id;
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+  const host = drawer.locator('[data-component="ai-conversation"]');
+  await host.getByLabel('Message Codex').fill('Research with tools.');
+  await host.getByLabel('Message Codex').press('Enter');
+  const group = host.locator('.ai-conversation__activity'),
+    toggle = group.locator('.ai-conversation__activity-toggle'),
+    rows = group.locator('[data-activity-id]');
+  // Collapsed by default: only the latest item shows.
+  await expect(group).toHaveAttribute('data-expanded', 'false');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('codex called WebFetch');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await page.screenshot({ path: 'target/visual-captures/hs2-y3sgh3-drawer-collapsed-1280.png' });
+  // A new item arriving while collapsed replaces the visible line.
+  await page.evaluate(async (id) => {
+    await fetch(`/__hotsheet/project-api/demo-checkout/drive/connections/${encodeURIComponent(id)}/turns`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: 'One more tool call.' }),
+    });
+  }, connectionId);
+  await expect(rows.first()).toContainText('codex called Agent');
+  await expect(rows).toHaveCount(1);
+  // Clicking the group body expands it to every item in order.
+  await rows.first().click();
+  await expect(group).toHaveAttribute('data-expanded', 'true');
+  await expect(rows).toHaveText(['codex called WebSearch', 'codex called WebFetch', 'codex called Agent']);
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await page.screenshot({ path: 'target/visual-captures/hs2-y3sgh3-drawer-expanded-1280.png' });
+  // The header button is the keyboard control: Enter collapses it again.
+  await toggle.focus();
+  await page.keyboard.press('Enter');
+  await expect(group).toHaveAttribute('data-expanded', 'false');
+  await expect(rows).toHaveCount(1);
+  await expect(drawer).toHaveAttribute('data-maximized', 'true');
+  // Message selection still works beside the collapsed group and does not toggle it.
+  await host.locator('.ai-conversation__message--user').click();
+  await expect(host.locator('.ai-conversation__selection')).toContainText('1 message selected');
+  await expect(group).toHaveAttribute('data-expanded', 'false');
 });
 
 test('omits effort after selecting a model that does not support it', async ({ page }) => {

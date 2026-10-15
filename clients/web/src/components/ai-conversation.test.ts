@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
+import { expandedActivityGroups, toggleActivityGroup } from '../conversation-activity-disclosure';
 import type { PermissionItem } from '../permission-notifications';
 import {
   AIConversation,
@@ -659,6 +660,69 @@ describe('AIConversation', () => {
     expect(activityRoots(render(['question', 'answer', 'follow-up'])).every((root) => root.includes('--framed'))).toBe(
       true,
     );
+  });
+  it('collapses activity to its latest item by default and toggles through every transition (HS2-Y3SGH3)', () => {
+    const item = (id: string, summary: string, sequence: number) => ({
+        id,
+        tool: 'Claude',
+        kind: 'tool',
+        summary,
+        importance: 'normal' as const,
+        sequence,
+      }),
+      render = (activity: ReturnType<typeof item>[], selectedMessageIds: string[] = []) =>
+        String(
+          AIConversation({
+            open: true,
+            presentation: 'embedded',
+            tool: 'Claude',
+            selectionId: 'c1',
+            selectedMessageIds,
+            messages: [
+              { id: 'q', role: 'user', content: 'Research this.', sequence: 0 },
+              { id: 'r', role: 'assistant', content: 'Done.', status: 'completed', sequence: 10 },
+            ],
+            activity,
+            draft: '',
+            busy: false,
+            interruptible: false,
+            feedbackAvailable: true,
+          }),
+        ),
+      items = (markup: string) => [...markup.matchAll(/data-activity-id="([^"]+)"/g)].map((match) => match[1]),
+      two = [item('a1', 'claude called WebSearch', 1), item('a2', 'claude called WebFetch', 2)];
+    try {
+      // Default: collapsed to the latest item, with an expandable header button.
+      const collapsed = render(two);
+      expect(items(collapsed)).toEqual(['a2']);
+      expect(collapsed).toContain('data-expanded="false"');
+      expect(collapsed).toMatch(/class="ai-conversation__activity-toggle" aria-expanded="false"/);
+      expect(collapsed).toContain('aria-label="Show all 2 activity items"');
+      expect(collapsed).toContain('data-action="toggle-conversation-activity" data-activity-group="a1"');
+      // A new item while collapsed replaces the visible line; the group keeps its identity.
+      const grown = render([...two, item('a3', 'claude called Agent', 3)]);
+      expect(items(grown)).toEqual(['a3']);
+      expect(grown).toContain('data-activity-group="a1"');
+      // Expanded: every item, in order, with its feedback.
+      toggleActivityGroup('c1', 'a1');
+      const expanded = render([...two, item('a3', 'claude called Agent', 3)]);
+      expect(items(expanded)).toEqual(['a1', 'a2', 'a3']);
+      expect(expanded).toMatch(/aria-expanded="true"/);
+      expect(expanded).toContain('aria-label="Collapse activity to the latest of 3 items"');
+      expect(new Set(expanded.match(/data-ai-feedback-target="activity:[^"]+"/g)).size).toBe(3);
+      // A new item while expanded joins the open list.
+      expect(items(render([...two, item('a3', 'x', 3), item('a4', 'y', 4)]))).toEqual(['a1', 'a2', 'a3', 'a4']);
+      // Collapsing again shows only the latest line.
+      toggleActivityGroup('c1', 'a1');
+      expect(items(render(two))).toEqual(['a2']);
+      // Selection still works around a collapsed group: messages stay pickable and the group outlines.
+      const selected = render(two, ['q', 'r']);
+      expect(selected.match(/data-action="pick-conversation-message"/g)).toHaveLength(2);
+      expect(selected).toContain('data-selected-range="true"');
+      expect(items(selected)).toEqual(['a2']);
+    } finally {
+      expandedActivityGroups.value = new Set();
+    }
   });
   it('distinguishes the conversation lifecycle from a nested model popup closing', () => {
     const surface = {} as Element,

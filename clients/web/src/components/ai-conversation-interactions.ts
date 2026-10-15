@@ -2,6 +2,7 @@ import { wireComposers } from '@kerfjs/ui/wire-composers';
 import { delegate, delegateCapture } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
+import { toggleActivityGroup } from '../conversation-activity-disclosure';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import { isConversationSurfaceLifecycleEvent } from './ai-conversation';
 
@@ -45,6 +46,19 @@ export function wireAiConversation(root: HTMLElement, bindings: AiConversationBi
       const connectionId = target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId,
         messageId = (target as HTMLElement).dataset.messageId;
       if (connectionId && messageId) bindings.pickMessage(connectionId, messageId);
+    }),
+  );
+  // A click anywhere in an activity group toggles it collapsed/expanded, except on its nested
+  // feedback controls or links, or while the person is selecting its text (HS2-Y3SGH3). The header
+  // toggle is a native button, so Enter and Space reach this handler as a click.
+  lifetime.add(
+    delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.toggleConversationActivity.selector, (event, target) => {
+      const control = (event.target as Element).closest('a,button,wa-button,input,select,textarea');
+      if (control && !control.matches('.ai-conversation__activity-toggle')) return;
+      if (!control && window.getSelection()?.toString()) return;
+      const groupId = (target as HTMLElement).dataset.activityGroup;
+      if (groupId)
+        toggleActivityGroup(target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId, groupId);
     }),
   );
   lifetime.add(

@@ -8057,6 +8057,47 @@ test('keeps AI chat activity borderless until the selected range spans it (HS2-7
   await expect(activity).toHaveAttribute('data-selected-range', 'false');
 });
 
+test('collapses AI chat activity to its latest item and toggles it at wide and narrow sizes (HS2-Y3SGH3)', async ({
+  page,
+}) => {
+  await page.goto('/ux-demo?component=ai-conversation');
+  const host = page.locator('[data-component="ai-conversation"]'),
+    dialog = host.getByRole('dialog');
+  await page
+    .locator('[data-settings="ai-conversation"] [name="scenario"]')
+    .evaluate((node: HTMLElement & { value: string }) => {
+      node.value = 'completed';
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  await expect(dialog).toBeVisible();
+  const group = host.locator('.ai-conversation__activity'),
+    rows = group.locator('[data-activity-id]'),
+    toggle = group.getByRole('button', { name: /activity/i });
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(group).toHaveAttribute('data-expanded', 'false');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toHaveAttribute('data-activity-id', 'activity-2');
+    await expect(toggle).toHaveAccessibleName('Show all 2 activity items');
+    await expect(toggle).toHaveCSS('cursor', 'pointer');
+    await group.screenshot({ path: `target/visual-captures/hs2-y3sgh3-activity-collapsed-${width}.png` });
+    await toggle.click();
+    await expect(rows).toHaveCount(2);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await group.screenshot({ path: `target/visual-captures/hs2-y3sgh3-activity-expanded-${width}.png` });
+    // A row click (not on its feedback) collapses it again; feedback stays a separate action.
+    await rows.first().locator('.markdown-preview').click();
+    await expect(rows).toHaveCount(1);
+  }
+  // Rating an item is its own action and leaves the expanded group open.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await toggle.click();
+  await expect(group).toHaveAttribute('data-expanded', 'true');
+  await rows.first().getByRole('button').first().click();
+  await expect(group).toHaveAttribute('data-expanded', 'true');
+  await expect(rows).toHaveCount(2);
+});
+
 test('shows the chat model/effort as a label with a popup to change them', async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 800 });
   await page.goto('/ux-demo?component=ai-conversation');

@@ -433,7 +433,12 @@ does not introduce polling or another network request.
     empty pill, in both presentations (HS2-77KJKR)
   - activity: adjacent activity groups into one transparent, unframed Kerf `ContentItem`
     (matching the sidebar's activity notes) that switches to `frame="framed"` only while it lies
-    between the first and last selected messages (`data-selected-range`; HS2-72GEX0). The demo's
+    between the first and last selected messages (`data-selected-range`; HS2-72GEX0). Each group
+    is collapsed to its latest item by default (`data-expanded`); a click anywhere in it, or its
+    native header disclosure button with `aria-expanded`, a count, and a chevron, toggles it.
+    The state lives in `conversation-activity-disclosure.ts`, keyed by connection and the
+    group's first activity id, so a new item while collapsed replaces the visible line
+    (HS2-Y3SGH3). The demo's
     Completed state orders the activity between its question and answer and keeps a real range
     selection so the outline can be exercised
   - permission requests: the existing `PermissionRequestCard` list presentation appears in

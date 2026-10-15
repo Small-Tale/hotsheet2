@@ -1540,7 +1540,12 @@ preview/download, server directory browser) are separate design work.
   transcript sequence, grouping adjacent activity while preserving their position between
   messages. Activity groups are borderless and transparent, like the ticket sidebar's activity
   notes, and gain an outline only while they lie inside the selected message range (between the
-  first and last selected messages; HS2-72GEX0). Each Activity card carries one persistent,
+  first and last selected messages; HS2-72GEX0). Each group starts collapsed to its most recent
+  item; clicking the group, or its header disclosure button (`aria-expanded`, keyboard
+  operable), toggles between that line and every item. A new item arriving while the group is
+  collapsed replaces the visible line, and an expanded group stays open as items append. Clicks
+  on an item's feedback controls or links, or that finish a text selection, do not toggle it,
+  and message selection is unaffected (HS2-Y3SGH3). Each Activity card carries one persistent,
   accessible AI-generated/may-contain-errors
   cue instead of repeating the disclosure on every row; row feedback retains its originating tool
   identity. The cue uses 8px between attribution and feedback, 4px inside each connected cluster,

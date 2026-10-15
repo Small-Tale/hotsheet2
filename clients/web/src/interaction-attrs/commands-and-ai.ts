@@ -21,6 +21,7 @@ export const COMMANDS_AND_AI_ACTIONS = {
   pickConversationMessage: action('pick-conversation-message'),
   copyConversationSelection: action('copy-conversation-selection'),
   clearConversationSelection: action('clear-conversation-selection'),
+  toggleConversationActivity: action('toggle-conversation-activity'),
   submitConversationExport: action('submit-conversation-export'),
   sendConversationTurn: action('send-conversation-turn'),
   stopConversation: action('stop-conversation'),

@@ -183,6 +183,32 @@
 .ai-conversation__activity-disclosure {
   min-width: 0;
 }
+/* The whole group toggles collapsed/expanded on click (HS2-Y3SGH3). */
+.ai-conversation__activity-body {
+  cursor: pointer;
+}
+/* The group's disclosure control: an app-owned native button that reads as the group heading. */
+.ai-conversation__activity-toggle {
+  display: inline-flex;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--wa-border-radius-s);
+  color: inherit;
+  background: none;
+  align-items: center;
+  gap: var(--kui-space-2xs);
+  font: inherit;
+  cursor: pointer;
+}
+.ai-conversation__activity-toggle:focus-visible {
+  outline: var(--wa-focus-ring);
+  outline-offset: 2px;
+}
+.ai-conversation__activity-count {
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+}
 .ai-conversation__activity-body > header > span {
   gap: var(--kui-space-2xs);
 }
