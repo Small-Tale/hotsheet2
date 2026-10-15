@@ -1,4 +1,4 @@
-import type { Capabilities, FullTicket } from './api';
+import type { Capabilities, CodeReview, FullTicket } from './api';
 import type { InspectorTab } from './components/ticket-inspector';
 
 export interface TicketReaderFrame {
@@ -11,6 +11,14 @@ export interface TicketReaderFrame {
   activeTab: InspectorTab;
   capabilities: Capabilities;
   edit: TicketReaderEditState;
+  /** This frame's own Code Review tab, loaded from its project for its ticket (HS2-9Q4AFB). */
+  codeReview?: TicketReaderCodeReviewState;
+}
+
+export interface TicketReaderCodeReviewState {
+  review?: CodeReview;
+  loading: boolean;
+  message: string;
 }
 
 export interface TicketReaderEditState {

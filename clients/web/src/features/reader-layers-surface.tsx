@@ -244,10 +244,10 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
         timelineUsage={timelineUsage(ticket)}
         attachments={attachmentItems(ticket, current)}
         attachmentContext={attachmentContext(ticket, current)}
-        codeReview={editable ? codeReview.value : undefined}
-        codeReviewLoading={editable && codeReviewLoading.value}
-        codeReviewMessage={editable ? codeReviewMessage.value : ''}
-        expandedCodeReviewCommits={editable ? expandedCodeReviewCommits.value : []}
+        codeReview={frame ? frame.codeReview?.review : editable ? codeReview.value : undefined}
+        codeReviewLoading={frame ? Boolean(frame.codeReview?.loading) : editable && codeReviewLoading.value}
+        codeReviewMessage={frame ? (frame.codeReview?.message ?? '') : editable ? codeReviewMessage.value : ''}
+        expandedCodeReviewCommits={frame || editable ? expandedCodeReviewCommits.value : []}
         attachmentsEnabled={editable && canUseAttachments()}
         attachmentsEditable={editable && canEditAttachments()}
         attachmentMessage={editable ? attachmentMessage.value : 'Attachments are view-only in linked ticket readers.'}

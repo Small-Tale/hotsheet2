@@ -90,6 +90,7 @@ async function mockLayeredProjects(
   rejectMutations = false,
   attachmentsFor: Record<string, Attachment[]> = {},
   notesFor: Record<string, unknown[]> = {},
+  codeReviewRequests: Array<{ projectId: string; ticketId: string; method: string }> = [],
 ) {
   const chooser = ['/work/target', '/work/deep'];
   await page.route('**/*', async (route) => {
@@ -170,6 +171,28 @@ async function mockLayeredProjects(
               )
             : tickets,
         ),
+      });
+    }
+    const reviewTicket = path.match(/\/tickets\/([^/]+)\/code-review$/)?.[1];
+    if (reviewTicket) {
+      codeReviewRequests.push({ projectId: projectId!, ticketId: reviewTicket, method: request.method() });
+      if (request.method() === 'POST') return route.fulfill({ status: 204, body: '' });
+      if (projectId === 'target-project')
+        return route.fulfill({ status: 500, json: { error: 'Code review unavailable for this checkout' } });
+      return route.fulfill({
+        json: {
+          difftool: 'Glassbox',
+          truncated: false,
+          ranges: [],
+          commits: [
+            {
+              sha: `${projectId}-sha`,
+              short_sha: `${projectId}`.slice(0, 7),
+              subject: `${reviewTicket}: commit in ${projectId}`,
+              committed_at: '2026-09-02T10:00:00Z',
+            },
+          ],
+        },
       });
     }
     const ticketId = path.match(/\/tickets\/([^/]+)$/)?.[1];
@@ -388,6 +411,34 @@ test('edits same-slug linked readers through their owning project and flushes be
     'data-ticket-slug',
     'KF-ROOT01',
   );
+});
+
+test("shows each stacked linked reader's own Code Review tab (HS2-9Q4AFB)", async ({ page }) => {
+  const codeReviewRequests: Array<{ projectId: string; ticketId: string; method: string }> = [];
+  await mockLayeredProjects(page, [], false, {}, {}, codeReviewRequests);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openProjects(page);
+  await page.locator('#app-right-rail').getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
+  const targetReader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
+  // A failed load explains itself instead of leaving only the title.
+  await targetReader.getByRole('tab', { name: 'Code Review' }).click();
+  await expect(targetReader.getByText('Code review unavailable for this checkout')).toBeVisible();
+  await targetReader.getByRole('tab', { name: 'Info' }).click();
+  await targetReader.getByRole('link', { name: '@third-project/HS2-LINK01' }).click();
+  const deepReader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Deep Work' });
+  await expect(deepReader).toBeVisible();
+  await deepReader.getByRole('tab', { name: 'Code Review' }).click();
+  // The second reader loads its own ticket's commits from its own project, not the workspace selection.
+  await expect(deepReader.getByText('deep: commit in third-project')).toBeVisible();
+  expect(codeReviewRequests).toContainEqual({ projectId: 'third-project', ticketId: 'git-deep:deep', method: 'GET' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-9q4afb-stacked-code-review-wide.png' });
+  await deepReader.getByRole('button', { name: /^Open Commit .* in Glassbox$/ }).click();
+  await expect
+    .poll(() => codeReviewRequests.filter((item) => item.method === 'POST'))
+    .toEqual([{ projectId: 'third-project', ticketId: 'git-deep:deep', method: 'POST' }]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(deepReader.getByText('deep: commit in third-project')).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-9q4afb-stacked-code-review-narrow.png' });
 });
 
 test('keeps every key typed into a linked reader through an immediate close (HS2-WV0VPE)', async ({ page }) => {

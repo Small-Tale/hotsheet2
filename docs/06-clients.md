@@ -1749,7 +1749,10 @@ preview/download, server directory browser) are separate design work.
   Up Next, details, blocked reason, and notes, routing every write to that layer's owning
   project and qualified ticket identity. Title and tag edits flush before the layer closes; a
   provider without `update` keeps the layer view-only. Adding or deleting notes, attachment
-  management, started-phase edits, and code review remain workspace-reader-only for now.
+  management, and started-phase edits remain workspace-reader-only for now. Each layer's
+  Code Review tab loads its own ticket's commits from its owning project when selected, shows
+  the commit list, empty state, or load error like the workspace reader, and opens a commit's
+  diff against that project (HS2-9Q4AFB).
   Imported HS1 references resolve through each ticket's retained legacy number, including
   single-digit `HS-1` through `HS-9`; other one-character suffixes such as `AB-1` remain
   ordinary text so the legacy exception does not broaden the general slug grammar.

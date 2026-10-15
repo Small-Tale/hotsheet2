@@ -1147,12 +1147,18 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       else if (isReaderSurface(target)) readerTab.value = tab;
       else inspectorTab.value = tab;
       scheduleProjectSessionPersistence();
-      if ((!frameId || frameId === 'workspace-reader') && tab === 'code-review' && !codeReviewLoading.value)
-        void refreshCodeReview();
+      if (tab !== 'code-review') return;
+      if (frameId && frameId !== 'workspace-reader') void refreshLinkedCodeReview(frameId);
+      else if (!codeReviewLoading.value) void refreshCodeReview();
     }),
   );
   lifetime.add(
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.openCodeReview.selector, (_event, target) => {
+      const frame = linkedReaderFrame(target);
+      if (frame) {
+        openLinkedCodeReview(frame, target);
+        return;
+      }
       const current = project(),
         ticket = selectedTicket.value,
         reviewTarget = codeReviewTarget(data(target));
@@ -1176,6 +1182,48 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         });
     }),
   );
+  /** Load a linked reader's Code Review tab from its own project for its own ticket (HS2-9Q4AFB). */
+  async function refreshLinkedCodeReview(frameId: string) {
+    const frame = linkedReaderStack.value.find((item) => item.id === frameId);
+    if (!frame || frame.codeReview?.loading) return;
+    const setReview = (codeReview: TicketReaderFrame['codeReview']) => {
+      replaceLinkedReaderFrame(frameId, (current) => ({ ...current, codeReview }));
+    };
+    setReview({ review: frame.codeReview?.review, loading: true, message: '' });
+    try {
+      setReview({
+        review: await new Api(frame.apiPath).codeReview(frame.projectId, frame.ticket.qualified_id),
+        loading: false,
+        message: '',
+      });
+    } catch (reason) {
+      setReview({ loading: false, message: reason instanceof Error ? reason.message : String(reason) });
+    }
+  }
+  /** Open a linked reader's commit in the diff tool against that reader's project (HS2-9Q4AFB). */
+  function openLinkedCodeReview(frame: TicketReaderFrame, target: Element) {
+    const reviewTarget = codeReviewTarget(data(target));
+    if (!reviewTarget) return;
+    const setMessage = (message: string) => {
+      replaceLinkedReaderFrame(frame.id, (current) => ({
+        ...current,
+        codeReview: { ...(current.codeReview ?? { loading: false }), message },
+      }));
+    };
+    setMessage('Opening diff tool…');
+    void new Api(frame.apiPath)
+      .openCodeReview(frame.projectId, frame.ticket.qualified_id, reviewTarget)
+      .then(() => {
+        setMessage('');
+        showToast(`Opened in ${frame.codeReview?.review?.difftool ?? 'the configured diff tool'}.`);
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof HostOnlyActionError) {
+          setMessage('');
+          showToast(reason.message);
+        } else setMessage(reason instanceof Error ? reason.message : String(reason));
+      });
+  }
   return () => {
     lifetime.dispose();
   };
