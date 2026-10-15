@@ -27904,7 +27904,9 @@ test('keeps Add project beside the last project tab and New ticket at the far ed
   expect(dashboardBar.x + dashboardBar.width - (dashboardAdd.x + dashboardAdd.width)).toBeLessThanOrEqual(32);
 });
 
-test('pins Add project to the far edge of dashboard project strips (HS2-0KSBW7)', async ({ page }) => {
+test('keeps Add project beside the last project tab on dashboard project strips (HS2-0KSBW7, HS2-YFKQT1)', async ({
+  page,
+}) => {
   await mockProject(page);
   await page.setViewportSize({ width: 1920, height: 900 });
   await page.goto('/');
@@ -27919,9 +27921,11 @@ test('pins Add project to the far edge of dashboard project strips (HS2-0KSBW7)'
     await page.setViewportSize({ width, height: 900 });
     await strip.getByRole('button', { name: mode }).click();
     await expect(strip).toHaveAttribute('data-mode', mode === 'Workspace Grid' ? 'terminals' : 'stats');
-    const barBox = (await strip.boundingBox())!,
+    // HS2-YFKQT1 supersedes the far-edge placement: Add project follows the last project tab.
+    const lastTabBox = (await strip.locator('[data-tab-kind="project"]').last().boundingBox())!,
       addBox = (await add.boundingBox())!;
-    expect(barBox.x + barBox.width - (addBox.x + addBox.width)).toBeLessThanOrEqual(32);
+    expect(addBox.x - (lastTabBox.x + lastTabBox.width)).toBeLessThan(24);
+    expect(addBox.x).toBeGreaterThan(lastTabBox.x);
     await strip.screenshot({
       path: `target/visual-captures/hs2-0ksbw7-${mode === 'Workspace Grid' ? 'grid' : 'stats'}-${width}.png`,
     });
