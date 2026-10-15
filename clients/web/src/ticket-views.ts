@@ -6,12 +6,13 @@ export type TicketView = BuiltInTicketView | `custom:${string}`;
 export const customTicketViewId = (id: string): TicketView => `custom:${id}`;
 export const customTicketViewKey = (view: TicketView): string | undefined =>
   view.startsWith('custom:') ? view.slice('custom:'.length) : undefined;
-export const ticketSearchCountViews = (customViewIds: readonly string[] = []): TicketView[] => [
-  'all',
-  'backlog',
-  'archive',
-  ...customViewIds.map(customTicketViewId),
-];
+/**
+ * The sidebar views a search-bar query is counted in. Searching from Trash searches only Trash, so
+ * only the Trash row carries a search-relative count; every other search counts the ordinary views
+ * and never Trash (HS2-S6TXSW).
+ */
+export const ticketSearchCountViews = (customViewIds: readonly string[] = [], selected?: TicketView): TicketView[] =>
+  selected === 'trash' ? ['trash'] : ['all', 'backlog', 'archive', ...customViewIds.map(customTicketViewId)];
 
 export const canCreateTicketInView = (view: TicketView): boolean => !['archive', 'trash', 'errors'].includes(view);
 export const newTicketStatusForView = (view: TicketView): 'not_started' | 'backlog' =>

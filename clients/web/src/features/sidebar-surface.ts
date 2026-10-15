@@ -17,7 +17,7 @@ import type { WorkspaceViewMode } from '../components/workspace-header';
 import type { Project } from '../interactions/types';
 import { projectChatConnectionId, projectDriveControlState } from '../project-drive';
 import { ticketCompletionTrend } from '../ticket-completion-trend';
-import { customTicketViewId, type TicketView } from '../ticket-views';
+import { customTicketViewId, ticketSearchCountViews, type TicketView } from '../ticket-views';
 import type { SidebarSearchCounts } from './workspace-search';
 
 /** A signal as the sidebar projection reads it. */
@@ -132,12 +132,23 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
       searchCounts = sidebarSearchCounts.value,
       searchActive =
         searchBarActive() && searchCounts?.projectId === current.id && searchCounts.signature === searchSignature(),
-      searchView = (id: TicketView, fallback?: number) => ({
-        count: searchActive ? searchCounts.values[id] : fallback,
-        countLoading: searchActive && searchCounts.pending.includes(id),
-        searchCount: searchActive && !searchCounts.pending.includes(id) && searchCounts.values[id] !== undefined,
-        countPartial: !searchActive && countsPartial,
-      }),
+      // Only the views the search actually covers carry a search-relative count: searching Trash
+      // counts Trash alone, and every other row keeps its ordinary total (HS2-S6TXSW).
+      searchScope = new Set(
+        ticketSearchCountViews(
+          customViewsFor(current.id).map((view) => view.id),
+          selectedView.value,
+        ),
+      ),
+      searchView = (id: TicketView, fallback?: number) => {
+        const searched = searchActive && searchScope.has(id);
+        return {
+          count: searched ? searchCounts.values[id] : fallback,
+          countLoading: searched && searchCounts.pending.includes(id),
+          searchCount: searched && !searchCounts.pending.includes(id) && searchCounts.values[id] !== undefined,
+          countPartial: !searched && countsPartial,
+        };
+      },
       repo = repository.value,
       completionTrend = counts.completion_trend ?? ticketCompletionTrend(tickets.value),
       views = [
@@ -149,8 +160,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
               {
                 id: 'trash' as const,
                 label: 'Trash',
-                count: counts.trash ?? 0,
-                countPartial: countsPartial,
+                ...searchView('trash', counts.trash ?? 0),
                 icon: 'trash' as const,
               },
             ]

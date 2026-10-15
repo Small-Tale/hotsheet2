@@ -83,6 +83,58 @@ describe('sidebar surface projection (HS2-BSSWGV)', () => {
   });
 });
 
+describe('sidebar search-count scope (HS2-S6TXSW)', () => {
+  const searching = (selected: string, values: Record<string, number>, pending: string[] = []) => {
+    const props = sidebar('list', {
+      selectedView: read(selected as never),
+      searchBarActive: () => true,
+      searchSignature: () => 'sig',
+      projectTicketCounts: () =>
+        ({ queued: 3, backlog: 1, archive: 2, trash: 13, open: 4, completed_today: 1, started: 2 }) as never,
+      sidebarSearchCounts: read({ projectId: 'p1', signature: 'sig', generation: 1, values, pending }),
+    });
+    if (props.kind !== 'project') throw new Error('expected the project sidebar');
+    return Object.fromEntries(props.sidebar.views.map((view) => [view.id, view]));
+  };
+
+  it('searching Trash counts only the Trash row; other rows keep their normal totals', () => {
+    const views = searching('trash', { trash: 1 });
+    expect(views.trash).toMatchObject({ count: 1, searchCount: true, countLoading: false });
+    expect(views.all).toMatchObject({ count: 3, searchCount: false, countLoading: false });
+    expect(views.backlog).toMatchObject({ count: 1, searchCount: false });
+    expect(views.archive).toMatchObject({ count: 2, searchCount: false });
+    expect(views['custom:v1']).toMatchObject({ searchCount: false, countLoading: false });
+  });
+
+  it('shows the Trash row loading while its search count is pending', () => {
+    expect(searching('trash', {}, ['trash']).trash).toMatchObject({ countLoading: true, searchCount: false });
+  });
+
+  it('searching another view never counts Trash, which keeps its plain total', () => {
+    const views = searching('all', { all: 2, backlog: 0, archive: 5, 'custom:v1': 1 });
+    expect(views.trash).toMatchObject({ count: 13, searchCount: false });
+    expect(views.all).toMatchObject({ count: 2, searchCount: true });
+    expect(views.backlog).toMatchObject({ count: 0, searchCount: true });
+    expect(views['custom:v1']).toMatchObject({ count: 1, searchCount: true });
+  });
+
+  it('drops search counts again once the search ends', () => {
+    const props = sidebar('list', {
+      selectedView: read('trash'),
+      projectTicketCounts: () => ({ queued: 3, backlog: 1, archive: 2, trash: 13 }) as never,
+      sidebarSearchCounts: read({
+        projectId: 'p1',
+        signature: 'sig',
+        generation: 1,
+        values: { trash: 1 },
+        pending: [],
+      }),
+    });
+    if (props.kind !== 'project') throw new Error('expected the project sidebar');
+    expect(props.sidebar.views.find((view) => view.id === 'trash')).toMatchObject({ count: 13, searchCount: false });
+  });
+});
+
 describe('settings surface projection (HS2-BSSWGV)', () => {
   it('lists each source with the other projects that share its connection', () => {
     const dependencies = {

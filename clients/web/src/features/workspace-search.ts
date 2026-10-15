@@ -250,7 +250,10 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
         updateSearchPartialWarning(reason instanceof Error ? reason.message : String(reason));
     }
     if (!refreshEveryView || !activeSidebarSearchCount(state)) return;
-    const views = ticketSearchCountViews(customViewsFor(current.id).map((view) => view.id));
+    const views = ticketSearchCountViews(
+      customViewsFor(current.id).map((view) => view.id),
+      selected,
+    );
     await Promise.all(
       views
         .filter((view) => view !== selected)
@@ -291,7 +294,10 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
       if (current) void refreshProject({ showLoading: false });
       return;
     }
-    const countViews = ticketSearchCountViews(customViewsFor(current.id).map((item) => item.id)),
+    const countViews = ticketSearchCountViews(
+        customViewsFor(current.id).map((item) => item.id),
+        view,
+      ),
       previous = sidebarSearchCounts.value,
       countsComplete =
         previous?.projectId === current.id &&

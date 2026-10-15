@@ -1201,6 +1201,9 @@ preview/download, server directory browser) are separate design work.
   request cannot contain. Once the selected view's indexed search completes, bounded
   background searches update the other active collections and shared custom-view counts.
   Trash remains outside this live-search fan-out and keeps its canonical collection count.
+  Searching from Trash searches only Trash: no other view is searched or counted, so Queue,
+  Backlog, Archive, and custom views keep their ordinary totals without the search marker,
+  and only the Trash row carries the search marker and search-relative count (HS2-S6TXSW).
   Pending searchable-view counts use a compact spinner;
   settled search-derived counts put a small magnifying-glass marker beside the number inside
   the same badge and remain inside the

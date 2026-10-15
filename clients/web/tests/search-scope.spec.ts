@@ -1,0 +1,207 @@
+import { expect, type Locator, type Page, test } from '@playwright/test';
+
+// Search scope across the built-in views: searching from Trash searches only Trash (HS2-S6TXSW).
+
+const capabilities = {
+  create: true,
+  update: true,
+  close: true,
+  notes: true,
+  note_edit: true,
+  note_delete: true,
+  attachments: true,
+  assignment: true,
+  review_requests: true,
+  dependencies: true,
+  up_next: true,
+  close_reasons: true,
+  claims: true,
+  atomic_batch: true,
+  not_working_report: true,
+  offline_mutation: true,
+  history: true,
+  watch: true,
+  provider_idempotency: true,
+  query_fields: [],
+};
+const project = {
+  id: 'demo',
+  root: '/work/demo',
+  name: 'Demo',
+  stores: ['/work/demo.hs2'],
+  apiPath: '/__hotsheet/project-api/demo',
+  needsTicketSetup: false,
+  needsHs1Migration: false,
+  hs1ImportCompleted: false,
+  hs1CleanupEligible: false,
+};
+const row = (slug: string, title: string, status: string) => ({
+  connection_id: 'git-local',
+  native_id: slug,
+  qualified_id: `git-local:${slug}`,
+  id: slug,
+  slug,
+  title,
+  category: 'feature',
+  priority: 'default',
+  status,
+  up_next: false,
+  feedback_needed: false,
+  tags: [],
+  blocked_by: [],
+  claim_count: 0,
+  created_at: '2026-09-01T00:00:00Z',
+  updated_at: '2026-09-14T00:00:00Z',
+});
+const rows = [
+  row('HS2-QUEUE1', 'Badge spacing in the queue', 'started'),
+  row('HS2-QUEUE2', 'Unrelated queue work', 'not_started'),
+  row('HS2-DONE01', 'Badge contrast shipped', 'completed'),
+  row('HS2-BACK01', 'Badge color backlog idea', 'backlog'),
+  row('HS2-BACK02', 'Unrelated backlog idea', 'backlog'),
+  row('HS2-ARCH01', 'Badge archived decision', 'archive'),
+  row('HS2-TRASH1', 'Badge count trashed', 'deleted'),
+  row('HS2-TRASH2', 'Unrelated trashed one', 'deleted'),
+];
+
+function inScope(ticket: (typeof rows)[number], url: URL) {
+  const status = url.searchParams.get('status'),
+    collection = url.searchParams.get('collection');
+  if (status) return ticket.status === status;
+  if (collection === 'trash') return ticket.status === 'deleted';
+  if (collection === 'archive') return ticket.status === 'archive';
+  if (collection === 'all') return ticket.status !== 'deleted';
+  return !['backlog', 'archive', 'deleted'].includes(ticket.status);
+}
+
+/** Mock one project whose ticket endpoint scopes rows the way the server does, recording each search scope. */
+async function mockSearchProject(page: Page) {
+  const searches: string[] = [];
+  await page.route('**/*', async (route) => {
+    const request = route.request(),
+      url = new URL(request.url()),
+      path = url.pathname;
+    if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+    if (path === '/__hotsheet/folders/choose') return route.fulfill({ json: { path: '/work/demo' } });
+    if (path.endsWith('/providers'))
+      return route.fulfill({
+        json: [
+          {
+            connection_id: 'git-local',
+            provider: 'git',
+            display_name: 'Hot Sheet Git',
+            locator: '/tickets',
+            default: true,
+            capabilities,
+          },
+        ],
+      });
+    if (path.endsWith('/tickets') && request.method() === 'GET') {
+      const text = (url.searchParams.get('text') ?? '').toLowerCase();
+      if (text) searches.push(url.searchParams.get('status') ?? url.searchParams.get('collection') ?? 'queue');
+      const items = rows.filter((ticket) => inScope(ticket, url) && ticket.title.toLowerCase().includes(text));
+      return route.fulfill({
+        json: {
+          items,
+          counts: {
+            total: 6,
+            queued: 3,
+            backlog: 2,
+            archive: 1,
+            trash: 2,
+            open: 2,
+            up_next: 0,
+            active: 1,
+            started: 1,
+            completed_today: 0,
+            completion_trend: [0, 0, 0, 0, 0, 0, 0],
+          },
+        },
+      });
+    }
+    if (path.endsWith('/repository/status'))
+      return route.fulfill({
+        json: { branch: 'main', ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0, clean: true },
+      });
+    if (path.endsWith('/ws/poll')) {
+      if (url.searchParams.get('since') === null)
+        return route.fulfill({ json: { cursor: 1, events: [], overflow: false } });
+      return;
+    }
+    if (
+      path.endsWith('/terminals') ||
+      path.endsWith('/connections') ||
+      path.endsWith('/commands') ||
+      path.endsWith('/command-runs') ||
+      path.endsWith('/views') ||
+      path.endsWith('/corrupt-tickets')
+    )
+      return route.fulfill({ json: [] });
+    return route.continue();
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await expect(page.locator('[data-ticket-slug="HS2-QUEUE1"]').first()).toBeVisible();
+  return searches;
+}
+
+/** The sidebar view navigation, opening the overlay sidebar first at narrow widths. */
+async function viewNavigation(page: Page) {
+  const navigation = page.getByRole('navigation', { name: 'Ticket Views' });
+  if (!(await navigation.isVisible())) await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
+  await expect(navigation).toBeVisible();
+  return navigation;
+}
+/** Close the overlay sidebar at narrow widths so it no longer covers the workspace. */
+async function closeOverlaySidebar(page: Page) {
+  const hide = page.getByRole('button', { name: 'Hide Project Sidebar' });
+  if (
+    (await page.locator('#app-left-rail').getAttribute('data-presentation')) === 'overlay' &&
+    (await hide.isVisible())
+  )
+    await hide.click();
+}
+const viewCount = (navigation: Locator, view: string) =>
+  navigation.getByRole('button', { name: new RegExp(`^${view}`) }).locator('.view-navigation__count');
+
+for (const width of [1280, 390]) {
+  test(`searching from Trash searches and counts only Trash at ${width}px (HS2-S6TXSW)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width > 600 ? 820 : 844 });
+    const searches = await mockSearchProject(page);
+    let navigation = await viewNavigation(page);
+    await navigation.getByRole('button', { name: /^Trash/ }).click();
+    await closeOverlaySidebar(page);
+    await expect(page.locator('[data-ticket-slug="HS2-TRASH2"]').first()).toBeVisible();
+    await page.getByRole('button', { name: 'Search tickets' }).click();
+    await page.getByRole('searchbox', { name: 'Search tickets' }).fill('badge');
+    await expect(page.locator('[data-ticket-slug="HS2-TRASH1"]').first()).toBeVisible();
+    await expect(page.locator('[data-ticket-slug="HS2-TRASH2"]')).toHaveCount(0);
+    await expect(page.locator('[data-ticket-slug="HS2-QUEUE1"]')).toHaveCount(0);
+    navigation = await viewNavigation(page);
+    // Only the Trash row carries the search icon and a search-relative count.
+    await expect(viewCount(navigation, 'Trash')).toHaveAttribute('data-search-count', 'true');
+    await expect(navigation.getByLabel('1 search results')).toBeVisible();
+    await expect(navigation.locator('[data-search-count="true"]')).toHaveCount(1);
+    await expect(navigation.locator('[data-lucide="search"]')).toHaveCount(1);
+    await expect(viewCount(navigation, 'Queue')).toHaveText('3');
+    await expect(viewCount(navigation, 'Backlog')).toHaveText('2');
+    await expect(viewCount(navigation, 'Archive')).toHaveText('1');
+    // The search never ran against the other views.
+    expect([...new Set(searches)]).toEqual(['trash']);
+    // Let the overlay sidebar finish sliding in before the after-capture.
+    await expect(page.locator('#app-left-rail .kui-workbench__panel-content')).toHaveCSS('transform', 'none');
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `target/visual-captures/hs2-s6txsw-trash-search-${width}.png` });
+
+    // Searching from Queue never counts Trash, which keeps its plain total.
+    await navigation.getByRole('button', { name: /^Queue/ }).click();
+    await closeOverlaySidebar(page);
+    await expect(page.locator('[data-ticket-slug="HS2-QUEUE1"]').first()).toBeVisible();
+    navigation = await viewNavigation(page);
+    await expect(navigation.locator('[data-search-count="true"]')).toHaveCount(3);
+    await expect(viewCount(navigation, 'Trash')).not.toHaveAttribute('data-search-count', 'true');
+    await expect(viewCount(navigation, 'Trash')).toHaveText('2');
+    expect(searches.slice(searches.lastIndexOf('trash') + 1).sort()).toEqual(['archive', 'backlog', 'queue']);
+  });
+}

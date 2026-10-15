@@ -77,9 +77,17 @@ describe('ticket views', () => {
     expect(ticketViewQuery('archive')).toEqual({ collection: 'archive' });
   });
 
-  it('derives live search counts for active collections and custom views, not Trash', () => {
+  it('derives live search counts for active collections and custom views, and a Trash search counts only Trash', () => {
     expect(ticketSearchCountViews(['needs-docs'])).toEqual(['all', 'backlog', 'archive', 'custom:needs-docs']);
     expect(ticketSearchCountViews()).not.toContain('trash');
+    expect(ticketSearchCountViews(['needs-docs'], 'backlog')).toEqual([
+      'all',
+      'backlog',
+      'archive',
+      'custom:needs-docs',
+    ]);
+    // Searching from Trash searches only Trash (HS2-S6TXSW).
+    expect(ticketSearchCountViews(['needs-docs'], 'trash')).toEqual(['trash']);
   });
 
   it('creates into the visible active destination and disables creation for Archive', () => {
