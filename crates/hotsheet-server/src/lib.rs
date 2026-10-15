@@ -29,6 +29,7 @@ mod presence;
 mod provider_overlay;
 pub mod provider_write_behind;
 pub mod repository_browser;
+mod request_timing;
 mod routes;
 pub mod source_revision;
 pub mod sync_loop;
@@ -356,7 +357,7 @@ impl AppState {
     /// State over a store + a prepared index, guarded by `secret`. The caller decides
     /// whether the index is in-memory or file-backed (`Index::open_reconciled`).
     pub fn with_index(store: FsStore, secret: String, index: Index) -> Self {
-        let store = store.with_deferred_push();
+        let store = store.with_deferred_push().with_background_autocommit();
         let primary_instance_id = store
             .metadata()
             .and_then(|metadata| match metadata.instance_id {
@@ -1470,6 +1471,8 @@ pub fn app(state: AppState) -> Router {
         // upgrade can't set headers from a browser), like `/ws/sync`.
         .route("/terminals/{id}/attach", get(attach_terminal))
         .merge(protected)
+        // Warn on any request over its local latency budget (HS2-0DH8ZS).
+        .layer(middleware::from_fn(request_timing::time_request))
         .with_state(state)
 }
 

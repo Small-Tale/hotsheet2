@@ -31,6 +31,9 @@ pub fn sync_all(state: &AppState) -> Vec<(String, SyncReport)> {
     let Some(_lifecycle_guard) = state.begin_background_work() else {
         return Vec::new();
     };
+    // Publish the server's queued background commits, not a half-committed store
+    // (HS2-0DH8ZS).
+    hotsheet_ticketing::flush_background_commits();
     state
         .hosted_store_roots()
         .into_iter()

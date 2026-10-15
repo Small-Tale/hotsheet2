@@ -737,6 +737,11 @@ pub fn update(
             t.up_next = false;
             end_claim(&mut t, &now);
         }
+        if t == before {
+            // Nothing to persist (for example the empty patch of a note-only API update):
+            // skip the rewrite and its git commit entirely (HS2-0DH8ZS).
+            return Ok(t);
+        }
         if has_substantive_change(&before, &t) {
             t.updated_at = now;
         }
@@ -3754,6 +3759,47 @@ mod tests {
             "Status changed from Started to Completed"
         );
         assert_eq!(completed.started_phase, None);
+    }
+
+    /// HS2-0DH8ZS: an empty patch (a note-only API update) neither rewrites the ticket
+    /// file nor bumps `updated_at`, so it costs no write and no git commit.
+    #[test]
+    fn empty_update_patch_does_not_rewrite_the_ticket() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        let path = store.ticket_path(&id);
+        std::fs::write(&path, std::fs::read_to_string(&path).unwrap() + "\n").unwrap();
+        let before = std::fs::read_to_string(&path).unwrap();
+        let t = update(
+            &store,
+            &id,
+            ts("2026-08-19T01:00:00Z"),
+            TicketPatch::default(),
+        )
+        .unwrap();
+        assert_eq!(t.updated_at.as_str(), "2026-08-19T00:00:00Z");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+        // A real change still writes.
+        let t = update(
+            &store,
+            &id,
+            ts("2026-08-19T02:00:00Z"),
+            TicketPatch {
+                title: Some("renamed".into()),
+                ..TicketPatch::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(t.updated_at.as_str(), "2026-08-19T02:00:00Z");
+        assert_ne!(std::fs::read_to_string(&path).unwrap(), before);
     }
 
     #[test]

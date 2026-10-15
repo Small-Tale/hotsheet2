@@ -22,7 +22,7 @@ impl AppState {
     /// register it, and spawn its fs-watcher. Idempotent by store id — returns whether it
     /// was newly added. Shared by `POST /stores` and startup discovery.
     pub(crate) fn host_store(&self, store: FsStore) -> Result<bool, ApiError> {
-        let store = store.with_deferred_push();
+        let store = store.with_deferred_push().with_background_autocommit();
         // Validate the store boundary before registering an index, watcher, or discovery
         // file. Otherwise an older server can appear to accept a newer store and fail only
         // when its first ticket mutation reaches the writer.

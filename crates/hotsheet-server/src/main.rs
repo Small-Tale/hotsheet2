@@ -407,6 +407,8 @@ async fn main() -> Result<()> {
     let outcome = drain_on_shutdown(serve, &state, drain, force).await;
     // A probe started during the drain must not outlive the process either (HS2-BH3M53).
     hotsheet_aitools::probe::stop_probes();
+    // Land every queued background autocommit before releasing the store (HS2-0DH8ZS).
+    hotsheet_ticketing::flush_background_commits();
     state.release_instances();
     drop(writer_lock);
     match outcome {

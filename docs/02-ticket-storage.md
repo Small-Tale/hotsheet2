@@ -205,7 +205,11 @@ staged as a hidden non-`.md` sibling and renamed over the ticket, so a concurren
 (another CLI process, the server's watcher or reconcile) sees the old or the new
 complete file, never an empty or partial one (HS2-P2178F).
 Ticket read–revise–write operations hold a store-root advisory lock across read,
-revision, file replacement, and autocommit (HS2-SVKB1V, HS2-RN7WS6). This includes
+revision, and file replacement (HS2-SVKB1V, HS2-RN7WS6). The path-scoped autocommit of
+those files runs immediately *after* the lock is released (nested store-pair
+transactions defer to the outermost one), so one writer's git commit — hundreds of
+milliseconds on a large store, seconds under index contention — never convoys other
+writer processes (HS2-0DH8ZS). A no-op update patch writes and commits nothing. This includes
 notes and AI ratings, general edits, claims, close actions, assignments, and
 attachment metadata and activity. Cross-store copy and move lock both stores in
 path order. The persistent `.hotsheet-note-mutation.lock` file retains its original

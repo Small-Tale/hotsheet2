@@ -304,6 +304,7 @@ pub struct FsStore {
     root: PathBuf,
     push_after_commit: bool,
     defer_autocommit: bool,
+    background_autocommit: bool,
     #[cfg(test)]
     background_push_observer: Option<BackgroundPushObserver>,
 }
@@ -339,6 +340,7 @@ impl FsStore {
             root,
             push_after_commit: true,
             defer_autocommit: false,
+            background_autocommit: false,
             #[cfg(test)]
             background_push_observer: None,
         };
@@ -366,6 +368,7 @@ impl FsStore {
             root,
             push_after_commit: true,
             defer_autocommit: false,
+            background_autocommit: false,
             #[cfg(test)]
             background_push_observer: None,
         })
@@ -384,6 +387,18 @@ impl FsStore {
     #[must_use]
     pub fn with_deferred_autocommit(mut self) -> Self {
         self.defer_autocommit = true;
+        self
+    }
+
+    /// Commit each mutation on a process-wide background committer instead of the
+    /// calling thread (HS2-0DH8ZS). A long-running server uses this so an API request
+    /// returns once the ticket file is written; the path-scoped git commit follows
+    /// moments later, coalesced with any other queued commits. Call
+    /// [`flush_background_commits`] before exiting or when a caller must observe the
+    /// commit.
+    #[must_use]
+    pub fn with_background_autocommit(mut self) -> Self {
+        self.background_autocommit = true;
         self
     }
 
@@ -442,14 +457,24 @@ impl FsStore {
                 source,
             })
             .map_err(E::from)?;
-        let _lock = FileLock::acquire(file)
+        let lock = FileLock::acquire(file)
             .map_err(|source| StoreError::IoAt {
                 operation: "locking note mutation transaction",
                 path,
                 source,
             })
             .map_err(E::from)?;
-        operation()
+        // Commits produced inside the transaction run after the store-wide lock is
+        // released (HS2-0DH8ZS): a git commit can take hundreds of milliseconds on a large
+        // store (seconds under index contention), and holding the mutation lock across it
+        // convoys every other writer process behind this one.
+        let scope = pending_commits::Scope::enter();
+        let result = operation();
+        drop(lock);
+        for job in scope.finish() {
+            job.run();
+        }
+        result
     }
 
     /// Hold two stores in a stable order for copy and move operations. A store
@@ -699,8 +724,14 @@ impl FsStore {
         paths.push(path.clone());
         paths.push(self.root.join(".gitignore"));
         paths.extend_from_slice(extra_paths);
-        if let Err(e) = self.autocommit_paths(&msg, &paths) {
-            eprintln!("warning: hotsheet autocommit failed: {e}");
+        let job = CommitJob {
+            store: self.clone(),
+            message: msg,
+            paths,
+        };
+        // Inside a ticket transaction the commit waits until the store lock is released.
+        if let Some(job) = pending_commits::defer(job) {
+            job.run();
         }
         Ok(path)
     }
@@ -1835,6 +1866,206 @@ pub(crate) fn write_file_atomically(path: &Path, bytes: &[u8]) -> std::io::Resul
 /// Replay the complete local transaction after lock contention. Another writer may
 /// have committed during the wait, so re-stage and re-check rather than retrying a
 /// stale commit alone. Never remove Git's lock or retry unrelated failures.
+/// One path-scoped autocommit produced by a ticket mutation.
+struct CommitJob {
+    store: FsStore,
+    message: String,
+    paths: Vec<PathBuf>,
+}
+
+impl CommitJob {
+    /// Commit now, or hand the job to the background committer when the store opted in.
+    fn run(self) {
+        if self.store.background_autocommit {
+            background_committer().submit(self);
+        } else {
+            self.commit();
+        }
+    }
+
+    /// The commit is best-effort: the ticket write already succeeded.
+    fn commit(self) {
+        if let Err(e) = self.store.autocommit_paths(&self.message, &self.paths) {
+            eprintln!("warning: hotsheet autocommit failed: {e}");
+        }
+    }
+}
+
+/// Commits produced inside [`FsStore::with_ticket_transaction`] on this thread, run once
+/// the outermost transaction releases its store lock.
+mod pending_commits {
+    use super::CommitJob;
+    use std::cell::{Cell, RefCell};
+
+    thread_local! {
+        static DEPTH: Cell<usize> = const { Cell::new(0) };
+        static JOBS: RefCell<Vec<CommitJob>> = const { RefCell::new(Vec::new()) };
+    }
+
+    /// One transaction level. Dropping it without [`Scope::finish`] (a panic) discards
+    /// the outermost level's queued jobs; their files stay on disk for the next commit.
+    pub(super) struct Scope {
+        outermost: bool,
+        finished: bool,
+    }
+
+    impl Scope {
+        pub(super) fn enter() -> Self {
+            let outermost = DEPTH.with(|depth| {
+                depth.set(depth.get() + 1);
+                depth.get() == 1
+            });
+            Self {
+                outermost,
+                finished: false,
+            }
+        }
+
+        /// Leave the level; the outermost level returns every deferred job.
+        pub(super) fn finish(mut self) -> Vec<CommitJob> {
+            self.finished = true;
+            self.leave()
+        }
+
+        fn leave(&self) -> Vec<CommitJob> {
+            DEPTH.with(|depth| depth.set(depth.get() - 1));
+            if self.outermost {
+                JOBS.with(|jobs| std::mem::take(&mut *jobs.borrow_mut()))
+            } else {
+                Vec::new()
+            }
+        }
+    }
+
+    impl Drop for Scope {
+        fn drop(&mut self) {
+            if !self.finished {
+                drop(self.leave());
+            }
+        }
+    }
+
+    /// Queue `job` when inside a transaction; otherwise give it back to run now.
+    pub(super) fn defer(job: CommitJob) -> Option<CommitJob> {
+        if DEPTH.with(Cell::get) == 0 {
+            Some(job)
+        } else {
+            JOBS.with(|jobs| jobs.borrow_mut().push(job));
+            None
+        }
+    }
+}
+
+/// Process-wide background committer for stores built with
+/// [`FsStore::with_background_autocommit`]. Jobs queued while a commit runs are
+/// coalesced into one commit per store.
+struct BackgroundCommitter {
+    state: std::sync::Mutex<CommitterState>,
+    changed: std::sync::Condvar,
+}
+
+#[derive(Default)]
+struct CommitterState {
+    queue: Vec<CommitJob>,
+    busy: bool,
+}
+
+fn background_committer() -> &'static BackgroundCommitter {
+    static COMMITTER: std::sync::OnceLock<&'static BackgroundCommitter> =
+        std::sync::OnceLock::new();
+    COMMITTER.get_or_init(|| {
+        let committer: &'static BackgroundCommitter = Box::leak(Box::new(BackgroundCommitter {
+            state: std::sync::Mutex::new(CommitterState::default()),
+            changed: std::sync::Condvar::new(),
+        }));
+        std::thread::Builder::new()
+            .name("hotsheet-autocommit".into())
+            .spawn(move || committer.work())
+            .expect("spawn the background autocommit thread");
+        committer
+    })
+}
+
+impl BackgroundCommitter {
+    fn lock(&self) -> std::sync::MutexGuard<'_, CommitterState> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn submit(&self, job: CommitJob) {
+        self.lock().queue.push(job);
+        self.changed.notify_all();
+    }
+
+    fn work(&self) {
+        loop {
+            let jobs = {
+                let mut state = self.lock();
+                while state.queue.is_empty() {
+                    state = self
+                        .changed
+                        .wait(state)
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                }
+                state.busy = true;
+                std::mem::take(&mut state.queue)
+            };
+            for job in coalesce_commit_jobs(jobs) {
+                job.commit();
+            }
+            self.lock().busy = false;
+            self.changed.notify_all();
+        }
+    }
+
+    fn flush(&self) {
+        let mut state = self.lock();
+        while state.busy || !state.queue.is_empty() {
+            state = self
+                .changed
+                .wait(state)
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        }
+    }
+}
+
+/// Merge queued jobs into one commit per store root, in first-seen order, with the
+/// union of their paths. A single job keeps its own message.
+fn coalesce_commit_jobs(jobs: Vec<CommitJob>) -> Vec<CommitJob> {
+    let mut merged: Vec<(CommitJob, usize)> = Vec::new();
+    for job in jobs {
+        if let Some((existing, count)) = merged
+            .iter_mut()
+            .find(|(existing, _)| existing.store.root == job.store.root)
+        {
+            *count += 1;
+            for path in job.paths {
+                if !existing.paths.contains(&path) {
+                    existing.paths.push(path);
+                }
+            }
+        } else {
+            merged.push((job, 1));
+        }
+    }
+    merged
+        .into_iter()
+        .map(|(mut job, count)| {
+            if count > 1 {
+                job.message = format!("{} (+{} more)", job.message, count - 1);
+            }
+            job
+        })
+        .collect()
+}
+
+/// Block until every background commit queued so far has run (HS2-0DH8ZS). A no-op when
+/// no store in this process uses [`FsStore::with_background_autocommit`].
+pub fn flush_background_commits() {
+    background_committer().flush();
+}
+
 fn retry_autocommit(
     mut attempt: impl FnMut() -> Result<bool, StoreError>,
     mut wait: impl FnMut(Duration),
@@ -3197,6 +3428,134 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    fn head(dir: &Path) -> String {
+        git_stdout(dir, &["rev-parse", "HEAD"]).unwrap()
+    }
+
+    fn commits_since(dir: &Path, base: &str) -> usize {
+        git_stdout(
+            dir,
+            &["rev-list", "--count", &format!("{}..HEAD", base.trim())],
+        )
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap()
+    }
+
+    /// HS2-0DH8ZS: a commit produced inside a ticket transaction runs only after the
+    /// store-wide mutation lock is released, so other writers never wait on git.
+    #[test]
+    fn transaction_commits_after_releasing_the_store_lock() {
+        let (dir, store) = temp_store();
+        git(dir.path(), &["init", "-q"]).unwrap();
+        assert!(store.autocommit("initial store").unwrap());
+        let base = head(dir.path());
+        let (other_dir, other) = temp_store();
+        git(other_dir.path(), &["init", "-q"]).unwrap();
+        assert!(other.autocommit("initial store").unwrap());
+        let other_base = head(other_dir.path());
+        let ticket = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+        store
+            .with_store_pair_transaction(&other, || {
+                store.write_ticket_committing(&ticket)?;
+                other.write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAW")))?;
+                // Still inside both locks: neither commit has run yet; the nested level
+                // defers to the outermost one.
+                assert_eq!(head(dir.path()), base);
+                assert_eq!(head(other_dir.path()), other_base);
+                Ok::<_, StoreError>(())
+            })
+            .unwrap();
+        assert_eq!(commits_since(dir.path(), &base), 1);
+        assert_eq!(commits_since(other_dir.path(), &other_base), 1);
+        assert!(
+            git_stdout(dir.path(), &["status", "--porcelain"])
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    /// A failed or panicking transaction still commits what it wrote (or leaves it for
+    /// the next commit) and never leaves this thread stuck deferring commits.
+    #[test]
+    fn transaction_failure_and_panic_do_not_strand_deferred_commits() {
+        let (dir, store) = temp_store();
+        git(dir.path(), &["init", "-q"]).unwrap();
+        assert!(store.autocommit("initial store").unwrap());
+        let base = head(dir.path());
+        let failed = store.with_ticket_transaction(|| {
+            store.write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV")))?;
+            Err::<(), _>(StoreError::Git("later step failed".into()))
+        });
+        assert!(failed.is_err());
+        assert_eq!(commits_since(dir.path(), &base), 1);
+        let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            store.with_ticket_transaction(|| -> Result<(), StoreError> {
+                panic!("operation panicked")
+            })
+        }));
+        assert!(panicked.is_err());
+        // Outside any transaction the next write commits immediately again.
+        store
+            .write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAW")))
+            .unwrap();
+        assert_eq!(commits_since(dir.path(), &base), 2);
+    }
+
+    /// HS2-0DH8ZS: a background-autocommit store returns before git runs; a flush lands
+    /// every queued write and leaves a clean tree.
+    #[test]
+    fn background_autocommit_commits_after_flush() {
+        let (dir, store) = temp_store();
+        git(dir.path(), &["init", "-q"]).unwrap();
+        assert!(store.autocommit("initial store").unwrap());
+        let base = head(dir.path());
+        let background = store.clone().with_background_autocommit();
+        for id in [
+            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+            "01ARZ3NDEKTSV4RRFFQ69G5FAX",
+        ] {
+            background
+                .with_ticket_transaction(|| background.write_ticket_committing(&sample(ulid(id))))
+                .unwrap();
+        }
+        flush_background_commits();
+        let commits = commits_since(dir.path(), &base);
+        assert!((1..=3).contains(&commits), "{commits}");
+        assert!(
+            git_stdout(dir.path(), &["status", "--porcelain"])
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn queued_commits_coalesce_per_store_with_their_path_union() {
+        let (_a_dir, a) = temp_store();
+        let (_b_dir, b) = temp_store();
+        let job = |store: &FsStore, message: &str, path: &str| CommitJob {
+            store: store.clone(),
+            message: message.into(),
+            paths: vec![store.root().join(path)],
+        };
+        let merged = coalesce_commit_jobs(vec![
+            job(&a, "A-1", "one.md"),
+            job(&b, "B-1", "one.md"),
+            job(&a, "A-2", "two.md"),
+            job(&a, "A-3", "one.md"),
+        ]);
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged[0].message, "A-1 (+2 more)");
+        assert_eq!(
+            merged[0].paths,
+            vec![a.root().join("one.md"), a.root().join("two.md")]
+        );
+        assert_eq!(merged[1].message, "B-1");
+        assert_eq!(merged[1].paths, vec![b.root().join("one.md")]);
     }
 
     #[cfg(unix)]

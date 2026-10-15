@@ -892,6 +892,18 @@ deadline. The shared
   commit, while publishing an update event for each ticket. A later update error still
   commits and publishes the earlier successful items, matching the existing partial-write
   behavior. Other staged or untracked files are not included in the batch commit.
+  Server-owned stores also commit in the background (HS2-0DH8ZS): an API mutation returns
+  once its ticket file is written and indexed, and a process-wide committer thread lands
+  the path-scoped commit moments later, coalescing queued jobs into one commit per store.
+  The sync loop flushes queued commits before each fetch/rebase/push pass and graceful
+  shutdown flushes before releasing the store; an uncommitted file left by a forced exit
+  is picked up by the next sync commit. Note saves dropped from ~1 s (two synchronous
+  commits) to ~20–35 ms on the 1.5 GB development store.
+  Every routed request is timed (`request_timing` middleware): a request over its budget
+  logs a `warn` with method, matched route template (never concrete ids), status,
+  `elapsed_ms`, and `budget_ms`. Ordinary API requests have a 100 ms budget; attachment,
+  provider-attachment, and speech routes 2 s; WebSocket, long-poll, and terminal-attach
+  routes are not timed.
   The checkout batch response includes `Server-Timing` measurements for admission,
   ticket writes, Git commit, index refresh, event publication, worklist refresh, and total
   handling time. These timings describe local server work; clients can measure their
