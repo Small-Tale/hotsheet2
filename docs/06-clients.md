@@ -1022,6 +1022,18 @@ preview/download, server directory browser) are separate design work.
   Recovery guidance distinguishes safe compatible skew, stale local source, old client,
   old server, and unavailable metadata; it never offers automatic restart without the
   same explicit restart plus quiescence capability gate.
+  Stale local source alone is not an error (HS2-B84P1S). When the server is compatible and its
+  build lags the workspace source, and no client build contradicts the running pair (no client
+  revision, or one equal to the server's build), the shell shows an informational, dismissible
+  `SourceStaleNoticeBanner` ("Newer local source is available") instead of the alert-toned
+  "Different server build is running" banner. Dismissing it is global: one dismissal hides it in
+  every open project. The dismissal is keyed on the build and source revision pair, so a later
+  rebuild or source change announces again. Protocol mismatches, unknown compatibility, and a
+  server running a build other than the client's keep the alert banner.
+  Every banner in the header slot wraps inside the viewport when several stack, including at
+  phone width: the slot is one shrinkable grid track, and the connection alert gives its detail
+  its own wrapping line (StateBanner `copyLayout="stacked"`) rather than truncating it beside
+  the title (HS2-TM2D7J).
   Ticket-provider connections are not stored in project
   `.hotsheet2/settings.json` or `.hotsheet2/settings.local.json`: those remain
   shared/local preferences. Git sources are

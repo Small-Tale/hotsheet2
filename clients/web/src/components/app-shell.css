@@ -49,6 +49,9 @@
    conditions all rendered nothing takes no space. */
 .app-shell__banner {
   display: grid;
+  /* One shrinkable track: a banner's long copy wraps at the viewport instead of widening the slot
+     past it when several banners stack (HS2-TM2D7J). */
+  grid-template-columns: minmax(0, 1fr);
   padding-bottom: var(--kui-space-xs);
   background: var(--wa-color-surface-default);
 }

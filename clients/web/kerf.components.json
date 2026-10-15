@@ -5612,6 +5612,71 @@
       }
     },
     {
+      "id": "source-stale-notice-banner",
+      "name": "SourceStaleNoticeBanner",
+      "kind": "component",
+      "purpose": "Dismissible info strip when the workspace source is newer than the running server's build while the client/server pair still matches (HS2-B84P1S).",
+      "source": "src/components/source-stale-notice-banner.tsx",
+      "publicExports": [
+        {
+          "name": "SourceStaleNoticeBanner"
+        }
+      ],
+      "sourceLinks": ["src/components/source-stale-notice-banner.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/source-stale-notice-banner.tsx",
+        "composition": "src/components/source-stale-notice-banner.tsx"
+      },
+      "selection": {
+        "useWhen": [
+          "The running server was built from older local source than the workspace, and no client build contradicts the running pair."
+        ],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific SourceStaleNoticeBanner behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "notifications-paused-banner",
       "name": "NotificationsPausedBanner",
       "kind": "component",

@@ -156,6 +156,7 @@ describe('UX demo catalog', () => {
       'shell-banner',
       'project-setup-warning-banner',
       'server-build-notice-banner',
+      'source-stale-notice-banner',
       'notifications-paused-banner',
       'provider-icon',
       'ticket-source-setup-dialog',

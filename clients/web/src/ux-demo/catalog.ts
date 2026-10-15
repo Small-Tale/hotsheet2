@@ -292,6 +292,7 @@ export const demoCatalog: DemoCategory[] = [
       cataloged('shell-banner', ['state-banner']),
       cataloged('project-setup-warning-banner', ['shell-banner']),
       cataloged('server-build-notice-banner', ['shell-banner']),
+      cataloged('source-stale-notice-banner', ['shell-banner']),
       cataloged('notifications-paused-banner', ['shell-banner']),
       cataloged('provider-icon'),
       cataloged('ticket-source-setup-dialog', ['content-transition', 'list-item', 'provider-icon']),

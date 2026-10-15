@@ -4477,6 +4477,70 @@
       }
     },
     {
+      "key": "hotsheet-web:source-stale-notice-banner",
+      "package": "hotsheet-web",
+      "id": "source-stale-notice-banner",
+      "name": "SourceStaleNoticeBanner",
+      "kind": "component",
+      "purpose": "Dismissible info strip when the workspace source is newer than the running server's build while the client/server pair still matches (HS2-B84P1S).",
+      "publicExports": [
+        {
+          "name": "SourceStaleNoticeBanner"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/source-stale-notice-banner.tsx"
+      ],
+      "source": "src/components/source-stale-notice-banner.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/source-stale-notice-banner.tsx",
+        "composition": "src/components/source-stale-notice-banner.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:status-badge",
       "package": "hotsheet-web",
       "id": "status-badge",

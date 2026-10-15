@@ -15,7 +15,11 @@ test('selects current local server, CLI, and migrator binaries from the real che
   expect(selected.HOT_SHEET_BUILD_REVISION).toMatch(/^source-sha256:[0-9a-f]{64}$/);
 });
 
-async function openWithCompatibility(page: import('@playwright/test').Page, compatibility: CompatibilityAssessment) {
+async function openWithCompatibility(
+  page: import('@playwright/test').Page,
+  compatibility: CompatibilityAssessment,
+  project: Record<string, unknown> = {},
+) {
   await page.route('**/*', (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/__hotsheet/projects/open')
@@ -28,6 +32,7 @@ async function openWithCompatibility(page: import('@playwright/test').Page, comp
           stores: ['/work/skew.hs2'],
           apiPath: '/__hotsheet/project-api/skew',
           compatibility,
+          ...project,
         },
       });
     if (path.endsWith('/providers')) return route.fulfill({ json: [] });
@@ -150,4 +155,114 @@ test('tells development users to restart a server built from older local source'
   await page.screenshot({ path: 'target/visual-captures/hs2-xrs9s4-server-details-narrow.png', fullPage: true });
   await page.mouse.click(4, 4);
   await expect(dialog).not.toBeVisible();
+});
+
+const staleOnly = (build: string, source: string): CompatibilityAssessment => ({
+  kind: 'compatible',
+  revisionMismatch: true,
+  sourceStale: true,
+  canRestartServer: false,
+  clientProtocol: { min: 1, max: 1 },
+  server: {
+    generation: 'hs2',
+    build_revision: build,
+    source_revision: source,
+    source_stale: true,
+    protocol: { min: 1, max: 1 },
+  },
+});
+
+test('presents newer local source as a globally dismissible info notice, not an alert (HS2-B84P1S)', async ({
+  page,
+}) => {
+  let current = { compatibility: staleOnly('source-sha256:old', 'source-sha256:new'), id: 'first' };
+  await openWithCompatibility(page, current.compatibility);
+  // Registered after the helper's catch-all so reloads see each step's project and build pair.
+  await page.route('**/__hotsheet/projects/open', (route) =>
+    route.fulfill({
+      status: 201,
+      json: {
+        id: current.id,
+        root: `/work/${current.id}`,
+        name: current.id,
+        stores: [`/work/${current.id}.hs2`],
+        apiPath: `/__hotsheet/project-api/${current.id}`,
+        compatibility: current.compatibility,
+      },
+    }),
+  );
+  const notice = page.locator('[data-component="source-stale-notice-banner"]');
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(notice).toContainText('Newer local source is available');
+    await expect(notice).toHaveAttribute('data-tone', 'info');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    // Let the shell settle into this width's layout before the visual capture.
+    await page.waitForTimeout(1_000);
+    await page.screenshot({
+      path: `target/visual-captures/hs2-b84p1s-source-stale-notice-${width}.png`,
+      animations: 'disabled',
+    });
+  }
+  await page.setViewportSize({ width: 1280, height: 844 });
+  // The red "different build" alert no longer appears for this case.
+  await expect(page.locator('.connection-state-banner')).toHaveCount(0);
+  await notice.getByRole('button', { name: 'Dismiss' }).click();
+  await expect(notice).toHaveCount(0);
+  // Another project on the same pair stays quiet: the dismissal is global.
+  current = { ...current, id: 'second' };
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Queue', level: 1 })).toBeVisible();
+  await expect(notice).toHaveCount(0);
+  // The source moves again: the new pair is announced.
+  current = { ...current, compatibility: staleOnly('source-sha256:old', 'source-sha256:newer') };
+  await page.reload();
+  await expect(notice).toContainText('Newer local source is available');
+});
+
+test('wraps stacked alert and shell banners inside a phone-width viewport (HS2-TM2D7J)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openWithCompatibility(
+    page,
+    {
+      kind: 'server_too_old',
+      detail: 'Server protocol 0–0 is older than client protocol 1–1.',
+      revisionMismatch: false,
+      sourceStale: false,
+      canRestartServer: false,
+    },
+    {
+      setupWarning:
+        'The development Hot Sheet CLI does not match the current setup templates and may overwrite newer project guidance. Run cargo build -p hotsheet-cli, then reopen the project.',
+    },
+  );
+  const alert = page.locator('.connection-state-banner'),
+    warning = page.locator('[data-component="project-setup-warning-banner"]');
+  await expect(alert).toContainText('Server update required');
+  await expect(warning).toContainText('Project setup needs attention');
+  const overflow = await page.evaluate(() =>
+    [...document.querySelectorAll('.app-shell__banner > *')].map((banner) => {
+      const box = banner.getBoundingClientRect();
+      return { right: box.right, scroll: banner.scrollWidth - banner.clientWidth };
+    }),
+  );
+  for (const banner of overflow) {
+    expect(banner.right).toBeLessThanOrEqual(390);
+    expect(banner.scroll).toBeLessThanOrEqual(0);
+  }
+  await expect(alert.getByRole('button', { name: 'View details' })).toBeInViewport();
+  // The detail wraps on its own line rather than truncating beside the title.
+  expect(
+    await alert.evaluate((banner) =>
+      [...banner.querySelectorAll('*')].some((node) => node.scrollWidth > node.clientWidth + 1),
+    ),
+  ).toBe(false);
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.waitForTimeout(1_000);
+  await page.screenshot({ path: 'target/visual-captures/hs2-tm2d7j-stacked-banners-390.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await page.waitForTimeout(1_000);
+  await page.screenshot({ path: 'target/visual-captures/hs2-tm2d7j-stacked-banners-1280.png', animations: 'disabled' });
 });

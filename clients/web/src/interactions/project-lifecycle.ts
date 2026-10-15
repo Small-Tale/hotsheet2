@@ -6,6 +6,7 @@ import { type ExternalProviderKind } from '../components/provider-setup-form';
 import { PROJECT_LIFECYCLE_ACTIONS, PROJECT_LIFECYCLE_TARGETS } from '../interaction-attrs/project-lifecycle';
 import { type MigrationJobClient } from '../migration-job-client';
 import { type MigrationJob } from '../migration-progress';
+import { dismissStaleSourceNotice } from '../source-stale-notice';
 import { dismissHs1CleanupPrompt, dismissHs1MigrationPrompt } from '../workspace-session';
 import { data } from './dom';
 import { type Control, type Project, type UnhealthyServerRecovery } from './types';
@@ -236,6 +237,13 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
       projects.value = projects.value.map((item) =>
         item.id === current.id ? { ...item, serverBuildNoticeDismissed: true } : item,
       );
+    }),
+  );
+  lifetime.add(
+    // The newer-source notice is dismissed for every project at once, keyed on its build pair (HS2-B84P1S).
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.dismissSourceStaleNotice.selector, () => {
+      const compatibility = project()?.compatibility;
+      if (compatibility) dismissStaleSourceNotice(compatibility);
     }),
   );
   lifetime.add(

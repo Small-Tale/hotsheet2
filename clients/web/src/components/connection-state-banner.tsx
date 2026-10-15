@@ -109,6 +109,9 @@ export function ConnectionStateBanner({ state, detail }: ConnectionStateBannerPr
       detail={detail}
       tone={item.tone}
       urgency={state === 'connecting' ? 'status' : 'alert'}
+      // The detail gets its own wrapping line, so long recovery copy stays readable at phone width
+      // instead of truncating beside the title (HS2-TM2D7J).
+      copyLayout="stacked"
       className={`connection-state-banner connection-state-banner--${state}`}
       icon={state === 'connecting' ? <LoadingSpinner /> : <LucideIcon icon={item.icon} name={item.iconName} />}
       action={action}

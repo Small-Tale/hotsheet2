@@ -146,6 +146,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ticket-timeline-data.ts # Timeline entries from activity notes + lifecycle backfill; appends each completion cycle's confidence to its Completed headline
     src/draft-input-coalescing.ts # Typing-pause publication of editor draft signals plus flushDraftInputs() for every reader of drafts (HS2-EQTXTJ)
     src/feedback-prompt-edits.ts # Note ids of FEEDBACK NEEDED prompts the user explicitly opened with Edit Note; only their saves carry edit_feedback_prompt (HS2-ZXGEFE)
+    src/source-stale-notice.ts # Stale-local-source-only detection plus the global, build-pair-keyed dismissal of its info notice (HS2-B84P1S)
     src/ticket-usage-timeline.ts # Buckets a ticket's AI usage events into the timeline gaps and formats the per-gap labels and the per-model plus total usage breakdown (HS2-ZA7W6E, HS2-J14225)
     src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, shell/AI/chat type filtering and scoped bulk inclusion rules
     src/terminal-visibility-filter.ts # Controlled native multi-select array binding that preserves its open popup through list rerenders
@@ -210,6 +211,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/shell-banner.tsx # Shared full-width shell status strip around Kerf StateBanner (info/success/warning) used by the setup, notification-pause, and HS1 banners (HS2-BF8C76)
     src/components/project-setup-warning-banner.tsx # Dismissible warning when opening a project skipped its setup refresh (HS2-0TXM8S)
     src/components/server-build-notice-banner.tsx # Dismissible info strip when a pinned host serves a project through a mismatched shared machine server it could not restart yet (HS2-46BKH7)
+    src/components/source-stale-notice-banner.tsx # Dismissible info strip when workspace source is newer than the running server build but the client/server pair matches (HS2-B84P1S)
     src/components/notifications-paused-banner.tsx # Kerf StateBanner shown in every project while notifications are paused, with the waiting count and Resume (HS2-QYA9SC)
     src/components/project-strip-actions.tsx # ProjectTabBar zone content: dashboard-mode and Add-project borderless Kerf control groups of native buttons, declared rendersAs toolbar-control-group in kerf.components.json (HS2-PNCDAE)
     src/top-layer-overlay.ts # Opens marked manual-popover overlays (the magnified terminal) into the browser top layer as Kerf renders them (HS2-Z9PQSC)

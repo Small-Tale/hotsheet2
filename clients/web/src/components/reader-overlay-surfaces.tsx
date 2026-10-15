@@ -1,6 +1,7 @@
 import type { SafeHtml } from 'kerfjs';
 
 import type { CompatibilityAssessment } from '../compatibility';
+import { isStaleSourceOnly } from '../source-stale-notice';
 import { AIConversation } from './ai-conversation';
 import { AttachmentContextMenu } from './attachment-context-menu';
 import { AttachmentGallery } from './attachment-gallery';
@@ -61,7 +62,12 @@ export function CompatibilityBannerSurface({
    */
   revisionMismatchExplained?: boolean;
 }) {
-  if (!assessment || (assessment.kind === 'compatible' && (!assessment.revisionMismatch || revisionMismatchExplained)))
+  if (
+    !assessment ||
+    (assessment.kind === 'compatible' && (!assessment.revisionMismatch || revisionMismatchExplained)) ||
+    // Newer local source alone is the informational SourceStaleNoticeBanner, not an alert (HS2-B84P1S).
+    isStaleSourceOnly(assessment)
+  )
     return null;
   const state: ConnectionState =
     assessment.kind === 'compatible'

@@ -35,6 +35,7 @@ import { type ProjectTabProps } from '../components/project-tab';
 import { CompatibilityBannerSurface } from '../components/reader-overlay-surfaces';
 import { ServerBuildNoticeBanner } from '../components/server-build-notice-banner';
 import { type SettingsCategory, settingsCategoryTitle } from '../components/settings-navigation';
+import { SourceStaleNoticeBanner } from '../components/source-stale-notice-banner';
 import { TerminalDashboardControls, type TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { TerminalDrawerProps } from '../components/terminal-drawer';
 import type { TicketInspectorProps } from '../components/ticket-inspector';
@@ -78,6 +79,7 @@ import { migrationPercent, migrationPhaseLabel } from '../migration-progress';
 import type { MobileTerminalFocusState } from '../mobile-terminal-focus';
 import { mobileViewChoices } from '../mobile-view-choices';
 import type { PermissionItem } from '../permission-notifications';
+import { showsStaleSourceNotice } from '../source-stale-notice';
 import { interleaveByRank } from '../tab-order';
 import type { TerminalVisibilityState } from '../terminal-visibility';
 import { activeTerminalVisibilityGroup, TERMINAL_DASHBOARD_VISIBILITY_SCOPE } from '../terminal-visibility';
@@ -559,6 +561,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
               )}
             {current.setupWarning && <ProjectSetupWarningBanner detail={current.setupWarning} />}
             {current.codexHooksChanged && <CodexHooksNoticeBanner path={current.codexHooksChanged} />}
+            {showsStaleSourceNotice(current.compatibility) && <SourceStaleNoticeBanner />}
             {current.serverBuildNotice && !current.serverBuildNoticeDismissed && (
               <ServerBuildNoticeBanner detail={current.serverBuildNotice} />
             )}

@@ -19,6 +19,7 @@ import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner'
 import { ProjectSetupWarningBanner } from '../components/project-setup-warning-banner';
 import { ServerBuildNoticeBanner } from '../components/server-build-notice-banner';
 import { ShellBanner } from '../components/shell-banner';
+import { SourceStaleNoticeBanner } from '../components/source-stale-notice-banner';
 import { TicketPageMore } from '../components/ticket-page-more';
 import type { DemoModule } from './demo-module';
 
@@ -102,6 +103,14 @@ export function ServerBuildNoticeBannerDemo() {
   return (
     <CatalogExample label="Busy Server">
       <ServerBuildNoticeBanner detail="The Hot Sheet server running on this machine was started by another host or build and does not match the build this host selected. It is busy with active work; this host will restart it onto its own build when the work finishes. The project stays usable meanwhile." />
+    </CatalogExample>
+  );
+}
+
+export function SourceStaleNoticeBannerDemo() {
+  return (
+    <CatalogExample label="Newer Local Source">
+      <SourceStaleNoticeBanner />
     </CatalogExample>
   );
 }
@@ -210,6 +219,7 @@ export const demoModule: DemoModule = {
     'shell-banner': { catalogExamples: true, Demo: ShellBannerDemo },
     'project-setup-warning-banner': { catalogExamples: true, Demo: ProjectSetupWarningBannerDemo },
     'server-build-notice-banner': { catalogExamples: true, Demo: ServerBuildNoticeBannerDemo },
+    'source-stale-notice-banner': { catalogExamples: true, Demo: SourceStaleNoticeBannerDemo },
     'ticket-page-more': { catalogExamples: true, Demo: TicketPageMoreDemo },
     'app-empty-state': { catalogExamples: true, Demo: AppEmptyStateDemo },
     'app-error': { catalogExamples: true, Demo: AppErrorDemo },
