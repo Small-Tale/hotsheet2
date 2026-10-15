@@ -6869,6 +6869,15 @@ test('shows AI chats in the project and workspace grids and reopens them from th
   await expect(globalChat).toContainText('demo › Codex chat');
   await expect(page.locator('.workspace-header__identity')).toContainText('Workspace Grid');
   await page.screenshot({ path: 'target/visual-captures/hs2-hpy5r0-workspace-grid-ai-chat-wide.png', fullPage: true });
+  // On the Workspace Grid, Add project sits beside the last project tab, not on the far edge (HS2-YFKQT1).
+  const projectStrip = page.locator('[data-tab-bar-id="projects"]'),
+    lastProjectTab = projectStrip.locator('[data-tab-kind="project"]').last(),
+    addProjectBox = (await projectStrip.getByRole('button', { name: 'Add Project' }).boundingBox())!,
+    lastTabBox = (await lastProjectTab.boundingBox())!,
+    stripBox = (await projectStrip.boundingBox())!;
+  expect(addProjectBox.x - (lastTabBox.x + lastTabBox.width)).toBeLessThan(24);
+  expect(stripBox.x + stripBox.width - (addProjectBox.x + addProjectBox.width)).toBeGreaterThan(100);
+  await page.screenshot({ path: 'target/visual-captures/hs2-yfkqt1-workspace-grid-add-project-1280.png' });
   for (let fit = 4; fit < 10; fit += 1)
     await dashboard.getByRole('button', { name: /Zoom Out, Fit More Items/ }).click();
   await expect(dashboard).toHaveAttribute('data-fit', '10');

@@ -480,9 +480,10 @@ describe('application shell components', () => {
     expect(
       String(ProjectTabBar({ tabs: [{ id: 'focus', name: 'Focus', location: 'local', selected: true }] })),
     ).toContain('data-trailing-placement="adjacent"');
+    // The dashboards keep it beside the last tab too, never on the far edge (HS2-YFKQT1).
     for (const mode of ['terminals', 'stats'] as const)
       expect(String(ProjectTabBar({ tabs: [{ id: 'focus', name: 'Focus', location: 'local' }], mode }))).toContain(
-        'data-trailing-placement="separate"',
+        'data-trailing-placement="adjacent"',
       );
   });
 

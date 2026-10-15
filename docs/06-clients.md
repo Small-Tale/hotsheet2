@@ -351,7 +351,8 @@ preview/download, server directory browser) are separate design work.
   list or columns, remembered in the workspace preferences across reloads; on a ticket view
   that click is a no-op (HS2-42T028). Add project stays immediately after the last project tab;
   only when the tabs overflow and the strip shrinks and scrolls does it end up beside the
-  ticket-view action (HS2-NE8JBS). Workspace Grid and Cross-project
+  ticket-view action (HS2-NE8JBS). The Workspace Grid and Cross-project Stats strips keep it
+  beside the last project tab too, never on the far edge (HS2-YFKQT1). Workspace Grid and Cross-project
   Stats retain their existing main-toolbar titles. Mobile retains its two compact project
   and view rows, including the New ticket action in the view row (HS2-9R1F91).
 
