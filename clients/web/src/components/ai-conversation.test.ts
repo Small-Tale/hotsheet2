@@ -102,7 +102,11 @@ describe('AIConversation', () => {
     expect(markup).toMatch(/data-has-description="true"[\s\S]*kui-toolbar-text__description/);
     // The DialogHeader groups the conversation actions under a localized label (HS2-M4X0WS).
     expect(markup).toMatch(/kui-toolbar__trailing[\s\S]*aria-label="Codex Conversation Actions"/);
-    expect(markup).toContain('Enter to send · Shift+Enter for a new line');
+    // The familiar Enter-to-send pattern needs no visible hint; the field still announces the
+    // shortcut to assistive technology (HS2-3VQSZD).
+    expect(markup).not.toContain('Enter to send');
+    expect(markup).not.toContain('aria-describedby="ai-conversation-draft-dialog-hint"');
+    expect(markup).toMatch(/aria-keyshortcuts="[^"]*Enter/);
     expect(markup).toContain('class="ai-conversation__send"');
     expect(markup).toContain('data-lucide="arrow-up"');
     expect(markup).toContain('Codex is working');

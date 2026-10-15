@@ -1548,8 +1548,9 @@ preview/download, server directory browser) are separate design work.
   choices carry visible labels, and user-authored Markdown keeps loud-surface contrast throughout
   its nested content.
   Its full-width composer floats above the message stream as one rounded, elevated surface:
-  the auto-growing textarea has no separate border, a small inner toolbar carries the keyboard
-  hint and round Lucide up-arrow send action, and the transcript reserves enough bottom padding
+  the auto-growing textarea has no separate border, a small inner toolbar carries the round
+  Lucide up-arrow send action without a visible keyboard hint (the field announces Enter through
+  `aria-keyshortcuts`; HS2-3VQSZD), and the transcript reserves enough bottom padding
   that its latest message remains readable above the overlay at wide and narrow sizes. In the
   bottom drawer, the embedded conversation remains height-bounded and the transcript alone
   scrolls, so a long conversation cannot push the floating input below the drawer viewport.

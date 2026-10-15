@@ -17570,6 +17570,14 @@ test('presents a legible, aligned AI chat without exposing its session id', asyn
   await expect(dialog).toBeVisible();
   await expect(host).toContainText('Ready for your first message');
   await expect(host).not.toContainText('Session thread-1');
+  // No visible Enter-to-send hint; the field still announces its shortcut (HS2-3VQSZD).
+  await expect(host).not.toContainText('Enter to send');
+  await expect(composer).toHaveAttribute('aria-keyshortcuts', 'Enter');
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-3vqszd-dialog-composer-1280.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(host).not.toContainText('Enter to send');
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-3vqszd-dialog-composer-390.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
   const modelControl = host.locator('[data-component="conversation-model-control"]');
   await expect(modelControl).toBeVisible();
   await expect(modelControl.locator('.ai-conversation__model-effort')).toBeVisible();
@@ -17644,6 +17652,9 @@ test('omits effort after selecting a model that does not support it', async ({ p
   const host = drawer.locator('[data-component="ai-conversation"]');
   await expect(host).toBeVisible();
   await expect(host.locator('.ai-conversation__model-effort')).toHaveText('medium');
+  await expect(host).not.toContainText('Enter to send');
+  await expect(host.getByLabel('Message Claude')).toHaveAttribute('aria-keyshortcuts', 'Enter');
+  await page.screenshot({ path: 'target/visual-captures/hs2-3vqszd-drawer-composer-1280.png' });
   await host.locator('[data-conversation-model-menu] [slot="trigger"]').click();
   const modelSubmenu = host.locator('[data-conversation-model-menu] > wa-dropdown-item').filter({ hasText: 'Model' });
   await modelSubmenu.hover();
@@ -17660,6 +17671,9 @@ test('omits effort after selecting a model that does not support it', async ({ p
   ).toBeVisible();
   await expect(host.getByRole('alert')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-8xrcyx-haiku-without-effort-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(host).not.toContainText('Enter to send');
+  await page.screenshot({ path: 'target/visual-captures/hs2-3vqszd-drawer-composer-390.png' });
   await page.setViewportSize({ width: 760, height: 800 });
   await expect(host).toBeVisible();
   await expect(host.locator('.ai-conversation__model-effort')).toHaveCount(0);

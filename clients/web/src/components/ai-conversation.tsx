@@ -487,6 +487,7 @@ export function AIConversation({
   ) : null;
   // Kerf Composer owns the raised frame, focus-within border, and the auto-growing borderless field;
   // `submitOnEnter` with `wireComposers` sends on Enter (KF-S5EG5K, HS2-94T958). The app form submits.
+  // No visible keyboard hint: the field announces Enter through `aria-keyshortcuts` (HS2-3VQSZD).
   const composer = readOnly ? null : (
     <form
       slot={presentation === 'dialog' ? 'footer' : undefined}
@@ -500,7 +501,6 @@ export function AIConversation({
         value={draft}
         placeholder={`Message ${tool}…`}
         maxRows={6}
-        hint={handsetDevice().value ? undefined : 'Enter to send · Shift+Enter for a new line'}
         disabled={busy}
         submitOnEnter
         actions={
