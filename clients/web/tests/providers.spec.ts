@@ -23505,31 +23505,43 @@ for (const surface of ['workspace', 'rail'] as const) {
           );
         }
       };
+      const outlineColors = new Set<string>();
       const expectState = async (state: 'none' | 'mixed' | 'all') => {
         await expect(star).toHaveAttribute('aria-pressed', state === 'mixed' ? 'mixed' : String(state === 'all'));
         await expect(icon).toHaveAttribute('data-up-next-state', state);
-        await expect(icon.locator('svg')).toHaveCount(state === 'mixed' ? 2 : 1);
-        // The stars carry the Up Next color through LucideIcon's color prop (HS2-GQ57YW), so the
-        // solid fill matches each svg's own color rather than a tinting wrapper's.
-        // Compare fill and color from one computed-style read, retried until it settles, rather than
-        // snapshotting the expected color once while a re-render may still be landing (HS2-VQWZ4H).
-        const outline = icon.locator('svg').first();
+        await expect(icon.locator('svg')).toHaveCount(state === 'none' ? 1 : 2);
+        // Every state draws one outline in the control's own text color; a starred selection adds a
+        // yellow solid fill beneath it, whole or clipped to the left half (HS2-YVH2JT). The fill
+        // carries the Up Next color through LucideIcon's color prop (HS2-GQ57YW). Compare fill and
+        // color from one computed-style read, retried until it settles (HS2-VQWZ4H).
+        const outline = icon.locator('.workspace-header__up-next-outline svg');
         const fillMatches = (target: typeof outline, expected: 'color' | 'none') =>
           target.evaluate((node, want) => {
             const style = getComputedStyle(node);
             return style.fill === (want === 'color' ? style.color : 'none');
           }, expected);
-        await expect.poll(() => fillMatches(outline, state === 'all' ? 'color' : 'none')).toBe(true);
-        if (state === 'mixed') {
-          await expect(icon.locator('.workspace-header__up-next-fill')).toHaveCSS(
-            'clip-path',
-            'inset(0px 50% 0px 0px)',
-          );
+        await expect.poll(() => fillMatches(outline, 'none')).toBe(true);
+        await expect(outline).not.toHaveCSS('color', 'rgb(255, 204, 0)');
+        // Every state's outline matches the empty state's gray, whatever the button's pressed color.
+        outlineColors.add(await outline.evaluate((node) => getComputedStyle(node).color));
+        if (state !== 'none') {
           const fill = icon.locator('.workspace-header__up-next-fill svg');
           await expect.poll(() => fillMatches(fill, 'color')).toBe(true);
           await expect(fill).toHaveCSS('color', 'rgb(255, 204, 0)');
+          await expect(icon.locator('.workspace-header__up-next-fill')).toHaveCSS(
+            'clip-path',
+            state === 'mixed' ? 'inset(0px 50% 0px 0px)' : 'none',
+          );
+          // The outline paints above the fill, so its gray edge stays crisp over the yellow.
+          expect(
+            await icon.evaluate(
+              (node) => node.lastElementChild?.classList.contains('workspace-header__up-next-outline') ?? false,
+            ),
+          ).toBe(true);
         }
-        if (state !== 'none') await expect(outline).toHaveCSS('color', 'rgb(255, 204, 0)');
+        await star.locator('xpath=..').screenshot({
+          path: `target/visual-captures/hs2-yvh2jt-star-${state}-${surface}-${theme}.png`,
+        });
       };
       await expect(star).toBeDisabled();
       await expect(controls.locator('.workspace-header__utility-group wa-button')).toHaveCount(0);
@@ -23613,6 +23625,8 @@ for (const surface of ['workspace', 'rail'] as const) {
       await expect(star).toBeEnabled();
       await star.click();
       await expectState('all');
+      // Enabled none, mixed, and all states drew one outline color (HS2-YVH2JT).
+      expect([...outlineColors]).toHaveLength(1);
       await select('HS2-DEMO01', true, false);
       await expect(star).toBeDisabled();
       await expectState('none');

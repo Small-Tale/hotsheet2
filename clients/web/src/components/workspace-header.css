@@ -35,11 +35,15 @@
   background: transparent;
   box-shadow: none;
 }
-/* The half fill is an app-owned span clipping a solid LucideIcon star (HS2-EZ1N7Z, HS2-ZFFCHW). */
-.workspace-header__up-next-fill {
+/* App-owned layers of one star (HS2-EZ1N7Z, HS2-ZFFCHW, HS2-YVH2JT): the yellow solid fill sits
+   under the outline, so the filled and half states keep the empty state's outline color. */
+.workspace-header__up-next-fill,
+.workspace-header__up-next-outline {
   position: absolute;
   display: block;
   inset: 0;
+}
+.workspace-header__up-next-fill[data-fill='half'] {
   clip-path: inset(0 50% 0 0);
 }
 /* The standalone Empty Trash wa-button sizes to its label inside TabBar's end zone. */

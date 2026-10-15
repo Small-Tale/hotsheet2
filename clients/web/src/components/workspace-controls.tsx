@@ -62,16 +62,30 @@ function workspaceUpNextDetails(state: WorkspaceUpNextState): string {
 }
 
 function WorkspaceUpNextIcon({ state }: { state: WorkspaceUpNextState }) {
-  // Starred selections take the Up Next color; an unstarred one inherits the control's text color.
-  const color = state === 'none' ? undefined : foregroundColorVar('--hs-ticket-state-up-next');
+  // One glyph with a fill level (HS2-YVH2JT): every state draws the same outline in the control's
+  // text color, and a starred selection adds the Up Next yellow inside it, whole or left half.
   return (
     <span class="workspace-header__up-next-icon" data-up-next-state={state} aria-hidden="true">
-      <LucideIcon icon={Star} name="star" appearance={state === 'all' ? 'solid' : 'outline'} color={color} />
-      {state === 'mixed' && (
-        <span class="workspace-header__up-next-fill">
-          <LucideIcon icon={Star} name="star" appearance="solid" color={color} />
+      {state !== 'none' && (
+        <span class="workspace-header__up-next-fill" data-fill={state === 'mixed' ? 'half' : 'full'}>
+          <LucideIcon
+            icon={Star}
+            name="star"
+            appearance="solid"
+            color={foregroundColorVar('--hs-ticket-state-up-next')}
+          />
         </span>
       )}
+      <span class="workspace-header__up-next-outline">
+        {/* The toolbar's unselected control color, so a pressed (all-starred) button's selected text
+            color cannot tint the outline away from the empty state's gray. */}
+        <LucideIcon
+          icon={Star}
+          name="star"
+          appearance="outline"
+          color={foregroundColorVar('--kui-toolbar-control-color')}
+        />
+      </span>
     </span>
   );
 }

@@ -1207,6 +1207,8 @@ preview/download, server directory browser) are separate design work.
   The workspace and grid-rail selection toolbar uses native group
   buttons and an empty, yellow half-filled, or yellow filled Up Next star for none,
   some, or all selected tickets queued, with matching false/mixed/true pressed state.
+  The three stars share the empty state's gray outline; only the yellow inner fill changes
+  (HS2-YVH2JT).
   The selected star has no extra colored border; keyboard focus still has a visible ring.
   None/mixed toggles add the eligible selection; all toggles remove it. Completed,
   Verified, other ineligible statuses, empty selections, and provider-disabled
