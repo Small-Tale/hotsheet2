@@ -244,8 +244,12 @@ stream-json [--resume <id>]`; input `{"type":"user",…}`; output `system`/`init
 > `TurnControl::on_interrupt` callback that only wakes the turn, which then stops the process
 > on its owner thread. When no event arrives within the 600 s turn timeout, the turn stops the
 > process the same way and fails with a timeout diagnostic instead of leaving it working
-> unobserved. Only the `claude` process itself is signalled; tool subprocesses that a
-> force-killed Claude leaves behind are tracked by HS2-M08WMC.
+> unobserved. The polite SIGTERM reaches only the `claude` process, which cleans up its own
+> tools. When it has to be force-killed, its descendant tree (Bash tool commands, MCP
+> servers) goes too: each descendant is frozen with SIGSTOP, the tree is re-walked until no
+> new process appears, and then every frozen process and `claude` get SIGKILL. The turn
+> process deliberately stays in the caller's process group, so a foreground
+> `hotsheet-cli trigger` still delivers terminal Ctrl-C to it (HS2-M08WMC).
 > **Live-verified (2026-08-21, isolated temp cwd + strict empty MCP config → nothing else
 > reachable):** a real turn streamed `Output("pong")` then `Done(Completed)` with the
 > session id captured and the HS1 dev instance untouched; gated ignored test

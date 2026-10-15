@@ -155,6 +155,11 @@ impl ProcessSignals for ChildSignals {
     fn kill(&mut self) {
         let mut child = self.child.lock_or_recover();
         if matches!(child.try_wait(), Ok(None)) {
+            // A process that ignored SIGTERM may leave tool subprocesses behind; take its whole
+            // descendant tree down with it (HS2-M08WMC). The child keeps sharing our process
+            // group, so a foreground CLI's terminal Ctrl-C still reaches it.
+            #[cfg(unix)]
+            kill_descendants(child.id());
             let _ = child.kill();
             let _ = child.wait();
         }
@@ -162,6 +167,72 @@ impl ProcessSignals for ChildSignals {
 
     fn has_exited(&mut self) -> bool {
         !matches!(self.child.lock_or_recover().try_wait(), Ok(None))
+    }
+}
+
+/// Every live `(pid, parent pid)` pair, from `ps` (macOS and Linux alike).
+#[cfg(unix)]
+fn process_table() -> Vec<(u32, u32)> {
+    let Ok(output) = std::process::Command::new("ps")
+        .args(["-A", "-o", "pid=", "-o", "ppid="])
+        .stderr(Stdio::null())
+        .output()
+    else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            Some((fields.next()?.parse().ok()?, fields.next()?.parse().ok()?))
+        })
+        .collect()
+}
+
+/// The descendants of `root` in `table`, parents before children.
+#[cfg_attr(not(unix), allow(dead_code))]
+fn descendants_of(root: u32, table: &[(u32, u32)]) -> Vec<u32> {
+    let mut found = Vec::new();
+    let mut frontier = vec![root];
+    while let Some(parent) = frontier.pop() {
+        for &(pid, ppid) in table {
+            if ppid == parent && pid != root && !found.contains(&pid) {
+                found.push(pid);
+                frontier.push(pid);
+            }
+        }
+    }
+    found
+}
+
+/// Force-stop every descendant of the still-running, unreaped `root` (HS2-M08WMC). Each
+/// discovered process is frozen with SIGSTOP so it cannot start more, and the tree is walked
+/// again until no new process appears; then every frozen process gets SIGKILL. While `root`
+/// is alive the tree stays parented to it, so no pid here has been reparented or recycled.
+#[cfg(unix)]
+fn kill_descendants(root: u32) {
+    let mut frozen: Vec<u32> = Vec::new();
+    for _ in 0..8 {
+        let fresh: Vec<u32> = descendants_of(root, &process_table())
+            .into_iter()
+            .filter(|pid| !frozen.contains(pid))
+            .collect();
+        if fresh.is_empty() {
+            break;
+        }
+        for &pid in &fresh {
+            // SAFETY: `pid` was a live descendant of our unreaped child a moment ago.
+            unsafe {
+                libc::kill(pid as libc::pid_t, libc::SIGSTOP);
+            }
+        }
+        frozen.extend(fresh);
+    }
+    for &pid in frozen.iter().rev() {
+        // SAFETY: as above; SIGKILL also ends a stopped process.
+        unsafe {
+            libc::kill(pid as libc::pid_t, libc::SIGKILL);
+        }
     }
 }
 
@@ -223,6 +294,83 @@ mod tests {
             StopOutcome::AlreadyExited,
             "a repeated stop signals nothing"
         );
+    }
+
+    #[test]
+    fn descendants_of_walks_the_whole_tree_and_ignores_other_processes() {
+        let table = [
+            (10, 1),
+            (11, 10),
+            (12, 11),
+            (13, 10),
+            (20, 1),
+            (21, 20),
+            (14, 13),
+        ];
+        let mut found = descendants_of(10, &table);
+        found.sort_unstable();
+        assert_eq!(found, vec![11, 12, 13, 14]);
+        assert!(descendants_of(12, &table).is_empty());
+        assert!(descendants_of(99, &table).is_empty());
+    }
+
+    #[cfg(unix)]
+    fn alive(pid: i32) -> bool {
+        // SAFETY: signal 0 only checks that the pid exists.
+        unsafe { libc::kill(pid, 0) == 0 }
+    }
+
+    /// HS2-M08WMC: a stand-in `claude` that ignores SIGTERM and has started a tool process
+    /// (itself with a child) loses its whole tree when it is force-killed, not just itself.
+    #[cfg(unix)]
+    #[test]
+    fn a_forced_stop_also_kills_the_tool_processes_the_child_started() {
+        let child = shell(
+            "trap '' TERM; sh -c 'sleep 300 & echo $!; trap \"\" TERM; while :; do sleep 0.05; done' & \
+             echo $!; while :; do sleep 0.05; done",
+        );
+        let mut signals = child.signals();
+        let (_writer, mut reader) = child.into_halves();
+        let mut pids: Vec<i32> = (0..2)
+            .map(|_| reader.recv().unwrap().unwrap().trim().parse().unwrap())
+            .collect();
+        pids.sort_unstable();
+        assert!(
+            pids.iter().all(|pid| alive(*pid)),
+            "the tool tree is running"
+        );
+        assert_eq!(
+            stop_process(signals.as_mut(), Duration::from_millis(200)),
+            StopOutcome::Killed
+        );
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while pids.iter().any(|pid| alive(*pid)) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(
+            pids.iter().all(|pid| !alive(*pid)),
+            "orphaned tool processes survived the forced stop: {pids:?}"
+        );
+    }
+
+    /// A cooperative child that exits on SIGTERM is never escalated, so its tree is left to it.
+    #[cfg(unix)]
+    #[test]
+    fn a_cooperative_stop_leaves_cleanup_to_the_child() {
+        let child =
+            shell("sleep 300 & echo $!; trap 'kill $!; exit 0' TERM; while :; do sleep 0.05; done");
+        let mut signals = child.signals();
+        let (_writer, mut reader) = child.into_halves();
+        let sleeper: i32 = reader.recv().unwrap().unwrap().trim().parse().unwrap();
+        assert_eq!(
+            stop_process(signals.as_mut(), Duration::from_secs(5)),
+            StopOutcome::Terminated
+        );
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while alive(sleeper) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!alive(sleeper), "the child cleaned up its own tool process");
     }
 
     #[test]
