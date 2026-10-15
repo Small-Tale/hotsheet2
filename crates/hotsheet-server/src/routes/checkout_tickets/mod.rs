@@ -99,7 +99,7 @@ pub(crate) fn checkout_ticket_owner(
             state
                 .host
                 .get(&source.connection_id)
-                .map(|entry| ops::resolve(&entry.store, id))
+                .map(|entry| entry.resolve(id))
                 .transpose()?
                 .flatten()
                 .is_some()
@@ -142,7 +142,8 @@ pub(crate) fn resolve_project_ticket_ref(
                 format!("checkout links an unhosted git source: {}", source.locator),
             )
         })?;
-        ops::resolve(&entry.store, &reference.native_id)?
+        entry
+            .resolve(&reference.native_id)?
             .ok_or_else(|| ApiError::not_found(&reference.qualified()))?
             .id
             .to_string()
@@ -262,7 +263,7 @@ fn read_checkout_ticket_source(
                 Ok(None)
             };
         };
-        let Some(ticket) = ops::resolve(&entry.store, id)? else {
+        let Some(ticket) = entry.resolve(id)? else {
             return Ok(None);
         };
         let store = multistore::store_url_id(&entry.store);
@@ -797,7 +798,7 @@ pub(crate) async fn restore_checkout_ticket(
 }
 
 fn do_restore(state: &AppState, entry: &StoreEntry, id: &str) -> Result<ApiTicket, ApiError> {
-    let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
+    let ticket = entry.resolve(id)?.ok_or_else(|| ApiError::not_found(id))?;
     let restored = ops::restore(&entry.store, &ticket.id, now())?;
     state.changed_in(entry, "updated", &restored);
     api_ticket(entry, &restored)

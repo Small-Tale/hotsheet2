@@ -125,7 +125,7 @@ pub(crate) fn do_update_with_ticket(
             req.expected_token.as_deref(),
         );
     }
-    let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
+    let ticket = entry.resolve(id)?.ok_or_else(|| ApiError::not_found(id))?;
     let note_text = req.note.clone();
     if req
         .expected_token
@@ -274,7 +274,7 @@ pub(crate) fn do_assign(
     id: &str,
     req: AssignReq,
 ) -> Result<ApiTicket, ApiError> {
-    let before = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
+    let before = entry.resolve(id)?.ok_or_else(|| ApiError::not_found(id))?;
     let at = now();
     let reviews = req
         .reviews
@@ -350,7 +350,7 @@ pub(crate) fn do_close(
     source_project_id: Option<&str>,
     req: CloseReq,
 ) -> Result<ApiTicket, ApiError> {
-    let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
+    let ticket = entry.resolve(id)?.ok_or_else(|| ApiError::not_found(id))?;
     let reason: CloseReason = opt_parse(Some(req.reason.as_str()))?.expect("reason present");
     let actor = parse_actor(req.actor.as_ref())?;
     hotsheet_ticketing::actor::check_completion(
@@ -361,7 +361,8 @@ pub(crate) fn do_close(
     )?;
     let dup = match req.duplicate_of {
         Some(DuplicateOfReq::Legacy(reference)) => {
-            let target = ops::resolve(&entry.store, &reference)?
+            let target = entry
+                .resolve(&reference)?
                 .ok_or_else(|| ApiError::not_found(&reference))?;
             if target.id == ticket.id {
                 return Err(ApiError::new(
@@ -422,7 +423,9 @@ pub(crate) async fn delete_ticket_note(
     Path((id, note_id)): Path<(String, String)>,
 ) -> Result<Json<ApiTicket>, ApiError> {
     let entry = state.default_entry();
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let ticket = entry
+        .resolve(&id)?
+        .ok_or_else(|| ApiError::not_found(&id))?;
     let note_id = Ulid::from_string(&note_id)
         .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid note ULID"))?;
     let updated = ops::delete_note(&entry.store, &ticket.id, &note_id, now())?;
@@ -437,7 +440,9 @@ pub(crate) async fn add_ticket_attachment(
     body: Bytes,
 ) -> Result<(StatusCode, Json<ApiTicket>), ApiError> {
     let entry = state.default_entry();
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let ticket = entry
+        .resolve(&id)?
+        .ok_or_else(|| ApiError::not_found(&id))?;
     let filename = attachment_filename(&headers)?;
     let metadata = attachment_metadata(&headers)?;
     let (updated, _) = entry.store.write_attachment_with_metadata(

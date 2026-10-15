@@ -943,7 +943,12 @@ impl FsStore {
             path: path.to_path_buf(),
             source,
         })?;
-        let mut ticket = parse_file(&text).map_err(|source| StoreError::Parse {
+        self.parse_ticket_text(path, &text)
+    }
+
+    /// Parse already-read ticket file text exactly as [`FsStore::read_ticket_at`] would.
+    fn parse_ticket_text(&self, path: &Path, text: &str) -> Result<Ticket, StoreError> {
+        let mut ticket = parse_file(text).map_err(|source| StoreError::Parse {
             path: path.to_path_buf(),
             source,
         })?;
@@ -952,6 +957,56 @@ impl FsStore {
             .retain(|attachment| attachment.filename != FINDER_METADATA_FILE);
         self.add_legacy_attachment_metadata(&mut ticket)?;
         Ok(ticket)
+    }
+
+    /// Find the ticket carrying `slug` (ASCII case-insensitive) by walking every ticket
+    /// file: the index-free fallback behind [`crate::ops::resolve`] (HS2-ZXFNE6).
+    ///
+    /// Each file's frontmatter `slug:` line is read first and only a possible match is
+    /// fully parsed, so a lookup costs one read per file rather than one parse. A file
+    /// whose slug line is missing or not a plain token is parsed, so the pre-filter can
+    /// never hide a match. When several files carry the slug the lowest ULID wins, the
+    /// order a sorted [`FsStore::list_tickets`] scan used. An unparseable file only fails
+    /// the lookup when its recoverable slug is the one requested; any other corrupt file
+    /// cannot hold the slug and is skipped (HS2-PRVPCQ).
+    pub fn find_ticket_by_slug(&self, slug: &str) -> Result<Option<Ticket>, StoreError> {
+        let mut found: Option<Ticket> = None;
+        for path in self.ticket_file_paths()? {
+            let text = match fs::read_to_string(&path) {
+                Ok(text) => text,
+                // Deleted between listing and reading: it holds nothing now.
+                Err(source) if source.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(source) => {
+                    return Err(StoreError::IoAt {
+                        operation: "reading ticket",
+                        path,
+                        source,
+                    });
+                }
+            };
+            let declared = frontmatter_value(&text, "slug");
+            if declared
+                .as_deref()
+                .is_some_and(|value| is_plain_slug(value) && !value.eq_ignore_ascii_case(slug))
+            {
+                continue;
+            }
+            let ticket = match self.parse_ticket_text(&path, &text) {
+                Ok(ticket) => ticket,
+                Err(error) => {
+                    if declared.is_some_and(|value| value.eq_ignore_ascii_case(slug)) {
+                        return Err(error);
+                    }
+                    continue;
+                }
+            };
+            if ticket.slug.eq_ignore_ascii_case(slug)
+                && found.as_ref().is_none_or(|best| ticket.id < best.id)
+            {
+                found = Some(ticket);
+            }
+        }
+        Ok(found)
     }
 
     /// The attachments directory for a ticket: `attachments/<ULID>/`.
@@ -1817,16 +1872,31 @@ pub fn recover_ticket_identity(path: &Path) -> (Option<Ulid>, Option<String>) {
     (id, slug)
 }
 
+/// Whether a frontmatter value is a bare slug token the YAML parser reads back verbatim,
+/// so comparing it textually is exact. Anything else (escapes, comments, spaces) is left
+/// to the real parser.
+fn is_plain_slug(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
 /// Pull a top-level scalar `key: value` from a file's leading `---` frontmatter block,
 /// tolerating a malformed body below it. Returns the trimmed, unquoted value, or `None`
 /// when there is no readable frontmatter or the key is absent/empty. Only exact,
 /// unindented top-level keys match (a nested/indented key is ignored).
 fn frontmatter_value(text: &str, key: &str) -> Option<String> {
+    // Scans only the leading block, without copying the file: the slug-resolution walk
+    // calls this once per ticket file (HS2-ZXFNE6).
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
-    let normalized = text.replace("\r\n", "\n");
-    let rest = normalized.strip_prefix("---\n")?;
-    let frontmatter = rest.split_once("\n---").map_or(rest, |(fm, _)| fm);
-    for line in frontmatter.lines() {
+    let rest = text
+        .strip_prefix("---\n")
+        .or_else(|| text.strip_prefix("---\r\n"))?;
+    for line in rest.lines() {
+        if line.starts_with("---") {
+            break;
+        }
         let Some(after) = line.strip_prefix(key).and_then(|a| a.strip_prefix(':')) else {
             continue;
         };

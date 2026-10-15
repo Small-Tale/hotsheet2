@@ -74,7 +74,9 @@ pub(crate) async fn get_store_ticket(
     Path((store_id, id)): Path<(String, String)>,
 ) -> Result<Json<ApiTicket>, ApiError> {
     let entry = scoped_entry(&state, &store_id)?;
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let ticket = entry
+        .resolve(&id)?
+        .ok_or_else(|| ApiError::not_found(&id))?;
     Ok(Json(api_ticket(&entry, &ticket)?))
 }
 

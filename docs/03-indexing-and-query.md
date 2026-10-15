@@ -225,6 +225,21 @@ full walk.
 is stale, or when the index file is missing/corrupt): drop and rebuild from a full
 store walk. Because the index is disposable this is always safe.
 
+**Resolving one ticket by slug (HS2-ZXFNE6).** A ULID names its file directly. A slug
+(ASCII case-insensitive) is resolved index-first: the server asks the store index for the
+candidate ULIDs carrying that slug (`Index::slug_candidates`, lowest ULID first), reads
+only the first candidate's file, and returns it when the file still carries the slug
+(`hotsheet_index::resolve_ticket`, used by every server route through
+`StoreEntry::resolve`). The files stay authoritative, so a miss, a stale row (the ticket
+was renamed, moved, or deleted since it was indexed), or an index that cannot answer falls
+back to the store walk, which gives the same answer as before. The walk
+(`FsStore::find_ticket_by_slug`, behind `ops::resolve` for index-free callers such as the
+CLI and MCP) reads each file's frontmatter `slug:` line and fully parses only possible
+matches. It parses a file whose slug line is not a plain token, keeps lowest-ULID-wins for
+duplicate slugs, and lets a corrupt file fail only the lookup of its own recoverable slug.
+On a generated 3,000-ticket store (debug build), a slug `GET /tickets/<SLUG>` dropped from
+about 1.7 s to about 3 ms; a miss, which still walks, dropped to about 130 ms.
+
 ## 3.5 The query surface
 
 One query API, consumed by the server (REST/WS) and the CLI:

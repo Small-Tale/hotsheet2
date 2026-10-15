@@ -122,6 +122,9 @@ pub use hotsheet_ticketing::TicketRow;
 mod prune;
 pub use prune::{PruneReport, prune_stale_index_files};
 
+mod resolve;
+pub use resolve::resolve_ticket;
+
 /// The small projection needed to display a reverse duplicate link.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuplicateBacklinkRow {
@@ -409,6 +412,23 @@ impl Index {
             )
             .optional()?;
         Ok(legacy.and_then(|id| Ulid::from_string(&id).ok()))
+    }
+
+    /// Every indexed ticket id whose slug equals `slug` (ASCII case-insensitive), lowest
+    /// ULID first. A slug is normally unique, but a derived-code collision or a moved
+    /// tombstone can share it; the caller verifies each candidate against its file
+    /// (HS2-ZXFNE6).
+    pub fn slug_candidates(&self, slug: &str) -> Result<Vec<Ulid>, IndexError> {
+        let mut statement = self.conn.prepare(
+            "SELECT id FROM tickets WHERE store_id=?1 AND slug=?2 COLLATE NOCASE ORDER BY id",
+        )?;
+        let ids = statement
+            .query_map(params![self.store_id, slug], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids
+            .into_iter()
+            .filter_map(|id| Ulid::from_string(&id).ok())
+            .collect())
     }
 
     /// Record the bytes currently present for an already-indexed ticket without

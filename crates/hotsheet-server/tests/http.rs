@@ -20349,3 +20349,86 @@ async fn human_edits_an_ai_feedback_prompt_only_when_explicitly_requested() {
     assert_eq!(edited["notes"][0]["kind"], "feedback_needed");
     assert_eq!(edited["notes"][0]["human_edited"], true);
 }
+
+/// HS2-ZXFNE6: slug routes resolve through the store index, verify the candidate file, and
+/// fall back to the store walk when the index is stale (an external rename or create).
+#[tokio::test]
+async fn slug_routes_resolve_through_the_index_and_survive_a_stale_index() {
+    let (dir, st) = state();
+    let application = app(st);
+    let created = body_json(
+        application
+            .clone()
+            .oneshot(authed("POST", "/tickets", Some(r#"{"title":"Indexed"}"#)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_owned();
+    let slug = created["slug"].as_str().unwrap().to_owned();
+
+    // Fast path, case-insensitive, for both reads and writes.
+    let fetched = application
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/tickets/{}", slug.to_lowercase()),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(fetched.status(), StatusCode::OK);
+    assert_eq!(body_json(fetched).await["id"], id.as_str());
+    let patched = application
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/tickets/{slug}"),
+            Some(r#"{"title":"Renamed title"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(patched.status(), StatusCode::OK);
+
+    // External edits the in-memory index never saw: a slug rewrite and a new file.
+    let store = FsStore::open(dir.path()).unwrap();
+    let ulid = hotsheet_model::Ulid::from_string(&id).unwrap();
+    let mut renamed = store.read_ticket(&ulid).unwrap();
+    renamed.slug = "HS-EXTERN".into();
+    store.write_ticket(&renamed).unwrap();
+    let external = hotsheet_ticketing::ops::create(
+        &store,
+        hotsheet_model::Ulid::new(),
+        "HS",
+        hotsheet_model::Timestamp::new("2026-10-15T00:00:00Z"),
+        hotsheet_ticketing::ops::NewTicket {
+            title: "Created outside the server".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    let stale = application
+        .clone()
+        .oneshot(authed("GET", &format!("/tickets/{slug}"), None))
+        .await
+        .unwrap();
+    assert_eq!(
+        stale.status(),
+        StatusCode::NOT_FOUND,
+        "stale index row must not win"
+    );
+    let by_new_slug = application
+        .clone()
+        .oneshot(authed("GET", "/tickets/hs-extern", None))
+        .await
+        .unwrap();
+    assert_eq!(by_new_slug.status(), StatusCode::OK);
+    assert_eq!(body_json(by_new_slug).await["id"], id.as_str());
+    let unindexed = application
+        .oneshot(authed("GET", &format!("/tickets/{}", external.slug), None))
+        .await
+        .unwrap();
+    assert_eq!(unindexed.status(), StatusCode::OK);
+    assert_eq!(body_json(unindexed).await["id"], external.id.to_string());
+}

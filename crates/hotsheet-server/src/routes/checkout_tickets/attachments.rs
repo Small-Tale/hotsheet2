@@ -19,8 +19,8 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::Response;
 use hotsheet_model::{Ticket, Ulid};
+use hotsheet_ticketing::ApiTicket;
 use hotsheet_ticketing::wire::ApiAttachment;
-use hotsheet_ticketing::{ApiTicket, ops};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -111,7 +111,9 @@ pub(crate) fn checkout_git_ticket(
             "checkout links an unhosted git source",
         )
     })?;
-    let ticket = ops::resolve(&entry.store, &native_id)?.ok_or_else(|| ApiError::not_found(id))?;
+    let ticket = entry
+        .resolve(&native_id)?
+        .ok_or_else(|| ApiError::not_found(id))?;
     Ok((entry, ticket))
 }
 
@@ -680,7 +682,10 @@ pub(crate) async fn update_ticket_attachment_annotations(
     Path((id, attachment_id)): Path<(String, String)>,
     Json(body): Json<UpdateAttachmentAnnotationsBody>,
 ) -> Result<Json<ApiTicket>, ApiError> {
-    let ticket = ops::resolve(&state.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let ticket = state
+        .default_entry()
+        .resolve(&id)?
+        .ok_or_else(|| ApiError::not_found(&id))?;
     let attachment_id =
         Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
     let actor = parse_actor(body.actor.as_ref())?;

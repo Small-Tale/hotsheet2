@@ -46,7 +46,9 @@ pub(crate) async fn claim_ticket(
     Json(req): Json<ClaimReq>,
 ) -> Result<Json<ApiTicket>, ApiError> {
     let entry = state.default_entry();
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let ticket = entry
+        .resolve(&id)?
+        .ok_or_else(|| ApiError::not_found(&id))?;
     let now = now();
     let lease = now.plus_minutes(req.lease_minutes.unwrap_or(DEFAULT_LEASE_MINUTES));
     let worker = req.worker.unwrap_or_else(|| "worker".into());
@@ -75,7 +77,9 @@ pub(crate) async fn release_ticket(
     Json(req): Json<ReleaseReq>,
 ) -> Result<Json<ApiTicket>, ApiError> {
     let entry = state.default_entry();
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let ticket = entry
+        .resolve(&id)?
+        .ok_or_else(|| ApiError::not_found(&id))?;
     let worker = req.worker.unwrap_or_else(|| "worker".into());
     let released = ops::release(
         &entry.store,
@@ -95,7 +99,9 @@ pub(crate) async fn renew_ticket(
     Json(req): Json<RenewReq>,
 ) -> Result<Json<ApiTicket>, ApiError> {
     let entry = state.default_entry();
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let ticket = entry
+        .resolve(&id)?
+        .ok_or_else(|| ApiError::not_found(&id))?;
     let now = now();
     let lease = now.plus_minutes(req.lease_minutes.unwrap_or(DEFAULT_LEASE_MINUTES));
     let worker = req.worker.unwrap_or_else(|| "worker".into());

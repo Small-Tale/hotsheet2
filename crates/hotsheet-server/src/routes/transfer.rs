@@ -60,7 +60,7 @@ pub(crate) async fn copy_ticket_route(
 ) -> Result<(StatusCode, Json<CopyResult>), ApiError> {
     let src = state.default_entry();
     let dest = scoped_entry(&state, &body.to)?;
-    let ticket = ops::resolve(&src.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let ticket = src.resolve(&id)?.ok_or_else(|| ApiError::not_found(&id))?;
     let new = ops::copy_ticket(&src.store, &dest.store, &ticket.id, Ulid::new(), now())?;
     state.changed_in(&dest, "created", &new);
     Ok((
@@ -89,7 +89,7 @@ pub(crate) async fn move_ticket_route(
     }
     let src = state.default_entry();
     let dest = scoped_entry(&state, &body.to)?;
-    let ticket = ops::resolve(&src.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let ticket = src.resolve(&id)?.ok_or_else(|| ApiError::not_found(&id))?;
     // Record the destination's canonical root as `moved_to_store` — the identity the
     // `StoreRegistry` follows when resolving the ULID to its live instance.
     let dest_id = StoreRegistry::store_id(&dest.store);

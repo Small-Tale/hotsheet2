@@ -53,7 +53,9 @@ pub(crate) async fn restore_provider_ticket(
             ),
         ));
     };
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let ticket = entry
+        .resolve(&id)?
+        .ok_or_else(|| ApiError::not_found(&id))?;
     let restored = ops::restore(&entry.store, &ticket.id, now())?;
     state.changed_in(&entry, "updated", &restored);
     Ok(Json(api_ticket(&entry, &restored)?))
@@ -149,7 +151,7 @@ pub(crate) fn do_rate_ai_feedback(
     expected_token: Option<&str>,
 ) -> Result<(ApiTicket, Ticket), ApiError> {
     let (feedback, note_actor) = parse_ai_feedback(feedback, actor)?;
-    let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
+    let ticket = entry.resolve(id)?.ok_or_else(|| ApiError::not_found(id))?;
     if expected_token.is_some_and(|expected| expected != ticket.updated_at.as_str()) {
         return Err(ApiError::new(
             StatusCode::CONFLICT,

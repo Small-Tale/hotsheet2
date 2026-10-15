@@ -373,6 +373,10 @@ fn filename_glob_matches(pattern: &str, filename: &str) -> bool {
 }
 
 /// Resolve a ticket by ULID (exact) or by slug (case-insensitive).
+///
+/// A slug is found by [`FsStore::find_ticket_by_slug`], a pre-filtered walk of the store.
+/// Callers that hold a store index resolve through `hotsheet_index::resolve_ticket`
+/// instead, which reads only the indexed candidate file (HS2-ZXFNE6).
 pub fn resolve(store: &FsStore, needle: &str) -> Result<Option<Ticket>, StoreError> {
     if let Ok(id) = Ulid::from_string(needle) {
         return match store.read_ticket(&id) {
@@ -381,11 +385,7 @@ pub fn resolve(store: &FsStore, needle: &str) -> Result<Option<Ticket>, StoreErr
             Err(e) => Err(e),
         };
     }
-    let wanted = needle.to_uppercase();
-    Ok(store
-        .list_tickets()?
-        .into_iter()
-        .find(|t| t.slug.eq_ignore_ascii_case(&wanted)))
+    store.find_ticket_by_slug(needle)
 }
 
 fn matches_text(t: &Ticket, needle_lower: &str) -> bool {
@@ -2486,6 +2486,98 @@ mod tests {
 
     fn ts(s: &str) -> Timestamp {
         Timestamp::new(s)
+    }
+
+    fn titled(store: &FsStore, title: &str) -> Ticket {
+        create(
+            store,
+            Ulid::new(),
+            "HS",
+            ts("2026-10-15T00:00:00Z"),
+            NewTicket {
+                title: title.into(),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    }
+
+    /// Rewrite a ticket file's `slug:` frontmatter line verbatim.
+    fn set_slug_line(store: &FsStore, id: &Ulid, line: &str) {
+        let path = store.ticket_path(id);
+        let text = std::fs::read_to_string(&path).unwrap();
+        let rewritten = text
+            .lines()
+            .map(|l| if l.starts_with("slug:") { line } else { l })
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&path, rewritten + "\n").unwrap();
+    }
+
+    #[test]
+    fn slug_resolution_is_case_insensitive_and_matches_the_full_parse() {
+        let (_dir, store) = store();
+        let wanted = titled(&store, "wanted");
+        titled(&store, "other");
+        let found = resolve(&store, &wanted.slug.to_lowercase())
+            .unwrap()
+            .unwrap();
+        assert_eq!(found, store.read_ticket(&wanted.id).unwrap());
+        assert!(resolve(&store, "HS-ZZZZZZ").unwrap().is_none());
+    }
+
+    #[test]
+    fn slug_prefilter_parses_any_line_it_cannot_compare_exactly() {
+        // HS2-ZXFNE6: the frontmatter pre-filter may skip only a file whose plain slug
+        // token differs; a quoted or commented line goes to the real parser.
+        let (_dir, store) = store();
+        let quoted = titled(&store, "quoted");
+        let commented = titled(&store, "commented");
+        set_slug_line(&store, &quoted.id, "slug: \"HS-QUOTED\"");
+        set_slug_line(&store, &commented.id, "slug: HS-NOTED # trailing comment");
+        assert_eq!(resolve(&store, "hs-quoted").unwrap().unwrap().id, quoted.id);
+        assert_eq!(
+            resolve(&store, "HS-NOTED").unwrap().unwrap().id,
+            commented.id
+        );
+    }
+
+    #[test]
+    fn duplicate_slugs_resolve_to_the_lowest_ulid() {
+        let (_dir, store) = store();
+        let first = titled(&store, "first");
+        let second = titled(&store, "second");
+        let (low, high) = if first.id < second.id {
+            (first, second)
+        } else {
+            (second, first)
+        };
+        let mut copy = store.read_ticket(&high.id).unwrap();
+        copy.slug = low.slug.clone();
+        store.write_ticket(&copy).unwrap();
+        assert_eq!(resolve(&store, &low.slug).unwrap().unwrap().id, low.id);
+    }
+
+    #[test]
+    fn a_corrupt_file_fails_only_the_lookup_of_its_own_slug() {
+        // HS2-ZXFNE6: the old full-parse walk failed every slug lookup when any one file
+        // was corrupt (HS2-PRVPCQ); now only a lookup that may target that file fails.
+        let (_dir, store) = store();
+        let healthy = titled(&store, "healthy");
+        let broken = titled(&store, "broken");
+        let path = store.ticket_path(&broken.id);
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(&path, text.replace("<!-- hotsheet:body:end -->", "")).unwrap();
+        assert!(
+            store.read_ticket(&broken.id).is_err(),
+            "fixture must be corrupt"
+        );
+        assert_eq!(
+            resolve(&store, &healthy.slug).unwrap().unwrap().id,
+            healthy.id
+        );
+        assert!(resolve(&store, &broken.slug).is_err());
+        assert!(resolve(&store, "HS-ZZZZZZ").unwrap().is_none());
     }
 
     #[test]

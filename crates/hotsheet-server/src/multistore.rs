@@ -30,6 +30,17 @@ pub struct StoreEntry {
     pub corrupt: Arc<Mutex<hotsheet_ticketing::CorruptTicketCache>>,
 }
 
+impl StoreEntry {
+    /// Resolve a ULID or slug in this store through its index, verifying the candidate
+    /// file and falling back to the store walk on a miss or stale entry (HS2-ZXFNE6).
+    /// The index lock is held only for the candidate query, never across file reads.
+    pub fn resolve(&self, needle: &str) -> Result<Option<Ticket>, StoreError> {
+        hotsheet_index::resolve_ticket(&self.store, needle, |slug| {
+            self.index.lock_or_recover().slug_candidates(slug)
+        })
+    }
+}
+
 /// The stable, URL-safe id for a store: the first 16 hex of the canonical-root hash — the
 /// same id the index uses for its db file, so a store's URL id and its index file agree.
 pub fn store_url_id(store: &FsStore) -> String {

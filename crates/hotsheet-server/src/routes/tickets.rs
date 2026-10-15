@@ -290,7 +290,10 @@ pub(crate) async fn get_ticket(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<ApiTicket>, ApiError> {
-    let ticket = ops::resolve(&state.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let ticket = state
+        .default_entry()
+        .resolve(&id)?
+        .ok_or_else(|| ApiError::not_found(&id))?;
     Ok(Json(api_ticket(&state.default_entry(), &ticket)?))
 }
 
