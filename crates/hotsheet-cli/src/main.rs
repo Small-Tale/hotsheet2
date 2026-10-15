@@ -689,6 +689,8 @@ enum Cmd {
 }
 
 fn main() -> Result<()> {
+    // `| head` closing our stdout is a normal end of output, not a panic (HS2-4BT3VF).
+    hotsheet_cli::broken_pipe::install_broken_pipe_exit();
     if hotsheet_cli::print_revision_status_if_requested() {
         return Ok(());
     }

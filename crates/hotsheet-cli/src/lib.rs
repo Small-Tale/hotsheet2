@@ -11,6 +11,7 @@
 //! needs Node + the bundled exporter — none of which the always-on ticket commands
 //! should carry (`docs/07-migration.md` §7.2).
 
+pub mod broken_pipe;
 pub mod external_launch;
 pub mod import;
 mod import_completion;
