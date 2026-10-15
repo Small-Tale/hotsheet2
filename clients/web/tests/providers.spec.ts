@@ -12762,7 +12762,8 @@ test('does not resurrect a dismissed ticket composer after another modal closes'
   await page.keyboard.press('Escape');
   await expect(composerHost).toBeHidden();
   await expect(composerHost.locator('[data-action="create-ticket-form"]')).toHaveCount(0);
-  await conversation.getByRole('button', { name: 'Save Conversation' }).click();
+  // Save lives in the drawer's tab toolbar since HS2-59F7WK (HS2-D7D7Y8).
+  await drawer.locator('.terminal-drawer__rail').getByRole('button', { name: 'Save Conversation' }).click();
   const exportDialog = page.locator('[data-component="conversation-export-dialog"]');
   await expect(exportDialog).toHaveJSProperty('open', true);
   await exportDialog.getByRole('button', { name: 'Cancel' }).click();
@@ -12779,7 +12780,7 @@ test('does not resurrect a dismissed ticket composer after another modal closes'
   await page.getByRole('button', { name: 'New ticket…' }).click();
   await page.getByRole('textbox', { name: 'Ticket Title' }).fill('Second temporary draft');
   await page.getByRole('button', { name: 'Cancel' }).click();
-  await conversation.getByRole('button', { name: 'Save Conversation' }).click();
+  await drawer.locator('.terminal-drawer__rail').getByRole('button', { name: 'Save Conversation' }).click();
   await exportDialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(composerHost).toBeHidden();
   await expect(createViewDialog).toBeHidden();
