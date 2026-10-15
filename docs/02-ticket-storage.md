@@ -206,7 +206,7 @@ staged as a hidden non-`.md` sibling and renamed over the ticket, so a concurren
 complete file, never an empty or partial one (HS2-P2178F).
 Ticket read–revise–write operations hold a store-root advisory lock across read,
 revision, and file replacement (HS2-SVKB1V, HS2-RN7WS6). The path-scoped autocommit of
-those files runs immediately *after* the lock is released (nested store-pair
+those files runs immediately _after_ the lock is released (nested store-pair
 transactions defer to the outermost one), so one writer's git commit — hundreds of
 milliseconds on a large store, seconds under index contention — never convoys other
 writer processes (HS2-0DH8ZS). A no-op update patch writes and commits nothing. This includes
