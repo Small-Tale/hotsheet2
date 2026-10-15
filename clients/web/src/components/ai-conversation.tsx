@@ -39,6 +39,7 @@ import {
 
 import {
   type ConversationActivity,
+  conversationHeaderSummary,
   type ConversationMessage,
   conversationTimeline,
   type ConversationUsage,
@@ -91,12 +92,12 @@ export function isConversationSurfaceLifecycleEvent(event: Pick<Event, 'target'>
   return event.target === surface;
 }
 
-function UsageLine({ usage, label = 'Turn usage' }: { usage: ConversationUsage; label?: string }) {
+function UsageLine({ usage }: { usage: ConversationUsage }) {
   const total = usage.tokensIn + usage.tokensOut;
   return (
     <p
       class="ai-conversation__usage"
-      aria-label={`${label}: ${usage.tokensIn} input tokens, ${usage.tokensOut} output tokens, ${formatConversationCost(usage.costUsd)}`}
+      aria-label={`Turn usage: ${usage.tokensIn} input tokens, ${usage.tokensOut} output tokens, ${formatConversationCost(usage.costUsd)}`}
     >
       <span>{formatConversationTokens(total)} tokens</span>
       <span>{formatConversationCost(usage.costUsd)}</span>
@@ -286,7 +287,8 @@ export function AIConversation({
           ? `${tool} is working`
           : messages.length === 0
             ? 'Ready for your first message'
-            : `${messages.length} message${messages.length === 1 ? '' : 's'}`;
+            : // Totals sit inline with the count instead of in a separate header pill (HS2-P415F0).
+              conversationHeaderSummary(messages.length, totalUsage);
   const saveAction = previewOnly ? null : (
     <button
       type="button"
@@ -314,11 +316,6 @@ export function AIConversation({
     ) : null;
   const actions = (
     <>
-      {totalUsage && (
-        <span class="ai-conversation__header-usage">
-          <UsageLine usage={totalUsage} label="Conversation usage" />
-        </span>
-      )}
       {saveAction}
       {stopAction}
     </>

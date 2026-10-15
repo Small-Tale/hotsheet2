@@ -177,10 +177,6 @@
   margin-right: remify(5.6px);
   content: '·';
 }
-.ai-conversation__header-usage .ai-conversation__usage {
-  margin: 0 var(--wa-space-xs) 0 0;
-  white-space: nowrap;
-}
 /* The activity card's frame is a Kerf ContentItem; this lays out the app's own header and list. */
 .ai-conversation__activity-body {
   display: grid;
@@ -253,9 +249,6 @@
   }
   .ai-conversation__foreground {
     padding-inline: remify(16px);
-  }
-  .ai-conversation__header-usage {
-    display: none;
   }
   .ai-conversation__activity-body > header {
     align-items: flex-start;

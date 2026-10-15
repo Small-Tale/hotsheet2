@@ -343,3 +343,30 @@ export function formatConversationTokens(value: number): string {
 export function formatConversationCost(value?: number): string {
   return value === undefined ? 'Cost unavailable' : `≈$${value < 0.01 ? value.toFixed(4) : value.toFixed(2)}`;
 }
+
+/** Whole-unit compact token count for a header summary: `950`, `39K`, `1.3M` (HS2-P415F0). */
+export function formatConversationTokensCompact(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    notation: value >= 1_000 ? 'compact' : 'standard',
+    maximumFractionDigits: value >= 1_000_000 ? 1 : 0,
+  }).format(value);
+}
+
+/** Cent-rounded dollars for a header summary; a nonzero total below one cent reads `<$0.01`. */
+export function formatConversationCostShort(value: number): string {
+  return value > 0 && value < 0.005 ? '<$0.01' : `$${value.toFixed(2)}`;
+}
+
+/**
+ * The conversation dialog's subtitle: the message count followed by the conversation's total
+ * tokens and cost, for example `2 messages • 39K tokens • $0.23`. Totals that are absent, zero,
+ * or unpriced are omitted rather than shown as `0 tokens` or a placeholder (HS2-P415F0).
+ */
+export function conversationHeaderSummary(messageCount: number, usage?: ConversationUsage): string {
+  const parts = [`${messageCount} message${messageCount === 1 ? '' : 's'}`],
+    tokens = usage ? usage.tokensIn + usage.tokensOut : 0;
+  if (tokens > 0) parts.push(`${formatConversationTokensCompact(tokens)} tokens`);
+  if (usage?.costUsd !== undefined && (tokens > 0 || usage.costUsd > 0))
+    parts.push(formatConversationCostShort(usage.costUsd));
+  return parts.join(' • ');
+}

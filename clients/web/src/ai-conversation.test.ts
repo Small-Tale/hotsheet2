@@ -5,11 +5,14 @@ import {
   applyConversationEvent,
   beginConversationTurn,
   conversationError,
+  conversationHeaderSummary,
   conversationTimeline,
   conversationUsage,
   EMPTY_CONVERSATION,
   formatConversationCost,
+  formatConversationCostShort,
   formatConversationTokens,
+  formatConversationTokensCompact,
   reconcileConversationConnection,
 } from './ai-conversation';
 
@@ -366,5 +369,37 @@ describe('turns without written output (HS2-M5GN19)', () => {
       cost_usd: 0.002,
     });
     expect(priced.messages.at(-1)?.usage).toMatchObject({ costUsd: 0.002 });
+  });
+});
+
+describe('conversationHeaderSummary (HS2-P415F0)', () => {
+  it('puts tokens and cost inline with the message count', () => {
+    expect(conversationHeaderSummary(2, { tokensIn: 38_000, tokensOut: 1_200, costUsd: 0.2284 })).toBe(
+      '2 messages • 39K tokens • $0.23',
+    );
+    expect(conversationHeaderSummary(1, { tokensIn: 600, tokensOut: 350, costUsd: 0.004 })).toBe(
+      '1 message • 950 tokens • <$0.01',
+    );
+    expect(conversationHeaderSummary(14, { tokensIn: 1_200_000, tokensOut: 54_000, costUsd: 12.345 })).toBe(
+      '14 messages • 1.3M tokens • $12.35',
+    );
+  });
+  it('omits absent, zero, and unpriced totals', () => {
+    expect(conversationHeaderSummary(3)).toBe('3 messages');
+    expect(conversationHeaderSummary(3, { tokensIn: 0, tokensOut: 0, costUsd: 0 })).toBe('3 messages');
+    expect(conversationHeaderSummary(2, { tokensIn: 8_420, tokensOut: 943 })).toBe('2 messages • 9K tokens');
+    expect(conversationHeaderSummary(2, { tokensIn: 10, tokensOut: 5, costUsd: 0 })).toBe(
+      '2 messages • 15 tokens • $0.00',
+    );
+  });
+  it('formats compact token counts and short costs', () => {
+    expect(formatConversationTokensCompact(999)).toBe('999');
+    expect(formatConversationTokensCompact(39_200)).toBe('39K');
+    expect(formatConversationTokensCompact(39_600)).toBe('40K');
+    expect(formatConversationTokensCompact(2_000_000)).toBe('2M');
+    expect(formatConversationCostShort(0)).toBe('$0.00');
+    expect(formatConversationCostShort(0.0049)).toBe('<$0.01');
+    expect(formatConversationCostShort(0.005)).toBe('$0.01');
+    expect(formatConversationCostShort(0.234)).toBe('$0.23');
   });
 });

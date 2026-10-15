@@ -7717,8 +7717,22 @@ test('previews AIConversation public states at wide and narrow sizes', async ({ 
     if (value === 'completed') {
       await expect(conversationHost).toContainText('≈$0.04');
       await expect(conversationHost).toContainText('AI-generated · may contain errors');
+      // Conversation totals sit inline with the message count, with no separate pill (HS2-P415F0).
+      await expect(conversationHost.locator('.kui-toolbar-text__description')).toHaveText(
+        '2 messages • 20K tokens • $0.04',
+      );
+      await expect(conversationHost.locator('.ai-conversation__header-usage')).toHaveCount(0);
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        await expect(conversationHost.locator('.kui-toolbar-text__description')).toBeVisible();
+        await dialog.screenshot({ path: `target/visual-captures/hs2-p415f0-dialog-header-${width}.png` });
+      }
+      await page.setViewportSize({ width: 1280, height: 900 });
     }
-    if (value === 'usage-unpriced') await expect(conversationHost).toContainText('Cost unavailable');
+    if (value === 'usage-unpriced') {
+      await expect(conversationHost).toContainText('Cost unavailable');
+      await expect(conversationHost.locator('.kui-toolbar-text__description')).toHaveText('2 messages • 9K tokens');
+    }
     if (value === 'failed') {
       await expect(conversationHost).toContainText('Conversation Unavailable');
       await expect(conversationHost).toContainText('The tool turn failed.');
@@ -8515,7 +8529,6 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(stop).toHaveCSS('outline-style', 'solid');
     await host.getByRole('dialog').screenshot({ path: `target/visual-captures/hs2-wxvaf3-dialog-${theme}-wide.png` });
     await page.setViewportSize({ width: 390, height: 850 });
-    await expect(host.locator('.ai-conversation__header-usage')).toBeHidden();
     await host.getByRole('dialog').screenshot({ path: `target/visual-captures/hs2-wxvaf3-dialog-${theme}-narrow.png` });
     await page.setViewportSize({ width: 1280, height: 900 });
     await stop.press('Space');

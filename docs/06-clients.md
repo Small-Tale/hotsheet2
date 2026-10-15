@@ -1570,8 +1570,11 @@ preview/download, server directory browser) are separate design work.
   `ToolbarControlGroup`; the group owns button geometry and keyboard focus treatment.
   Save is disabled for empty or active transcripts, and Stop appears only for an
   interruptible active response. Both controls preserve their production actions and
-  keyboard activation. At narrow widths the header omits its repeated usage summary so
-  tool identity and actions fit; per-message usage remains available (HS2-WXVAF3).
+  keyboard activation. The dialog subtitle carries the conversation totals inline with the
+  message count (`2 messages • 39K tokens • $0.23`: whole-unit compact tokens, cent-rounded cost,
+  `<$0.01` for a nonzero sub-cent total, and absent, zero, or unpriced totals omitted) instead
+  of a separate header usage pill, so it fits at every width; per-message usage remains
+  available (HS2-WXVAF3, HS2-P415F0).
 
   Completed transcripts can be saved from either conversation presentation. Messages remain
   directly selectable in the live transcript: one pick anchors a range, a second includes every

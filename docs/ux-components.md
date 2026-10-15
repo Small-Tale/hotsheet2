@@ -397,9 +397,10 @@ does not introduce polling or another network request.
     `100% - 40px` cap. Wide windows get `min(768px, 100vw - 32px)` by `min(608px, 100vh - 48px)`;
     at 640px and below the panel keeps an 8px margin (`100vw - 16px` by `100vh - 16px`, so 374px
     wide at 390px) (HS2-MWMMCN).
-  - header: tool identity, ready/working/message-count context, conversation usage, and
-    native Save/Stop buttons inside Kerf `ToolbarControlGroup` in both dialog and embedded
-    presentations. Save is disabled for empty or active transcripts; Stop appears only
+  - header: tool identity, ready/working/message-count context with the conversation's totals
+    inline (`2 messages • 39K tokens • $0.23`; absent, zero, or unpriced totals are omitted, and
+    no separate usage pill remains; HS2-P415F0), and native Save/Stop buttons inside Kerf
+    `ToolbarControlGroup` in both dialog and embedded presentations. Save is disabled for empty or active transcripts; Stop appears only
     while the active connection advertises `interrupt`. The group owns button geometry
     and keyboard focus treatment. The dialog uses light-dismiss/Escape without a redundant
     close action. The demo exposes both presentations and exercises save/interruption
