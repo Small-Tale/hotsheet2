@@ -25,6 +25,8 @@ import {
   linkedTicketStore,
   listServerCheckouts,
   localStoreInitArgs,
+  mayReplaceServer,
+  PINNED_SERVER_LAUNCHER,
   preserveHs1Entry,
   projectBootstrapArgs,
   projectScopedServerPath,
@@ -44,7 +46,9 @@ import {
   runGitCommand,
   safelyRestartServer,
   serverLauncherLabel,
+  serverNeedsOwnership,
   serverNeedsSelectedBuild,
+  ServerOwnedByPinnedHostError,
   setupRefreshNotices,
   storeNeedsServerUpgrade,
   superviseServer,
@@ -1449,5 +1453,160 @@ describe('reconcileSelectedServerBuild (HS2-46BKH7)', () => {
       ),
     ).resolves.toMatchObject({ outcome: 'deferred', reason: 'recently_attempted' });
     expect(stubborn.restart).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('pinned server ownership (HS2-9AWEX5)', () => {
+  const restartable = { lifecycle_restart: true, lifecycle_quiescence: true },
+    running = { pid: 21, url: 'http://127.0.0.1:1', secret: 's', started_at: '2026-10-15T00:00:00Z' },
+    replacement = { pid: 22, url: 'http://127.0.0.1:2', secret: 's', started_at: '2026-10-15T00:01:00Z' },
+    server = (build_revision: string, launcher?: string | null) => ({
+      generation: 'hs2',
+      protocol: { min: 1, max: 1 },
+      build_revision,
+      capabilities: restartable,
+      ...(launcher === undefined ? {} : { launcher }),
+    });
+  const platform = (overrides: Partial<Parameters<typeof reconcileSelectedServerBuild>[3]> = {}) => ({
+    restart: vi.fn().mockResolvedValue(replacement),
+    refresh: vi.fn().mockResolvedValue(server('selected', PINNED_SERVER_LAUNCHER)),
+    attempts: new Map(),
+    now: () => 1_000,
+    ...overrides,
+  });
+  const hosts = ['dev-bridge', 'stable-dev', 'cli', PINNED_SERVER_LAUNCHER];
+
+  it('protects only a pinned server, and only from hosts that are not pinned', () => {
+    // Transition matrix: host launcher x server launcher (including older servers without one).
+    for (const host of hosts)
+      for (const serverLauncher of [undefined, null, 'dev-bridge', 'stable-dev', 'cli', 'unspecified']) {
+        expect(mayReplaceServer(host, serverLauncher)).toBe(true);
+        expect(serverNeedsOwnership(host, server('x', serverLauncher))).toBe(
+          host === PINNED_SERVER_LAUNCHER && typeof serverLauncher === 'string',
+        );
+      }
+    for (const host of hosts) {
+      expect(mayReplaceServer(host, PINNED_SERVER_LAUNCHER)).toBe(host === PINNED_SERVER_LAUNCHER);
+      expect(serverNeedsOwnership(host, server('x', PINNED_SERVER_LAUNCHER))).toBe(false);
+    }
+    expect(serverNeedsOwnership(PINNED_SERVER_LAUNCHER, undefined)).toBe(false);
+  });
+
+  it('names the owner and the deliberate relaunch when a dev host would need to replace it', () => {
+    const error = new ServerOwnedByPinnedHostError(server('source-sha256:abc', PINNED_SERVER_LAUNCHER));
+    expect(error.message).toMatch(/pinned production host/);
+    expect(error.message).toContain('local-host-snapshot');
+    expect(error.message).toContain('source-sha256:abc');
+    expect(error.message).toContain('npm run prod:rebuild-lan');
+    expect(error.message).not.toMatch(/server:rebuild /);
+    expect(new ServerOwnedByPinnedHostError(undefined).message).toContain('build unknown');
+  });
+
+  it('never restarts a pinned server from a dev host, even with a mismatched selected build', async () => {
+    for (const host of ['dev-bridge', 'stable-dev']) {
+      const dev = platform({ hostLauncher: host });
+      const result = await reconcileSelectedServerBuild(
+        '/store',
+        { instance: running, metadata: server('pinned', PINNED_SERVER_LAUNCHER) },
+        'selected',
+        dev,
+      );
+      expect(result).toMatchObject({ outcome: 'deferred', reason: 'owned_by_pinned_host', instance: running });
+      expect(result.outcome === 'deferred' && result.notice).toMatch(/pinned production host/);
+      expect(dev.restart).not.toHaveBeenCalled();
+      // Without a selected build (the usual dev host) there is nothing to reconcile at all.
+      await expect(
+        reconcileSelectedServerBuild(
+          '/store',
+          { instance: running, metadata: server('pinned', PINNED_SERVER_LAUNCHER) },
+          undefined,
+          dev,
+        ),
+      ).resolves.toMatchObject({ outcome: 'matched' });
+    }
+  });
+
+  it('keeps reconciling between two pinned hosts as before', async () => {
+    const pinned = platform({ hostLauncher: PINNED_SERVER_LAUNCHER });
+    await expect(
+      reconcileSelectedServerBuild(
+        '/store',
+        { instance: running, metadata: server('other', PINNED_SERVER_LAUNCHER) },
+        'selected',
+        pinned,
+      ),
+    ).resolves.toMatchObject({ outcome: 'restarted', instance: replacement });
+    expect(pinned.restart).toHaveBeenCalledWith(running);
+  });
+
+  it('takes ownership of a same-build server a dev host launched, silently when deferred', async () => {
+    const adopt = platform({ hostLauncher: PINNED_SERVER_LAUNCHER });
+    await expect(
+      reconcileSelectedServerBuild(
+        '/store',
+        { instance: running, metadata: server('selected', 'dev-bridge') },
+        'selected',
+        adopt,
+      ),
+    ).resolves.toMatchObject({ outcome: 'restarted', instance: replacement });
+    // A pinned server with the selected build is already owned: nothing to do.
+    await expect(
+      reconcileSelectedServerBuild(
+        '/store',
+        { instance: replacement, metadata: server('selected', PINNED_SERVER_LAUNCHER) },
+        'selected',
+        adopt,
+      ),
+    ).resolves.toMatchObject({ outcome: 'matched' });
+    expect(adopt.restart).toHaveBeenCalledTimes(1);
+
+    // Busy: the project opens through the same-build server with no banner, and the cooldown holds.
+    const busy = platform({
+      hostLauncher: PINNED_SERVER_LAUNCHER,
+      restart: vi.fn().mockRejectedValue(new Error('busy')),
+    });
+    const open = () =>
+      reconcileSelectedServerBuild(
+        '/store',
+        { instance: running, metadata: server('selected', 'stable-dev') },
+        'selected',
+        busy,
+      );
+    const deferred = await open();
+    expect(deferred).toMatchObject({ outcome: 'deferred', reason: 'busy' });
+    expect(deferred.outcome === 'deferred' && deferred.notice).toBeFalsy();
+    await expect(open()).resolves.toMatchObject({ reason: 'recently_attempted' });
+    expect(busy.restart).toHaveBeenCalledTimes(1);
+
+    // An older server that reports no launcher is never restarted just for ownership.
+    const legacy = platform({ hostLauncher: PINNED_SERVER_LAUNCHER });
+    await expect(
+      reconcileSelectedServerBuild('/store', { instance: running, metadata: server('selected') }, 'selected', legacy),
+    ).resolves.toMatchObject({ outcome: 'matched' });
+    expect(legacy.restart).not.toHaveBeenCalled();
+  });
+
+  it('remembers a relaunch race a dev host won and stays silent when the build matches', async () => {
+    const raced = platform({
+      hostLauncher: PINNED_SERVER_LAUNCHER,
+      refresh: vi.fn().mockResolvedValue(server('selected', 'dev-bridge')),
+    });
+    const result = await reconcileSelectedServerBuild(
+      '/store',
+      { instance: running, metadata: server('selected', 'dev-bridge') },
+      'selected',
+      raced,
+    );
+    expect(result).toMatchObject({ outcome: 'deferred', reason: 'still_mismatched', instance: replacement });
+    expect(result.outcome === 'deferred' && result.notice).toBeFalsy();
+    await expect(
+      reconcileSelectedServerBuild(
+        '/store',
+        { instance: replacement, metadata: server('selected', 'dev-bridge') },
+        'selected',
+        raced,
+      ),
+    ).resolves.toMatchObject({ reason: 'recently_attempted' });
+    expect(raced.restart).toHaveBeenCalledTimes(1);
   });
 });

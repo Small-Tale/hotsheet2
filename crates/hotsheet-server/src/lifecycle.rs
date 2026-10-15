@@ -47,6 +47,55 @@ pub struct InstanceInfo {
     pub launcher: Option<String>,
 }
 
+/// The launcher label of a **pinned** host: the production local host that runs startup
+/// snapshots of its binaries (`npm run prod`). Its machine server must survive dev hosts and
+/// rebuild scripts on the same machine (HS2-9AWEX5), so an ordinary stop refuses it.
+pub const PINNED_LAUNCHER: &str = "local-host-snapshot";
+
+/// Whether a registration was launched by a pinned host (HS2-9AWEX5). Legacy records with no
+/// launcher are not pinned, so they keep stopping as before.
+pub fn is_pinned_launcher(launcher: Option<&str>) -> bool {
+    launcher == Some(PINNED_LAUNCHER)
+}
+
+/// What an explicit `--stop` does with the registered server for a store (HS2-9AWEX5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StopDecision {
+    /// No live server is registered; nothing to signal.
+    NotRunning,
+    /// Signal this server.
+    Stop(InstanceInfo),
+    /// The server belongs to a pinned host and `--force` was not given: leave it running.
+    RefusePinned(InstanceInfo),
+}
+
+/// Decide an explicit stop. Only a pinned server without `force` is refused; a forced stop is
+/// a deliberate relaunch (for example `npm run prod:rebuild-lan`).
+pub fn stop_decision(running: Option<InstanceInfo>, force: bool) -> StopDecision {
+    match running {
+        None => StopDecision::NotRunning,
+        Some(info) if !force && is_pinned_launcher(info.launcher.as_deref()) => {
+            StopDecision::RefusePinned(info)
+        }
+        Some(info) => StopDecision::Stop(info),
+    }
+}
+
+/// The refusal a stop prints for a pinned server: who owns it and the deliberate alternatives.
+pub fn pinned_stop_refusal(info: &InstanceInfo, store_path: &Path) -> String {
+    format!(
+        "refusing to stop the Hot Sheet server for {store}: it belongs to the pinned production \
+         host (launcher={launcher} pid={pid} build={build}). Stopping it would let another host \
+         replace it with a different build. Stop the production host first, relaunch it \
+         deliberately with `npm run prod:rebuild-lan`, or rerun with --force if that host is no \
+         longer running.",
+        store = store_path.display(),
+        launcher = info.launcher.as_deref().unwrap_or("unknown"),
+        pid = info.pid,
+        build = info.build_revision.as_deref().unwrap_or("unknown"),
+    )
+}
+
 /// A stable per-store id (hash of the canonical store path) — the same key the index uses.
 fn project_id(store_path: &Path) -> String {
     let root = store_path
@@ -133,12 +182,26 @@ impl InstanceRegistry {
     }
 
     /// Stop the server serving `store_path` (SIGTERM → graceful shutdown). Returns whether
-    /// a live server was found and signalled.
+    /// a live server was found and signalled. Unconditional: an explicit user-facing stop
+    /// goes through [`InstanceRegistry::request_stop`], which protects pinned servers.
     pub fn stop_instance(&self, store_path: &Path) -> bool {
         match self.find_instance(store_path) {
             Some(info) => signal(info.pid, "TERM"),
             None => false,
         }
+    }
+
+    /// An explicit stop that honours [`stop_decision`] (HS2-9AWEX5): a pinned server is
+    /// left running unless `force`. Returns the decision; only [`StopDecision::Stop`]
+    /// signals, and only the exact pid that was decided on.
+    pub fn request_stop(&self, store_path: &Path, force: bool) -> StopDecision {
+        let decision = stop_decision(self.find_instance(store_path), force);
+        if let StopDecision::Stop(info) = &decision
+            && !signal(info.pid, "TERM")
+        {
+            return StopDecision::NotRunning;
+        }
+        decision
     }
 
     /// Whether a **live** server currently holds this store's index-writer lock. A stale
@@ -287,6 +350,11 @@ pub fn register_instance(info: &InstanceInfo, store_path: &Path) -> std::io::Res
 /// [`InstanceRegistry::stop_instance`] on the machine registry.
 pub fn stop_instance(store_path: &Path) -> bool {
     InstanceRegistry::machine().stop_instance(store_path)
+}
+
+/// [`InstanceRegistry::request_stop`] on the machine registry.
+pub fn request_stop(store_path: &Path, force: bool) -> StopDecision {
+    InstanceRegistry::machine().request_stop(store_path, force)
 }
 
 /// Removes the instance file when the server stops.
@@ -529,6 +597,113 @@ mod tests {
         child.wait().unwrap();
         // Dead now: the same file reads as no live server.
         assert!(!registry.stop_instance(store.path()));
+    }
+
+    /// HS2-9AWEX5 transition matrix: (no server | unlabelled | dev launchers | pinned) ×
+    /// (force off | on). Only a pinned server without force is refused.
+    #[test]
+    fn stop_decision_refuses_only_an_unforced_pinned_server() {
+        let store = Path::new("/stores/bootstrap.hs2");
+        let labelled = |launcher: Option<&str>| InstanceInfo {
+            launcher: launcher.map(str::to_owned),
+            build_revision: Some("source-sha256:abc".into()),
+            ..info(4242, store)
+        };
+        for force in [false, true] {
+            assert_eq!(stop_decision(None, force), StopDecision::NotRunning);
+            for launcher in [
+                None,
+                Some("cli"),
+                Some("dev-bridge"),
+                Some("stable-dev"),
+                Some("unspecified"),
+                Some("local-host-snapshot-but-not-really"),
+            ] {
+                let running = labelled(launcher);
+                assert_eq!(
+                    stop_decision(Some(running.clone()), force),
+                    StopDecision::Stop(running),
+                    "{launcher:?} force={force}"
+                );
+            }
+            let pinned = labelled(Some(PINNED_LAUNCHER));
+            let expected = if force {
+                StopDecision::Stop(pinned.clone())
+            } else {
+                StopDecision::RefusePinned(pinned.clone())
+            };
+            assert_eq!(stop_decision(Some(pinned), force), expected);
+        }
+        let refusal = pinned_stop_refusal(&labelled(Some(PINNED_LAUNCHER)), store);
+        for expected in [
+            "/stores/bootstrap.hs2",
+            "launcher=local-host-snapshot",
+            "pid=4242",
+            "build=source-sha256:abc",
+            "--force",
+            "npm run prod:rebuild-lan",
+        ] {
+            assert!(refusal.contains(expected), "{expected} in {refusal}");
+        }
+        assert!(
+            !refusal.contains("server:rebuild "),
+            "never suggests the shared-server stop"
+        );
+    }
+
+    /// HS2-9AWEX5: `request_stop` leaves a live pinned server running without force, then
+    /// signals it with force; an unlabelled live server stops on an ordinary request.
+    #[test]
+    fn request_stop_protects_a_live_pinned_server_until_forced() {
+        let (_home, registry) = isolated_registry();
+        let store = tempfile::tempdir().unwrap();
+        assert_eq!(
+            registry.request_stop(store.path(), false),
+            StopDecision::NotRunning
+        );
+        let mut child = std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .unwrap();
+        let pinned = InstanceInfo {
+            launcher: Some(PINNED_LAUNCHER.into()),
+            ..info(child.id(), store.path())
+        };
+        let _g = registry.register_instance(&pinned, store.path()).unwrap();
+        assert_eq!(
+            registry.request_stop(store.path(), false),
+            StopDecision::RefusePinned(pinned.clone())
+        );
+        // Refused twice in a row: still alive, still the same registration.
+        assert_eq!(
+            registry.request_stop(store.path(), false),
+            StopDecision::RefusePinned(pinned.clone())
+        );
+        assert!(pid_alive(child.id()), "a refused stop never signals");
+        assert_eq!(
+            registry.request_stop(store.path(), true),
+            StopDecision::Stop(pinned)
+        );
+        child.wait().unwrap();
+        assert_eq!(
+            registry.request_stop(store.path(), true),
+            StopDecision::NotRunning,
+            "the dead registration reads as no server"
+        );
+
+        let mut plain = std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .unwrap();
+        let unlabelled = info(plain.id(), store.path());
+        let _g2 = registry
+            .register_instance(&unlabelled, store.path())
+            .unwrap();
+        assert_eq!(
+            registry.request_stop(store.path(), false),
+            StopDecision::Stop(unlabelled)
+        );
+        plain.wait().unwrap();
     }
 
     #[test]

@@ -9,7 +9,7 @@
     "server:rebuild": "cd ../.. && cargo build -p hotsheet-server -p hotsheet-cli -p hotsheet-mcp && cargo install --path crates/hotsheet-cli --force && cargo install --path crates/hotsheet-mcp --force && ./target/debug/hotsheet-cli serve -C \"${HOTSHEET_HOME:-$HOME/.hotsheet2}/server-bootstrap.hs2\" --stop",
     "prod": "npm run build && npm run build:host && node dist-host/local-host.js",
     "server:rebuild:release": "cd ../.. && cargo build --release -p hotsheet-server -p hotsheet-cli -p hotsheet-mcp && ./target/release/hotsheet-cli serve -C \"${HOTSHEET_HOME:-$HOME/.hotsheet2}/server-bootstrap.hs2\" --stop",
-    "prod:rebuild-lan": "npm run server:rebuild:release && npm run prod -- --host 0.0.0.0",
+    "prod:rebuild-lan": "npm run server:rebuild:release -- --force && npm run prod -- --host 0.0.0.0",
     "build": "vite build && node scripts/check-production-bundle.mjs",
     "build:host": "vite build --ssr src/local-host.ts --outDir dist-host --emptyOutDir",
     "format": "node scripts/format-sources.mjs --write && cargo fmt --all --manifest-path ../../Cargo.toml",

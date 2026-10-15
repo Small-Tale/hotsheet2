@@ -12,6 +12,8 @@ export interface ServerCompatibility {
   store_schema?: CompatibilityRange;
   capabilities?: { lifecycle_restart?: boolean; lifecycle_quiescence?: boolean };
   started_at?: string | null;
+  /** Who launched the machine server (HS2-GWFEAA); `local-host-snapshot` marks a pinned owner (HS2-9AWEX5). */
+  launcher?: string | null;
 }
 
 export type CompatibilityKind = 'compatible' | 'client_too_old' | 'server_too_old' | 'unknown';

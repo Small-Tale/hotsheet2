@@ -269,7 +269,7 @@ async function main() {
   } finally {
     await browser?.close();
     if (host && host.exitCode === null) host.kill('SIGTERM');
-    await run(binaries.HOTSHEET_CLI_BIN, ['serve', '-C', resolve(home, 'server-bootstrap.hs2'), '--stop'], {
+    await run(binaries.HOTSHEET_CLI_BIN, ['serve', '-C', resolve(home, 'server-bootstrap.hs2'), '--stop', '--force'], {
       env: { ...productionEnvironment, HOTSHEET_HOME: home },
     }).catch(() => undefined);
     await rm(buildRoot, { recursive: true, force: true });

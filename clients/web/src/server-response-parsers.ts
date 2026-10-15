@@ -118,6 +118,7 @@ export const parseServerCompatibility: ResponseParser<ServerCompatibility> = (va
   optionalOf(body, 'protocol', what, isRange);
   optionalOf(body, 'store_schema', what, isRange);
   optionalOf(body, 'started_at', what, isString, true);
+  optionalOf(body, 'launcher', what, isString, true);
   optionalOf(
     body,
     'capabilities',

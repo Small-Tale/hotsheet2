@@ -31,8 +31,19 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             secret,
             stop,
             kill_all_terminals,
+            force,
             list,
-        } => cmd_serve(path, &bind, secret, stop, kill_all_terminals, list),
+        } => cmd_serve(
+            path,
+            &bind,
+            secret,
+            ServeStop {
+                stop,
+                kill_all_terminals,
+                force,
+            },
+            list,
+        ),
         Cmd::Cert { cmd } => cmd_cert(path, &cmd),
         _ => misrouted("server"),
     }
@@ -41,12 +52,19 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
 /// Run the server for this store in the foreground by exec'ing the sibling
 /// `hotsheet-server` binary (the CLI stays free of a server dependency). Detached +
 /// supervised start is client-owned (HS2-59 / HS2-4072GM).
+/// The explicit-stop flags of `serve` (HS2-9AWEX5 adds `force`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct ServeStop {
+    pub stop: bool,
+    pub kill_all_terminals: bool,
+    pub force: bool,
+}
+
 pub(crate) fn cmd_serve(
     path: &Path,
     bind: &str,
     secret: Option<String>,
-    stop: bool,
-    kill_all_terminals: bool,
+    stop: ServeStop,
     list: bool,
 ) -> Result<()> {
     if list {
@@ -62,8 +80,7 @@ pub(crate) fn cmd_serve(
         bind,
         secret.as_deref(),
         stop,
-        kill_all_terminals,
-        (!stop).then_some("cli"),
+        (!stop.stop).then_some("cli"),
     ));
     let status = cmd.status().map_err(|e| {
         anyhow::anyhow!(
@@ -614,8 +631,7 @@ pub(crate) fn server_args(
     path: &Path,
     bind: &str,
     secret: Option<&str>,
-    stop: bool,
-    kill_all_terminals: bool,
+    stop: ServeStop,
     launcher: Option<&str>,
 ) -> Vec<std::ffi::OsString> {
     let mut args = vec![
@@ -627,11 +643,14 @@ pub(crate) fn server_args(
     if let Some(secret) = secret {
         args.extend(["--secret".into(), secret.into()]);
     }
-    if stop {
+    if stop.stop {
         args.push("--stop".into());
     }
-    if kill_all_terminals {
+    if stop.kill_all_terminals {
         args.push("--kill-all-terminals".into());
+    }
+    if stop.force {
+        args.push("--force".into());
     }
     if let Some(launcher) = launcher {
         args.extend(["--launcher".into(), launcher.into()]);
@@ -712,8 +731,11 @@ mod tests {
                 Path::new("store path"),
                 "127.0.0.1:0",
                 Some("secret"),
-                true,
-                true,
+                ServeStop {
+                    stop: true,
+                    kill_all_terminals: true,
+                    force: false,
+                },
                 None
             ),
             [
@@ -728,14 +750,28 @@ mod tests {
             ]
             .map(std::ffi::OsString::from)
         );
+        // HS2-9AWEX5: a forced stop forwards --force so the server stops a pinned owner.
+        assert_eq!(
+            server_args(
+                Path::new("s"),
+                "127.0.0.1:0",
+                None,
+                ServeStop {
+                    stop: true,
+                    kill_all_terminals: false,
+                    force: true,
+                },
+                None
+            ),
+            ["-C", "s", "--bind", "127.0.0.1:0", "--stop", "--force"].map(std::ffi::OsString::from)
+        );
         // HS2-GWFEAA: a launch names its launcher so the registration can say who owns it.
         assert_eq!(
             server_args(
                 Path::new("s"),
                 "127.0.0.1:0",
                 None,
-                false,
-                false,
+                ServeStop::default(),
                 Some("cli")
             ),
             ["-C", "s", "--bind", "127.0.0.1:0", "--launcher", "cli"].map(std::ffi::OsString::from)

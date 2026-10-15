@@ -34,9 +34,15 @@ struct Cli {
     /// Index database file (default: ${HOTSHEET_HOME:-~/.hotsheet2}/index/<project-id>.v<schema>.sqlite).
     #[arg(long)]
     index: Option<PathBuf>,
-    /// Stop the running server for this store (explicit shutdown), then exit.
+    /// Stop the running server for this store (explicit shutdown), then exit. A server
+    /// launched by the pinned production host is refused unless --force (HS2-9AWEX5).
     #[arg(long)]
     stop: bool,
+
+    /// With --stop, also stop a server owned by the pinned production host
+    /// (`local-host-snapshot`). For deliberate relaunches such as `npm run prod:rebuild-lan`.
+    #[arg(long, requires = "stop")]
+    force: bool,
 
     /// Print this binary's build/source revision status as JSON, without opening a store.
     #[arg(long)]
@@ -143,21 +149,27 @@ async fn main() -> Result<()> {
 
     // Explicit shutdown (HS2-59): signal the running server for this store and exit.
     if cli.stop {
-        let running = hotsheet_server::lifecycle::find_instance(&cli.path);
-        let stopped = hotsheet_server::lifecycle::stop_instance(&cli.path);
-        if stopped {
-            println!("stopped the running server for {}", cli.path.display());
-            if let Some(running) = running {
+        use hotsheet_server::lifecycle::{StopDecision, pinned_stop_refusal, request_stop};
+        let stopped = match request_stop(&cli.path, cli.force) {
+            StopDecision::RefusePinned(running) => {
+                // Refuse before any terminal cleanup: the owner keeps its server and terminals.
+                anyhow::bail!("{}", pinned_stop_refusal(&running, &cli.path));
+            }
+            StopDecision::Stop(running) => {
+                println!("stopped the running server for {}", cli.path.display());
                 println!(
                     "  pid={} launcher={} build={}",
                     running.pid,
                     running.launcher.as_deref().unwrap_or("unknown"),
                     running.build_revision.as_deref().unwrap_or("unknown")
                 );
+                true
             }
-        } else {
-            println!("no running server found for {}", cli.path.display());
-        }
+            StopDecision::NotRunning => {
+                println!("no running server found for {}", cli.path.display());
+                false
+            }
+        };
         if cli.kill_all_terminals {
             if stopped {
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
@@ -677,6 +689,15 @@ mod tests {
         .unwrap();
         assert!(owned.exit_on_stdin_eof);
         assert_eq!(owned.shutdown_drain_ms, 250);
+    }
+
+    #[test]
+    fn force_requires_an_explicit_server_stop() {
+        assert!(Cli::try_parse_from(["hotsheet-server", "--force"]).is_err());
+        let forced = Cli::try_parse_from(["hotsheet-server", "--stop", "--force"]).unwrap();
+        assert!(forced.stop && forced.force);
+        let plain = Cli::try_parse_from(["hotsheet-server", "--stop"]).unwrap();
+        assert!(plain.stop && !plain.force);
     }
 
     #[test]

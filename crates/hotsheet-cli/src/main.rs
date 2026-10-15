@@ -599,6 +599,10 @@ enum Cmd {
         /// With --stop, also kill every terminal retained for this project.
         #[arg(long, requires = "stop", conflicts_with = "list")]
         kill_all_terminals: bool,
+        /// With --stop, also stop a server owned by the pinned production host
+        /// (`local-host-snapshot`), which an ordinary stop refuses (HS2-9AWEX5).
+        #[arg(long, requires = "stop", conflicts_with = "list")]
+        force: bool,
         /// List every registered machine server and its hosted stores. Registrations are
         /// deduplicated by server identity, health-checked, and never expose bearer secrets.
         #[arg(long, conflicts_with = "stop")]

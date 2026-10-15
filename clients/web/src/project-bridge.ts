@@ -1125,6 +1125,41 @@ export function serverLauncherLabel(environment: Readonly<Record<string, string 
   return 'dev-bridge';
 }
 
+/** The launcher label of the pinned production host, whose machine server other hosts must not replace (HS2-9AWEX5). */
+export const PINNED_SERVER_LAUNCHER = 'local-host-snapshot';
+
+/**
+ * Whether this host may restart or replace the running machine server (HS2-9AWEX5). Only a server
+ * owned by the pinned production host is protected, and only from hosts that are not themselves
+ * pinned: a dev host attaches to it as is, while another pinned host keeps reconciling as before.
+ * A server that reports no launcher (an older build) is not protected.
+ */
+export function mayReplaceServer(hostLauncher: string, serverLauncher: string | null | undefined): boolean {
+  return serverLauncher !== PINNED_SERVER_LAUNCHER || hostLauncher === PINNED_SERVER_LAUNCHER;
+}
+
+/**
+ * Whether a pinned host should take ownership of the running server (HS2-9AWEX5): it reports a
+ * launcher, and that launcher is a dev host or the CLI. Until the pinned host restarts it onto its
+ * own snapshot, `server:rebuild` could stop it and a dev host could replace it again.
+ */
+export function serverNeedsOwnership(hostLauncher: string, server: ServerCompatibility | undefined): boolean {
+  return (
+    hostLauncher === PINNED_SERVER_LAUNCHER &&
+    typeof server?.launcher === 'string' &&
+    server.launcher !== PINNED_SERVER_LAUNCHER
+  );
+}
+
+/** A non-pinned host needed to restart a server the pinned production host owns (HS2-9AWEX5). */
+export class ServerOwnedByPinnedHostError extends Error {
+  constructor(readonly server: ServerCompatibility | undefined) {
+    super(
+      `The Hot Sheet server on this machine belongs to the pinned production host (launcher ${PINNED_SERVER_LAUNCHER}, build ${server?.build_revision ?? 'unknown'}) and is older than this host needs. This host will not restart or replace it. Stop the production host, or relaunch it deliberately with npm run prod:rebuild-lan to move it onto the newer build.`,
+    );
+  }
+}
+
 function serverPlatform(store: string): ServerSupervisorPlatform {
   const repoRoot = developmentRepositoryRoot();
   const binary = process.env.HOTSHEET_SERVER_BIN || resolve(repoRoot, 'target/debug/hotsheet-server');
@@ -1260,12 +1295,15 @@ export function serverNeedsSelectedBuild(
 }
 
 /** Why a pinned host keeps using a server it did not select (HS2-46BKH7). */
-export type ServerBuildDeferral = 'busy' | 'unsupported' | 'still_mismatched' | 'recently_attempted';
+export type ServerBuildDeferral =
+  'busy' | 'unsupported' | 'still_mismatched' | 'recently_attempted' | 'owned_by_pinned_host';
 
+/** A deferral carries a notice only when the running build differs from the selected one; a pinned
+ * host that is merely waiting to take ownership of a same-build server stays silent (HS2-9AWEX5). */
 export type ServerBuildReconciliation =
   | { outcome: 'matched' }
   | { outcome: 'restarted' }
-  | { outcome: 'deferred'; reason: ServerBuildDeferral; notice: string };
+  | { outcome: 'deferred'; reason: ServerBuildDeferral; notice?: string };
 
 /** Last safe-restart request per store, so a persistent mismatch does not re-request one on every open. */
 const serverBuildRestartAttempts = new Map<string, { instance: InstanceInfo; at: number }>();
@@ -1287,6 +1325,8 @@ export function serverBuildNoticeText(reason: ServerBuildDeferral): string {
       return `${shared} A restart did not produce the selected build, so this host is serving the project through the running server. Relaunch this host deliberately (npm run prod:rebuild-lan or dev:rebuild-lan) to replace it.`;
     case 'recently_attempted':
       return `${shared} A restart was requested recently; this host will try again shortly. The project stays usable meanwhile.`;
+    case 'owned_by_pinned_host':
+      return `${shared} It belongs to the pinned production host, so this host will not restart or replace it. The project stays usable through it; stop the production host to run this host's own build.`;
   }
 }
 
@@ -1299,6 +1339,11 @@ export interface ServerBuildReconciliationPlatform {
   attempts?: Map<string, { instance: InstanceInfo; at: number }>;
   /** How long a refused restart waits before the next open requests one again. */
   retryAfterMs?: number;
+  /**
+   * This host's launcher label (HS2-9AWEX5). With it, a non-pinned host never restarts a pinned
+   * server, and a pinned host also restarts a same-build server another host launched so it owns it.
+   */
+  hostLauncher?: string;
 }
 
 /**
@@ -1315,15 +1360,19 @@ export async function reconcileSelectedServerBuild(
   selectedRevision: string | undefined,
   platform: ServerBuildReconciliationPlatform,
 ): Promise<ServerBuildReconciliation & { instance: InstanceInfo; metadata: ServerCompatibility | undefined }> {
-  const { instance, metadata } = current;
-  if (!serverNeedsSelectedBuild(metadata, selectedRevision)) return { outcome: 'matched', instance, metadata };
-  const deferred = (reason: ServerBuildDeferral) => ({
+  const { instance, metadata } = current,
+    host = platform.hostLauncher,
+    needsRestart = (server: ServerCompatibility | undefined) =>
+      serverNeedsSelectedBuild(server, selectedRevision) || (host !== undefined && serverNeedsOwnership(host, server));
+  if (!needsRestart(metadata)) return { outcome: 'matched', instance, metadata };
+  const deferred = (reason: ServerBuildDeferral, server = metadata, running = instance) => ({
     outcome: 'deferred' as const,
     reason,
-    notice: serverBuildNoticeText(reason),
-    instance,
-    metadata,
+    ...(serverNeedsSelectedBuild(server, selectedRevision) ? { notice: serverBuildNoticeText(reason) } : {}),
+    instance: running,
+    metadata: server,
   });
+  if (host !== undefined && !mayReplaceServer(host, metadata?.launcher)) return deferred('owned_by_pinned_host');
   if (!supportsSafeRestart(metadata)) return deferred('unsupported');
   const now = platform.now ?? Date.now,
     attempts = platform.attempts ?? serverBuildRestartAttempts,
@@ -1339,11 +1388,12 @@ export async function reconcileSelectedServerBuild(
     return deferred('busy');
   }
   const refreshed = await platform.refresh(replacement);
-  if (serverNeedsSelectedBuild(refreshed, selectedRevision)) {
+  if (needsRestart(refreshed)) {
     // The replacement is still not the selected build (for example the host's own binary changed
-    // under it). Remember it so the next opens do not restart the server again before the cooldown.
+    // under it), or another host won the relaunch race. Remember it so the next opens do not restart
+    // the server again before the cooldown.
     attempts.set(store, { instance: replacement, at: now() });
-    return { ...deferred('still_mismatched'), instance: replacement, metadata: refreshed };
+    return deferred('still_mismatched', refreshed, replacement);
   }
   attempts.delete(store);
   return { outcome: 'restarted', instance: replacement, metadata: refreshed };
@@ -1396,7 +1446,8 @@ async function openPreparedLocalProject(
     target: SessionTarget = { url: instance.url, secret: instance.secret, root, serverStore: plan.serverStore };
   let metadata = await serverRequest(target, '/compatibility', parseServerCompatibility).catch(() => undefined);
   const cli = ticketStore ? await cliCompatibility(ticketStore, runProcess) : undefined;
-  const selectedRevision = process.env.HOT_SHEET_BUILD_REVISION;
+  const selectedRevision = process.env.HOT_SHEET_BUILD_REVISION,
+    hostLauncher = serverLauncherLabel();
   let compatibility = assessCompatibility(metadata, undefined, selectedRevision);
   const retarget = (next: InstanceInfo) => {
     instance = next;
@@ -1406,6 +1457,8 @@ async function openPreparedLocalProject(
     (compatibility.kind === 'server_too_old' || storeNeedsServerUpgrade(metadata, cli)) &&
     supportsSafeRestart(metadata)
   ) {
+    // A dev host never replaces the pinned production host's server (HS2-9AWEX5); say who owns it.
+    if (!mayReplaceServer(hostLauncher, metadata?.launcher)) throw new ServerOwnedByPinnedHostError(metadata);
     retarget(await restartForUpgrade(plan.serverStore, target, instance));
     metadata = await serverRequest(target, '/compatibility', parseServerCompatibility).catch(() => undefined);
     compatibility = assessCompatibility(metadata, undefined, selectedRevision);
@@ -1415,6 +1468,7 @@ async function openPreparedLocalProject(
   // replaced the shared machine server, bring it back when it is idle and otherwise keep serving the
   // project through the running, protocol-compatible server (HS2-46BKH7).
   const reconciled = await reconcileSelectedServerBuild(plan.serverStore, { instance, metadata }, selectedRevision, {
+    hostLauncher,
     restart: (running) => restartForUpgrade(plan.serverStore, target, running),
     refresh: (replacement) =>
       serverRequest(

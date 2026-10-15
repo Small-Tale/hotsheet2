@@ -446,7 +446,8 @@ preview/download, server directory browser) are separate design work.
   return 404. Maintainer shortcuts: `server:rebuild`
   rebuilds the server and CLI and stops the running machine server (found via the bridge's
   bootstrap store, `${HOTSHEET_HOME:-~/.hotsheet2}/server-bootstrap.hs2`) so the next project
-  open starts the new binary; `dev:rebuild-lan` runs it and then serves the dev client on `0.0.0.0`
+  open starts the new binary, unless the production host owns that server (see pinned-server
+  ownership below; `npm run server:rebuild -- --force` overrides); `dev:rebuild-lan` runs it and then serves the dev client on `0.0.0.0`
   for other devices on the LAN. The production host prefers **release** binaries (HS2-D2JQ9A): when
   `HOTSHEET_SERVER_BIN` is unset, it probes the release server's build/source revision and uses the
   release server only when current. It probes the CLI and migrator independently, preferring each
@@ -463,6 +464,22 @@ preview/download, server directory browser) are separate design work.
   restart on a later open once a short cooldown passes or the server instance changes. The notice
   never instructs the user to run `server:rebuild` from a running host, because stopping the shared
   server is what starts the cycle. Only an incompatible protocol or store schema still blocks.
+  **Pinned-server ownership (HS2-9AWEX5).** The production host's machine server survives dev
+  hosts and rebuild scripts on the same machine through an ownership-aware lifecycle rather than a
+  second machine server: two servers cannot host the same ticket store (the per-store index-writer
+  lock refuses the second, and MCP/CLI discovery resolves one registration per store), so a
+  per-profile bootstrap store was rejected. Instead the launcher label recorded on every
+  registration (HS2-GWFEAA) marks the owner, and `local-host-snapshot` is the one _pinned_ label.
+  A non-pinned host (`npm run dev`, the Vite dev bridge) never safe-restarts or replaces a pinned
+  server: it opens projects through it as is, and when it would need a restart (an older protocol
+  or store schema) the open fails with a message naming the owner and the deliberate relaunch.
+  A pinned host that finds a server another host launched, even one with the selected build,
+  restarts it onto its own snapshot when idle (silently deferred while busy) so the protection
+  holds after a dev host started first. Two pinned hosts still reconcile against each other as
+  above. `server:rebuild`, `server:rebuild:release`, and `dev:rebuild-lan` end with an ordinary
+  `serve --stop`, which the server refuses for a pinned owner with a message naming its pid and
+  build; `prod:rebuild-lan` is the production host's own deliberate relaunch and passes
+  `--force`. A pinned server whose production host has exited stays protected until a forced stop.
   That selected revision stays pinned for the host's lifetime: at startup the host copies
   its client bundle and selected local executables into a private temporary snapshot, then
   serves and launches from that snapshot. Later source edits and working builds cannot
@@ -474,8 +491,8 @@ preview/download, server directory browser) are separate design work.
   configs persist its path, so the host exports the stable `target/{release,debug}/hotsheet-mcp`
   as `HOTSHEET_MCP_BIN` for setup to record (HS2-HNXE38).
   Explicit binary overrides remain authoritative. `server:rebuild:release` builds the release set
-  and stops the running machine server, and
-  `prod:rebuild-lan` runs it before serving the production client on `0.0.0.0`.
+  and stops the running machine server (refused while the production host owns it), and
+  `prod:rebuild-lan` runs it with `--force` before serving the production client on `0.0.0.0`.
 
 - **Project and ticket deep links (HS2-RVSPQ9, HS2-BQ0ECV, HS2-R4209F).** The local client accepts
   `/?project=<registered-checkout-id|alias|absolute-project-path|ticket-store-path>` with an optional

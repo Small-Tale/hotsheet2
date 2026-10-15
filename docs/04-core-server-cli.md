@@ -428,7 +428,9 @@ The server's life is **decoupled from any client's** (maintainer requirement,
 - **Shutdown is explicit** — `hotsheet serve --stop` / a tray/menu "Quit server"
   action / OS service stop — never an implicit side effect of a client exiting. Server
   shutdown preserves broker-hosted terminals by default; the project-scoped destructive
-  variant is `hotsheet serve --stop --kill-all-terminals`.
+  variant is `hotsheet serve --stop --kill-all-terminals`. A server launched by the pinned
+  production host (`launcher` = `local-host-snapshot`) is refused by an ordinary stop and
+  needs `--force` (HS2-9AWEX5).
 - **On iOS** there is no local server to auto-start (background-execution limits
   make an independent daemon impractical); iOS connects to a _remote_ server on a
   Mac. See [06-clients.md](06-clients.md) §6.4.
@@ -526,7 +528,18 @@ started it; `GET /health` and `GET /compatibility` report the same `launcher` an
 `executable`, so a maintainer can tell at a glance whether the pinned LAN host's server is
 the one running. `serve --list` prints those fields per server and prunes registration
 files whose recorded pid is dead (invalid records are kept for inspection), and
-`hotsheet-server --stop` prints the launcher and build of the process it signals. The Vite platform bridge supplies the client-side half: detached
+`hotsheet-server --stop` prints the launcher and build of the process it signals.
+**Ownership-aware stop (HS2-9AWEX5).** `lifecycle::stop_decision` makes an explicit stop
+refuse a server whose registration names the pinned launcher `local-host-snapshot` (the
+production local host): `hotsheet-server --stop` and `hotsheet-cli serve --stop` exit non-zero
+without signalling, print the owner's pid and build plus the deliberate alternatives, and skip
+`--kill-all-terminals` cleanup. `--force` (which requires `--stop`) stops it anyway, for
+deliberate relaunches such as `npm run prod:rebuild-lan`. Servers launched by `cli`,
+`dev-bridge`, `stable-dev`, an unspecified launcher, or a legacy registration without a launcher
+stop as before. The decision to isolate the production host this way rather than through a
+second per-profile machine server, and the bridge-side half (dev hosts never restart a pinned
+server; a pinned host takes ownership of one another host launched), are recorded in
+[06](06-clients.md) under the local production host. The Vite platform bridge supplies the client-side half: detached
 launch, health-checked discovery, and event-driven supervision after project-open, API,
 or terminal-WebSocket failures. It never starts a duplicate beside a registered live
 process; the server is already separate, so it outlives the client by construction.
@@ -970,6 +983,7 @@ hotsheet bootstrap [--project <path>] [--store <path>] [--remote <url>] [--tool 
 hotsheet serve         # run the server
 hotsheet serve --stop  # stop the server; preserve detached terminals
 hotsheet serve --stop --kill-all-terminals  # stop it and explicitly clear project terminals
+hotsheet serve --stop --force  # also stop a server owned by the pinned production host
 hotsheet reindex       # drop + rebuild the index from disk; prune idle older-schema index files
 hotsheet doctor --project .  # store health + read-only tool/HS1 onboarding guidance
 hotsheet merge-driver  # git-invoked semantic 3-way merge for ticket files (02-ticket-storage.md §2.7)

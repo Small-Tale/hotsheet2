@@ -1,5 +1,19 @@
 import { execFile, spawn } from 'node:child_process';
-import { appendFile, chmod, copyFile, cp, mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import {
+  appendFile,
+  chmod,
+  copyFile,
+  cp,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -51,9 +65,12 @@ async function processesUsing(home) {
  * HOTSHEET_HOME to find that server's discovery record, and match the build the host launched.
  */
 async function stopMachineServer(home) {
-  await run(workingTreeBinaries.HOTSHEET_CLI_BIN, ['serve', '-C', resolve(home, 'server-bootstrap.hs2'), '--stop'], {
-    env: { ...process.env, HOTSHEET_HOME: home },
-  }).catch(() => undefined);
+  // Forced: the pinned production host owns this server, and an ordinary stop refuses it (HS2-9AWEX5).
+  await run(
+    workingTreeBinaries.HOTSHEET_CLI_BIN,
+    ['serve', '-C', resolve(home, 'server-bootstrap.hs2'), '--stop', '--force'],
+    { env: { ...process.env, HOTSHEET_HOME: home } },
+  ).catch(() => undefined);
   const deadline = Date.now() + 10_000;
   while ((await processesUsing(home)).length > 0 && Date.now() < deadline)
     await new Promise((resolveWait) => setTimeout(resolveWait, 100));
@@ -71,7 +88,41 @@ const workingTreeBinaries = {
   HOTSHEET_MIGRATE_BIN: resolve(repoRoot, 'target/debug/hotsheet-migrate'),
 };
 
-let buildRoot;
+/** The bootstrap machine server's registration under `home` (pid, launcher, build), or undefined. */
+async function machineServer(home) {
+  try {
+    const store = await realpath(resolve(home, 'server-bootstrap.hs2')),
+      id = createHash('sha256').update(store).digest('hex').slice(0, 16);
+    return JSON.parse(await readFile(resolve(home, 'instances', `${id}.json`), 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+async function copyBinaries(directory) {
+  await mkdir(directory, { recursive: true });
+  return Object.fromEntries(
+    await Promise.all(
+      Object.entries(workingTreeBinaries).map(async ([variable, source]) => {
+        const destination = resolve(directory, variable.toLowerCase());
+        await copyFile(source, destination);
+        await chmod(destination, (await stat(source)).mode & 0o777);
+        return [variable, destination];
+      }),
+    ),
+  );
+}
+
+async function openThrough(origin, root, ticketStore) {
+  const response = await fetch(`${origin}/__hotsheet/projects/open`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ root, ticketStore }),
+  });
+  return { status: response.status, body: await response.json() };
+}
+
+let buildRoot, ownershipBuildRoot;
 beforeAll(async () => {
   await mkdir(resolve(webRoot, 'target'), { recursive: true });
   buildRoot = await mkdtemp(resolve(webRoot, 'target/local-host-e2e-'));
@@ -87,9 +138,13 @@ beforeAll(async () => {
       env: productionEnvironment,
     },
   );
+  // The first test deletes its build outputs to prove the snapshot; the ownership test needs its own.
+  ownershipBuildRoot = await mkdtemp(resolve(webRoot, 'target/local-host-e2e-ownership-'));
+  await cp(buildRoot, ownershipBuildRoot, { recursive: true });
 }, 180_000);
 afterAll(async () => {
   if (buildRoot) await rm(buildRoot, { recursive: true, force: true });
+  if (ownershipBuildRoot) await rm(ownershipBuildRoot, { recursive: true, force: true });
 });
 
 it('serves the production client and the local bridge without Vite', async () => {
@@ -351,3 +406,167 @@ it('serves the production client and the local bridge without Vite', async () =>
     expect(survivors).toEqual([]);
   }
 }, 120_000);
+
+// HS2-9AWEX5: the pinned production host and a dev host (`npm run dev`) share one machine server per
+// HOTSHEET_HOME. A dev host must never take that server over, and `server:rebuild`'s stop must not
+// pull it out from under the production host. After every step a fresh browser on the pinned host
+// opens the project without an error or a server-build notice.
+it('keeps the pinned host on its own machine server across dev hosts and rebuild stops', async () => {
+  const home = await mkdtemp(resolve(tmpdir(), 'hotsheet-local-host-owner-')),
+    runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-local-host-owner-runtime-')),
+    pinnedPort = await availablePort(),
+    devPort = await availablePort(),
+    pinnedOrigin = `http://127.0.0.1:${pinnedPort}`,
+    devOrigin = `http://127.0.0.1:${devPort}`,
+    env = { ...process.env, HOTSHEET_HOME: home };
+  let log = '',
+    pinned,
+    dev,
+    browser;
+  const capture = (child) => {
+    child.stdout.on('data', (chunk) => (log += chunk));
+    child.stderr.on('data', (chunk) => (log += chunk));
+  };
+  try {
+    const project = resolve(home, 'app'),
+      ticketStore = resolve(home, 'app.hs2');
+    await mkdir(project);
+    await run(workingTreeBinaries.HOTSHEET_CLI_BIN, ['-C', ticketStore, 'init', '--prefix', 'OW'], { env });
+    const pinnedBinaries = await copyBinaries(resolve(home, 'pinned-bin')),
+      devBinaries = await copyBinaries(resolve(home, 'dev-bin')),
+      revision = JSON.parse(
+        (await run(workingTreeBinaries.HOTSHEET_SERVER_BIN, ['--revision-status'])).stdout,
+      ).build_revision;
+    browser = await chromium.launch();
+    const freshOpenOnPinnedHost = async (step, capturePrefix) => {
+      const context = await browser.newContext(),
+        page = await context.newPage(),
+        errors = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      await page.goto(`${pinnedOrigin}/?project=${encodeURIComponent(project)}`);
+      await page.getByRole('heading', { name: 'Queue', level: 1 }).waitFor({ state: 'visible' });
+      expect(await page.locator('[data-component="server-build-notice-banner"]').count(), step).toBe(0);
+      expect(errors, step).toEqual([]);
+      if (capturePrefix) {
+        await mkdir(resolve(webRoot, 'target/visual-captures'), { recursive: true });
+        await page.screenshot({ path: resolve(webRoot, `target/visual-captures/${capturePrefix}-wide.png`) });
+        const phone = await context.newPage();
+        await phone.setViewportSize({ width: 390, height: 844 });
+        await phone.goto(`${pinnedOrigin}/?project=${encodeURIComponent(project)}`);
+        await phone.getByRole('combobox', { name: 'Ticket view' }).waitFor({ state: 'visible' });
+        await phone.getByText('No tickets yet').waitFor({ state: 'visible' });
+        expect(await phone.locator('[data-component="server-build-notice-banner"]').count(), step).toBe(0);
+        expect(await phone.evaluate(() => document.documentElement.scrollWidth), step).toBeLessThanOrEqual(390);
+        await phone.screenshot({ path: resolve(webRoot, `target/visual-captures/${capturePrefix}-narrow.png`) });
+      }
+      await context.close();
+    };
+
+    // (b) A dev host starts first and launches the machine server from its own build.
+    const devEnvironment = {
+      ...process.env,
+      ...devBinaries,
+      HOTSHEET_HOME: home,
+      HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+    };
+    delete devEnvironment.HOT_SHEET_BUILD_REVISION;
+    delete devEnvironment.HOTSHEET_LOCAL_HOST_SNAPSHOT;
+    dev = spawn(
+      process.execPath,
+      [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(devPort), '--strictPort'],
+      { env: devEnvironment, stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    capture(dev);
+    const deadline = Date.now() + 90_000;
+    while (Date.now() < deadline) {
+      try {
+        if ((await fetch(`${devOrigin}/`)).ok) break;
+      } catch {
+        /* Vite is still starting */
+      }
+      if (dev.exitCode !== null) throw new Error(`Dev host exited early.\n${log}`);
+      await new Promise((resolveWait) => setTimeout(resolveWait, 200));
+    }
+    const devFirst = await openThrough(devOrigin, project, ticketStore);
+    expect(devFirst.status, JSON.stringify(devFirst.body)).toBe(201);
+    const devLaunched = await machineServer(home);
+    expect(devLaunched?.launcher).toBe('stable-dev');
+
+    // The pinned host then takes ownership: the idle dev-launched server restarts onto its snapshot.
+    pinned = spawn(
+      process.execPath,
+      [resolve(ownershipBuildRoot, 'dist-host/local-host.js'), '--port', String(pinnedPort)],
+      {
+        cwd: webRoot,
+        env: { ...productionEnvironment, ...pinnedBinaries, HOT_SHEET_BUILD_REVISION: revision, HOTSHEET_HOME: home },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    capture(pinned);
+    await waitForHost(`${pinnedOrigin}/`, pinned, () => log);
+    const adopted = await openThrough(pinnedOrigin, project, ticketStore);
+    expect(adopted.status, JSON.stringify(adopted.body)).toBe(201);
+    expect(adopted.body.serverBuildNotice).toBeUndefined();
+    const owned = await machineServer(home);
+    expect(owned?.launcher).toBe('local-host-snapshot');
+    expect(owned?.pid).not.toBe(devLaunched.pid);
+    await freshOpenOnPinnedHost('after the pinned host adopted the dev-launched server');
+
+    // The dev host reopens through the pinned server and never restarts or replaces it.
+    const devAgain = await openThrough(devOrigin, project, ticketStore);
+    expect(devAgain.status, JSON.stringify(devAgain.body)).toBe(201);
+    expect((await machineServer(home))?.pid).toBe(owned.pid);
+    await freshOpenOnPinnedHost('after the dev host reopened');
+
+    // (a) `npm run server:rebuild` ends with this stop. It is refused, so no host can relaunch the
+    // server from another build; the dev host keeps attaching to the pinned server.
+    const refused = await run(
+      workingTreeBinaries.HOTSHEET_CLI_BIN,
+      ['serve', '-C', resolve(home, 'server-bootstrap.hs2'), '--stop'],
+      { env },
+    ).then(
+      () => undefined,
+      (error) => error,
+    );
+    expect(refused, 'the ordinary stop must fail').toBeDefined();
+    expect(String(refused.stderr)).toMatch(/refusing to stop[\s\S]*launcher=local-host-snapshot/);
+    expect(String(refused.stderr)).toContain('--force');
+    expect((await machineServer(home))?.pid).toBe(owned.pid);
+    expect((await openThrough(devOrigin, project, ticketStore)).status).toBe(201);
+    expect((await machineServer(home))?.pid).toBe(owned.pid);
+    await freshOpenOnPinnedHost('after the refused server:rebuild stop');
+
+    // (c) Rebuilding the dev host's binaries (here: replacing them in place) does not touch the
+    // running pinned server; both hosts keep opening through it.
+    await copyBinaries(resolve(home, 'dev-bin'));
+    expect((await openThrough(devOrigin, project, ticketStore)).status).toBe(201);
+    const pinnedAgain = await openThrough(pinnedOrigin, project, ticketStore);
+    expect(pinnedAgain.status).toBe(201);
+    expect(pinnedAgain.body.serverBuildNotice).toBeUndefined();
+    expect((await machineServer(home))?.pid).toBe(owned.pid);
+    await freshOpenOnPinnedHost('after a dev rebuild', 'hs2-9awex5-pinned-after-dev-rebuild');
+  } finally {
+    await browser?.close();
+    for (const host of [dev, pinned]) {
+      if (!host || host.exitCode !== null || host.signalCode !== null) continue;
+      const exited = new Promise((resolveExit) => host.once('exit', resolveExit));
+      host.kill('SIGTERM');
+      const force = setTimeout(() => host.kill('SIGKILL'), 10_000);
+      await exited;
+      clearTimeout(force);
+    }
+    await stopMachineServer(home);
+    // The dev-launched server started the detached terminal broker from the dev binary under this
+    // home. Brokers deliberately outlive server stops and restarts (they idle-exit later), so stop
+    // this test's broker explicitly rather than leaving it to its idle timeout.
+    for (const line of await processesUsing(home))
+      if (line.includes('--terminal-broker-process')) process.kill(Number(line.split(/\s+/)[0]), 'SIGTERM');
+    const deadline = Date.now() + 10_000;
+    while ((await processesUsing(home)).length > 0 && Date.now() < deadline)
+      await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+    const survivors = await processesUsing(home);
+    await rm(home, { recursive: true, force: true });
+    await rm(runtimeTemp, { recursive: true, force: true });
+    expect(survivors).toEqual([]);
+  }
+}, 240_000);
