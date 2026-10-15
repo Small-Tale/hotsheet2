@@ -465,8 +465,7 @@ fn call_actor(args: &Value) -> Result<Option<Value>, String> {
             .map(str::to_owned)
     };
     let env = |key: &str| {
-        std::env::var(key)
-            .ok()
+        actor_env_var(key)
             .map(|value| value.trim().to_owned())
             .filter(|value| !value.is_empty())
     };
@@ -483,6 +482,21 @@ fn call_actor(args: &Value) -> Result<Option<Value>, String> {
     serde_json::to_value(actor)
         .map(Some)
         .map_err(|error| error.to_string())
+}
+
+/// Reads an actor default from the shim's process environment.
+#[cfg(not(test))]
+fn actor_env_var(key: &str) -> Option<String> {
+    std::env::var(key).ok()
+}
+
+/// Unit tests read actor defaults from a per-thread fake instead of the process environment,
+/// so a test run inherited from an AI-launched session (which exports `HOTSHEET_ACTOR_ROLE` /
+/// `HOTSHEET_ACTOR_ID`) cannot change their expectations, and no test has to mutate the
+/// shared process environment (HS2-8JT960).
+#[cfg(test)]
+fn actor_env_var(key: &str) -> Option<String> {
+    tests::FAKE_ACTOR_ENV.with(|env| env.borrow().get(key).cloned())
 }
 
 /// Adds the call's `actor` to every mutating request body the tool sends.
@@ -2662,6 +2676,93 @@ fn auth_mismatch_message(base: &str, health: Option<&Value>, fallback: &str) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    thread_local! {
+        /// The actor environment `call_actor` sees in unit tests; empty unless a test sets it.
+        pub(super) static FAKE_ACTOR_ENV: RefCell<std::collections::HashMap<String, String>> =
+            RefCell::new(std::collections::HashMap::new());
+    }
+
+    fn with_fake_actor_env<T>(vars: &[(&str, &str)], body: impl FnOnce() -> T) -> T {
+        FAKE_ACTOR_ENV.with(|env| {
+            *env.borrow_mut() = vars
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                .collect();
+        });
+        let result = body();
+        FAKE_ACTOR_ENV.with(|env| env.borrow_mut().clear());
+        result
+    }
+
+    /// The actor body sent by a `hotsheet_create` call under the given fake environment.
+    fn sent_actor(vars: &[(&str, &str)], arguments: Value) -> Result<Option<Value>, String> {
+        with_fake_actor_env(vars, || {
+            let backend = FakeBackend::default();
+            let r = handle_message(
+                &req(
+                    "tools/call",
+                    json!({ "name": "hotsheet_create", "arguments": arguments }),
+                ),
+                &backend,
+            )
+            .unwrap();
+            if r["result"]["isError"] == Value::Bool(true) {
+                return Err(r["result"]["content"][0]["text"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned());
+            }
+            let call = backend.calls.borrow()[0].clone();
+            let json_start = call.find('{').unwrap();
+            let body: Value = serde_json::from_str(&call[json_start..]).unwrap();
+            Ok(body.get("actor").cloned())
+        })
+    }
+
+    #[test]
+    fn actor_defaults_come_from_the_shim_environment_and_arguments_win() {
+        // HS2-8JT960: the env defaults are injected, so this holds whatever the real process
+        // environment of the test run contains.
+        assert_eq!(sent_actor(&[], json!({ "title": "t" })), Ok(None));
+        assert_eq!(
+            sent_actor(
+                &[
+                    ("HOTSHEET_ACTOR_ROLE", "ai"),
+                    ("HOTSHEET_ACTOR_ID", "launched-1")
+                ],
+                json!({ "title": "t" })
+            ),
+            Ok(Some(json!({ "role": "ai", "id": "launched-1" })))
+        );
+        assert_eq!(
+            sent_actor(
+                &[("HOTSHEET_ACTOR_ROLE", " ai "), ("HOTSHEET_ACTOR_ID", "  ")],
+                json!({ "title": "t" })
+            ),
+            Ok(Some(json!({ "role": "ai" })))
+        );
+        assert_eq!(
+            sent_actor(
+                &[
+                    ("HOTSHEET_ACTOR_ROLE", "ai"),
+                    ("HOTSHEET_ACTOR_ID", "launched-1")
+                ],
+                json!({ "title": "t", "actor_role": "human", "actor_id": "me" })
+            ),
+            Ok(Some(json!({ "role": "human", "id": "me" })))
+        );
+        let orphan_id = sent_actor(
+            &[("HOTSHEET_ACTOR_ID", "launched-1")],
+            json!({ "title": "t" }),
+        );
+        assert!(
+            orphan_id
+                .as_ref()
+                .is_err_and(|message| message.contains("actor_id requires actor_role")),
+            "{orphan_id:?}"
+        );
+    }
     use std::cell::RefCell;
 
     #[derive(Default)]
