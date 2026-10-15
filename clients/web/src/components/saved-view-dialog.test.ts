@@ -47,7 +47,7 @@ describe('SavedViewDialog', () => {
     // field renders only its state marker, never an in-flow surface.
     expect(markup).not.toContain('ticket-search-surfaces');
     expect(markup).toContain(
-      '<span hidden data-ticket-search-surface-state data-ticket-search-for="saved-view-query" data-date-prefix="" data-help-open="true">',
+      '<span hidden data-ticket-search-surface-state data-ticket-search-for="saved-view-query" data-surfaces-open="true" data-date-prefix="" data-help-open="true">',
     );
     // Kerf's tag completion excludes the committed chip (HS2-5JXBQY).
     expect(markup).toContain('data-token-search-suggestion="tag:design"');

@@ -10,6 +10,7 @@ import { Text } from '@kerfjs/ui/text';
 import { TokenSearchField } from '@kerfjs/ui/token-search-field';
 import { createTokenSearchModel, type TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { computed, type ReadonlySignal } from 'kerfjs';
 import { action } from 'kerfjs/actions';
 import { CircleHelp } from 'lucide';
 
@@ -230,8 +231,8 @@ export function TicketSearchDateHelper({ id, prefix }: { id: string; prefix: str
 
 /**
  * The declarative state of one field's floating surfaces, read by `wireTicketSearchFields`, which
- * opens and closes the Kerf anchored surfaces to match (HS2-8TE69P). An empty `data-date-prefix`
- * means no date helper.
+ * opens and closes the Kerf anchored surfaces to match (HS2-8TE69P). An empty `data-date-prefix`,
+ * or `data-surfaces-open="false"`, means no date helper.
  */
 function TicketSearchSurfaceState({
   id,
@@ -244,16 +245,32 @@ function TicketSearchSurfaceState({
   open: boolean;
   helpOpen: boolean;
 }) {
-  const prefix = open ? (activeDatePrefix(model.state.value.query) ?? '') : '';
   return (
     <span
       hidden
       data-ticket-search-surface-state
       data-ticket-search-for={id}
-      data-date-prefix={prefix}
+      data-surfaces-open={String(open)}
+      data-date-prefix={typedDatePrefix(model)}
       data-help-open={String(open && helpOpen)}
     />
   );
+}
+
+const typedDatePrefixes = new WeakMap<TokenSearchModel, ReadonlySignal<string>>();
+
+/**
+ * The lifecycle date filter being typed, bound straight onto the surface marker's attribute: the
+ * field's render never reads the per-keystroke model state, so typing does not re-render the host
+ * (HS2-X72PD6). One stable `computed` per model keeps the binding from going stale.
+ */
+function typedDatePrefix(model: TokenSearchModel): ReadonlySignal<string> {
+  let prefix = typedDatePrefixes.get(model);
+  if (!prefix) {
+    prefix = computed(() => activeDatePrefix(model.state.value.query) ?? '');
+    typedDatePrefixes.set(model, prefix);
+  }
+  return prefix;
 }
 
 /**

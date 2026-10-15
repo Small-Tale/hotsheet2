@@ -11,6 +11,7 @@ import { effectiveSearch, type InlineSearchToken, sameInlineSearchState, tokenQu
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import type { Project } from '../interactions/types';
 import { customViewSearch } from '../saved-views';
+import { createSearchProjection } from '../search-projection-coalescing';
 import { createTicketSearchModel, inlineSearchTokens } from '../ticket-search-model';
 import { customTicketViewKey, ticketSearchCountViews, type TicketView, ticketViewQuery } from '../ticket-views';
 import type { WorkspaceSortPreference } from '../workspace-preferences';
@@ -120,17 +121,39 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
       searchHelpOpen.value = false;
     },
   });
+  // Plain typing reaches the projections at a typing pause, then searches at once; chips and
+  // empty/non-empty changes publish immediately (HS2-X72PD6).
+  const searchProjection = createSearchProjection(
+    () => ({ query: searchQuery.peek(), tokens: searchTokens.peek() }),
+    ({ query, tokens }, coalesced) => {
+      const committed = tokens.length > searchTokens.peek().length;
+      batch(() => {
+        searchQuery.value = query;
+        searchTokens.value = [...tokens];
+        if (committed) searchHelpOpen.value = false;
+      });
+      scheduleTicketSearch(coalesced ? 0 : undefined);
+    },
+  );
+  let searchEditorRevision = workspaceSearchModel.editorRevision.peek();
   effect(() => {
     const state = workspaceSearchModel.state.value,
-      tokens = inlineSearchTokens(state);
-    if (sameInlineSearchState(searchQuery.value, searchTokens.value, state.query, tokens)) return;
-    const committed = tokens.length > searchTokens.value.length;
-    batch(() => {
-      searchQuery.value = state.query;
-      searchTokens.value = tokens;
-      if (committed) searchHelpOpen.value = false;
-    });
-    scheduleTicketSearch();
+      tokens = inlineSearchTokens(state),
+      // A programmatic replacement (a restored session or saved view) is not typing.
+      revision = workspaceSearchModel.editorRevision.value,
+      replaced = revision !== searchEditorRevision;
+    searchEditorRevision = revision;
+    if (sameInlineSearchState(searchQuery.value, searchTokens.value, state.query, tokens)) {
+      searchProjection.cancel();
+      return;
+    }
+    searchProjection.update({ query: state.query, tokens }, { immediate: replaced });
+    // Typing still waiting for its pause holds off a search armed by an earlier edit, as each
+    // keystroke used to by rescheduling it.
+    if (searchProjection.pending() && searchTimer !== undefined) {
+      window.clearTimeout(searchTimer);
+      searchTimer = undefined;
+    }
   });
   /** The caret position a workspace chip occupies, for focus restoration around Kerf's chip actions. */
   function workspaceSearchTokenOffset(raw: string) {
@@ -350,7 +373,11 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
   function focusWorkspaceSearch(offset?: number) {
     restoreInlineSearchCaret(document, '[data-token-search-editor="workspace-search"]', offset);
   }
-  function scheduleTicketSearch() {
+  /** Publish typed search text still waiting for a typing pause, before reading the projections. */
+  function flushWorkspaceSearch() {
+    searchProjection.flush();
+  }
+  function scheduleTicketSearch(delay = 150) {
     resetProgressiveTicketRendering();
     scheduleProjectSessionPersistence();
     searchGeneration += 1;
@@ -365,7 +392,7 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
     searchTimer = window.setTimeout(() => {
       searchTimer = undefined;
       void refreshTicketSearch();
-    }, 150);
+    }, delay);
   }
   return {
     searchBarActive,
@@ -379,5 +406,6 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
     availableSearchTags,
     focusWorkspaceSearch,
     scheduleTicketSearch,
+    flushWorkspaceSearch,
   };
 }

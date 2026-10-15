@@ -147,6 +147,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/confidence-badge.tsx # Shared banded AI completion ConfidenceBadge + colocated CSS: compact pill (note header, TicketRow list/board summaries, HS2-A0Q6G6) and labeled inspector/reader header (HS2-DWTJ43); demo in src/ux-demo/confidence-badge-demo.tsx
     src/ticket-timeline-data.ts # Timeline entries from activity notes + lifecycle backfill; appends each completion cycle's confidence to its Completed headline
     src/draft-input-coalescing.ts # Typing-pause publication of editor draft signals plus flushDraftInputs() for every reader of drafts (HS2-EQTXTJ)
+    src/search-projection-coalescing.ts # Typing-pause projection of the workspace search model into searchQuery/searchTokens; chips and empty/non-empty publish at once (HS2-X72PD6)
     src/feedback-prompt-edits.ts # Note ids of FEEDBACK NEEDED prompts the user explicitly opened with Edit Note; only their saves carry edit_feedback_prompt (HS2-ZXGEFE)
     src/source-stale-notice.ts # Stale-local-source-only detection plus the global, build-pair-keyed dismissal of its info notice (HS2-B84P1S)
     src/ticket-usage-timeline.ts # Buckets a ticket's AI usage events into the timeline gaps and formats the per-gap labels and the per-model plus total usage breakdown (HS2-ZA7W6E, HS2-J14225)

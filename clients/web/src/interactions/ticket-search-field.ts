@@ -149,7 +149,7 @@ function wireTicketSearchSurfaces(root: HTMLElement, handlers: TicketSearchField
       const id = marker.dataset.ticketSearchFor,
         anchor = marker.closest('.ticket-search-field, .ticket-search-form-field');
       if (!id || !anchor) continue;
-      const prefix = marker.dataset.datePrefix ?? '',
+      const prefix = marker.dataset.surfacesOpen === 'true' ? (marker.dataset.datePrefix ?? '') : '',
         surfaces: [string, string, () => OverlayHandle][] = [];
       if (prefix) surfaces.push([`date:${id}`, prefix, () => openDate(id, anchor, prefix)]);
       if (marker.dataset.helpOpen === 'true')
@@ -170,7 +170,7 @@ function wireTicketSearchSurfaces(root: HTMLElement, handlers: TicketSearchField
     subtree: true,
     childList: true,
     attributes: true,
-    attributeFilter: ['data-date-prefix', 'data-help-open'],
+    attributeFilter: ['data-date-prefix', 'data-surfaces-open', 'data-help-open'],
   });
   sync();
   return () => {

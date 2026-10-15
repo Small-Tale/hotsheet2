@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 
+import { effect } from 'kerfjs';
 import { describe, expect, it } from 'vitest';
 
 import { createTicketSearchModel, replaceTicketSearch } from '../ticket-search-model';
@@ -80,11 +81,33 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     );
   });
 
+  it('does not re-run the host render while plain text is typed (HS2-X72PD6)', () => {
+    const search = model();
+    let renders = 0,
+      markup = '';
+    const dispose = effect(() => {
+      renders += 1;
+      markup = String(TicketSearchField({ id: 'f', label: 'Search', model: search }));
+    });
+    const type = (query: string) => {
+      search.edit({ query, tokens: search.state.peek().tokens });
+    };
+    type('u');
+    const afterFirst = renders;
+    for (const query of ['up', 'upd', 'updated', 'updated-after']) type(query);
+    expect(renders).toBe(afterFirst);
+    expect(markup).toContain('data-surfaces-open="true"');
+    // Committing a chip is structural and still re-renders.
+    replaceTicketSearch(search, 'is:open ');
+    expect(renders).toBeGreaterThan(afterFirst);
+    dispose();
+  });
+
   it('offers the date helper for a trailing lifecycle filter and the syntax help on request', () => {
     // The field renders only the surface state; the wiring opens Kerf anchored surfaces from it (HS2-8TE69P).
     const field = String(TicketSearchField({ id: 'f', label: 'Search', model: model('', 'updated-after:') }));
     expect(field).toContain(
-      '<span hidden data-ticket-search-surface-state data-ticket-search-for="f" data-date-prefix="updated-after" data-help-open="false">',
+      '<span hidden data-ticket-search-surface-state data-ticket-search-for="f" data-surfaces-open="true" data-date-prefix="updated-after" data-help-open="false">',
     );
     expect(field).not.toContain('aria-label="Date and time helper"');
     const date = String(TicketSearchDateHelper({ id: 'f', prefix: 'updated-after' }));

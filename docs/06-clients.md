@@ -600,6 +600,13 @@ preview/download, server directory browser) are separate design work.
   key, and every finish, save, submit, editor switch, refresh merge, ticket switch, and page hide
   flushes pending drafts first; the title's auto-height mirror still updates per keystroke
   (HS2-EQTXTJ; linked reader frames follow in HS2-WV0VPE).
+  The workspace search field works the same way: plain typing reaches the app's search
+  projection at a typing pause and then searches at once, while committing or removing a chip
+  and the search becoming empty or non-empty publish immediately; opening the saved-view
+  dialog and restoring a saved view flush pending text first. The field's render reads only
+  Kerf's structural `TokenSearchModel.structure`, and the typed date-filter prefix reaches the
+  date helper through a bound attribute, so keystrokes do not re-render the workspace
+  (HS2-X72PD6).
   Text fields (details, title, blocked reason, notes, in the inspector, the reader, and
   linked readers) never write to the server while the user is typing. Keystrokes update the
   controlled draft and, after a 150 ms debounce, a local recovery copy in `localStorage`

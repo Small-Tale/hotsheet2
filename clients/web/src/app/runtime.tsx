@@ -1253,6 +1253,7 @@ export async function startHotSheetWebClient() {
   }
   /** Restore a selected shared view; sessions saved before HS2-50R1YQ copied its query into the bar, so drop it. */
   function restoreCustomView(view: CustomView) {
+    flushWorkspaceSearch();
     if (orderedSearchText(searchQuery.value, searchTokens.value, () => true).trim() === view.query.trim())
       workspaceSearchModel.clear();
     activateCustomView();
@@ -2125,6 +2126,7 @@ export async function startHotSheetWebClient() {
     availableSearchTags,
     focusWorkspaceSearch,
     scheduleTicketSearch,
+    flushWorkspaceSearch,
   } = createWorkspaceSearchController({
     searchQuery,
     searchTokens,

@@ -2,6 +2,7 @@ import { effect, type Signal, signal } from 'kerfjs';
 
 import { Api, type CustomView } from '../api';
 import type { SavedViewContextMenuState } from '../components/view-navigation';
+import { flushDraftInputs } from '../draft-input-coalescing';
 import { type InlineSearchToken, orderedSearchText } from '../inline-search';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import type { Control, Project } from '../interactions/types';
@@ -82,6 +83,8 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
     savedViewHelpOpen.value = false;
   }
   function openSavedViewDialog() {
+    // Search text typed just before this still waits for a typing pause (HS2-X72PD6).
+    flushDraftInputs();
     const selected = customViewFor(selectedView.value),
       // A new view starts from what is visible: the selected view scoped by any search-bar query (HS2-50R1YQ).
       query = selected
