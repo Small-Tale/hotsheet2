@@ -27,6 +27,10 @@ export interface Project {
   setupWarning?: string;
   /** Changed Codex hooks require a new trust review (HS2-4AR09Z). */
   codexHooksChanged?: string;
+  /** The shared machine server differs from this host's selected build; dismissible info (HS2-46BKH7). */
+  serverBuildNotice?: string;
+  /** The user dismissed that notice for this open; the next open re-evaluates it (HS2-46BKH7). */
+  serverBuildNoticeDismissed?: boolean;
 }
 
 export type Control = HTMLElement & { value: string; open?: boolean; show?(): void; hide?(): void };

@@ -430,6 +430,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['codex-hooks-notice-banner', 1],
     ['shell-banner', 3],
     ['project-setup-warning-banner', 1],
+    ['server-build-notice-banner', 1],
     ['ticket-page-more', 2],
     ['app-empty-state', 4],
     ['app-error', 1],

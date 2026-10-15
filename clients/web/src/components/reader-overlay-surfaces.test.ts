@@ -35,6 +35,23 @@ describe('reader and overlay composition surfaces', () => {
         }),
       ),
     ).toContain('Upgrade required. Safe restart is unavailable');
+    // HS2-46BKH7: a compatible revision mismatch the host already explained renders no alert banner.
+    const mismatch = {
+      kind: 'compatible' as const,
+      revisionMismatch: true,
+      sourceStale: false,
+      canRestartServer: true,
+    };
+    expect(String(CompatibilityBannerSurface({ assessment: mismatch }))).toContain('Different server build is running');
+    expect(String(CompatibilityBannerSurface({ assessment: mismatch, revisionMismatchExplained: true }))).toBe('null');
+    expect(
+      String(
+        CompatibilityBannerSurface({
+          assessment: { ...mismatch, kind: 'server_too_old', detail: 'Upgrade required.' },
+          revisionMismatchExplained: true,
+        }),
+      ),
+    ).toContain('Upgrade required.');
     expect(
       String(
         ConnectionDetailsSurface({

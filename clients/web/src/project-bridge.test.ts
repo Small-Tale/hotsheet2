@@ -31,6 +31,7 @@ import {
   projectServerPlan,
   projectSessionRegistry,
   reconcileHs1Registrations,
+  reconcileSelectedServerBuild,
   recoverUnhealthyServer,
   refreshLocalProjectSetup,
   refreshProjectSetupOnOpen,
@@ -38,7 +39,6 @@ import {
   requireCompatibleServer,
   requireCurrentSetupAssets,
   requireReportedCorruptPath,
-  requireSelectedServerBuild,
   requireStoreSchemaCompatibility,
   revealCommand,
   runGitCommand,
@@ -1336,14 +1336,107 @@ describe('machine server supervision', () => {
         'current',
       ),
     ).toBe(false);
-    expect(() => {
-      requireSelectedServerBuild(
-        { ...server, build_revision: 'current', source_revision: 'changed', source_stale: true },
-        'current',
-      );
-    }).not.toThrow();
-    expect(() => {
-      requireSelectedServerBuild(server, 'current');
-    }).toThrow(/does not match the current local build/);
+  });
+});
+
+describe('reconcileSelectedServerBuild (HS2-46BKH7)', () => {
+  const restartable = { lifecycle_restart: true, lifecycle_quiescence: true },
+    running = { pid: 11, url: 'http://127.0.0.1:1', secret: 's', started_at: '2026-10-15T00:00:00Z' },
+    replacement = { pid: 12, url: 'http://127.0.0.1:2', secret: 's', started_at: '2026-10-15T00:01:00Z' },
+    server = (build_revision: string, capabilities = restartable) => ({
+      generation: 'hs2',
+      protocol: { min: 1, max: 1 },
+      build_revision,
+      capabilities,
+    });
+  const platform = (overrides: Partial<Parameters<typeof reconcileSelectedServerBuild>[3]> = {}) => ({
+    restart: vi.fn().mockResolvedValue(replacement),
+    refresh: vi.fn().mockResolvedValue(server('selected')),
+    attempts: new Map(),
+    now: () => 1_000,
+    ...overrides,
+  });
+
+  it('leaves a matching or unpinned server alone', async () => {
+    const matched = platform();
+    await expect(
+      reconcileSelectedServerBuild('/store', { instance: running, metadata: server('selected') }, 'selected', matched),
+    ).resolves.toMatchObject({ outcome: 'matched', instance: running });
+    await expect(
+      reconcileSelectedServerBuild('/store', { instance: running, metadata: server('other') }, undefined, matched),
+    ).resolves.toMatchObject({ outcome: 'matched' });
+    expect(matched.restart).not.toHaveBeenCalled();
+  });
+
+  it('restarts an idle mismatched server and re-reads the replacement', async () => {
+    const idle = platform();
+    await expect(
+      reconcileSelectedServerBuild('/store', { instance: running, metadata: server('other') }, 'selected', idle),
+    ).resolves.toMatchObject({ outcome: 'restarted', instance: replacement, metadata: server('selected') });
+    expect(idle.restart).toHaveBeenCalledWith(running);
+    expect(idle.refresh).toHaveBeenCalledWith(replacement);
+    expect(idle.attempts.size).toBe(0);
+  });
+
+  it('defers with a notice instead of failing when the busy server refuses the restart', async () => {
+    const busy = platform({ restart: vi.fn().mockRejectedValue(new Error('server is not quiescent')) });
+    const result = await reconcileSelectedServerBuild(
+      '/store',
+      { instance: running, metadata: server('other') },
+      'selected',
+      busy,
+    );
+    expect(result).toMatchObject({ outcome: 'deferred', reason: 'busy', instance: running });
+    expect(result.outcome === 'deferred' && result.notice).toMatch(/busy with active work/);
+    expect(result.outcome === 'deferred' && result.notice).not.toMatch(/server:rebuild/);
+  });
+
+  it('does not re-request a refused restart on every open until the cooldown passes or the server changes', async () => {
+    let clock = 1_000;
+    const busy = platform({
+      restart: vi.fn().mockRejectedValue(new Error('busy')),
+      now: () => clock,
+      retryAfterMs: 30_000,
+    });
+    const open = (instance = running) =>
+      reconcileSelectedServerBuild('/store', { instance, metadata: server('other') }, 'selected', busy);
+    await expect(open()).resolves.toMatchObject({ reason: 'busy' });
+    await expect(open()).resolves.toMatchObject({ reason: 'recently_attempted' });
+    expect(busy.restart).toHaveBeenCalledTimes(1);
+    clock += 30_000;
+    await expect(open()).resolves.toMatchObject({ reason: 'busy' });
+    expect(busy.restart).toHaveBeenCalledTimes(2);
+    await expect(open(replacement)).resolves.toMatchObject({ reason: 'busy' });
+    expect(busy.restart).toHaveBeenCalledTimes(3);
+    await expect(
+      reconcileSelectedServerBuild('/other-store', { instance: running, metadata: server('other') }, 'selected', busy),
+    ).resolves.toMatchObject({ reason: 'busy' });
+  });
+
+  it('defers when the server cannot restart safely or still mismatches after restarting', async () => {
+    const unsupported = platform();
+    await expect(
+      reconcileSelectedServerBuild(
+        '/store',
+        { instance: running, metadata: server('other', { lifecycle_restart: false, lifecycle_quiescence: true }) },
+        'selected',
+        unsupported,
+      ),
+    ).resolves.toMatchObject({ outcome: 'deferred', reason: 'unsupported' });
+    expect(unsupported.restart).not.toHaveBeenCalled();
+    const stubborn = platform({ refresh: vi.fn().mockResolvedValue(server('other')) });
+    await expect(
+      reconcileSelectedServerBuild('/store', { instance: running, metadata: server('other') }, 'selected', stubborn),
+    ).resolves.toMatchObject({ outcome: 'deferred', reason: 'still_mismatched', instance: replacement });
+    // The replacement is remembered, so the next open does not restart the server yet again.
+    await expect(
+      reconcileSelectedServerBuild(
+        '/store',
+        { instance: replacement, metadata: server('other') },
+        'selected',
+        stubborn,
+      ),
+    ).resolves.toMatchObject({ outcome: 'deferred', reason: 'recently_attempted' });
+    expect(stubborn.restart).toHaveBeenCalledTimes(1);
   });
 });

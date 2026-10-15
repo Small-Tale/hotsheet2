@@ -155,6 +155,7 @@ describe('UX demo catalog', () => {
       'codex-hooks-notice-banner',
       'shell-banner',
       'project-setup-warning-banner',
+      'server-build-notice-banner',
       'notifications-paused-banner',
       'provider-icon',
       'ticket-source-setup-dialog',

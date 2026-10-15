@@ -5547,6 +5547,71 @@
       }
     },
     {
+      "id": "server-build-notice-banner",
+      "name": "ServerBuildNoticeBanner",
+      "kind": "component",
+      "purpose": "Dismissible info strip when a pinned host serves a project through a machine server that differs from its selected build (HS2-46BKH7).",
+      "source": "src/components/server-build-notice-banner.tsx",
+      "publicExports": [
+        {
+          "name": "ServerBuildNoticeBanner"
+        }
+      ],
+      "sourceLinks": ["src/components/server-build-notice-banner.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/server-build-notice-banner.tsx",
+        "composition": "src/components/server-build-notice-banner.tsx"
+      },
+      "selection": {
+        "useWhen": [
+          "Hot Sheet opened a project through a shared machine server that another host or build replaced, and a safe restart was refused, unsupported, or ineffective."
+        ],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific ServerBuildNoticeBanner behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "notifications-paused-banner",
       "name": "NotificationsPausedBanner",
       "kind": "component",

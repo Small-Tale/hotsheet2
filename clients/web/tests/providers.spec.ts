@@ -2748,6 +2748,44 @@ test('opens a project whose setup refresh was skipped and explains it in a dismi
   }
 });
 
+test('keeps a project usable through a mismatched shared server and explains it in a dismissible info banner (HS2-46BKH7)', async ({
+  page,
+}) => {
+  const notice =
+    'The Hot Sheet server running on this machine was started by another host or build and does not match the build this host selected. It is busy with active work; this host will restart it onto its own build when the work finishes. The project stays usable meanwhile.';
+  await mockProject(page);
+  // The bridge's real open response when the pinned host could not restart the shared server yet.
+  // The compatibility assessment reports the same mismatch; the notice replaces the alert banner.
+  const compatibility = { kind: 'compatible', revisionMismatch: true, sourceStale: false, canRestartServer: true };
+  await page.route('**/__hotsheet/projects/open', (route) =>
+    route.fulfill({ status: 201, json: { ...project, compatibility, serverBuildNotice: notice } }),
+  );
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/');
+    if (width === 1280) {
+      await page.getByRole('button', { name: 'Open Project' }).click();
+      await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    }
+    const banner = page.locator('[data-component="server-build-notice-banner"]');
+    await expect(banner).toContainText('Server build differs from this host');
+    await expect(banner).toContainText('restart it onto its own build when the work finishes');
+    await expect(banner).toHaveAttribute('data-tone', 'info');
+    // No setup warning is implied, the alert-toned "different build" banner stays out, and the project
+    // is fully usable.
+    await expect(page.locator('[data-component="project-setup-warning-banner"]')).toHaveCount(0);
+    await expect(page.getByText('Different server build is running')).toHaveCount(0);
+    await expect(page.getByText('Use real project tickets').first()).toBeVisible();
+    await expect(page.getByText('could not be reopened')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: test.info().outputPath(`server-build-notice-${width}.png`) });
+    await banner.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(banner).toHaveCount(0);
+    await expect(page.getByText('Different server build is running')).toHaveCount(0);
+    await expect(page.getByText('Use real project tickets').first()).toBeVisible();
+  }
+});
+
 test('explains changed Codex hooks without a setup-failure warning and dismisses per project (HS2-4AR09Z)', async ({
   page,
 }) => {

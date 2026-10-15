@@ -23,6 +23,7 @@ export const PROJECT_LIFECYCLE_ACTIONS = {
   removeHs1Data: action('remove-hs1-data'),
   dismissProjectSetupWarning: action('dismiss-project-setup-warning'),
   dismissCodexHooksNotice: action('dismiss-codex-hooks-notice'),
+  dismissServerBuildNotice: action('dismiss-server-build-notice'),
   dismissHs1Cleanup: action('dismiss-hs1-cleanup'),
   dismissTicketSourceSetup: action('dismiss-ticket-source-setup'),
   submitGitSourceRelink: action('submit-git-source-relink'),

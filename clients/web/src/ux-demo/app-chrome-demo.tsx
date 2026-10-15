@@ -17,6 +17,7 @@ import {
 import { AppError } from '../components/app-error';
 import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
 import { ProjectSetupWarningBanner } from '../components/project-setup-warning-banner';
+import { ServerBuildNoticeBanner } from '../components/server-build-notice-banner';
 import { ShellBanner } from '../components/shell-banner';
 import { TicketPageMore } from '../components/ticket-page-more';
 import type { DemoModule } from './demo-module';
@@ -93,6 +94,14 @@ export function ProjectSetupWarningBannerDemo() {
   return (
     <CatalogExample label="Default">
       <ProjectSetupWarningBanner detail="The development Hot Sheet CLI does not match the current setup templates and may overwrite newer project guidance. Run cargo build -p hotsheet-cli, then reopen the project. No setup files were changed." />
+    </CatalogExample>
+  );
+}
+
+export function ServerBuildNoticeBannerDemo() {
+  return (
+    <CatalogExample label="Busy Server">
+      <ServerBuildNoticeBanner detail="The Hot Sheet server running on this machine was started by another host or build and does not match the build this host selected. It is busy with active work; this host will restart it onto its own build when the work finishes. The project stays usable meanwhile." />
     </CatalogExample>
   );
 }
@@ -200,6 +209,7 @@ export const demoModule: DemoModule = {
     'codex-hooks-notice-banner': { catalogExamples: true, Demo: CodexHooksNoticeBannerDemo },
     'shell-banner': { catalogExamples: true, Demo: ShellBannerDemo },
     'project-setup-warning-banner': { catalogExamples: true, Demo: ProjectSetupWarningBannerDemo },
+    'server-build-notice-banner': { catalogExamples: true, Demo: ServerBuildNoticeBannerDemo },
     'ticket-page-more': { catalogExamples: true, Demo: TicketPageMoreDemo },
     'app-empty-state': { catalogExamples: true, Demo: AppEmptyStateDemo },
     'app-error': { catalogExamples: true, Demo: AppErrorDemo },

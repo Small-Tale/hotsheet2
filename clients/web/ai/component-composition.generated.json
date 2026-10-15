@@ -4209,6 +4209,70 @@
       }
     },
     {
+      "key": "hotsheet-web:server-build-notice-banner",
+      "package": "hotsheet-web",
+      "id": "server-build-notice-banner",
+      "name": "ServerBuildNoticeBanner",
+      "kind": "component",
+      "purpose": "Dismissible info strip when a pinned host serves a project through a machine server that differs from its selected build (HS2-46BKH7).",
+      "publicExports": [
+        {
+          "name": "ServerBuildNoticeBanner"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/server-build-notice-banner.tsx"
+      ],
+      "source": "src/components/server-build-notice-banner.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/server-build-notice-banner.tsx",
+        "composition": "src/components/server-build-notice-banner.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:settings-navigation",
       "package": "hotsheet-web",
       "id": "settings-navigation",

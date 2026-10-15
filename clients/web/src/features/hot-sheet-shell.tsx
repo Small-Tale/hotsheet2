@@ -33,6 +33,7 @@ import { ProjectSetupWarningBanner } from '../components/project-setup-warning-b
 import type { ProjectStripMode } from '../components/project-strip-actions';
 import { type ProjectTabProps } from '../components/project-tab';
 import { CompatibilityBannerSurface } from '../components/reader-overlay-surfaces';
+import { ServerBuildNoticeBanner } from '../components/server-build-notice-banner';
 import { type SettingsCategory, settingsCategoryTitle } from '../components/settings-navigation';
 import { TerminalDashboardControls, type TerminalDashboardGroup } from '../components/terminal-dashboard';
 import type { TerminalDrawerProps } from '../components/terminal-drawer';
@@ -529,7 +530,10 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
         projectTabAction={viewportMobile.value ? undefined : headingAction}
         banner={
           <>
-            <CompatibilityBannerSurface assessment={current.compatibility} />
+            <CompatibilityBannerSurface
+              assessment={current.compatibility}
+              revisionMismatchExplained={Boolean(current.serverBuildNotice)}
+            />
             {currentJob &&
               !(
                 currentJob.kind === 'backup' &&
@@ -555,6 +559,9 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
               )}
             {current.setupWarning && <ProjectSetupWarningBanner detail={current.setupWarning} />}
             {current.codexHooksChanged && <CodexHooksNoticeBanner path={current.codexHooksChanged} />}
+            {current.serverBuildNotice && !current.serverBuildNoticeDismissed && (
+              <ServerBuildNoticeBanner detail={current.serverBuildNotice} />
+            )}
             {notificationsPaused.value && (
               <NotificationsPausedBanner
                 waiting={pendingPermissions().length}

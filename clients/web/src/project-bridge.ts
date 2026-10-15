@@ -51,6 +51,11 @@ export interface ProjectSession {
   setupWarning?: string;
   /** Codex hook bytes changed; the user must review them in this checkout (HS2-4AR09Z). */
   codexHooksChanged?: string;
+  /**
+   * The running machine server is not the build this pinned host selected and could not be
+   * restarted yet (HS2-46BKH7). The project is fully usable through the running server.
+   */
+  serverBuildNotice?: string;
 }
 
 export interface InstanceInfo {
@@ -1245,14 +1250,94 @@ export function serverNeedsSelectedBuild(
   return Boolean(selectedRevision && server?.build_revision !== selectedRevision);
 }
 
-export function requireSelectedServerBuild(
-  server: ServerCompatibility | undefined,
+/** Why a pinned host keeps using a server it did not select (HS2-46BKH7). */
+export type ServerBuildDeferral = 'busy' | 'unsupported' | 'still_mismatched' | 'recently_attempted';
+
+export type ServerBuildReconciliation =
+  | { outcome: 'matched' }
+  | { outcome: 'restarted' }
+  | { outcome: 'deferred'; reason: ServerBuildDeferral; notice: string };
+
+/** Last safe-restart request per store, so a persistent mismatch does not re-request one on every open. */
+const serverBuildRestartAttempts = new Map<string, { instance: InstanceInfo; at: number }>();
+
+/**
+ * The notice a pinned host shows while it serves a project through a server it did not select.
+ * It never tells the user to stop or rebuild the server from a running host: `server:rebuild`
+ * stops the shared machine server and restarts the very cycle that produced the mismatch.
+ */
+export function serverBuildNoticeText(reason: ServerBuildDeferral): string {
+  const shared =
+    'The Hot Sheet server running on this machine was started by another host or build and does not match the build this host selected.';
+  switch (reason) {
+    case 'busy':
+      return `${shared} It is busy with active work; this host will restart it onto its own build when the work finishes. The project stays usable meanwhile.`;
+    case 'unsupported':
+      return `${shared} It cannot be restarted safely from here. The project stays usable; relaunch this host deliberately (npm run prod:rebuild-lan or dev:rebuild-lan) to replace it.`;
+    case 'still_mismatched':
+      return `${shared} A restart did not produce the selected build, so this host is serving the project through the running server. Relaunch this host deliberately (npm run prod:rebuild-lan or dev:rebuild-lan) to replace it.`;
+    case 'recently_attempted':
+      return `${shared} A restart was requested recently; this host will try again shortly. The project stays usable meanwhile.`;
+  }
+}
+
+export interface ServerBuildReconciliationPlatform {
+  /** Request a quiescent restart and supervise the replacement; rejects when the server refuses. */
+  restart(current: InstanceInfo): Promise<InstanceInfo>;
+  /** Re-read the replacement server's compatibility metadata. */
+  refresh(instance: InstanceInfo): Promise<ServerCompatibility | undefined>;
+  now?: () => number;
+  attempts?: Map<string, { instance: InstanceInfo; at: number }>;
+  /** How long a refused restart waits before the next open requests one again. */
+  retryAfterMs?: number;
+}
+
+/**
+ * Bring the running machine server onto the build this host selected, without ever failing the
+ * project open for a protocol-compatible server (HS2-46BKH7). A pinned production host shares the
+ * machine server with every other host on the box; when another host replaced it, every refresh and
+ * every new device used to fail while the server was busy. Now a refused, unsupported, or ineffective
+ * restart defers with a notice and the open proceeds through the running server. Only a server that
+ * is actually incompatible (protocol or store schema) still blocks, and the caller checks that.
+ */
+export async function reconcileSelectedServerBuild(
+  store: string,
+  current: { instance: InstanceInfo; metadata: ServerCompatibility | undefined },
   selectedRevision: string | undefined,
-): void {
-  if (serverNeedsSelectedBuild(server, selectedRevision))
-    throw new Error(
-      'The running Hot Sheet server does not match the current local build. Run `npm run server:rebuild` or `npm run server:rebuild:release`, then reopen the project.',
-    );
+  platform: ServerBuildReconciliationPlatform,
+): Promise<ServerBuildReconciliation & { instance: InstanceInfo; metadata: ServerCompatibility | undefined }> {
+  const { instance, metadata } = current;
+  if (!serverNeedsSelectedBuild(metadata, selectedRevision)) return { outcome: 'matched', instance, metadata };
+  const deferred = (reason: ServerBuildDeferral) => ({
+    outcome: 'deferred' as const,
+    reason,
+    notice: serverBuildNoticeText(reason),
+    instance,
+    metadata,
+  });
+  if (!supportsSafeRestart(metadata)) return deferred('unsupported');
+  const now = platform.now ?? Date.now,
+    attempts = platform.attempts ?? serverBuildRestartAttempts,
+    retryAfterMs = platform.retryAfterMs ?? 30_000,
+    previous = attempts.get(store);
+  if (previous && sameInstance(previous.instance, instance) && now() - previous.at < retryAfterMs)
+    return deferred('recently_attempted');
+  attempts.set(store, { instance, at: now() });
+  let replacement: InstanceInfo;
+  try {
+    replacement = await platform.restart(instance);
+  } catch {
+    return deferred('busy');
+  }
+  const refreshed = await platform.refresh(replacement);
+  if (serverNeedsSelectedBuild(refreshed, selectedRevision)) {
+    // The replacement is still not the selected build (for example the host's own binary changed
+    // under it). Remember it so the next opens do not restart the server again before the cooldown.
+    attempts.set(store, { instance: replacement, at: now() });
+    return { ...deferred('still_mismatched'), instance: replacement, metadata: refreshed };
+  }
+  attempts.delete(store);
+  return { outcome: 'restarted', instance: replacement, metadata: refreshed };
 }
 
 function supportsSafeRestart(server: ServerCompatibility | undefined): boolean {
@@ -1304,20 +1389,37 @@ async function openPreparedLocalProject(
   const cli = ticketStore ? await cliCompatibility(ticketStore, runProcess) : undefined;
   const selectedRevision = process.env.HOT_SHEET_BUILD_REVISION;
   let compatibility = assessCompatibility(metadata, undefined, selectedRevision);
+  const retarget = (next: InstanceInfo) => {
+    instance = next;
+    target = { url: next.url, secret: next.secret, root, serverStore: plan.serverStore };
+  };
   if (
-    (compatibility.kind === 'server_too_old' ||
-      storeNeedsServerUpgrade(metadata, cli) ||
-      serverNeedsSelectedBuild(metadata, selectedRevision)) &&
+    (compatibility.kind === 'server_too_old' || storeNeedsServerUpgrade(metadata, cli)) &&
     supportsSafeRestart(metadata)
   ) {
-    instance = await restartForUpgrade(plan.serverStore, target, instance);
-    target = { url: instance.url, secret: instance.secret, root, serverStore: plan.serverStore };
+    retarget(await restartForUpgrade(plan.serverStore, target, instance));
     metadata = await serverRequest(target, '/compatibility', parseServerCompatibility).catch(() => undefined);
     compatibility = assessCompatibility(metadata, undefined, selectedRevision);
   }
-  // A running production host pins its selected binaries at launch. Source edits after
-  // that point do not change the served client or server until an explicit rebuild.
-  requireSelectedServerBuild(metadata, selectedRevision);
+  // A running production host pins its selected binaries at launch. Source edits after that point
+  // do not change the served client or server until an explicit rebuild. When another host already
+  // replaced the shared machine server, bring it back when it is idle and otherwise keep serving the
+  // project through the running, protocol-compatible server (HS2-46BKH7).
+  const reconciled = await reconcileSelectedServerBuild(plan.serverStore, { instance, metadata }, selectedRevision, {
+    restart: (running) => restartForUpgrade(plan.serverStore, target, running),
+    refresh: (replacement) =>
+      serverRequest(
+        { url: replacement.url, secret: replacement.secret, root, serverStore: plan.serverStore },
+        '/compatibility',
+        parseServerCompatibility,
+      ).catch(() => undefined),
+  });
+  if (reconciled.instance !== instance) {
+    retarget(reconciled.instance);
+    metadata = reconciled.metadata;
+    compatibility = assessCompatibility(metadata, undefined, selectedRevision);
+  }
+  const serverBuildNotice = reconciled.outcome === 'deferred' ? reconciled.notice : undefined;
   if (ticketStore && cli) requireStoreSchemaCompatibility(metadata, cli, 'open');
   requireCompatibleServer(compatibility);
   const opened = await serverRequest(target, '/projects/open', parseOpenedCheckout, {
@@ -1344,6 +1446,7 @@ async function openPreparedLocalProject(
     compatibility,
     ...(setupResult.warning ? { setupWarning: setupResult.warning } : {}),
     ...(setupResult.codexHooksChanged ? { codexHooksChanged: setupResult.codexHooksChanged } : {}),
+    ...(serverBuildNotice ? { serverBuildNotice } : {}),
     needsTicketSetup: opened.checkout.sources.length === 0,
     needsHs1Migration: hs1DataPresent && !imported,
     hs1ImportCompleted: imported,

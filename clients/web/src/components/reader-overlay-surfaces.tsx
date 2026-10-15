@@ -50,8 +50,19 @@ export function ReaderLayersSurface({ layers }: { layers: readonly SafeHtml[] })
   return <>{layers}</>;
 }
 
-export function CompatibilityBannerSurface({ assessment }: { assessment?: CompatibilityAssessment }) {
-  if (!assessment || (assessment.kind === 'compatible' && !assessment.revisionMismatch)) return null;
+export function CompatibilityBannerSurface({
+  assessment,
+  revisionMismatchExplained = false,
+}: {
+  assessment?: CompatibilityAssessment;
+  /**
+   * The host already explained a compatible revision mismatch through its deferred-restart notice
+   * (HS2-46BKH7), so the alert-toned "different build" banner would only duplicate it.
+   */
+  revisionMismatchExplained?: boolean;
+}) {
+  if (!assessment || (assessment.kind === 'compatible' && (!assessment.revisionMismatch || revisionMismatchExplained)))
+    return null;
   const state: ConnectionState =
     assessment.kind === 'compatible'
       ? 'revision-mismatch'

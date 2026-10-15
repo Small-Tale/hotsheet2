@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
-import { appendFile, chmod, copyFile, cp, mkdir, mkdtemp, readdir, rm, stat } from 'node:fs/promises';
+import { appendFile, chmod, copyFile, cp, mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -98,6 +98,8 @@ it('serves the production client and the local bridge without Vite', async () =>
     origin = `http://127.0.0.1:${port}`;
   let log = '',
     child,
+    other,
+    otherBuildRoot,
     browser;
   // Everything that can fail runs inside the try, so the host and its machine server are always
   // stopped: a browser that failed to launch used to leave both running (HS2-WQ65KT).
@@ -139,6 +141,9 @@ it('serves the production client and the local bridge without Vite', async () =>
     await expect.poll(() => log).toContain(`Hot Sheet production client on ${origin}/`);
     // HS2-D2JQ9A: the host says which server build it launches (release when one is built).
     await expect.poll(() => log).toMatch(/Using (release|debug) Hot Sheet binaries/);
+    // A second pinned host later in this test needs the same build after the working outputs are gone.
+    otherBuildRoot = await mkdtemp(resolve(webRoot, 'target/local-host-e2e-other-'));
+    await cp(buildRoot, otherBuildRoot, { recursive: true });
     // Working builds can replace or delete their outputs while this host stays on its launch snapshot.
     await rm(resolve(buildRoot, 'dist'), { recursive: true });
     for (const candidate of Object.values(candidates)) await rm(candidate);
@@ -269,17 +274,79 @@ it('serves the production client and the local bridge without Vite', async () =>
     await linked.locator('[data-component="ticket-reader"][data-reader-active="true"]').waitFor({ state: 'visible' });
     await linked.screenshot({ path: resolve(webRoot, 'target/visual-captures/hs2-r4209f-ticket-link.png') });
     await fresh.close();
+
+    // HS2-46BKH7: a second pinned host on the same machine selected a build the shared machine
+    // server does not run (another host replaced it). While that server is busy, the host must still
+    // open the project through it and explain the deferred restart, instead of failing every open.
+    await mkdir(resolve(project, '.hotsheet2'), { recursive: true });
+    await writeFile(
+      resolve(project, '.hotsheet2/settings.local.json'),
+      JSON.stringify({ commands: [{ id: 'hold', title: 'Hold the server busy', program: 'sleep', args: ['20'] }] }),
+    );
+    const hold = await fetch(`${api}/checkouts/${encodeURIComponent(id)}/commands/hold/run`, { method: 'POST' });
+    expect(hold.status, await hold.clone().text()).toBe(202);
+    const otherPort = await availablePort(),
+      otherOrigin = `http://127.0.0.1:${otherPort}`;
+    other = spawn(process.execPath, [resolve(otherBuildRoot, 'dist-host/local-host.js'), '--port', String(otherPort)], {
+      cwd: webRoot,
+      env: {
+        ...productionEnvironment,
+        ...workingTreeBinaries,
+        HOT_SHEET_BUILD_REVISION: `source-sha256:${'0'.repeat(64)}`,
+        HOTSHEET_HOME: home,
+        HOTSHEET_REPO_ROOT: checkout,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    other.stdout.on('data', (chunk) => (log += chunk));
+    other.stderr.on('data', (chunk) => (log += chunk));
+    await waitForHost(`${otherOrigin}/`, other, () => log);
+    const mismatched = await fetch(`${otherOrigin}/__hotsheet/projects/open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root: project, ticketStore }),
+    });
+    expect(mismatched.status).toBe(201);
+    const mismatchedBody = await mismatched.json();
+    expect(mismatchedBody.serverBuildNotice).toMatch(/busy with active work/);
+    expect(mismatchedBody.serverBuildNotice).not.toMatch(/server:rebuild/);
+    expect(mismatchedBody.compatibility.kind).toBe('compatible');
+    // A refresh and another device both open through the running server and see the notice.
+    const noticeBanner = '[data-component="server-build-notice-banner"]';
+    const mismatchedWide = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await mismatchedWide.goto(`${otherOrigin}/?project=${encodeURIComponent(project)}`);
+    await mismatchedWide.getByRole('heading', { name: 'Queue', level: 1 }).waitFor({ state: 'visible' });
+    await mismatchedWide.locator(noticeBanner).waitFor({ state: 'visible' });
+    await mismatchedWide.screenshot({
+      path: resolve(webRoot, 'target/visual-captures/hs2-46bkh7-server-build-notice-wide.png'),
+    });
+    await mismatchedWide.reload();
+    await mismatchedWide.getByRole('heading', { name: 'Queue', level: 1 }).waitFor({ state: 'visible' });
+    await mismatchedWide.locator(noticeBanner).waitFor({ state: 'visible' });
+    await mismatchedWide.close();
+    const mismatchedPhone = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await mismatchedPhone.goto(`${otherOrigin}/?project=${encodeURIComponent(project)}`);
+    await mismatchedPhone.getByRole('combobox', { name: 'Ticket view' }).waitFor({ state: 'visible' });
+    await mismatchedPhone.locator(noticeBanner).waitFor({ state: 'visible' });
+    expect(await mismatchedPhone.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await mismatchedPhone.screenshot({
+      path: resolve(webRoot, 'target/visual-captures/hs2-46bkh7-server-build-notice-narrow.png'),
+      fullPage: true,
+    });
+    await mismatchedPhone.close();
   } finally {
     await browser?.close();
-    if (child) {
-      child.kill('SIGTERM');
+    for (const host of [child, other]) {
+      if (!host) continue;
+      host.kill('SIGTERM');
       await new Promise((resolveExit) =>
-        child.exitCode === null && child.signalCode === null ? child.once('exit', resolveExit) : resolveExit(),
+        host.exitCode === null && host.signalCode === null ? host.once('exit', resolveExit) : resolveExit(),
       );
     }
     await stopMachineServer(home);
     const survivors = await processesUsing(home);
     await rm(home, { recursive: true, force: true });
+    if (otherBuildRoot) await rm(otherBuildRoot, { recursive: true, force: true });
     // Nothing the test started may outlive it: not the host, not its supervised machine server.
     expect(survivors).toEqual([]);
   }

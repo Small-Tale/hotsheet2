@@ -446,8 +446,16 @@ preview/download, server directory browser) are separate design work.
   current release binary and falling back to its current debug binary. Every chosen binary must
   match the workspace source and the selected server revision. If a required binary has no current
   build, startup requests a rebuild before project setup or migration can run.
-  The host compares an already running server with its selected build before opening a project;
-  it uses a supported quiescent restart for a mismatch or stops with a rebuild/reopen instruction.
+  The host compares an already running server with its selected build before opening a project
+  and requests a supported quiescent restart for a mismatch. Every host on the machine shares one
+  bootstrap machine server, so another host or a rebuild script can replace it with a different
+  build (HS2-PCM11N); a protocol-compatible mismatch therefore never fails the open (HS2-46BKH7).
+  When the server refuses the restart because it is busy, cannot restart safely, or still differs
+  afterwards, the host opens the project through the running server, returns a `serverBuildNotice`
+  that the client shows as a dismissible info banner (`ServerBuildNoticeBanner`), and retries the
+  restart on a later open once a short cooldown passes or the server instance changes. The notice
+  never instructs the user to run `server:rebuild` from a running host, because stopping the shared
+  server is what starts the cycle. Only an incompatible protocol or store schema still blocks.
   That selected revision stays pinned for the host's lifetime: at startup the host copies
   its client bundle and selected local executables into a private temporary snapshot, then
   serves and launches from that snapshot. Later source edits and working builds cannot
