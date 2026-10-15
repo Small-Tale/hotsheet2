@@ -405,7 +405,7 @@ describe('client-owned AI drive transport', () => {
       model: 'gpt-5.4',
       effort: 'high',
     });
-    await api.sendToolTurn('main/1', 'Continue this work', 'thread/1', { model: 'gpt-5.4', effort: 'xhigh' });
+    await api.sendToolTurn('main/1', 'Continue this work', 'thread/1', { model: 'gpt-5.4', effort: 'xhigh' }, 'turn-1');
     await api.interruptToolTurn('main/1');
     await api.deleteToolConnection('checkout/1', 'main/1');
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/drive/sessions', expect.any(Object));
@@ -430,7 +430,7 @@ describe('client-owned AI drive transport', () => {
       '/api/drive/connections/main%2F1/turns',
       expect.objectContaining({
         method: 'POST',
-        body: '{"content":"Continue this work","session_id":"thread/1","model":"gpt-5.4","effort":"xhigh"}',
+        body: '{"content":"Continue this work","session_id":"thread/1","model":"gpt-5.4","effort":"xhigh","turn_id":"turn-1"}',
       }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(

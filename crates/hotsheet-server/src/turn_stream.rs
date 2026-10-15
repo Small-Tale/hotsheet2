@@ -16,6 +16,12 @@ pub struct TurnStreamEnvelope {
     pub connection_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ticket: Option<String>,
+    /// The turn this event belongs to (HS2-14X4AF). Clients apply a correlated event only to
+    /// the conversation turn with the same id, so a late event from an earlier turn on the same
+    /// connection cannot complete or fill a newer one. Omitted by older servers; clients then
+    /// fall back to their single active turn.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub turn_id: Option<String>,
     pub event: ClientTurnEvent,
 }
 

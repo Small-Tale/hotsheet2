@@ -204,12 +204,16 @@ describe('production project drive control', () => {
       interruptToolTurn: vi.fn(),
     };
     await expect(
-      runProjectDrive(client, [idle], checkout, 'codex', { model: 'gpt-5.6', effort: 'high' }),
+      runProjectDrive(client, [idle], checkout, 'codex', { model: 'gpt-5.6', effort: 'high' }, 'turn-1'),
     ).resolves.toBe(running);
     expect(client.createToolConnection).not.toHaveBeenCalled();
-    expect(client.sendToolTurn).toHaveBeenCalledWith(idle.id, SIDEBAR_DRIVE_PROMPT, idle.session_id, {
-      model: 'gpt-5.6',
-      effort: 'high',
-    });
+    // The client's turn id rides along so the turn's stream events correlate (HS2-14X4AF).
+    expect(client.sendToolTurn).toHaveBeenCalledWith(
+      idle.id,
+      SIDEBAR_DRIVE_PROMPT,
+      idle.session_id,
+      { model: 'gpt-5.6', effort: 'high' },
+      'turn-1',
+    );
   });
 });

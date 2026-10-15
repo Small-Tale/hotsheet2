@@ -304,8 +304,15 @@ project-local `.codex/hooks.json` `PermissionRequest` adapter and running-server
 it is intentionally not the isolated app-server drive and does not bypass Codex hook trust.
 
 **Raw client stream (HS2-060HQJ):** every `TurnEvent` is projected into a stable tagged
-`turn_event` envelope carrying connection id and, for autonomous ticket work, ticket id.
-It rides the existing WS and genuine-long-poll replay ring; each replayable WS event carries
+`turn_event` envelope carrying connection id, the originating `turn_id`, and, for
+autonomous ticket work, ticket id. **Turn correlation (HS2-14X4AF):** a client may name its
+turn with `turn_id` in `POST /drive/connections/{id}/turns` (1-128 ASCII letters, digits,
+`-`, `_`, `.`, `:`; anything else is `400`), otherwise the server assigns a ULID; dist-loop
+worker turns always get a server ULID. A busy connection reports the running turn's
+`turn_id` and an idle one omits it. Clients apply a correlated event only to the matching
+turn, so a delayed or repeated event from an earlier turn on the same connection cannot
+finish or fill a newer one; events from older servers omit `turn_id` and fall back to the
+client's single active turn. It rides the existing WS and genuine-long-poll replay ring; each replayable WS event carries
 the same monotonic cursor a reconnecting client supplies to `/ws/poll`. Output,
 permission requests, usage, native activity, a coalescing notice, and terminal done are
 additive event variants. Clients retain unknown variants without failing their live loop.

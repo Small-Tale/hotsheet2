@@ -1458,7 +1458,11 @@ preview/download, server directory browser) are separate design work.
   conversation, while Drive is the explicit `$hotsheet` automation shortcut in the drawer.
   Kerf retains one receipt-ordered transcript and composer draft
   per connection; each submit appends a user message and one assistant message whose Markdown
-  content grows in place from attributed `turn_event` output. The assistant result receives its
+  content grows in place from attributed `turn_event` output. Each submit names its turn with
+  a fresh `turn_id` sent with the request; correlated events for any other turn (a delayed Done
+  or output from an earlier attempt, or a repeated delivery after completion) are ignored, and a
+  reconnect that finds the connection busy with a different turn settles the local one
+  (HS2-14X4AF). The assistant result receives its
   transcript position when output first arrives, so activity emitted before a permission pause
   remains above the result that resumes afterward; output already shown before later activity
   keeps its earlier position. Replayed events are deduplicated without changing that order, and

@@ -22,7 +22,7 @@ export interface AiConfigurationDependencies {
   conversationOpen: Signal<boolean>;
   createDrawerAIChat: (selection: AiToolDefaults) => Promise<{ connectionId: string } | undefined>;
   showToast: (message: string) => void;
-  beginConversation: (connectionId: string, content: string) => (() => void) | undefined;
+  beginConversation: (connectionId: string, content: string) => { turnId: string; finish: () => void } | undefined;
   updateConversation: (connectionId: string, update: (state: ConversationState) => ConversationState) => void;
   error: Signal<string>;
   commandSettingsDefinitions: (projectId?: string) => CommandDefinition[];
@@ -233,7 +233,7 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
       ...(descriptor.actions?.includes('change_model') && selection.model ? { model: selection.model } : {}),
       ...(descriptor.actions?.includes('change_effort') && selection.effort ? { effort: selection.effort } : {}),
     };
-    const finishStart = beginConversation(newConnectionId, seed);
+    const start = beginConversation(newConnectionId, seed);
     requestAnimationFrame(() => {
       syncConversationScroll(document, true);
     });
@@ -243,6 +243,7 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
         seed,
         connection.session_id,
         turnSelection,
+        start?.turnId,
       );
       if (project()?.id === current.id)
         driveConnectionsByProject.value = {
@@ -270,7 +271,7 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
         ),
       }));
     } finally {
-      finishStart?.();
+      start?.finish();
     }
   }
 

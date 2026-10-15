@@ -216,6 +216,7 @@ export async function runProjectDrive(
   checkout: string,
   tool: ProjectDriveTool = 'codex',
   selection: { model?: string; effort?: string } = {},
+  turnId?: string,
 ): Promise<ToolConnection> {
   const existing = projectDriveConnection(connections, checkout, tool);
   if (existing?.busy) throw new Error(`This ${tool} drive session is already running.`);
@@ -228,5 +229,5 @@ export async function runProjectDrive(
         ...selection,
       });
   if (!prepared.actions?.includes('send_turn')) throw new Error(`This ${tool} connection cannot accept a turn.`);
-  return client.sendToolTurn(prepared.id, SIDEBAR_DRIVE_PROMPT, prepared.session_id, selection);
+  return client.sendToolTurn(prepared.id, SIDEBAR_DRIVE_PROMPT, prepared.session_id, selection, turnId);
 }

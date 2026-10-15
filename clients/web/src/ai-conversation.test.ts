@@ -228,3 +228,76 @@ it('settles persisted or disconnected active turns from idle server failures wit
   expect(recovered.messages.at(-1)?.status).toBe('interrupted');
   expect(recovered.error).toBeUndefined();
 });
+
+describe('turn correlation (HS2-14X4AF)', () => {
+  const output = (content: string) => ({ type: 'output', content, truncated: false }) as const;
+  const done = { type: 'done', reason: 'completed' } as const;
+  const usage = { type: 'usage', tokens_in: 10, tokens_out: 5, cost_usd: 0.01 } as const;
+
+  it('ignores a delayed Done and output from an earlier turn after a new turn starts', () => {
+    let state = beginConversationTurn(EMPTY_CONVERSATION, 'turn-a', 'first');
+    state = applyConversationEvent(state, output('A answer'), 'turn-a');
+    // The page settles turn A from a reconnect before its Done is delivered, then the user sends B.
+    state = reconcileConversationConnection(state, { busy: false });
+    state = beginConversationTurn(state, 'turn-b', 'second');
+    const beforeLate = state;
+    state = applyConversationEvent(state, output(' late A'), 'turn-a');
+    state = applyConversationEvent(state, usage, 'turn-a');
+    state = applyConversationEvent(state, { type: 'done', reason: 'failed', message: 'A failed late' }, 'turn-a');
+    expect(state).toBe(beforeLate);
+    expect(state.activeTurnId).toBe('turn-b');
+    state = applyConversationEvent(state, output('B answer'), 'turn-b');
+    state = applyConversationEvent(state, usage, 'turn-b');
+    state = applyConversationEvent(state, done, 'turn-b');
+    const b = state.messages.find((message) => message.id === 'turn-b-assistant');
+    expect(b).toMatchObject({ content: 'B answer', status: 'completed', usage: { tokensIn: 10, tokensOut: 5 } });
+    expect(state.messages.find((message) => message.id === 'turn-a-assistant')?.content).toBe('A answer');
+    expect(state.error).toBeUndefined();
+  });
+
+  it('drops repeated deliveries of a correlated Done and events after completion', () => {
+    let state = beginConversationTurn(EMPTY_CONVERSATION, 'turn-r', 'work');
+    state = applyConversationEvent(state, output('Done.'), 'turn-r');
+    state = applyConversationEvent(state, done, 'turn-r');
+    const settled = state;
+    for (const event of [done, output(' again'), usage, { type: 'done', reason: 'failed', message: 'x' } as const])
+      state = applyConversationEvent(state, event, 'turn-r');
+    expect(state).toBe(settled);
+    expect(state.error).toBeUndefined();
+  });
+
+  it('keeps a retry isolated from the failed attempt it replaces', () => {
+    let state = beginConversationTurn(EMPTY_CONVERSATION, 'attempt-1', 'work');
+    state = applyConversationEvent(state, { type: 'done', reason: 'failed', message: 'capacity' }, 'attempt-1');
+    state = beginConversationTurn(state, 'attempt-2', 'work');
+    state = applyConversationEvent(state, { type: 'done', reason: 'failed', message: 'capacity' }, 'attempt-1');
+    expect(state.activeAssistantId).toBe('attempt-2-assistant');
+    expect(state.error).toBeUndefined();
+    state = applyConversationEvent(state, output('Recovered'), 'attempt-2');
+    state = applyConversationEvent(state, done, 'attempt-2');
+    expect(state.messages.at(-1)).toMatchObject({ content: 'Recovered', status: 'completed' });
+  });
+
+  it('applies uncorrelated events from older servers to the active turn', () => {
+    let state = beginConversationTurn(EMPTY_CONVERSATION, 'legacy', 'work');
+    state = applyConversationEvent(state, output('Legacy answer'));
+    state = applyConversationEvent(state, done);
+    expect(state.messages.at(-1)).toMatchObject({ content: 'Legacy answer', status: 'completed' });
+    // A turn restored from storage written before turn ids existed accepts correlated events.
+    const restored = { ...beginConversationTurn(EMPTY_CONVERSATION, 'old', 'work'), activeTurnId: undefined };
+    expect(applyConversationEvent(restored, output('ok'), 'server-ulid').messages.at(-1)?.content).toBe('ok');
+  });
+
+  it('settles a reconnected turn when the server reports a different running turn', () => {
+    const active = beginConversationTurn(EMPTY_CONVERSATION, 'mine', 'work');
+    expect(reconcileConversationConnection(active, { busy: true, turn_id: 'mine' })).toBe(active);
+    expect(reconcileConversationConnection(active, { busy: true })).toBe(active);
+    expect(reconcileConversationConnection(active, { busy: true, turn_id: 'other' }, true)).toBe(active);
+    const settled = reconcileConversationConnection(active, { busy: true, turn_id: 'other' });
+    expect(settled.activeAssistantId).toBeUndefined();
+    expect(settled.activeTurnId).toBeUndefined();
+    expect(settled.messages.at(-1)?.status).toBe('interrupted');
+    // The other turn's stream does not reopen or fill the settled bubble.
+    expect(applyConversationEvent(settled, output('foreign'), 'other')).toBe(settled);
+  });
+});

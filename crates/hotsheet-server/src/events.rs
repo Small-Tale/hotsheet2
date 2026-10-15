@@ -325,6 +325,7 @@ impl AppState {
         store: &FsStore,
         connection_id: &str,
         ticket: Option<String>,
+        turn_id: Option<&str>,
         tool: &str,
         event: turn_stream::ClientTurnEvent,
     ) {
@@ -340,6 +341,7 @@ impl AppState {
             turn: Some(turn_stream::TurnStreamEnvelope {
                 connection_id: connection_id.into(),
                 ticket,
+                turn_id: turn_id.map(str::to_owned),
                 event,
             }),
         });

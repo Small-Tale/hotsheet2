@@ -355,8 +355,8 @@ async fn main() -> Result<()> {
             }),
             turn_sink: Some({
                 let state = state.clone();
-                std::sync::Arc::new(move |store, connection, tool, ticket, event| {
-                    state.emit_turn_event(store, connection, ticket, tool, event);
+                std::sync::Arc::new(move |store, connection, tool, ticket, turn_id, event| {
+                    state.emit_turn_event(store, connection, ticket, turn_id, tool, event);
                 })
             }),
             worker_sessions: Some(Default::default()),

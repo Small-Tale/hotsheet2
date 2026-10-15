@@ -1122,8 +1122,9 @@ async function mockProject(
       summary: string;
       importance: 'low' | 'normal' | 'high';
     };
-    turn?: { connection_id: string; event: Record<string, unknown> };
+    turn?: { connection_id: string; turn_id?: string; event: Record<string, unknown> };
   };
+  let correlatedTurnId: string | undefined;
   let toolConnections: MockToolConnection[] = [],
     driveCursor = 0,
     driveEvents: MockDriveEvent[] = [],
@@ -1145,12 +1146,12 @@ async function mockProject(
   const driveEvent = (connection: MockToolConnection) => {
     pushDriveEvent({ kind: 'drive_updated', id: connection.id, slug: connection.tool });
   };
-  const turnEvent = (connection: MockToolConnection, event: Record<string, unknown>) => {
+  const turnEvent = (connection: MockToolConnection, event: Record<string, unknown>, turnId?: string) => {
     pushDriveEvent({
       kind: 'turn_event',
       id: connection.id,
       slug: connection.tool,
-      turn: { connection_id: connection.id, event },
+      turn: { connection_id: connection.id, ...(turnId ? { turn_id: turnId } : {}), event },
     });
   };
   let createdTerminal = false;
@@ -1636,6 +1637,29 @@ async function mockProject(
         turnEvent(idle, { type: 'done', reason: failed ? 'failed' : 'completed', ...(failed ? { message } : {}) });
         driveEvent(idle);
         return route.fulfill({ status: 202, json: running });
+      }
+      // HS2-14X4AF: the first turn's Done is delayed past the next turn's start.
+      if (body.content === 'Start a correlated turn.') {
+        correlatedTurnId = body.turn_id;
+        turnEvent(running, { type: 'output', content: 'First correlated answer.', truncated: false }, body.turn_id);
+        const idle = { ...running, busy: false };
+        toolConnections = toolConnections.map((item) => (item.id === id ? idle : item));
+        driveEvent(idle);
+        return route.fulfill({ status: 202, json: { ...running, turn_id: body.turn_id } });
+      }
+      if (body.content === 'Send the next correlated turn.') {
+        const idle = { ...running, busy: false };
+        turnEvent(
+          running,
+          { type: 'done', reason: 'failed', message: 'Stale failure from the first turn' },
+          correlatedTurnId,
+        );
+        turnEvent(running, { type: 'output', content: 'Second correlated answer.', truncated: false }, body.turn_id);
+        toolConnections = toolConnections.map((item) => (item.id === id ? idle : item));
+        turnEvent(idle, { type: 'done', reason: 'completed' }, body.turn_id);
+        turnEvent(idle, { type: 'done', reason: 'completed' }, body.turn_id);
+        driveEvent(idle);
+        return route.fulfill({ status: 202, json: { ...running, turn_id: body.turn_id } });
       }
       if (body.content === 'background-output-only') {
         for (let index = 0; index < 20; index += 1)
@@ -13169,7 +13193,7 @@ test('queues a custom AI command as an urgent Up Next ticket and signals an avai
     .toEqual([
       {
         path: '/__hotsheet/project-api/demo-checkout/drive/connections/hotsheet-project-chat-codex-demo-checkout/turns',
-        body: { content: '$hotsheet', model: 'gpt-5.6-sol', effort: 'high' },
+        body: { content: '$hotsheet', model: 'gpt-5.6-sol', effort: 'high', turn_id: expect.any(String) },
       },
     ]);
   const created = page.locator('[data-ticket-slug="HS2-NEW001"]');
@@ -16939,7 +16963,7 @@ test('overrides the default provider and reuses its dedicated drawer Drive chat'
       },
       {
         path: '/__hotsheet/project-api/demo-checkout/drive/connections/hotsheet-sidebar-claude-demo-checkout/turns',
-        body: { content: '$hotsheet', model: 'sonnet', effort: 'medium' },
+        body: { content: '$hotsheet', model: 'sonnet', effort: 'medium', turn_id: expect.any(String) },
       },
     ]);
   await page.screenshot({ path: 'target/visual-captures/hs2-ndda7p-project-drive-claude-wide.png', fullPage: true });
@@ -16954,7 +16978,13 @@ test('overrides the default provider and reuses its dedicated drawer Drive chat'
   expect(driveRequests.filter((item) => item.path.endsWith('/drive/connections'))).toHaveLength(1);
   expect(driveRequests.at(-1)).toEqual({
     path: '/__hotsheet/project-api/demo-checkout/drive/connections/hotsheet-sidebar-claude-demo-checkout/turns',
-    body: { content: '$hotsheet', session_id: 'thread-1', model: 'sonnet', effort: 'medium' },
+    body: {
+      content: '$hotsheet',
+      session_id: 'thread-1',
+      model: 'sonnet',
+      effort: 'medium',
+      turn_id: expect.any(String),
+    },
   });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(drive).toBeVisible();
@@ -17583,7 +17613,9 @@ test('omits effort after selecting a model that does not support it', async ({ p
   await expect(host.locator('.ai-conversation__model-effort')).toHaveCount(0);
   await host.getByLabel('Message Claude').fill('What time is it in California?');
   await host.getByLabel('Message Claude').press('Enter');
-  await expect.poll(() => turns).toEqual([{ content: 'What time is it in California?', model: 'haiku' }]);
+  await expect
+    .poll(() => turns)
+    .toEqual([{ content: 'What time is it in California?', model: 'haiku', turn_id: expect.any(String) }]);
   await expect(
     host.getByText('I found the relevant client boundary. The event stream remains authoritative.', { exact: true }),
   ).toBeVisible();
@@ -27749,6 +27781,37 @@ for (const width of [1280, 390]) {
     await page.screenshot({ path: test.info().outputPath(`hs2-azve3p-recovered-${width}.png`) });
   });
 }
+
+test('keeps a delayed completion from an earlier turn out of the next turn (HS2-14X4AF)', async ({ page }) => {
+  await mockProject(page);
+  const turns: Array<{ content: string; turn_id?: string }> = [];
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/turns'))
+      turns.push(request.postDataJSON() as { content: string; turn_id?: string });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+  const host = drawer.locator('[data-component="ai-conversation"]'),
+    composer = host.getByLabel('Message Codex');
+  await composer.fill('Start a correlated turn.');
+  await composer.press('Enter');
+  await expect(host).toContainText('First correlated answer.');
+  await expect(composer).toBeEnabled();
+  await composer.fill('Send the next correlated turn.');
+  await composer.press('Enter');
+  await expect(host).toContainText('Second correlated answer.');
+  await expect(host).not.toContainText('Stale failure from the first turn');
+  await expect(host.getByRole('alert')).toHaveCount(0);
+  expect(turns.map((turn) => turn.content)).toEqual(['Start a correlated turn.', 'Send the next correlated turn.']);
+  expect(turns.every((turn) => typeof turn.turn_id === 'string' && turn.turn_id.length > 0)).toBe(true);
+  expect(new Set(turns.map((turn) => turn.turn_id)).size).toBe(2);
+});
 
 test('restores an idle server failure when a persisted conversation still has an active assistant (HS2-AZVE3P)', async ({
   page,

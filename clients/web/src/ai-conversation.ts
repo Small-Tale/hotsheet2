@@ -30,6 +30,8 @@ export interface ConversationState {
   messages: ConversationMessage[];
   activity?: ConversationActivity[];
   activeAssistantId?: string;
+  /** Correlation id of the running turn (HS2-14X4AF): stream events naming another turn are stale. */
+  activeTurnId?: string;
   progress?: string;
   error?: string;
   nextSequence?: number;
@@ -48,13 +50,24 @@ export function conversationError(
   return state.error ?? connection?.last_error;
 }
 
-/** Settle a turn whose terminal stream event was missed while disconnected or reloading. */
+/**
+ * Settle a turn whose terminal stream event was missed while disconnected or reloading. A
+ * connection that is busy with a different correlated turn (HS2-14X4AF) also proves this turn
+ * ended: the server runs one turn per connection at a time.
+ */
 export function reconcileConversationConnection(
   state: ConversationState,
-  connection: { busy?: boolean; last_error?: string },
+  connection: { busy?: boolean; last_error?: string; turn_id?: string },
   pendingStart = false,
 ): ConversationState {
-  if (!state.activeAssistantId || connection.busy !== false || pendingStart) return state;
+  if (!state.activeAssistantId || pendingStart) return state;
+  const replaced =
+    connection.busy === true &&
+    connection.turn_id !== undefined &&
+    state.activeTurnId !== undefined &&
+    connection.turn_id !== state.activeTurnId;
+  if (replaced) return applyConversationEvent(state, { type: 'done', reason: 'interrupted' });
+  if (connection.busy !== false) return state;
   return applyConversationEvent(
     state,
     connection.last_error
@@ -126,6 +139,19 @@ export function conversationTimeline(
   return groups;
 }
 
+/**
+ * Whether a stream event correlated to `turnId` belongs to this conversation's running turn.
+ * Uncorrelated events (older servers) always fall back to the active turn; a correlated event
+ * for a turn that is no longer running here, or for another turn, is a late or repeated
+ * delivery and must not touch the transcript (HS2-14X4AF).
+ */
+export function acceptsConversationTurnEvent(state: ConversationState, turnId?: string): boolean {
+  if (turnId === undefined) return true;
+  if (!state.activeAssistantId) return false;
+  return state.activeTurnId === undefined || state.activeTurnId === turnId;
+}
+
+/** Begin a local turn. `id` is also the turn's correlation id sent with the request. */
 export function beginConversationTurn(state: ConversationState, id: string, content: string): ConversationState {
   const ordered = normalizeConversationSequence(state),
     assistantId = `${id}-assistant`,
@@ -139,6 +165,7 @@ export function beginConversationTurn(state: ConversationState, id: string, cont
     ],
     nextSequence: sequence + 1,
     activeAssistantId: assistantId,
+    activeTurnId: id,
     progress: 'Reviewing the project and planning the next steps…',
     error: undefined,
   };
@@ -151,7 +178,12 @@ function nativeProgress(payload: unknown): string | undefined {
     if (typeof value[key] === 'string' && value[key].trim()) return value[key].trim().slice(0, 160);
 }
 
-export function applyConversationEvent(state: ConversationState, event: ClientTurnEvent): ConversationState {
+export function applyConversationEvent(
+  state: ConversationState,
+  event: ClientTurnEvent,
+  turnId?: string,
+): ConversationState {
+  if (!acceptsConversationTurnEvent(state, turnId)) return state;
   const ordered = normalizeConversationSequence(state),
     active = ordered.activeAssistantId,
     index = active ? ordered.messages.findIndex((message) => message.id === active) : -1;
@@ -211,7 +243,8 @@ export function applyConversationEvent(state: ConversationState, event: ClientTu
     const reason = event.reason === 'failed' || event.reason === 'interrupted' ? event.reason : 'completed';
     const message = typeof event.message === 'string' ? event.message.trim() : '';
     const error = reason === 'failed' ? message || 'The tool turn failed.' : undefined;
-    if (index < 0) return { ...ordered, activeAssistantId: undefined, progress: undefined, error };
+    if (index < 0)
+      return { ...ordered, activeAssistantId: undefined, activeTurnId: undefined, progress: undefined, error };
     const status: ConversationMessageStatus = reason;
     const sequence = ordered.nextSequence ?? 0,
       messages = ordered.messages.map((message, messageIndex) =>
@@ -233,6 +266,7 @@ export function applyConversationEvent(state: ConversationState, event: ClientTu
       messages,
       nextSequence: ordered.messages[index]?.sequence === undefined ? sequence + 1 : ordered.nextSequence,
       activeAssistantId: undefined,
+      activeTurnId: undefined,
       progress: undefined,
       error,
     };

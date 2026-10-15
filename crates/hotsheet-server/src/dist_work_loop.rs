@@ -217,7 +217,7 @@ pub struct LiveDriveCtx {
 pub type ActivitySink =
     std::sync::Arc<dyn Fn(&FsStore, hotsheet_ticketing::ActivityEvent) + Send + Sync + 'static>;
 pub type TurnSink = std::sync::Arc<
-    dyn Fn(&FsStore, &str, &str, Option<String>, crate::turn_stream::ClientTurnEvent)
+    dyn Fn(&FsStore, &str, &str, Option<String>, Option<&str>, crate::turn_stream::ClientTurnEvent)
         + Send
         + Sync
         + 'static,
@@ -322,6 +322,8 @@ fn drive_one_ticket(
     // Capture usage for ticket metrics and project the bounded raw stream for clients.
     let mut usage: Option<hotsheet_aitools::Usage> = None;
     let mut turn_guard = crate::turn_stream::TurnStreamGuard::default();
+    // One id per driven turn so clients correlate its stream events (HS2-14X4AF).
+    let turn_id = hotsheet_model::Ulid::new().to_string();
     let turn = safe.run_turn(
         prompt,
         resume.as_deref(),
@@ -331,7 +333,14 @@ fn drive_one_ticket(
         &mut |ev| {
             if let Some(sink) = &ctx.turn_sink {
                 for event in turn_guard.observe(ev) {
-                    sink(store, &conn, tool, Some(ticket_slug.clone()), event);
+                    sink(
+                        store,
+                        &conn,
+                        tool,
+                        Some(ticket_slug.clone()),
+                        Some(&turn_id),
+                        event,
+                    );
                 }
             }
             match ev {
@@ -357,7 +366,14 @@ fn drive_one_ticket(
         Err(error) => {
             if let Some(sink) = &ctx.turn_sink {
                 for event in turn_guard.transport_failed(&error.to_string()) {
-                    sink(store, &conn, tool, Some(ticket_slug.clone()), event);
+                    sink(
+                        store,
+                        &conn,
+                        tool,
+                        Some(ticket_slug.clone()),
+                        Some(&turn_id),
+                        event,
+                    );
                 }
             }
             emit_coarse_activity(

@@ -3177,12 +3177,18 @@ export async function startHotSheetWebClient() {
         showToast(`Queued ${created.slug}.`);
         return;
       }
-      const finishStart = beginConversation(connection.id, HOTSHEET_SKILL_SIGNAL);
+      const start = beginConversation(connection.id, HOTSHEET_SKILL_SIGNAL);
       try {
-        const updated = await client.sendToolTurn(connection.id, HOTSHEET_SKILL_SIGNAL, connection.session_id, {
-          ...(command.model ? { model: command.model } : {}),
-          ...(command.effort ? { effort: command.effort } : {}),
-        });
+        const updated = await client.sendToolTurn(
+          connection.id,
+          HOTSHEET_SKILL_SIGNAL,
+          connection.session_id,
+          {
+            ...(command.model ? { model: command.model } : {}),
+            ...(command.effort ? { effort: command.effort } : {}),
+          },
+          start.turnId,
+        );
         if (project()?.id === current.id)
           driveConnectionsByProject.value = {
             ...driveConnectionsByProject.value,
@@ -3206,7 +3212,7 @@ export async function startHotSheetWebClient() {
         }));
         showToast(`Queued ${created.slug}; ${aiToolLabel(connection.tool)} could not be notified.`);
       } finally {
-        finishStart();
+        start.finish();
       }
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : String(reason);

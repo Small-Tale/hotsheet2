@@ -2393,12 +2393,14 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
         .oneshot(authed(
             "POST",
             "/drive/connections/client-1/turns",
-            Some(r#"{"content":"complete","model":"m2","effort":"low"}"#),
+            Some(r#"{"content":"complete","model":"m2","effort":"low","turn_id":"web-turn-1"}"#),
         ))
         .await
         .unwrap();
     assert_eq!(started.status(), StatusCode::ACCEPTED);
-    assert!(body_json(started).await["busy"].as_bool().unwrap());
+    let started = body_json(started).await;
+    assert!(started["busy"].as_bool().unwrap());
+    assert_eq!(started["turn_id"], "web-turn-1", "HS2-14X4AF");
     let listed = loop {
         let listed = body_json(
             router
@@ -2415,6 +2417,10 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
     };
     assert!(!listed[0]["busy"].as_bool().unwrap());
     assert_eq!(listed[0]["session_id"], "thread-1");
+    assert!(
+        listed[0].get("turn_id").is_none(),
+        "an idle connection has no running turn"
+    );
     let replay = body_json(
         router
             .clone()
@@ -2441,6 +2447,13 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
             "native_activity",
             "done"
         ]
+    );
+    assert!(
+        replayed
+            .iter()
+            .filter(|event| event["kind"] == "turn_event")
+            .all(|event| event["turn"]["turn_id"] == "web-turn-1"),
+        "every stream event names the client turn it belongs to (HS2-14X4AF)"
     );
     let usage = replayed
         .iter()
@@ -2483,6 +2496,14 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
         .await
         .unwrap();
     assert_eq!(held.status(), StatusCode::ACCEPTED);
+    let held_turn = body_json(held).await["turn_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        held_turn.len() == 26 && held_turn != "web-turn-1",
+        "a turn sent without an id gets a fresh server ULID"
+    );
     let interrupted = router
         .clone()
         .oneshot(authed(
@@ -2753,6 +2774,7 @@ async fn raw_turn_event_is_ticket_attributed_and_carries_its_ws_replay_cursor() 
         &store,
         "worker-1",
         Some("HS-ABC123".into()),
+        Some("turn-7"),
         "fake",
         hotsheet_server::turn_stream::ClientTurnEvent::Output {
             content: "working".into(),
@@ -2764,6 +2786,7 @@ async fn raw_turn_event_is_ticket_attributed_and_carries_its_ws_replay_cursor() 
     let turn = event.turn.unwrap();
     assert_eq!(turn.connection_id, "worker-1");
     assert_eq!(turn.ticket.as_deref(), Some("HS-ABC123"));
+    assert_eq!(turn.turn_id.as_deref(), Some("turn-7"));
 }
 
 #[tokio::test]

@@ -643,6 +643,8 @@ export interface ToolConnection {
   last_error?: string;
   model?: string;
   effort?: string;
+  /** The running turn's correlation id while busy (HS2-14X4AF). */
+  turn_id?: string;
 }
 export interface ToolSession {
   connection_id: string;
@@ -787,6 +789,8 @@ export type ClientTurnEvent =
 export interface TurnStreamEnvelope {
   connection_id: string;
   ticket?: string;
+  /** The originating turn (HS2-14X4AF); absent from older servers. */
+  turn_id?: string;
   event: ClientTurnEvent;
 }
 export interface ChangeEvent {
@@ -1369,10 +1373,21 @@ export class Api {
     model?: string;
     effort?: string;
   }) => this.parsed(parseToolConnection, '/drive/connections', { method: 'POST', body: JSON.stringify(value) });
-  sendToolTurn = (id: string, content: string, session_id?: string, selection?: { model?: string; effort?: string }) =>
+  sendToolTurn = (
+    id: string,
+    content: string,
+    session_id?: string,
+    selection?: { model?: string; effort?: string },
+    turn_id?: string,
+  ) =>
     this.parsed(parseToolConnection, `/drive/connections/${encodeURIComponent(id)}/turns`, {
       method: 'POST',
-      body: JSON.stringify({ content, ...(session_id ? { session_id } : {}), ...selection }),
+      body: JSON.stringify({
+        content,
+        ...(session_id ? { session_id } : {}),
+        ...selection,
+        ...(turn_id ? { turn_id } : {}),
+      }),
     });
   interruptToolTurn = (id: string) =>
     this.parsed(parseToolConnection, `/drive/connections/${encodeURIComponent(id)}/interrupt`, { method: 'POST' });

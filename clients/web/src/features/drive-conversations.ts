@@ -175,12 +175,17 @@ export function createDriveConversationsController(dependencies: DriveConversati
       (connections.length === 1 ? connections[0] : undefined)
     );
   }
+  /** Begin a local turn; returns its correlation id (sent with the request) and a finisher. */
   function beginConversation(connectionId: string, content: string) {
     conversationStartGeneration += 1;
     pendingConversationStarts.add(connectionId);
-    updateConversation(connectionId, (state) => beginConversationTurn(state, browserRandomId(), content));
-    return () => {
-      pendingConversationStarts.delete(connectionId);
+    const turnId = browserRandomId();
+    updateConversation(connectionId, (state) => beginConversationTurn(state, turnId, content));
+    return {
+      turnId,
+      finish: () => {
+        pendingConversationStarts.delete(connectionId);
+      },
     };
   }
   async function toggleSidebarDrive() {
@@ -199,12 +204,16 @@ export function createDriveConversationsController(dependencies: DriveConversati
     const connections = driveConnectionsByProject.value[current.id] ?? [];
     drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: true };
     conversationConnectionId.value = connectionId;
-    const finishStart = beginConversation(connectionId, SIDEBAR_DRIVE_PROMPT);
+    const start = beginConversation(connectionId, SIDEBAR_DRIVE_PROMPT);
     try {
-      const updated = await runProjectDrive(new Api(current.apiPath), connections, current.id, tool, {
-        model: selection.model,
-        effort: selection.effort,
-      });
+      const updated = await runProjectDrive(
+        new Api(current.apiPath),
+        connections,
+        current.id,
+        tool,
+        { model: selection.model, effort: selection.effort },
+        start.turnId,
+      );
       if (project()?.id === current.id)
         driveConnectionsByProject.value = {
           ...driveConnectionsByProject.value,
@@ -225,7 +234,7 @@ export function createDriveConversationsController(dependencies: DriveConversati
       }));
       if (project()?.id === current.id) error.value = message;
     } finally {
-      finishStart();
+      start.finish();
       drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: false };
     }
   }
@@ -278,7 +287,7 @@ export function createDriveConversationsController(dependencies: DriveConversati
           : {}),
       };
     if (!connection?.actions?.includes('send_turn') || connection.busy) return;
-    const finishStart = beginConversation(connectionId, draft);
+    const start = beginConversation(connectionId, draft);
     conversationDrafts.value = { ...conversationDrafts.value, [connectionId]: '' };
     const composer = document.querySelector<HTMLTextAreaElement>('[name="conversation-draft"]');
     if (composer) composer.value = '';
@@ -291,6 +300,7 @@ export function createDriveConversationsController(dependencies: DriveConversati
         draft,
         connection.session_id,
         turnSelection,
+        start.turnId,
       );
       if (project()?.id === current.id)
         driveConnectionsByProject.value = {
@@ -313,7 +323,7 @@ export function createDriveConversationsController(dependencies: DriveConversati
         ),
       }));
     } finally {
-      finishStart();
+      start.finish();
     }
   }
   async function stopConversation() {

@@ -710,6 +710,9 @@ pub(crate) struct SendDriveTurnReq {
     model: Option<String>,
     #[serde(default)]
     effort: Option<String>,
+    /// Optional client-chosen correlation id for this turn's stream events (HS2-14X4AF).
+    #[serde(default)]
+    turn_id: Option<String>,
 }
 
 pub(crate) async fn send_drive_turn(
@@ -766,7 +769,13 @@ pub(crate) async fn send_drive_turn(
     }
     let job = state
         .client_drives
-        .begin_turn(&id, request.session_id, request.model, request.effort)
+        .begin_correlated_turn(
+            &id,
+            request.session_id,
+            request.model,
+            request.effort,
+            request.turn_id,
+        )
         .map_err(client_drive_api_error)?;
     let info = state
         .client_drives
@@ -781,6 +790,7 @@ pub(crate) async fn send_drive_turn(
     let activity_project = info.project.clone();
     let prompt = request.content;
     let thread_id = id.clone();
+    let turn_id = job.turn_id().to_owned();
     std::thread::spawn(move || {
         let mut guard = turn_stream::TurnStreamGuard::default();
         let result = job.run(&prompt, &mut |event| {
@@ -834,12 +844,26 @@ pub(crate) async fn send_drive_turn(
                 _ => event.clone(),
             };
             for event in guard.observe(&projected) {
-                thread_state.emit_turn_event(&thread_store, &thread_id, None, &tool, event);
+                thread_state.emit_turn_event(
+                    &thread_store,
+                    &thread_id,
+                    None,
+                    Some(&turn_id),
+                    &tool,
+                    event,
+                );
             }
         });
         if let Err(message) = &result {
             for event in guard.transport_failed(message) {
-                thread_state.emit_turn_event(&thread_store, &thread_id, None, &tool, event);
+                thread_state.emit_turn_event(
+                    &thread_store,
+                    &thread_id,
+                    None,
+                    Some(&turn_id),
+                    &tool,
+                    event,
+                );
             }
         }
         if let Some(worker) = manager.finish_turn(&job, &result) {

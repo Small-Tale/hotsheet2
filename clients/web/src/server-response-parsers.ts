@@ -450,7 +450,7 @@ export const parsePermissionDecision = shape<{ connection: string; decision: 'al
 export const parseToolConnection = shape<ToolConnection>(
   'tool connection',
   { id: isString, tool: isString, project: isString, role: isString, busy: isBoolean },
-  { source: isString, actions: isStringArray, session_id: isString, last_error: isString },
+  { source: isString, actions: isStringArray, session_id: isString, last_error: isString, turn_id: isString },
 );
 
 export const parseAiToolDescriptor = shape<AiToolDescriptor>(

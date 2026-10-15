@@ -126,10 +126,15 @@ pub struct ClientConnectionInfo {
     pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+    /// The running turn's correlation id while `busy` (HS2-14X4AF); the same id every
+    /// `turn_event` of that turn carries.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub turn_id: Option<String>,
 }
 
 struct ConnectionState {
     busy: bool,
+    turn_id: Option<String>,
     closing: bool,
     session_id: Option<String>,
     control: Option<TurnControl>,
@@ -326,6 +331,7 @@ impl ClientDriveManager {
             model,
             effort,
             state: Mutex::new(ConnectionState {
+                turn_id: None,
                 busy: false,
                 closing: false,
                 session_id: session_id.clone(),
@@ -369,6 +375,29 @@ impl ClientDriveManager {
         model: Option<String>,
         effort: Option<String>,
     ) -> Result<ClientTurnJob, ClientDriveError> {
+        self.begin_correlated_turn(id, explicit_session, model, effort, None)
+    }
+
+    /// [`Self::begin_turn`] with the caller's turn correlation id (HS2-14X4AF). A client that
+    /// names its turn before sending can match stream events that arrive before the send
+    /// response; without one the server assigns a fresh ULID.
+    pub fn begin_correlated_turn(
+        &self,
+        id: &str,
+        explicit_session: Option<String>,
+        model: Option<String>,
+        effort: Option<String>,
+        turn_id: Option<String>,
+    ) -> Result<ClientTurnJob, ClientDriveError> {
+        let turn_id = match turn_id {
+            Some(turn_id) if valid_turn_id(&turn_id) => turn_id,
+            Some(_) => {
+                return Err(ClientDriveError::Prepare(
+                    "turn_id must be 1-128 ASCII letters, digits, '-', '_', '.' or ':'".into(),
+                ));
+            }
+            None => hotsheet_model::Ulid::new().to_string(),
+        };
         let connection = self
             .connection(id)?
             .ok_or_else(|| ClientDriveError::NotFound(id.into()))?;
@@ -397,6 +426,7 @@ impl ClientDriveManager {
         }
         let control = TurnControl::default();
         state.busy = true;
+        state.turn_id = Some(turn_id.clone());
         state.last_error = None;
         state.control = Some(control.clone());
         state.active_session_key = Some(active_key);
@@ -404,6 +434,7 @@ impl ClientDriveManager {
         Ok(ClientTurnJob {
             connection,
             control,
+            turn_id,
             resume,
             model,
             effort,
@@ -425,6 +456,7 @@ impl ClientDriveManager {
             self.forget_live_drive(worker);
         }
         state.busy = false;
+        state.turn_id = None;
         state.control = None;
         if let Some(key) = state.active_session_key.take() {
             active_sessions.remove(&key);
@@ -654,6 +686,7 @@ pub enum DriveClosed {
 pub struct ClientTurnJob {
     connection: Arc<ClientConnection>,
     control: TurnControl,
+    turn_id: String,
     resume: Option<String>,
     model: Option<String>,
     effort: Option<String>,
@@ -662,6 +695,11 @@ pub struct ClientTurnJob {
 impl ClientTurnJob {
     pub fn store_path(&self) -> &std::path::Path {
         &self.connection.store_path
+    }
+
+    /// The correlation id every stream event of this turn carries (HS2-14X4AF).
+    pub fn turn_id(&self) -> &str {
+        &self.turn_id
     }
 
     pub fn run(
@@ -702,7 +740,16 @@ fn connection_info(connection: &ClientConnection) -> ClientConnectionInfo {
         last_error: state.last_error.clone(),
         model: connection.model.clone(),
         effort: connection.effort.clone(),
+        turn_id: state.turn_id.clone(),
     }
+}
+
+/// A client-chosen turn id is echoed on every stream event, so keep it short and inert.
+fn valid_turn_id(value: &str) -> bool {
+    (1..=128).contains(&value.len())
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b':'))
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -794,6 +841,45 @@ mod tests {
             model: None,
             effort: None,
         }
+    }
+
+    #[test]
+    fn turn_ids_are_exposed_only_while_busy_and_client_ids_are_validated() {
+        let manager = manager(false);
+        manager
+            .create_or_attach(prepare("/project"), Some("connection".into()), None)
+            .unwrap();
+        assert_eq!(manager.get("connection").unwrap().turn_id, None);
+        for invalid in ["", "has space", "x".repeat(129).as_str(), "slash/turn"] {
+            assert!(matches!(
+                manager.begin_correlated_turn("connection", None, None, None, Some(invalid.into())),
+                Err(ClientDriveError::Prepare(_))
+            ));
+            assert!(
+                !manager.get("connection").unwrap().busy,
+                "a rejected id must not leave the connection busy"
+            );
+        }
+        let job = manager
+            .begin_correlated_turn("connection", None, None, None, Some("web:turn-1".into()))
+            .unwrap();
+        assert_eq!(job.turn_id(), "web:turn-1");
+        assert_eq!(
+            manager.get("connection").unwrap().turn_id.as_deref(),
+            Some("web:turn-1")
+        );
+        manager.finish_turn(&job, &done(hotsheet_aitools::DoneReason::Completed));
+        assert_eq!(manager.get("connection").unwrap().turn_id, None);
+        let first = manager.begin_turn("connection", None, None, None).unwrap();
+        let first_id = first.turn_id().to_owned();
+        manager.finish_turn(&first, &done(hotsheet_aitools::DoneReason::Completed));
+        let second = manager.begin_turn("connection", None, None, None).unwrap();
+        assert_ne!(
+            first_id,
+            second.turn_id(),
+            "every server-assigned turn is distinct"
+        );
+        manager.finish_turn(&second, &done(hotsheet_aitools::DoneReason::Completed));
     }
 
     #[test]
