@@ -65,6 +65,9 @@ describe('TerminalTicketRail', () => {
     expect(String(root.header)).toContain('class="kui-toolbar terminal-ticket-rail__controls"');
     expect(String(root.header)).toContain('name="terminal-rail-view"');
     expect(root.pane?.appearance).toBe('sunken');
+    // The sunken Pane's header line is the only line under the pinned header; the stack's chrome
+    // separator under the project toolbar doubled it (HS2-VYJQZV).
+    expect(parts.navStack.separator).toBe('hidden');
     expect(String(root.content)).toContain('Tickets');
     expect(String(root.content)).not.toContain('name="terminal-rail-project"');
   });
@@ -88,11 +91,13 @@ describe('TerminalTicketRail', () => {
   it('keeps open search in the controls row and centers the ticket header independently', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8'),
       source = readFileSync(new URL('./terminal-ticket-rail.tsx', import.meta.url), 'utf8');
-    // The controls fill the Toolbar's center zone; a wrapper wraps the closed full-width view
-    // group without leaving a content-width control island at the right (HS2-JJ6ZE1).
+    // The controls fill the Toolbar's leading zone, so they start at the chrome's inline inset
+    // (HS2-5BE8NE); a wrapper wraps the closed full-width view group without leaving a
+    // content-width control island at the right (HS2-JJ6ZE1).
     expect(source).toMatch(
-      /<Toolbar\s+className="terminal-ticket-rail__controls"[^>]*responsive="none"[^>]*centerAlign="stretch"[^>]*center=\{\s*<Row wrap flex className="terminal-ticket-rail__groups">\s*\{controls\}\s*<\/Row>\s*\}/,
+      /<Toolbar\s+className="terminal-ticket-rail__controls"[^>]*responsive="none"\s+leading=\{\s*<Row wrap flex className="terminal-ticket-rail__groups">\s*\{controls\}\s*<\/Row>\s*\}/,
     );
+    expect(source).not.toMatch(/terminal-ticket-rail__controls"[^/]*center=/);
     expect(css).not.toMatch(/__controls \{/);
     expect(css).not.toMatch(/__controls[^{]*\{[^}]*grid-(?:column|row)/);
     // The composed groups take their rail presentation through their own props; this stylesheet
@@ -125,7 +130,7 @@ describe('TerminalTicketRail', () => {
     expect(css).not.toMatch(/__project \.kui-toolbar__/);
     // The controls Toolbar keeps Kerf's own inset; the app adds no rule on that toolbar root (HS2-K9KWJJ).
     expect(css).not.toMatch(/__controls \{/);
-    // The heading Toolbar draws its own always-on bottom divider (`dividerSides="b"`); no app rule.
+    // The sunken Pane header draws the line under the heading; the heading Toolbar adds none (HS2-2703EK).
     expect(css).not.toContain('__heading');
     expect(css).not.toContain('--kui-sunken-panel-radius');
     // The rail search's row entrance is Kerf's stacked fill-search motion (KF-XFPJSY, HS2-DAMHD1).
@@ -142,7 +147,9 @@ describe('TerminalTicketRail', () => {
         TerminalTicketRail({ ...props, action: { kind: 'new-ticket', label: 'Ticket…', size: 'compact' } }),
       ),
       heading = markup.match(/<header class="kui-toolbar terminal-ticket-rail__heading"[\s\S]*?<\/header>/)![0];
-    expect(heading).toContain('divider-sides="b"');
+    // One line separates the heading from the tickets: the Pane header's, not a second toolbar
+    // divider stacked on it (HS2-2703EK).
+    expect(heading).not.toContain('divider-sides="b"');
     // The rail asks the launcher for its compact size instead of restyling it (HS2-8FS5BJ).
     expect(heading).toContain('class="quick-ticket-composer__launcher" data-size="compact"');
     expect(css).not.toContain('quick-ticket-composer');

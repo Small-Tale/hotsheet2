@@ -4882,7 +4882,8 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
       hideRight: hide.right,
       railRight: node.getBoundingClientRect().right,
       railWidth: node.getBoundingClientRect().width,
-      // The heading Toolbar's always-on bottom divider is Kerf's inset shadow (dividerSides="b").
+      // The sunken Pane header draws the one line under the heading; the heading Toolbar stacks no
+      // second inset-shadow divider on it (HS2-2703EK).
       headingDivider: heading.boxShadow
         .split(/,(?![^(]*\))/)
         .some((shadow) => shadow.includes('0px -1px 0px 0px inset') && !shadow.includes('rgba(0, 0, 0, 0)')),
@@ -4898,7 +4899,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   expect(railGeometry.hideRight).toBeGreaterThan(railGeometry.railRight - 24);
   expect(railGeometry.modeWidth).toBeGreaterThan(railGeometry.railWidth * 0.8);
   expect(railGeometry.projectWidth).toBeLessThan(railGeometry.railWidth * 0.8);
-  expect(railGeometry.headingDivider).toBe(true);
+  expect(railGeometry.headingDivider).toBe(false);
   expect(railGeometry.launcherBackground).not.toBe('rgba(0, 0, 0, 0)');
   await launcher.click();
   const composer = page.getByRole('dialog', { name: 'Create ticket' });

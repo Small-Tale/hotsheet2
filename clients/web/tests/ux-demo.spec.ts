@@ -1374,7 +1374,8 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
       projectPadding: projectChrome.padding,
       controlsPadding: controls.padding,
       headingPadding: heading.padding,
-      // The heading Toolbar's always-on bottom divider is Kerf's inset shadow (dividerSides="b").
+      // The sunken Pane header draws the one line under the heading; the heading Toolbar stacks no
+      // second inset-shadow divider on it (HS2-2703EK).
       headingDivider: headingWrap.boxShadow
         .split(/,(?![^(]*\))/)
         .some((shadow) => shadow.includes('0px -1px 0px 0px inset') && !shadow.includes('rgba(0, 0, 0, 0)')),
@@ -1401,7 +1402,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
     'data-appearance',
     'sunken',
   );
-  expect(geometry.headingDivider).toBe(true);
+  expect(geometry.headingDivider).toBe(false);
   expect(geometry.launcherBackground).not.toBe('rgba(0, 0, 0, 0)');
   expect(Number.parseFloat(geometry.launcherRadius)).toBeGreaterThan(geometry.railWidth / 4);
   const scroller = rail.locator('.kui-nav-stack__view[data-nav-active="true"] .kui-pane__content'),

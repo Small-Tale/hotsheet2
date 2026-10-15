@@ -110,23 +110,26 @@ export function terminalTicketRailPanel({
     },
     header: (
       <div class="terminal-ticket-rail__header" data-component="terminal-ticket-rail-header">
-        {/* The shared WorkspaceControls fill the rail's center zone. Its app-owned flex wrapper
-            wraps the closed full-width view group and keeps open search inline as space allows. */}
+        {/* The shared WorkspaceControls fill the rail's leading zone, so they align with the chrome's
+            project Select at the toolbar's inline inset; the center zone added a second zone gap
+            (HS2-5BE8NE). The app-owned flex wrapper wraps the closed full-width view group and
+            keeps open search inline as space allows. */}
         <Toolbar
           className="terminal-ticket-rail__controls"
           label="Ticket Rail Controls"
           dividerSides=""
           responsive="none"
-          centerAlign="stretch"
-          center={
+          leading={
             <Row wrap flex className="terminal-ticket-rail__groups">
               {controls}
             </Row>
           }
         />
+        {/* The sunken Pane header already draws the line under the pinned header; a toolbar divider
+            here stacked a second line and read darker than every other separator (HS2-2703EK). */}
         <Toolbar
           className="terminal-ticket-rail__heading"
-          dividerSides="b"
+          dividerSides=""
           leading={heading}
           trailing={action && <TicketViewAction action={action} />}
         />
@@ -155,6 +158,9 @@ export function terminalTicketRailPanel({
       // The pushed detail's ticket number follows Kerf's back control in the leading zone, so the back
       // control, the number, the actions, and the toggle share one row at the rail's narrowest width.
       toolbarConfig: { label: 'Ticket rail toolbar', dividerSides: '' },
+      // The pinned header ends with the Pane's own line; the stack's chrome line under the project
+      // toolbar doubled it (HS2-VYJQZV).
+      separator: 'hidden',
       views: detail ? [root, detailView(detail.key, detail.parts)] : [root],
     },
   };
