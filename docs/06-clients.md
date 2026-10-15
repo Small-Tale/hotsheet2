@@ -1632,8 +1632,11 @@ preview/download, server directory browser) are separate design work.
   - Modified clicks never extend the page's text selection, while a plain click that ends a text
     drag is treated as reading and leaves the selection alone.
   - Ranges, gaps, and copies follow the transcript's displayed (sequence) order.
-  - With nothing selected, the sticky bar shows the platform's hint ("Click to select. Cmd-click to
+  - With nothing selected, the selection bar shows the platform's hint ("Click to select. Cmd-click to
     add or remove, Shift-click for a range."). Otherwise it shows the count with Copy and Clear.
+    The bar is its own non-scrolling row above the transcript scroller in both the drawer and the
+    dialog, so it reserves its height and never covers a message, whether the transcript is pinned
+    to its latest message or scrolled to the top (HS2-C4RTVS).
 
   Copy writes the selected messages as Markdown and inserts an italic `N messages skipped` line
   wherever a run of unselected messages lies between two selected ones. Leading and trailing

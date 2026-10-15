@@ -482,6 +482,8 @@ export function AIConversation(props: AIConversationProps) {
     selectedIds = new Set(selectedMessageIds),
     selectionEnabled = Boolean(selectionId) && messages.length > 0,
     selectedCount = selectedIds.size;
+  // The selection bar is its own row above the transcript scroller, never floating over messages
+  // (HS2-C4RTVS); the dialog's fill-last body and the drawer's flex column give it its height.
   const selectionStatus = selectionEnabled ? (
     <div class="ai-conversation__selection" data-active={String(selectedCount > 0)}>
       <span>
@@ -539,7 +541,6 @@ export function AIConversation(props: AIConversationProps) {
               }
             />
           )}
-          {selectionStatus}
           {timeline.map((group, index) =>
             group.kind === 'message' ? (
               <ConversationMessages
@@ -645,6 +646,7 @@ export function AIConversation(props: AIConversationProps) {
         {/* No title bar: the drawer tab already names the chat, and its model, Save, and Stop controls
             render in the drawer's tab toolbar through AIConversationToolbar (HS2-DMH8MX, HS2-59F7WK). */}
         {savedNotice}
+        {selectionStatus}
         {transcript}
         {composer}
       </section>
@@ -696,6 +698,7 @@ export function AIConversation(props: AIConversationProps) {
         />
         {foreground && <div class="ai-conversation__foreground">{foreground}</div>}
         {savedNotice}
+        {selectionStatus}
         {transcript}
         {composer}
       </wa-dialog>

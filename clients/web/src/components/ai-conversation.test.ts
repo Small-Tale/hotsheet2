@@ -454,6 +454,25 @@ describe('AIConversation', () => {
     });
     expect(idle).toContain(conversationSelectionHint());
     expect(idle).not.toContain('data-action="copy-conversation-selection"');
+    // The bar is its own row before the transcript scroller, never inside it (HS2-C4RTVS).
+    for (const presentation of ['embedded', 'dialog'] as const) {
+      const rendered = String(
+          AIConversation({
+            open: true,
+            presentation,
+            tool: 'Codex',
+            selectionId: 'connection-1',
+            messages,
+            draft: '',
+            busy: false,
+            interruptible: false,
+          }),
+        ),
+        bar = rendered.indexOf('class="ai-conversation__selection"'),
+        scroller = rendered.search(/class="[^"]*ai-conversation__transcript[^-"]*"/);
+      expect(bar).toBeGreaterThan(-1);
+      expect(scroller).toBeGreaterThan(bar);
+    }
   });
   it('renders live read-only previews without saved-transcript or mutation affordances', () => {
     const markup = withToolbar({

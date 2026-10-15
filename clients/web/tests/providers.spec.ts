@@ -6625,7 +6625,7 @@ test('keeps a scrolled-back transcript in place while selecting a message range'
           }),
       );
   // Put a known middle-history pair safely in view before measuring; the selection clicks themselves must not scroll.
-  const [anchorIndex, endIndex] = [4, 3];
+  const [anchorIndex, endIndex] = [5, 3];
   await messages.nth(anchorIndex).evaluate((node) => {
     node.scrollIntoView({ block: 'center' });
   });
@@ -7054,6 +7054,105 @@ test('selects non-contiguous messages in a phone-width drawer chat (HS2-WV88W3)'
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-wv88w3-drawer-gap-390.png' });
 });
+
+/**
+ * The selection bar reserves its own row above the transcript scroller instead of floating over it,
+ * so it never covers a message — pinned to the latest message or at the top (HS2-C4RTVS).
+ */
+async function expectSelectionBarClearOfMessages(conversation: Locator) {
+  const transcript = conversation.locator('.ai-conversation__transcript'),
+    geometry = () =>
+      conversation.evaluate((root) => {
+        const bar = root.querySelector('.ai-conversation__selection')!.getBoundingClientRect(),
+          scroller = root.querySelector('.ai-conversation__transcript')!.getBoundingClientRect(),
+          firstVisible = [...root.querySelectorAll('[data-action="pick-conversation-message"]')]
+            .map((node) => node.getBoundingClientRect())
+            .find((box) => box.bottom > scroller.top + 1);
+        return {
+          barBottom: bar.bottom,
+          barHeight: bar.height,
+          scrollerTop: scroller.top,
+          firstVisibleTop: firstVisible ? Math.max(firstVisible.top, scroller.top) : Infinity,
+        };
+      });
+  for (const position of ['latest', 'top'] as const) {
+    await transcript.evaluate((node, edge) => {
+      node.scrollTop = edge === 'top' ? 0 : node.scrollHeight;
+    }, position);
+    const box = await geometry();
+    expect(box.barHeight).toBeGreaterThan(0);
+    expect(box.barBottom, `bar overlaps the transcript (${position})`).toBeLessThanOrEqual(box.scrollerTop + 0.5);
+    expect(box.firstVisibleTop, `bar covers a message (${position})`).toBeGreaterThanOrEqual(box.barBottom);
+  }
+}
+
+for (const width of [1280, 390]) {
+  test(`keeps the selection hint clear of the first message in the drawer chat at ${width}px (HS2-C4RTVS)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 800 });
+    await mockProject(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]');
+    await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+    await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+    const conversation = drawer.locator('[data-component="ai-conversation"]'),
+      composer = conversation.getByLabel('Message Codex'),
+      messages = conversation.locator('[data-action="pick-conversation-message"]');
+    for (let turn = 1; turn <= 3; turn += 1) {
+      await composer.fill('What time is it in California?');
+      await composer.press('Enter');
+      await expect(conversation.getByText('The event stream remains authoritative.', { exact: true })).toHaveCount(
+        turn,
+      );
+    }
+    await expect(conversation.locator('.ai-conversation__selection')).toContainText(SELECTION_HINT);
+    await expectSelectionBarClearOfMessages(conversation);
+    await page.screenshot({ path: `target/visual-captures/hs2-c4rtvs-drawer-hint-${width}.png` });
+    await messages.nth(0).click();
+    await expect(conversation.locator('.ai-conversation__selection')).toContainText('1 message selected');
+    await expectSelectionBarClearOfMessages(conversation);
+    await page.screenshot({ path: `target/visual-captures/hs2-c4rtvs-drawer-selected-${width}.png` });
+  });
+
+  test(`keeps the selection hint clear of the first message in the main chat dialog at ${width}px (HS2-C4RTVS)`, async ({
+    page,
+  }) => {
+    // The ticket's chat entry point is in the wide inspector; the open dialog then follows the viewport.
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await mockProject(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+    await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    const conversation = page.locator('[data-component="ai-conversation"]'),
+      composer = conversation.getByLabel('Message Codex'),
+      messages = conversation.locator('[data-action="pick-conversation-message"]');
+    for (let turn = 1; turn <= 3; turn += 1) {
+      await composer.fill('What time is it in California?');
+      await composer.press('Enter');
+      await expect(conversation.getByText('The event stream remains authoritative.', { exact: true })).toHaveCount(
+        turn,
+      );
+    }
+    await expect(conversation.locator('.ai-conversation__selection')).toContainText(SELECTION_HINT);
+    await expectSelectionBarClearOfMessages(conversation);
+    await conversation
+      .getByRole('dialog')
+      .screenshot({ path: `target/visual-captures/hs2-c4rtvs-dialog-hint-${width}.png` });
+    await messages.nth(0).click();
+    await expect(conversation.locator('.ai-conversation__selection')).toContainText('1 message selected');
+    await expectSelectionBarClearOfMessages(conversation);
+    await conversation
+      .getByRole('dialog')
+      .screenshot({ path: `target/visual-captures/hs2-c4rtvs-dialog-selected-${width}.png` });
+  });
+}
 
 test('selects single and non-contiguous messages with modifier keys in the main chat dialog (HS2-WV88W3)', async ({
   page,
