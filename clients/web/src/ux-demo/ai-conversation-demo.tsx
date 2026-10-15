@@ -9,6 +9,7 @@ import { createScope } from 'kerfjs/scope';
 import { type ConversationActivity, type ConversationMessage, conversationUsage } from '../ai-conversation';
 import { AIConversation, type AIConversationProps, AIConversationToolbar } from '../components/ai-conversation';
 import { wireAiConversation } from '../components/ai-conversation-interactions';
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import type { PermissionItem } from '../permission-notifications';
 import { DemoEvent } from './components/demo-event';
 import { type DemoDevice, DeviceSetting } from './components/device-setting';
@@ -25,6 +26,16 @@ export const aiConversationDevice = signal<DemoDevice>('host');
 export const aiConversationDemoOpen = signal(true);
 export const aiConversationPresentation = signal<'dialog' | 'embedded'>('dialog');
 export const aiConversationSaveCount = signal(0);
+/** Transcript selection: one pick anchors, a second extends to an inclusive range, a third restarts. */
+export const aiConversationSelection = signal<{ anchor?: string; focus?: string }>({});
+function demoSelectedMessageIds(messages: readonly ConversationMessage[]): string[] {
+  const { anchor, focus } = aiConversationSelection.value,
+    ids = messages.map((message) => message.id),
+    from = anchor ? ids.indexOf(anchor) : -1,
+    to = focus ? ids.indexOf(focus) : from;
+  if (from < 0 || to < 0) return [];
+  return ids.slice(Math.min(from, to), Math.max(from, to) + 1);
+}
 export const aiConversationDraft = signal('Can you also explain the compatibility boundary?');
 export const aiConversationProvider = signal('codex');
 export const AI_CONVERSATION_PROVIDERS = [
@@ -39,6 +50,7 @@ const completed: ConversationMessage[] = [
   {
     id: 'question-1',
     role: 'user',
+    sequence: 0,
     content: 'Review the client connection flow in `api.ts`.',
     // Referenced files render as Kerf link Chips on both bubble tones (HS2-94T958).
     files: [
@@ -54,6 +66,8 @@ const completed: ConversationMessage[] = [
   {
     id: 'answer-1',
     role: 'assistant',
+    // The turn's tool activity lands between the question and its answer.
+    sequence: 3,
     status: 'completed',
     content:
       'The connection uses the project event stream, so the transcript updates without simple polling.\n\n- Turns stay in one session.\n- Permissions appear inline.',
@@ -73,6 +87,7 @@ const activity: ConversationActivity[] = [
   {
     id: 'activity-1',
     tool: 'Codex',
+    sequence: 1,
     kind: 'edit',
     summary: 'Edited the conversation state boundary',
     importance: 'normal',
@@ -80,6 +95,7 @@ const activity: ConversationActivity[] = [
   {
     id: 'activity-2',
     tool: 'Codex',
+    sequence: 2,
     kind: 'command',
     summary:
       "Codex ran `zsh -ic 'npm run test -- --project chromium --grep ai-conversation-activity-presentation-with-a-deliberately-long-filter'`",
@@ -175,6 +191,8 @@ export function AIConversationDemo() {
     open: aiConversationDemoOpen.value,
     tool: aiConversationProviderLabel(),
     sessionId: '019-demo-session',
+    selectionId: 'demo-conversation',
+    selectedMessageIds: demoSelectedMessageIds(state.messages),
     messages: state.messages,
     draft: aiConversationDraft.value,
     busy: state.busy,
@@ -247,6 +265,7 @@ export function AIConversationDemo() {
 export function resetAIConversationDemo(root?: ParentNode): void {
   aiConversationPresentation.value = 'dialog';
   aiConversationScenario.value = 'streaming';
+  aiConversationSelection.value = {};
   aiConversationDevice.value = 'host';
   aiConversationDemoOpen.value = true;
   if (root)
@@ -319,6 +338,7 @@ function wireAiConversationDemo(root: HTMLElement): () => void {
   demoListeners.add(
     delegate(root, 'change', '[data-settings="ai-conversation"] [name="scenario"]', (_event, target) => {
       aiConversationScenario.value = (target as FormControl).value as typeof aiConversationScenario.value;
+      aiConversationSelection.value = {};
       openAIConversationDemo(root);
     }),
   );
@@ -333,6 +353,17 @@ function wireAiConversationDemo(root: HTMLElement): () => void {
       openAIConversationDemo(root);
     }),
   );
+  // The selection actions use the production action attributes; the demo keeps its own range.
+  demoListeners.add(
+    delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.clearConversationSelection.selector, () => {
+      aiConversationSelection.value = {};
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.copyConversationSelection.selector, () => {
+      sidebarEvent.value = `Copied ${demoSelectedMessageIds(scenarioState().messages).length} selected messages.`;
+    }),
+  );
   // The production AIConversation handlers, driving the fixture scenario (HS2-RWY78R).
   demoListeners.add(
     wireAiConversation(root, {
@@ -343,6 +374,9 @@ function wireAiConversationDemo(root: HTMLElement): () => void {
         aiConversationSaveCount.value++;
       },
       pickMessage: (_connectionId, messageId) => {
+        const current = aiConversationSelection.value;
+        aiConversationSelection.value =
+          current.anchor && !current.focus ? { ...current, focus: messageId } : { anchor: messageId };
         sidebarEvent.value = `Picked conversation message ${messageId}.`;
       },
       setDraft: (value) => {

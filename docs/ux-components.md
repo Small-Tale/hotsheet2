@@ -431,6 +431,11 @@ does not introduce polling or another network request.
     spinner without explanation. Until a thinking turn streams its first text, its assistant
     bubble holds a Kerf `LoadingSpinner` labeled "Awaiting response" instead of rendering as an
     empty pill, in both presentations (HS2-77KJKR)
+  - activity: adjacent activity groups into one transparent, unframed Kerf `ContentItem`
+    (matching the sidebar's activity notes) that switches to `frame="framed"` only while it lies
+    between the first and last selected messages (`data-selected-range`; HS2-72GEX0). The demo's
+    Completed state orders the activity between its question and answer and keeps a real range
+    selection so the outline can be exercised
   - permission requests: the existing `PermissionRequestCard` list presentation appears in
     transcript order for this connection and uses the same global decision handlers/history
   - composer: multiline free-form input plus an explicit Send action; Enter sends while

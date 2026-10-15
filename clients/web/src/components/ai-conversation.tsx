@@ -198,16 +198,22 @@ export function ConversationMessages({
 function ConversationActivityGroup({
   activity,
   feedbackAvailable,
+  selected = false,
 }: {
   activity: readonly ConversationActivity[];
   feedbackAvailable: boolean;
+  /** Inside the selected message range: the only state that outlines the group (HS2-72GEX0). */
+  selected?: boolean;
 }) {
   return (
-    // A Kerf ContentItem frames the activity card (HS2-ADM62E); the app lays out only its own header and list.
+    // A borderless, transparent Kerf ContentItem like the sidebar's activity notes; it frames only
+    // while it lies inside the selected message range (HS2-ADM62E, HS2-72GEX0).
     <ContentItem
-      appearance="neutral"
+      appearance="transparent"
+      frame={selected ? 'framed' : 'none'}
       className="ai-conversation__activity"
       ariaLabel="AI-generated activity summaries; may contain errors"
+      rootAttributes={{ 'data-selected-range': String(selected) }}
     >
       <div class="ai-conversation__activity-body">
         <header>
@@ -234,6 +240,21 @@ function ConversationActivityGroup({
       </div>
     </ContentItem>
   );
+}
+
+/**
+ * The first and last timeline positions holding a selected message; an activity group strictly
+ * between them is part of the selected span. With fewer than two selected messages nothing lies
+ * between, so `first` is greater than or equal to `last`.
+ */
+export function selectedTimelineSpan(
+  timeline: ReturnType<typeof conversationTimeline>,
+  selectedIds: ReadonlySet<string>,
+): { first: number; last: number } {
+  const positions = timeline.flatMap((group, index) =>
+    group.kind === 'message' && selectedIds.has(group.message.id) ? [index] : [],
+  );
+  return positions.length ? { first: positions[0], last: positions.at(-1)! } : { first: 0, last: 0 };
 }
 
 let handset: ReadonlySignal<boolean> | undefined;
@@ -445,6 +466,7 @@ export function AIConversation(props: AIConversationProps) {
     </div>
   ) : null;
   const timeline = conversationTimeline(messages, activity),
+    selectedSpan = selectedTimelineSpan(timeline, selectedIds),
     transcript = (
       // Kerf List is the transcript scroller: in the dialog its block-end scrollClearance lets messages
       // scroll beneath the floating Composer footer while the last one still rests above it
@@ -470,7 +492,7 @@ export function AIConversation(props: AIConversationProps) {
             />
           )}
           {selectionStatus}
-          {timeline.map((group) =>
+          {timeline.map((group, index) =>
             group.kind === 'message' ? (
               <ConversationMessages
                 tool={tool}
@@ -480,7 +502,11 @@ export function AIConversation(props: AIConversationProps) {
                 selectionAction={selectionEnabled ? 'pick-conversation-message' : undefined}
               />
             ) : (
-              <ConversationActivityGroup activity={group.activity} feedbackAvailable={feedbackAvailable} />
+              <ConversationActivityGroup
+                activity={group.activity}
+                feedbackAvailable={feedbackAvailable}
+                selected={index > selectedSpan.first && index < selectedSpan.last}
+              />
             ),
           )}
           {inlinePermissions.map((item) => (

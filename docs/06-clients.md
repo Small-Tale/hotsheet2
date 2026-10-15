@@ -1538,7 +1538,10 @@ preview/download, server directory browser) are separate design work.
   conversation total without a second counter; unknown cost is labeled unavailable. The same
   stream's normalized activity events are session/connection matched into the shared bounded
   transcript sequence, grouping adjacent activity while preserving their position between
-  messages. Each Activity card carries one persistent, accessible AI-generated/may-contain-errors
+  messages. Activity groups are borderless and transparent, like the ticket sidebar's activity
+  notes, and gain an outline only while they lie inside the selected message range (between the
+  first and last selected messages; HS2-72GEX0). Each Activity card carries one persistent,
+  accessible AI-generated/may-contain-errors
   cue instead of repeating the disclosure on every row; row feedback retains its originating tool
   identity. The cue uses 8px between attribution and feedback, 4px inside each connected cluster,
   and keeps its 32px feedback targets plus 12px glyphs as explicit geometry (HS2-4Y6SM9).

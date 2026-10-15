@@ -8017,6 +8017,46 @@ test('sizes inspector editors and titles through child tokens and own classes (H
   }
 });
 
+test('keeps AI chat activity borderless until the selected range spans it (HS2-72GEX0)', async ({ page }) => {
+  await page.goto('/ux-demo?component=ai-conversation');
+  const host = page.locator('[data-component="ai-conversation"]'),
+    dialog = host.getByRole('dialog');
+  await page
+    .locator('[data-settings="ai-conversation"] [name="scenario"]')
+    .evaluate((node: HTMLElement & { value: string }) => {
+      node.value = 'completed';
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  await expect(dialog).toBeVisible();
+  const activity = host.locator('.ai-conversation__activity'),
+    frame = () =>
+      activity.evaluate((node) => {
+        const style = getComputedStyle(node);
+        return { background: style.backgroundColor, border: style.borderTopColor };
+      });
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(activity).toHaveAttribute('data-selected-range', 'false');
+    // Transparent fill and an unpainted border, like the sidebar's activity notes.
+    await expect.poll(frame).toEqual({ background: 'rgba(0, 0, 0, 0)', border: 'rgba(0, 0, 0, 0)' });
+    await activity.screenshot({ path: `target/visual-captures/hs2-72gex0-activity-${width}.png` });
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // The question, then its answer: the activity between them joins the selected span and is outlined.
+  await host.locator('[data-message-id="question-1"]').click();
+  await expect(activity).toHaveAttribute('data-selected-range', 'false');
+  await host.locator('[data-message-id="answer-1"]').click();
+  await expect(activity).toHaveAttribute('data-selected-range', 'true');
+  await expect.poll(async () => (await frame()).border).not.toBe('rgba(0, 0, 0, 0)');
+  await expect.poll(async () => (await frame()).background).toBe('rgba(0, 0, 0, 0)');
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await dialog.screenshot({ path: `target/visual-captures/hs2-72gex0-activity-selected-${width}.png` });
+  }
+  await host.getByRole('button', { name: 'Clear Message Selection' }).click();
+  await expect(activity).toHaveAttribute('data-selected-range', 'false');
+});
+
 test('shows the chat model/effort as a label with a popup to change them', async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 800 });
   await page.goto('/ux-demo?component=ai-conversation');

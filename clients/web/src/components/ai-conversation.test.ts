@@ -212,7 +212,8 @@ describe('AIConversation', () => {
       '<code>zsh -ic &#39;npm run test -- --project chromium --grep a-deliberately-long-filter&#39;</code>',
     );
     // A Kerf ContentItem frames the activity card; the app grid only lays out its own body (HS2-ADM62E).
-    expect(markup).toMatch(/data-component="content-item" data-appearance="neutral"[^>]*role="region"/);
+    // The activity group is a borderless, transparent Kerf ContentItem region (HS2-72GEX0).
+    expect(markup).toMatch(/data-component="content-item" data-appearance="transparent"[^>]*role="region"/);
     expect(css).toMatch(/\.ai-conversation__activity-body \{[^}]*display: grid;[^}]*min-width: 0/);
     expect(css).not.toMatch(/\.ai-conversation__activity \{/);
     expect(css).toMatchSource(
@@ -615,6 +616,49 @@ describe('AIConversation', () => {
     const toolbar = String(AIConversationToolbar({ ...props, presentation: 'embedded' }));
     expect(toolbar).toContain('placement="top-end"');
     expect(toolbar).toContain('data-action="save-conversation"');
+  });
+  it('renders activity borderless and transparent, outlined only inside the selected range (HS2-72GEX0)', () => {
+    const render = (selectedMessageIds: string[]) =>
+        String(
+          AIConversation({
+            open: true,
+            presentation: 'embedded',
+            tool: 'Codex',
+            selectionId: 'connection-1',
+            selectedMessageIds,
+            messages: [
+              { id: 'question', role: 'user', content: 'Inspect this.', sequence: 0 },
+              { id: 'answer', role: 'assistant', content: 'Done.', status: 'completed', sequence: 2 },
+              { id: 'follow-up', role: 'user', content: 'Thanks.', sequence: 4 },
+            ],
+            activity: [
+              { id: 'a1', tool: 'Codex', kind: 'command', summary: 'Ran the tests', importance: 'normal', sequence: 1 },
+              { id: 'a2', tool: 'Codex', kind: 'edit', summary: 'Edited main.tsx', importance: 'normal', sequence: 3 },
+            ],
+            draft: '',
+            busy: false,
+            interruptible: false,
+          }),
+        ),
+      activityRoots = (markup: string) =>
+        markup.match(/<div[^>]*class="kui-content-item[^"]*ai-conversation__activity"[^>]*>/g) ?? [];
+    const idle = activityRoots(render([]));
+    expect(idle).toHaveLength(2);
+    for (const root of idle) {
+      expect(root).toContain('data-appearance="transparent"');
+      expect(root).not.toContain('kui-content-item--framed');
+      expect(root).toContain('data-selected-range="false"');
+    }
+    // Selecting question..answer outlines only the activity between them.
+    const ranged = activityRoots(render(['question', 'answer']));
+    expect(ranged[0]).toContain('kui-content-item--framed');
+    expect(ranged[0]).toContain('data-selected-range="true"');
+    expect(ranged[1]).not.toContain('kui-content-item--framed');
+    // A single selected message has no span; extending to the end outlines both groups.
+    expect(activityRoots(render(['answer'])).some((root) => root.includes('--framed'))).toBe(false);
+    expect(activityRoots(render(['question', 'answer', 'follow-up'])).every((root) => root.includes('--framed'))).toBe(
+      true,
+    );
   });
   it('distinguishes the conversation lifecycle from a nested model popup closing', () => {
     const surface = {} as Element,
