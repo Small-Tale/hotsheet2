@@ -34,6 +34,7 @@ import type {
   TerminalSettings,
   Ticket,
   TicketRow,
+  TicketUsage,
   ToolConnection,
   ToolSession,
   TrashPurgePreview,
@@ -367,6 +368,17 @@ export const parseCorruptTicket = shape<CorruptTicket>(
   { store: isString, path: isString, error: isString },
   { store_path: isString, id: isString, slug: isString, error_code: isString },
 );
+
+const ticketUsageEvent = shape<TicketUsage['events'][number]>(
+  'ticket usage event',
+  { ts: isString, tool: isString, tokens_in: isNumber, tokens_out: isNumber },
+  { model: isString, cost_usd: isNumber, session: isString },
+);
+export const parseTicketUsage = shape<TicketUsage>('ticket usage', {
+  events: listOf(ticketUsageEvent.check),
+  settled_cost_usd: isNumber,
+  settled_through: isString,
+});
 
 export const parseDuplicateBacklinks = shape<DuplicateBacklinkResponse>('duplicate backlinks', {
   backlinks: listOf(isObject),

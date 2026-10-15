@@ -101,6 +101,7 @@ export interface ReaderLayersSurfaceDependencies {
     durationToNext?: string;
     emphasized?: boolean;
   }[];
+  timelineUsage: (ticket: FullTicket) => string | undefined;
   titleDraft: Signal<string>;
   titleEditingSurface: Signal<TicketTitleEditSurface | undefined>;
 }
@@ -155,6 +156,7 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
     status,
     tagSuggestions,
     timeline,
+    timelineUsage,
     titleDraft,
     titleEditingSurface,
   } = dependencies;
@@ -238,6 +240,7 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
         latestConfidence={ticket.latest_confidence}
         duplicateTarget={duplicateTargetFor(ticket)}
         timelineEntries={timeline(ticket)}
+        timelineUsage={timelineUsage(ticket)}
         attachments={attachmentItems(ticket, current)}
         attachmentContext={attachmentContext(ticket, current)}
         codeReview={editable ? codeReview.value : undefined}

@@ -97,6 +97,14 @@ Metrics can be shared across a team **through git** — no server sync needed:
 ## 14.5 What consumes it
 
 - The **cost widget** + **analytics/stats dashboards** (HS2-47) read via §14.3.
+- The **ticket timeline** reads one ticket's history through
+  `metrics::ticket_usage` (`GET /checkouts/{checkout}/tickets/{ticket}/usage`, HS2-ZA7W6E,
+  HS2-J14225): the attributed raw events in `ts` order, de-duplicated by timestamp, session,
+  tool, and token counts, plus the settled rollup's `by_ticket` cost and
+  `last_rolled_up_through` day, so the client can show per-phase tokens and models while raw
+  events exist and still a cost total after the raw tail is pruned. Tickets on other
+  providers return an empty history rather than a capability error. Raw events are
+  device-local (§14.3), so per-phase figures reflect this device's recorded sessions.
 - Cross-project + cross-person rollups feed a team cost view (from the shared rollups,
   §14.4).
 - The production web `AIConversation` consumes the same per-turn `Usage` projection that

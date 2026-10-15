@@ -144,6 +144,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/note-authorship.ts # Note author/AI-label facets from the recorded note actor (tool name from the worker-id prefix; HS2-32QDZ3)
     src/components/confidence-badge.tsx # Shared banded AI completion ConfidenceBadge + colocated CSS: compact pill (note header, TicketRow list/board summaries, HS2-A0Q6G6) and labeled inspector/reader header (HS2-DWTJ43); demo in src/ux-demo/confidence-badge-demo.tsx
     src/ticket-timeline-data.ts # Timeline entries from activity notes + lifecycle backfill; appends each completion cycle's confidence to its Completed headline
+    src/ticket-usage-timeline.ts # Buckets a ticket's AI usage events into the timeline gaps and formats the per-gap and total token/model/cost labels (HS2-ZA7W6E, HS2-J14225)
     src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, shell/AI/chat type filtering and scoped bulk inclusion rules
     src/terminal-visibility-filter.ts # Controlled native multi-select array binding that preserves its open popup through list rerenders
     src/browser-id.ts       #   Secure/ordinary-LAN browser identities plus time-sortable Jira outbox retry IDs (HS2-QA1VEF)
@@ -168,6 +169,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/project-ticket-refresh.ts # Independent healthy/corrupt ticket loading so either result remains usable when the other request fails
     tests/project-sidebar-state.spec.ts # Atomic new-project activation, project-keyed sidebar count/trend isolation, and stale background-snapshot rejection
     tests/project-chat-scope.spec.ts # AI chat tabs and close-dialog chats stay scoped to the project whose root or store registered the connection (HS2-6GHSCY, HS2-5AGPWE)
+    tests/ticket-timeline-usage.spec.ts # Timeline gap labels carry tokens and models and the total line sums the ticket, at 1280 and 390 px (HS2-ZA7W6E, HS2-J14225)
     src/project-change-poll.ts # Replay-safe per-open-project change transport (WebSocket-first, long-poll fallback, `resume`) plus the main-thread consumer it feeds (HS2-SH9179); ticket invalidation, overflow/reconnect recovery, onResync hook (initial/reconnect/overflow) that replaces permission polling (HS2-NKCXW4), and abortable lifecycle
     src/change-stream-worker-protocol.ts # Versioned main<->worker change-stream messages (generation tokens, acks), their validators, and the bounded coalescing per-project delivery queue (HS2-SH9179)
     src/change-stream-worker-runtime.ts # Worker-side runtime: one transport per open project, worker poll client, open/close/ack handling (HS2-SH9179)

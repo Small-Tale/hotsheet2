@@ -98,6 +98,7 @@ export interface InspectorSurfaceDependencies {
     durationToNext?: string;
     emphasized?: boolean;
   }[];
+  timelineUsage: (ticket: FullTicket) => string | undefined;
   titleDraft: Signal<string>;
   titleEditingSurface: Signal<TicketTitleEditSurface | undefined>;
 }
@@ -150,6 +151,7 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
     status,
     tagSuggestions,
     timeline,
+    timelineUsage,
     titleDraft,
     titleEditingSurface,
   } = dependencies;
@@ -253,6 +255,7 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
       duplicateBacklinks: backlinks?.backlinks,
       duplicateBacklinkInaccessibleProjects: backlinks?.inaccessibleProjects,
       timelineEntries: timeline(ticket),
+      timelineUsage: timelineUsage(ticket),
       attachments: attachmentItems(ticket, current),
       attachmentContext: attachmentContext(ticket),
       codeReview: codeReview.value,

@@ -20168,3 +20168,123 @@ async fn code_review_shows_unmerged_worktree_commits_until_they_are_merged() {
             .any(|commit| commit["sha"] == loose.as_str() && commit.get("unmerged").is_some())
     );
 }
+
+#[tokio::test]
+async fn checkout_ticket_usage_lists_attributed_events_in_order_and_keeps_settled_cost() {
+    let (store, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry_home = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry_home.path().join("checkouts.json")));
+    let registration =
+        serde_json::json!({"root":checkout.path(),"alias":"usage","stores":[store.path()]})
+            .to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/usage/tickets",
+                Some(r#"{"title":"Measure this work"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_owned();
+    let slug = created["slug"].as_str().unwrap().to_owned();
+    let qualified = created["qualified_id"].as_str().unwrap().to_owned();
+
+    let usage = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/usage/tickets/{qualified}/usage"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(usage["events"].as_array().unwrap().len(), 0);
+    assert_eq!(usage["settled_cost_usd"], 0.0);
+
+    let fs_store = FsStore::open(store.path()).unwrap();
+    let event =
+        |ts: &str, tokens_in: u64, ticket: Option<&str>| hotsheet_ticketing::metrics::UsageEvent {
+            ts: ts.into(),
+            tool: "claude".into(),
+            model: Some("opus".into()),
+            tokens_in,
+            tokens_out: 10,
+            cost_usd: Some(0.25),
+            ticket: ticket.map(str::to_owned),
+            session: Some("s1".into()),
+        };
+    hotsheet_ticketing::metrics::record(&fs_store, &event("2026-08-20T10:00:00Z", 300, Some(&id)))
+        .unwrap();
+    hotsheet_ticketing::metrics::record(&fs_store, &event("2026-08-19T09:00:00Z", 100, Some(&id)))
+        .unwrap();
+    hotsheet_ticketing::metrics::record(&fs_store, &event("2026-08-19T09:30:00Z", 999, None))
+        .unwrap();
+    hotsheet_ticketing::metrics::record(
+        &fs_store,
+        &event("2026-08-19T09:40:00Z", 999, Some("other")),
+    )
+    .unwrap();
+
+    for reference in [qualified.as_str(), slug.as_str()] {
+        let usage = body_json(
+            app.clone()
+                .oneshot(authed(
+                    "GET",
+                    &format!("/checkouts/usage/tickets/{reference}/usage"),
+                    None,
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        let events = usage["events"].as_array().unwrap();
+        assert_eq!(events.len(), 2, "{usage}");
+        assert_eq!(events[0]["ts"], "2026-08-19T09:00:00Z");
+        assert_eq!(events[0]["tokens_in"], 100);
+        assert_eq!(events[1]["ts"], "2026-08-20T10:00:00Z");
+        assert_eq!(events[1]["tokens_in"], 300);
+        assert_eq!(usage["settled_through"], "");
+    }
+
+    hotsheet_ticketing::metrics::roll_up_through(&fs_store, "2026-08-20").unwrap();
+    hotsheet_ticketing::metrics::prune_raw_before(&fs_store, "2026-08-20").unwrap();
+    let usage = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/usage/tickets/{qualified}/usage"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(usage["events"].as_array().unwrap().len(), 1);
+    assert_eq!(usage["settled_through"], "2026-08-20");
+    // Both attributed events were rolled up (the duplicate write counts once in raw but the
+    // rollup folds every recorded line, so the settled cost is the two distinct events' cost).
+    assert!(
+        (usage["settled_cost_usd"].as_f64().unwrap() - 0.5).abs() < 1e-9,
+        "{usage}"
+    );
+
+    let missing = app
+        .oneshot(authed(
+            "GET",
+            "/checkouts/usage/tickets/HS-NOPE/usage",
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+}

@@ -25,6 +25,7 @@ import {
   type PollResponse,
   type ProviderOutboxOperation,
   type TicketRow as WireTicketRow,
+  type TicketUsage,
   TurnStreamReplayGuard,
 } from '../api';
 import {
@@ -278,6 +279,7 @@ export async function startHotSheetWebClient() {
     backlinks: [],
     inaccessibleProjects: [],
   });
+  const ticketUsageState = signal<{ key: string; usage?: TicketUsage }>({ key: '' });
   const resolvedDuplicateTargets = signal<Record<string, DuplicateTarget>>({});
   const projectProjectionById = signal<Record<string, CachedProjectProjection>>({});
   // Bounded LRU of projects whose loaded projection stays resident so tab switches paint instantly and
@@ -2867,6 +2869,7 @@ export async function startHotSheetWebClient() {
     ticketWorkAreaFocused,
     ordinaryTextSelected,
     timeline,
+    timelineUsage,
     notes,
     attachmentContext: ticketAttachmentContext,
     duplicateTargetFor,
@@ -3009,6 +3012,7 @@ export async function startHotSheetWebClient() {
     codeReviewMessage,
     expandedCodeReviewCommits,
     duplicateBacklinkState,
+    ticketUsageState,
     resolvedDuplicateTargets,
     ticketCloseDialog,
     ticketLinkChoice,
@@ -3417,6 +3421,7 @@ export async function startHotSheetWebClient() {
       status,
       tagSuggestions,
       timeline,
+      timelineUsage,
       titleDraft,
       titleEditingSurface,
     });
@@ -3464,6 +3469,7 @@ export async function startHotSheetWebClient() {
     status,
     tagSuggestions,
     timeline,
+    timelineUsage,
     titleDraft,
     titleEditingSurface,
   });

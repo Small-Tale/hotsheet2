@@ -45,6 +45,7 @@ import {
   parseTerminalSettings,
   parseTicket,
   parseTicketRow,
+  parseTicketUsage,
   parseToolConnection,
   parseToolSession,
   parseTrashPurge,
@@ -472,6 +473,22 @@ export interface FullTicket extends TicketRow {
   attachments: Attachment[];
   concurrency_token?: string;
   warnings?: string[];
+}
+/** One AI usage event attributed to a ticket (`docs/14` §14.2, HS2-ZA7W6E). */
+export interface TicketUsageEvent {
+  ts: string;
+  tool: string;
+  model?: string;
+  tokens_in: number;
+  tokens_out: number;
+  cost_usd?: number;
+  session?: string;
+}
+/** A ticket's usage history: raw attributed events plus the settled rollup's cost for it. */
+export interface TicketUsage {
+  events: TicketUsageEvent[];
+  settled_cost_usd: number;
+  settled_through: string;
 }
 export interface DuplicateBacklink {
   reference: string;
@@ -1135,6 +1152,8 @@ export class Api {
       parseDuplicateBacklinks,
       `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/duplicate-backlinks`,
     );
+  checkoutTicketUsage = (checkout: string, id: string) =>
+    this.parsed(parseTicketUsage, `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/usage`);
   createCheckoutTicket = (
     checkout: string,
     value: {

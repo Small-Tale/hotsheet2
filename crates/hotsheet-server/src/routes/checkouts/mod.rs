@@ -8,7 +8,7 @@ pub(crate) use listing::{
 
 use crate::api_error::ApiError;
 use crate::multistore::{StoreEntry, StoreHost};
-use crate::routes::checkout_tickets::checkout_git_ticket;
+use crate::routes::checkout_tickets::{checkout_git_ticket, checkout_ticket_owner};
 use crate::routes::providers::provider_transfer_error;
 use crate::watcher::repository_change_event;
 use crate::{AppState, code_review, repository_browser};
@@ -718,6 +718,28 @@ fn repository_setup_api_error(error: repository_browser::RepositorySetupError) -
         RepositorySetupError::Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
     };
     ApiError::new(status, error.to_string())
+}
+
+/// One ticket's usage history for the timeline (HS2-ZA7W6E, HS2-J14225). Usage events are
+/// recorded in the git store that owns the ticket; a ticket from another provider has no
+/// local usage, so it yields an empty history rather than a capability error.
+pub(crate) async fn get_checkout_ticket_usage(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+) -> Result<Json<hotsheet_ticketing::metrics::TicketUsage>, ApiError> {
+    let (source, _) = checkout_ticket_owner(&state, &reference, &id)?;
+    if source.provider != "git" {
+        return Ok(Json(hotsheet_ticketing::metrics::TicketUsage::default()));
+    }
+    let (entry, ticket) = checkout_git_ticket(&state, &reference, &id)?;
+    let ulid = ticket.id.to_string();
+    tokio::task::spawn_blocking(move || {
+        hotsheet_ticketing::metrics::ticket_usage(&entry.store, &ulid)
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map(Json)
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
 }
 
 pub(crate) async fn get_checkout_code_review(

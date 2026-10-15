@@ -239,6 +239,12 @@ the server's selected store; activity uses its persisted rolling window, and
 notifications use its bounded server-process feed. Acknowledgement uses the same id and
 authorization as the web client.
 
+Checkout-scoped ticket usage is exposed at
+`GET /checkouts/{checkout}/tickets/{ticket}/usage` (HS2-ZA7W6E, HS2-J14225): the ticket's
+attributed AI usage events in time order plus the settled rollup's per-ticket cost and
+rolled-up-through day from the owning git store (`docs/14` §14.5). A ticket on another
+provider yields an empty history; an unknown ticket is `404`.
+
 Checkout-scoped code review is exposed at
 `GET /checkouts/{checkout}/tickets/{ticket}/code-review`. Discovery walks at most the
 newest 2,000 reachable commits, returns each commit's subject and full message body, and

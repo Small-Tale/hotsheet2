@@ -13,6 +13,9 @@ export interface TicketTimelineEntry {
   subtitle?: string;
   /** Elapsed time from this event to the next chronological event. */
   durationToNext?: string;
+  /** AI usage recorded between this event and the next (or since the last event), for example
+   * `38K tokens · opus` (HS2-ZA7W6E). */
+  usageToNext?: string;
   emphasized?: boolean;
 }
 export const DEFAULT_TIMELINE_ENTRIES: readonly TicketTimelineEntry[] = [
@@ -47,15 +50,25 @@ export const DEFAULT_TIMELINE_ENTRIES: readonly TicketTimelineEntry[] = [
 export function TicketTimeline({
   entries = DEFAULT_TIMELINE_ENTRIES,
   presentation = 'sidebar',
+  usage,
 }: {
   entries?: readonly TicketTimelineEntry[];
   presentation?: TicketInspectorPanelPresentation;
+  /** The whole ticket's AI usage, for example `214K tokens · ≈$1.84 · opus, sonnet` (HS2-J14225). */
+  usage?: string;
 }) {
   return (
     <TicketInspectorPanel component="ticket-timeline" className="ticket-timeline" presentation={presentation}>
       {/* Kerf owns the section stack, heading, and text; only the rail is app-drawn (HS2-52D1JZ). */}
       <List gap="xs">
         <ListHeader label="Timeline" />
+        {usage ? (
+          <Text variant="p" tone="quiet" size="compact" flush>
+            <span class="ticket-timeline__usage-total" aria-label={`AI usage for this ticket: ${usage}`}>
+              {usage}
+            </span>
+          </Text>
+        ) : undefined}
         <ol class="ticket-timeline__list">
           {entries.map((entry, index) => (
             <li data-entry-id={entry.id} data-emphasized={String(Boolean(entry.emphasized))}>
@@ -72,9 +85,23 @@ export function TicketTimeline({
                   </Text>
                 )}
               </div>
-              {index < entries.length - 1 && entry.durationToNext && (
-                <span class="ticket-timeline__duration" aria-label={`Elapsed to next event: ${entry.durationToNext}`}>
-                  {entry.durationToNext}
+              {((index < entries.length - 1 && entry.durationToNext) || entry.usageToNext) && (
+                <span
+                  class="ticket-timeline__duration"
+                  aria-label={[
+                    index < entries.length - 1 && entry.durationToNext
+                      ? `Elapsed to next event: ${entry.durationToNext}`
+                      : undefined,
+                    entry.usageToNext
+                      ? `AI usage ${index < entries.length - 1 ? 'until the next event' : 'since this event'}: ${entry.usageToNext}`
+                      : undefined,
+                  ]
+                    .filter(Boolean)
+                    .join('. ')}
+                >
+                  {index < entries.length - 1 && entry.durationToNext}
+                  {index < entries.length - 1 && entry.durationToNext && entry.usageToNext && ' · '}
+                  {entry.usageToNext && <span class="ticket-timeline__usage">{entry.usageToNext}</span>}
                 </span>
               )}
             </li>

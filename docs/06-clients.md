@@ -3476,6 +3476,16 @@ backlog`, `Re-enqueued`) while retaining the full durable note text and using th
   gaps under three minutes, minutes under three hours, hours under three days, and days
   thereafter. Place each label at the center of its connector and join the number and unit
   without a space (for example, `98s` or `3m`). The final entry has no gap label.
+  When the ticket's store holds AI usage events attributed to it (`docs/14` §14.2), each
+  gap label also carries the tokens and models recorded between that entry and the next
+  (`3m · 38K tokens · opus`; models by descending token share, at most two named, the rest
+  counted), the final entry carries the usage recorded since it (the phase still open), and a
+  quiet total line above the rail sums the ticket (`214K tokens · ≈$1.84 · opus, sonnet`).
+  Events older than the first entry count toward the first gap; a gap with no events has no
+  usage label; cost appears only when every live event is priced, adding the settled rollup's
+  per-ticket cost once raw events have been pruned. The client reads
+  `GET /checkouts/{checkout}/tickets/{ticket}/usage` when a ticket is selected and keeps the
+  last known usage if that read fails (HS2-ZA7W6E, HS2-J14225).
   Started-phase changes appear as concise Timeline entries (`Analyzing`,
   `Planning`, and so on). Their generated activity notes are omitted from the
   Notes list, while other activity notes remain visible there.

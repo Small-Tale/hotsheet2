@@ -11,6 +11,7 @@ import {
   type FullTicket,
   type TicketCloseReason,
   type TicketRow as WireTicketRow,
+  type TicketUsage,
 } from '../api';
 import { describeUnreadableAttachments, screenAttachmentFiles } from '../attachment-files';
 import { attachmentUploadBatchId } from '../attachment-grouping';
@@ -101,6 +102,7 @@ import {
 import { ticketTimelineEntries } from '../ticket-timeline-data';
 import type { TicketTitleEditSurface } from '../ticket-title-editing';
 import { copiedTicketPlacement, ticketClipboardText } from '../ticket-transfer';
+import { timelineUsageLabels } from '../ticket-usage-timeline';
 import {
   createdTicketVisibleInView,
   isTrashedTicket,
@@ -172,6 +174,8 @@ export interface TicketWorkflowDependencies {
   codeReviewMessage: Signal<string>;
   expandedCodeReviewCommits: Signal<string[]>;
   duplicateBacklinkState: Signal<{ key: string; backlinks: DuplicateBacklink[]; inaccessibleProjects: string[] }>;
+  /** The selected ticket's AI usage history, keyed like the backlinks (HS2-ZA7W6E). */
+  ticketUsageState: Signal<{ key: string; usage?: TicketUsage }>;
   resolvedDuplicateTargets: Signal<Record<string, DuplicateTarget>>;
   ticketCloseDialog: Signal<TicketCloseDialogState | undefined>;
   ticketLinkChoice: Signal<TicketLinkChoice | undefined>;
@@ -298,6 +302,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     codeReviewMessage,
     expandedCodeReviewCommits,
     duplicateBacklinkState,
+    ticketUsageState,
     resolvedDuplicateTargets,
     ticketCloseDialog,
     ticketLinkChoice,
@@ -1529,8 +1534,22 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     const selection = document.getSelection();
     return Boolean(selection && !selection.isCollapsed && selection.toString().length);
   }
+  function ticketUsageFor(ticket: FullTicket) {
+    const current = project(),
+      state = ticketUsageState.value;
+    return current && state.key === `${current.id}:${ticket.qualified_id}` ? state.usage : undefined;
+  }
   function timeline(ticket: FullTicket) {
-    return ticketTimelineEntries(ticket).map((entry) => ({ ...entry, time: ago(entry.timestamp) }));
+    const entries = ticketTimelineEntries(ticket),
+      usage = timelineUsageLabels(entries, ticketUsageFor(ticket));
+    return entries.map((entry, index) => ({
+      ...entry,
+      time: ago(entry.timestamp),
+      ...(usage.perEntry[index] ? { usageToNext: usage.perEntry[index] } : {}),
+    }));
+  }
+  function timelineUsage(ticket: FullTicket) {
+    return timelineUsageLabels(ticketTimelineEntries(ticket), ticketUsageFor(ticket)).total;
   }
   function notes(ticket: FullTicket) {
     return ticket.notes.map((note) => {
@@ -1669,6 +1688,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       committedTickets.clear();
       committedTickets.set(ticket.slug, ticket);
       duplicateBacklinkState.value = { key: backlinkKey, backlinks: [], inaccessibleProjects: [] };
+      if (ticketUsageState.value.key !== backlinkKey) ticketUsageState.value = { key: backlinkKey };
       if (changed) {
         codeReview.value = undefined;
         codeReviewMessage.value = '';
@@ -1719,6 +1739,21 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         })
         .catch(() => undefined);
     if (inspectorTab.value === 'code-review') void refreshCodeReview();
+    void refreshTicketUsage();
+  }
+  /** Read the selected ticket's AI usage for the timeline; a provider without local metrics yields none. */
+  async function refreshTicketUsage() {
+    const current = project(),
+      ticket = selectedTicket.value;
+    if (!current || !ticket) return;
+    const key = `${current.id}:${ticket.qualified_id}`;
+    try {
+      const usage = await new Api(current.apiPath).checkoutTicketUsage(current.id, ticket.qualified_id);
+      if (project()?.id === current.id && selectedTicket.value?.qualified_id === ticket.qualified_id)
+        ticketUsageState.value = { key, usage };
+    } catch {
+      /* usage is decoration on the timeline; a failed read keeps the last known state */
+    }
   }
   /** Send every unsaved text edit now (page hide, explicit save); each keeps its local copy until it commits. */
   function flushTicketDrafts(): Promise<boolean> {
@@ -2336,6 +2371,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     ticketWorkAreaFocused,
     ordinaryTextSelected,
     timeline,
+    timelineUsage,
+    refreshTicketUsage,
     notes,
     attachmentContext,
     duplicateTargetFor,

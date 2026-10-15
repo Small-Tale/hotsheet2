@@ -114,12 +114,49 @@ export function TicketInfoPanelDemo() {
 }
 export function TicketTimelineDemo() {
   return (
-    <CatalogExample
-      label="Interactive"
-      viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
-    >
-      <TicketTimeline />
-    </CatalogExample>
+    <>
+      <CatalogExample
+        label="Interactive"
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
+        <TicketTimeline />
+      </CatalogExample>
+      <CatalogExample
+        label="With AI Usage"
+        note="Tokens and models recorded in each phase gap and the ticket total above the rail (HS2-ZA7W6E, HS2-J14225)."
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+      >
+        <TicketTimeline
+          usage="214K tokens · ≈$1.84 · opus, sonnet"
+          entries={[
+            { id: 'created', time: '2h ago', title: 'Ticket created', durationToNext: '48m', emphasized: true },
+            {
+              id: 'analyzing',
+              time: '1h ago',
+              title: 'Analyzing',
+              durationToNext: '12m',
+              usageToNext: '38K tokens · opus',
+              emphasized: true,
+            },
+            {
+              id: 'working',
+              time: '58m ago',
+              title: 'Working',
+              durationToNext: '41m',
+              usageToNext: '162K tokens · opus, sonnet',
+              emphasized: true,
+            },
+            {
+              id: 'testing',
+              time: '17m ago',
+              title: 'Initial testing',
+              usageToNext: '14K tokens · sonnet',
+              emphasized: true,
+            },
+          ]}
+        />
+      </CatalogExample>
+    </>
   );
 }
 const demoImages = [

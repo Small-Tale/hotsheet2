@@ -98,6 +98,8 @@ export interface TicketInspectorProps {
   duplicateBacklinks?: readonly DuplicateBacklink[];
   duplicateBacklinkInaccessibleProjects?: readonly string[];
   timelineEntries?: readonly TicketTimelineEntry[];
+  /** The ticket's total AI usage line shown above the timeline (HS2-J14225). */
+  timelineUsage?: string;
   attachments?: readonly TicketAttachmentItem[];
   codeReview?: CodeReview;
   codeReviewLoading?: boolean;
@@ -184,6 +186,7 @@ export function ticketInspectorPanel({
   duplicateBacklinks = [],
   duplicateBacklinkInaccessibleProjects = [],
   timelineEntries,
+  timelineUsage,
   attachments,
   codeReview,
   codeReviewLoading = false,
@@ -534,7 +537,7 @@ export function ticketInspectorPanel({
         </TicketInspectorPanel>
       )}
       {!contentLoading && activeTab === 'timeline' && (
-        <TicketTimeline entries={timelineEntries} presentation={presentation} />
+        <TicketTimeline entries={timelineEntries} presentation={presentation} usage={timelineUsage} />
       )}
       {!contentLoading && activeTab === 'code-review' && (
         <TicketCodeReview

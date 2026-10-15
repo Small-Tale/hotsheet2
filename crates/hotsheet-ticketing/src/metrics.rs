@@ -317,6 +317,46 @@ pub fn prune_raw_before(store: &FsStore, before_day: &str) -> io::Result<usize> 
     Ok(pruned)
 }
 
+/// One ticket's usage history for the timeline (HS2-ZA7W6E, HS2-J14225): every raw event
+/// attributed to the ticket in time order, plus what the settled rollup already knows about
+/// it, so a client can show per-phase figures while raw events exist and still a total after
+/// the raw tail has been pruned.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct TicketUsage {
+    /// Attributed raw events in `ts` order (de-duplicated by `ts`+`session`+tokens).
+    pub events: Vec<UsageEvent>,
+    /// Cost of this ticket's events already folded into this contributor's settled rollup.
+    /// Those events may no longer exist as raw lines when they are older than the retention
+    /// window, so `events` can be a subset of what this cost covers.
+    pub settled_cost_usd: f64,
+    /// The last `YYYY-MM-DD` day folded into the settled rollup (`""` when none).
+    pub settled_through: String,
+}
+
+/// Read one ticket's usage history (`docs/14` §14.5): raw attributed events in time order plus
+/// the settled per-ticket cost. Unattributed events never match, and an unknown ticket yields
+/// an empty history rather than an error.
+pub fn ticket_usage(store: &FsStore, ticket: &str) -> io::Result<TicketUsage> {
+    let mut events: Vec<UsageEvent> = read_raw(store)?
+        .into_iter()
+        .filter(|event| event.ticket.as_deref() == Some(ticket))
+        .collect();
+    events.sort_by(|left, right| left.ts.cmp(&right.ts));
+    events.dedup_by(|left, right| {
+        left.ts == right.ts
+            && left.session == right.session
+            && left.tool == right.tool
+            && left.tokens_in == right.tokens_in
+            && left.tokens_out == right.tokens_out
+    });
+    let settled = read_settled(store, &contributor_id(store));
+    Ok(TicketUsage {
+        events,
+        settled_cost_usd: settled.total.by_ticket.get(ticket).copied().unwrap_or(0.0),
+        settled_through: settled.last_rolled_up_through,
+    })
+}
+
 /// Add `name` to the store's `.gitignore` if absent (raw metrics are per-device).
 fn ensure_gitignored(store: &FsStore, name: &str) -> io::Result<()> {
     let gi = store.root().join(".gitignore");
@@ -446,6 +486,76 @@ mod tests {
             "unattributed events don't get a ticket key"
         );
         assert!((r.by_day["2026-08-19"] - 0.15).abs() < 1e-9);
+    }
+
+    #[test]
+    fn ticket_usage_orders_filters_and_keeps_settled_cost_after_pruning() {
+        let (_d, store) = store();
+        let t = "01TICKETAAAAAAAAAAAAAAAAAA";
+        record(
+            &store,
+            &ev("2026-08-20T10:00:00Z", "claude", "opus", 5, 1, 0.5, Some(t)),
+        )
+        .unwrap();
+        record(
+            &store,
+            &ev(
+                "2026-08-19T09:00:00Z",
+                "claude",
+                "opus",
+                10,
+                2,
+                1.0,
+                Some(t),
+            ),
+        )
+        .unwrap();
+        record(
+            &store,
+            &ev(
+                "2026-08-19T09:30:00Z",
+                "codex",
+                "gpt",
+                7,
+                3,
+                0.2,
+                Some("other"),
+            ),
+        )
+        .unwrap();
+        record(
+            &store,
+            &ev("2026-08-19T09:45:00Z", "codex", "gpt", 7, 3, 0.2, None),
+        )
+        .unwrap();
+        // The same event written twice (a replayed stream) counts once.
+        record(
+            &store,
+            &ev("2026-08-20T10:00:00Z", "claude", "opus", 5, 1, 0.5, Some(t)),
+        )
+        .unwrap();
+
+        let usage = ticket_usage(&store, t).unwrap();
+        assert_eq!(
+            usage
+                .events
+                .iter()
+                .map(|e| e.ts.as_str())
+                .collect::<Vec<_>>(),
+            ["2026-08-19T09:00:00Z", "2026-08-20T10:00:00Z"]
+        );
+        assert_eq!(usage.settled_cost_usd, 0.0);
+        assert_eq!(usage.settled_through, "");
+        assert!(ticket_usage(&store, "missing").unwrap().events.is_empty());
+
+        // Roll up both days and prune the first: the early event is gone from raw, its cost stays.
+        roll_up_through(&store, "2026-08-20").unwrap();
+        prune_raw_before(&store, "2026-08-20").unwrap();
+        let usage = ticket_usage(&store, t).unwrap();
+        assert_eq!(usage.events.len(), 1);
+        assert_eq!(usage.events[0].ts, "2026-08-20T10:00:00Z");
+        assert!((usage.settled_cost_usd - 2.0).abs() < 1e-9, "{usage:?}");
+        assert_eq!(usage.settled_through, "2026-08-20");
     }
 
     #[test]

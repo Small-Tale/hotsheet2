@@ -1311,7 +1311,8 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   - `TicketTimeline` — **demo built**: chronological activity shown as time-ago and a
     concise headline along a continuous dot/line track; durable ticket activity omits
     the full note body/subtitle, and its displayed event total is derived from the
-    rendered entry collection
+    rendered entry collection; the "With AI Usage" example shows per-gap token/model
+    labels beside the elapsed time and the ticket's usage total above the rail
   - `TicketCodeReview` — **demo built**: ticket-associated commit subjects, abbreviated
     SHAs, dates, two-line Markdown body previews with click-to-expand full messages,
     configured-tool status, individual commit actions, adjacent-range actions, and the
