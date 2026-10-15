@@ -871,6 +871,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           const remote = (await client.checkoutTicket(frame.projectId, frame.ticket.qualified_id)).ticket,
             reconciled = reconcileTicketPatch(base, remote, pending);
           if (reconciled.conflicts.length) {
+            // Reconciling compares against the frame's draft, so typed text must be in it (HS2-WV0VPE).
+            flushDraftInputs();
             replaceLinkedReaderFrame(frameId, (current) => reconcileTicketReaderFrame(current, remote));
             error.value = `This linked ticket's ${ticketFieldLabel(reconciled.conflicts[0].field).toLocaleLowerCase()} changed remotely in the same place you edited. Your draft was preserved; review it and try again.`;
             return false;
@@ -882,6 +884,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           }
           ticket = remote;
         }
+        flushDraftInputs();
         replaceLinkedReaderFrame(frameId, (current) =>
           adoptCommittedReaderDrafts(reconcileTicketReaderFrame(current, ticket), patch, ticket),
         );

@@ -146,7 +146,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/note-authorship.ts # Note author/AI-label facets from the recorded note actor (tool name from the worker-id prefix; HS2-32QDZ3)
     src/components/confidence-badge.tsx # Shared banded AI completion ConfidenceBadge + colocated CSS: compact pill (note header, TicketRow list/board summaries, HS2-A0Q6G6) and labeled inspector/reader header (HS2-DWTJ43); demo in src/ux-demo/confidence-badge-demo.tsx
     src/ticket-timeline-data.ts # Timeline entries from activity notes + lifecycle backfill; appends each completion cycle's confidence to its Completed headline
-    src/draft-input-coalescing.ts # Typing-pause publication of editor draft signals plus flushDraftInputs() for every reader of drafts (HS2-EQTXTJ)
+    src/draft-input-coalescing.ts # Typing-pause publication of editor draft signals (keyed per linked reader frame, HS2-WV0VPE) plus flushDraftInputs() for every reader of drafts (HS2-EQTXTJ)
     src/search-projection-coalescing.ts # Typing-pause projection of the workspace search model into searchQuery/searchTokens; chips and empty/non-empty publish at once (HS2-X72PD6)
     src/feedback-prompt-edits.ts # Note ids of FEEDBACK NEEDED prompts the user explicitly opened with Edit Note; only their saves carry edit_feedback_prompt (HS2-ZXGEFE)
     src/source-stale-notice.ts # Stale-local-source-only detection plus the global, build-pair-keyed dismissal of its info notice (HS2-B84P1S)
@@ -175,7 +175,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/project-ticket-refresh.ts # Independent healthy/corrupt ticket loading so either result remains usable when the other request fails
     tests/project-sidebar-state.spec.ts # Atomic new-project activation, project-keyed sidebar count/trend isolation, and stale background-snapshot rejection
     tests/project-chat-scope.spec.ts # AI chat tabs and close-dialog chats stay scoped to the project whose root or store registered the connection (HS2-6GHSCY, HS2-5AGPWE)
-    tests/typing-latency-profile.spec.ts # Opt-in (HOTSHEET_TYPING_PROFILE=1) real-server per-keystroke Event Timing profile of the search, title, details, and note editors (HS2-EQTXTJ)
+    tests/typing-latency-profile.spec.ts # Opt-in (HOTSHEET_TYPING_PROFILE=1) real-server per-keystroke Event Timing profile of the search, title, details, note, and linked-reader details editors (HS2-EQTXTJ, HS2-WV0VPE)
     tests/archive-load-more.spec.ts # Real-server regression: rows appended by Load more survive a concurrent change's list refresh (HS2-9DF0DA)
     tests/ticket-timeline-usage.spec.ts # Timeline gap labels carry tokens and models, rail labels share one edge, and the per-model breakdown table sums the ticket, at 1280 and 390 px (HS2-ZA7W6E, HS2-J14225)
     src/project-change-poll.ts # Replay-safe per-open-project change transport (WebSocket-first, long-poll fallback, `resume`) plus the main-thread consumer it feeds (HS2-SH9179); ticket invalidation, overflow/reconnect recovery, onResync hook (initial/reconnect/overflow) that replaces permission polling (HS2-NKCXW4), and abortable lifecycle

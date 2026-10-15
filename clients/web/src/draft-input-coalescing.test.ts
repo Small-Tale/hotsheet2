@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { coalescedDraft, flushDraftInputs } from './draft-input-coalescing';
+import { coalescedDraft, coalescedKeyedDraft, flushDraftInputs } from './draft-input-coalescing';
 
 describe('draft input coalescing (HS2-EQTXTJ)', () => {
   beforeEach(() => {
@@ -55,5 +55,29 @@ describe('draft input coalescing (HS2-EQTXTJ)', () => {
     input.schedule('later');
     vi.advanceTimersByTime(150);
     expect(published).toEqual(['kept', 'later']);
+  });
+
+  it('keeps linked reader frames apart: switching frame or note publishes the previous draft (HS2-WV0VPE)', () => {
+    const published: string[] = [];
+    const input = coalescedKeyedDraft<{ frame: string; note: string; value: string }>(
+      ({ frame, note }) => `${frame}/${note}`,
+      ({ frame, note, value }) => published.push(`${frame}/${note}=${value}`),
+    );
+    input.schedule({ frame: 'a', note: '1', value: 'he' });
+    input.schedule({ frame: 'a', note: '1', value: 'hello' });
+    expect(published).toEqual([]);
+    // Typing into another note of the same frame, then another frame, never drops text.
+    input.schedule({ frame: 'a', note: '2', value: 'x' });
+    expect(published).toEqual(['a/1=hello']);
+    input.schedule({ frame: 'b', note: '2', value: 'y' });
+    expect(published).toEqual(['a/1=hello', 'a/2=x']);
+    // The shared flush (frame close, save, refresh merge) publishes the latest pending draft.
+    flushDraftInputs();
+    expect(published).toEqual(['a/1=hello', 'a/2=x', 'b/2=y']);
+    input.schedule({ frame: 'b', note: '2', value: 'yz' });
+    vi.advanceTimersByTime(150);
+    expect(published.at(-1)).toBe('b/2=yz');
+    flushDraftInputs();
+    expect(published).toHaveLength(4);
   });
 });

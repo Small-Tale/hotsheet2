@@ -599,7 +599,9 @@ preview/download, server directory browser) are separate design work.
   their draft signals at typing pauses (150 ms) instead of re-rendering the workspace on every
   key, and every finish, save, submit, editor switch, refresh merge, ticket switch, and page hide
   flushes pending drafts first; the title's auto-height mirror still updates per keystroke
-  (HS2-EQTXTJ; linked reader frames follow in HS2-WV0VPE).
+  (HS2-EQTXTJ). Linked (link-opened) reader frames do the same for details, note, and
+  blocked-reason drafts, coalesced per frame and note; closing a frame and reconciling a
+  frame's save or conflict flush them first (HS2-WV0VPE).
   The workspace search field works the same way: plain typing reaches the app's search
   projection at a typing pause and then searches at once, while committing or removing a chip
   and the search becoming empty or non-empty publish immediately; opening the saved-view

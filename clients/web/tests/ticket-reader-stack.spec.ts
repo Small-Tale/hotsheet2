@@ -390,6 +390,27 @@ test('edits same-slug linked readers through their owning project and flushes be
   );
 });
 
+test('keeps every key typed into a linked reader through an immediate close (HS2-WV0VPE)', async ({ page }) => {
+  const mutations: Array<{ projectId: string; ticketId: string; patch: Record<string, unknown> }> = [];
+  await mockLayeredProjects(page, mutations);
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await openProjects(page);
+  await page.locator('#app-right-rail').getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
+  await reader.locator('[data-action="edit-markdown"]').click({ position: { x: 4, y: 4 } });
+  const details = reader.getByRole('textbox', { name: 'Ticket details' });
+  await details.fill('');
+  // Keystrokes reach the frame at typing pauses; the textarea keeps the live text meanwhile.
+  await details.pressSequentially('Typed key by key', { delay: 15 });
+  await expect(details).toHaveValue('Typed key by key');
+  // Closing within the typing pause still lands (and saves) the last keys.
+  await reader.getByRole('button', { name: 'Close Ticket Reader' }).click();
+  await expect(reader).toHaveCount(0);
+  await expect
+    .poll(() => mutations.map((item) => [item.projectId, item.ticketId, item.patch.details]))
+    .toEqual([['target-project', 'git-target:target', 'Typed key by key']]);
+});
+
 test('edits a link-opened reader title and up-next like any other reader (HS2-KRVWKF)', async ({ page }) => {
   const mutations: Array<{ projectId: string; ticketId: string; patch: Record<string, unknown> }> = [];
   await mockLayeredProjects(page, mutations);

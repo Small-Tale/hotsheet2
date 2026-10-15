@@ -25,7 +25,7 @@ import { type WorkspaceViewMode } from '../components/workspace-header';
 import { maintainContextPopupMenuAnchor } from '../context-menu-position';
 import { copyText } from '../copy-text';
 import { createCoalescedInput, createKeyedCoalescedInput, type DebouncedAutosave } from '../debounced-autosave';
-import { coalescedDraft, flushDraftInputs } from '../draft-input-coalescing';
+import { coalescedDraft, coalescedKeyedDraft, flushDraftInputs } from '../draft-input-coalescing';
 import { parseFeedbackChoices, updateFeedbackChoiceDocumentSelection } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
 import { beginFeedbackPromptEdit, endFeedbackPromptEdit, isFeedbackPromptEdit } from '../feedback-prompt-edits';
@@ -328,7 +328,36 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
     blockedReasonDraftInput = coalescedDraft<{ reader: boolean; value: string }>(({ reader, value }) => {
       (reader ? readerBlockedReasonDraft : blockedReasonDraft).value = value;
-    });
+    }),
+    // Linked reader frames keep their drafts in the frame; replacing it re-renders the workspace,
+    // so it too catches up at typing pauses, per frame (and note) (HS2-WV0VPE).
+    linkedDetailsDraftInput = coalescedKeyedDraft<{ frameId: string; value: string }>(
+      ({ frameId }) => frameId,
+      ({ frameId, value }) => {
+        replaceLinkedReaderFrame(frameId, (current) => ({
+          ...current,
+          edit: { ...current.edit, detailsDraft: value },
+        }));
+      },
+    ),
+    linkedNoteDraftInput = coalescedKeyedDraft<{ frameId: string; id: string; value: string }>(
+      ({ frameId, id }) => `${frameId}\u0000${id}`,
+      ({ frameId, id, value }) => {
+        replaceLinkedReaderFrame(frameId, (current) => ({
+          ...current,
+          edit: { ...current.edit, editingNoteId: id, noteDraft: value },
+        }));
+      },
+    ),
+    linkedBlockedReasonDraftInput = coalescedKeyedDraft<{ frameId: string; value: string }>(
+      ({ frameId }) => frameId,
+      ({ frameId, value }) => {
+        replaceLinkedReaderFrame(frameId, (current) => ({
+          ...current,
+          edit: { ...current.edit, blockedReasonDraft: value },
+        }));
+      },
+    );
   lifetime.add(() => {
     flushDraftInputs();
   });
@@ -540,10 +569,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         const frame = linkedReaderFrame(field),
           value = field.value;
         if (frame) {
-          replaceLinkedReaderFrame(frame.id, (current) => ({
-            ...current,
-            edit: { ...current.edit, detailsDraft: value },
-          }));
+          linkedDetailsDraftInput.schedule({ frameId: frame.id, value });
           linkedReaderSaves(frame.id).details.schedule(value);
           return;
         }
@@ -823,10 +849,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         const frame = linkedReaderFrame(field),
           value = field.value;
         if (frame && id) {
-          replaceLinkedReaderFrame(frame.id, (current) => ({
-            ...current,
-            edit: { ...current.edit, editingNoteId: id, noteDraft: value },
-          }));
+          linkedNoteDraftInput.schedule({ frameId: frame.id, id, value });
           // A feedback response is only a draft until Respond creates its own note (HS2-MB2Q10).
           if (!response) linkedReaderSaves(frame.id).note.schedule({ id, value });
           return;
@@ -999,10 +1022,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       input: (value, target) => {
         const frame = linkedReaderFrame(target);
         if (frame) {
-          replaceLinkedReaderFrame(frame.id, (current) => ({
-            ...current,
-            edit: { ...current.edit, blockedReasonDraft: value },
-          }));
+          linkedBlockedReasonDraftInput.schedule({ frameId: frame.id, value });
           linkedReaderSaves(frame.id).blocked.schedule(value);
           return;
         }

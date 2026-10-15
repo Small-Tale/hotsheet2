@@ -1,4 +1,4 @@
-import { type CoalescedInput, createCoalescedInput } from './debounced-autosave';
+import { type CoalescedInput, createCoalescedInput, createKeyedCoalescedInput } from './debounced-autosave';
 
 /**
  * Keystroke coalescing for the ticket text editors (HS2-EQTXTJ). Writing an editor's draft signal
@@ -11,7 +11,22 @@ import { type CoalescedInput, createCoalescedInput } from './debounced-autosave'
 const pending = new Set<CoalescedInput<unknown>>();
 
 export function coalescedDraft<T>(publish: (value: T) => void, delay?: number): CoalescedInput<T> {
-  const input = createCoalescedInput(publish, delay);
+  return tracked(createCoalescedInput(publish, delay));
+}
+
+/**
+ * A `coalescedDraft` shared by several drafts, such as one field across linked reader frames
+ * (HS2-WV0VPE): typing into a different draft (by `keyOf`) publishes the previous one first.
+ */
+export function coalescedKeyedDraft<T>(
+  keyOf: (value: T) => string,
+  publish: (value: T) => void,
+  delay?: number,
+): CoalescedInput<T> {
+  return tracked(createKeyedCoalescedInput(keyOf, publish, delay));
+}
+
+function tracked<T>(input: CoalescedInput<T>): CoalescedInput<T> {
   const coalesced: CoalescedInput<T> = {
     schedule(value) {
       pending.add(coalesced);

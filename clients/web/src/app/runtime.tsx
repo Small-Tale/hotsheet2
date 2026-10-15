@@ -2337,6 +2337,8 @@ export async function startHotSheetWebClient() {
     }
     const top = linkedReaderStack.value.at(-1);
     if (!top || top.id !== id) return;
+    // Typed text still waiting for a pause lands in the frame before it closes (HS2-WV0VPE).
+    flushDraftInputs();
     const popped = popTicketReaderFrame(linkedReaderStack.value);
     linkedReaderAutosaves.delete(id);
     linkedReaderStack.value = popped.stack;

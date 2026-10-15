@@ -79,8 +79,11 @@ test('profiles per-keystroke latency in every editor of a 400-ticket project', a
           ),
         )),
       );
+    // Each note links another ticket, so the profile can type into a stacked linked reader (HS2-WV0VPE).
     for (const ticket of created.slice(0, 40))
-      await server.request(`/tickets/${ticket.id}`, 'PATCH', { note: 'An existing note with some text.' });
+      await server.request(`/tickets/${ticket.id}`, 'PATCH', {
+        note: `An existing note with some text. See ${created[(created.indexOf(ticket) + 1) % created.length].slug}.`,
+      });
     const apiPath = `/__hotsheet/project-api/${server.checkoutId}`;
     await page.routeWebSocket(/.*/, (route) => {
       void route.close();
@@ -151,6 +154,21 @@ test('profiles per-keystroke latency in every editor of a 400-ticket project', a
     await page.waitForTimeout(800);
     await inspector.getByRole('button', { name: 'Add Note', exact: true }).last().click();
     await type('new note', inspector.locator('[name="new-note-body"]').first());
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(800);
+
+    // A stacked linked reader's details editor.
+    await inspector.locator('[data-action="open-linked-ticket"]').first().click();
+    const linked = page.getByRole('dialog', { name: /^Read and edit / }).last();
+    await expect(linked).toBeVisible();
+    await page.waitForTimeout(800);
+    await linked
+      .locator('[data-action="edit-markdown"]')
+      .first()
+      .click({ position: { x: 4, y: 4 } });
+    const linkedSource = linked.locator('[name="markdown-source"]').first();
+    await expect(linkedSource).toBeVisible();
+    await type('linked details', linkedSource);
   } finally {
     await server.stop();
   }
