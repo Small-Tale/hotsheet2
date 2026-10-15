@@ -171,6 +171,31 @@ export function beginConversationTurn(state: ConversationState, id: string, cont
   };
 }
 
+export const EMPTY_TURN_CONTENT = 'The turn ended without output.';
+
+/**
+ * What an assistant bubble says when its turn produced no text (HS2-M5GN19). A turn whose
+ * tools acted (activity recorded after its prompt) summarizes those actions; only a turn with
+ * neither text nor activity keeps the empty-turn placeholder.
+ */
+export function emptyTurnContent(state: ConversationState, assistantIndex: number): string {
+  const prompt = assistantIndex > 0 ? state.messages[assistantIndex - 1] : undefined,
+    since = prompt?.role === 'user' ? (prompt.sequence ?? -1) : Number.POSITIVE_INFINITY,
+    summaries = [
+      ...new Set(
+        (state.activity ?? [])
+          .filter((item) => (item.sequence ?? -1) > since)
+          .map((item) => item.summary.trim())
+          .filter(Boolean),
+      ),
+    ];
+  if (!summaries.length) return EMPTY_TURN_CONTENT;
+  const shown = summaries.slice(0, 3),
+    more = summaries.length - shown.length,
+    count = summaries.length === 1 ? '1 action' : `${summaries.length} actions`;
+  return `Finished without a written reply after ${count}: ${shown.join('; ')}${more ? `; and ${more} more` : ''}.`;
+}
+
 function nativeProgress(payload: unknown): string | undefined {
   if (!payload || typeof payload !== 'object') return;
   const value = payload as Record<string, unknown>;
@@ -196,6 +221,8 @@ export function applyConversationEvent(
       tokensOut = typeof event.tokens_out === 'number' ? event.tokens_out : 0,
       costUsd = typeof event.cost_usd === 'number' ? event.cost_usd : undefined,
       model = typeof event.model === 'string' ? event.model : undefined;
+    // A provider result without model work is not usage: never show `0 tokens` (HS2-M5GN19).
+    if (tokensIn === 0 && tokensOut === 0 && !(costUsd !== undefined && costUsd > 0)) return state;
     const messages = ordered.messages.map((message, messageIndex) =>
       messageIndex === index
         ? {
@@ -257,7 +284,7 @@ export function applyConversationEvent(
                 message.content ||
                 (status === 'interrupted'
                   ? 'Stopped before a response was completed.'
-                  : 'The turn ended without output.'),
+                  : emptyTurnContent(ordered, index)),
             }
           : message,
       );

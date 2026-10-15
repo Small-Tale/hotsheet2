@@ -125,7 +125,8 @@ pub fn run_trigger_controlled(
                 program: program.clone(),
                 source,
             })?;
-            let channel = ClaudeChannel::connect(transport);
+            // One process per turn: drain it to exit so nothing runs unobserved (HS2-M5GN19).
+            let channel = ClaudeChannel::connect_single_turn(transport);
             let ctx = DriveCtx {
                 cwd: t.cwd.clone(),
                 model: t.model.clone(),

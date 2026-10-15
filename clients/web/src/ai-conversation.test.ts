@@ -301,3 +301,70 @@ describe('turn correlation (HS2-14X4AF)', () => {
     expect(applyConversationEvent(settled, output('foreign'), 'other')).toBe(settled);
   });
 });
+
+describe('turns without written output (HS2-M5GN19)', () => {
+  const activity = (id: string, summary: string) => ({
+    id,
+    ts: '2026-10-15T02:43:00Z',
+    tool: 'claude',
+    kind: 'tool',
+    summary,
+    importance: 'normal' as const,
+  });
+
+  it('summarizes the actions of a tool-only turn instead of reporting no output', () => {
+    let state = applyConversationActivity(EMPTY_CONVERSATION, activity('before', 'claude called WebFetch'));
+    state = beginConversationTurn(state, 'act', 'work on HS2-XMJGFJ now');
+    state = applyConversationActivity(state, activity('claim', 'claude called hotsheet_claim'));
+    state = applyConversationActivity(state, activity('read', 'claude read lecture-outlines.md'));
+    state = applyConversationActivity(state, activity('claim-again', 'claude called hotsheet_claim'));
+    state = applyConversationEvent(state, { type: 'usage', tokens_in: 900, tokens_out: 60, cost_usd: 0.04 });
+    state = applyConversationEvent(state, { type: 'done', reason: 'completed' });
+    expect(state.messages.at(-1)).toMatchObject({
+      status: 'completed',
+      content:
+        'Finished without a written reply after 2 actions: claude called hotsheet_claim; claude read lecture-outlines.md.',
+      usage: { tokensIn: 900, tokensOut: 60, costUsd: 0.04 },
+    });
+  });
+
+  it('bounds a long action summary and keeps the placeholder for a genuinely empty turn', () => {
+    let state = beginConversationTurn(EMPTY_CONVERSATION, 'many', 'work');
+    for (const index of [1, 2, 3, 4, 5])
+      state = applyConversationActivity(state, activity(`a${index}`, `step ${index}`));
+    state = applyConversationEvent(state, { type: 'done', reason: 'failed', message: 'capacity' });
+    expect(state.messages.at(-1)?.content).toBe(
+      'Finished without a written reply after 5 actions: step 1; step 2; step 3; and 2 more.',
+    );
+    let empty = applyConversationActivity(EMPTY_CONVERSATION, activity('old', 'an earlier turn acted'));
+    empty = beginConversationTurn(empty, 'empty', 'hello');
+    empty = applyConversationEvent(empty, { type: 'done', reason: 'completed' });
+    expect(empty.messages.at(-1)?.content).toBe('The turn ended without output.');
+    expect(empty.messages.at(-1)?.usage).toBeUndefined();
+    let stopped = beginConversationTurn(EMPTY_CONVERSATION, 'stop', 'work');
+    stopped = applyConversationActivity(stopped, activity('s', 'claude ran `date`'));
+    stopped = applyConversationEvent(stopped, { type: 'done', reason: 'interrupted' });
+    expect(stopped.messages.at(-1)?.content).toBe('Stopped before a response was completed.');
+  });
+
+  it('never records zero-token usage, while real usage still accumulates', () => {
+    let state = beginConversationTurn(EMPTY_CONVERSATION, 'usage', 'work');
+    const started = state;
+    state = applyConversationEvent(state, { type: 'usage', tokens_in: 0, tokens_out: 0, cost_usd: 0 });
+    state = applyConversationEvent(state, { type: 'usage', tokens_in: 0, tokens_out: 0 });
+    expect(state).toBe(started);
+    state = applyConversationEvent(state, { type: 'usage', tokens_in: 800, tokens_out: 150 });
+    state = applyConversationEvent(state, { type: 'usage', tokens_in: 0, tokens_out: 0, cost_usd: 0 });
+    state = applyConversationEvent(state, { type: 'output', content: 'Done.', truncated: false });
+    state = applyConversationEvent(state, { type: 'done', reason: 'completed' });
+    expect(state.messages.at(-1)).toMatchObject({ content: 'Done.', usage: { tokensIn: 800, tokensOut: 150 } });
+    // A priced event with no token counts is still real usage.
+    const priced = applyConversationEvent(beginConversationTurn(EMPTY_CONVERSATION, 'p', 'x'), {
+      type: 'usage',
+      tokens_in: 0,
+      tokens_out: 0,
+      cost_usd: 0.002,
+    });
+    expect(priced.messages.at(-1)?.usage).toMatchObject({ costUsd: 0.002 });
+  });
+});

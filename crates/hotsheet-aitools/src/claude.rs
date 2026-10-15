@@ -77,6 +77,11 @@ impl Inner {
     fn events_len(&self) -> usize {
         self.events.lock_or_recover().len()
     }
+
+    /// Deliver EOF on the child's stdin so a per-turn process exits once its queued work ends.
+    fn close_input(&self) {
+        self.writer.lock_or_recover().close();
+    }
 }
 
 fn start_reader(transport: Box<dyn RpcTransport>) -> Arc<Inner> {
@@ -109,6 +114,8 @@ fn start_reader(transport: Box<dyn RpcTransport>) -> Arc<Inner> {
 /// each `start_turn` injects one user message and returns a streaming [`TurnHandle`].
 pub struct ClaudeChannel {
     inner: Arc<Inner>,
+    /// The process exists for exactly one turn (HS2-M5GN19); see [`Self::connect_single_turn`].
+    single_turn: bool,
 }
 
 impl ClaudeChannel {
@@ -116,6 +123,19 @@ impl ClaudeChannel {
     pub fn connect(transport: Box<dyn RpcTransport>) -> Self {
         Self {
             inner: start_reader(transport),
+            single_turn: false,
+        }
+    }
+
+    /// Attach to a `claude` process spawned for exactly one turn (the live drive spawns one
+    /// `--resume` process per turn). A `result` does not end such a turn: the channel closes
+    /// stdin and keeps streaming until the process exits, so output, tool use, and usage
+    /// produced after an early or extra `result` reach the turn instead of an unobserved
+    /// orphaned process (HS2-M5GN19). The last `result` decides the outcome.
+    pub fn connect_single_turn(transport: Box<dyn RpcTransport>) -> Self {
+        Self {
+            inner: start_reader(transport),
+            single_turn: true,
         }
     }
 }
@@ -136,6 +156,10 @@ impl ClaudeChannelClient for ClaudeChannel {
             usage: None,
             pending: std::collections::VecDeque::new(),
             assistant_projection: AssistantProjection::default(),
+            single_turn: self.single_turn,
+            settled: None,
+            emitted_output: false,
+            result_text: None,
         }))
     }
 }
@@ -148,13 +172,23 @@ struct ClaudeTurn {
     inner: Arc<Inner>,
     cursor: usize,
     done: Option<DoneReason>,
-    /// Token usage captured from the final `result` event, if it reported any (HS2-TJ8FGR).
+    /// Token usage aggregated from this turn's `result` events (HS2-TJ8FGR). A result that
+    /// reports no model work (zero tokens and no cost) contributes nothing, so a turn never
+    /// reports `0 tokens` while it consumed some (HS2-M5GN19).
     usage: Option<crate::drive::Usage>,
     pending: std::collections::VecDeque<TurnEvent>,
     /// Claude may repeat a complete `assistant` stream record while changing or omitting
     /// its provider message id. Track both identified repeats and the immediately preceding
     /// text projection so transport retries cannot duplicate prose in one host message.
     assistant_projection: AssistantProjection,
+    /// Single-turn process: a `result` closes stdin and the turn ends at EOF.
+    single_turn: bool,
+    /// The latest `result` outcome of a single-turn process, applied at EOF.
+    settled: Option<DoneReason>,
+    /// Whether this turn has emitted any assistant text.
+    emitted_output: bool,
+    /// The latest successful `result` text, shown when the turn emitted no assistant text.
+    result_text: Option<String>,
 }
 
 #[derive(Default)]
@@ -197,6 +231,31 @@ pub fn claude_result_usage(result: &Value) -> Option<crate::drive::Usage> {
         tokens_out,
         cost_usd,
     })
+}
+
+/// Fold one `result` usage into a turn's total. Claude reports `usage` per result but
+/// `total_cost_usd` cumulatively for the process, so tokens add and cost keeps the maximum.
+/// A result without model work (no tokens, no cost) is ignored.
+fn absorb_usage(total: &mut Option<crate::drive::Usage>, usage: Option<crate::drive::Usage>) {
+    let Some(usage) = usage else {
+        return;
+    };
+    if usage.tokens_in == 0 && usage.tokens_out == 0 && usage.cost_usd.unwrap_or(0.0) <= 0.0 {
+        return;
+    }
+    let merged = match total.take() {
+        None => usage,
+        Some(previous) => crate::drive::Usage {
+            model: usage.model.or(previous.model),
+            tokens_in: previous.tokens_in + usage.tokens_in,
+            tokens_out: previous.tokens_out + usage.tokens_out,
+            cost_usd: match (previous.cost_usd, usage.cost_usd) {
+                (Some(left), Some(right)) => Some(left.max(right)),
+                (left, right) => left.or(right),
+            },
+        },
+    };
+    *total = Some(merged);
 }
 
 /// Map one output event to zero or more user-visible/native [`TurnEvent`] values.
@@ -309,47 +368,94 @@ fn assistant_text(v: &Value, projection: &mut AssistantProjection) -> String {
 
 impl ClaudeTurn {
     /// Advance to the next mappable event, blocking until one arrives (or the turn ends /
-    /// the channel closes / it times out). Setting `done` is terminal.
+    /// the channel closes / it times out). Returning `Done` is terminal.
     fn pull(&mut self) -> Option<TurnEvent> {
+        if let Some(event) = self.pending.pop_front() {
+            return Some(self.emit(event));
+        }
         if self.done.is_some() {
             return None;
         }
-        if let Some(event) = self.pending.pop_front() {
-            return Some(event);
-        }
+        let inner = self.inner.clone();
         let deadline = Instant::now() + TURN_TIMEOUT;
-        let mut events = self.inner.events.lock_or_recover();
+        let mut events = inner.events.lock_or_recover();
         loop {
             while self.cursor < events.len() {
                 let ev = &events[self.cursor];
-                // Capture token usage from the terminal `result` event (HS2-TJ8FGR).
                 if ev.get("type").and_then(Value::as_str) == Some("result") {
-                    self.usage = claude_result_usage(ev);
+                    // Capture token usage from every `result` event (HS2-TJ8FGR, HS2-M5GN19).
+                    absorb_usage(&mut self.usage, claude_result_usage(ev));
+                    if ev.get("subtype").and_then(Value::as_str) == Some("success")
+                        && let Some(text) = ev
+                            .get("result")
+                            .and_then(Value::as_str)
+                            .filter(|text| !text.trim().is_empty())
+                    {
+                        self.result_text = Some(text.to_string());
+                    }
                 }
                 let mapped = map_events(ev, &mut self.assistant_projection);
                 self.cursor += 1;
-                self.pending.extend(mapped);
-                if let Some(te) = self.pending.pop_front() {
-                    if let TurnEvent::Done(r) = &te {
-                        self.done = Some(r.clone());
+                for event in mapped {
+                    match event {
+                        TurnEvent::Done(reason) if self.single_turn => {
+                            if self.settled.is_none() {
+                                inner.close_input();
+                            }
+                            self.settled = Some(reason);
+                        }
+                        TurnEvent::Done(reason) => self.finish(reason),
+                        TurnEvent::Output(text) => {
+                            self.emitted_output = true;
+                            self.pending.push_back(TurnEvent::Output(text));
+                        }
+                        other => self.pending.push_back(other),
                     }
-                    return Some(te);
+                }
+                if let Some(event) = self.pending.pop_front() {
+                    return Some(self.emit(event));
                 }
             }
-            if self.inner.closed.load(Ordering::SeqCst) {
-                let r = DoneReason::failed(1, "Claude channel closed");
-                self.done = Some(r.clone());
-                return Some(TurnEvent::Done(r));
+            if inner.closed.load(Ordering::SeqCst) {
+                let reason = self
+                    .settled
+                    .take()
+                    .unwrap_or_else(|| DoneReason::failed(1, "Claude channel closed"));
+                self.finish(reason);
+                return self.pending.pop_front().map(|event| self.emit(event));
             }
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
-                let r = DoneReason::failed(1, "Timed out waiting for Claude turn result");
-                self.done = Some(r.clone());
-                return Some(TurnEvent::Done(r));
+                let reason = self.settled.take().unwrap_or_else(|| {
+                    DoneReason::failed(1, "Timed out waiting for Claude turn result")
+                });
+                self.finish(reason);
+                return self.pending.pop_front().map(|event| self.emit(event));
             }
-            let (g, _) = self.inner.cvar.wait_timeout(events, remaining).unwrap();
+            let (g, _) = inner.cvar.wait_timeout(events, remaining).unwrap();
             events = g;
         }
+    }
+
+    /// Queue the terminal outcome. A successful turn that emitted no assistant text shows
+    /// its final `result` text instead, so a tool-only reply is not presented as empty.
+    fn finish(&mut self, reason: DoneReason) {
+        if !self.emitted_output
+            && reason == DoneReason::Completed
+            && let Some(text) = self.result_text.take()
+        {
+            self.emitted_output = true;
+            self.pending.push_back(TurnEvent::Output(text));
+        }
+        self.pending.push_back(TurnEvent::Done(reason));
+    }
+
+    /// Record a terminal event as it leaves the turn.
+    fn emit(&mut self, event: TurnEvent) -> TurnEvent {
+        if let TurnEvent::Done(reason) = &event {
+            self.done = Some(reason.clone());
+        }
+        event
     }
 }
 
@@ -357,6 +463,10 @@ impl TurnHandle for ClaudeTurn {
     fn is_busy(&mut self) -> bool {
         if self.done.is_some() || self.inner.closed.load(Ordering::SeqCst) {
             return false;
+        }
+        if self.single_turn {
+            // A per-turn process stays busy until it exits, even after a `result`.
+            return true;
         }
         // Read-only peek: a `result` at/after the cursor means the turn is finished.
         let events = self.inner.events.lock_or_recover();
@@ -521,6 +631,13 @@ pub(crate) mod scripted {
         Failure,
         /// Emit text plus a tool-use block, then a successful result.
         RichSuccess,
+        /// The captured HS2-M5GN19 shape: a successful zero-usage `result` arrives before any
+        /// model work, then the real tool use, text, and usage-bearing result follow.
+        PrematureResult,
+        /// Only a tool-use block, then a successful result whose `result` text is the reply.
+        ToolOnly,
+        /// The process exits on the user message without emitting a `result`.
+        Crash,
     }
 
     pub struct ScriptedClaude {
@@ -544,7 +661,7 @@ pub(crate) mod scripted {
             );
             (
                 Box::new(ClaudeWriter {
-                    out: tx,
+                    out: Some(tx),
                     mode: self.mode,
                 }),
                 Box::new(ClaudeReader { inbox: rx }),
@@ -553,15 +670,31 @@ pub(crate) mod scripted {
     }
 
     struct ClaudeWriter {
-        out: Sender<String>,
+        /// Dropped on `close`, which ends the reader like a process exiting after stdin EOF.
+        out: Option<Sender<String>>,
         mode: ClaudeMode,
     }
     impl ClaudeWriter {
         fn push(&self, v: Value) {
-            let _ = self.out.send(v.to_string());
+            if let Some(out) = &self.out {
+                let _ = out.send(v.to_string());
+            }
+        }
+
+        fn tool_use(&self) -> Value {
+            json!({ "type": "assistant",
+                "message": { "role": "assistant", "id": "msg-tool",
+                             "content": [{ "type": "tool_use", "id": "tool-redacted",
+                                           "name": "mcp__hotsheet__hotsheet_claim",
+                                           "input": { "ticket": "HS2-XMJGFJ" } }] },
+                "session_id": "sess-abc" })
         }
     }
     impl RpcWriter for ClaudeWriter {
+        fn close(&mut self) {
+            self.out = None;
+        }
+
         fn send(&mut self, msg: &str) -> std::io::Result<()> {
             let v: Value = serde_json::from_str(msg).expect("client sends valid JSON");
             if v.get("type").and_then(Value::as_str) == Some("user") {
@@ -570,6 +703,28 @@ pub(crate) mod scripted {
                     .and_then(|m| m.get("content"))
                     .and_then(Value::as_str)
                     .unwrap_or("");
+                match self.mode {
+                    ClaudeMode::Crash => {
+                        self.out = None;
+                        return Ok(());
+                    }
+                    ClaudeMode::PrematureResult => {
+                        self.push(json!({ "type": "result", "subtype": "success",
+                            "is_error": false, "result": "", "session_id": "sess-abc",
+                            "num_turns": 0, "total_cost_usd": 0.0,
+                            "usage": { "input_tokens": 0, "output_tokens": 0 } }));
+                        self.push(self.tool_use());
+                    }
+                    ClaudeMode::ToolOnly => {
+                        self.push(self.tool_use());
+                        self.push(json!({ "type": "result", "subtype": "success",
+                            "is_error": false, "result": "Claimed HS2-XMJGFJ and started work.",
+                            "session_id": "sess-abc", "num_turns": 2, "total_cost_usd": 0.04,
+                            "usage": { "input_tokens": 900, "output_tokens": 60 } }));
+                        return Ok(());
+                    }
+                    _ => {}
+                }
                 let assistant = json!({ "type": "assistant",
                     "message": { "role": "assistant",
                                  "id": "msg-scripted",
@@ -591,9 +746,12 @@ pub(crate) mod scripted {
                     self.push(missing_id);
                 }
                 let (subtype, is_error, result) = match self.mode {
-                    ClaudeMode::Success | ClaudeMode::DuplicateOutput | ClaudeMode::RichSuccess => {
-                        ("success", false, "done")
-                    }
+                    ClaudeMode::Success
+                    | ClaudeMode::DuplicateOutput
+                    | ClaudeMode::RichSuccess
+                    | ClaudeMode::PrematureResult
+                    | ClaudeMode::ToolOnly
+                    | ClaudeMode::Crash => ("success", false, "done"),
                     ClaudeMode::Failure => (
                         "error_during_execution",
                         true,
@@ -694,6 +852,41 @@ mod usage_tests {
             };
             assert_eq!(reason.failure_message().as_deref(), expected);
         }
+    }
+
+    #[test]
+    fn turn_usage_skips_empty_results_adds_tokens_and_keeps_cumulative_cost() {
+        let usage = |tokens_in, tokens_out, cost_usd, model: Option<&str>| {
+            Some(crate::drive::Usage {
+                model: model.map(str::to_string),
+                tokens_in,
+                tokens_out,
+                cost_usd,
+            })
+        };
+        let mut total = None;
+        absorb_usage(&mut total, None);
+        absorb_usage(&mut total, usage(0, 0, Some(0.0), None));
+        absorb_usage(&mut total, usage(0, 0, None, Some("ignored")));
+        assert_eq!(
+            total, None,
+            "results without model work are not usage (HS2-M5GN19)"
+        );
+        absorb_usage(
+            &mut total,
+            usage(800, 150, Some(0.03), Some("claude-opus-4-8")),
+        );
+        absorb_usage(&mut total, usage(0, 0, Some(0.0), None));
+        absorb_usage(&mut total, usage(200, 50, Some(0.05), None));
+        assert_eq!(
+            total,
+            usage(1000, 200, Some(0.05), Some("claude-opus-4-8")),
+            "tokens add across results, process-cumulative cost keeps its maximum"
+        );
+        let mut unpriced = None;
+        absorb_usage(&mut unpriced, usage(10, 1, None, None));
+        absorb_usage(&mut unpriced, usage(5, 1, Some(0.01), None));
+        assert_eq!(unpriced, usage(15, 2, Some(0.01), None));
     }
 
     #[test]

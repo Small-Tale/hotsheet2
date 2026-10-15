@@ -1638,6 +1638,39 @@ async function mockProject(
         driveEvent(idle);
         return route.fulfill({ status: 202, json: running });
       }
+      // HS2-M5GN19: a tool-only turn (activity, a zero-usage result, real usage, no text).
+      if (body.content === 'work on HS2-XMJGFJ now') {
+        for (const [index, summary] of ['claude called hotsheet_claim', 'claude read lecture-outlines.md'].entries())
+          pushDriveEvent({
+            kind: 'activity',
+            id: `activity-tool-only-${index}`,
+            slug: '',
+            activity: {
+              id: `activity-tool-only-${index}`,
+              ts: '2026-10-15T02:43:00Z',
+              tool: running.tool,
+              session: id,
+              kind: 'tool',
+              summary,
+              importance: 'normal',
+            },
+          });
+        turnEvent(running, { type: 'usage', tokens_in: 0, tokens_out: 0, cost_usd: 0 }, body.turn_id);
+        turnEvent(running, { type: 'usage', tokens_in: 900, tokens_out: 60, cost_usd: 0.04 }, body.turn_id);
+        const idle = { ...running, busy: false };
+        toolConnections = toolConnections.map((item) => (item.id === id ? idle : item));
+        turnEvent(idle, { type: 'done', reason: 'completed' }, body.turn_id);
+        driveEvent(idle);
+        return route.fulfill({ status: 202, json: { ...running, turn_id: body.turn_id } });
+      }
+      if (body.content === 'is there some background work going on?') {
+        turnEvent(running, { type: 'usage', tokens_in: 0, tokens_out: 0, cost_usd: 0 }, body.turn_id);
+        const idle = { ...running, busy: false };
+        toolConnections = toolConnections.map((item) => (item.id === id ? idle : item));
+        turnEvent(idle, { type: 'done', reason: 'completed' }, body.turn_id);
+        driveEvent(idle);
+        return route.fulfill({ status: 202, json: { ...running, turn_id: body.turn_id } });
+      }
       // HS2-14X4AF: the first turn's Done is delayed past the next turn's start.
       if (body.content === 'Start a correlated turn.') {
         correlatedTurnId = body.turn_id;
@@ -27779,6 +27812,36 @@ for (const width of [1280, 390]) {
     await expect(drawer.locator('[title="Stopped: Selected model is at capacity"]')).toHaveCount(0);
     await expect(host).not.toContainText('Selected model is at capacity');
     await page.screenshot({ path: test.info().outputPath(`hs2-azve3p-recovered-${width}.png`) });
+  });
+}
+
+for (const width of [1280, 390]) {
+  test(`says what a tool-only turn did and never shows zero tokens at ${width}px (HS2-M5GN19)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await mockProject(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]');
+    await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
+    await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+    await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+    const host = drawer.locator('[data-component="ai-conversation"]'),
+      composer = host.getByLabel('Message Codex');
+    await composer.fill('is there some background work going on?');
+    await composer.press('Enter');
+    await expect(host).toContainText('The turn ended without output.');
+    await expect(composer).toBeEnabled();
+    await composer.fill('work on HS2-XMJGFJ now');
+    await composer.press('Enter');
+    await expect(host).toContainText(
+      'Finished without a written reply after 2 actions: claude called hotsheet_claim; claude read lecture-outlines.md.',
+    );
+    await expect(host).toContainText('960 tokens');
+    await expect(host).not.toContainText('0 tokens ·');
+    await expect(host.getByText('The turn ended without output.')).toHaveCount(1);
+    await host.screenshot({ path: `target/visual-captures/hs2-m5gn19-tool-only-${width}.png` });
   });
 }
 

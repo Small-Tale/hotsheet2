@@ -221,6 +221,17 @@ stream-json [--resume <id>]`; input `{"type":"user",…}`; output `system`/`init
 > consecutive text projections independent of that unstable identity, and also remembers
 > identified projections across the turn. Distinct fragments, repetition after intervening
 > different output, and every other provider retain ordinary append semantics.
+> **Per-turn processes (HS2-M5GN19):** the live drive spawns one `claude --resume` process
+> per turn and attaches it with `ClaudeChannel::connect_single_turn`. In that mode a
+> `result` does not end the turn. The channel closes stdin and keeps streaming until the
+> process exits, so assistant text, tool use, and usage produced after an early or extra
+> `result` reach the turn. Before this, the child was orphaned unobserved and the client
+> showed an empty `0 tokens` turn while the session kept acting. The last `result` decides the
+> outcome, and an exit with no result is a failure. Result `usage` tokens add across a
+> turn, while `total_cost_usd` (process-cumulative) keeps its maximum. A result reporting no
+> model work (zero tokens and no cost) contributes no usage. When a successful turn streamed
+> no assistant text, its final `result` text becomes the turn's output. The persistent
+> multi-turn mode (`ClaudeChannel::connect`) still ends a turn at its first `result`.
 > **Live-verified (2026-08-21, isolated temp cwd + strict empty MCP config → nothing else
 > reachable):** a real turn streamed `Output("pong")` then `Done(Completed)` with the
 > session id captured and the HS1 dev instance untouched; gated ignored test

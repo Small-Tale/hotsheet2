@@ -905,6 +905,112 @@ fn claude_channel_runs_two_sequential_turns() {
     assert_eq!(t2.wait(), DoneReason::Completed);
 }
 
+/// Drain a turn to its terminal `Done`, returning every event in order.
+fn drain_turn(turn: &mut dyn TurnHandle) -> Vec<TurnEvent> {
+    let mut events = Vec::new();
+    while let Some(event) = turn.next_event() {
+        let done = matches!(event, TurnEvent::Done(_));
+        events.push(event);
+        if done {
+            break;
+        }
+    }
+    assert_eq!(turn.next_event(), None, "nothing follows Done");
+    events
+}
+
+#[test]
+fn persistent_channel_ends_at_a_premature_zero_usage_result_without_reporting_zero_tokens() {
+    // HS2-M5GN19 regression pin: the persistent mode stops at the first `result`, which is
+    // why the live per-turn process uses the single-turn mode below. Even here the empty
+    // result reports no usage instead of `0 tokens`.
+    let ch = ClaudeChannel::connect(ScriptedClaude::new(ClaudeMode::PrematureResult));
+    let mut turn = ch.start_turn("work on HS2-XMJGFJ now").unwrap();
+    assert_eq!(
+        drain_turn(turn.as_mut()),
+        [TurnEvent::Done(DoneReason::Completed)]
+    );
+    assert_eq!(
+        turn.usage(),
+        None,
+        "a result without model work is not usage"
+    );
+}
+
+#[test]
+fn single_turn_channel_streams_work_that_follows_a_premature_result() {
+    // HS2-M5GN19: the captured turn reported "ended without output" and 0 tokens while
+    // the process went on to claim the ticket unobserved.
+    let ch = ClaudeChannel::connect_single_turn(ScriptedClaude::new(ClaudeMode::PrematureResult));
+    let mut turn = ch.start_turn("work on HS2-XMJGFJ now").unwrap();
+    let events = drain_turn(turn.as_mut());
+    assert!(
+        matches!(&events[0], TurnEvent::NativeActivity { payload, .. }
+            if payload["tool_name"] == "mcp__hotsheet__hotsheet_claim"),
+        "tool use after the early result reaches the turn: {events:?}"
+    );
+    assert_eq!(
+        events[1..],
+        [
+            TurnEvent::Output("done: work on HS2-XMJGFJ now".into()),
+            TurnEvent::Done(DoneReason::Completed),
+        ]
+    );
+    let usage = turn.usage().expect("the real result's usage");
+    assert_eq!((usage.tokens_in, usage.tokens_out), (800, 150));
+    assert!(!turn.is_busy());
+}
+
+#[test]
+fn single_turn_channel_shows_the_result_text_of_a_tool_only_turn() {
+    let ch = ClaudeChannel::connect_single_turn(ScriptedClaude::new(ClaudeMode::ToolOnly));
+    let mut turn = ch.start_turn("work on HS2-XMJGFJ now").unwrap();
+    let events = drain_turn(turn.as_mut());
+    assert!(matches!(&events[0], TurnEvent::NativeActivity { .. }));
+    assert_eq!(
+        events[1..],
+        [
+            TurnEvent::Output("Claimed HS2-XMJGFJ and started work.".into()),
+            TurnEvent::Done(DoneReason::Completed),
+        ]
+    );
+    let usage = turn.usage().unwrap();
+    assert_eq!((usage.tokens_in, usage.tokens_out), (900, 60));
+    assert_eq!(usage.cost_usd, Some(0.04));
+}
+
+#[test]
+fn single_turn_channel_keeps_ordinary_turns_and_failures_unchanged() {
+    for (mode, expected) in [
+        (ClaudeMode::Success, DoneReason::Completed),
+        (
+            ClaudeMode::Failure,
+            DoneReason::failed(1, "Selected model is at capacity"),
+        ),
+    ] {
+        let ch = ClaudeChannel::connect_single_turn(ScriptedClaude::new(mode));
+        let mut turn = ch.start_turn("x").unwrap();
+        assert!(turn.is_busy(), "busy until the process exits");
+        let events = drain_turn(turn.as_mut());
+        assert_eq!(events[0], TurnEvent::Output("done: x".into()));
+        assert_eq!(events.last(), Some(&TurnEvent::Done(expected.clone())));
+        assert_eq!(
+            events.len(),
+            2,
+            "the result text never duplicates streamed output"
+        );
+        assert_eq!(turn.wait(), expected, "wait after Done repeats the outcome");
+    }
+}
+
+#[test]
+fn single_turn_channel_reports_a_process_that_exits_without_a_result() {
+    let ch = ClaudeChannel::connect_single_turn(ScriptedClaude::new(ClaudeMode::Crash));
+    let mut turn = ch.start_turn("x").unwrap();
+    assert_eq!(turn.wait(), DoneReason::failed(1, "Claude channel closed"));
+    assert_eq!(turn.usage(), None);
+}
+
 #[test]
 fn claude_channel_drive_runs_a_turn_end_to_end() {
     let ch = ClaudeChannel::connect(ScriptedClaude::new(ClaudeMode::Success));

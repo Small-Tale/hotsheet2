@@ -1470,7 +1470,11 @@ preview/download, server directory browser) are separate design work.
   before a new turn is appended. Native activity and permission
   events provide specific progress text, and connection-matched permission requests reuse the
   standard decision card inline. Completed, failed, and interrupted outcomes remain on their
-  turn. Transcript and activity state is validated and persisted device-locally. Streamed
+  turn. A turn that ends without text but recorded tool activity after its prompt says what
+  it did ("Finished without a written reply after N actions: …", at most three distinct
+  summaries plus a count). Only a turn with neither text nor activity shows "The turn ended
+  without output." A usage event with zero tokens and no cost is ignored, so a turn never
+  shows `0 tokens` (HS2-M5GN19). Transcript and activity state is validated and persisted device-locally. Streamed
   changes are coalesced after 250 ms of quiet or at least once per second during a sustained
   stream, then flushed on turn completion and page hide so a reload restores received history
   without serializing the full transcript for every output event (HS2-TC93GZ). In-memory state
