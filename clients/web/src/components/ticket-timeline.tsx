@@ -3,7 +3,9 @@ import './ticket-timeline.css';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { Text } from '@kerfjs/ui/text';
+import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 
+import type { TimelineUsageRow } from '../ticket-usage-timeline';
 import { TicketInspectorPanel, type TicketInspectorPanelPresentation } from './ticket-inspector-panel';
 
 export interface TicketTimelineEntry {
@@ -54,26 +56,23 @@ export function TicketTimeline({
 }: {
   entries?: readonly TicketTimelineEntry[];
   presentation?: TicketInspectorPanelPresentation;
-  /** The whole ticket's AI usage, for example `214K tokens · ≈$1.84 · opus, sonnet` (HS2-J14225). */
-  usage?: string;
+  /** The whole ticket's AI usage under the rail: one row per model, then the total (HS2-J14225). */
+  usage?: readonly TimelineUsageRow[];
 }) {
   return (
     <TicketInspectorPanel component="ticket-timeline" className="ticket-timeline" presentation={presentation}>
       {/* Kerf owns the section stack, heading, and text; only the rail is app-drawn (HS2-52D1JZ). */}
       <List gap="xs">
         <ListHeader label="Timeline" />
-        {usage ? (
-          <Text variant="p" tone="quiet" size="compact" flush>
-            <span class="ticket-timeline__usage-total" aria-label={`AI usage for this ticket: ${usage}`}>
-              {usage}
-            </span>
-          </Text>
-        ) : undefined}
         <ol class="ticket-timeline__list">
           {entries.map((entry, index) => (
             <li data-entry-id={entry.id} data-emphasized={String(Boolean(entry.emphasized))}>
-              <Text variant="span" tone="quiet" size="compact" wrap="nowrap">
-                <time>{entry.time}</time>
+              {/* The time reads like the event title beside it, apart from the quiet elapsed-time
+                  labels between events (HS2-J14225). */}
+              <Text variant="span" size="compact" lineHeight="tight" wrap="nowrap">
+                <strong>
+                  <time>{entry.time}</time>
+                </strong>
               </Text>
               <div>
                 <Text variant="p" size="compact" lineHeight="tight" flush>
@@ -107,6 +106,13 @@ export function TicketTimeline({
             </li>
           ))}
         </ol>
+        {usage?.length ? (
+          <ValueTable label="AI usage for this ticket" density="compact">
+            {usage.map((row) => (
+              <ValueTableRow label={row.label} value={row.value} />
+            ))}
+          </ValueTable>
+        ) : undefined}
         <Text variant="p" size="compact" flush>
           {entries.length} {entries.length === 1 ? 'event' : 'events'} total
         </Text>

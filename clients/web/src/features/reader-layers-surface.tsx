@@ -24,6 +24,7 @@ import { type GallerySource, type Project } from '../interactions/types';
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
 import { linkedReaderCanUpdate, type TicketReaderFrame } from '../ticket-reader-stack';
 import { type TicketTitleEditSurface } from '../ticket-title-editing';
+import type { TimelineUsageRow } from '../ticket-usage-timeline';
 import type { createInspectorSurface } from './inspector-surface';
 
 /** Live application bindings createReaderLayersSurface reads (HS2-K0VC2C). */
@@ -101,7 +102,7 @@ export interface ReaderLayersSurfaceDependencies {
     durationToNext?: string;
     emphasized?: boolean;
   }[];
-  timelineUsage: (ticket: FullTicket) => string | undefined;
+  timelineUsage: (ticket: FullTicket) => readonly TimelineUsageRow[];
   titleDraft: Signal<string>;
   titleEditingSurface: Signal<TicketTitleEditSurface | undefined>;
 }

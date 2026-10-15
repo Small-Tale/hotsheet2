@@ -35,6 +35,7 @@ import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and
 import { ticketCloseReasonLabel } from '../ticket-close';
 import { ticketDisplayNumber } from '../ticket-display-number';
 import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-field-reconciliation';
+import type { TimelineUsageRow } from '../ticket-usage-timeline';
 import { LiveClaimNotice, type LiveClaimNoticeProps } from './active-claim';
 import { ConfidenceBadge } from './confidence-badge';
 import type { MarkdownEditorMode } from './markdown-editor';
@@ -98,8 +99,8 @@ export interface TicketInspectorProps {
   duplicateBacklinks?: readonly DuplicateBacklink[];
   duplicateBacklinkInaccessibleProjects?: readonly string[];
   timelineEntries?: readonly TicketTimelineEntry[];
-  /** The ticket's total AI usage line shown above the timeline (HS2-J14225). */
-  timelineUsage?: string;
+  /** The ticket's AI usage by model and in total, shown under the timeline (HS2-J14225). */
+  timelineUsage?: readonly TimelineUsageRow[];
   attachments?: readonly TicketAttachmentItem[];
   codeReview?: CodeReview;
   codeReviewLoading?: boolean;

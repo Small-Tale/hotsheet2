@@ -1554,7 +1554,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     }));
   }
   function timelineUsage(ticket: FullTicket) {
-    return timelineUsageLabels(ticketTimelineEntries(ticket), ticketUsageFor(ticket)).total;
+    return timelineUsageLabels(ticketTimelineEntries(ticket), ticketUsageFor(ticket)).breakdown;
   }
   function notes(ticket: FullTicket) {
     return ticket.notes.map((note) => {

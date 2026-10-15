@@ -46,18 +46,19 @@
   content: '';
 }
 /* The elapsed time to the next event, centered on its connector (13.6px from the top to 2.4px
-   from the bottom). */
+   from the bottom). It starts on the time column's edge so every label on the rail lines up
+   (HS2-J14225). */
 .ticket-timeline__duration {
   position: absolute;
   top: calc(50% + remify(5.6px));
-  left: remify(12px);
+  left: var(--kui-space-m);
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
   line-height: 1;
   white-space: nowrap;
   transform: translateY(-50%);
   /* A gap's AI usage shares the label; keep long model lists inside the row (HS2-ZA7W6E). */
-  max-width: calc(100% - remify(12px));
+  max-width: calc(100% - var(--kui-space-m));
   overflow: hidden;
   text-overflow: ellipsis;
 }

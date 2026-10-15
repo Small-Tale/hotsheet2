@@ -29,6 +29,7 @@ import { type NotWorkingTarget, type PendingEvidence, type Project } from '../in
 import { type ProjectTicketSources } from '../new-ticket-source';
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
 import { type TicketTitleEditSurface } from '../ticket-title-editing';
+import type { TimelineUsageRow } from '../ticket-usage-timeline';
 
 /** Live application bindings createInspectorSurface reads (HS2-K0VC2C). */
 export interface InspectorSurfaceDependencies {
@@ -98,7 +99,7 @@ export interface InspectorSurfaceDependencies {
     durationToNext?: string;
     emphasized?: boolean;
   }[];
-  timelineUsage: (ticket: FullTicket) => string | undefined;
+  timelineUsage: (ticket: FullTicket) => readonly TimelineUsageRow[];
   titleDraft: Signal<string>;
   titleEditingSurface: Signal<TicketTitleEditSurface | undefined>;
 }

@@ -123,11 +123,15 @@ export function TicketTimelineDemo() {
       </CatalogExample>
       <CatalogExample
         label="With AI Usage"
-        note="Tokens and models recorded in each phase gap and the ticket total above the rail (HS2-ZA7W6E, HS2-J14225)."
+        note="Tokens and models recorded in each phase gap, and the ticket's usage by model and in total under the rail (HS2-ZA7W6E, HS2-J14225)."
         viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
       >
         <TicketTimeline
-          usage="214K tokens · ≈$1.84 · opus, sonnet"
+          usage={[
+            { label: 'opus', value: '176K tokens · ≈$1.52' },
+            { label: 'sonnet', value: '38K tokens · ≈$0.32' },
+            { label: 'Total', value: '214K tokens · ≈$1.84' },
+          ]}
           entries={[
             { id: 'created', time: '2h ago', title: 'Ticket created', durationToNext: '48m', emphasized: true },
             {

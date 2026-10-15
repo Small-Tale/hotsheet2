@@ -3510,11 +3510,17 @@ backlog`, `Re-enqueued`) while retaining the full durable note text and using th
   When the ticket's store holds AI usage events attributed to it (`docs/14` §14.2), each
   gap label also carries the tokens and models recorded between that entry and the next
   (`3m · 38K tokens · opus`; models by descending token share, at most two named, the rest
-  counted), the final entry carries the usage recorded since it (the phase still open), and a
-  quiet total line above the rail sums the ticket (`214K tokens · ≈$1.84 · opus, sonnet`).
+  counted), and the final entry carries the usage recorded since it (the phase still open).
+  Every rail label (the entry times, the gap labels, and the final usage label) starts on the
+  same time-column edge. The entry times use the entry titles' color, size, and weight, which
+  sets them apart from the quiet gap labels. Under the rail, a compact value table breaks the
+  ticket's usage down by model, in descending token share (`opus — 176K tokens · ≈$1.52`),
+  then a `Total` row (`214K tokens · ≈$1.84`).
   Events older than the first entry count toward the first gap; a gap with no events has no
-  usage label; cost appears only when every live event is priced, adding the settled rollup's
-  per-ticket cost once raw events have been pruned. The client reads
+  usage label. The total's cost appears only when every live event is priced, adding the
+  settled rollup's per-ticket cost once raw events have been pruned. A model's cost appears
+  only when all of its live events are priced and no settled rollup cost exists, since the
+  rollup keeps no per-model split. The client reads
   `GET /checkouts/{checkout}/tickets/{ticket}/usage` when a ticket is selected and keeps the
   last known usage if that read fails (HS2-ZA7W6E, HS2-J14225).
   Started-phase changes appear as concise Timeline entries (`Analyzing`,

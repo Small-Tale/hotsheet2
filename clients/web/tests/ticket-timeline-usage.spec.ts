@@ -161,7 +161,36 @@ for (const width of [1280, 390]) {
     await page.getByText('Measure the phases').click();
     await page.getByRole('tab', { name: 'Timeline' }).click();
     const timeline = page.locator('[data-component="ticket-timeline"]');
-    await expect(timeline.locator('.ticket-timeline__usage-total')).toHaveText('214K tokens · ≈$1.84 · sonnet, opus');
+    // Under the rail: each model's tokens (and cost when known), then the ticket total (HS2-J14225).
+    const breakdown = timeline.locator('[data-component="value-table"]');
+    await expect(breakdown).toContainText('sonnet');
+    await expect(breakdown).toContainText('opus');
+    await expect(breakdown).toContainText('Total');
+    await expect(breakdown).toContainText('214K tokens · ≈$1.84');
+    // The breakdown sits below the rail, not above it.
+    const order = await timeline.evaluate(
+      (node) =>
+        node.querySelector('.ticket-timeline__list')!.getBoundingClientRect().bottom <=
+        node.querySelector('[data-component="value-table"]')!.getBoundingClientRect().top,
+    );
+    expect(order).toBe(true);
+    // Every rail label starts on the time column's edge (HS2-J14225).
+    const edges = await timeline.evaluate((node) => {
+      const left = (element: Element) => Math.round(element.getBoundingClientRect().left);
+      return {
+        times: [...node.querySelectorAll('.ticket-timeline__list time')].map(left),
+        labels: [...node.querySelectorAll('.ticket-timeline__duration')].map(left),
+      };
+    });
+    expect(new Set([...edges.times, ...edges.labels]).size).toBe(1);
+    // The time reads in the event title's weight, unlike the quiet elapsed-time labels.
+    const weights = await timeline.evaluate((node) => ({
+      time: Number(getComputedStyle(node.querySelector('.ticket-timeline__list time')!).fontWeight),
+      title: Number(getComputedStyle(node.querySelector('.ticket-timeline__list li > div strong')!).fontWeight),
+      duration: Number(getComputedStyle(node.querySelector('.ticket-timeline__duration')!).fontWeight),
+    }));
+    expect(weights.time).toBe(weights.title);
+    expect(weights.duration).toBeLessThan(weights.time);
     // The creation gap (10:00 to 10:30) had no usage; Analyzing (10:30 to 11:00) used opus; the
     // open Working phase (since 11:00) used both models.
     await expect(timeline.locator('[data-entry-id="01-created"] .ticket-timeline__duration')).toHaveText('30m');
@@ -201,7 +230,7 @@ test('keeps the timeline unchanged when a ticket has no recorded usage', async (
   await page.getByRole('tab', { name: 'Timeline' }).click();
   const timeline = page.locator('[data-component="ticket-timeline"]');
   await expect(timeline.getByText('Working', { exact: true })).toBeVisible();
-  await expect(timeline.locator('.ticket-timeline__usage-total')).toHaveCount(0);
+  await expect(timeline.locator('[data-component="value-table"]')).toHaveCount(0);
   await expect(timeline.locator('[data-entry-id="N2"] .ticket-timeline__duration')).toHaveText('30m');
   await expect(timeline.locator('[data-entry-id="N3"] .ticket-timeline__duration')).toHaveCount(0);
 });

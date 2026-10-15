@@ -146,7 +146,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ticket-timeline-data.ts # Timeline entries from activity notes + lifecycle backfill; appends each completion cycle's confidence to its Completed headline
     src/draft-input-coalescing.ts # Typing-pause publication of editor draft signals plus flushDraftInputs() for every reader of drafts (HS2-EQTXTJ)
     src/feedback-prompt-edits.ts # Note ids of FEEDBACK NEEDED prompts the user explicitly opened with Edit Note; only their saves carry edit_feedback_prompt (HS2-ZXGEFE)
-    src/ticket-usage-timeline.ts # Buckets a ticket's AI usage events into the timeline gaps and formats the per-gap and total token/model/cost labels (HS2-ZA7W6E, HS2-J14225)
+    src/ticket-usage-timeline.ts # Buckets a ticket's AI usage events into the timeline gaps and formats the per-gap labels and the per-model plus total usage breakdown (HS2-ZA7W6E, HS2-J14225)
     src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, shell/AI/chat type filtering and scoped bulk inclusion rules
     src/terminal-visibility-filter.ts # Controlled native multi-select array binding that preserves its open popup through list rerenders
     src/browser-id.ts       #   Secure/ordinary-LAN browser identities plus time-sortable Jira outbox retry IDs (HS2-QA1VEF)
@@ -173,7 +173,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/project-chat-scope.spec.ts # AI chat tabs and close-dialog chats stay scoped to the project whose root or store registered the connection (HS2-6GHSCY, HS2-5AGPWE)
     tests/typing-latency-profile.spec.ts # Opt-in (HOTSHEET_TYPING_PROFILE=1) real-server per-keystroke Event Timing profile of the search, title, details, and note editors (HS2-EQTXTJ)
     tests/archive-load-more.spec.ts # Real-server regression: rows appended by Load more survive a concurrent change's list refresh (HS2-9DF0DA)
-    tests/ticket-timeline-usage.spec.ts # Timeline gap labels carry tokens and models and the total line sums the ticket, at 1280 and 390 px (HS2-ZA7W6E, HS2-J14225)
+    tests/ticket-timeline-usage.spec.ts # Timeline gap labels carry tokens and models, rail labels share one edge, and the per-model breakdown table sums the ticket, at 1280 and 390 px (HS2-ZA7W6E, HS2-J14225)
     src/project-change-poll.ts # Replay-safe per-open-project change transport (WebSocket-first, long-poll fallback, `resume`) plus the main-thread consumer it feeds (HS2-SH9179); ticket invalidation, overflow/reconnect recovery, onResync hook (initial/reconnect/overflow) that replaces permission polling (HS2-NKCXW4), and abortable lifecycle
     src/change-stream-worker-protocol.ts # Versioned main<->worker change-stream messages (generation tokens, acks), their validators, and the bounded coalescing per-project delivery queue (HS2-SH9179)
     src/change-stream-worker-runtime.ts # Worker-side runtime: one transport per open project, worker poll client, open/close/ack handling (HS2-SH9179)
