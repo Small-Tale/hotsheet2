@@ -2264,7 +2264,9 @@ remounts from leaving duplicated or ghosted transcript content in the wide dialo
 dialog uses 24px detail/terminal insets, 16px warning and consequence regions, 8px resource-pane
 and action spacing, and gapless adjacent resource rows; constrained layouts use a 16px preview
 inset and 8px viewport gutter while preserving all preview/control geometry (HS2-4Y6SM9).
-**Keep Running** removes only the local project tab. Reopening the project reconciles
+The footer leads with **Cancel**, followed by a flexible Kerf `Spacer`, so the keep/stop decisions
+stay grouped on the trailing edge; the ticket close dialog uses the same Cancel-leading footer
+(HS2-0DHVGK). **Keep Running** removes only the local project tab. Reopening the project reconciles
 eligible drawer Chat, Drive, and resumed-saved-chat connection ids from the server into
 their original AI-chat tabs, including provider, model, effort, busy, action, and session
 state (HS2-D34C2V). The machine server's connection list spans every checkout on the machine, so

@@ -169,6 +169,17 @@ describe('ProjectCloseDialog', () => {
     expect(markup).toContain('data-project-close-consequences');
     expect(markup).toContain('slot="footer"');
     expect(markup).toContain('data-component="row"');
+    // Cancel leads the footer, a flexible Kerf Spacer follows, then Keep Running and Stop & Close (HS2-0DHVGK).
+    const footer = markup.slice(markup.indexOf('slot="footer"')),
+      cancel = footer.indexOf('Cancel'),
+      spacer = footer.indexOf('kui-spacer'),
+      keep = footer.indexOf('Keep Running'),
+      stop = footer.indexOf('Stop &amp; Close');
+    expect(cancel).toBeGreaterThan(0);
+    expect(spacer).toBeGreaterThan(cancel);
+    expect(keep).toBeGreaterThan(spacer);
+    expect(stop).toBeGreaterThan(keep);
+    expect(footer.slice(0, footer.indexOf('>'))).not.toContain('data-h-align="right"');
   });
 
   it('gives the phone preview frame its published grid aspect and delegates shell geometry to DialogSurface', () => {

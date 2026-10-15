@@ -6942,6 +6942,26 @@ test('previews running project resources with shared menus and explicit keep-run
   await expect(dialog).toContainText('Terminals and AI chat tabs return when reopened');
   await expect(dialog.getByRole('button', { name: 'Keep Running' })).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Stop & Close' })).toBeVisible();
+  // Cancel leads the footer; Keep Running and Stop & Close stay grouped on the trailing edge (HS2-0DHVGK).
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 800 });
+    const box = async (name: string) => (await dialog.getByRole('button', { name, exact: true }).boundingBox())!;
+    await expect
+      .poll(async () => {
+        const [cancel, keep, stop] = [await box('Cancel'), await box('Keep Running'), await box('Stop & Close')],
+          surface = (await dialog.locator('[data-project-close-consequences]').boundingBox())!;
+        return {
+          cancelLeads: cancel.x < keep.x && keep.x < stop.x,
+          // Cancel sits at the dialog's leading content edge and Stop & Close at its trailing edge.
+          cancelAtStart: cancel.x - surface.x < 48,
+          stopAtEnd: surface.x + surface.width - (stop.x + stop.width) < 48,
+          inViewport: stop.x + stop.width <= width && cancel.x >= 0,
+        };
+      })
+      .toEqual({ cancelLeads: true, cancelAtStart: true, stopAtEnd: true, inViewport: true });
+    await page.screenshot({ path: `target/visual-captures/hs2-0dhvgk-project-close-footer-${width}.png` });
+  }
+  await page.setViewportSize({ width: 1280, height: 800 });
   // The live preview scales its 1280x768 canvas to the frame like a dashboard tile, so every line
   // stays inside the frame instead of a native-size crop (HS2-S7E53Q).
   const previewFit = () =>
@@ -26584,6 +26604,13 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
     await expect(reason).toHaveJSProperty('open', false);
     await page.waitForTimeout(300);
     await page.screenshot({ path: 'target/visual-captures/claude/hs2-n11t22-close-dialog.png' });
+    // Cancel leads the footer and the close action trails it, as in the project close dialog (HS2-0DHVGK).
+    const cancelBox = (await dialog.getByRole('button', { name: 'Cancel' }).boundingBox())!,
+      closeBox = (await dialog.getByRole('button', { name: 'Close ticket' }).boundingBox())!,
+      reasonBox = (await reason.boundingBox())!;
+    expect(Math.abs(cancelBox.x - reasonBox.x)).toBeLessThan(24);
+    expect(Math.abs(closeBox.x + closeBox.width - (reasonBox.x + reasonBox.width))).toBeLessThan(24);
+    await page.screenshot({ path: 'target/visual-captures/hs2-0dhvgk-ticket-close-footer-1440.png' });
     await dialog.getByRole('button', { name: 'Close ticket' }).click();
     await expect
       .poll(async () => (await server.request<FullTicket>(`/tickets/${created.id}`)).close_reason)

@@ -9,6 +9,7 @@ import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
+import { Spacer } from '@kerfjs/ui/spacer';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
@@ -151,7 +152,8 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
                   </Text>
                 )}
               </div>
-              <Row hAlign="right" vAlign="middle" gap="xs">
+              {/* The same footer layout as the project close dialog: Cancel leads, the decision trails (HS2-0DHVGK). */}
+              <Row vAlign="middle" gap="xs">
                 <wa-button
                   type="button"
                   {...TICKET_SELECTION_ACTIONS.cancelTicketClose.attrs}
@@ -160,6 +162,7 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
                 >
                   Cancel
                 </wa-button>
+                <Spacer flex />
                 <wa-button type="submit" variant="brand" disabled={Boolean(validation) || state.submitting}>
                   {state.submitting ? 'Closing…' : duplicate ? 'Mark as duplicate' : 'Close ticket'}
                 </wa-button>

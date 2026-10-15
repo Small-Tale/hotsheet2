@@ -9,6 +9,7 @@ import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
+import { Spacer } from '@kerfjs/ui/spacer';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
@@ -234,7 +235,8 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
               </Text>
             )}
           </List>
-          <Row slot="footer" hAlign="right" vAlign="middle" gap="xs" wrap>
+          {/* Cancel stands apart on the leading edge; the keep/stop decisions stay grouped on the right (HS2-0DHVGK). */}
+          <Row slot="footer" vAlign="middle" gap="xs" wrap flex>
             <wa-button
               type="button"
               size="small"
@@ -246,6 +248,7 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
             >
               Cancel
             </wa-button>
+            <Spacer flex />
             <wa-button
               type="button"
               size="small"
