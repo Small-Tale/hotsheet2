@@ -227,7 +227,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/migration-progress.ts # Versioned phase counters, job/attempt snapshots, phase-local labels and stale revision guards
     src/migration-jobs.ts    # Atomic background job checkpoints, native project/store locks, child ownership and blocking revision watches
     src/child-process.ts     # The ONE node:child_process boundary in src/: spawn/spawnSync/execFileAsync strip inherited repo-locating GIT_* vars (parity with hotsheet_ticketing::git + scripts/repository-env.mjs); ESLint no-restricted-imports forbids child_process elsewhere (HS2-T1H6NP)
-    src/migration-lock.ts    # Standalone migrator native advisory-lock guard shared across bridge processes
+    src/migration-lock.ts    # Standalone migrator native advisory-lock guard shared across bridge processes; resolves the migrator through the checkout root with a not-built preflight (HS2-KFKE8W)
+    src/repository-root.ts   # `developmentRepositoryRoot`: HOTSHEET_REPO_ROOT or cwd/../.., the one place bridge code locates the checkout for Rust binaries (HS2-KFKE8W)
     src/migration-stream.ts  # Incremental NDJSON/Git byte-rate decoding and checkpoint-before-launch process-group ownership
     src/migration-job-bridge.ts # Canonical project/source validation and singleton async migration service
     src/migration-job-client.ts # Project-owned start/rejoin/watch lifecycle, stale responses and reconnect errors

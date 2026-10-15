@@ -373,7 +373,13 @@ preview/download, server directory browser) are separate design work.
   files not accessed for three days, and cloned snapshot files keep their source's old access
   time, so modules Vite had not read yet (such as a lazily imported entry)
   disappeared from a running snapshot and were served as `index.html` (HS2-ZJ6VN3). Each
-  snapshot records its owning process, and startup prunes snapshots whose owner has exited. The launcher
+  snapshot records its owning process, and startup prunes snapshots whose owner has exited.
+  The launcher names the real checkout in `HOTSHEET_REPO_ROOT`, and every bridge lookup of a
+  Rust binary resolves through it (`src/repository-root.ts`), never relative to the running
+  module or the snapshot's working directory: the migration lock used to resolve
+  `hotsheet-migrate` beside the snapshot's parent, so every HS1 import on the stable host
+  failed with a spawn ENOENT before the migrator ran (HS2-KFKE8W). A missing migrator now
+  reports "Hot Sheet migrator is not built at …" instead of a raw spawn error. The launcher
   also exits, stopping Vite, when the process that started it dies without signalling it
   (it notices the reparenting with a local check, no network request), and force-kills a
   Vite child that ignores the shutdown signal after five seconds (HS2-4SSWV5), so an

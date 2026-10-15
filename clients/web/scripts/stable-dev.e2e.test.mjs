@@ -112,6 +112,91 @@ it('serves the startup snapshot until the stable dev process restarts', async ()
   }
 }, 45_000);
 
+// HS2-KFKE8W: the real stable host serves a snapshot copied under a cache directory. A migration
+// job's lock binary used to resolve relative to that snapshot, so every HS1 import died with
+// `spawn …/target/debug/hotsheet-migrate ENOENT` before the migrator ever ran.
+it('starts an HS1 import job from the cache snapshot with the checkout migrator', async () => {
+  const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
+  const home = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-home-'));
+  const project = resolve(home, 'legacy-project');
+  await mkdir(resolve(project, '.hotsheet/db'), { recursive: true });
+  await writeFile(resolve(project, '.hotsheet/db/PG_VERSION'), '17\n');
+  const port = await availablePort();
+  const environment = { ...process.env, HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp, HOTSHEET_HOME: home };
+  // The bridge must find the checkout's migrator on its own, as a developer's `npm run dev` does,
+  // and a pinned build revision belongs to the production host, not this launcher.
+  delete environment.HOTSHEET_MIGRATE_BIN;
+  delete environment.HOT_SHEET_BUILD_REVISION;
+  const child = spawn(
+    process.execPath,
+    [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'],
+    { env: environment, stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  const output = captureChildOutput(child);
+  let browser;
+  try {
+    await waitForSource(`http://127.0.0.1:${port}/`, { child, output, timeoutMs: 90_000 });
+    // A migration job belongs to an open project session, so open the legacy project first (the
+    // bridge supervises a machine server under the isolated home).
+    const opened = await fetch(`http://127.0.0.1:${port}/__hotsheet/projects/open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root: project }),
+    });
+    const session = await opened.json();
+    expect(opened.status, JSON.stringify(session)).toBe(201);
+    expect(session.needsHs1Migration).toBe(true);
+    // The dialog the reviewer captured (HS2-P2W5D7) no longer shows a spawn error after
+    // "Import project": the job starts and the page reports the import's own progress or outcome.
+    // Capture the dialog at the reviewer's width, then the running state on a phone; the API start
+    // below then rejoins the running job.
+    browser = await chromium.launch();
+    await mkdir(resolve(webRoot, 'target/visual-captures'), { recursive: true });
+    const wide = await browser.newPage({ viewport: { width: 1106, height: 1199 } });
+    await wide.goto(`http://127.0.0.1:${port}/?project=${encodeURIComponent(project)}`);
+    const importButton = wide.getByRole('button', { name: 'Import project' });
+    await importButton.waitFor({ state: 'visible', timeout: 30_000 });
+    await wide.screenshot({ path: resolve(webRoot, 'target/visual-captures/hs2-kfke8w-import-dialog-wide.png') });
+    await importButton.click();
+    await wide.waitForTimeout(1_500);
+    expect(await wide.locator('body').innerText()).not.toMatch(/ENOENT|Library\/Caches/);
+    await wide.screenshot({ path: resolve(webRoot, 'target/visual-captures/hs2-kfke8w-import-started-wide.png') });
+    await wide.close();
+    const narrow = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await narrow.goto(`http://127.0.0.1:${port}/?project=${encodeURIComponent(project)}`);
+    await narrow.getByRole('combobox', { name: 'Ticket view' }).waitFor({ state: 'visible', timeout: 30_000 });
+    await narrow.waitForTimeout(500);
+    expect(await narrow.locator('body').innerText()).not.toMatch(/ENOENT|Library\/Caches/);
+    await narrow.screenshot({ path: resolve(webRoot, 'target/visual-captures/hs2-kfke8w-import-started-narrow.png') });
+    await narrow.close();
+
+    const started = await fetch(`http://127.0.0.1:${port}/__hotsheet/projects/migration-jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: session.id, root: project, location: `${project}.hs2`, kind: 'import' }),
+    });
+    const body = await started.json();
+    // Before the fix this was a 409 whose error named a migrator beside the snapshot's parent.
+    expect(JSON.stringify(body)).not.toMatch(/ENOENT|Library\/Caches/);
+    expect(started.status, JSON.stringify(body)).toBe(202);
+    expect(body.kind).toBe('import');
+  } finally {
+    await browser?.close();
+    await stopChild(child);
+    // The bridge's machine server outlives the host by design; stop the one under this home.
+    const cli = resolve(webRoot, '../../target/debug/hotsheet-cli');
+    await new Promise((resolveStop) =>
+      spawn(cli, ['serve', '-C', resolve(home, 'server-bootstrap.hs2'), '--stop'], {
+        env: { ...process.env, HOTSHEET_HOME: home },
+        stdio: 'ignore',
+      }).once('exit', resolveStop),
+    );
+    await new Promise((resolveWait) => setTimeout(resolveWait, 500));
+    await rm(home, { recursive: true, force: true });
+    await rm(runtimeTemp, { recursive: true, force: true });
+  }
+}, 120_000);
+
 it('exits with its Vite child when the process that started it dies (HS2-4SSWV5)', async () => {
   const fixture = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-e2e-'));
   const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));

@@ -19,6 +19,7 @@ import {
 import { errorMessageOf, isRecord, parseJson, responseJson, responseJsonBody } from './json-value';
 import type { MigrationJob, MigrationProgress, MigrationResult } from './migration-progress';
 import { parseGitProgress, parseMigrationProgress, runMigrationProcess } from './migration-stream';
+import { developmentRepositoryRoot } from './repository-root';
 import {
   ignoreBody,
   parseCheckout,
@@ -197,9 +198,7 @@ export function requireStoreSchemaCompatibility(
   );
 }
 
-export function developmentRepositoryRoot(cwd = process.cwd(), environment = process.env) {
-  return resolve(environment.HOTSHEET_REPO_ROOT ?? resolve(cwd, '../..'));
-}
+export { developmentRepositoryRoot };
 
 function hotsheetHome() {
   return process.env.HOTSHEET_HOME || resolve(homedir(), '.hotsheet2');
