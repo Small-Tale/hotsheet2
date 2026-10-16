@@ -12,7 +12,9 @@
 //! file, so two writers can never hold "the" lock through different inodes.
 
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Write};
+#[cfg(unix)]
+use std::io::Read;
+use std::io::{self, Write};
 use std::path::Path;
 #[cfg(unix)]
 use std::time::{Duration, SystemTime};

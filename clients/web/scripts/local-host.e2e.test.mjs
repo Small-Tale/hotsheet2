@@ -10,6 +10,7 @@ import {
   readdir,
   readFile,
   realpath,
+  rename,
   rm,
   stat,
   writeFile,
@@ -105,8 +106,12 @@ async function copyBinaries(directory) {
     await Promise.all(
       Object.entries(workingTreeBinaries).map(async ([variable, source]) => {
         const destination = resolve(directory, variable.toLowerCase());
-        await copyFile(source, destination);
-        await chmod(destination, (await stat(source)).mode & 0o777);
+        // A server started from an earlier copy may still be executing `destination`; Linux
+        // refuses to overwrite a running executable (ETXTBSY) but allows replacing it by rename.
+        const staged = `${destination}.${process.pid}.${Date.now()}.tmp`;
+        await copyFile(source, staged);
+        await chmod(staged, (await stat(source)).mode & 0o777);
+        await rename(staged, destination);
         return [variable, destination];
       }),
     ),
