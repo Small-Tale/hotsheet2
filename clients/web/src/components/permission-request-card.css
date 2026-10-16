@@ -15,7 +15,9 @@
   display: flex;
   min-width: 0;
   flex: 1;
-  align-items: center;
+  /* Top-aligned so the countdown stays level with the first row of decisions when the four
+     decisions (with Allow for This Chat, HS2-JNHAYB) wrap onto a second row. */
+  align-items: flex-start;
   justify-content: flex-end;
   gap: remify(12.8px);
 }
@@ -32,6 +34,8 @@
 }
 .permission-request-card__countdown {
   display: flex;
+  /* Never collapse the timer and its Stop control to make room for the decisions. */
+  flex: none;
   min-width: 0;
   align-items: center;
   gap: remify(3.2px);

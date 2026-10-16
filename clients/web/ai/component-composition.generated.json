@@ -3169,6 +3169,70 @@
       }
     },
     {
+      "key": "hotsheet-web:permission-rules-settings",
+      "package": "hotsheet-web",
+      "id": "permission-rules-settings",
+      "name": "PermissionRulesSettings",
+      "kind": "component",
+      "purpose": "Remembered permission answers (chat, session, and always rules) for a project, each with a revoke action (HS2-JNHAYB).",
+      "publicExports": [
+        {
+          "name": "PermissionRulesSettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/permission-rules-settings.tsx"
+      ],
+      "source": "src/components/permission-rules-settings.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "content"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/permission-rules-settings.tsx",
+        "composition": "src/components/permission-rules-settings.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:project-close-dialog",
       "package": "hotsheet-web",
       "id": "project-close-dialog",

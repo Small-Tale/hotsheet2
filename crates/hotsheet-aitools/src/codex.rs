@@ -1581,6 +1581,7 @@ mod approval_tests {
                     action: "git status".into(),
                     decision: Decision::Allow,
                     persist: true,
+                    connection: None,
                 },
                 Rule {
                     project: String::new(),
@@ -1588,6 +1589,7 @@ mod approval_tests {
                     action: "rm -rf /".into(),
                     decision: Decision::Deny,
                     persist: true,
+                    connection: None,
                 },
             ],
             Decision::Deny,

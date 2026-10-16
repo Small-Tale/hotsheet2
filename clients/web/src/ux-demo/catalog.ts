@@ -305,6 +305,7 @@ export const demoCatalog: DemoCategory[] = [
       cataloged('settings-workspace', ['ticket-sources-settings']),
       cataloged('keyboard-settings'),
       cataloged('trash-settings'),
+      cataloged('permission-rules-settings'),
     ],
   },
 ];

@@ -14730,6 +14730,104 @@ test('switches settings categories from the project sidebar', async ({ page }) =
   await expect(selected).toHaveAttribute('data-selected', 'true');
 });
 
+test('answers identical permission requests for this chat and revokes the remembered rule in Settings (HS2-JNHAYB)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  const ask = (id: number) => ({
+    id,
+    project: '/work/demo.hs2',
+    connection: 'hotsheet-drawer-chat-1',
+    tool: 'Bash',
+    action: 'npm test',
+    agent: 'claude',
+    always_allow_supported: true,
+  });
+  let pending = [ask(81), ask(82)],
+    rules: Array<Record<string, unknown>> = [];
+  const answers: Array<{ id: string; body: Record<string, unknown> }> = [],
+    revokes: Array<Record<string, unknown>> = [];
+  await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
+  await page.route('**/permissions/rules', (route) => {
+    if (route.request().method() === 'DELETE') {
+      revokes.push(route.request().postDataJSON() as Record<string, unknown>);
+      rules = [];
+      return route.fulfill({ status: 204, body: '' });
+    }
+    return route.fulfill({ json: rules });
+  });
+  await page.route(/\/permissions\/\d+$/, (route) => {
+    const id = route.request().url().split('/').at(-1)!,
+      body = route.request().postDataJSON() as Record<string, unknown>;
+    answers.push({ id, body });
+    // The server resolves the identical waiting ask with the new chat rule.
+    pending = [];
+    rules = [
+      {
+        project: '/work/demo.hs2',
+        connection: 'hotsheet-drawer-chat-1',
+        tool: 'Bash',
+        action: 'npm test',
+        decision: 'allow',
+        scope: 'chat',
+      },
+    ];
+    return route.fulfill({
+      json: { connection: 'hotsheet-drawer-chat-1', decision: 'allow', persisted: false, also_resolved: [82] },
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const popup = page.locator('[data-component="permission-request-popup"]');
+  await expect(popup).toBeVisible();
+  await expect(popup).toContainText('2 identical requests are waiting');
+  await page.screenshot({ path: 'target/visual-captures/hs2-jnhayb-grouped-popup-1280.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(popup).toBeVisible();
+  for (const name of ['Deny', 'Allow for This Chat', 'Always Allow', 'Allow Once']) {
+    const bounds = await popup.getByRole('button', { name, exact: true }).boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+  }
+  await page.screenshot({ path: 'target/visual-captures/hs2-jnhayb-grouped-popup-390.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await popup.getByRole('button', { name: 'Allow for This Chat', exact: true }).click();
+  await expect(popup).toHaveCount(0);
+  // One remembered answer covers the group: only the first request is sent, scoped to the chat.
+  expect(answers).toEqual([{ id: '81', body: { decision: 'allow', scope: 'chat' } }]);
+
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  const remembered = page.locator('[data-component="permission-rules-settings"]');
+  const row = remembered.locator('[data-permission-rule-scope="chat"]');
+  await expect(row).toContainText('Bash: npm test');
+  await expect(row).toContainText('Allow · This chat only, until it closes');
+  await remembered.screenshot({ path: 'target/visual-captures/hs2-jnhayb-remembered-rules-1280.png' });
+  // Phone width, loaded fresh so the mobile layout applies.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
+  await expect(page.getByRole('button', { name: 'Ticket sources', exact: true })).not.toBeInViewport();
+  await expect(row).toBeVisible();
+  // The settings sidebar slides away; wait until the page column has settled at the screen edge.
+  await expect.poll(async () => (await remembered.boundingBox())?.x ?? -1).toBeGreaterThanOrEqual(8);
+  expect(await remembered.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  await row.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-jnhayb-remembered-rules-390.png' });
+  const revoke = row.locator('[data-action="revoke-permission-rule"]');
+  await expect(revoke).toHaveAttribute('aria-label', 'Revoke Bash: npm test');
+  await revoke.click();
+  await expect(remembered).toContainText('No Remembered Answers');
+  expect(revokes).toEqual([
+    { project: '/work/demo.hs2', connection: 'hotsheet-drawer-chat-1', tool: 'Bash', action: 'npm test' },
+  ]);
+});
+
 test('renders exactly once when the long poll announces a permission request', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await mockProject(page);

@@ -5,6 +5,7 @@ import { attr, delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { KeyboardSettings } from '../components/keyboard-settings';
+import { PermissionRulesSettings } from '../components/permission-rules-settings';
 import { ProviderSetupForm } from '../components/provider-setup-form';
 import { type SettingsCategory } from '../components/settings-navigation';
 import { SettingsWorkspace } from '../components/settings-workspace';
@@ -230,6 +231,40 @@ function applyTrashDemo(state: TrashDemoState, value: string): TrashDemoState {
     : { ...state, message: 'Enter a positive whole number of days.' };
 }
 
+const PERMISSION_RULES_DEMO = [
+  {
+    project: '/work/demo.hs2',
+    connection: 'hotsheet-drawer-chat-1',
+    tool: 'Bash',
+    action: 'npm test',
+    decision: 'allow',
+    scope: 'chat',
+  },
+  { project: '/work/demo.hs2', tool: 'WebFetch', action: 'https://docs.rs', decision: 'allow', scope: 'session' },
+  { project: '/work/demo.hs2', tool: 'Bash', action: 'rm -rf build', decision: 'deny', scope: 'always' },
+] as const;
+
+/** Remembered permission answers (HS2-JNHAYB): empty, listed, and a revoke in flight with an error. */
+export function PermissionRulesSettingsDemo() {
+  return (
+    <>
+      <CatalogExample label="No Remembered Answers">
+        <PermissionRulesSettings rules={[]} />
+      </CatalogExample>
+      <CatalogExample label="Chat, Session, and Always Rules">
+        <PermissionRulesSettings rules={PERMISSION_RULES_DEMO} />
+      </CatalogExample>
+      <CatalogExample label="Revoking, with a Failure Message">
+        <PermissionRulesSettings
+          rules={PERMISSION_RULES_DEMO}
+          revoking={[JSON.stringify(['/work/demo.hs2', '', 'Bash', 'rm -rf build'])]}
+          message="Could not revoke the rule. The server is unavailable."
+        />
+      </CatalogExample>
+    </>
+  );
+}
+
 export function resetTrashSettingsDemo() {
   trashDemo.value = TRASH_DEMO_INITIAL;
 }
@@ -352,6 +387,7 @@ export const demoModule: DemoModule = {
       reset: resetSettingsWorkspaceDemo,
     },
     'trash-settings': { catalogExamples: true, Demo: TrashSettingsDemo, reset: resetTrashSettingsDemo },
+    'permission-rules-settings': { catalogExamples: true, Demo: PermissionRulesSettingsDemo },
   },
   wire: wireSetupSettingsDemo,
 };

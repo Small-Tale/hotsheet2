@@ -47,8 +47,11 @@ pub enum Decision {
 pub enum Scope {
     /// This request only — no rule recorded.
     Once,
-    /// Remembered for this bridge's lifetime (a "session").
+    /// Remembered for this bridge's lifetime (a "session"), for the whole project.
     Session,
+    /// Remembered in memory for the raising connection only — "Allow for this chat"
+    /// (HS2-JNHAYB). It outranks a project rule for that connection and ends with it.
+    Chat,
     /// Remembered durably (the caller persists the returned rule).
     Always,
 }
@@ -88,13 +91,77 @@ pub struct Rule {
     pub action: String,
     pub decision: Decision,
     /// `true` for an `Always` rule the caller should persist; `false` for a `Session`
-    /// rule that lives only for this bridge's lifetime.
+    /// or `Chat` rule that lives only in memory.
     pub persist: bool,
+    /// `Some(connection)` for a chat rule (HS2-JNHAYB) that answers only that connection's
+    /// requests; `None` for a project-wide rule.
+    pub connection: Option<String>,
 }
 
 impl Rule {
     fn matches(&self, project: &str, tool: &str, action: &str) -> bool {
         self.project == project && self.tool == tool && self.action == action
+    }
+
+    /// Whether two rules occupy the same slot: a newer one replaces an older one.
+    fn same_key(&self, other: &Rule) -> bool {
+        self.matches(&other.project, &other.tool, &other.action)
+            && self.connection == other.connection
+    }
+}
+
+/// The rule answering a request, by precedence (HS2-JNHAYB): the newest chat rule for the
+/// raising connection, else the newest project rule, else none (ask a human).
+fn effective_rule<'a>(
+    rules: &'a [Rule],
+    project: &str,
+    connection: &str,
+    tool: &str,
+    action: &str,
+) -> Option<&'a Rule> {
+    rules
+        .iter()
+        .rev()
+        .find(|rule| {
+            rule.connection.as_deref() == Some(connection) && rule.matches(project, tool, action)
+        })
+        .or_else(|| {
+            rules
+                .iter()
+                .rev()
+                .find(|rule| rule.connection.is_none() && rule.matches(project, tool, action))
+        })
+}
+
+/// A remembered rule as a client lists it (HS2-JNHAYB): which scope holds it and what it
+/// answers. `scope` is `chat`, `session`, or `always`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RuleInfo {
+    pub project: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connection: Option<String>,
+    pub tool: String,
+    pub action: String,
+    pub decision: Decision,
+    pub scope: Scope,
+}
+
+impl From<&Rule> for RuleInfo {
+    fn from(rule: &Rule) -> Self {
+        Self {
+            project: rule.project.clone(),
+            connection: rule.connection.clone(),
+            tool: rule.tool.clone(),
+            action: rule.action.clone(),
+            decision: rule.decision,
+            scope: if rule.connection.is_some() {
+                Scope::Chat
+            } else if rule.persist {
+                Scope::Always
+            } else {
+                Scope::Session
+            },
+        }
     }
 }
 
@@ -115,6 +182,18 @@ pub struct Resolved {
     pub decision: Decision,
     /// A rule to persist, when the answer's scope was `Always`. `None` otherwise.
     pub persisted_rule: Option<Rule>,
+    /// Other queued requests the new rule now answers (HS2-JNHAYB): identical asks that were
+    /// waiting are resolved with it instead of prompting again.
+    pub cascaded: Vec<CascadedResolution>,
+}
+
+/// A queued request resolved because a newly remembered rule answers it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CascadedResolution {
+    pub id: u64,
+    pub project: String,
+    pub connection: String,
+    pub decision: Decision,
 }
 
 /// The permission bridge: a FIFO queue of pending requests + the active allow-rules.
@@ -174,12 +253,8 @@ impl PermissionBridge {
         let project = project.into();
         let tool = tool.into();
         let action = action.into();
-        if let Some(rule) = self
-            .rules
-            .iter()
-            .rev()
-            .find(|r| r.matches(&project, &tool, &action))
-        {
+        let connection = connection.into();
+        if let Some(rule) = effective_rule(&self.rules, &project, &connection, &tool, &action) {
             return Outcome::Auto(rule.decision);
         }
         self.next_id += 1;
@@ -187,7 +262,7 @@ impl PermissionBridge {
         self.queue.push_back(Request {
             id,
             project,
-            connection: connection.into(),
+            connection,
             tool,
             action,
             agent,
@@ -211,8 +286,38 @@ impl PermissionBridge {
     }
 
     /// Replace the allow-rules (seeding durable rules loaded from storage at startup).
+    /// Chat rules are in-memory state, not storage, so they survive a reseed.
     pub fn set_rules(&mut self, rules: Vec<Rule>) {
+        let chat: Vec<Rule> = self
+            .rules
+            .drain(..)
+            .filter(|rule| rule.connection.is_some())
+            .collect();
         self.rules = rules;
+        self.rules.extend(chat);
+    }
+
+    /// Forget one remembered rule (HS2-JNHAYB: revoke from settings). Matches the exact
+    /// slot — project, chat connection (or none), tool, action. Returns the removed rule.
+    pub fn revoke(
+        &mut self,
+        project: &str,
+        connection: Option<&str>,
+        tool: &str,
+        action: &str,
+    ) -> Option<Rule> {
+        let position = self.rules.iter().position(|rule| {
+            rule.matches(project, tool, action) && rule.connection.as_deref() == connection
+        })?;
+        Some(self.rules.remove(position))
+    }
+
+    /// Drop every chat rule of a connection when its chat closes (HS2-JNHAYB).
+    pub fn forget_connection(&mut self, connection: &str) -> usize {
+        let before = self.rules.len();
+        self.rules
+            .retain(|rule| rule.connection.as_deref() != Some(connection));
+        before - self.rules.len()
     }
 
     /// Answer a pending request by id. Removes it from the queue (position-independent,
@@ -224,6 +329,7 @@ impl PermissionBridge {
         let req = self.queue.remove(pos).expect("position just found");
 
         let mut persisted_rule = None;
+        let mut cascaded = Vec::new();
         if scope != Scope::Once {
             let rule = Rule {
                 project: req.project.clone(),
@@ -231,14 +337,46 @@ impl PermissionBridge {
                 action: req.action.clone(),
                 decision,
                 persist: scope == Scope::Always,
+                connection: (scope == Scope::Chat).then(|| req.connection.clone()),
             };
-            // A later rule for the same project-scoped key supersedes an earlier one.
-            self.rules
-                .retain(|r| !r.matches(&req.project, &req.tool, &req.action));
+            // A later rule for the same key (and the same chat, for a chat rule) supersedes
+            // an earlier one; chat and project rules coexist and precedence picks between them.
+            self.rules.retain(|r| !r.same_key(&rule));
             if scope == Scope::Always {
                 persisted_rule = Some(rule.clone());
             }
             self.rules.push(rule);
+            // Identical asks already waiting are answered by the new rule now (HS2-JNHAYB).
+            let rules = &self.rules;
+            let (answered, waiting): (Vec<Request>, Vec<Request>) =
+                self.queue.drain(..).partition(|queued| {
+                    effective_rule(
+                        rules,
+                        &queued.project,
+                        &queued.connection,
+                        &queued.tool,
+                        &queued.action,
+                    )
+                    .is_some()
+                });
+            self.queue = waiting.into();
+            for queued in answered {
+                let decision = effective_rule(
+                    &self.rules,
+                    &queued.project,
+                    &queued.connection,
+                    &queued.tool,
+                    &queued.action,
+                )
+                .map(|rule| rule.decision)
+                .expect("partitioned by a matching rule");
+                cascaded.push(CascadedResolution {
+                    id: queued.id,
+                    project: queued.project,
+                    connection: queued.connection,
+                    decision,
+                });
+            }
         }
 
         Some(Resolved {
@@ -246,6 +384,7 @@ impl PermissionBridge {
             connection: req.connection,
             decision,
             persisted_rule,
+            cascaded,
         })
     }
 }
@@ -479,9 +618,44 @@ impl SharedPermissionBridge {
     /// returns who raised it + any rule to persist. `None` if the id isn't pending.
     pub fn resolve(&self, id: u64, decision: Decision, scope: Scope) -> Option<Resolved> {
         let resolved = self.inner.lock_or_recover().resolve(id, decision, scope)?;
-        self.results.lock_or_recover().insert(id, decision);
+        {
+            let mut results = self.results.lock_or_recover();
+            results.insert(id, decision);
+            // Identical waiting asks the new rule answered wake with its decision too.
+            for cascaded in &resolved.cascaded {
+                results.insert(cascaded.id, cascaded.decision);
+            }
+        }
         self.cvar.notify_all();
         Some(resolved)
+    }
+
+    /// Every remembered rule, newest last (HS2-JNHAYB settings list).
+    pub fn rules(&self) -> Vec<RuleInfo> {
+        self.inner
+            .lock_or_recover()
+            .rules()
+            .iter()
+            .map(RuleInfo::from)
+            .collect()
+    }
+
+    /// Forget one remembered rule; see [`PermissionBridge::revoke`].
+    pub fn revoke(
+        &self,
+        project: &str,
+        connection: Option<&str>,
+        tool: &str,
+        action: &str,
+    ) -> Option<Rule> {
+        self.inner
+            .lock_or_recover()
+            .revoke(project, connection, tool, action)
+    }
+
+    /// Drop a closed chat's rules; see [`PermissionBridge::forget_connection`].
+    pub fn forget_connection(&self, connection: &str) -> usize {
+        self.inner.lock_or_recover().forget_connection(connection)
     }
 
     /// Withdraw an approval whose asking transport can no longer accept a decision.
@@ -541,6 +715,7 @@ impl StoredRule {
             action: self.action,
             decision: self.decision,
             persist: true,
+            connection: None,
         }
     }
 }
@@ -556,6 +731,23 @@ pub fn load_rules(path: &Path) -> Vec<Rule> {
         .into_iter()
         .map(StoredRule::into_rule)
         .collect()
+}
+
+/// Remove a durable rule for `(project, tool, action)` from `path` (HS2-JNHAYB revoke).
+/// Returns whether one was removed; a missing file removes nothing.
+pub fn remove_rule(path: &Path, project: &str, tool: &str, action: &str) -> std::io::Result<bool> {
+    let mut rules: Vec<StoredRule> = load_rules(path).iter().map(StoredRule::from).collect();
+    let before = rules.len();
+    // Durable rules may be stored with the project or with the legacy empty project.
+    rules.retain(|r| {
+        !((r.project == project || r.project.is_empty()) && r.tool == tool && r.action == action)
+    });
+    if rules.len() == before {
+        return Ok(false);
+    }
+    let json = serde_json::to_string_pretty(&rules).map_err(std::io::Error::other)?;
+    std::fs::write(path, json)?;
+    Ok(true)
 }
 
 /// Persist an `Always` allow-rule to `path`, replacing any existing rule for the same
@@ -611,6 +803,7 @@ mod tests {
                 action: "ls".into(),
                 decision: Decision::Allow,
                 persist: true,
+                connection: None,
             }],
         )));
         assert_eq!(b.request_blocking("c", "Bash", "ls"), Decision::Allow);
@@ -793,6 +986,7 @@ mod tests {
                 action: "ls".into(),
                 decision: Decision::Allow,
                 persist: true,
+                connection: None,
             }],
         )));
         // A rule answers immediately — the (tiny) timeout is never reached.
@@ -811,6 +1005,7 @@ mod tests {
                 action: "ls".into(),
                 decision: Decision::Allow,
                 persist: true,
+                connection: None,
             }],
         )));
         let seen = Arc::new(Mutex::new(Vec::<(u64, String, String)>::new()));
@@ -851,6 +1046,7 @@ mod tests {
             action: "ls".into(),
             decision: Decision::Allow,
             persist: true,
+            connection: None,
         };
         append_rule(&path, &allow).unwrap();
         // A later answer for the SAME (tool, action) replaces the earlier one.
@@ -971,6 +1167,7 @@ mod tests {
             action: "git status".into(),
             decision: Decision::Allow,
             persist: true,
+            connection: None,
         }]);
         assert_eq!(
             b.request("c", "Bash", "git status"),
@@ -980,9 +1177,10 @@ mod tests {
     }
 
     #[test]
-    fn a_later_answer_supersedes_an_earlier_rule_for_the_same_key() {
-        // Two requests for the SAME key both enqueue (no rule exists yet at request time),
-        // so answering the second supersedes the rule the first created.
+    fn a_remembered_answer_resolves_identical_waiting_asks() {
+        // Two requests for the SAME key both enqueue (no rule exists yet at request time);
+        // remembering the first answer resolves the second with it (HS2-JNHAYB) instead of
+        // prompting again.
         let mut b = PermissionBridge::new();
         let (id1, id2) = match (
             b.request("c", "Bash", "curl x"),
@@ -991,14 +1189,170 @@ mod tests {
             (Outcome::Pending(a), Outcome::Pending(b)) => (a, b),
             _ => panic!("both enqueue — no rule yet"),
         };
-        b.resolve(id1, Decision::Allow, Scope::Session).unwrap();
-        b.resolve(id2, Decision::Deny, Scope::Session).unwrap();
-
+        let resolved = b.resolve(id1, Decision::Allow, Scope::Session).unwrap();
+        assert_eq!(resolved.cascaded.len(), 1);
+        assert_eq!(resolved.cascaded[0].id, id2);
+        assert_eq!(resolved.cascaded[0].decision, Decision::Allow);
+        assert!(b.resolve(id2, Decision::Deny, Scope::Session).is_none());
+        assert_eq!(b.pending_count(), 0);
         assert_eq!(b.rules().len(), 1, "one rule per (tool, action) key");
-        assert_eq!(
-            b.request("c", "Bash", "curl x"),
-            Outcome::Auto(Decision::Deny),
-            "the later answer won"
+        // A one-time answer never cascades.
+        let (a, c) = match (
+            b.request("c", "Bash", "rm x"),
+            b.request("c", "Bash", "rm x"),
+        ) {
+            (Outcome::Pending(a), Outcome::Pending(c)) => (a, c),
+            _ => panic!("both enqueue"),
+        };
+        assert!(
+            b.resolve(a, Decision::Allow, Scope::Once)
+                .unwrap()
+                .cascaded
+                .is_empty()
         );
+        assert_eq!(b.pending().map(|r| r.id).collect::<Vec<_>>(), [c]);
+    }
+
+    fn pending(outcome: Outcome) -> u64 {
+        match outcome {
+            Outcome::Pending(id) => id,
+            Outcome::Auto(decision) => panic!("expected a prompt, got {decision:?}"),
+        }
+    }
+
+    /// HS2-JNHAYB transition matrix for rule precedence: chat > project > ask, across
+    /// chat-then-project, project-then-chat, revoke, and chat close.
+    #[test]
+    fn chat_rules_outrank_project_rules_which_outrank_asking() {
+        let mut b = PermissionBridge::new();
+        // ask → chat allow (only that chat).
+        let id = pending(b.request_for_project("p", "chat-a", "Bash", "ls"));
+        let resolved = b.resolve(id, Decision::Allow, Scope::Chat).unwrap();
+        assert!(
+            resolved.persisted_rule.is_none(),
+            "a chat rule is never persisted"
+        );
+        assert_eq!(
+            b.request_for_project("p", "chat-a", "Bash", "ls"),
+            Outcome::Auto(Decision::Allow)
+        );
+        let other = pending(b.request_for_project("p", "chat-b", "Bash", "ls"));
+        assert!(
+            matches!(
+                b.request_for_project("q", "chat-a", "Bash", "ls"),
+                Outcome::Pending(_)
+            ),
+            "project-scoped"
+        );
+        // chat-b denies for the whole project → chat-a's own allow still wins for chat-a.
+        b.resolve(other, Decision::Deny, Scope::Always).unwrap();
+        assert_eq!(
+            b.request_for_project("p", "chat-a", "Bash", "ls"),
+            Outcome::Auto(Decision::Allow)
+        );
+        assert_eq!(
+            b.request_for_project("p", "chat-c", "Bash", "ls"),
+            Outcome::Auto(Decision::Deny)
+        );
+        // A chat answer added after a project rule still wins for its chat (project then chat).
+        let infos: Vec<RuleInfo> = b.rules().iter().map(RuleInfo::from).collect();
+        assert_eq!(
+            infos.iter().map(|rule| rule.scope).collect::<Vec<_>>(),
+            [Scope::Chat, Scope::Always]
+        );
+        // Revoking the chat rule falls back to the project rule; revoking that asks again.
+        assert!(b.revoke("p", Some("chat-a"), "Bash", "ls").is_some());
+        assert_eq!(
+            b.request_for_project("p", "chat-a", "Bash", "ls"),
+            Outcome::Auto(Decision::Deny)
+        );
+        assert!(
+            b.revoke("p", Some("chat-a"), "Bash", "ls").is_none(),
+            "already gone"
+        );
+        assert!(b.revoke("p", None, "Bash", "ls").is_some());
+        let asked = pending(b.request_for_project("p", "chat-a", "Bash", "ls"));
+        // Empty → refill: a fresh chat rule, then closing the chat forgets it.
+        b.resolve(asked, Decision::Deny, Scope::Chat).unwrap();
+        assert_eq!(
+            b.request_for_project("p", "chat-a", "Bash", "ls"),
+            Outcome::Auto(Decision::Deny)
+        );
+        assert_eq!(b.forget_connection("chat-a"), 1);
+        assert!(matches!(
+            b.request_for_project("p", "chat-a", "Bash", "ls"),
+            Outcome::Pending(_)
+        ));
+    }
+
+    #[test]
+    fn a_chat_answer_cascades_only_to_that_chat_and_a_project_answer_respects_chat_rules() {
+        let mut b = PermissionBridge::new();
+        let a1 = pending(b.request_for_project("p", "chat-a", "Bash", "ls"));
+        let a2 = pending(b.request_for_project("p", "chat-a", "Bash", "ls"));
+        let b1 = pending(b.request_for_project("p", "chat-b", "Bash", "ls"));
+        let resolved = b.resolve(a1, Decision::Allow, Scope::Chat).unwrap();
+        assert_eq!(
+            resolved.cascaded.iter().map(|c| c.id).collect::<Vec<_>>(),
+            [a2]
+        );
+        assert_eq!(b.pending().map(|r| r.id).collect::<Vec<_>>(), [b1]);
+        // chat-a now has a chat allow; a project deny resolves chat-b's wait, and chat-a keeps allow.
+        let a3 = {
+            // A chat-a ask can't be pending (its chat rule answers), so add a third chat.
+            pending(b.request_for_project("p", "chat-c", "Bash", "ls"))
+        };
+        let resolved = b.resolve(b1, Decision::Deny, Scope::Session).unwrap();
+        assert_eq!(
+            resolved
+                .cascaded
+                .iter()
+                .map(|c| (c.id, c.decision))
+                .collect::<Vec<_>>(),
+            [(a3, Decision::Deny)]
+        );
+        assert_eq!(
+            b.request_for_project("p", "chat-a", "Bash", "ls"),
+            Outcome::Auto(Decision::Allow)
+        );
+    }
+
+    #[test]
+    fn reseeding_durable_rules_keeps_chat_rules_and_revoked_durable_rules_leave_the_file() {
+        let mut b = PermissionBridge::new();
+        let id = pending(b.request_for_project("p", "chat-a", "Bash", "ls"));
+        b.resolve(id, Decision::Allow, Scope::Chat).unwrap();
+        b.set_rules(Vec::new());
+        assert_eq!(
+            b.request_for_project("p", "chat-a", "Bash", "ls"),
+            Outcome::Auto(Decision::Allow)
+        );
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rules.json");
+        let rule = Rule {
+            project: "p".into(),
+            tool: "Bash".into(),
+            action: "ls".into(),
+            decision: Decision::Allow,
+            persist: true,
+            connection: None,
+        };
+        append_rule(&path, &rule).unwrap();
+        append_rule(
+            &path,
+            &Rule {
+                action: "pwd".into(),
+                ..rule.clone()
+            },
+        )
+        .unwrap();
+        assert!(remove_rule(&path, "p", "Bash", "ls").unwrap());
+        assert!(
+            !remove_rule(&path, "p", "Bash", "ls").unwrap(),
+            "already removed"
+        );
+        assert_eq!(load_rules(&path).len(), 1);
+        assert!(!remove_rule(&dir.path().join("missing.json"), "p", "Bash", "ls").unwrap());
     }
 }

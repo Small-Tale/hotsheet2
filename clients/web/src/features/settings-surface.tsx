@@ -40,6 +40,9 @@ export interface SettingsSurfaceDependencies {
   inheritGlobalShellHistory: Readable<boolean>;
   terminalSettingsMessage: Readable<string>;
   permissionAutomation: (projectId: string) => Props['permissions']['automation'];
+  permissionRules: (projectId: string) => Props['permissions']['rules'];
+  permissionRulesMessage: Readable<string>;
+  revokingPermissionRules: Readable<readonly string[]>;
   hideVerifiedColumn: () => boolean;
   showLoadingActivity: Readable<boolean>;
   keyboardShortcutOverrides: Readable<Props['keyboard']['overrides']>;
@@ -81,6 +84,9 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     inheritGlobalShellHistory,
     terminalSettingsMessage,
     permissionAutomation,
+    permissionRules,
+    permissionRulesMessage,
+    revokingPermissionRules,
     hideVerifiedColumn,
     showLoadingActivity,
     keyboardShortcutOverrides,
@@ -150,7 +156,14 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
           inheritGlobalShellHistory: inheritGlobalShellHistory.value,
           message: terminalSettingsMessage.value,
         }}
-        permissions={{ automation: permissionAutomation(current.id), delays: PERMISSION_DELAYS }}
+        permissions={{
+          automation: permissionAutomation(current.id),
+          delays: PERMISSION_DELAYS,
+          // Loaded only while the Permissions category shows (HS2-JNHAYB).
+          rules: settingsCategory() === 'permissions' ? permissionRules(current.id) : [],
+          revoking: revokingPermissionRules.value,
+          rulesMessage: permissionRulesMessage.value,
+        }}
         columns={{ hideVerified: hideVerifiedColumn() }}
         general={{ showLoadingActivity: showLoadingActivity.value }}
         keyboard={{

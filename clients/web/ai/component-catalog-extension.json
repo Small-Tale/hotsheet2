@@ -1064,6 +1064,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "permission-rules-settings",
+      "name": "PermissionRulesSettings",
+      "kind": "component",
+      "purpose": "Remembered permission answers (chat, session, and always rules) for a project, each with a revoke action (HS2-JNHAYB).",
+      "useWhen": [
+        "Hot Sheet needs to list a project's remembered permission answers and let the user revoke them."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific PermissionRulesSettings behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/permission-rules-settings.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "project-close-dialog",
       "name": "ProjectCloseDialog",
       "kind": "component",

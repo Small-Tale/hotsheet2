@@ -790,6 +790,20 @@ longer than client-side automation windows: an ignored or otherwise hidden popup
 not advance a client's visible-presentation countdown and must not disappear after the
 old five-minute transport timeout.
 
+**Fewer repeat prompts (HS2-JNHAYB).** Besides Allow Once and Always Allow, the popup offers
+**Allow for This Chat** (`scope: "chat"`): an in-memory rule for the asking connection only,
+dropped when that drive connection closes and never written to disk. Rules apply by
+precedence **chat > project > ask**: the newest chat rule for the raising connection wins,
+else the newest project rule (`session` or `always`), else a human is asked. Remembering
+an answer (chat, session, or always) also resolves every identical request already
+waiting — the resolve response lists them in `also_resolved` and each gets its own
+`permission_resolved` event. The client groups identical pending requests (same project,
+connection, tool, and action) into one popup that names the count; a one-time answer is
+sent for each. `GET /permissions/rules` lists every remembered rule with its scope and
+`DELETE /permissions/rules` `{project, connection?, tool, action}` revokes one (removing a
+durable rule from the store's rule file too); Settings → Permissions lists the project's
+remembered answers with a revoke action.
+
 This is also the seam for **other prompts** the ticket mentions — the bridge is a
 generic "the tool needs a human decision" channel, not just tool-permissions.
 

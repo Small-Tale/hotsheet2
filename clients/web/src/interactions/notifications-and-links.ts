@@ -38,6 +38,8 @@ export interface NotificationAndLinkInteractionsDependencies {
     scope: PermissionScope,
     automatic?: boolean,
   ) => Promise<void>;
+  /** Forget one remembered permission answer from Settings (HS2-JNHAYB). */
+  readonly revokePermissionRule: (projectId: string, key: string) => Promise<void>;
   readonly error: Signal<string>;
   readonly selectedProjectId: Signal<string>;
   readonly hideVerifiedByProject: Signal<Record<string, boolean>>;
@@ -63,6 +65,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     permissionInbox,
     pendingPermissions,
     resolvePermission,
+    revokePermissionRule,
     error,
     selectedProjectId,
     hideVerifiedByProject,
@@ -148,6 +151,17 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
           data(target).scope as PermissionScope,
         );
     }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.revokePermissionRule.selector,
+      (_event, target) => {
+        const key = data(target).ruleKey;
+        if (key) void revokePermissionRule(selectedProjectId.value, key);
+      },
+    ),
   );
   lifetime.add(
     delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.dismissAppError.selector, () => {

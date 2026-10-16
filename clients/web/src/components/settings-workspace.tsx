@@ -10,11 +10,17 @@ import { Text } from '@kerfjs/ui/text';
 import type { AiToolDefaults, AiToolDescriptor } from '../api';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
-import { formatPermissionDelay, type PermissionAutomation, permissionDelaysFor } from '../permission-notifications';
+import {
+  formatPermissionDelay,
+  type PermissionAutomation,
+  permissionDelaysFor,
+  type PermissionRule,
+} from '../permission-notifications';
 import { AiToolSettings } from './ai-tool-settings';
 import type { CommandSettingsEditorProps } from './command-settings-editor';
 import { CommandSettingsEditor } from './command-settings-editor';
 import { KeyboardSettings, type KeyboardSettingsProps } from './keyboard-settings';
+import { PermissionRulesSettings } from './permission-rules-settings';
 import { type SettingsCategory, settingsCategoryTitle } from './settings-navigation';
 import {
   AccountsSettings,
@@ -32,7 +38,14 @@ export interface SettingsWorkspaceProps {
   commands: CommandSettingsEditorProps;
   lifecycle: { days: number; message: string; draft?: TrashRetentionDraft };
   terminals: { inheritGlobalShellHistory: boolean; message: string };
-  permissions: { automation: PermissionAutomation; delays: readonly number[] };
+  permissions: {
+    automation: PermissionAutomation;
+    delays: readonly number[];
+    /** Remembered answers for this project (HS2-JNHAYB). */
+    rules?: readonly PermissionRule[];
+    revoking?: readonly string[];
+    rulesMessage?: string;
+  };
   columns: { hideVerified: boolean };
   general: { showLoadingActivity: boolean };
   keyboard: KeyboardSettingsProps;
@@ -109,6 +122,11 @@ export function SettingsWorkspace({
             auto-allow or Stop auto-deny disables that automatic decision for this request. Auto-allow after 0 seconds
             allows each request without showing the popup; it is still recorded in Notifications.
           </Text>
+          <PermissionRulesSettings
+            rules={permissions.rules ?? []}
+            revoking={permissions.revoking}
+            message={permissions.rulesMessage}
+          />
         </List>
       )}
       {category === 'columns' && (

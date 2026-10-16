@@ -1,0 +1,101 @@
+import '@awesome.me/webawesome/dist/components/button/button.js';
+
+import { EmptyState } from '@kerfjs/ui/empty-state';
+import { List } from '@kerfjs/ui/list';
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
+import { Text } from '@kerfjs/ui/text';
+import { ShieldCheck, ShieldX, Trash2 } from 'lucide';
+
+import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
+import { type PermissionRule, permissionRuleKey } from '../permission-notifications';
+
+export interface PermissionRulesSettingsProps {
+  rules: readonly PermissionRule[];
+  /** Rule keys whose revoke request is in flight. */
+  revoking?: readonly string[];
+  message?: string;
+}
+
+const SCOPE_LABELS: Record<PermissionRule['scope'], string> = {
+  chat: 'This chat only, until it closes',
+  session: 'This project, until the server restarts',
+  always: 'This project, always',
+};
+
+/** The first line of a remembered action; commands can span lines. */
+function actionSummary(action: string) {
+  const first = action.split('\n', 1)[0] ?? '';
+  return first.trim() || '(any input)';
+}
+
+/**
+ * Settings → Permissions: every answer Hot Sheet remembers for this project (HS2-JNHAYB) — "Allow for
+ * this chat" rules, session rules, and durable "Always Allow" rules — each revocable. Chat rules
+ * outrank project rules for their chat; revoking one makes the next identical request ask again (or
+ * fall back to the project rule).
+ */
+export function PermissionRulesSettings({ rules, revoking = [], message = '' }: PermissionRulesSettingsProps) {
+  return (
+    <section data-component="permission-rules-settings" aria-label="Remembered Permission Answers">
+      <List gap="xs">
+        <Text variant="h3" size="compact">
+          Remembered answers
+        </Text>
+        {rules.length === 0 ? (
+          <EmptyState
+            icon={<LucideIcon size="xl" icon={ShieldCheck} name="shield-check" />}
+            title="No Remembered Answers"
+            detail="Answers you give with Allow for This Chat or Always Allow appear here so you can revoke them."
+          />
+        ) : (
+          <List gap="xs" rootAttributes={{ role: 'list', 'aria-label': 'Remembered Answers' }}>
+            {rules.map((rule) => {
+              const key = permissionRuleKey(rule),
+                allowed = rule.decision === 'allow',
+                summary = actionSummary(rule.action);
+              return (
+                <Row
+                  vAlign="middle"
+                  gap="m"
+                  rootAttributes={{
+                    'data-permission-rule': key,
+                    'data-permission-rule-scope': rule.scope,
+                  }}
+                >
+                  <LucideIcon
+                    icon={allowed ? ShieldCheck : ShieldX}
+                    name={allowed ? 'shield-check' : 'shield-x'}
+                    label={allowed ? 'Allowed' : 'Denied'}
+                  />
+                  <List gap="none" flex>
+                    <Text wrap="truncate" title={rule.action} flush>
+                      {`${rule.tool}: ${summary}`}
+                    </Text>
+                    <Text tone="quiet" size="compact" flush>
+                      {`${allowed ? 'Allow' : 'Deny'} · ${SCOPE_LABELS[rule.scope]}`}
+                    </Text>
+                  </List>
+                  <wa-button
+                    appearance="plain"
+                    size="small"
+                    {...NOTIFICATIONS_AND_LINKS_ACTIONS.revokePermissionRule.attrs}
+                    data-rule-key={key}
+                    disabled={revoking.includes(key)}
+                    aria-label={`Revoke ${rule.tool}: ${summary}`}
+                    title="Forget this answer; the next identical request asks again"
+                  >
+                    <LucideIcon icon={Trash2} name="trash-2" />
+                  </wa-button>
+                </Row>
+              );
+            })}
+          </List>
+        )}
+        <Text tone="quiet" size="compact" role="status">
+          {message}
+        </Text>
+      </List>
+    </section>
+  );
+}

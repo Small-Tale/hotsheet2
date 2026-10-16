@@ -13,6 +13,7 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   pauseNotifications: action('pause-notifications'),
   resumeNotifications: action('resume-notifications'),
   resolvePermission: action('resolve-permission'),
+  revokePermissionRule: action('revoke-permission-rule'),
   dismissAppError: action('dismiss-app-error'),
   openHaltedSession: action('open-halted-session'),
   dismissHaltedSession: action('dismiss-halted-session'),

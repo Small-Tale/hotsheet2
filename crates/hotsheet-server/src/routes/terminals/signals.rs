@@ -809,7 +809,8 @@ pub(crate) async fn kill_terminal(
 #[derive(Deserialize)]
 pub(crate) struct PermissionAnswer {
     decision: hotsheet_aitools::PermissionDecision,
-    /// `once` | `session` | `always` (default `once`).
+    /// `once` | `chat` | `session` | `always` (default `once`). `chat` remembers the answer
+    /// for the raising connection only, in memory (HS2-JNHAYB).
     #[serde(default = "default_scope")]
     scope: hotsheet_aitools::PermissionScope,
 }
@@ -825,6 +826,9 @@ pub(crate) struct PermissionResolved {
     decision: hotsheet_aitools::PermissionDecision,
     /// Whether an `Always` rule was persisted durably.
     persisted: bool,
+    /// Other pending ids the remembered answer resolved too (HS2-JNHAYB).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    also_resolved: Vec<u64>,
 }
 
 /// `POST /permissions/{id}` `{decision, scope}` — answer a pending request. Wakes the
@@ -841,6 +845,7 @@ pub(crate) async fn resolve_permission(
     };
     let event_scope = match body.scope {
         hotsheet_aitools::PermissionScope::Once => "once",
+        hotsheet_aitools::PermissionScope::Chat => "chat",
         hotsheet_aitools::PermissionScope::Session => "session",
         hotsheet_aitools::PermissionScope::Always => "always",
     };
@@ -874,9 +879,97 @@ pub(crate) async fn resolve_permission(
         assignment: None,
         turn: None,
     });
+    // Identical asks the new rule answered resolve the same way (HS2-JNHAYB); each gets its
+    // own nudge so every client records it with the decision instead of as external.
+    for cascaded in &resolved.cascaded {
+        let decision = match cascaded.decision {
+            hotsheet_aitools::PermissionDecision::Allow => "allow",
+            hotsheet_aitools::PermissionDecision::Deny => "deny",
+        };
+        state.emit(ChangeEvent {
+            cursor: None,
+            store: cascaded.project.clone(),
+            kind: "permission_resolved".to_string(),
+            id: cascaded.id.to_string(),
+            slug: String::new(),
+            message: Some(format!("{decision}:{event_scope}")),
+            activity: None,
+            assignment: None,
+            turn: None,
+        });
+    }
     Ok(Json(PermissionResolved {
         connection: resolved.connection,
         decision: resolved.decision,
         persisted,
+        also_resolved: resolved
+            .cascaded
+            .iter()
+            .map(|cascaded| cascaded.id)
+            .collect(),
     }))
+}
+
+/// `GET /permissions/rules` — every remembered answer (HS2-JNHAYB): chat rules (this server
+/// run, one connection), session rules, and durable `always` rules, for Settings to list and
+/// revoke. Durable rules are also seeded under the legacy empty project; those duplicates
+/// are omitted.
+pub(crate) async fn list_permission_rules(
+    State(state): State<AppState>,
+) -> Json<Vec<hotsheet_aitools::PermissionRuleInfo>> {
+    Json(
+        state
+            .permissions
+            .rules()
+            .into_iter()
+            .filter(|rule| !rule.project.is_empty())
+            .collect(),
+    )
+}
+
+/// Body for `DELETE /permissions/rules`: the exact remembered slot to forget.
+#[derive(Deserialize)]
+pub(crate) struct RevokePermissionRule {
+    project: String,
+    #[serde(default)]
+    connection: Option<String>,
+    tool: String,
+    action: String,
+}
+
+/// `DELETE /permissions/rules` — forget one remembered answer (HS2-JNHAYB). A durable rule
+/// is also removed from the store's rule file so it does not return after a restart. 404
+/// when no such rule is remembered.
+pub(crate) async fn revoke_permission_rule(
+    State(state): State<AppState>,
+    Json(body): Json<RevokePermissionRule>,
+) -> Result<StatusCode, ApiError> {
+    let removed = state
+        .permissions
+        .revoke(
+            &body.project,
+            body.connection.as_deref(),
+            &body.tool,
+            &body.action,
+        )
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "no such remembered rule"))?;
+    if removed.persist {
+        // The legacy empty-project copy seeded from the same file must go too.
+        state.permissions.revoke("", None, &body.tool, &body.action);
+        let path = state
+            .permission_rule_paths
+            .lock_or_recover()
+            .get(&body.project)
+            .cloned();
+        if let Some(path) = path {
+            hotsheet_aitools::remove_permission_rule(
+                &path,
+                &body.project,
+                &body.tool,
+                &body.action,
+            )
+            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+        }
+    }
+    Ok(StatusCode::NO_CONTENT)
 }

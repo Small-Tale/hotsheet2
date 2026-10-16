@@ -14198,6 +14198,177 @@ async fn an_always_answer_persists_a_rule_that_auto_resolves_next_time() {
     );
 }
 
+/// HS2-JNHAYB: "Allow for this chat" answers only its connection, cascades to identical
+/// waiting asks, and every remembered rule is listed and revocable (durable ones from disk).
+#[tokio::test]
+async fn chat_scoped_answers_cascade_list_and_revoke_through_real_routes() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let rules = dir.path().join("permissions.json");
+    let project = dir.path().display().to_string();
+    let st = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_permission_rules(&rules);
+    let bridge = st.permission_bridge();
+    let app = app(st);
+    let ask = |connection: &'static str, action: &'static str| {
+        let bridge = bridge.clone();
+        let project = project.clone();
+        std::thread::spawn(move || {
+            bridge.request_blocking_for_project(project, connection, "Bash", action)
+        })
+    };
+    let pending = || {
+        let app = app.clone();
+        async move {
+            body_json(
+                app.oneshot(authed("GET", "/permissions", None))
+                    .await
+                    .unwrap(),
+            )
+            .await
+            .as_array()
+            .unwrap()
+            .clone()
+        }
+    };
+    let wait_for = |count: usize| async move {
+        {
+            loop {
+                let list = pending().await;
+                if list.len() == count {
+                    return list;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+        }
+    };
+
+    // Two identical asks from chat-a and one from chat-b.
+    let a1 = ask("chat-a", "npm test");
+    wait_for(1).await;
+    let a2 = ask("chat-a", "npm test");
+    wait_for(2).await;
+    let b1 = ask("chat-b", "npm test");
+    let list = wait_for(3).await;
+    let first = list[0]["id"].as_u64().unwrap();
+    let ack = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/permissions/{first}"),
+                Some(r#"{"decision":"allow","scope":"chat"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        ack["persisted"], false,
+        "a chat answer is never written to disk"
+    );
+    assert_eq!(ack["also_resolved"].as_array().unwrap().len(), 1);
+    assert_eq!(format!("{:?}", a1.join().unwrap()), "Allow");
+    assert_eq!(
+        format!("{:?}", a2.join().unwrap()),
+        "Allow",
+        "the identical ask cascaded"
+    );
+    let left = wait_for(1).await;
+    assert_eq!(left[0]["connection"], "chat-b", "another chat still asks");
+    assert!(!rules.exists(), "nothing durable yet");
+
+    // chat-b answers Always Deny: durable, listed, and chat-a keeps its own allow.
+    let b_id = left[0]["id"].as_u64().unwrap();
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/permissions/{b_id}"),
+            Some(r#"{"decision":"deny","scope":"always"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(format!("{:?}", b1.join().unwrap()), "Deny");
+    assert_eq!(
+        format!("{:?}", ask("chat-a", "npm test").join().unwrap()),
+        "Allow"
+    );
+    assert_eq!(
+        format!("{:?}", ask("chat-c", "npm test").join().unwrap()),
+        "Deny"
+    );
+    let listed = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let scopes: Vec<_> = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|rule| {
+            (
+                rule["scope"].clone(),
+                rule["connection"].clone(),
+                rule["decision"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        scopes,
+        [
+            (
+                serde_json::json!("chat"),
+                serde_json::json!("chat-a"),
+                serde_json::json!("allow")
+            ),
+            (
+                serde_json::json!("always"),
+                serde_json::Value::Null,
+                serde_json::json!("deny")
+            ),
+        ]
+    );
+
+    // Revoke the durable rule: gone from memory and disk; chat-c asks again.
+    let revoke = |body: String| {
+        let app = app.clone();
+        async move {
+            app.oneshot(authed("DELETE", "/permissions/rules", Some(&body)))
+                .await
+                .unwrap()
+                .status()
+        }
+    };
+    let durable = serde_json::json!({"project": project, "tool": "Bash", "action": "npm test"});
+    assert_eq!(revoke(durable.to_string()).await, StatusCode::NO_CONTENT);
+    assert_eq!(revoke(durable.to_string()).await, StatusCode::NOT_FOUND);
+    assert!(hotsheet_aitools::load_permission_rules(&rules).is_empty());
+    let c2 = ask("chat-c", "npm test");
+    let again = wait_for(1).await;
+    bridge.cancel(again[0]["id"].as_u64().unwrap());
+    c2.join().unwrap();
+    // Revoke the chat rule: chat-a asks again too.
+    let chat = serde_json::json!({
+        "project": project, "connection": "chat-a", "tool": "Bash", "action": "npm test"
+    });
+    assert_eq!(revoke(chat.to_string()).await, StatusCode::NO_CONTENT);
+    let a3 = ask("chat-a", "npm test");
+    let again = wait_for(1).await;
+    bridge.cancel(again[0]["id"].as_u64().unwrap());
+    assert_eq!(format!("{:?}", a3.join().unwrap()), "Deny");
+    let listed = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(listed.as_array().unwrap().is_empty());
+}
+
 #[tokio::test]
 async fn permission_rules_are_isolated_and_persisted_per_hosted_project() {
     let primary_dir = tempfile::tempdir().unwrap();

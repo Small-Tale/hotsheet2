@@ -20,6 +20,8 @@ export interface PermissionRequestCardProps {
   countdown?: string;
   countdownAction?: 'allow' | 'deny';
   error?: string;
+  /** Pending requests identical to this one, itself included (HS2-JNHAYB); one answer covers them all. */
+  groupCount?: number;
 }
 
 function isHistory(item: PermissionItem | PermissionHistoryItem): item is PermissionHistoryItem {
@@ -40,6 +42,7 @@ function historyLabel(item: PermissionHistoryItem): string {
   const prefix = item.automatic ? 'Automatically ' : '';
   if (item.decision === 'deny') return `${prefix}denied permission`;
   if (item.scope === 'always') return `${prefix}allowed this kind of request`;
+  if (item.scope === 'chat') return `${prefix}allowed for this chat`;
   return `${prefix}allowed permission`;
 }
 
@@ -72,6 +75,7 @@ export function PermissionRequestCard({
   countdown,
   countdownAction = 'allow',
   error,
+  groupCount = 1,
 }: PermissionRequestCardProps) {
   const history = isHistory(item);
   const alwaysSupported = !history && item.always_allow_supported === true;
@@ -179,6 +183,20 @@ export function PermissionRequestCard({
             Deny
           </wa-button>
         </span>
+        <span class="permission-request-card__decision">
+          <wa-button
+            appearance="outlined"
+            size="small"
+            {...NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.attrs}
+            data-decision="allow"
+            data-scope="chat"
+            data-request-key={item.key}
+            disabled={state === 'resolving'}
+            title="Allow this exact request again in this chat without asking, until the chat closes"
+          >
+            Allow for This Chat
+          </wa-button>
+        </span>
         {alwaysSupported && (
           <span class="permission-request-card__decision">
             <wa-button
@@ -234,6 +252,11 @@ export function PermissionRequestCard({
       endActions={decisions}
     >
       <>
+        {!history && groupCount > 1 && (
+          <p class="permission-request-card__explanation" data-permission-group-count={String(groupCount)}>
+            {`${groupCount} identical requests are waiting; your answer applies to all of them.`}
+          </p>
+        )}
         {explanation && <p class="permission-request-card__explanation">{explanation}</p>}
         {error && (
           <p class="permission-request-card__error" role="alert">

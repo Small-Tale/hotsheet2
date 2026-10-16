@@ -11,6 +11,8 @@ import {
   permissionBelongsToProject,
   permissionDelaysFor,
   PermissionInbox,
+  permissionRuleKey,
+  projectPermissionRules,
   VisiblePermissionTimer,
 } from './permission-notifications';
 
@@ -182,5 +184,39 @@ describe('permission notifications', () => {
     expect(permissionBelongsToProject({ ...request, project: '/q.hs2' }, connections, projects, 'p')).toBe(false);
     expect(permissionBelongsToProject({ ...request, project: '/p.hs2' }, connections, projects, 'p')).toBe(true);
     expect(permissionBelongsToProject(request, connections, projects, 'p')).toBe(true);
+  });
+});
+
+describe('chat-scoped answers and identical-request groups (HS2-JNHAYB)', () => {
+  it('groups pending requests by project, chat, tool, and action, and shrinks as they resolve', () => {
+    const inbox = new PermissionInbox();
+    inbox.reconcile(
+      project,
+      [
+        request,
+        { ...request, id: 2 },
+        { ...request, id: 3, connection: 'other-chat' },
+        { ...request, id: 4, action: 'npm run lint' },
+      ],
+      [],
+      10,
+    );
+    expect(inbox.identical('p:1').map((item) => item.key)).toEqual(['p:1', 'p:2']);
+    expect(inbox.identical('p:3').map((item) => item.key)).toEqual(['p:3']);
+    expect(inbox.identical('missing')).toEqual([]);
+    inbox.resolve('p:1', 'allow', 'chat', false, 20);
+    expect(inbox.identical('p:2').map((item) => item.key)).toEqual(['p:2']);
+    expect(inbox.history(20)[0]).toMatchObject({ key: 'p:1', scope: 'chat' });
+  });
+  it('parses a chat resolution and filters remembered rules to the project', () => {
+    expect(parsePermissionResolution('allow:chat')).toEqual({ decision: 'allow', scope: 'chat' });
+    expect(parsePermissionResolution('deny:session')).toEqual({ decision: 'deny', scope: 'once' });
+    const rules = [
+      { project: '/p', tool: 'Bash', action: 'ls', decision: 'allow', scope: 'always' },
+      { project: '/p/.hs2', connection: 'c', tool: 'Bash', action: 'ls', decision: 'deny', scope: 'chat' },
+      { project: '/elsewhere', tool: 'Bash', action: 'ls', decision: 'allow', scope: 'session' },
+    ] as const;
+    expect(projectPermissionRules(rules, { ...project, stores: ['/p/.hs2'] })).toHaveLength(2);
+    expect(permissionRuleKey(rules[0])).not.toBe(permissionRuleKey(rules[1]));
   });
 });

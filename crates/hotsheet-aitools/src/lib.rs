@@ -52,9 +52,10 @@ pub use model_catalog::{
 pub use permission::{
     DEFAULT_PERMISSION_TIMEOUT, Decision as PermissionDecision, Outcome as PermissionOutcome,
     PermissionAsk, PermissionBridge, Request as PermissionRequest, Resolved as PermissionResolved,
-    Rule as PermissionRule, Scope as PermissionScope, SharedPermissionBridge,
-    StoredRule as StoredPermissionRule, append_rule as append_permission_rule,
-    load_rules as load_permission_rules,
+    Rule as PermissionRule, RuleInfo as PermissionRuleInfo, Scope as PermissionScope,
+    SharedPermissionBridge, StoredRule as StoredPermissionRule,
+    append_rule as append_permission_rule, load_rules as load_permission_rules,
+    remove_rule as remove_permission_rule,
 };
 pub use ports::{
     AcpClient, AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, ProcessSignals,

@@ -6472,6 +6472,69 @@
       }
     },
     {
+      "id": "permission-rules-settings",
+      "name": "PermissionRulesSettings",
+      "kind": "component",
+      "purpose": "Remembered permission answers (chat, session, and always rules) for a project, each with a revoke action (HS2-JNHAYB).",
+      "source": "src/components/permission-rules-settings.tsx",
+      "publicExports": [
+        {
+          "name": "PermissionRulesSettings"
+        }
+      ],
+      "sourceLinks": ["src/components/permission-rules-settings.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["content"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/permission-rules-settings.tsx",
+        "composition": "src/components/permission-rules-settings.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet needs to list a project's remembered permission answers and let the user revoke them."],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific PermissionRulesSettings behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "main-shell",
       "name": "MainShell",
       "kind": "composition",

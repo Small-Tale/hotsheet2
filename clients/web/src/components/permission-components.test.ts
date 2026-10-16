@@ -13,6 +13,7 @@ import {
   PermissionRequestPopup,
   updatePermissionCountdownText,
 } from './permission-request-card';
+import { PermissionRulesSettings } from './permission-rules-settings';
 
 const pending: PermissionItem = {
   id: 7,
@@ -276,5 +277,50 @@ describe('notification pause controls (HS2-QYA9SC)', () => {
     expect(banner).toContain('data-action="resume-notifications"');
     expect(banner).toContain('class="shell-banner" data-component="notifications-paused-banner" data-tone="info"');
     expect(banner).toContain('data-lucide="bell-off"');
+  });
+});
+
+describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
+  it('offers Allow for This Chat and announces a group of identical requests', () => {
+    const single = String(PermissionRequestCard({ item: pending, presentation: 'popup' }));
+    expect(single).toMatch(/data-scope="chat"[^>]*>\s*Allow for This Chat/);
+    expect(single).not.toContain('data-permission-group-count');
+    const grouped = String(PermissionRequestCard({ item: pending, presentation: 'popup', groupCount: 3 }));
+    expect(grouped).toContain('data-permission-group-count="3"');
+    expect(grouped).toContain('3 identical requests are waiting');
+    const remembered = String(
+      PermissionRequestCard({ item: { ...pending, decision: 'allow', scope: 'chat', resolvedAt: 20 } }),
+    );
+    expect(remembered).toContain('allowed for this chat');
+    expect(remembered).not.toContain('Allow for This Chat');
+  });
+  it('lists remembered rules with their scope and a revoke action, or an empty state', () => {
+    const empty = String(PermissionRulesSettings({ rules: [] }));
+    expect(empty).toContain('No Remembered Answers');
+    const markup = String(
+      PermissionRulesSettings({
+        rules: [
+          {
+            project: '/p',
+            connection: 'chat-a',
+            tool: 'Bash',
+            action: 'npm test\nmore',
+            decision: 'allow',
+            scope: 'chat',
+          },
+          { project: '/p', tool: 'Bash', action: 'rm -rf build', decision: 'deny', scope: 'always' },
+        ],
+        revoking: [JSON.stringify(['/p', '', 'Bash', 'rm -rf build'])],
+        message: 'Could not revoke the rule.',
+      }),
+    );
+    expect(markup).toContain('Bash: npm test');
+    expect(markup).toContain('This chat only, until it closes');
+    expect(markup).toContain('Deny · This project, always');
+    expect(markup.match(/data-action="revoke-permission-rule"/g)).toHaveLength(2);
+    expect(markup).toMatch(
+      /aria-label="Revoke Bash: rm -rf build"[^>]*disabled|disabled[^>]*aria-label="Revoke Bash: rm -rf build"/,
+    );
+    expect(markup).toContain('Could not revoke the rule.');
   });
 });

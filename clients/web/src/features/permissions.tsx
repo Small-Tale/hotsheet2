@@ -23,7 +23,10 @@ import {
   type PermissionDecision,
   PermissionInbox,
   type PermissionItem,
+  type PermissionRule,
+  permissionRuleKey,
   type PermissionScope,
+  projectPermissionRules,
   VisiblePermissionTimer,
 } from '../permission-notifications';
 
@@ -58,6 +61,17 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionTimer = new VisiblePermissionTimer();
   const permissionAutomationByProject = signal<Record<string, PermissionAutomation>>({});
   const permissionResolutionErrors = signal<Record<string, string>>({});
+  // Remembered answers per project for Settings → Permissions (HS2-JNHAYB). Loaded when that view
+  // shows a project whose list is missing or stale; any permission resolution marks every project
+  // stale. Never polled.
+  const permissionRulesByProject = signal<Record<string, PermissionRule[]>>({}),
+    permissionRulesMessage = signal(''),
+    revokingPermissionRules = signal<readonly string[]>([]);
+  const freshPermissionRules = new Set<string>(),
+    loadingPermissionRules = new Set<string>();
+  const markPermissionRulesStale = () => {
+    freshPermissionRules.clear();
+  };
   // App-wide pause (HS2-QYA9SC): no popup in any project while set, so its countdown also freezes.
   const notificationsPaused = signal(loadNotificationsPaused());
   let permissionPolling = false,
@@ -184,14 +198,33 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     decision: PermissionDecision,
     scope: PermissionScope,
     automatic = false,
+    grouped = !automatic,
   ) {
-    const finishTiming = beginInteractionTiming('permission-decision', { project: item.projectId }),
-      owning = projects.value.find((value) => value.id === item.projectId);
+    const owning = projects.value.find((value) => value.id === item.projectId);
     if (!owning) return;
+    // One answer covers every identical waiting request (HS2-JNHAYB). A remembered answer is sent
+    // once — the server resolves the identical asks with the new rule; a one-time answer is sent
+    // for each request in the group.
+    const group = grouped ? permissionInbox.identical(item.key) : [item];
+    if (group.length > 1) {
+      const [first, ...rest] = group;
+      // A remembered answer resolves the rest on the server; settle them here now (a failed send
+      // restores only the first, and the next reconcile re-adds anything still pending).
+      if (scope !== 'once')
+        for (const other of rest)
+          if (permissionInbox.resolve(other.key, decision, scope)) permissionTimer.remove(other.key);
+      await Promise.all([
+        resolvePermission(first, decision, scope, automatic, false),
+        ...(scope === 'once' ? rest.map((other) => resolvePermission(other, decision, scope, false, false)) : []),
+      ]);
+      return;
+    }
+    const finishTiming = beginInteractionTiming('permission-decision', { project: item.projectId });
     permissionResolutionErrors.value = Object.fromEntries(
       Object.entries(permissionResolutionErrors.value).filter(([key]) => key !== item.key),
     );
     if (!permissionInbox.resolve(item.key, decision, scope, automatic)) return;
+    if (scope !== 'once') markPermissionRulesStale();
     permissionResolutionEpoch += 1;
     persistPermissionHistory();
     permissionTimer.remove(item.key);
@@ -226,6 +259,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     resolution?: { decision: PermissionDecision; scope: PermissionScope },
   ) {
     permissionResolutionEpoch += 1;
+    if (resolution?.scope !== 'once') markPermissionRulesStale();
     const removed = resolution
       ? permissionInbox.resolve(key, resolution.decision, resolution.scope)
       : permissionInbox.removeExternal(key);
@@ -302,9 +336,61 @@ export function createPermissionsController(dependencies: PermissionsDependencie
           error,
           countdown,
           countdownAction: automation.action === 'off' ? undefined : automation.action,
+          groupCount: permissionInbox.identical(permission.key).length,
         }}
       />
     );
+  }
+
+  function permissionRules(projectId = selectedProjectId.value) {
+    const project = projects.value.find((value) => value.id === projectId);
+    if (project && !freshPermissionRules.has(projectId) && !loadingPermissionRules.has(projectId))
+      queueMicrotask(() => void loadPermissionRules(project));
+    return permissionRulesByProject.value[projectId] ?? [];
+  }
+
+  /** Fetch one project's remembered answers once; a failure leaves it stale for the next view. */
+  async function loadPermissionRules(project: Project) {
+    if (freshPermissionRules.has(project.id) || loadingPermissionRules.has(project.id)) return;
+    loadingPermissionRules.add(project.id);
+    freshPermissionRules.add(project.id);
+    try {
+      const rules = await new Api(project.apiPath, '', { trackBusy: false }).permissionRules();
+      permissionRulesByProject.value = {
+        ...permissionRulesByProject.value,
+        [project.id]: projectPermissionRules(rules, project),
+      };
+    } catch (reason) {
+      permissionRulesMessage.value = `Could not load remembered answers. ${reason instanceof Error ? reason.message : String(reason)}`;
+    } finally {
+      loadingPermissionRules.delete(project.id);
+    }
+  }
+
+  /** Forget one remembered answer from Settings → Permissions (HS2-JNHAYB). */
+  async function revokePermissionRule(projectId: string, key: string) {
+    const project = projects.value.find((value) => value.id === projectId),
+      rule = permissionRules(projectId).find((value) => permissionRuleKey(value) === key);
+    if (!project || !rule) return;
+    revokingPermissionRules.value = [...revokingPermissionRules.value, key];
+    permissionRulesMessage.value = '';
+    try {
+      await new Api(project.apiPath).revokePermissionRule(rule);
+      permissionRulesByProject.value = {
+        ...permissionRulesByProject.value,
+        [projectId]: permissionRules(projectId).filter((value) => permissionRuleKey(value) !== key),
+      };
+    } catch (reason) {
+      if (reason instanceof ApiHttpError && reason.status === 404)
+        permissionRulesByProject.value = {
+          ...permissionRulesByProject.value,
+          [projectId]: permissionRules(projectId).filter((value) => permissionRuleKey(value) !== key),
+        };
+      else
+        permissionRulesMessage.value = `Could not revoke the rule. ${reason instanceof Error ? reason.message : String(reason)}`;
+    } finally {
+      revokingPermissionRules.value = revokingPermissionRules.value.filter((value) => value !== key);
+    }
   }
 
   /** Stop the countdown interval and storage listener; a later start re-registers them. */
@@ -314,6 +400,10 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   }
   return {
     dispose,
+    permissionRules,
+    permissionRulesMessage,
+    revokingPermissionRules,
+    revokePermissionRule,
     loadPermissionAutomation,
     permissionRevision,
     permissionInbox,

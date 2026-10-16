@@ -44,6 +44,7 @@ import type {
 } from './api';
 import type { CompatibilityRange, ServerCompatibility } from './compatibility';
 import { isRecord } from './json-value';
+import type { PermissionRule } from './permission-notifications';
 
 /**
  * Response parsers for successful Hot Sheet server bodies (HS2-34P6XY). `Api` and the
@@ -465,10 +466,28 @@ export const parsePermissionRequest = shape<PermissionRequest>(
   { project: isString, agent: isString, always_allow_supported: isBoolean },
 );
 
-export const parsePermissionDecision = shape<{ connection: string; decision: 'allow' | 'deny'; persisted: boolean }>(
+export const parsePermissionDecision = shape<{
+  connection: string;
+  decision: 'allow' | 'deny';
+  persisted: boolean;
+  also_resolved?: number[];
+}>(
   'permission decision',
   { connection: isString, decision: (field) => field === 'allow' || field === 'deny' },
-  { persisted: isBoolean },
+  { persisted: isBoolean, also_resolved: listOf(isNumber) },
+);
+
+/** A remembered permission answer (HS2-JNHAYB). */
+export const parsePermissionRule = shape<PermissionRule>(
+  'permission rule',
+  {
+    project: isString,
+    tool: isString,
+    action: isString,
+    decision: (field) => field === 'allow' || field === 'deny',
+    scope: (field) => field === 'chat' || field === 'session' || field === 'always',
+  },
+  { connection: isString },
 );
 
 export const parseToolConnection = shape<ToolConnection>(

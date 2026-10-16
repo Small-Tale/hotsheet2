@@ -1,5 +1,6 @@
 export type PermissionDecision = 'allow' | 'deny';
-export type PermissionScope = 'once' | 'always';
+/** `chat` remembers the answer for the asking chat only, in memory (HS2-JNHAYB). */
+export type PermissionScope = 'once' | 'chat' | 'always';
 export type PermissionHistoryDecision = PermissionDecision | 'external';
 export type PermissionAutomationAction = 'off' | 'allow' | 'deny';
 
@@ -41,6 +42,31 @@ export interface PermissionHistoryItem extends PermissionItem {
   resolvedAt: number;
   automatic?: boolean;
 }
+/** A remembered answer as `GET /permissions/rules` lists it (HS2-JNHAYB). */
+export interface PermissionRule {
+  project: string;
+  connection?: string;
+  tool: string;
+  action: string;
+  decision: PermissionDecision;
+  scope: 'chat' | 'session' | 'always';
+}
+
+/** The remembered rules that belong to `project` (its checkout root or one of its stores). */
+export function projectPermissionRules(
+  rules: readonly PermissionRule[],
+  project: Pick<PermissionProject, 'id' | 'root' | 'stores'>,
+): PermissionRule[] {
+  return rules.filter(
+    (rule) => rule.project === project.id || rule.project === project.root || project.stores?.includes(rule.project),
+  );
+}
+
+/** The identity a client uses to name one remembered rule (row keys and revoke targets). */
+export function permissionRuleKey(rule: Pick<PermissionRule, 'project' | 'connection' | 'tool' | 'action'>): string {
+  return JSON.stringify([rule.project, rule.connection ?? '', rule.tool, rule.action]);
+}
+
 export interface PermissionAutomation {
   action: PermissionAutomationAction;
   delayMs: number;
@@ -125,7 +151,7 @@ export function parsePermissionResolution(
 ): { decision: PermissionDecision; scope: PermissionScope } | undefined {
   const [decision, scope] = message?.split(':') ?? [];
   if (decision !== 'allow' && decision !== 'deny') return undefined;
-  return { decision, scope: scope === 'always' ? 'always' : 'once' };
+  return { decision, scope: scope === 'always' ? 'always' : scope === 'chat' ? 'chat' : 'once' };
 }
 
 export class PermissionInbox {
@@ -143,6 +169,21 @@ export class PermissionInbox {
   }
   visible() {
     return this.pending().find((item) => !item.ignored);
+  }
+  /**
+   * Pending requests identical to `key`'s — same project, chat, tool, and action — oldest first,
+   * including `key` itself (HS2-JNHAYB). The popup shows them as one group and one answer covers it.
+   */
+  identical(key: string) {
+    const item = this.pendingItems.get(key);
+    if (!item) return [];
+    return this.pending().filter(
+      (other) =>
+        other.projectId === item.projectId &&
+        other.connection === item.connection &&
+        other.tool === item.tool &&
+        other.action === item.action,
+    );
   }
   reconcile(
     project: PermissionProject,

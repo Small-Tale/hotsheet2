@@ -750,6 +750,8 @@ pub(crate) async fn delete_drive_connection(
     }
     if closed != client_drive::DriveClosed::NotFound {
         let permissions = state.permission_bridge();
+        // The chat is gone, so are its "Allow for this chat" answers (HS2-JNHAYB).
+        permissions.forget_connection(&id);
         for request in permissions
             .pending()
             .into_iter()
