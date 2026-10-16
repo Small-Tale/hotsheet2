@@ -1854,8 +1854,10 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   (HS2-ANRXAE); the workspace reader offers the same started-phase submenu. Each linked layer
   owns its new-note composer and its inline feedback replies and choice selections, so two
   readers never share a draft, even for the same note id; a new note is submitted explicitly
-  and frame reply drafts are not session-persisted. Attachment management remains
-  workspace-reader-only for now (HS2-W8VEMP). Each layer's
+  and frame reply drafts are not session-persisted. The top layer also manages its ticket's
+  attachments (HS2-W8VEMP): upload, batch label and purpose, regrouping, rename, remove,
+  host open/reveal, and gallery markup all target that layer's own ticket through its owning
+  project, gated by its provider's `attachments` and `attachment_edit` capabilities. Each layer's
   Code Review tab loads its own ticket's commits from its owning project when selected, shows
   the commit list, empty state, or load error like the workspace reader, and opens a commit's
   diff against that project (HS2-9Q4AFB).
@@ -1864,9 +1866,10 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   ordinary text so the legacy exception does not broaden the general slug grammar.
   Close or Escape removes one layer and restores focus to the link that opened it; unwinding
   the final linked layer returns to the unchanged inspector or editable workspace reader.
-  Linked reader attachment batches remain view-only even when their provider supports
-  editing: label and purpose controls are disabled, and no relabel or regroup action is
-  exposed (HS2-QZFZA8). Media still opens from that linked ticket in its own gallery.
+  A linked reader whose provider cannot edit existing attachments (`attachment_edit` false)
+  keeps its batches view-only: label and purpose controls are disabled, and no relabel or
+  regroup action is exposed (HS2-QZFZA8, HS2-W8VEMP). Media opens from that linked ticket in
+  its own gallery, whose attachment menu and markup act on that ticket too.
   References already inside Markdown links, inline/fenced code, or attachment controls
   remain unchanged.
 

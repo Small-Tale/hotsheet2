@@ -3,7 +3,7 @@ import { createScope } from 'kerfjs/scope';
 
 import { ANNOTATION_INTENT_ORDER, annotationDefaultIntent } from '../annotation-intents';
 import {
-  type Api,
+  Api,
   type AttachmentMetadata,
   type AttachmentPurpose,
   type FullTicket,
@@ -53,6 +53,7 @@ import {
   ATTACHMENTS_AND_GALLERY_TARGETS,
 } from '../interaction-attrs/attachments-and-gallery';
 import { ticketDraftKey } from '../ticket-draft-store';
+import { reconcileTicketReaderFrame, type TicketReaderFrame } from '../ticket-reader-stack';
 import { data } from './dom';
 import { type AttachmentMenu, type GallerySource, type Project } from './types';
 
@@ -70,7 +71,10 @@ export interface AttachmentAndGalleryInteractionsDependencies {
    */
   readonly canEditAttachments?: () => boolean;
   readonly tickets: Signal<TicketRow[]>;
-  readonly addAttachments: (slug: string, files: FileList | File[]) => Promise<void>;
+  readonly addAttachments: (slug: string, files: FileList | File[], frameId?: string) => Promise<void>;
+  /** Stacked reader frames; a frame's attachment actions target its own ticket and project (HS2-W8VEMP). */
+  readonly linkedReaderStack: Signal<TicketReaderFrame[]>;
+  readonly replaceLinkedReaderFrame: (id: string, update: (frame: TicketReaderFrame) => TicketReaderFrame) => void;
   readonly project: () => Project | undefined;
   readonly api: () => Api;
   readonly attachmentMessage: Signal<string>;
@@ -82,6 +86,8 @@ export interface AttachmentAndGalleryInteractionsDependencies {
   readonly resetAttachmentGallery: (url?: string, source?: GallerySource) => void;
   /** The stacked reader's ticket and project owning a gallery opener, if it is not the workspace reader (HS2-97E0QR). */
   readonly gallerySourceFor: (target: Element) => GallerySource | undefined;
+  /** The source the open gallery shows, so its menu acts on that ticket (HS2-W8VEMP). */
+  readonly activeGallerySource?: () => GallerySource | undefined;
   readonly shiftGallery: (delta: number) => void;
   readonly attachmentGalleryGeometry: Signal<AttachmentGalleryGeometry>;
   readonly attachmentGalleryScale: Signal<number | undefined>;
@@ -187,16 +193,68 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     attachmentGalleryMuted,
     attachmentGalleryVolume,
     canUseAttachments,
+    linkedReaderStack,
+    replaceLinkedReaderFrame,
   } = dependencies;
+  /**
+   * The ticket an attachment action belongs to: a linked reader frame's own ticket, reached through
+   * its owning project and provider capabilities, or the workspace selection (HS2-W8VEMP).
+   */
+  interface AttachmentOwner {
+    readonly projectId: string;
+    readonly ticket: FullTicket;
+    readonly client: Api;
+    readonly canUse: boolean;
+    readonly canEdit: boolean;
+    readonly frameId?: string;
+    readonly setTicket: (ticket: FullTicket) => void;
+    readonly refresh: () => Promise<void>;
+  }
+  const galleryFrameId = (target: Element) =>
+    target.closest('[data-component="attachment-gallery"]') ? dependencies.activeGallerySource?.()?.frameId : undefined;
+  const frameIdOf = (target: Element | null | undefined) => {
+    const id = target?.closest<HTMLElement>('[data-reader-frame-id]')?.dataset.readerFrameId;
+    return id && id !== 'workspace-reader' ? id : undefined;
+  };
+  function attachmentOwner(frameId?: string): AttachmentOwner | undefined {
+    const frame = frameId ? linkedReaderStack.value.find((item) => item.id === frameId) : undefined;
+    if (frame)
+      return {
+        projectId: frame.projectId,
+        ticket: frame.ticket,
+        client: new Api(frame.apiPath),
+        canUse: frame.capabilities.attachments,
+        canEdit: frame.capabilities.attachment_edit ?? frame.capabilities.attachments,
+        frameId: frame.id,
+        setTicket: (ticket) => {
+          replaceLinkedReaderFrame(frame.id, (current) => reconcileTicketReaderFrame(current, ticket));
+        },
+        refresh: () => Promise.resolve(),
+      };
+    const current = project(),
+      ticket = selectedTicket.value;
+    return current && ticket
+      ? {
+          projectId: current.id,
+          ticket,
+          client: api(),
+          canUse: canUseAttachments(),
+          canEdit: dependencies.canEditAttachments?.() ?? true,
+          setTicket: (updated) => {
+            selectedTicket.value = updated;
+          },
+          refresh: () => refreshProject(),
+        }
+      : undefined;
+  }
   const routedTicketId = (slug: string) =>
     (selectedTicket.value?.slug === slug ? selectedTicket.value.qualified_id : undefined) ??
     tickets.value.find((ticket) => ticket.slug === slug)?.qualified_id ??
     slug;
-  async function openSelectedAttachment(id: string) {
-    const current = project(),
-      ticket = selectedTicket.value;
-    if (!current || !ticket) return;
-    await api().checkoutAttachmentAction(current.id, ticket.qualified_id, id, 'open');
+  async function openSelectedAttachment(id: string, frameId?: string) {
+    const owner = attachmentOwner(frameId);
+    if (!owner) return;
+    await owner.client.checkoutAttachmentAction(owner.projectId, owner.ticket.qualified_id, id, 'open');
   }
   function metadataForBatch(
     batch: HTMLElement,
@@ -217,18 +275,26 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         : undefined,
     };
   }
-  async function persistAttachmentMetadata(ids: readonly string[], metadata: AttachmentMetadata): Promise<boolean> {
-    const current = project(),
-      ticket = selectedTicket.value;
-    if (!current || !ticket || !ids.length) return false;
+  async function persistAttachmentMetadata(
+    ids: readonly string[],
+    metadata: AttachmentMetadata,
+    frameId?: string,
+  ): Promise<boolean> {
+    const owner = attachmentOwner(frameId);
+    if (!owner || !owner.canEdit || !ids.length) return false;
     // No inline progress line: the global server-busy indicator covers the request (HS2-GHA1D3).
     attachmentMessage.value = '';
     try {
-      const result = await api().updateCheckoutAttachmentMetadata(current.id, ticket.qualified_id, [...ids], metadata);
-      selectedTicket.value = result.ticket;
+      const result = await owner.client.updateCheckoutAttachmentMetadata(
+        owner.projectId,
+        owner.ticket.qualified_id,
+        [...ids],
+        metadata,
+      );
+      owner.setTicket(result.ticket);
       attachmentMessage.value = '';
       showToast('Attachment group updated.');
-      await refreshProject();
+      await owner.refresh();
       return true;
     } catch (reason) {
       attachmentMessage.value = `Update failed: ${reason instanceof Error ? reason.message : String(reason)}`;
@@ -237,20 +303,28 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
   }
   // The batch label is ticket text (HS2-0QQHSZ): a controlled draft with a local recovery copy keyed by
   // project, ticket, and batch, written once when focus leaves the editor or the page hides.
+  // The label editor's scope is its reader frame id (or the inspector), so a linked frame's label
+  // edit drafts, merges, and saves against that frame's own ticket (HS2-W8VEMP).
+  const scopeFrame = (scope?: string) =>
+    scope && linkedReaderStack.value.some((item) => item.id === scope) ? scope : undefined;
   const labelEditor = createAttachmentLabelEditor({
     editing: attachmentLabelEditing,
     draftKey: (batchKey) => {
-      const current = project(),
-        ticket = selectedTicket.value;
-      return current && ticket
-        ? ticketDraftKey(current.id, ticket.qualified_id, 'attachment_label', batchKey)
+      const owner = attachmentOwner(scopeFrame(attachmentLabelEditing.value?.scope));
+      return owner
+        ? ticketDraftKey(owner.projectId, owner.ticket.qualified_id, 'attachment_label', batchKey)
         : undefined;
     },
     currentLabel: (edit) =>
-      selectedTicket.value?.attachments.find((item) => edit.ids?.includes(item.id))?.batch_label ?? '',
+      attachmentOwner(scopeFrame(edit.scope))?.ticket.attachments.find((item) => edit.ids?.includes(item.id))
+        ?.batch_label ?? '',
     describe: (batch) => metadataForBatch(batch),
     save: (edit, label) =>
-      persistAttachmentMetadata(edit.ids ?? [], { ...edit.metadata, batch_label: label || undefined }),
+      persistAttachmentMetadata(
+        edit.ids ?? [],
+        { ...edit.metadata, batch_label: label || undefined },
+        scopeFrame(edit.scope),
+      ),
     notify: showToast,
   });
   const flushLabelOnHide = () => {
@@ -270,40 +344,47 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
   lifetime.add(
     wireTicketAttachmentActions(document.body, {
       addFiles: (files, origin) => {
-        const slug =
-          origin.closest<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug ?? selectedTicket.value?.slug;
-        if (slug) void addAttachments(slug, files);
+        const frameId = frameIdOf(origin),
+          slug =
+            origin.closest<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug ??
+            attachmentOwner(frameId)?.ticket.slug;
+        if (slug) void addAttachments(slug, files, frameId);
       },
       extraDropTargets: INSPECTOR_RAIL_DROP_TARGET,
       labelEditor,
       changePurpose: (batch, ids) => {
-        void persistAttachmentMetadata(ids, metadataForBatch(batch));
+        void persistAttachmentMetadata(ids, metadataForBatch(batch), frameIdOf(batch));
       },
       regroup: (id, source, destination) => {
         if (!source) return;
+        const frameId = frameIdOf(source);
         if (!destination) {
           const role = source.dataset.attachmentActorRole as 'human' | 'ai' | 'system' | 'unknown' | undefined;
-          void persistAttachmentMetadata([id], {
-            batch_id: browserRandomId(),
-            batch_label: 'New group',
-            actor: role
-              ? {
-                  role,
-                  identity: source.dataset.attachmentActorIdentity || undefined,
-                  display_name: source.dataset.attachmentActorName || undefined,
-                }
-              : undefined,
-          });
+          void persistAttachmentMetadata(
+            [id],
+            {
+              batch_id: browserRandomId(),
+              batch_label: 'New group',
+              actor: role
+                ? {
+                    role,
+                    identity: source.dataset.attachmentActorIdentity || undefined,
+                    display_name: source.dataset.attachmentActorName || undefined,
+                  }
+                : undefined,
+            },
+            frameId,
+          );
           return;
         }
-        if (destination !== source) void persistAttachmentMetadata([id], metadataForBatch(destination));
+        if (destination !== source) void persistAttachmentMetadata([id], metadataForBatch(destination), frameId);
       },
     }),
   );
   lifetime.add(
     delegate(document.body, 'dblclick', ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentRow.selector, (event, target) => {
       if ((event.target as Element).closest('button, input, a')) return;
-      openSelectedAttachment(data(target).attachmentActionId!).catch((reason: unknown) => {
+      openSelectedAttachment(data(target).attachmentActionId!, frameIdOf(target)).catch((reason: unknown) => {
         error.value = reason instanceof Error ? reason.message : String(reason);
       });
     }),
@@ -330,7 +411,10 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
   // Row, gallery, and reference menus open and position through the wiring the UX demo shares (HS2-1RQA1E).
   lifetime.add(
     wireAttachmentContextMenuOpeners(document.body, {
-      canOpenFromPointer: () => dependencies.canEditAttachments?.() ?? true,
+      canOpenFromPointer: (target) =>
+        attachmentOwner(frameIdOf(target) ?? galleryFrameId(target))?.canEdit ??
+        dependencies.canEditAttachments?.() ??
+        true,
       open: openAttachmentContextMenu,
     }),
   );
@@ -360,7 +444,22 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         event.preventDefault();
         const current = project(),
           ticket = data(target).attachmentTicket,
-          name = data(target).attachmentName;
+          name = data(target).attachmentName,
+          // A reference inside a linked reader resolves against that reader's project (HS2-W8VEMP).
+          frameOwner = attachmentOwner(frameIdOf(target));
+        if (frameOwner?.frameId && ticket && name) {
+          void frameOwner.client
+            .checkoutAttachmentByNameAction(
+              frameOwner.projectId,
+              ticket === frameOwner.ticket.slug ? frameOwner.ticket.qualified_id : ticket,
+              name,
+              'open',
+            )
+            .catch((reason: unknown) => {
+              error.value = reason instanceof Error ? reason.message : String(reason);
+            });
+          return;
+        }
         if (current && ticket && name)
           void api()
             .checkoutAttachmentByNameAction(current.id, routedTicketId(ticket), name, 'open')
@@ -386,12 +485,14 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
           url: image.url,
           id: image.attachmentId,
           kind,
+          // The gallery's menu acts on the ticket the gallery shows, which may be a linked frame's.
+          owner: galleryFrameId(target),
         };
       return;
     }
     if (target.matches(ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentMenu.selector)) {
       const item = target.closest<HTMLElement>('[data-component="ticket-attachment-item"]'),
-        ticket = selectedTicket.value,
+        ticket = attachmentOwner(frameIdOf(target))?.ticket,
         name = item?.dataset.attachmentName,
         url = item?.dataset.attachmentUrl,
         id = item?.dataset.attachmentActionId;
@@ -399,19 +500,22 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         attachmentMenu.value = { x, y, ticket: ticket.slug, name, url, id, kind, reader };
       return;
     }
-    const ticket = data(target).attachmentTicket ?? selectedTicket.value?.slug,
+    const ticket = data(target).attachmentTicket ?? attachmentOwner(frameIdOf(target))?.ticket.slug,
       name = data(target).attachmentName,
       url = data(target).attachmentUrl,
       id = data(target).attachmentActionId ?? data(target).galleryAttachmentId;
     if (ticket && name && url) attachmentMenu.value = { x, y, ticket, name, url, id, kind, reader };
   }
+  /** The frame owning a menu: the gallery's source frame, else the reader the menu opened in. */
+  const menuFrameId = (menu: AttachmentMenu) => menu.owner ?? (menu.reader && scopeFrame(menu.reader));
   async function attachmentMenuHostAction(menu: AttachmentMenu, action: 'open' | 'reveal' | 'path') {
-    const current = project(),
-      ticket = selectedTicket.value;
-    if (!current || !ticket) return undefined;
-    return menu.id && menu.ticket === ticket.slug
-      ? api().checkoutAttachmentAction(current.id, ticket.qualified_id, menu.id, action)
-      : api().checkoutAttachmentByNameAction(current.id, routedTicketId(menu.ticket), menu.name, action);
+    const owner = attachmentOwner(menuFrameId(menu) || undefined);
+    if (!owner) return undefined;
+    return menu.id && menu.ticket === owner.ticket.slug
+      ? owner.client.checkoutAttachmentAction(owner.projectId, owner.ticket.qualified_id, menu.id, action)
+      : owner.frameId
+        ? owner.client.checkoutAttachmentByNameAction(owner.projectId, owner.ticket.qualified_id, menu.name, action)
+        : owner.client.checkoutAttachmentByNameAction(owner.projectId, routedTicketId(menu.ticket), menu.name, action);
   }
   lifetime.add(
     delegate(
@@ -431,7 +535,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
           return;
         }
         if (action === 'copy-reference') {
-          const local = menu.ticket === selectedTicket.value?.slug;
+          const local = menu.ticket === attachmentOwner(menuFrameId(menu) || undefined)?.ticket.slug;
           void copyText(`attachment:${local ? '' : `[${menu.ticket}]`}${menu.name}`)
             .then(() => {
               showToast('Attachment reference copied to clipboard.');
@@ -456,16 +560,15 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
           return;
         }
         if (action === 'rename') {
-          const current = project(),
-            ticket = selectedTicket.value,
+          const owner = attachmentOwner(menuFrameId(menu) || undefined),
             filename = window.prompt('Attachment filename', menu.name);
-          if (current && ticket && menu.id && filename?.trim())
-            void api()
-              .renameCheckoutAttachment(current.id, ticket.qualified_id, menu.id, filename.trim())
+          if (owner?.canEdit && menu.id && filename?.trim())
+            void owner.client
+              .renameCheckoutAttachment(owner.projectId, owner.ticket.qualified_id, menu.id, filename.trim())
               .then((result) => {
-                selectedTicket.value = result.ticket;
+                owner.setTicket(result.ticket);
                 showToast('Attachment renamed.');
-                return refreshProject();
+                return owner.refresh();
               })
               .catch((reason: unknown) => {
                 error.value = reason instanceof Error ? reason.message : String(reason);
@@ -474,7 +577,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         }
         if (action === 'remove') {
           if (menu.kind === 'host') resetAttachmentGallery();
-          void removeSelectedAttachment(menu.id);
+          void removeSelectedAttachment(menu.id, menuFrameId(menu) || undefined);
           return;
         }
         if (action === 'open' || action === 'reveal')
@@ -1292,17 +1395,16 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     },
     { signal: lifetime.signal },
   );
-  async function removeSelectedAttachment(id?: string) {
-    const current = project(),
-      ticket = selectedTicket.value;
-    if (!current || !ticket || !id || !canUseAttachments()) return;
+  async function removeSelectedAttachment(id?: string, frameId?: string) {
+    const owner = attachmentOwner(frameId);
+    if (!owner || !id || !owner.canUse) return;
     attachmentMessage.value = '';
     try {
-      const result = await api().deleteCheckoutAttachment(current.id, ticket.qualified_id, id);
-      selectedTicket.value = result.ticket;
+      const result = await owner.client.deleteCheckoutAttachment(owner.projectId, owner.ticket.qualified_id, id);
+      owner.setTicket(result.ticket);
       attachmentMessage.value = '';
       showToast('Attachment removed.');
-      await refreshProject();
+      await owner.refresh();
     } catch (reason) {
       attachmentMessage.value = `Remove failed: ${reason instanceof Error ? reason.message : String(reason)}`;
     }

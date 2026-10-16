@@ -36,6 +36,8 @@ export interface GalleryDependencies {
    */
   attachmentsEditable?: (ticket: FullTicket) => boolean;
   attachmentsCroppable?: (ticket: FullTicket) => boolean;
+  /** The API of a gallery source's own project, so stacked-reader markup saves there (HS2-W8VEMP). */
+  apiFor?: (project: Project) => Api;
 }
 
 export function createGalleryController(dependencies: GalleryDependencies) {
@@ -48,6 +50,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     error,
     attachmentsEditable = () => true,
     attachmentsCroppable = attachmentsEditable,
+    apiFor,
   } = dependencies;
   const attachmentGalleryUrl = signal<string | undefined>(undefined),
     gallerySource = signal<GallerySource | undefined>(undefined);
@@ -609,12 +612,15 @@ export function createGalleryController(dependencies: GalleryDependencies) {
           session.originalSize.height,
         );
     attachmentGallerySaveState.value = 'saving';
+    // Markup on a stacked reader's media saves through that reader's own project (HS2-W8VEMP).
+    const owner = gallerySource.value?.project,
+      client = owner?.id === session.projectId && apiFor ? apiFor(owner) : api();
     void (async () => {
       let result;
       try {
         result =
           cropChanged || session.revision
-            ? await api().updateCheckoutAttachmentMarkup(
+            ? await client.updateCheckoutAttachmentMarkup(
                 session.projectId,
                 session.qualifiedId,
                 session.attachmentId,
@@ -622,7 +628,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
                 crop,
                 session.revision,
               )
-            : await api().updateCheckoutAttachmentAnnotations(
+            : await client.updateCheckoutAttachmentAnnotations(
                 session.projectId,
                 session.qualifiedId,
                 session.attachmentId,
@@ -714,6 +720,8 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     finishGalleryAnnotationSession,
     discardGalleryAnnotationSession,
     shiftGallery,
+    /** The stacked reader source the gallery shows, if not the workspace selection (HS2-W8VEMP). */
+    activeGallerySource: () => gallerySource.value,
     get attachmentAnnotationGesture() {
       return attachmentAnnotationGesture;
     },

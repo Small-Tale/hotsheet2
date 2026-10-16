@@ -71,6 +71,8 @@ export interface AttachmentMenu {
   id?: string;
   kind: AttachmentContextMenuKind;
   reader?: string;
+  /** The linked reader frame whose ticket the menu acts on, when it opened from that frame's gallery (HS2-W8VEMP). */
+  owner?: string;
 }
 
 export interface DetailsFinishTask {
@@ -88,7 +90,9 @@ export interface DetailsFinishTask {
 export interface GallerySource {
   ticket: FullTicket;
   project: Project;
-  /** View-only source (a linked reader cannot edit attachments), so markup is unavailable. */
+  /** View-only source (its provider cannot edit attachments), so markup is unavailable. */
   readOnly?: boolean;
+  /** The linked reader frame the media belongs to (HS2-W8VEMP). */
+  frameId?: string;
   update?: (ticket: FullTicket) => void;
 }

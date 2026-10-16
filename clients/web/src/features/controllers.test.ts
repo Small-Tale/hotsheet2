@@ -694,8 +694,11 @@ describe('gallery source for stacked readers (HS2-97E0QR)', () => {
       selectedTicket = signal<FullTicket | null>(workspace),
       updates: FullTicket[] = [],
       saved: Array<[string, string, string]> = [],
-      api = new Api('/api/a');
-    vi.spyOn(api, 'updateCheckoutAttachmentAnnotations').mockImplementation(async (checkout, id, attachmentId) => {
+      api = new Api('/api/a'),
+      ownerApi = new Api('/api/b');
+    // A stacked reader's markup saves through its own project's API, never the workspace's (HS2-W8VEMP).
+    vi.spyOn(api, 'updateCheckoutAttachmentAnnotations').mockRejectedValue(new Error('workspace API used'));
+    vi.spyOn(ownerApi, 'updateCheckoutAttachmentAnnotations').mockImplementation(async (checkout, id, attachmentId) => {
       saved.push([checkout, id, attachmentId]);
       return { store: 'git', ticket: { ...linkedTicket, title: 'saved', store: 'git' } };
     });
@@ -703,6 +706,7 @@ describe('gallery source for stacked readers (HS2-97E0QR)', () => {
       selectedTicket,
       project: () => project('a'),
       api: () => api,
+      apiFor: (owning) => (owning.id === 'b' ? ownerApi : api),
       attachmentContext: (ticket, owning) => ({
         checkout: owning?.id ?? 'a',
         ticket: ticket.slug,

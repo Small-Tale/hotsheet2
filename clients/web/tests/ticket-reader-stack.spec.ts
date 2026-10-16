@@ -91,6 +91,7 @@ async function mockLayeredProjects(
   attachmentsFor: Record<string, Attachment[]> = {},
   notesFor: Record<string, unknown[]> = {},
   codeReviewRequests: Array<{ projectId: string; ticketId: string; method: string }> = [],
+  capabilityOverrides: Record<string, Record<string, unknown>> = {},
 ) {
   const chooser = ['/work/target', '/work/deep'];
   await page.route('**/*', async (route) => {
@@ -136,6 +137,7 @@ async function mockLayeredProjects(
               watch: true,
               provider_idempotency: true,
               query_fields: [],
+              ...(capabilityOverrides[projectId ?? ''] ?? {}),
             },
           },
         ],
@@ -503,12 +505,68 @@ test('edits a link-opened reader title and up-next like any other reader (HS2-KR
   await expect(inspector.getByRole('textbox', { name: 'Ticket Title' })).toHaveCount(0);
 });
 
-test('keeps linked reader attachment batches read-only even with an editable provider (HS2-QZFZA8)', async ({
-  page,
-}) => {
-  const attachmentWrites: string[] = [];
+/** A stateful attachment server for the linked target ticket (HS2-W8VEMP). */
+async function statefulTargetAttachments(page: Page, initial: Attachment[]) {
+  let attachments = [...initial];
+  const writes: Array<{ method: string; path: string; body?: unknown; filename?: string | null }> = [];
+  const ticketJson = () => ({
+    store: target.connection_id,
+    ...target,
+    blocked_reason: null,
+    concurrency_token: `token-target-${writes.length}`,
+    notes: [],
+    attachments,
+  });
+  await page.route('**/project-api/target-project/**/tickets/git-target%3Atarget**', async (route) => {
+    const request = route.request(),
+      method = request.method(),
+      path = decodeURIComponent(new URL(request.url()).pathname);
+    if (method === 'GET' && /\/tickets\/[^/]+$/.test(path)) return route.fulfill({ json: ticketJson() });
+    if (!path.includes('/attachments') || method === 'GET') return route.fallback();
+    const id = path.match(/\/attachments\/([^/]+)$/)?.[1];
+    if (method === 'POST' && path.endsWith('/attachments')) {
+      const filename = decodeURIComponent(request.headers()['x-hotsheet-filename'] ?? 'upload.png');
+      writes.push({ method, path, filename });
+      attachments = [
+        ...attachments,
+        {
+          id: `UP${attachments.length + 1}`,
+          filename,
+          created_at: '2026-09-11T00:04:00Z',
+          batch_id: decodeURIComponent(request.headers()['x-hotsheet-attachment-batch'] ?? 'upload-batch'),
+        },
+      ];
+      return route.fulfill({ json: ticketJson() });
+    }
+    const body = request.postDataJSON() as Record<string, unknown> | null;
+    writes.push({ method, path, body });
+    if (method === 'PATCH' && path.endsWith('/attachments')) {
+      const ids = body?.attachment_ids as string[];
+      attachments = attachments.map((item) =>
+        ids.includes(item.id)
+          ? {
+              ...item,
+              batch_id: body?.batch_id as string,
+              batch_label: body?.batch_label as string | undefined,
+              purpose: body?.purpose as Attachment['purpose'],
+            }
+          : item,
+      );
+    } else if (method === 'PATCH' && id)
+      attachments = attachments.map((item) =>
+        item.id === id ? { ...item, filename: body?.filename as string } : item,
+      );
+    else if (method === 'DELETE' && id) attachments = attachments.filter((item) => item.id !== id);
+    return route.fulfill({ json: ticketJson() });
+  });
+  return writes;
+}
+
+test('manages attachments in a link-opened reader through its owning project (HS2-W8VEMP)', async ({ page }) => {
+  const sourceWrites: string[] = [];
   page.on('request', (request) => {
-    if (request.url().includes('/attachments') && request.method() !== 'GET') attachmentWrites.push(request.url());
+    if (request.method() !== 'GET' && request.url().includes('/project-api/source-project/'))
+      sourceWrites.push(`${request.method()} ${request.url()}`);
   });
   await mockLayeredProjects(page, [], false, {
     source: [
@@ -521,17 +579,108 @@ test('keeps linked reader attachment batches read-only even with an editable pro
         purpose: 'reference',
       },
     ],
-    target: [
-      {
-        id: 'LINKED',
-        filename: 'linked.png',
-        created_at: '2026-09-11T00:02:00Z',
-        batch_id: 'linked-batch',
-        batch_label: 'Linked evidence',
-        purpose: 'problem_evidence',
-      },
-    ],
   });
+  const writes = await statefulTargetAttachments(page, [
+    {
+      id: 'LINKED',
+      filename: 'linked.png',
+      created_at: '2026-09-11T00:02:00Z',
+      batch_id: 'linked-batch',
+      batch_label: 'Linked evidence',
+      purpose: 'problem_evidence',
+    },
+  ]);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openProjects(page);
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
+  const workspaceReader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' });
+  await workspaceReader.getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
+  const linked = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
+  await linked.getByRole('tab', { name: /Attachments/ }).click();
+  const batch = linked.locator('[data-attachment-batch="linked-batch"]');
+  // Relabel the batch: the label saves once, on blur, against the frame's own ticket.
+  await linked.getByRole('button', { name: 'Edit batch label Linked evidence' }).dblclick();
+  const label = batch.locator('[name="attachment-batch-label"]');
+  await expect(label).toBeFocused();
+  await label.fill('Relabelled from a link');
+  await label.blur();
+  await expect
+    .poll(() => writes.map((item) => [item.method, (item.body as { batch_label?: string } | undefined)?.batch_label]))
+    .toEqual([['PATCH', 'Relabelled from a link']]);
+  const relabelled = linked.locator('[data-attachment-batch="linked-batch"]');
+  await expect(relabelled.getByRole('button', { name: 'Edit batch label Relabelled from a link' })).toBeVisible();
+  // Change the batch purpose.
+  await relabelled.locator('[name="attachment-batch-purpose"]').selectOption('correctness_evidence');
+  await expect
+    .poll(() => (writes.at(-1)?.body as { purpose?: string } | undefined)?.purpose)
+    .toBe('correctness_evidence');
+  // Upload a file through the frame's own file input.
+  await linked
+    .locator('input[type="file"][name="ticket-attachments"]')
+    .first()
+    .setInputFiles({ name: 'added-from-link.png', mimeType: 'image/png', buffer: GALLERY_PNG });
+  await expect.poll(() => writes.at(-1)).toMatchObject({ method: 'POST', filename: 'added-from-link.png' });
+  await expect(linked.getByText('added-from-link.png').first()).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-w8vemp-linked-attachments-wide.png' });
+  // Rename and remove through the attachment menu, against the frame's ticket.
+  page.once('dialog', (dialog) => void dialog.accept('renamed-from-link.png'));
+  await linked
+    .locator('[data-component="ticket-attachment-item"][data-attachment-name="linked.png"]')
+    .click({ button: 'right' });
+  await linked.locator('[data-context-menu="attachment"] [data-item-id="rename"]').click();
+  await expect
+    .poll(() => writes.at(-1))
+    .toMatchObject({ method: 'PATCH', body: { filename: 'renamed-from-link.png' } });
+  await expect(linked.getByText('renamed-from-link.png').first()).toBeVisible();
+  await linked
+    .locator('[data-component="ticket-attachment-item"][data-attachment-name="renamed-from-link.png"]')
+    .click({ button: 'right' });
+  await linked.locator('[data-context-menu="attachment"] [data-item-id="remove"]').click();
+  await expect.poll(() => writes.at(-1)?.method).toBe('DELETE');
+  await expect(linked.getByText('renamed-from-link.png')).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(linked.getByText('added-from-link.png').first()).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-w8vemp-linked-attachments-narrow.png' });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  expect(
+    writes.every(
+      (item) => item.path.includes('/project-api/target-project/') && item.path.includes('git-target:target'),
+    ),
+  ).toBe(true);
+  await linked.getByRole('button', { name: 'Close Ticket Reader' }).click();
+  await workspaceReader.getByRole('tab', { name: /Attachments/ }).click();
+  await expect(workspaceReader.getByRole('button', { name: 'Edit batch label Workspace evidence' })).toBeVisible();
+  expect(sourceWrites).toEqual([]);
+});
+
+test('keeps linked reader attachment batches read-only for a provider without attachment edits (HS2-QZFZA8)', async ({
+  page,
+}) => {
+  const attachmentWrites: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/attachments') && request.method() !== 'GET') attachmentWrites.push(request.url());
+  });
+  // The linked ticket's provider adds attachments but cannot edit existing ones (append-only).
+  await mockLayeredProjects(
+    page,
+    [],
+    false,
+    {
+      target: [
+        {
+          id: 'LINKED',
+          filename: 'linked.png',
+          created_at: '2026-09-11T00:02:00Z',
+          batch_id: 'linked-batch',
+          batch_label: 'Linked evidence',
+          purpose: 'problem_evidence',
+        },
+      ],
+    },
+    {},
+    [],
+    { 'target-project': { attachment_edit: false } },
+  );
   await page.setViewportSize({ width: 1200, height: 900 });
   await openProjects(page);
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
@@ -540,12 +689,9 @@ test('keeps linked reader attachment batches read-only even with an editable pro
   const linked = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
   await linked.getByRole('tab', { name: /Attachments/ }).click();
   const batch = linked.locator('[data-attachment-batch="linked-batch"]');
-  await expect(linked.getByText('Attachments are view-only in linked ticket readers.')).toBeVisible();
-  await expect(linked.getByText('This provider does not support attachment actions.')).toHaveCount(0);
   await expect(batch.getByRole('heading', { name: 'Linked evidence' })).toBeVisible();
   await expect(batch.locator('[name="attachment-batch-label"]')).toBeDisabled();
   await expect(batch.locator('[name="attachment-batch-purpose"]')).toBeDisabled();
-  await expect(batch.locator('[name="attachment-batch-purpose"]')).toHaveValue('problem_evidence');
   await expect(linked.locator('[data-action="edit-attachment-batch-label"]')).toHaveCount(0);
   await expect(
     linked.locator(
@@ -554,16 +700,7 @@ test('keeps linked reader attachment batches read-only even with an editable pro
   ).toHaveCount(0);
   await batch.getByRole('heading', { name: 'Linked evidence' }).dblclick();
   await expect(batch.locator('[name="attachment-batch-label"]')).not.toBeVisible();
-  await page.screenshot({ path: test.info().outputPath('linked-batch-readonly-wide.png') });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(batch.getByRole('heading', { name: 'Linked evidence' })).toBeVisible();
-  await page.screenshot({ path: test.info().outputPath('linked-batch-readonly-phone.png') });
   await linked.getByRole('button', { name: 'Close Ticket Reader' }).click();
-  await workspaceReader.getByRole('tab', { name: /Attachments/ }).click();
-  await expect(workspaceReader.getByRole('button', { name: 'Edit batch label Workspace evidence' })).toBeVisible();
-  await expect(workspaceReader.locator('[name="attachment-batch-purpose"]')).toBeEnabled();
-  await expect(workspaceReader.locator('[name="attachment-batch-purpose"]')).toHaveValue('reference');
-  await workspaceReader.getByRole('button', { name: 'Close Ticket Reader' }).click();
   expect(attachmentWrites).toEqual([]);
   expect(
     await page.evaluate(() => Object.keys(localStorage).filter((key) => key.includes('attachment_label'))),
@@ -601,8 +738,8 @@ test('opens media from a stacked linked reader in the gallery for that reader ti
     return Boolean(hit && node.contains(hit));
   });
   expect(galleryOnTop).toBe(true);
-  // The linked reader is view-only for attachments, so its gallery offers no markup either.
-  await expect(gallery.getByRole('button', { name: 'Annotate media' })).toBeDisabled();
+  // The linked reader's provider edits attachments, so its gallery offers markup (HS2-W8VEMP).
+  await expect(gallery.getByRole('button', { name: 'Annotate media' })).toBeEnabled();
   await page.screenshot({ path: test.info().outputPath('hs2-97e0qr-linked-reader-gallery.png') });
   // Closing the gallery returns to the linked reader, still stacked above the base reader.
   await page.keyboard.press('Escape');

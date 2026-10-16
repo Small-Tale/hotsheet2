@@ -1649,7 +1649,13 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     }
     return result.ticket;
   }
-  async function addAttachments(slug: string, files: FileList | File[]) {
+  async function addAttachments(slug: string, files: FileList | File[], frameId?: string) {
+    // A linked reader frame attaches to its own ticket through its owning project (HS2-W8VEMP).
+    const frame = frameId ? linkedReaderStack.value.find((item) => item.id === frameId) : undefined;
+    if (frame) {
+      await addLinkedReaderAttachments(frame, files);
+      return;
+    }
     const current = project(),
       ticket = selectedTicket.value?.slug === slug ? selectedTicket.value : undefined;
     if (!current || !ticket || files.length === 0 || !canUseAttachments()) return;
@@ -1677,6 +1683,34 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       error.value = message;
     } finally {
       loading.value = false;
+    }
+  }
+  async function addLinkedReaderAttachments(frame: TicketReaderFrame, files: FileList | File[]) {
+    const owner = projects.value.find((item) => item.id === frame.projectId);
+    if (!owner || files.length === 0 || !frame.capabilities.attachments) return;
+    attachmentMessage.value = `Adding ${files.length} attachment${files.length === 1 ? '' : 's'}…`;
+    try {
+      const client = new Api(frame.apiPath),
+        screened = await screenAttachmentFiles(Array.from(files)),
+        batch_id = attachmentUploadBatchId(frame.ticket.attachments, frame.ticket.notes, () => browserRandomId());
+      let updated: FullTicket = frame.ticket;
+      for (const file of screened.readable)
+        updated = await uploadAttachmentWithPoster(client, owner, updated, file, {
+          batch_id,
+          actor: { role: 'human' },
+        });
+      const result = updated;
+      if (result !== frame.ticket)
+        replaceLinkedReaderFrame(frame.id, (current) => reconcileTicketReaderFrame(current, result));
+      const warning = describeUnreadableAttachments(screened.unreadable);
+      attachmentMessage.value = warning;
+      error.value = warning;
+      if (screened.readable.length)
+        showToast(`${screened.readable.length} attachment${screened.readable.length === 1 ? '' : 's'} added.`);
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : String(reason);
+      attachmentMessage.value = `Attachment failed: ${message}`;
+      error.value = message;
     }
   }
   function selectionOrder(target: Element) {

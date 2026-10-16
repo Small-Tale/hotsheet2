@@ -266,9 +266,13 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
         codeReviewLoading={frame ? Boolean(frame.codeReview?.loading) : editable && codeReviewLoading.value}
         codeReviewMessage={frame ? (frame.codeReview?.message ?? '') : editable ? codeReviewMessage.value : ''}
         expandedCodeReviewCommits={frame || editable ? expandedCodeReviewCommits.value : []}
-        attachmentsEnabled={editable && canUseAttachments()}
-        attachmentsEditable={editable && canEditAttachments()}
-        attachmentMessage={editable ? attachmentMessage.value : 'Attachments are view-only in linked ticket readers.'}
+        attachmentsEnabled={frame ? active && capabilities!.attachments : editable && canUseAttachments()}
+        attachmentsEditable={
+          frame
+            ? active && (capabilities!.attachment_edit ?? capabilities!.attachments)
+            : editable && canEditAttachments()
+        }
+        attachmentMessage={editable || (frame && active) ? attachmentMessage.value : ''}
         attachmentLabelEditing={attachmentLabelEditingKey(attachmentLabelEditing.value, readerScope)}
         attachmentLabelDraft={attachmentLabelEditingDraft(attachmentLabelEditing.value, readerScope)}
         largeText={readerLargeText.value}
@@ -296,8 +300,9 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
     return {
       ticket: frame.ticket,
       project: owner,
-      // Linked readers never manage attachments (only the workspace reader is editable).
-      readOnly: true,
+      frameId: frame.id,
+      // A linked reader's media is editable exactly when its own provider edits attachments (HS2-W8VEMP).
+      readOnly: !(frame.capabilities.attachment_edit ?? frame.capabilities.attachments),
       update: (ticket) => {
         linkedReaderStack.value = linkedReaderStack.value.map((item) =>
           item.id === frame.id ? { ...item, ticket } : item,

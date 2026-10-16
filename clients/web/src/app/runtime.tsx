@@ -715,6 +715,7 @@ export async function startHotSheetWebClient() {
       (providerCapabilities.value[ticket.connection_id] as Capabilities | undefined)?.attachment_crop === true,
     attachmentsCroppable: (ticket) =>
       (providerCapabilities.value[ticket.connection_id] as Capabilities | undefined)?.attachment_crop === true,
+    apiFor: (owner) => new Api(owner.apiPath),
   });
   const {
     attachmentGalleryUrl,
@@ -752,6 +753,7 @@ export async function startHotSheetWebClient() {
     finishGalleryAnnotationSession,
     discardGalleryAnnotationSession,
     shiftGallery,
+    activeGallerySource,
   } = galleryController;
   const readerDetailsMode = signal<MarkdownEditorMode>('preview'),
     readerDetailsDraft = signal('');
@@ -4389,6 +4391,7 @@ export async function startHotSheetWebClient() {
     galleryImages,
     resetAttachmentGallery,
     gallerySourceFor,
+    activeGallerySource,
     shiftGallery,
     attachmentGalleryGeometry,
     attachmentGalleryScale,
