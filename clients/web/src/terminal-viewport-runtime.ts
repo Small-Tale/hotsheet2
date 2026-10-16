@@ -46,6 +46,7 @@ import {
   TERMINAL_DRAWER_RESIZE_END_EVENT,
   TERMINAL_FOCUS_RETRY_MS,
   TERMINAL_INITIAL_FOCUS_WINDOW_MS,
+  TERMINAL_INPUT_PROBE_TIMEOUT_MS,
   TERMINAL_PING_INTERVAL_MS,
   TERMINAL_PREVIEW_NATURAL_HEIGHT,
   TERMINAL_PREVIEW_NATURAL_WIDTH,
@@ -55,6 +56,7 @@ import {
   TERMINAL_VIEWPORT_RESUME_EVENT,
   terminalDedicatedGridSize,
   terminalFittedFontSize,
+  terminalInputNeedsProbe,
   terminalInverseScalePercent,
   terminalLivenessFrame,
   terminalPhysicalScale,
@@ -449,6 +451,8 @@ function initializeTerminalViewport(
     livenessSupported = false,
     lastInboundAt = 0,
     pingSeq = 0,
+    // While set, typed input is held behind an immediate liveness probe (HS2-J52ZJ7).
+    inputProbe: number | undefined,
     // Keystrokes typed while the socket is closed or still reopening, sent once it opens so a
     // reconnect never drops what the user typed (HS2-A1R38J). Bounded like a paste.
     pendingInput = '',
@@ -457,6 +461,7 @@ function initializeTerminalViewport(
     disposed = true;
     if (reconnect !== undefined) window.clearTimeout(reconnect);
     if (heartbeat !== undefined) window.clearInterval(heartbeat);
+    if (inputProbe !== undefined) window.clearTimeout(inputProbe);
     if (fitFrame !== undefined) window.cancelAnimationFrame(fitFrame);
     if (dashboardFrame !== undefined) window.cancelAnimationFrame(dashboardFrame);
     if (resumeFrame !== undefined) window.cancelAnimationFrame(resumeFrame);
@@ -719,11 +724,18 @@ function initializeTerminalViewport(
   // fresh socket instead of waiting for its close event (HS2-51HQ3S).
   const socketStale = () =>
     socket?.readyState === WebSocket.OPEN && terminalSocketStale({ livenessSupported, lastInboundAt, now: Date.now() });
+  // Held input stays in `pendingInput`, so the next socket replays it once it opens.
+  const endInputProbe = () => {
+    if (inputProbe !== undefined) window.clearTimeout(inputProbe);
+    inputProbe = undefined;
+    delete element.dataset.inputHeld;
+  };
   const abandonSocket = () => {
     const dead = socket;
     socket = undefined;
     if (heartbeat !== undefined) window.clearInterval(heartbeat);
     heartbeat = undefined;
+    endInputProbe();
     element.dataset.connection = 'reconnecting';
     try {
       dead?.close();
@@ -778,6 +790,15 @@ function initializeTerminalViewport(
     current.addEventListener('message', (event) => {
       if (socket !== current) return;
       lastInboundAt = Date.now();
+      // Any frame proves the socket is alive: release input held behind a probe (HS2-J52ZJ7).
+      if (inputProbe !== undefined) {
+        endInputProbe();
+        if (pendingInput) {
+          current.send(pendingInput);
+          pendingInput = '';
+          signalInteractionThrottled();
+        }
+      }
       if (typeof event.data === 'string') {
         const liveness = terminalLivenessFrame(event.data);
         if (liveness === 'hello') livenessSupported = true;
@@ -821,6 +842,7 @@ function initializeTerminalViewport(
       if (socket !== current || disposed) return;
       if (heartbeat !== undefined) window.clearInterval(heartbeat);
       heartbeat = undefined;
+      endInputProbe();
       // A parked viewport does not reconnect in the background: its owner evicts it, and the
       // terminal remounts fresh if it is shown again (HS2-WGTQ6X).
       if (parked) {
@@ -1094,10 +1116,37 @@ function initializeTerminalViewport(
       element.removeEventListener('focusin', signalInteraction);
     });
   }
+  // Typing after a quiet spell holds the input and probes the socket at once (HS2-J52ZJ7): the reply
+  // releases it, and no reply within the timeout abandons the socket so the fresh one replays it.
+  // A half-open socket can otherwise swallow keystrokes for up to the 15 s stale window.
+  const holdInputBehindProbe = (current: WebSocket, value: string) => {
+    pendingInput = bufferTerminalInput(pendingInput, value);
+    if (inputProbe !== undefined) return;
+    element.dataset.inputHeld = 'true';
+    current.send(terminalPing(++pingSeq));
+    inputProbe = window.setTimeout(() => {
+      inputProbe = undefined;
+      if (socket !== current) return;
+      abandonSocket();
+      reconnectNow();
+    }, TERMINAL_INPUT_PROBE_TIMEOUT_MS);
+  };
   const sendInput = (value: string) => {
     if (scaledPreview) return;
-    if (socket?.readyState === WebSocket.OPEN && !socketStale()) {
-      socket.send(value);
+    const current = socket;
+    if (current?.readyState === WebSocket.OPEN && !socketStale()) {
+      if (
+        terminalInputNeedsProbe({
+          livenessSupported,
+          lastInboundAt,
+          now: Date.now(),
+          probing: inputProbe !== undefined,
+        })
+      ) {
+        holdInputBehindProbe(current, value);
+        return;
+      }
+      current.send(value);
       signalInteractionThrottled();
       return;
     }

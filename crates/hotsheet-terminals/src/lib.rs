@@ -21,12 +21,13 @@ pub mod manager;
 pub mod osc;
 pub mod sizing;
 pub mod terminal;
+pub mod viewer_output;
 pub mod wire_bytes;
 
 pub use broker::{
-    BrokerClient, BrokerStream, BrokerTermInfo, DEFAULT_IDLE_GRACE, Request as BrokerRequest,
-    Response as BrokerResponse, SocketCleanup, StreamIn, StreamOut, run_broker_process,
-    serve_broker, serve_broker_with_idle,
+    BrokerClient, BrokerStream, BrokerStreamReader, BrokerStreamWriter, BrokerTermInfo,
+    DEFAULT_IDLE_GRACE, Request as BrokerRequest, Response as BrokerResponse, SocketCleanup,
+    StreamIn, StreamOut, run_broker_process, serve_broker, serve_broker_with_idle,
 };
 pub use busy::{Activity, BusyDetector, contains_spinner};
 pub use env::scrub_env;
@@ -34,4 +35,8 @@ pub use manager::{TermKey, TerminalManager};
 pub use osc::{OscScanner, TermState};
 pub use sizing::{Decision, SizeArbiter, SizePolicy, ViewportClaim};
 pub use terminal::{SCROLLBACK_BYTES, TermError, TermSpec, Terminal, TerminalKind};
+pub use viewer_output::{
+    MAX_COALESCED_BYTES, PendingOutput, VIEWER_QUEUE_FRAMES, ViewerClosed, ViewerFrame,
+    pump_viewer_output,
+};
 pub use wire_bytes::{BytesEncoding, WireBytes};

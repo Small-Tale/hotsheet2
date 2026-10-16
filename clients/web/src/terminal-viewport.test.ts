@@ -13,14 +13,18 @@ import {
   TERMINAL_DEDICATED_SCROLLBACK,
   TERMINAL_DRAWER_RESIZE_END_EVENT,
   TERMINAL_FOCUS_RETRY_MS,
+  TERMINAL_INPUT_PROBE_TIMEOUT_MS,
   TERMINAL_MAGNIFIED_SCROLLBACK,
   TERMINAL_PENDING_INPUT_LIMIT,
   TERMINAL_PREVIEW_NATURAL_HEIGHT,
   TERMINAL_PREVIEW_NATURAL_WIDTH,
   TERMINAL_PREVIEW_SCROLLBACK,
+  TERMINAL_QUIET_INPUT_AFTER_MS,
+  TERMINAL_STALE_AFTER_MS,
   terminalBrowserWebSocketUrl,
   terminalDedicatedGridSize,
   terminalFittedFontSize,
+  terminalInputNeedsProbe,
   terminalInverseScalePercent,
   terminalPhysicalScale,
   terminalPreviewGridAspect,
@@ -81,6 +85,21 @@ describe('terminal viewport protocol', () => {
     expect(bufferTerminalInput('', 'x'.repeat(TERMINAL_PENDING_INPUT_LIMIT + 3))).toHaveLength(
       TERMINAL_PENDING_INPUT_LIMIT,
     );
+  });
+  it('holds input typed after a quiet spell behind a probe, in order, only for liveness servers (HS2-J52ZJ7)', () => {
+    const at = (quietMs: number, probing = false, livenessSupported = true) =>
+      terminalInputNeedsProbe({ livenessSupported, lastInboundAt: 10_000, now: 10_000 + quietMs, probing });
+    expect(TERMINAL_QUIET_INPUT_AFTER_MS).toBe(3_000);
+    // The probe settles well inside the 15 s stale window that previously swallowed keystrokes.
+    expect(TERMINAL_QUIET_INPUT_AFTER_MS + TERMINAL_INPUT_PROBE_TIMEOUT_MS).toBeLessThan(TERMINAL_STALE_AFTER_MS);
+    expect(at(0)).toBe(false);
+    expect(at(TERMINAL_QUIET_INPUT_AFTER_MS)).toBe(false);
+    expect(at(TERMINAL_QUIET_INPUT_AFTER_MS + 1)).toBe(true);
+    // Once a probe is in flight, later keys queue behind the held ones even if a frame just arrived.
+    expect(at(0, true)).toBe(true);
+    // A server that never announced liveness never answers a probe, so its input is never held.
+    expect(at(60_000, false, false)).toBe(false);
+    expect(at(0, true, false)).toBe(false);
   });
   it('sends a final resize claim shortly after a drag settles', () => {
     expect(TERMINAL_FOCUS_RETRY_MS).toBe(120);

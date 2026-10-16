@@ -528,6 +528,13 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   handoff: output concurrent with attach appears exactly once in either the snapshot or
   the new subscriber. A lagged subscriber atomically takes a replacement snapshot and a
   fresh live receiver rather than appending an overlapping replay (HS2-5W0V9M).
+- **Input never waits behind output (HS2-J52ZJ7).** Every attach (the server's direct and
+  broker WebSocket paths, and the broker's own stream to the server) splits into an output
+  pump, a writer, and an input reader joined by a bounded 32-frame queue. Under heavy output
+  to a slow viewer, the viewer's keystrokes still reach the PTY at once. While the queue is
+  full, the pump coalesces live output into one pending frame instead of letting the
+  fan-out lag. Only past 256 KiB of coalesced output (the scrollback size) does it fall back
+  to a scrollback replacement. The server writes liveness pongs ahead of queued output.
 - Survival across server restarts via a **detached PTY broker process** (carried
   from HS1 `src/terminals/broker/`) — terminals aren't killed when the server
   recycles or is explicitly stopped. Detached hosting is the server default; ordinary

@@ -91,6 +91,28 @@ export function terminalSocketStale(input: {
   return input.livenessSupported && input.now - input.lastInboundAt > TERMINAL_STALE_AFTER_MS;
 }
 
+/** Typing after this long with nothing received first confirms the socket with a probe (HS2-J52ZJ7). */
+export const TERMINAL_QUIET_INPUT_AFTER_MS = 3_000;
+/** A held keystroke's probe unanswered for this long means the socket is dead: reconnect and replay. */
+export const TERMINAL_INPUT_PROBE_TIMEOUT_MS = 2_000;
+
+/**
+ * Whether input typed now should be held behind a liveness probe instead of sent (HS2-J52ZJ7).
+ * Keystrokes sent into a half-open socket before the 15 s stale window noticed it were lost, so
+ * after a quiet spell the viewport holds them, probes at once, and sends them on the reply (or
+ * replays them on a fresh socket if none comes). Input keeps queueing behind a probe already in
+ * flight so it stays in order. A server without liveness support is never probed.
+ */
+export function terminalInputNeedsProbe(input: {
+  livenessSupported: boolean;
+  lastInboundAt: number;
+  now: number;
+  probing: boolean;
+}): boolean {
+  if (!input.livenessSupported) return false;
+  return input.probing || input.now - input.lastInboundAt > TERMINAL_QUIET_INPUT_AFTER_MS;
+}
+
 export const terminalReconnectDelay = (attempt: number) => Math.min(8_000, 250 * 2 ** Math.max(0, attempt));
 /** Most input a reconnecting terminal holds for its next socket; the oldest keystrokes give way. */
 export const TERMINAL_PENDING_INPUT_LIMIT = 64 * 1024;

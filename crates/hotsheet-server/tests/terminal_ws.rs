@@ -776,3 +776,111 @@ async fn liveness_probes_are_answered_after_the_preamble_and_never_reach_the_pty
         "the probe is never PTY input: {seen:?}"
     );
 }
+
+/// A terminal that floods output until it reads one line of input, then records that line in
+/// `marker` and stops flooding (HS2-J52ZJ7).
+fn flood_until_input_body(id: &str, marker: &std::path::Path) -> String {
+    let script = format!(
+        "stty -echo; yes FLOOD-0123456789abcdef0123456789abcdef & read line; printf %s \"$line\" > '{}'; kill $!; exec cat",
+        marker.display()
+    );
+    serde_json::json!({ "command": "/bin/sh", "args": ["-c", script], "id": id }).to_string()
+}
+
+/// Attach a viewer that stops reading while the terminal floods output, then type: the input
+/// must reach the PTY promptly even though the viewer's socket is backed up, and once the
+/// viewer resumes reading the stream is still healthy (a probe is answered) (HS2-J52ZJ7).
+async fn slow_viewer_input_reaches_the_pty(addr: std::net::SocketAddr, id: &str) {
+    let marker_dir = tempfile::tempdir().unwrap();
+    let marker = marker_dir.path().join("input.txt");
+    let base = format!("http://{addr}");
+    let body = flood_until_input_body(id, &marker);
+    tokio::task::spawn_blocking(move || {
+        let resp = ureq::post(&format!("{base}/terminals"))
+            .set("x-hotsheet-secret", SECRET)
+            .set("content-type", "application/json")
+            .send_string(&body)
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+    })
+    .await
+    .unwrap();
+    let url = format!("ws://{addr}/terminals/{id}/attach?secret={SECRET}");
+    // A small receive buffer stands in for a slow viewer, so the back-pressure reaches the
+    // server's send quickly instead of after megabytes of loopback buffering.
+    let socket = tokio::net::TcpSocket::new_v4().unwrap();
+    socket.set_recv_buffer_size(4 * 1024).unwrap();
+    let stream = socket.connect(addr).await.unwrap();
+    let (mut ws, _) = tokio_tungstenite::client_async(url, stream).await.unwrap();
+    // Stop reading while the flood fills every buffer between the PTY and this viewer.
+    tokio::time::sleep(std::time::Duration::from_millis(1_500)).await;
+    let typed = std::time::Instant::now();
+    ws.send(WsMessage::Text("typed-under-backpressure\n".into()))
+        .await
+        .unwrap();
+    let delivered = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            if std::fs::read_to_string(&marker).unwrap_or_default() == "typed-under-backpressure" {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await;
+    assert!(
+        delivered.is_ok(),
+        "input sat behind output back-pressure for {:?} without reaching the PTY",
+        typed.elapsed()
+    );
+    // The viewer catches up: a probe is still answered on the same socket.
+    ws.send(WsMessage::Text(r#"{"terminal_ping":9}"#.into()))
+        .await
+        .unwrap();
+    let pong = tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        while let Some(Ok(message)) = ws.next().await {
+            if matches!(&message, WsMessage::Text(t) if t.as_str() == r#"{"terminal_pong":9}"#) {
+                return true;
+            }
+        }
+        false
+    })
+    .await
+    .unwrap_or(false);
+    assert!(
+        pong,
+        "the backed-up viewer recovers and its probe is answered"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_slow_viewer_under_heavy_output_still_gets_input_to_the_pty() {
+    let (_d, addr, _cat) = boot_with_cat().await;
+    slow_viewer_input_reaches_the_pty(addr, "flood-direct").await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_slow_broker_viewer_under_heavy_output_still_gets_input_to_the_pty() {
+    use hotsheet_server::terminal_broker::TerminalBroker;
+    use std::sync::Arc;
+
+    let bdir = tempfile::tempdir().unwrap();
+    let sock = bdir.path().join("b.sock");
+    let listener = tokio::net::UnixListener::bind(&sock).unwrap();
+    tokio::spawn(hotsheet_terminals::serve_broker(
+        listener,
+        "proj".into(),
+        Arc::new(hotsheet_terminals::TerminalManager::new()),
+    ));
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_terminal_broker_at(TerminalBroker::at(&sock, "proj"));
+    let tcp = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = tcp.local_addr().unwrap();
+    let app = app(state);
+    tokio::spawn(async move {
+        axum::serve(tcp, app).await.unwrap();
+    });
+    slow_viewer_input_reaches_the_pty(addr, "flood-broker").await;
+}

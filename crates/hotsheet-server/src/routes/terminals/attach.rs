@@ -7,7 +7,11 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use futures_util::stream::SplitSink;
+use futures_util::{SinkExt, StreamExt};
+use hotsheet_terminals::{PendingOutput, VIEWER_QUEUE_FRAMES, ViewerFrame, pump_viewer_output};
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 
 /// `GET /terminals/{id}/attach?secret=…` — the **live** terminal attach (HS2-XTTTMV): a
 /// WebSocket that first replays the scrollback (one binary frame), then streams each new PTY
@@ -155,19 +159,88 @@ fn term_now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-/// Drive one attached viewer: replay scrollback, then interleave live output → socket, the
-/// arbiter's size decisions → socket, and socket input/claims → PTY, on one task via
-/// `select!`. On disconnect the viewport's size claim is dropped so the size self-heals.
+/// Pongs waiting for the writer. Probes arrive at most every few seconds, so this only fills
+/// when the writer is stuck, and then a dropped pong is exactly the right signal.
+const CONTROL_QUEUE: usize = 8;
+
+/// One queued frame for a viewer's WebSocket writer.
+enum Outbound {
+    Frame(ViewerFrame),
+    /// The liveness hello, which the broker path sends after its replay-then-size preamble.
+    LivenessHello,
+}
+
+impl From<ViewerFrame> for Outbound {
+    fn from(frame: ViewerFrame) -> Self {
+        Self::Frame(frame)
+    }
+}
+
+/// The WebSocket messages for one queued frame, in order.
+fn outbound_messages(outbound: Outbound) -> Vec<Message> {
+    match outbound {
+        Outbound::Frame(ViewerFrame::Output(data)) => vec![Message::Binary(data.into())],
+        Outbound::Frame(ViewerFrame::Replace(data)) => {
+            vec![terminal_replay_control(), Message::Binary(data.into())]
+        }
+        Outbound::Frame(ViewerFrame::Size(d)) => {
+            vec![terminal_size_message(
+                d.cols,
+                d.rows,
+                d.driven_by.as_deref(),
+            )]
+        }
+        Outbound::LivenessHello => vec![terminal_liveness_hello()],
+    }
+}
+
+/// Own a viewer's send half (HS2-J52ZJ7): write pongs ahead of queued output, so a liveness
+/// probe is never stuck behind a backlog, then queued frames in order. Ends when the output
+/// queue closes (the terminal ended; the socket is closed) or a send fails.
+async fn write_viewer(
+    mut sink: SplitSink<WebSocket, Message>,
+    mut frames: mpsc::Receiver<Outbound>,
+    mut control: mpsc::Receiver<Message>,
+) {
+    loop {
+        let messages = tokio::select! {
+            biased;
+            Some(message) = control.recv() => vec![message],
+            frame = frames.recv() => match frame {
+                Some(frame) => outbound_messages(frame),
+                None => break,
+            },
+        };
+        for message in messages {
+            if sink.send(message).await.is_err() {
+                return;
+            }
+        }
+    }
+    let _ = sink.close().await;
+}
+
+/// Answer a probe through the writer's priority queue. `false` once the writer is gone. A full
+/// queue drops the pong: the writer is stuck, and the viewer's missing pong reports that.
+fn queue_pong(control: &mpsc::Sender<Message>, seq: u64) -> bool {
+    !matches!(
+        control.try_send(terminal_pong(seq)),
+        Err(mpsc::error::TrySendError::Closed(_))
+    )
+}
+
+/// Drive one attached viewer: send the attach preamble (replay, size, liveness hello), then
+/// run output on a pump and a writer task while this task reads the viewer's input and size
+/// claims, so input reaches the PTY however far behind the viewer's output is (HS2-J52ZJ7).
+/// On disconnect the viewport's size claim is dropped so the size self-heals.
 async fn terminal_attach_loop(
     mut socket: WebSocket,
     term: std::sync::Arc<hotsheet_terminals::Terminal>,
 ) {
-    use tokio::sync::broadcast::error::RecvError;
-
     // Snapshot and subscribe under one output boundary so concurrent PTY output lands exactly
     // once in either the replay or the live stream (HS2-5W0V9M).
-    let (snapshot, mut rx) = term.subscribe_with_scrollback();
-    let mut size_rx = term.subscribe_size();
+    let (snapshot, rx) = term.subscribe_with_scrollback();
+    let size_rx = term.subscribe_size();
     let mut my_viewer: Option<String> = None;
 
     // An empty binary replay is still the attach boundary. Reconnecting browsers use it to
@@ -198,37 +271,21 @@ async fn terminal_attach_loop(
         return;
     }
 
+    let (sink, mut inbound) = socket.split();
+    let (frames_tx, frames_rx) = mpsc::channel(VIEWER_QUEUE_FRAMES);
+    let (control_tx, control_rx) = mpsc::channel(CONTROL_QUEUE);
+    let pump = tokio::spawn(pump_viewer_output::<Outbound>(
+        term.clone(),
+        rx,
+        size_rx,
+        frames_tx,
+    ));
+    let mut writer = tokio::spawn(write_viewer(sink, frames_rx, control_rx));
+
     loop {
         tokio::select! {
-            output = rx.recv() => match output {
-                Ok(chunk) => {
-                    if socket.send(Message::Binary(chunk.into())).await.is_err() {
-                        break; // viewer went away
-                    }
-                }
-                // Fell behind the fan-out buffer — re-sync from a fresh snapshot.
-                Err(RecvError::Lagged(_)) => {
-                    let (snap, replacement) = term.subscribe_with_scrollback();
-                    rx = replacement;
-                    if socket.send(terminal_replay_control()).await.is_err() {
-                        break;
-                    }
-                    if socket.send(Message::Binary(snap.into())).await.is_err() {
-                        break;
-                    }
-                }
-                Err(RecvError::Closed) => break, // terminal ended
-            },
-            size = size_rx.recv() => match size {
-                Ok(d) => {
-                    if socket.send(terminal_size_message(d.cols, d.rows, d.driven_by.as_deref())).await.is_err() {
-                        break;
-                    }
-                }
-                Err(RecvError::Lagged(_)) => {} // a missed size update self-corrects on the next claim
-                Err(RecvError::Closed) => break,
-            },
-            inbound = socket.recv() => match inbound {
+            _ = &mut writer => break, // the terminal ended or the viewer stopped accepting output
+            message = inbound.next() => match message {
                 // A write to an exited PTY is dropped; the exit is reported separately.
                 Some(Ok(Message::Binary(b))) => { let _ = term.write(&b); }
                 Some(Ok(Message::Text(t))) => {
@@ -251,7 +308,7 @@ async fn terminal_attach_loop(
                             );
                         }
                         TerminalText::Ping(seq) => {
-                            if socket.send(terminal_pong(seq)).await.is_err() {
+                            if !queue_pong(&control_tx, seq) {
                                 break;
                             }
                         }
@@ -267,6 +324,8 @@ async fn terminal_attach_loop(
             },
         }
     }
+    pump.abort();
+    writer.abort();
 
     // Self-heal: drop this viewport's claim so the PTY size recomputes for the rest.
     if let Some(v) = my_viewer {
@@ -274,64 +333,90 @@ async fn terminal_attach_loop(
     }
 }
 
+/// Forward a broker attach's frames to a viewer's queue (HS2-J52ZJ7). It reads the broker
+/// promptly and coalesces output while the viewer is slow; past
+/// [`hotsheet_terminals::MAX_COALESCED_BYTES`] it stops reading, so the back-pressure moves to the broker, whose own pump coalesces and
+/// resyncs from scrollback. The broker's first scrollback is the attach replay; a later one
+/// replaces the viewer's state and supersedes any pending output.
+async fn pump_broker_output(
+    mut broker: hotsheet_terminals::BrokerStreamReader,
+    frames: mpsc::Sender<Outbound>,
+) {
+    use hotsheet_terminals::StreamOut as S;
+    let mut pending = PendingOutput::default();
+    let mut received_initial_replay = false;
+    let mut liveness_announced = false;
+    loop {
+        tokio::select! {
+            biased;
+            permit = frames.reserve(), if !pending.is_empty() => {
+                let Ok(permit) = permit else { return };
+                if let Some(frame) = pending.take() {
+                    permit.send(frame.into());
+                }
+            }
+            frame = broker.next(), if !pending.over_cap() => match frame {
+                Ok(Some(S::Scrollback { data })) => {
+                    if received_initial_replay {
+                        pending.replace_with(data.into_vec());
+                    } else {
+                        received_initial_replay = true;
+                        if pending.push(data.into_vec(), &frames).is_err() {
+                            return;
+                        }
+                    }
+                }
+                Ok(Some(S::Output { data })) => {
+                    if pending.push(data.into_vec(), &frames).is_err() {
+                        return;
+                    }
+                }
+                Ok(Some(S::Size { cols, rows, driven_by })) => {
+                    let size = ViewerFrame::Size(hotsheet_terminals::Decision { cols, rows, driven_by });
+                    if pending.flush(&frames).await.is_err() || frames.send(size.into()).await.is_err() {
+                        return;
+                    }
+                    // Announce liveness after the broker's replay-then-size preamble (HS2-51HQ3S).
+                    if !liveness_announced {
+                        liveness_announced = true;
+                        if frames.send(Outbound::LivenessHello).await.is_err() {
+                            return;
+                        }
+                    }
+                }
+                // The terminal's gone (or the attach failed) — end the viewer session.
+                Ok(Some(S::NotFound | S::Err { .. })) | Ok(None) | Err(_) => break,
+            },
+        }
+    }
+    let _ = pending.flush(&frames).await;
+}
+
 /// Bridge one attached viewer to a terminal that lives in the **detached broker** (HS2-ERT00F
-/// item 4): open a streaming broker connection, then forward broker output/size frames → the
-/// WebSocket and the viewer's input/size claims → the broker, on one task via `select!`. The
-/// broker replays the scrollback as its first frame(s) and drops the size claim when this
-/// connection closes, so the size self-heal holds even across a server restart.
-async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::PathBuf, id: String) {
-    let mut stream = match hotsheet_terminals::BrokerStream::open(&broker_socket, &id).await {
+/// item 4): open a streaming broker connection, pump broker output/size frames to the
+/// viewer's writer, and forward the viewer's input/size claims to the broker on this task, so
+/// input never waits behind output (HS2-J52ZJ7). The broker replays the scrollback as its
+/// first frame(s) and drops the size claim when this connection closes, so the size self-heal
+/// holds even across a server restart.
+async fn broker_attach_loop(socket: WebSocket, broker_socket: std::path::PathBuf, id: String) {
+    let stream = match hotsheet_terminals::BrokerStream::open(&broker_socket, &id).await {
         Ok(s) => s,
         Err(_) => return, // dropping the socket closes it
     };
-    let mut received_initial_replay = false;
-    let mut liveness_announced = false;
+    let (broker_out, mut broker_in) = stream.into_split();
+    let (sink, mut inbound) = socket.split();
+    let (frames_tx, frames_rx) = mpsc::channel(VIEWER_QUEUE_FRAMES);
+    let (control_tx, control_rx) = mpsc::channel(CONTROL_QUEUE);
+    let pump = tokio::spawn(pump_broker_output(broker_out, frames_tx));
+    let mut writer = tokio::spawn(write_viewer(sink, frames_rx, control_rx));
 
     loop {
         tokio::select! {
-            frame = stream.next() => match frame {
-                Ok(Some(f)) => {
-                    use hotsheet_terminals::StreamOut as S;
-                    match f {
-                        S::Scrollback { data } => {
-                            if received_initial_replay
-                                && socket.send(terminal_replay_control()).await.is_err()
-                            {
-                                break;
-                            }
-                            received_initial_replay = true;
-                            if socket.send(Message::Binary(data.into_vec().into())).await.is_err() {
-                                break;
-                            }
-                        }
-                        S::Output { data } => {
-                            if socket.send(Message::Binary(data.into_vec().into())).await.is_err() {
-                                break;
-                            }
-                        }
-                        S::Size { cols, rows, driven_by } => {
-                            if socket.send(terminal_size_message(cols, rows, driven_by.as_deref())).await.is_err() {
-                                break;
-                            }
-                            // Announce liveness after the broker's replay-then-size preamble (HS2-51HQ3S).
-                            if !liveness_announced {
-                                liveness_announced = true;
-                                if socket.send(terminal_liveness_hello()).await.is_err() {
-                                    break;
-                                }
-                            }
-                        }
-                        // The terminal's gone (or the attach failed) — end the viewer session.
-                        S::NotFound | S::Err { .. } => break,
-                    }
-                }
-                Ok(None) | Err(_) => break, // broker closed (terminal ended / broker gone)
-            },
-            inbound = socket.recv() => match inbound {
+            _ = &mut writer => break, // the terminal ended or the viewer stopped accepting output
+            message = inbound.next() => match message {
                 Some(Ok(Message::Binary(b))) => {
                     // Base64 once the broker proved it speaks it (HS2-9R751Y).
-                    if stream.send_input(b.to_vec()).await.is_err()
-                    {
+                    if broker_in.send_input(b.to_vec()).await.is_err() {
                         break;
                     }
                 }
@@ -339,7 +424,7 @@ async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::Pat
                     let sent = match classify_terminal_text(&t) {
                         // A size claim forwards as a Resize frame the broker feeds to its arbiter.
                         TerminalText::Resize(r) => {
-                            stream
+                            broker_in
                                 .send(&hotsheet_terminals::StreamIn::Resize {
                                     viewer_id: r.viewer_id,
                                     cols: r.cols,
@@ -352,14 +437,14 @@ async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::Pat
                         }
                         // The server answers liveness probes itself; the broker never sees them.
                         TerminalText::Ping(seq) => {
-                            if socket.send(terminal_pong(seq)).await.is_err() {
+                            if !queue_pong(&control_tx, seq) {
                                 break;
                             }
                             continue;
                         }
                         TerminalText::InvalidControl => continue,
                         TerminalText::Input(input) => {
-                            stream.send_input(input.as_bytes().to_vec()).await
+                            broker_in.send_input(input.as_bytes().to_vec()).await
                         }
                     };
                     if sent.is_err() {
@@ -372,9 +457,10 @@ async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::Pat
             },
         }
     }
-
-    // Dropping `stream` closes the broker connection, so the broker self-heals the size claim;
-    // dropping `socket` closes the WebSocket to the viewer.
+    // Ending the pump drops the broker connection, so the broker self-heals the size claim;
+    // ending the writer drops the WebSocket to the viewer.
+    pump.abort();
+    writer.abort();
 }
 
 #[cfg(test)]

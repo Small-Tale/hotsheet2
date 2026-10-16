@@ -3397,6 +3397,13 @@ Default policy (= tmux `window-size latest`, which is exactly the maintainer's a
   without waiting for `close()` (which can hang on a half-open connection) and attaches a fresh
   one; anything typed meanwhile is sent once it opens. This fixes a drawer terminal frozen on stale output that ignored typing after sleep or a
   network change, while a freshly mounted grid tile of the same session worked (**HS2-51HQ3S**).
+- Typing after a quiet spell confirms the socket first. When nothing has arrived for 3 s, a
+  keystroke is held (`data-input-held`) and the viewport sends an immediate
+  `{"terminal_ping":n}`. Any reply releases the held input in order, and later keys queue
+  behind it. If no frame arrives within 2 s, the viewport abandons the socket and the fresh
+  one replays the held keys when it opens. Keys typed into a half-open socket are therefore
+  delivered rather than lost before the 15 s stale window notices (**HS2-J52ZJ7**). A server
+  without the liveness hello is never probed.
 - Activating the read-only dashboard counts each visible fixed 80×24 tile as that
   PTY's local sizing claimant. A grid tile cannot accept keyboard input, but entering
   the terminal-specific surface is still a deliberate request to render its TUI at

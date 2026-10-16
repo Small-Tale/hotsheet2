@@ -10,7 +10,7 @@
 
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,7 @@ pub use crate::broker_socket::SocketCleanup;
 use crate::manager::TerminalManager;
 use crate::sizing::ViewportClaim;
 use crate::terminal::{TermSpec, TerminalKind};
+use crate::viewer_output::{VIEWER_QUEUE_FRAMES, ViewerFrame, pump_viewer_output};
 use crate::wire_bytes::{BytesEncoding, WireBytes};
 
 /// Detached brokers exit after this long with no terminals and no connected clients.
@@ -305,6 +306,33 @@ async fn write_line<T: Serialize>(write: &mut OwnedWriteHalf, frame: &T) -> std:
     write.flush().await
 }
 
+/// Write an attached client's queued frames as [`StreamOut`] lines until the queue closes
+/// (the terminal ended) or the client stops accepting writes.
+async fn write_stream_frames(
+    mut write: OwnedWriteHalf,
+    mut frames: tokio::sync::mpsc::Receiver<ViewerFrame>,
+    encoding: BytesEncoding,
+) {
+    while let Some(frame) = frames.recv().await {
+        let line = match frame {
+            ViewerFrame::Output(data) => StreamOut::Output {
+                data: WireBytes::new(data, encoding),
+            },
+            ViewerFrame::Replace(data) => StreamOut::Scrollback {
+                data: WireBytes::new(data, encoding),
+            },
+            ViewerFrame::Size(d) => StreamOut::Size {
+                cols: d.cols,
+                rows: d.rows,
+                driven_by: d.driven_by,
+            },
+        };
+        if write_line(&mut write, &line).await.is_err() {
+            return;
+        }
+    }
+}
+
 /// Stream a terminal's live output + size decisions to an attached client, and apply the
 /// input + size claims it sends back, until the connection closes (HS2-ERT00F item 4). On
 /// disconnect the viewport's size claim is dropped so the PTY size self-heals for the rest —
@@ -317,7 +345,6 @@ async fn stream_terminal(
     id: String,
     encoding: BytesEncoding,
 ) -> std::io::Result<()> {
-    use tokio::sync::broadcast::error::RecvError;
     let wire = |data: Vec<u8>| WireBytes::new(data, encoding);
 
     let Some(term) = manager.get(&(project.to_string(), id.clone())) else {
@@ -326,8 +353,8 @@ async fn stream_terminal(
 
     // Snapshot and subscribe under one output boundary so concurrent PTY output lands exactly
     // once in either the replay or the live stream (HS2-5W0V9M).
-    let (snapshot, mut out_rx) = term.subscribe_with_scrollback();
-    let mut size_rx = term.subscribe_size();
+    let (snapshot, out_rx) = term.subscribe_with_scrollback();
+    let size_rx = term.subscribe_size();
     let mut my_viewer: Option<String> = None;
 
     write_line(
@@ -351,27 +378,16 @@ async fn stream_terminal(
         .await?;
     }
 
+    // Output and input run on separate tasks joined by a bounded queue, so a server viewer
+    // that is slow to read output never delays its input reaching the PTY (HS2-J52ZJ7).
+    let (frames_tx, frames_rx) = tokio::sync::mpsc::channel(VIEWER_QUEUE_FRAMES);
+    let pump = tokio::spawn(pump_viewer_output(term.clone(), out_rx, size_rx, frames_tx));
+    let mut writer = tokio::spawn(write_stream_frames(write, frames_rx, encoding));
+
     loop {
         tokio::select! {
-            output = out_rx.recv() => match output {
-                Ok(data) => write_line(&mut write, &StreamOut::Output { data: wire(data) }).await?,
-                // Fell behind the fan-out — re-sync from a fresh snapshot.
-                Err(RecvError::Lagged(_)) => {
-                    let (snapshot, replacement) = term.subscribe_with_scrollback();
-                    out_rx = replacement;
-                    write_line(&mut write, &StreamOut::Scrollback { data: wire(snapshot) }).await?;
-                }
-                Err(RecvError::Closed) => break, // terminal ended
-            },
-            size = size_rx.recv() => match size {
-                Ok(d) => {
-                    write_line(&mut write, &StreamOut::Size {
-                        cols: d.cols, rows: d.rows, driven_by: d.driven_by,
-                    }).await?;
-                }
-                Err(RecvError::Lagged(_)) => {} // a missed size update self-corrects on the next claim
-                Err(RecvError::Closed) => break,
-            },
+            // The writer ends when the terminal ended (its queue closed) or the client is gone.
+            _ = &mut writer => break,
             line = lines.next_line() => match line {
                 Ok(Some(l)) if !l.trim().is_empty() => {
                     if let Ok(inbound) = serde_json::from_str::<StreamIn>(&l) {
@@ -393,6 +409,8 @@ async fn stream_terminal(
             },
         }
     }
+    pump.abort();
+    writer.abort();
 
     // Self-heal: drop this viewport's claim so the PTY size recomputes for the rest.
     if let Some(v) = my_viewer {
@@ -515,11 +533,23 @@ impl BrokerClient {
 /// (scrollback replay, then live output + size decisions), and [`send`](Self::send) forwards
 /// [`StreamIn`] frames (input + size claims). The server bridges this to a WebSocket viewer.
 pub struct BrokerStream {
+    reader: BrokerStreamReader,
+    writer: BrokerStreamWriter,
+}
+
+/// The receiving half of a [`BrokerStream`] (HS2-J52ZJ7): read it on one task while another
+/// forwards input through the [`BrokerStreamWriter`], so input never waits behind output.
+pub struct BrokerStreamReader {
     reader: tokio::io::Lines<BufReader<OwnedReadHalf>>,
+    /// Set once the broker streamed a base64 payload on this connection, proving it
+    /// understands the encoding (HS2-9R751Y). Shared with the writer half.
+    base64_proven: Arc<AtomicBool>,
+}
+
+/// The sending half of a [`BrokerStream`] (HS2-J52ZJ7).
+pub struct BrokerStreamWriter {
     writer: OwnedWriteHalf,
-    /// The encoding input is sent in: base64 only once the broker has streamed a base64
-    /// payload on this connection, proving it understands the encoding (HS2-9R751Y).
-    input_encoding: BytesEncoding,
+    base64_proven: Arc<AtomicBool>,
 }
 
 impl BrokerStream {
@@ -547,15 +577,50 @@ impl BrokerStream {
         line.push('\n');
         writer.write_all(line.as_bytes()).await?;
         writer.flush().await?;
+        let base64_proven = Arc::new(AtomicBool::new(false));
         Ok(Self {
-            reader: BufReader::new(read).lines(),
-            writer,
-            input_encoding: BytesEncoding::Array,
+            reader: BrokerStreamReader {
+                reader: BufReader::new(read).lines(),
+                base64_proven: base64_proven.clone(),
+            },
+            writer: BrokerStreamWriter {
+                writer,
+                base64_proven,
+            },
         })
+    }
+
+    /// Split into independently usable receiving and sending halves (HS2-J52ZJ7).
+    pub fn into_split(self) -> (BrokerStreamReader, BrokerStreamWriter) {
+        (self.reader, self.writer)
     }
 
     /// The next streamed frame, or `None` when the broker closed the stream (terminal ended /
     /// broker gone).
+    pub async fn next(&mut self) -> std::io::Result<Option<StreamOut>> {
+        self.reader.next().await
+    }
+
+    /// The encoding [`send_input`](Self::send_input) uses right now.
+    pub fn input_encoding(&self) -> BytesEncoding {
+        self.writer.input_encoding()
+    }
+
+    /// Forward PTY input, as base64 once the broker proved it speaks it and as a number
+    /// array before that (so a broker older than the encoding never sees a string).
+    pub async fn send_input(&mut self, data: Vec<u8>) -> std::io::Result<()> {
+        self.writer.send_input(data).await
+    }
+
+    /// Forward one input / size-claim frame to the broker.
+    pub async fn send(&mut self, frame: &StreamIn) -> std::io::Result<()> {
+        self.writer.send(frame).await
+    }
+}
+
+impl BrokerStreamReader {
+    /// The next streamed frame, or `None` when the broker closed the stream. Cancel-safe, so
+    /// it can sit in a `select!`.
     pub async fn next(&mut self) -> std::io::Result<Option<StreamOut>> {
         loop {
             match self.reader.next_line().await? {
@@ -566,7 +631,7 @@ impl BrokerStream {
                     if let StreamOut::Scrollback { data } | StreamOut::Output { data } = &frame
                         && data.encoding() == BytesEncoding::Base64
                     {
-                        self.input_encoding = BytesEncoding::Base64;
+                        self.base64_proven.store(true, Ordering::Release);
                     }
                     return Ok(Some(frame));
                 }
@@ -574,17 +639,23 @@ impl BrokerStream {
             }
         }
     }
+}
 
+impl BrokerStreamWriter {
     /// The encoding [`send_input`](Self::send_input) uses right now.
     pub fn input_encoding(&self) -> BytesEncoding {
-        self.input_encoding
+        if self.base64_proven.load(Ordering::Acquire) {
+            BytesEncoding::Base64
+        } else {
+            BytesEncoding::Array
+        }
     }
 
     /// Forward PTY input, as base64 once the broker proved it speaks it and as a number
     /// array before that (so a broker older than the encoding never sees a string).
     pub async fn send_input(&mut self, data: Vec<u8>) -> std::io::Result<()> {
         let frame = StreamIn::Input {
-            data: WireBytes::new(data, self.input_encoding),
+            data: WireBytes::new(data, self.input_encoding()),
         };
         self.send(&frame).await
     }
