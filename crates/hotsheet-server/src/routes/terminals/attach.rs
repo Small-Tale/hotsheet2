@@ -59,6 +59,9 @@ fn default_true() -> bool {
 struct TermControl {
     #[serde(default)]
     resize: Option<ResizeClaim>,
+    /// A viewer's liveness probe (HS2-51HQ3S), answered with `{"terminal_pong":n}`.
+    #[serde(default)]
+    terminal_ping: Option<u64>,
 }
 
 /// A viewport's leased size claim (HS2-BD7Q74).
@@ -79,20 +82,26 @@ struct ResizeClaim {
 
 enum TerminalText<'a> {
     Resize(ResizeClaim),
+    Ping(u64),
     InvalidControl,
     Input(&'a str),
 }
 
 fn classify_terminal_text(value: &str) -> TerminalText<'_> {
-    if let Ok(TermControl {
-        resize: Some(resize),
-    }) = serde_json::from_str(value)
-    {
-        return TerminalText::Resize(resize);
+    match serde_json::from_str(value) {
+        Ok(TermControl {
+            resize: Some(resize),
+            ..
+        }) => return TerminalText::Resize(resize),
+        Ok(TermControl {
+            terminal_ping: Some(seq),
+            ..
+        }) => return TerminalText::Ping(seq),
+        _ => {}
     }
     if serde_json::from_str::<serde_json::Value>(value)
         .ok()
-        .and_then(|json| json.get("resize").cloned())
+        .filter(|json| json.get("resize").is_some() || json.get("terminal_ping").is_some())
         .is_some()
     {
         return TerminalText::InvalidControl;
@@ -125,6 +134,20 @@ fn terminal_size_message(cols: u16, rows: u16, driven_by: Option<&str>) -> Messa
 /// A replay after initial attach replaces the viewer's emulator state rather than appending.
 fn terminal_replay_control() -> Message {
     Message::Text(r#"{"terminal_replay":"replace"}"#.into())
+}
+
+/// Sent first on every attach: this server answers `terminal_ping` probes (HS2-51HQ3S). A
+/// viewer only sends probes after this frame, so an older server never sees one as PTY input,
+/// and a viewer only treats a silent socket as dead once it knows pongs would arrive.
+fn terminal_liveness_hello() -> Message {
+    Message::Text(r#"{"terminal_liveness":1}"#.into())
+}
+
+/// The reply to a viewer's `{"terminal_ping":n}` probe. A half-open socket (a slept laptop, a
+/// changed network, a restarted proxy) can stay OPEN in the browser while nothing flows; the
+/// missing pong is how the viewer notices and reconnects (HS2-51HQ3S).
+fn terminal_pong(seq: u64) -> Message {
+    Message::Text(format!(r#"{{"terminal_pong":{seq}}}"#).into())
 }
 
 /// Monotonic-ish wall clock in ms for the size arbiter (real millis; the arbiter is
@@ -171,6 +194,12 @@ async fn terminal_attach_loop(
         {
             return;
         }
+    }
+
+    // The liveness hello follows the attach preamble (replay, then size), so viewers that read
+    // those two frames first are unaffected (HS2-51HQ3S).
+    if socket.send(terminal_liveness_hello()).await.is_err() {
+        return;
     }
 
     loop {
@@ -225,6 +254,11 @@ async fn terminal_attach_loop(
                                 now,
                             );
                         }
+                        TerminalText::Ping(seq) => {
+                            if socket.send(terminal_pong(seq)).await.is_err() {
+                                break;
+                            }
+                        }
                         // A malformed control frame is never terminal input: dropping it avoids
                         // echoing protocol JSON into the user's shell during transient layout.
                         TerminalText::InvalidControl => {}
@@ -255,6 +289,7 @@ async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::Pat
         Err(_) => return, // dropping the socket closes it
     };
     let mut received_initial_replay = false;
+    let mut liveness_announced = false;
 
     loop {
         tokio::select! {
@@ -281,6 +316,13 @@ async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::Pat
                         S::Size { cols, rows, driven_by } => {
                             if socket.send(terminal_size_message(cols, rows, driven_by.as_deref())).await.is_err() {
                                 break;
+                            }
+                            // Announce liveness after the broker's replay-then-size preamble (HS2-51HQ3S).
+                            if !liveness_announced {
+                                liveness_announced = true;
+                                if socket.send(terminal_liveness_hello()).await.is_err() {
+                                    break;
+                                }
                             }
                         }
                         // The terminal's gone (or the attach failed) — end the viewer session.
@@ -314,6 +356,13 @@ async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::Pat
                                 })
                                 .await
                         }
+                        // The server answers liveness probes itself; the broker never sees them.
+                        TerminalText::Ping(seq) => {
+                            if socket.send(terminal_pong(seq)).await.is_err() {
+                                break;
+                            }
+                            continue;
+                        }
                         TerminalText::InvalidControl => continue,
                         TerminalText::Input(input) => {
                             stream
@@ -340,7 +389,10 @@ async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::Pat
 
 #[cfg(test)]
 mod terminal_text_tests {
-    use super::{TerminalText, classify_terminal_text, terminal_replay_control};
+    use super::{
+        TerminalText, classify_terminal_text, terminal_liveness_hello, terminal_pong,
+        terminal_replay_control,
+    };
     use axum::extract::ws::Message;
 
     #[test]
@@ -356,6 +408,27 @@ mod terminal_text_tests {
         assert!(matches!(
             classify_terminal_text("echo hello\n"),
             TerminalText::Input("echo hello\n")
+        ));
+    }
+
+    #[test]
+    fn liveness_probes_are_answered_and_never_become_pty_input() {
+        assert!(matches!(
+            classify_terminal_text(r#"{"terminal_ping":7}"#),
+            TerminalText::Ping(7)
+        ));
+        // A malformed probe is dropped, not typed into the shell.
+        assert!(matches!(
+            classify_terminal_text(r#"{"terminal_ping":"x"}"#),
+            TerminalText::InvalidControl
+        ));
+        assert!(matches!(
+            terminal_pong(7),
+            Message::Text(value) if value.as_str() == r#"{"terminal_pong":7}"#
+        ));
+        assert!(matches!(
+            terminal_liveness_hello(),
+            Message::Text(value) if value.as_str() == r#"{"terminal_liveness":1}"#
         ));
     }
 

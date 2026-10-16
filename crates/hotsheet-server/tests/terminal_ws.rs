@@ -727,3 +727,52 @@ async fn shell_command_terminal_runs_the_command_and_stays_open() {
         "the shell-command terminal exited instead of staying open: {scrollback:?}"
     );
 }
+
+/// HS2-51HQ3S: a viewer can tell a live attach from a half-open one. The server announces
+/// liveness after the replay-then-size preamble and answers `terminal_ping` with
+/// `terminal_pong`; the probe never reaches the PTY (`cat` would echo it back).
+#[tokio::test]
+async fn liveness_probes_are_answered_after_the_preamble_and_never_reach_the_pty() {
+    let (_d, addr, id) = boot_with_cat().await;
+    let url = format!("ws://{addr}/terminals/{id}/attach?secret={SECRET}");
+    let (mut ws, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+    expect_replay_then_size(&mut ws).await;
+    let wait = std::time::Duration::from_secs(5);
+    let hello = tokio::time::timeout(wait, ws.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(&hello, WsMessage::Text(t) if t.as_str() == r#"{"terminal_liveness":1}"#),
+        "the hello follows the preamble: {hello:?}"
+    );
+    ws.send(WsMessage::Text(r#"{"terminal_ping":41}"#.into()))
+        .await
+        .unwrap();
+    ws.send(WsMessage::Text("after-probe\n".into()))
+        .await
+        .unwrap();
+    let mut seen = String::new();
+    let mut pong = false;
+    let deadline = std::time::Instant::now() + wait;
+    while !(pong && seen.contains("after-probe")) && std::time::Instant::now() < deadline {
+        match tokio::time::timeout(wait, ws.next()).await {
+            Ok(Some(Ok(WsMessage::Text(t)))) if t.as_str() == r#"{"terminal_pong":41}"# => {
+                pong = true
+            }
+            Ok(Some(Ok(WsMessage::Binary(b)))) => seen.push_str(&String::from_utf8_lossy(&b)),
+            Ok(Some(Ok(_))) => {}
+            _ => break,
+        }
+    }
+    assert!(pong, "the probe is answered");
+    assert!(
+        seen.contains("after-probe"),
+        "ordinary input still reaches the PTY: {seen:?}"
+    );
+    assert!(
+        !seen.contains("terminal_ping"),
+        "the probe is never PTY input: {seen:?}"
+    );
+}

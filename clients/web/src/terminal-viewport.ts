@@ -55,6 +55,42 @@ export function isTerminalReplacementReplay(value: string): boolean {
   }
 }
 
+/** Liveness protocol (HS2-51HQ3S): the server's attach hello, probe, and reply frames. */
+export const TERMINAL_PING_INTERVAL_MS = 5_000;
+/** No inbound frame for this long, despite answered probes, means the socket is dead. */
+export const TERMINAL_STALE_AFTER_MS = 15_000;
+
+export function terminalPing(seq: number): string {
+  return JSON.stringify({ terminal_ping: seq });
+}
+
+/** True for the liveness frames this viewer handles itself (`terminal_liveness`, `terminal_pong`). */
+export function terminalLivenessFrame(value: string): 'hello' | 'pong' | undefined {
+  try {
+    const parsed = parseJson(value);
+    if (!isRecord(parsed)) return undefined;
+    if (parsed.terminal_liveness !== undefined) return 'hello';
+    if (parsed.terminal_pong !== undefined) return 'pong';
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Whether an OPEN socket is actually dead (HS2-51HQ3S). A half-open connection (a slept laptop, a
+ * changed network, a restarted proxy) can stay OPEN in the browser while nothing flows, so the
+ * viewport froze on stale output and swallowed keystrokes. Only a server that announced liveness
+ * support answers probes, so silence from an older server is never mistaken for a dead socket.
+ */
+export function terminalSocketStale(input: {
+  livenessSupported: boolean;
+  lastInboundAt: number;
+  now: number;
+}): boolean {
+  return input.livenessSupported && input.now - input.lastInboundAt > TERMINAL_STALE_AFTER_MS;
+}
+
 export const terminalReconnectDelay = (attempt: number) => Math.min(8_000, 250 * 2 ** Math.max(0, attempt));
 /** Sent to a live viewport its owner moves out of the page to keep it warm (HS2-WGTQ6X). */
 export const TERMINAL_VIEWPORT_PARK_EVENT = 'hs-terminal-viewport-park';

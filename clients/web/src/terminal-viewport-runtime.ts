@@ -45,6 +45,7 @@ import {
   TERMINAL_DRAWER_RESIZE_END_EVENT,
   TERMINAL_FOCUS_RETRY_MS,
   TERMINAL_INITIAL_FOCUS_WINDOW_MS,
+  TERMINAL_PING_INTERVAL_MS,
   TERMINAL_PREVIEW_NATURAL_HEIGHT,
   TERMINAL_PREVIEW_NATURAL_WIDTH,
   TERMINAL_VIEWPORT_PARK_EVENT,
@@ -54,13 +55,16 @@ import {
   terminalDedicatedGridSize,
   terminalFittedFontSize,
   terminalInverseScalePercent,
+  terminalLivenessFrame,
   terminalPhysicalScale,
+  terminalPing,
   terminalPreviewGridAspect,
   terminalPreviewScale,
   terminalReconnectDelay,
   terminalResizeClaim,
   terminalScrollbackLimit,
   terminalShouldUseWebgl,
+  terminalSocketStale,
   terminalUsesMobile80xM,
   terminalViewportClaimsSizing,
   terminalViewportScale,
@@ -441,6 +445,9 @@ function initializeTerminalViewport(
     replacementReplayPending = false,
     parked = false,
     webglParked = false,
+    livenessSupported = false,
+    lastInboundAt = 0,
+    pingSeq = 0,
     serverSize: { cols: number; rows: number } | undefined;
   own(() => {
     disposed = true;
@@ -703,8 +710,26 @@ function initializeTerminalViewport(
   // meanwhile were dropped silently, so a drawer terminal whose socket died (server restart, sleep,
   // a LAN drop) read as locked up until a page reload (HS2-KRQRWH). Any sign that the user is back
   // (typing, a pointer, focus, the page becoming visible, the network returning) reconnects at once.
+  // An OPEN socket that stopped answering liveness probes is as dead as a CLOSED one, but
+  // `close()` on a half-open connection can sit in CLOSING for minutes: abandon it and attach a
+  // fresh socket instead of waiting for its close event (HS2-51HQ3S).
+  const socketStale = () =>
+    socket?.readyState === WebSocket.OPEN && terminalSocketStale({ livenessSupported, lastInboundAt, now: Date.now() });
+  const abandonSocket = () => {
+    const dead = socket;
+    socket = undefined;
+    if (heartbeat !== undefined) window.clearInterval(heartbeat);
+    heartbeat = undefined;
+    element.dataset.connection = 'reconnecting';
+    try {
+      dead?.close();
+    } catch {
+      // Already closing: its late events are ignored because it is no longer `socket`.
+    }
+  };
   const reconnectNow = () => {
     if (disposed || parked || scaledPreview) return;
+    if (socketStale()) abandonSocket();
     if (socket && socket.readyState !== WebSocket.CLOSED) return;
     if (reconnect !== undefined) window.clearTimeout(reconnect);
     reconnect = undefined;
@@ -714,6 +739,7 @@ function initializeTerminalViewport(
   const connect = () => {
     if (disposed) return;
     initialReplay = true;
+    livenessSupported = false;
     element.dataset.connection = 'connecting';
     const current = new WebSocket(url);
     socket = current;
@@ -729,11 +755,24 @@ function initializeTerminalViewport(
       element.dataset.connection = 'connected';
       fitAndClaim();
       if (autoFocus) terminal.focus();
-      heartbeat = window.setInterval(claim, 5_000);
+      lastInboundAt = Date.now();
+      heartbeat = window.setInterval(() => {
+        if (socketStale()) {
+          abandonSocket();
+          reconnectNow();
+          return;
+        }
+        claim();
+        if (livenessSupported && socket?.readyState === WebSocket.OPEN) socket.send(terminalPing(++pingSeq));
+      }, TERMINAL_PING_INTERVAL_MS);
     });
     current.addEventListener('message', (event) => {
       if (socket !== current) return;
+      lastInboundAt = Date.now();
       if (typeof event.data === 'string') {
+        const liveness = terminalLivenessFrame(event.data);
+        if (liveness === 'hello') livenessSupported = true;
+        if (liveness) return;
         if (isTerminalReplacementReplay(event.data)) {
           replacementReplayPending = true;
           initialReplay = true;
@@ -1048,7 +1087,7 @@ function initializeTerminalViewport(
   }
   const sendInput = (value: string) => {
     if (scaledPreview) return;
-    if (socket?.readyState === WebSocket.OPEN) {
+    if (socket?.readyState === WebSocket.OPEN && !socketStale()) {
       socket.send(value);
       signalInteractionThrottled();
       return;

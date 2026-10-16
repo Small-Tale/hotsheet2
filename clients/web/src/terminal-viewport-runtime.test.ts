@@ -69,7 +69,9 @@ vi.mock('@xterm/xterm', () => ({
     onRender() {
       return { dispose: this.render };
     }
-    onData() {
+    dataHandler: ((value: string) => void) | undefined;
+    onData(handler: (value: string) => void) {
+      this.dataHandler = handler;
       return { dispose: this.input };
     }
   },
@@ -1245,6 +1247,99 @@ describe('an early interaction on a magnified terminal takes over PTY sizing (HS
     view.show();
     expect(view.claims().length).toBeGreaterThan(0);
     expect(view.claims().every((claim) => claim.interacting === false)).toBe(true);
+    view.dispose();
+  });
+});
+
+describe('a silent OPEN socket is replaced instead of freezing the terminal (HS2-51HQ3S)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    windowMock.setInterval.mockImplementation(() => 1);
+  });
+
+  function mountLive() {
+    let now = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const ticks: Array<() => void> = [];
+    windowMock.setInterval.mockImplementation(((callback: () => void) => {
+      ticks.push(callback);
+      return ticks.length;
+    }) as never);
+    const { viewport } = element();
+    const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'viewer' });
+    const sent: string[] = [];
+    const open = () => {
+      const socket = sockets.at(-1)! as unknown as EventTarget & { readyState: number; send: (v: string) => void };
+      socket.send = (value: string) => sent.push(value);
+      socket.readyState = 1;
+      socket.dispatchEvent(new Event('open'));
+      return socket;
+    };
+    const receive = (data: string) => {
+      sockets.at(-1)!.dispatchEvent(Object.assign(new Event('message'), { data }));
+    };
+    const advance = (ms: number) => {
+      now += ms;
+    };
+    const tick = (ms: number) => {
+      advance(ms);
+      ticks.at(-1)?.();
+    };
+    const terminal = () => allocated.terminals.at(-1) as unknown as { dataHandler?: (value: string) => void };
+    return { viewport, dispose, open, receive, advance, tick, sent, terminal };
+  }
+
+  it('probes a server that announced liveness and keeps a socket that answers', () => {
+    const view = mountLive();
+    view.open();
+    view.receive('{"terminal_liveness":1}');
+    view.tick(5_000);
+    expect(view.sent).toContain('{"terminal_ping":1}');
+    view.receive('{"terminal_pong":1}');
+    view.tick(5_000);
+    view.receive('{"terminal_pong":2}');
+    view.tick(5_000);
+    expect(sockets, 'an answering socket is kept').toHaveLength(1);
+    expect(view.viewport.dataset.connection).toBe('connected');
+    view.dispose();
+  });
+
+  it('abandons a socket that stopped answering and attaches a fresh one at once', () => {
+    const view = mountLive();
+    const first = view.open();
+    view.receive('{"terminal_liveness":1}');
+    for (let i = 0; i < 3; i += 1) view.tick(5_000);
+    view.tick(5_000);
+    expect(sockets, 'a new socket replaces the silent one').toHaveLength(2);
+    expect((first as unknown as { close: ReturnType<typeof vi.fn> }).close).toHaveBeenCalled();
+    expect(view.viewport.dataset.connection).toBe('connecting');
+    // A late close from the abandoned socket does not schedule another reconnect.
+    (first as unknown as { readyState: number }).readyState = 3;
+    first.dispatchEvent(new Event('close'));
+    expect(sockets).toHaveLength(2);
+    view.open();
+    expect(view.viewport.dataset.connection).toBe('connected');
+    view.dispose();
+  });
+
+  it('never treats a quiet socket on an older server as dead, and never pings it', () => {
+    const view = mountLive();
+    view.open();
+    for (let i = 0; i < 10; i += 1) view.tick(5_000);
+    expect(sockets).toHaveLength(1);
+    expect(view.sent.some((value) => value.includes('terminal_ping'))).toBe(false);
+    view.dispose();
+  });
+
+  it('typing on a stale socket reconnects instead of sending into the void', () => {
+    const view = mountLive();
+    view.open();
+    view.receive('{"terminal_liveness":1}');
+    // The heartbeat has not fired yet (a throttled background tab), but the silence is long.
+    view.advance(60_000);
+    view.terminal().dataHandler?.('x');
+    expect(sockets).toHaveLength(2);
+    expect(view.sent).not.toContain('x');
     view.dispose();
   });
 });

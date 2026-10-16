@@ -3286,6 +3286,15 @@ Default policy (= tmux `window-size latest`, which is exactly the maintainer's a
   `pageshow`, or the network coming back reconnects a closed socket immediately (attempt
   reset, pending timer cancelled); a parked viewport is left to its owner's eviction
   (**HS2-KRQRWH**).
+- A socket that stays OPEN but stops carrying traffic is treated as dead too. After its attach
+  preamble (replay, then size), the server sends `{"terminal_liveness":1}` and answers each
+  `{"terminal_ping":n}` with `{"terminal_pong":n}`; both the direct and broker paths answer
+  probes themselves, so a probe never reaches the PTY. A viewport probes on its 5 s heartbeat
+  only after that hello, so an older server never sees a probe as input. When no frame has
+  arrived for 15 s, or the user types on a socket that silent, the viewport abandons the socket
+  without waiting for `close()` (which can hang on a half-open connection) and attaches a fresh
+  one. This fixes a drawer terminal frozen on stale output that ignored typing after sleep or a
+  network change, while a freshly mounted grid tile of the same session worked (**HS2-51HQ3S**).
 - Activating the read-only dashboard counts each visible fixed 80×24 tile as that
   PTY's local sizing claimant. A grid tile cannot accept keyboard input, but entering
   the terminal-specific surface is still a deliberate request to render its TUI at
