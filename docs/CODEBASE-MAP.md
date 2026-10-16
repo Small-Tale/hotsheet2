@@ -332,6 +332,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata; explicit schema-1/2 migration to guarded random-suffix schema 3; list_tickets_resilient -> StoreListing{tickets,corrupt:Vec<CorruptTicket>} so one unparseable file never blocks project open (HS2-PRVPCQ); git-diff fast path (head_commit/is_working_tree_clean/changed_ticket_ids_between, HS2-90)
       src/registry.rs        #   StoreRegistry: resolve a ULID across multiple stores, follow moved_to_store tombstones (docs/02 §2.2.1, HS2-4)
       src/settings.rs        #   Settings: global (${HOTSHEET_HOME}) / shared (committed) / local (gitignored) scopes; effective precedence global<shared<local (HS2-34)
+      src/settings_locks.rs  #   Bounded ${HOTSHEET_HOME}/settings-locks: path-recording locks, identity-checked acquire, hourly prune of vanished targets (HS2-MZ1TMH)
       src/auto_context.rs    #   HS1-compatible category/tag guidance defaults + override/suppression/matching (HS2-BZBVAS)
       src/secrets.rs         #   injected SecretStore + OS keychain adapters + metadata-only provider registry (HS2-M1XMSX)
       src/connection_removal.rs # shared idempotent source removal: detach_source (one project; deletes the connection when no other checkout links it) + remove_provider_connection (every project); credentials stay (HS2-724S9N, HS2-SM9PM8)

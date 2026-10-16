@@ -137,3 +137,4 @@ pub mod connection_removal;
 mod file_lock;
 pub mod repository_size;
 pub mod repository_status;
+mod settings_locks;

@@ -15,6 +15,28 @@ impl FileLock {
         lock_file(&file)?;
         Ok(Self { file })
     }
+
+    /// Take the lock only when nobody holds it right now; `Ok(None)` means it is busy.
+    #[cfg(unix)]
+    pub(crate) fn try_acquire(file: File) -> io::Result<Option<Self>> {
+        use std::os::fd::AsRawFd;
+
+        // SAFETY: flock only borrows this live file descriptor for the duration of the call.
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+            return Ok(Some(Self { file }));
+        }
+        let error = io::Error::last_os_error();
+        if error.kind() == io::ErrorKind::WouldBlock {
+            Ok(None)
+        } else {
+            Err(error)
+        }
+    }
+
+    /// The locked file, for reading or writing its contents while the lock is held.
+    pub(crate) fn file(&self) -> &File {
+        &self.file
+    }
 }
 
 impl Drop for FileLock {

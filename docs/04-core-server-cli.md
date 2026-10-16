@@ -1286,7 +1286,12 @@ Settings rewrites replace each scope file atomically so concurrent CLI and serve
 complete JSON before or after a write. `set`, `unset`, and migration hold a cross-process
 lock for the entire read-modify-write transaction of each scope, preventing concurrent
 writers from silently dropping different keys. Lock files live under
-`${HOTSHEET_HOME}/settings-locks`, outside the committed project settings directory.
+`${HOTSHEET_HOME}/settings-locks`, outside the committed project settings directory. Each
+lock file records the settings path it guards. On Unix, at most once an hour
+(`.last-prune` marker), a writer removes unheld locks whose settings file no longer
+exists, plus legacy empty locks, so a lock is not left behind for every temp project ever
+seen (HS2-MZ1TMH). A writer re-checks after locking that its open file is still the one at
+the lock path, and retries if a prune replaced it. Windows does not prune.
 
 `trash_cleanup_days` is a positive whole number stored in Shared scope. Its documented and
 runtime default is 30. The server validates checkout-scoped writes, the generic CLI settings

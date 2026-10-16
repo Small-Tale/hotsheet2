@@ -13,7 +13,6 @@
 //! Device/app-only settings (window geometry, theme) are the client's concern and never
 //! live here.
 
-use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
@@ -245,15 +244,13 @@ impl Settings {
         canonical.push(path.file_name().expect("settings path has a file name"));
         let digest = Sha256::digest(canonical.to_string_lossy().as_bytes());
         let home = self.global_home.clone().unwrap_or_else(hotsheet_home);
-        let lock_dir = home.join("settings-locks");
-        std::fs::create_dir_all(&lock_dir)?;
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(lock_dir.join(format!("{digest:x}.lock")))?;
-        Ok(FileLock::acquire(file)?)
+        // Locks record the settings path they guard so stale ones can be pruned instead
+        // of accumulating one file per project ever seen (HS2-MZ1TMH).
+        Ok(crate::settings_locks::acquire(
+            &home.join("settings-locks"),
+            &format!("{digest:x}.lock"),
+            &canonical,
+        )?)
     }
 
     fn read_map(
@@ -514,6 +511,39 @@ mod tests {
 
     fn root() -> tempfile::TempDir {
         tempfile::tempdir().unwrap()
+    }
+
+    /// HS2-MZ1TMH: temp projects that write settings and then disappear must not leave a
+    /// permanent lock each; a prune keeps only locks whose settings file still exists.
+    #[cfg(unix)]
+    #[test]
+    fn settings_locks_of_vanished_projects_are_pruned() {
+        let home = root();
+        let live = root();
+        Settings::for_project_with_global_home(live.path(), home.path())
+            .set("kept", json!(true), Scope::Shared)
+            .unwrap();
+        for index in 0..20 {
+            let project = root();
+            let settings = Settings::for_project_with_global_home(project.path(), home.path());
+            settings.set("k", json!(index), Scope::Shared).unwrap();
+            settings.set("k", json!(index), Scope::Local).unwrap();
+        }
+        let dir = home.path().join("settings-locks");
+        let count = || {
+            std::fs::read_dir(&dir)
+                .unwrap()
+                .filter(|entry| entry.as_ref().unwrap().path().extension().is_some())
+                .count()
+        };
+        assert_eq!(count(), 41);
+        crate::settings_locks::prune(&dir, &dir.join("none.lock")).unwrap();
+        assert_eq!(count(), 1, "only the live project's lock remains");
+        // The surviving lock still serializes writes for the live project.
+        Settings::for_project_with_global_home(live.path(), home.path())
+            .set("again", json!(1), Scope::Shared)
+            .unwrap();
+        assert_eq!(count(), 1);
     }
 
     #[test]
