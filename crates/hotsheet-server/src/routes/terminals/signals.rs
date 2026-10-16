@@ -696,7 +696,11 @@ pub(crate) async fn read_terminal(
 ) -> Result<Json<TerminalRead>, ApiError> {
     if let Some(tb) = &state.terminal_broker {
         let resp = tb
-            .call(hotsheet_terminals::BrokerRequest::Read { id: id.clone() })
+            .call(hotsheet_terminals::BrokerRequest::Read {
+                id: id.clone(),
+                // A broker older than HS2-9R751Y ignores this and answers with an array.
+                bytes: hotsheet_terminals::BytesEncoding::Base64,
+            })
             .await
             .map_err(|e| {
                 ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, format!("broker: {e}"))

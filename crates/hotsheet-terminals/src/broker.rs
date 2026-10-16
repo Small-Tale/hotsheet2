@@ -22,6 +22,7 @@ pub use crate::broker_socket::SocketCleanup;
 use crate::manager::TerminalManager;
 use crate::sizing::ViewportClaim;
 use crate::terminal::{TermSpec, TerminalKind};
+use crate::wire_bytes::{BytesEncoding, WireBytes};
 
 /// Detached brokers exit after this long with no terminals and no connected clients.
 pub const DEFAULT_IDLE_GRACE: Duration = Duration::from_secs(5 * 60);
@@ -56,14 +57,20 @@ pub enum Request {
     },
     /// List all hosted terminals.
     List,
-    /// The terminal's state + scrollback snapshot.
-    Read { id: String },
+    /// The terminal's state + scrollback snapshot. `bytes` asks for the scrollback's encoding
+    /// (HS2-9R751Y); brokers that predate it ignore the field and answer with an array.
+    Read {
+        id: String,
+        #[serde(default, skip_serializing_if = "BytesEncoding::is_array")]
+        bytes: BytesEncoding,
+    },
     /// The terminal's state alone, answered with [`Response::Terminal`] (HS2-7RRAA8). Status
     /// pollers use it: a `read` carries the whole 256 KiB scrollback as a JSON number array, and
     /// two of those a second per terminal kept the broker and server busy while idle. Brokers
     /// that predate it answer `Err { "bad request: …" }`, which callers treat as "use `list`".
     Info { id: String },
-    /// Write input bytes to the terminal's PTY.
+    /// Write input bytes to the terminal's PTY. Input is small keystroke data, so it stays a
+    /// number array that every broker parses.
     Input { id: String, data: Vec<u8> },
     /// Kill + forget the terminal.
     Kill { id: String },
@@ -71,7 +78,13 @@ pub enum Request {
     /// the broker replays the scrollback then streams live output + size decisions as
     /// [`StreamOut`] frames, and reads [`StreamIn`] frames (input + size claims) until the
     /// connection closes. No further request/response ops happen on this connection.
-    Attach { id: String },
+    /// `bytes` asks for the streamed payloads' encoding (HS2-9R751Y); brokers that predate it
+    /// ignore the field and stream arrays.
+    Attach {
+        id: String,
+        #[serde(default, skip_serializing_if = "BytesEncoding::is_array")]
+        bytes: BytesEncoding,
+    },
 }
 
 /// A frame the broker streams to an attached client (one JSON line each), after an
@@ -81,9 +94,9 @@ pub enum Request {
 #[serde(tag = "frame", rename_all = "snake_case")]
 pub enum StreamOut {
     /// The initial scrollback replay (and a re-sync snapshot after a lag).
-    Scrollback { data: Vec<u8> },
+    Scrollback { data: WireBytes },
     /// A live PTY output chunk as it arrives.
-    Output { data: Vec<u8> },
+    Output { data: WireBytes },
     /// The size arbiter's applied PTY size: sent once right after the initial replay
     /// (HS2-7Y1BQ2) and again whenever it changes.
     Size {
@@ -102,8 +115,9 @@ pub enum StreamOut {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "frame", rename_all = "snake_case")]
 pub enum StreamIn {
-    /// Raw bytes to write to the PTY (keystrokes / a command).
-    Input { data: Vec<u8> },
+    /// Raw bytes to write to the PTY (keystrokes / a command). A client sends base64 only
+    /// after the broker streamed base64 on this connection (see [`BrokerStream::send_input`]).
+    Input { data: WireBytes },
     /// This viewport's leased size claim (fed to the arbiter, HS2-BD7Q74).
     Resize {
         viewer_id: String,
@@ -137,7 +151,7 @@ pub enum Response {
     /// State + scrollback (for `read`).
     Read {
         info: BrokerTermInfo,
-        scrollback: Vec<u8>,
+        scrollback: WireBytes,
     },
     /// A successful side-effecting op (`input` / `kill`).
     Ok,
@@ -262,8 +276,8 @@ async fn handle_connection(
         }
         match serde_json::from_str::<Request>(&line) {
             // Attach switches this connection into streaming mode for the rest of its life.
-            Ok(Request::Attach { id }) => {
-                return stream_terminal(lines, write, project, manager, id).await;
+            Ok(Request::Attach { id, bytes }) => {
+                return stream_terminal(lines, write, project, manager, id, bytes).await;
             }
             Ok(req) => {
                 let resp = handle_request(project, manager, req);
@@ -301,8 +315,10 @@ async fn stream_terminal(
     project: &str,
     manager: &Arc<TerminalManager>,
     id: String,
+    encoding: BytesEncoding,
 ) -> std::io::Result<()> {
     use tokio::sync::broadcast::error::RecvError;
+    let wire = |data: Vec<u8>| WireBytes::new(data, encoding);
 
     let Some(term) = manager.get(&(project.to_string(), id.clone())) else {
         return write_line(&mut write, &StreamOut::NotFound).await;
@@ -314,7 +330,13 @@ async fn stream_terminal(
     let mut size_rx = term.subscribe_size();
     let mut my_viewer: Option<String> = None;
 
-    write_line(&mut write, &StreamOut::Scrollback { data: snapshot }).await?;
+    write_line(
+        &mut write,
+        &StreamOut::Scrollback {
+            data: wire(snapshot),
+        },
+    )
+    .await?;
     // Size frames only report changes, so tell a new viewer the applied size right after the
     // replay; otherwise a stable-size terminal never reports its grid (HS2-7Y1BQ2).
     if let Some(current) = term.current_size() {
@@ -332,12 +354,12 @@ async fn stream_terminal(
     loop {
         tokio::select! {
             output = out_rx.recv() => match output {
-                Ok(data) => write_line(&mut write, &StreamOut::Output { data }).await?,
+                Ok(data) => write_line(&mut write, &StreamOut::Output { data: wire(data) }).await?,
                 // Fell behind the fan-out — re-sync from a fresh snapshot.
                 Err(RecvError::Lagged(_)) => {
                     let (snapshot, replacement) = term.subscribe_with_scrollback();
                     out_rx = replacement;
-                    write_line(&mut write, &StreamOut::Scrollback { data: snapshot }).await?;
+                    write_line(&mut write, &StreamOut::Scrollback { data: wire(snapshot) }).await?;
                 }
                 Err(RecvError::Closed) => break, // terminal ended
             },
@@ -424,10 +446,10 @@ fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Request) -
             },
             None => Response::NotFound,
         },
-        Request::Read { id } => match manager.get(&key(&id)) {
+        Request::Read { id, bytes } => match manager.get(&key(&id)) {
             Some(term) => Response::Read {
                 info: info_of(&term, &id),
-                scrollback: term.scrollback(),
+                scrollback: WireBytes::new(term.scrollback(), bytes),
             },
             None => Response::NotFound,
         },
@@ -495,22 +517,40 @@ impl BrokerClient {
 pub struct BrokerStream {
     reader: tokio::io::Lines<BufReader<OwnedReadHalf>>,
     writer: OwnedWriteHalf,
+    /// The encoding input is sent in: base64 only once the broker has streamed a base64
+    /// payload on this connection, proving it understands the encoding (HS2-9R751Y).
+    input_encoding: BytesEncoding,
 }
 
 impl BrokerStream {
     /// Connect to the broker at `socket_path` and attach to terminal `id`. The first
     /// [`next`](Self::next) frame is the scrollback replay (or [`StreamOut::NotFound`]).
+    /// Payloads are requested as base64; a broker that predates the encoding streams arrays,
+    /// which decode the same way.
     pub async fn open(socket_path: &Path, id: &str) -> std::io::Result<Self> {
+        Self::open_with(socket_path, id, BytesEncoding::Base64).await
+    }
+
+    /// [`open`](Self::open) asking for an explicit payload encoding.
+    pub async fn open_with(
+        socket_path: &Path,
+        id: &str,
+        bytes: BytesEncoding,
+    ) -> std::io::Result<Self> {
         let stream = UnixStream::connect(socket_path).await?;
         let (read, mut writer) = stream.into_split();
-        let mut line = serde_json::to_string(&Request::Attach { id: id.to_string() })
-            .map_err(std::io::Error::other)?;
+        let mut line = serde_json::to_string(&Request::Attach {
+            id: id.to_string(),
+            bytes,
+        })
+        .map_err(std::io::Error::other)?;
         line.push('\n');
         writer.write_all(line.as_bytes()).await?;
         writer.flush().await?;
         Ok(Self {
             reader: BufReader::new(read).lines(),
             writer,
+            input_encoding: BytesEncoding::Array,
         })
     }
 
@@ -521,13 +561,32 @@ impl BrokerStream {
             match self.reader.next_line().await? {
                 Some(l) if l.trim().is_empty() => continue,
                 Some(l) => {
-                    return serde_json::from_str(&l)
-                        .map(Some)
-                        .map_err(std::io::Error::other);
+                    let frame: StreamOut =
+                        serde_json::from_str(&l).map_err(std::io::Error::other)?;
+                    if let StreamOut::Scrollback { data } | StreamOut::Output { data } = &frame
+                        && data.encoding() == BytesEncoding::Base64
+                    {
+                        self.input_encoding = BytesEncoding::Base64;
+                    }
+                    return Ok(Some(frame));
                 }
                 None => return Ok(None),
             }
         }
+    }
+
+    /// The encoding [`send_input`](Self::send_input) uses right now.
+    pub fn input_encoding(&self) -> BytesEncoding {
+        self.input_encoding
+    }
+
+    /// Forward PTY input, as base64 once the broker proved it speaks it and as a number
+    /// array before that (so a broker older than the encoding never sees a string).
+    pub async fn send_input(&mut self, data: Vec<u8>) -> std::io::Result<()> {
+        let frame = StreamIn::Input {
+            data: WireBytes::new(data, self.input_encoding),
+        };
+        self.send(&frame).await
     }
 
     /// Forward one input / size-claim frame to the broker.
@@ -644,11 +703,15 @@ mod tests {
             "cat's echo reaches the broker-hosted scrollback"
         );
         let read = client
-            .request(&Request::Read { id: "t1".into() })
+            .request(&Request::Read {
+                id: "t1".into(),
+                bytes: BytesEncoding::Base64,
+            })
             .await
             .unwrap();
         match read {
             Response::Read { scrollback, .. } => {
+                assert_eq!(scrollback.encoding(), BytesEncoding::Base64);
                 assert!(String::from_utf8_lossy(&scrollback).contains("broker-echo"));
             }
             other => panic!("expected Read, got {other:?}"),
@@ -664,7 +727,10 @@ mod tests {
         ));
         assert!(matches!(
             client
-                .request(&Request::Read { id: "t1".into() })
+                .request(&Request::Read {
+                    id: "t1".into(),
+                    bytes: BytesEncoding::Array,
+                })
                 .await
                 .unwrap(),
             Response::NotFound
@@ -789,7 +855,7 @@ mod tests {
         // Now stream NEW input through the attach connection; `cat` echoes it back as live output.
         stream
             .send(&StreamIn::Input {
-                data: b"live-echo\n".to_vec(),
+                data: b"live-echo\n".to_vec().into(),
             })
             .await
             .unwrap();
@@ -1079,5 +1145,170 @@ mod tests {
         let _listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
         drop(SocketCleanup::new(&socket));
         assert!(!socket.exists());
+    }
+
+    // ---- HS2-9R751Y: byte-encoding version skew ---------------------------------------
+
+    async fn broker_with_cat(id: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("broker.sock");
+        let listener = UnixListener::bind(&sock).unwrap();
+        tokio::spawn(serve_broker(
+            listener,
+            "proj".into(),
+            Arc::new(TerminalManager::new()),
+        ));
+        let mut client = BrokerClient::connect(&sock).await.unwrap();
+        client
+            .request(&Request::Open {
+                id: id.into(),
+                kind: TerminalKind::Shell,
+                command: "cat".into(),
+                args: vec![],
+                cwd: None,
+                env: vec![],
+            })
+            .await
+            .unwrap();
+        client
+            .request(&Request::Input {
+                id: id.into(),
+                data: b"seed\n".to_vec(),
+            })
+            .await
+            .unwrap();
+        (dir, sock)
+    }
+
+    /// A raw JSON-line peer: what a server older than the encoding sends and reads.
+    struct RawPeer {
+        lines: tokio::io::Lines<BufReader<OwnedReadHalf>>,
+        writer: OwnedWriteHalf,
+    }
+
+    impl RawPeer {
+        async fn connect(sock: &Path) -> Self {
+            let (read, writer) = UnixStream::connect(sock).await.unwrap().into_split();
+            Self {
+                lines: BufReader::new(read).lines(),
+                writer,
+            }
+        }
+
+        async fn send(&mut self, line: &str) {
+            self.writer.write_all(line.as_bytes()).await.unwrap();
+            self.writer.write_all(b"\n").await.unwrap();
+        }
+
+        async fn next(&mut self) -> serde_json::Value {
+            let line = tokio::time::timeout(Duration::from_secs(5), self.lines.next_line())
+                .await
+                .expect("line in time")
+                .unwrap()
+                .expect("open");
+            serde_json::from_str(&line).unwrap()
+        }
+
+        /// Collect array-encoded output until `needle` appears.
+        async fn read_array_output_until(&mut self, needle: &str) -> Vec<u8> {
+            let mut acc = Vec::new();
+            while !String::from_utf8_lossy(&acc).contains(needle) {
+                let frame = self.next().await;
+                if let Some(data) = frame.get("data") {
+                    let bytes = data.as_array().expect("an old peer only ever sees arrays");
+                    acc.extend(bytes.iter().map(|b| b.as_u64().unwrap() as u8));
+                }
+            }
+            acc
+        }
+    }
+
+    #[tokio::test]
+    async fn an_old_server_without_an_encoding_gets_arrays_and_its_array_input_works() {
+        let (_dir, sock) = broker_with_cat("legacy").await;
+        let mut old = RawPeer::connect(&sock).await;
+        old.send(r#"{"op":"read","id":"legacy"}"#).await;
+        let read = old.next().await;
+        assert!(read["scrollback"].is_array(), "{read}");
+
+        let mut old = RawPeer::connect(&sock).await;
+        old.send(r#"{"op":"attach","id":"legacy"}"#).await;
+        old.read_array_output_until("seed").await;
+        let input: Vec<u8> = b"old-input\n".to_vec();
+        old.send(&format!(
+            r#"{{"frame":"input","data":{}}}"#,
+            serde_json::to_string(&input).unwrap()
+        ))
+        .await;
+        old.read_array_output_until("old-input").await;
+    }
+
+    #[tokio::test]
+    async fn a_new_server_streams_base64_and_switches_input_after_the_first_base64_frame() {
+        let (_dir, sock) = broker_with_cat("compact").await;
+        let mut stream = BrokerStream::open(&sock, "compact").await.unwrap();
+        assert_eq!(stream.input_encoding(), BytesEncoding::Array);
+        match stream.next().await.unwrap() {
+            Some(StreamOut::Scrollback { data }) => {
+                assert_eq!(data.encoding(), BytesEncoding::Base64)
+            }
+            other => panic!("expected the replay first, got {other:?}"),
+        }
+        assert_eq!(stream.input_encoding(), BytesEncoding::Base64);
+        stream.send_input(b"new-input\n".to_vec()).await.unwrap();
+        let mut seen = Vec::new();
+        assert!(wait_until_stream(&mut stream, &mut seen, "new-input", 5).await);
+
+        // A new broker still decodes array input mid-stream (a peer that has not switched).
+        stream
+            .send(&StreamIn::Input {
+                data: b"array-input\n".to_vec().into(),
+            })
+            .await
+            .unwrap();
+        assert!(wait_until_stream(&mut stream, &mut seen, "array-input", 5).await);
+    }
+
+    /// An old broker ignores the requested encoding and streams arrays. The new client
+    /// decodes them and never sends it a base64 string it could not parse.
+    #[tokio::test]
+    async fn a_new_server_against_an_old_array_only_broker_keeps_input_as_arrays() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("old-broker.sock");
+        let listener = UnixListener::bind(&sock).unwrap();
+        let old_broker = tokio::spawn(async move {
+            let (conn, _) = listener.accept().await.unwrap();
+            let (read, mut write) = conn.into_split();
+            let mut lines = BufReader::new(read).lines();
+            let attach = lines.next_line().await.unwrap().unwrap();
+            // The old broker's Request::Attach has only `id`; serde ignores the new field.
+            #[derive(Deserialize)]
+            #[serde(tag = "op", rename_all = "snake_case")]
+            enum OldRequest {
+                Attach { id: String },
+            }
+            let OldRequest::Attach { id } = serde_json::from_str(&attach).unwrap();
+            assert_eq!(id, "t");
+            write
+                .write_all(b"{\"frame\":\"scrollback\",\"data\":[104,105]}\n")
+                .await
+                .unwrap();
+            lines.next_line().await.unwrap().unwrap()
+        });
+
+        let mut stream = BrokerStream::open(&sock, "t").await.unwrap();
+        match stream.next().await.unwrap() {
+            Some(StreamOut::Scrollback { data }) => {
+                assert_eq!(
+                    (&*data, data.encoding()),
+                    (&b"hi"[..], BytesEncoding::Array)
+                );
+            }
+            other => panic!("expected the replay, got {other:?}"),
+        }
+        assert_eq!(stream.input_encoding(), BytesEncoding::Array);
+        stream.send_input(b"x".to_vec()).await.unwrap();
+        let input: serde_json::Value = serde_json::from_str(&old_broker.await.unwrap()).unwrap();
+        assert_eq!(input, serde_json::json!({"frame": "input", "data": [120]}));
     }
 }

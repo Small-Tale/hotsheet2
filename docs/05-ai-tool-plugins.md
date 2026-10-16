@@ -547,21 +547,34 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   falls back to `list`, which also carries no scrollback, so a long-lived older broker gets
   the same relief without a restart. MCP presence sweeps check lease pids with a direct
   `kill(pid, 0)` rather than spawning `kill -0`.
-  New broker sockets use `/tmp/hotsheet2-brokers-<effective-uid>/<home-project-hash>.sock`:
-  the short path stays within Unix socket address limits even when `HOTSHEET_HOME` is
-  under macOS's long temporary-directory root. The private directory is owned by the
-  effective user with mode 0700; sockets and persistent ownership-lock files use 0600.
-  The key includes the canonical configured home and project, so separate homes do not
-  share terminal brokers. Indexes, instance registrations, settings, and other state
-  remain under the configured home. An owned legacy socket is adopted under a shared
-  namespace-selection lock and pinned by its persistent ownership-lock inode, even
-  after idle socket cleanup. Retained and fresh server handles therefore reuse the
-  same legacy address across exits/restarts; failed health probes never select a
-  second namespace. This preserves terminals across upgrades. Symlink/shared directories and
-  non-socket stale paths are rejected with a diagnostic; exclusive no-follow locks
-  serialize detached ownership, and shutdown removes only the socket inode it bound.
-  Lock files remain in place to avoid unlink/recreate races; they hold no durable
-  application data and the operating system releases their lock on process exit.
+- **Compact broker byte payloads (HS2-9R751Y).** Byte payloads (attach scrollback and
+  output frames, attach input, `read` scrollback) decode from either a legacy JSON number
+  array or a base64 string (`hotsheet_terminals::WireBytes`), so mixed versions always
+  interoperate. Encoding is negotiated per connection:
+  - The server's `attach` and `read` requests carry `"bytes": "base64"`. A current broker
+    then answers in base64. A broker that predates the field ignores it and keeps sending
+    arrays, and a request without the field (an older server) gets arrays.
+  - Attach input goes to the broker as base64 only after that connection has streamed a
+    base64 payload, so an older broker never receives a string it cannot parse.
+  - The request/response `input` op stays an array, since keystrokes are small.
+  - A 256 KiB replay frame shrinks from about 934 KB to about 350 KB on the wire. Its parse
+    through the tagged frame enum drops from about 38 ms to about 4 ms (debug build,
+    `wire_bytes_replay_cost`).
+    New broker sockets use `/tmp/hotsheet2-brokers-<effective-uid>/<home-project-hash>.sock`:
+    the short path stays within Unix socket address limits even when `HOTSHEET_HOME` is
+    under macOS's long temporary-directory root. The private directory is owned by the
+    effective user with mode 0700; sockets and persistent ownership-lock files use 0600.
+    The key includes the canonical configured home and project, so separate homes do not
+    share terminal brokers. Indexes, instance registrations, settings, and other state
+    remain under the configured home. An owned legacy socket is adopted under a shared
+    namespace-selection lock and pinned by its persistent ownership-lock inode, even
+    after idle socket cleanup. Retained and fresh server handles therefore reuse the
+    same legacy address across exits/restarts; failed health probes never select a
+    second namespace. This preserves terminals across upgrades. Symlink/shared directories and
+    non-socket stale paths are rejected with a diagnostic; exclusive no-follow locks
+    serialize detached ownership, and shutdown removes only the socket inode it bound.
+    Lock files remain in place to avoid unlink/recreate races; they hold no durable
+    application data and the operating system releases their lock on process exit.
 - Environment scrubbing (drop tool-marker vars like `TSX_*`/`npm_*`, plus the host's `HOT_SHEET_*` build pins, that leak into
   child shells — HS1 §22.13.1). Every launched process also drops the inherited
   repository-locating git variables (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, …;

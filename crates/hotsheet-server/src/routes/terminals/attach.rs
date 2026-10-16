@@ -300,12 +300,12 @@ async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::Pat
                                 break;
                             }
                             received_initial_replay = true;
-                            if socket.send(Message::Binary(data.into())).await.is_err() {
+                            if socket.send(Message::Binary(data.into_vec().into())).await.is_err() {
                                 break;
                             }
                         }
                         S::Output { data } => {
-                            if socket.send(Message::Binary(data.into())).await.is_err() {
+                            if socket.send(Message::Binary(data.into_vec().into())).await.is_err() {
                                 break;
                             }
                         }
@@ -329,10 +329,8 @@ async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::Pat
             },
             inbound = socket.recv() => match inbound {
                 Some(Ok(Message::Binary(b))) => {
-                    if stream
-                        .send(&hotsheet_terminals::StreamIn::Input { data: b.to_vec() })
-                        .await
-                        .is_err()
+                    // Base64 once the broker proved it speaks it (HS2-9R751Y).
+                    if stream.send_input(b.to_vec()).await.is_err()
                     {
                         break;
                     }
@@ -361,11 +359,7 @@ async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::Pat
                         }
                         TerminalText::InvalidControl => continue,
                         TerminalText::Input(input) => {
-                            stream
-                                .send(&hotsheet_terminals::StreamIn::Input {
-                                    data: input.as_bytes().to_vec(),
-                                })
-                                .await
+                            stream.send_input(input.as_bytes().to_vec()).await
                         }
                     };
                     if sent.is_err() {

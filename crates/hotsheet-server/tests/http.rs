@@ -17800,7 +17800,10 @@ async fn broker_terminal_sessions_release_claims_including_after_a_server_restar
         assert_eq!(resp.status(), StatusCode::OK);
     }
     let Ok(hotsheet_terminals::BrokerResponse::Read { info, .. }) = broker
-        .call(hotsheet_terminals::BrokerRequest::Read { id: "fresh".into() })
+        .call(hotsheet_terminals::BrokerRequest::Read {
+            id: "fresh".into(),
+            bytes: hotsheet_terminals::BytesEncoding::Array,
+        })
         .await
     else {
         panic!("the broker hosts the terminal");

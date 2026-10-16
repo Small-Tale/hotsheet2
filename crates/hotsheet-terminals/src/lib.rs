@@ -21,6 +21,7 @@ pub mod manager;
 pub mod osc;
 pub mod sizing;
 pub mod terminal;
+pub mod wire_bytes;
 
 pub use broker::{
     BrokerClient, BrokerStream, BrokerTermInfo, DEFAULT_IDLE_GRACE, Request as BrokerRequest,
@@ -33,3 +34,4 @@ pub use manager::{TermKey, TerminalManager};
 pub use osc::{OscScanner, TermState};
 pub use sizing::{Decision, SizeArbiter, SizePolicy, ViewportClaim};
 pub use terminal::{SCROLLBACK_BYTES, TermError, TermSpec, Terminal, TerminalKind};
+pub use wire_bytes::{BytesEncoding, WireBytes};
