@@ -12,6 +12,13 @@
 //!   synthesis move file bodies, so they get [`TRANSFER_BUDGET`].
 //! - [`RequestClass::Streaming`]: WebSocket upgrades, the long-poll event fallback, and
 //!   terminal attach are intentionally long-lived and are never timed.
+//! - [`RequestClass::LongWait`]: an ordinary request whose response waits for a human or an
+//!   external event (a permission ask parks for up to 24 h; the GitHub device-auth wait parks
+//!   until the person authorizes). Never timed, and never offloaded (HS2-V3S89Q).
+//!
+//! A request that had to wait for an API offload slot (the blocking pool was saturated) is
+//! also reported, with a `queue` entry in `Server-Timing` and a warning naming the wait and
+//! the slots in use (HS2-V3S89Q).
 
 use axum::{
     extract::{MatchedPath, Request},
@@ -34,6 +41,7 @@ pub(crate) enum RequestClass {
     Api,
     Transfer,
     Streaming,
+    LongWait,
 }
 
 impl RequestClass {
@@ -42,15 +50,27 @@ impl RequestClass {
         match self {
             Self::Api => Some(API_BUDGET),
             Self::Transfer => Some(TRANSFER_BUDGET),
-            Self::Streaming => None,
+            Self::Streaming | Self::LongWait => None,
         }
     }
 }
+
+/// Route templates whose response waits on a human or an external event rather than on
+/// local work (HS2-V3S89Q). Keep every such route here: an offloaded long wait would hold an
+/// API slot and a pool thread for its whole wait.
+pub(crate) const LONG_WAIT_ROUTES: &[&str] = &[
+    // Parks until a person answers the prompt, up to `DEFAULT_PERMISSION_TIMEOUT` (24 h).
+    "/permissions/ask",
+    // `GET` parks until the person finishes GitHub device authorization.
+    "/github-auth/device/{session_id}",
+];
 
 /// Classify a matched route template (for example `/checkouts/{reference}/tickets/{id}`).
 pub(crate) fn classify(route: &str) -> RequestClass {
     if route.starts_with("/ws/") || route.ends_with("/attach") {
         RequestClass::Streaming
+    } else if LONG_WAIT_ROUTES.contains(&route) {
+        RequestClass::LongWait
     } else if route.contains("attachments") || route.starts_with("/tts/") {
         RequestClass::Transfer
     } else {
@@ -90,6 +110,21 @@ pub(crate) fn server_timing(elapsed: Duration) -> String {
     format!("handler;dur={:.3}", elapsed.as_secs_f64() * 1_000.0)
 }
 
+/// How long a request waited for an API offload slot, and how many slots were in use when it
+/// got one. [`crate::blocking_offload::offload`] attaches it to the response when the pool was
+/// saturated; [`time_request`] reports it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct SlotWait {
+    pub(crate) waited: Duration,
+    pub(crate) in_use: usize,
+    pub(crate) capacity: usize,
+}
+
+/// The `Server-Timing` entry for an offload-slot wait.
+pub(crate) fn queue_timing(waited: Duration) -> String {
+    format!("queue;dur={:.3}", waited.as_secs_f64() * 1_000.0)
+}
+
 /// Axum middleware: time the request and warn when it exceeds its class budget. The
 /// route template (never the concrete path) is logged so ticket ids and checkout paths
 /// do not leak into logs and slow routes aggregate cleanly.
@@ -108,6 +143,19 @@ pub(crate) async fn time_request(request: Request, next: Next) -> Response {
         if let Ok(value) = HeaderValue::from_str(&server_timing(elapsed)) {
             response.headers_mut().append(SERVER_TIMING, value);
         }
+    }
+    if let Some(wait) = response.extensions().get::<SlotWait>().copied() {
+        if let Ok(value) = HeaderValue::from_str(&queue_timing(wait.waited)) {
+            response.headers_mut().append(SERVER_TIMING, value);
+        }
+        tracing::warn!(
+            method = %method,
+            route = %route,
+            waited_ms = wait.waited.as_millis() as u64,
+            in_use = wait.in_use,
+            capacity = wait.capacity,
+            "API request waited for an offload slot; the request pool is saturated"
+        );
     }
     if let Some(slow) = evaluate(&method, &route, response.status().as_u16(), elapsed) {
         tracing::warn!(
@@ -152,6 +200,19 @@ mod tests {
         for route in ["/ws/sync", "/ws/poll", "/terminals/{id}/attach"] {
             assert_eq!(classify(route), RequestClass::Streaming, "{route}");
             assert_eq!(classify(route).budget(), None);
+        }
+        // Waits on a person are neither timed nor offloaded (HS2-V3S89Q).
+        for route in ["/permissions/ask", "/github-auth/device/{session_id}"] {
+            assert_eq!(classify(route), RequestClass::LongWait, "{route}");
+            assert_eq!(classify(route).budget(), None);
+        }
+        for route in [
+            "/permissions",
+            "/permissions/{id}",
+            "/github-auth/device",
+            "/github-auth/device/{session_id}/repositories",
+        ] {
+            assert_eq!(classify(route), RequestClass::Api, "{route}");
         }
     }
 
@@ -265,5 +326,77 @@ mod tests {
             !warnings[0].contains("HS-1"),
             "concrete ids stay out of logs: {log}"
         );
+    }
+
+    /// A response that carries a slot wait is reported with a `queue` timing and a
+    /// saturation warning; one without is not (HS2-V3S89Q).
+    #[tokio::test(flavor = "current_thread")]
+    async fn middleware_reports_offload_slot_waits() {
+        let capture = Capture::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(capture.clone())
+            .with_ansi(false)
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+        let app = Router::new()
+            .route(
+                "/tickets/{id}",
+                get(|| async {
+                    let mut response = axum::response::IntoResponse::into_response("queued");
+                    response.extensions_mut().insert(SlotWait {
+                        waited: Duration::from_millis(42),
+                        in_use: 256,
+                        capacity: 256,
+                    });
+                    response
+                }),
+            )
+            .route("/tickets", get(|| async { "fast" }))
+            .layer(axum::middleware::from_fn(time_request));
+        let queued = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/tickets/HS-1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let timing: Vec<_> = queued
+            .headers()
+            .get_all("server-timing")
+            .iter()
+            .map(|value| value.to_str().unwrap().to_string())
+            .collect();
+        assert!(
+            timing.iter().any(|entry| entry == "queue;dur=42.000"),
+            "{timing:?}"
+        );
+        let fast = app
+            .oneshot(
+                Request::builder()
+                    .uri("/tickets")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            fast.headers()
+                .get_all("server-timing")
+                .iter()
+                .all(|value| !value.to_str().unwrap().starts_with("queue")),
+        );
+        let log = String::from_utf8(capture.0.lock().unwrap().clone()).unwrap();
+        let warnings = log
+            .lines()
+            .filter(|line| line.contains("waited for an offload slot"))
+            .collect::<Vec<_>>();
+        assert_eq!(warnings.len(), 1, "{log}");
+        assert!(warnings[0].contains("route=/tickets/{id}"), "{log}");
+        assert!(warnings[0].contains("waited_ms=42"), "{log}");
+        assert!(warnings[0].contains("in_use=256"), "{log}");
+        assert!(!warnings[0].contains("HS-1"), "{log}");
     }
 }

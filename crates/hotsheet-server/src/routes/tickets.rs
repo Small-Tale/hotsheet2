@@ -29,6 +29,7 @@ pub(crate) async fn health(
             "generation": "hs2",
             "api_version": 1,
             "primary_store": { "status": "conflict", "error": error.message },
+            "api_offload": crate::blocking_offload::stats(),
         })));
     }
     let metadata = state.store.metadata()?;
@@ -44,6 +45,8 @@ pub(crate) async fn health(
         "listing": source,
         "launcher": state.launcher(),
         "executable": state.executable(),
+        // Request-pool saturation: slots in use, requests queued, long waits parked (HS2-V3S89Q).
+        "api_offload": crate::blocking_offload::stats(),
     })))
 }
 

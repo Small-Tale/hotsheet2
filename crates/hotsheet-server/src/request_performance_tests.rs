@@ -338,3 +338,89 @@ async fn a_blocked_store_request_does_not_starve_unrelated_routes() {
         );
     }
 }
+
+/// Through the real router: more pending permission asks than there are API offload slots
+/// must not delay an unrelated request, and `/health` reports them as long waits rather than
+/// slots in use (HS2-V3S89Q). Before the fix each parked ask held a slot for up to 24 h, so
+/// the 257th request queued silently behind them.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pending_permission_asks_do_not_queue_unrelated_requests() {
+    use tower::ServiceExt;
+    let (_root, state, project, ticket) = project_fixture();
+    let bridge = state.permissions.clone();
+    let router = app(state);
+    let asks = crate::blocking_offload::MAX_OFFLOADED + 8;
+    let pending: Vec<_> = (0..asks)
+        .map(|index| {
+            let request = axum::http::Request::builder()
+                .method("POST")
+                .uri("/permissions/ask")
+                .header("x-hotsheet-secret", "secret")
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    serde_json::json!({
+                        "connection": format!("agent-{index}"),
+                        "tool": "Bash",
+                        "action": format!("run {index}"),
+                    })
+                    .to_string(),
+                ))
+                .unwrap();
+            tokio::spawn(router.clone().oneshot(request))
+        })
+        .collect();
+    tokio::time::timeout(Duration::from_secs(20), async {
+        while bridge.pending().len() < asks {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("every ask should be pending");
+    for uri in [
+        "/health".to_string(),
+        format!("/checkouts/{project}/tickets/{}", ticket.id),
+    ] {
+        let response =
+            tokio::time::timeout(Duration::from_secs(2), router.clone().oneshot(routed(&uri)))
+                .await
+                .unwrap_or_else(|_| panic!("{uri} queued behind pending permission asks"))
+                .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{uri}");
+        let timing: Vec<_> = response
+            .headers()
+            .get_all("server-timing")
+            .iter()
+            .map(|value| value.to_str().unwrap().to_string())
+            .collect();
+        assert!(
+            timing.iter().all(|entry| !entry.starts_with("queue")),
+            "{uri} waited for an offload slot: {timing:?}"
+        );
+        if uri == "/health" {
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let health: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            let offload = &health["api_offload"];
+            assert_eq!(offload["long_waits"], asks, "{offload}");
+            assert_eq!(offload["waiting"], 0, "{offload}");
+            assert_eq!(offload["capacity"], crate::blocking_offload::MAX_OFFLOADED);
+            // Only the health request itself holds a slot.
+            assert!(offload["in_use"].as_u64().unwrap() <= 1, "{offload}");
+        }
+    }
+    // A disconnected hook withdraws its prompt (the non-offloaded path still cancels).
+    for ask in &pending {
+        ask.abort();
+    }
+    for ask in pending {
+        let _ = ask.await;
+    }
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !bridge.pending().is_empty() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("aborted asks withdraw their prompts");
+}

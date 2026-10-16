@@ -1010,6 +1010,14 @@ deadline. The shared
   calls inside handlers always find a free thread; a panicking handler answers 500. A client
   disconnect still cancels its handler at the next await point (a dropped permission hook
   withdraws its pending prompt exactly as before).
+  Long-wait routes, whose response waits on a person or an external event rather than local
+  work, are never offloaded and never timed (HS2-V3S89Q): `POST /permissions/ask` (parks for
+  up to the 24 h permission timeout) and `GET /github-auth/device/{session_id}` (parks until
+  device authorization finishes). Any number of pending prompts therefore leaves all 256 API
+  slots free. When the pool is saturated anyway, a request that waited for a slot carries a
+  `Server-Timing: queue;dur=<ms>` entry and logs a saturation `warn` with its route
+  template, `waited_ms`, `in_use`, and `capacity`. `GET /health`
+  reports the live pool as `api_offload: {in_use, capacity, waiting, long_waits}`.
   The checkout batch response includes `Server-Timing` measurements for admission,
   ticket writes, Git commit, index refresh, event publication, worklist refresh, and total
   handling time. These timings describe local server work; clients can measure their
