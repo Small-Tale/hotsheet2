@@ -1,10 +1,13 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { availableParallelism, loadavg, tmpdir } from 'node:os';
+import { availableParallelism, getPriority, loadavg, setPriority, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { defineConfig } from '@playwright/test';
 
-import { localPlaywrightWorkers } from './scripts/playwright-workers.mjs';
+import { localPlaywrightWorkers, lowerPlaywrightPriority } from './scripts/playwright-workers.mjs';
+
+// Before any worker, browser, or web server starts: they inherit the lowered priority (HS2-FVT34A).
+lowerPlaywrightPriority({ getPriority, setPriority }, process.env);
 
 const port = Number(process.env.HOTSHEET_WEB_TEST_PORT ?? 4176);
 const viteCacheDir = mkdtempSync(join(tmpdir(), 'hotsheet-playwright-vite-'));

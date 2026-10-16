@@ -694,6 +694,11 @@ or `HOTSHEET_PLAYWRIGHT_WORKERS` overrides the count. Tests get 60 s and asserti
 busy machine slows a run down instead of failing it. Tests still must wait for events or
 state, never for fixed delays.
 
+Local runs also lower their own CPU priority to nice 10 before Playwright starts its workers,
+browsers, and web server, which inherit it, so several parallel suites cannot starve the
+machine (HS2-FVT34A). `PLAYWRIGHT_NICE` sets another niceness (`0` opts out). CI keeps its
+priority unless that variable is set, and an already lower priority is never raised.
+
 Playwright rotates its managed screenshots, traces, and failure evidence under
 `clients/web/target/playwright-test-results`. Kerf UI doctor excludes this generated
 directory, so lint and browser tests can run together without a directory-scan race
