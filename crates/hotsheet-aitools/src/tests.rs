@@ -509,14 +509,40 @@ fn codex_client_streams_native_activity_and_agent_output_before_done() {
     let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::AutoComplete)).unwrap();
     let thread = cx.open_thread(None, std::path::Path::new("/w")).unwrap();
     let mut turn = cx.start_turn(&thread, "work", None, None).unwrap();
-    match turn.next_event() {
-        Some(TurnEvent::NativeActivity { source, payload }) => {
+    // HS2-90FMR2: the command is announced as in flight when it starts; the reasoning item and
+    // another thread's item are not.
+    let started = turn.next_event().unwrap();
+    match &started {
+        TurnEvent::NativeActivity { source, payload } => {
+            assert_eq!(source, "codex-item-started");
+            assert_eq!(payload["id"], "item-1");
+            assert_eq!(payload["status"], "inProgress");
+        }
+        other => panic!("expected a started item, got {other:?}"),
+    }
+    assert_eq!(
+        crate::tool_progress::tool_transition(&started),
+        Some(crate::tool_progress::ToolTransition::Started {
+            id: Some("item-1".into()),
+            name: "Shell".into()
+        })
+    );
+    let completed = turn.next_event().unwrap();
+    match &completed {
+        TurnEvent::NativeActivity { source, payload } => {
             assert_eq!(source, "codex-transcript");
             assert_eq!(payload["type"], "commandExecution");
             assert_eq!(payload["command"], "cargo test");
         }
         other => panic!("expected native activity, got {other:?}"),
     }
+    assert_eq!(
+        crate::tool_progress::tool_transition(&completed),
+        Some(crate::tool_progress::ToolTransition::Finished {
+            id: Some("item-1".into()),
+            name: Some("Shell".into())
+        })
+    );
     assert_eq!(
         turn.next_event(),
         Some(TurnEvent::Output("Today is Thursday.".into()))
@@ -551,6 +577,25 @@ fn codex_client_maps_a_failed_turn() {
         AppServerOutcome::Failed(msg) => assert_eq!(msg, "boom"),
         other => panic!("expected Failed, got {other:?}"),
     }
+}
+
+#[test]
+fn codex_client_reports_a_long_running_command_as_in_flight_until_interrupted() {
+    // HS2-90FMR2: a command that never completes is in flight from its `item/started`.
+    let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::ToolUntilInterrupt)).unwrap();
+    let thread = cx.open_thread(None, std::path::Path::new("/w")).unwrap();
+    let mut turn = cx.start_turn(&thread, "run the suite", None, None).unwrap();
+    let started = turn.next_event().unwrap();
+    assert_eq!(
+        crate::tool_progress::tool_transition(&started),
+        Some(crate::tool_progress::ToolTransition::Started {
+            id: Some("item-long".into()),
+            name: "Shell".into()
+        })
+    );
+    assert!(turn.is_running(), "the command keeps the turn running");
+    turn.interrupt();
+    assert!(!turn.is_running());
 }
 
 #[test]

@@ -1144,6 +1144,31 @@ mod tests {
         assert_eq!(timing.last_event_at_ms, 2_900);
     }
 
+    /// HS2-90FMR2: Codex items open on `item/started` and close on their `item/completed`,
+    /// matched by item id even when another call of the same kind is open.
+    #[test]
+    fn turn_timing_tracks_codex_items_by_id() {
+        let codex = |source: &str, id: &str, kind: &str| TurnEvent::NativeActivity {
+            source: source.into(),
+            payload: serde_json::json!({"type": kind, "id": id, "tool": "hotsheet_get"}),
+        };
+        let mut timing = TurnTiming::started(0);
+        timing.observe(&codex("codex-item-started", "a", "commandExecution"), 10);
+        timing.observe(&codex("codex-item-started", "b", "commandExecution"), 20);
+        timing.observe(&codex("codex-item-started", "c", "mcpToolCall"), 30);
+        timing.observe(&codex("codex-item-started", "r", "reasoning"), 35);
+        assert_eq!(in_flight(&timing), Some(("Shell".into(), 10, 3)));
+        timing.observe(&codex("codex-transcript", "b", "commandExecution"), 40);
+        assert_eq!(in_flight(&timing), Some(("Shell".into(), 10, 2)));
+        timing.observe(&codex("codex-transcript", "a", "commandExecution"), 50);
+        assert_eq!(in_flight(&timing), Some(("hotsheet_get".into(), 30, 1)));
+        // A completed item that never started (an older Codex) closes nothing else.
+        timing.observe(&codex("codex-transcript", "z", "webSearch"), 60);
+        assert_eq!(in_flight(&timing), Some(("hotsheet_get".into(), 30, 1)));
+        timing.observe(&codex("codex-transcript", "c", "mcpToolCall"), 70);
+        assert_eq!(in_flight(&timing), None);
+    }
+
     #[test]
     fn turn_timing_bounds_its_open_tool_list() {
         let mut timing = TurnTiming::started(0);

@@ -354,7 +354,12 @@ client seeds the same state; an idle one omits all three. Tool lifecycle edges a
 provider-neutrally by `hotsheet_aitools::tool_progress::tool_transition`: a Claude
 `PreToolUse` record (with its `tool_use_id`) opens a call and `PostToolUse` /
 `PostToolUseFailure` closes it; sub-agent records (`parent_tool_use_id`) never open their own
-call, and `Done` closes every call. Older servers omit these fields. It rides the existing WS and genuine-long-poll replay ring; each replayable WS event carries
+call, and `Done` closes every call. Codex driven turns map a tool-like `item/started`
+(command execution, MCP or dynamic tool call, web search, file change, sub-agent call, image
+generation) to native activity with source `codex-item-started`, which opens a call keyed by the
+item id; that item's `item/completed` transcript record (`codex-transcript`) closes it
+(HS2-90FMR2). Message and reasoning items are never in flight, and items of another thread or
+turn are ignored. Older servers omit these fields. It rides the existing WS and genuine-long-poll replay ring; each replayable WS event carries
 the same monotonic cursor a reconnecting client supplies to `/ws/poll`. Output,
 permission requests, usage, native activity, a coalescing notice, and terminal done are
 additive event variants. Clients retain unknown variants without failing their live loop.

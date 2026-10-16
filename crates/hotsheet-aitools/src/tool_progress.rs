@@ -10,6 +10,10 @@ use crate::drive::TurnEvent;
 
 /// Native activity source of a Claude stream/hook record.
 pub const CLAUDE_HOOKS_SOURCE: &str = "claude-hooks";
+/// Native activity source of a completed Codex transcript item.
+pub const CODEX_TRANSCRIPT_SOURCE: &str = "codex-transcript";
+/// Native activity source of a Codex item that has started but not completed (HS2-90FMR2).
+pub const CODEX_ITEM_STARTED_SOURCE: &str = "codex-item-started";
 
 /// One tool lifecycle edge read from a turn event.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,6 +36,20 @@ pub fn tool_transition(event: &TurnEvent) -> Option<ToolTransition> {
     };
     match source.as_str() {
         CLAUDE_HOOKS_SOURCE => claude_transition(payload),
+        CODEX_ITEM_STARTED_SOURCE => {
+            let name = codex_tool_name(payload)?;
+            Some(ToolTransition::Started {
+                id: text(payload, "id"),
+                name,
+            })
+        }
+        CODEX_TRANSCRIPT_SOURCE => {
+            let name = codex_tool_name(payload)?;
+            Some(ToolTransition::Finished {
+                id: text(payload, "id"),
+                name: Some(name),
+            })
+        }
         _ => None,
     }
 }
@@ -50,6 +68,21 @@ fn claude_transition(payload: &Value) -> Option<ToolTransition> {
         "PostToolUse" | "PostToolUseFailure" => Some(ToolTransition::Finished { id, name }),
         _ => None,
     }
+}
+
+/// The display name of a Codex tool-like transcript item, or `None` for message items.
+pub(crate) fn codex_tool_name(item: &Value) -> Option<String> {
+    let kind = item.get("type").and_then(Value::as_str)?;
+    Some(match kind {
+        "commandExecution" => "Shell".to_owned(),
+        "mcpToolCall" => text(item, "tool").unwrap_or_else(|| "MCP tool".to_owned()),
+        "dynamicToolCall" => text(item, "tool").unwrap_or_else(|| "Tool".to_owned()),
+        "webSearch" => "Web search".to_owned(),
+        "fileChange" => "File edit".to_owned(),
+        "collabAgentToolCall" => "Agent".to_owned(),
+        "imageGeneration" => "Image generation".to_owned(),
+        _ => return None,
+    })
 }
 
 fn text(value: &Value, key: &str) -> Option<String> {
@@ -125,5 +158,55 @@ mod tests {
         );
         assert_eq!(tool_transition(&TurnEvent::Output("hi".into())), None);
         assert_eq!(tool_transition(&native("other", json!({}))), None);
+    }
+
+    #[test]
+    fn codex_items_start_and_finish_by_item_id() {
+        let item = json!({"type": "commandExecution", "id": "item-1", "command": "ls"});
+        assert_eq!(
+            tool_transition(&native(CODEX_ITEM_STARTED_SOURCE, item.clone())),
+            Some(ToolTransition::Started {
+                id: Some("item-1".into()),
+                name: "Shell".into()
+            })
+        );
+        assert_eq!(
+            tool_transition(&native(CODEX_TRANSCRIPT_SOURCE, item)),
+            Some(ToolTransition::Finished {
+                id: Some("item-1".into()),
+                name: Some("Shell".into())
+            })
+        );
+        for (item, name) in [
+            (
+                json!({"type": "mcpToolCall", "tool": "hotsheet_get"}),
+                "hotsheet_get",
+            ),
+            (json!({"type": "mcpToolCall"}), "MCP tool"),
+            (json!({"type": "dynamicToolCall"}), "Tool"),
+            (json!({"type": "dynamicToolCall", "tool": "x"}), "x"),
+            (json!({"type": "webSearch"}), "Web search"),
+            (json!({"type": "fileChange"}), "File edit"),
+            (json!({"type": "collabAgentToolCall"}), "Agent"),
+            (json!({"type": "imageGeneration"}), "Image generation"),
+        ] {
+            assert_eq!(
+                tool_transition(&native(CODEX_ITEM_STARTED_SOURCE, item)),
+                Some(ToolTransition::Started {
+                    id: None,
+                    name: name.into()
+                })
+            );
+        }
+        for item in [
+            json!({"type": "agentMessage"}),
+            json!({"type": "reasoning"}),
+            json!({}),
+        ] {
+            assert_eq!(
+                tool_transition(&native(CODEX_ITEM_STARTED_SOURCE, item)),
+                None
+            );
+        }
     }
 }

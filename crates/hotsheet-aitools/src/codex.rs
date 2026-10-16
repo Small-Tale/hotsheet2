@@ -712,7 +712,29 @@ pub fn notification_usage(notification: &Value) -> Option<crate::drive::Usage> {
 /// Extract one completed transcript item belonging to this turn. Codex 0.152.1's
 /// generated app-server schema defines the rich item vocabulary under this notification.
 fn completed_item(notification: &Value, thread_id: &str, turn_id: Option<&str>) -> Option<Value> {
-    if notification.get("method").and_then(Value::as_str) != Some("item/completed") {
+    turn_item(notification, "item/completed", thread_id, turn_id)
+}
+
+/// Extract one tool-like item of this turn that has started but not completed (HS2-90FMR2):
+/// a command execution, MCP or dynamic tool call, web search, file change, sub-agent call, or
+/// image generation. Message and reasoning items are not in-flight work and stay unreported.
+fn started_tool_item(
+    notification: &Value,
+    thread_id: &str,
+    turn_id: Option<&str>,
+) -> Option<Value> {
+    turn_item(notification, "item/started", thread_id, turn_id)
+        .filter(|item| crate::tool_progress::codex_tool_name(item).is_some())
+}
+
+/// The `item` of a `method` notification routed to this thread and, when known, this turn.
+fn turn_item(
+    notification: &Value,
+    method: &str,
+    thread_id: &str,
+    turn_id: Option<&str>,
+) -> Option<Value> {
+    if notification.get("method").and_then(Value::as_str) != Some(method) {
         return None;
     }
     let params = notification.get("params")?;
@@ -802,6 +824,13 @@ impl CodexTurn {
                 self.streamed_agent_items.insert(item_id);
                 self.pending
                     .push_back(crate::drive::TurnEvent::Output(delta));
+            }
+            if let Some(payload) = started_tool_item(n, &self.thread_id, self.turn_id.as_deref()) {
+                self.pending
+                    .push_back(crate::drive::TurnEvent::NativeActivity {
+                        source: crate::tool_progress::CODEX_ITEM_STARTED_SOURCE.into(),
+                        payload,
+                    });
             }
             if let Some(payload) = completed_item(n, &self.thread_id, self.turn_id.as_deref()) {
                 if payload.get("type").and_then(Value::as_str) == Some("agentMessage") {
@@ -1327,6 +1356,9 @@ pub(crate) mod scripted {
         /// Stay running; only emit `turn/completed` (status `interrupted`) on
         /// `turn/interrupt`.
         UntilInterrupt,
+        /// Start a command execution item that never completes, then behave like
+        /// [`Self::UntilInterrupt`] (HS2-90FMR2).
+        ToolUntilInterrupt,
     }
 
     pub struct ScriptedDaemon {
@@ -1459,13 +1491,43 @@ pub(crate) mod scripted {
                     let status = match self.mode {
                         TurnMode::AutoComplete => Some("completed"),
                         TurnMode::AutoFail => Some("failed"),
-                        TurnMode::UntilInterrupt => None,
+                        TurnMode::UntilInterrupt | TurnMode::ToolUntilInterrupt => None,
                     };
+                    if matches!(self.mode, TurnMode::ToolUntilInterrupt) {
+                        // Codex 0.152.1 `item/started`: the item as it begins, status inProgress.
+                        self.push(json!({ "jsonrpc": "2.0", "method": "item/started",
+                            "params": { "threadId": thread_id, "turnId": "turn-1",
+                                "item": { "id": "item-long", "type": "commandExecution",
+                                    "command": "cargo test --workspace", "cwd": "/tmp/project",
+                                    "status": "inProgress", "commandActions": [],
+                                    "aggregatedOutput": null, "durationMs": null,
+                                    "exitCode": null, "processId": null, "source": null,
+                                    "scriptPath": null, "pluginId": null } } }));
+                    }
                     if let Some(status) = status {
                         let turn = if status == "failed" {
                             json!({ "id": "turn-1", "status": "failed",
                                     "error": { "message": "boom" } })
                         } else {
+                            // A tool item is announced when it starts (HS2-90FMR2), then a
+                            // reasoning item starts that is never reported as in-flight work.
+                            self.push(json!({ "jsonrpc": "2.0", "method": "item/started",
+                                "params": { "threadId": thread_id, "turnId": "turn-1",
+                                    "item": { "id": "item-1", "type": "commandExecution",
+                                        "command": "cargo test", "cwd": "/tmp/project",
+                                        "status": "inProgress", "commandActions": [],
+                                        "aggregatedOutput": null, "durationMs": null,
+                                        "exitCode": null, "processId": null, "source": null,
+                                        "scriptPath": null, "pluginId": null } } }));
+                            self.push(json!({ "jsonrpc": "2.0", "method": "item/started",
+                                "params": { "threadId": thread_id, "turnId": "turn-1",
+                                    "item": { "id": "item-think", "type": "reasoning",
+                                        "summary": [], "content": [] } } }));
+                            // Another thread's started item never reaches this turn.
+                            self.push(json!({ "jsonrpc": "2.0", "method": "item/started",
+                                "params": { "threadId": "other-thread", "turnId": "turn-1",
+                                    "item": { "id": "item-x", "type": "commandExecution",
+                                        "command": "rm -rf /" } } }));
                             // Codex 0.152.1 rich transcript item, emitted before usage and
                             // terminal completion exactly like the generated protocol schema.
                             self.push(json!({ "jsonrpc": "2.0", "method": "item/completed",
