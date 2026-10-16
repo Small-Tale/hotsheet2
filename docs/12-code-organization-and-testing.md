@@ -637,9 +637,9 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   `mcr.microsoft.com/playwright:v<version>-noble` with that `fonts.conf` mounted at
   `/root/.config/fontconfig/fonts.conf` and `--cpus=2`. The job verifies the full suite during a ticket's
   `final_testing` handoff, so the local requirement is the affected specs only. The
-  `@ci-smoke` group stays as the fast early signal. Until the job has run green on main
-  it is `continue-on-error` (HS2-6H4M85 makes it required), so check its result
-  explicitly in `final_testing`.
+  `@ci-smoke` group stays as the fast early signal. The job is required (HS2-6H4M85): a
+  failing shard fails the CI run, so a ticket in `final_testing` completes only after it
+  passes.
 - **Bounded, visible retries in `browser-full` only (HS2-8YHY6V).** The shards set
   `HOTSHEET_PLAYWRIGHT_RETRIES=2`, which `playwright.config.ts` reads through
   `playwrightRetries()` in `clients/web/src/test-quarantine.ts` (clamped to at most 2; unset or

@@ -292,13 +292,12 @@ jobs:
   # The full Playwright suite, sharded (HS2-D95TXJ). Locally agents run only the specs a
   # ticket affects; this job verifies the whole browser suite during the `final_testing`
   # handoff. `--fully-parallel` balances shards at the test level (the suite has no
-  # serial or beforeAll-coupled tests). Non-blocking until it has run green on main
-  # (HS2-6H4M85 makes it required); its result is still visible on every run.
+  # serial or beforeAll-coupled tests). Required (HS2-6H4M85): a failing shard fails the run.
+  # Bounded retries keep a rare flake from blocking while listing it for a follow-up (HS2-8YHY6V).
   browser-full:
     name: Full Playwright suite (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:

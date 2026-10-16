@@ -395,8 +395,8 @@ For each ticket:
    suite for shared/risky changes and always before publishing an accumulated recovery
    batch (per [`docs/12-code-organization-and-testing.md`](docs/12-code-organization-and-testing.md)
    §12.7). The full Playwright suite runs sharded in CI (`browser-full`, HS2-D95TXJ),
-   so locally run only the affected browser specs. During `final_testing`, check that
-   job's result explicitly while it stays non-blocking (HS2-6H4M85).
+   so locally run only the affected browser specs. The job is required (HS2-6H4M85),
+   so a ticket in `final_testing` completes only after it passes.
 4. Mark the ticket completed with its verification note, review the diff, make **one
    commit for that ticket**, and push immediately. Combine tickets in one commit only
    when their implementations overlap so strongly that separating them would be unsafe
