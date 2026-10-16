@@ -108,20 +108,39 @@ test.describe('touch phone audit (HS2-JDXSND)', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   test('every UX demo keeps its editable text fields at 16px or larger', async ({ page }) => {
     test.setTimeout(300_000);
-    const small: string[] = [];
+    const small: string[] = [],
+      pageErrors: string[] = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
     await page.goto('/ux-demo');
     // The Vite dev server serves the catalog module, so the walk always covers every listed demo.
-    const ids = await page.evaluate(async (module) => {
-      const catalog = (await import(module)) as { flattenCatalog: () => Array<{ id: string }> };
-      return catalog.flattenCatalog().map((demo) => demo.id);
+    const demos = await page.evaluate(async (module) => {
+      const catalog = (await import(module)) as { flattenCatalog: () => Array<{ id: string; name: string }> };
+      return catalog.flattenCatalog().map(({ id, name }) => ({ id, name }));
     }, '/src/ux-demo/catalog.ts');
-    expect(ids.length).toBeGreaterThan(50);
-    for (const id of ids) {
-      await page.goto(`/ux-demo?component=${id}`);
-      await expect(page.locator('#ux-demo-stage, main').first()).toBeAttached();
+    expect(demos.length).toBeGreaterThan(50);
+    // Boot the catalog once and switch entries in the page, as its sidebar does (HS2-Z5EE35): a full
+    // document load per entry re-fetched the whole unbundled source graph about 110 times from the
+    // shared dev server, and on a busy CI shard one such boot never mounted the catalog.
+    for (const { id, name } of demos) {
+      await page.evaluate(
+        async ([module, demo]) => {
+          const state = (await import(module)) as { selectDemo: (id: string) => void };
+          state.selectDemo(demo);
+        },
+        ['/src/ux-demo/components/demo-state.ts', id] as const,
+      );
+      await expect(
+        page.locator(
+          `[data-catalog-entry-name=${JSON.stringify(name)}] [aria-current="page"], [data-catalog-entry-name=${JSON.stringify(name)}][aria-current="page"]`,
+        ),
+        id,
+      ).toBeAttached();
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      expect(new URL(page.url()).searchParams.get('component'), id).toBe(id);
       small.push(...(await smallEditableFields(page)).map((field) => `${id}: ${field}`));
     }
     expect(small).toEqual([]);
+    expect(pageErrors).toEqual([]);
   });
 
   test('the Not working note stays at 16px when focused', async ({ page }) => {
