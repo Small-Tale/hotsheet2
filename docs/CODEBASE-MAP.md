@@ -114,7 +114,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       ticket-workflows.ts     # Ticket mutation/autosave, selection, bulk/clipboard, reader, attachment, creation, close, and Not Working workflows
       ai-configuration.tsx    # Project AI defaults, tool/model/effort and manual-model lifecycle
       terminal-limits-settings.ts # Loads, applies, and saves the machine-wide terminal limits for App Settings → Terminal memory (HS2-Y5DYC0)
-      terminal-viewports.ts   # Observed viewport identity, progressive mount/disposal, pending focus, and early kept-alive parking across project switches (HS2-WGTQ6X, HS2-DM2SK3), and reparenting live grid viewports into re-rendered placeholders (HS2-AMNNBR)
+      terminal-viewports.ts   # Observed viewport identity, one live instance moved between drawer and grid tiles (HS2-EYD24K), progressive mount/disposal, pending focus, and early kept-alive parking across project switches (HS2-WGTQ6X, HS2-DM2SK3), and reparenting live grid viewports into re-rendered placeholders (HS2-AMNNBR)
       terminal-presentation.tsx # Live workspace/drawer/conversation props projected during root render
       controllers.test.ts     # Project replacement, delayed response, rollback, reset/refill transition matrix
       terminal-viewports.test.ts # Viewport focus, mount/disposal, cancellation, refill, and park/restore/evict transitions
@@ -297,6 +297,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/terminal-safari.spec.ts # Real WebKit on ordinary HTTP origin: real PTY glyph pixels across preview/magnified/drawer, resize/reconnect and visible startup failures
     tests/terminal-dashboard-startup.spec.ts # Atomic remembered-project/terminal restoration and operations-sidebar composition
     tests/terminal-grid-reuse.spec.ts # Project grid -> workspace grid -> full screen -> exit -> project grid keeps every xterm and socket (HS2-AMNNBR, HS2-TBQQ00)
+    tests/terminal-instance-move.spec.ts # One drawer emulator and socket move into its project-grid and Workspace Grid tiles and back, scaled and inert in the tile, at 1280 and 390 px (HS2-EYD24K)
     tests/terminal-project-switch.spec.ts # Kept-alive drawer terminals: same emulator/socket and first-frame content after a project round trip, eviction on project close (HS2-WGTQ6X)
     src/components/*.tsx     #   Production web components; each imports its colocated component CSS
     src/components/*.css     #   Production styles exercised unchanged by /ux-demo and the real app

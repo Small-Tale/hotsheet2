@@ -6,6 +6,7 @@ import {
   TERMINAL_DRAWER_RESIZE_END_EVENT,
   TERMINAL_VIEWPORT_PARK_EVENT,
   TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT,
+  TERMINAL_VIEWPORT_PRESENTATION_EVENT,
   TERMINAL_VIEWPORT_REPARENT_EVENT,
   TERMINAL_VIEWPORT_RESUME_EVENT,
 } from './terminal-viewport';
@@ -46,6 +47,8 @@ vi.mock('@xterm/xterm', () => ({
     write = vi.fn();
     buffer = { active: { baseY: 20, cursorY: 3, viewportY: 20 } };
     focus = vi.fn();
+    blur = vi.fn();
+    scrollToBottom = vi.fn();
     scrollLines = vi.fn();
     modes = { applicationCursorKeysMode: false };
     selection = '';
@@ -206,6 +209,8 @@ function element() {
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
+    setAttribute: vi.fn(),
+    removeAttribute: vi.fn(),
   };
   return {
     viewport: mock as unknown as HTMLElement,
@@ -277,6 +282,8 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
         'hotsheet-terminal-paste',
         'hotsheet-terminal-read-text',
         TERMINAL_VIEWPORT_PARK_EVENT,
+        // HS2-EYD24K: the owner moves the emulator between the drawer and a grid tile.
+        TERMINAL_VIEWPORT_PRESENTATION_EVENT,
         TERMINAL_VIEWPORT_REPARENT_EVENT,
         TERMINAL_VIEWPORT_RESUME_EVENT,
         'pointerdown',
@@ -1366,5 +1373,115 @@ describe('a silent OPEN socket is replaced instead of freezing the terminal (HS2
     expect(sockets).toHaveLength(2);
     expect(view.sent).not.toContain('x');
     view.dispose();
+  });
+});
+
+describe('one emulator moves between the drawer and a grid tile (HS2-EYD24K)', () => {
+  function mountMovable() {
+    allocated.openElement = true;
+    const frame = { clientWidth: 400, clientHeight: 300 },
+      screen = { offsetWidth: 800, offsetHeight: 480 },
+      { viewport, listeners } = element();
+    Object.assign(viewport, { parentElement: frame, inert: false });
+    (viewport.classList as unknown as { contains: (name: string) => boolean }).contains = (name: string) =>
+      name === 'terminal-viewport--dedicated';
+    const frames: Array<() => void> = [];
+    windowMock.requestAnimationFrame.mockImplementation(((callback: () => void) => {
+      frames.push(callback);
+      return frames.length;
+    }) as never);
+    const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'viewer' }),
+      terminal = allocated.terminals.at(-1)! as unknown as (typeof allocated.terminals)[number] & {
+        element: { style: Record<string, string>; querySelector: () => unknown };
+        blur: ReturnType<typeof vi.fn>;
+        cols: number;
+        rows: number;
+      };
+    terminal.element.querySelector = () => screen;
+    const socket = sockets.at(-1)! as unknown as EventTarget & { readyState: number; send: (value: string) => void },
+      sent: string[] = [];
+    socket.send = (value: string) => sent.push(value);
+    socket.readyState = 1;
+    socket.dispatchEvent(new Event('open'));
+    intersections.at(-1)!.callback([{ isIntersecting: true }]);
+    const fire = (type: string, detail?: unknown) => {
+      for (const [name, handler] of listeners.mock.calls as Array<[string, (event: Event) => void]>)
+        if (name === type) handler(new CustomEvent(type, { detail }));
+    };
+    const flush = () => {
+      for (const callback of frames.splice(0)) callback();
+    };
+    const size = (cols: number, rows: number) =>
+      socket.dispatchEvent(
+        new MessageEvent('message', { data: JSON.stringify({ pty_size: { cols, rows }, driven_by: 'other' }) }),
+      );
+    const claims = () =>
+      sent
+        .filter((value) => value.startsWith('{"resize"'))
+        .map((value) => (JSON.parse(value) as { resize: { focus: boolean; visible: boolean } }).resize);
+    return { viewport, terminal, dispose, fire, flush, size, sent, claims, screen, frame };
+  }
+
+  it('keeps its socket in a tile, mirrors the PTY size there, scales to the frame, and never drives', async () => {
+    const view = mountMovable();
+    view.flush();
+    view.size(120, 40);
+    await Promise.resolve();
+    const socketCount = sockets.length;
+    view.sent.length = 0;
+
+    view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: true });
+    expect(view.viewport.dataset.presentation).toBe('tile');
+    expect(view.viewport.inert).toBe(true);
+    expect(view.terminal.options.disableStdin).toBe(true);
+    expect(view.terminal.blur).toHaveBeenCalled();
+    // A tile's claims keep the lease but report hidden and non-focused, so they never drive the PTY.
+    expect(view.claims().at(-1)).toMatchObject({ focus: false, visible: false, cols: 120, rows: 40 });
+    view.flush();
+    // 800×480 screen in a 400×300 frame: half size, letterboxed vertically.
+    expect(view.viewport.dataset.tileScale).toBe('0.5');
+    expect(view.viewport.style.transform).toBe('translate(0px, 30px) scale(0.5)');
+    expect(view.viewport.style.width).toBe('800px');
+    // Another device resizes the PTY: the tile follows its size instead of claiming its own.
+    view.size(100, 30);
+    await Promise.resolve();
+    expect([view.terminal.cols, view.terminal.rows]).toEqual([100, 30]);
+    // Typing into a tile goes nowhere.
+    view.sent.length = 0;
+    view.terminal.dataHandler!('ls\r');
+    expect(view.sent).not.toContain('ls\r');
+    expect(view.claims().every((claim) => !claim.visible)).toBe(true);
+
+    view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: false });
+    expect(view.viewport.dataset.presentation).toBeUndefined();
+    expect(view.viewport.inert).toBe(false);
+    expect(view.viewport.style.transform).toBe('');
+    expect(view.viewport.style.width).toBe('');
+    expect(view.terminal.options.disableStdin).toBe(false);
+    view.flush();
+    // Back in the drawer it claims a visible, driving size again, on the same socket.
+    expect(view.claims().at(-1)).toMatchObject({ visible: true });
+    expect(sockets).toHaveLength(socketCount);
+    view.terminal.dataHandler!('pwd\r');
+    expect(view.sent).toContain('pwd\r');
+    view.dispose();
+  });
+
+  it('survives repeated and redundant moves without leaking or reconnecting', () => {
+    const view = mountMovable();
+    for (let round = 0; round < 3; round += 1) {
+      view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: true });
+      view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: true });
+      view.flush();
+      view.fire(TERMINAL_VIEWPORT_PARK_EVENT);
+      view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: false });
+      view.fire(TERMINAL_VIEWPORT_RESUME_EVENT);
+      view.flush();
+    }
+    expect(sockets).toHaveLength(1);
+    expect(view.viewport.dataset.presentation).toBeUndefined();
+    expect(view.terminal.options.disableStdin).toBe(false);
+    view.dispose();
+    expect(view.terminal.dispose).toHaveBeenCalledTimes(1);
   });
 });

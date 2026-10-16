@@ -3248,6 +3248,32 @@ the old project cannot hold the destination's first frame during PTY output
   deferred input-focus frames, so the newly selected tab keeps focus through repeated Delete
   presses (HS2-DAXSH5).
 
+**One instance in the drawer and the grid (HS2-EYD24K).** A terminal with a warm drawer instance
+shows that same instance in its grid tile, in the drawer's project grid and in the Workspace Grid,
+instead of mounting a second emulator and socket. The instance moves between places by
+reparenting; it is never re-mounted, reconnected, or replayed. It sits inside the tile's
+morph-skipped preview placeholder, so a re-render never clobbers it.
+
+The owner tells the instance where it is with `hs-terminal-viewport-presentation`. In a tile:
+
+- **Size:** the local grid mirrors the PTY's cols×rows. It is never refitted, and never resized to
+  80×24.
+- **Scale:** the emulator is CSS-scaled to the tile frame with letterboxing.
+- **Input and focus:** the instance is `inert`, input is disabled, and its scrollbar is hidden.
+- **Sizing:** its claims report `visible:false`, so moving a terminal into the grid never resizes
+  the PTY.
+- **Resources:** it holds no WebGL context.
+
+Returning to the drawer refits the instance and lets it drive again. If the drawer and a tile both
+ask for the instance in one pass, the drawer wins. A tile still on screen while the drawer shows the
+terminal falls back to its lightweight preview. A tile that leaves the page parks the instance
+again.
+
+Tile-hosted and parked instances share the warm-terminal limit. Beyond it, the oldest tile returns
+to its lightweight preview, so memory stays bounded. Tiles of terminals never opened in the drawer
+keep the lightweight preview (HS2-QV814W), and a magnified card still mounts its own interactive
+viewer (HS2-SA08XA).
+
 Renderer choice follows real PTY measurements and browser compatibility.
 Full-size dedicated drawer terminals use xterm's DOM renderer on Chromium
 and Apple WebKit. Firefox keeps WebGL, with DOM fallback after load failure

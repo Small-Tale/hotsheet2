@@ -330,6 +330,13 @@
   overflow-y: auto;
   background-color: var(--hs-terminal-background);
 }
+/* A drawer terminal shown in a grid tile (HS2-EYD24K) is a read-only, scaled view: no scrollbar. */
+.terminal-viewport[data-presentation='tile'] .xterm .xterm-viewport {
+  overflow-y: hidden;
+}
+.terminal-viewport[data-presentation='tile'] .xterm .xterm-scrollable-element > .scrollbar {
+  display: none;
+}
 /* The footer slot holds the card's fixed footer band (the grid geometry reserves exactly this height)
    and sizes the Kerf Toolbar inside it through its public tokens: a 32px control band plus a 5.6px
    inset fills the 43.2px band (HS2-XHA5QA). */

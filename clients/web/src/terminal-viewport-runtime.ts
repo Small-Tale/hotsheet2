@@ -52,6 +52,7 @@ import {
   TERMINAL_PREVIEW_NATURAL_WIDTH,
   TERMINAL_VIEWPORT_PARK_EVENT,
   TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT,
+  TERMINAL_VIEWPORT_PRESENTATION_EVENT,
   TERMINAL_VIEWPORT_REPARENT_EVENT,
   TERMINAL_VIEWPORT_RESUME_EVENT,
   terminalDedicatedGridSize,
@@ -68,8 +69,10 @@ import {
   terminalScrollbackLimit,
   terminalShouldUseWebgl,
   terminalSocketStale,
+  terminalTileLayout,
   terminalUsesMobile80xM,
   terminalViewportClaimsSizing,
+  type TerminalViewportPresentationDetail,
   terminalViewportScale,
 } from './terminal-viewport';
 
@@ -456,7 +459,10 @@ function initializeTerminalViewport(
     // Keystrokes typed while the socket is closed or still reopening, sent once it opens so a
     // reconnect never drops what the user typed (HS2-A1R38J). Bounded like a paste.
     pendingInput = '',
-    serverSize: { cols: number; rows: number } | undefined;
+    serverSize: { cols: number; rows: number } | undefined,
+    // Shown inside a grid tile rather than the drawer (HS2-EYD24K): mirrored, scaled, non-driving.
+    tiled = false,
+    tileWebglReleased = false;
   own(() => {
     disposed = true;
     if (reconnect !== undefined) window.clearTimeout(reconnect);
@@ -479,14 +485,16 @@ function initializeTerminalViewport(
   const fixedGridSize = () =>
     mirrorPtyGrid && serverSize ? serverSize : { cols: TERMINAL_DASHBOARD_COLS, rows: TERMINAL_DASHBOARD_ROWS };
   const proposed = () => {
+    if (tiled) return serverSize ?? { cols: terminal.cols, rows: terminal.rows };
     if (mobile80xM()) return { cols: mobileCols(), rows: mobileGridRows };
     if (fixedGrid) return fixedGridSize();
     const dimensions = fit.proposeDimensions() ?? { cols: terminal.cols, rows: terminal.rows };
     return settledResize ? terminalDedicatedGridSize(dimensions.cols, dimensions.rows) : dimensions;
   };
-  const claimDimensions = () => (!fixedGrid && !mobile80xM() && lastSettledGeometry ? lastSettledGeometry : proposed());
+  const claimDimensions = () =>
+    !tiled && !fixedGrid && !mobile80xM() && lastSettledGeometry ? lastSettledGeometry : proposed();
   const reconcileScale = () => {
-    if (!terminal.element) return;
+    if (!terminal.element || tiled) return;
     const previewScale = scaledPreview ? applyScaledPreviewTransform(element) : 1;
     if (fixedGrid || mobile80xM()) {
       if (!scaledPreview) element.style.transform = '';
@@ -511,13 +519,16 @@ function initializeTerminalViewport(
   // must NOT advance the arbiter's recency, so one device's heartbeats can't steal size control
   // from the device the user last touched (HS2-3ZBQDG).
   const claim = () => {
-    const sizingFocus = claimsSizing();
+    // A tiled emulator keeps its lease like a parked one, but reports itself hidden so it never drives
+    // the PTY size: moving a terminal into the grid must not resize it (HS2-EYD24K).
+    const sizingFocus = claimsSizing() && !tiled,
+      claimVisible = visible && !tiled;
     element.dataset.sizingFocus = String(sizingFocus);
-    element.dataset.viewportVisible = String(visible);
+    element.dataset.viewportVisible = String(claimVisible);
     if (socket?.readyState !== WebSocket.OPEN) return;
-    if (!fixedGrid && !mobile80xM() && element.dataset.geometryReady !== 'true') return;
+    if (!tiled && !fixedGrid && !mobile80xM() && element.dataset.geometryReady !== 'true') return;
     const size = claimDimensions();
-    socket.send(terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, visible, false));
+    socket.send(terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, claimVisible, false));
   };
   // A genuine user interaction (tap/click/focus/keystroke) on THIS device: an interacting claim
   // makes this the "last interacted" viewport, so it takes over PTY sizing (HS2-3ZBQDG).
@@ -528,7 +539,7 @@ function initializeTerminalViewport(
   let lastInteractionAt = 0,
     pendingInteraction = false;
   const signalInteraction = () => {
-    if (scaledPreview) return;
+    if (scaledPreview || tiled) return;
     if (
       socket?.readyState !== WebSocket.OPEN ||
       !visible ||
@@ -647,12 +658,47 @@ function initializeTerminalViewport(
       applyDashboardPhysicalFill();
     });
   };
-  const render = terminal.onRender(scheduleDashboardFill);
+  // A tiled emulator mirrors the PTY's grid, then scales to its frame with letterboxing (HS2-EYD24K).
+  const layoutTile = () => {
+    if (!tiled || disposed || !terminal.element) return;
+    if (serverSize && (terminal.cols !== serverSize.cols || terminal.rows !== serverSize.rows))
+      resizeTerminalPreservingScroll(terminal, serverSize.cols, serverSize.rows);
+    const screen = terminal.element.querySelector<HTMLElement>('.xterm-screen'),
+      frame = element.parentElement;
+    if (!screen || !frame) return;
+    const layout = terminalTileLayout(screen.offsetWidth, screen.offsetHeight, frame.clientWidth, frame.clientHeight);
+    if (!layout) return;
+    element.style.width = `${screen.offsetWidth}px`;
+    element.style.height = `${screen.offsetHeight}px`;
+    element.style.transform = `translate(${layout.x}px, ${layout.y}px) scale(${layout.scale})`;
+    element.dataset.tileScale = String(layout.scale);
+    element.dataset.gridSize = `${terminal.cols}x${terminal.rows}`;
+  };
+  let tileFrame: number | undefined;
+  const scheduleTileLayout = () => {
+    if (tileFrame !== undefined) return;
+    tileFrame = window.requestAnimationFrame(() => {
+      tileFrame = undefined;
+      layoutTile();
+    });
+  };
+  own(() => {
+    if (tileFrame !== undefined) window.cancelAnimationFrame(tileFrame);
+  });
+  const render = terminal.onRender(() => {
+    if (tiled) scheduleTileLayout();
+    else scheduleDashboardFill();
+  });
   own(() => {
     render.dispose();
   });
   const applySettledGeometry = () => {
     if (disposed || element.closest('[hidden]')) return;
+    if (tiled) {
+      layoutTile();
+      claim();
+      return;
+    }
     try {
       if (mobile80xM()) {
         releaseWebgl();
@@ -817,7 +863,7 @@ function initializeTerminalViewport(
         element.dataset.driving = String(drivenByViewer);
         element.dataset.ptySize = `${size.pty_size.cols}x${size.pty_size.rows}`;
         element.dataset.gridSize = `${terminal.cols}x${terminal.rows}`;
-        queueMicrotask(reconcileScale);
+        queueMicrotask(tiled ? layoutTile : reconcileScale);
         return;
       }
       const write = (value: ArrayBuffer) => {
@@ -915,8 +961,8 @@ function initializeTerminalViewport(
     window.removeEventListener('focus', reconnectWhenShown);
     window.removeEventListener('online', reconnectWhenShown);
   });
-  // A scaled preview fits its frame (the parent); other viewports fit themselves.
-  const observedTarget = () => (scaledPreview ? (element.parentElement ?? element) : element);
+  // A scaled preview, and a tiled emulator, fit their frame (the parent); other viewports fit themselves.
+  const observedTarget = () => (scaledPreview || tiled ? (element.parentElement ?? element) : element);
   resize.observe(observedTarget());
   fitAndClaim();
   const intersection = new IntersectionObserver((entries) => {
@@ -949,6 +995,59 @@ function initializeTerminalViewport(
   element.addEventListener(TERMINAL_VIEWPORT_REPARENT_EVENT, reparent);
   own(() => {
     element.removeEventListener(TERMINAL_VIEWPORT_REPARENT_EVENT, reparent);
+  });
+  // One emulator per terminal (HS2-EYD24K): the owner moves this dedicated viewport into a grid tile and
+  // back. In a tile the emulator keeps its socket, scrollback, and grid; it is scaled to the frame.
+  const tileStyles = ['inset', 'width', 'height', 'overflow', 'transform', 'transformOrigin'] as const;
+  const present = (event: Event) => {
+    const tile = Boolean((event as CustomEvent<TerminalViewportPresentationDetail | null>).detail?.tile);
+    parked = false;
+    if (tile !== tiled) {
+      tiled = tile;
+      if (tile) {
+        if (fitFrame !== undefined) window.cancelAnimationFrame(fitFrame);
+        fitFrame = undefined;
+        // A tile never holds a WebGL context: grids can show more terminals than browsers allow.
+        tileWebglReleased = releaseWebgl() || tileWebglReleased;
+        terminal.options.disableStdin = true;
+        terminal.options.cursorBlink = false;
+        terminal.blur();
+        terminal.scrollToBottom();
+        // Drop the drawer's own fit transform (the phone 80xM scale); the tile scales the whole viewport.
+        if (terminal.element) {
+          terminal.element.style.transform = '';
+          terminal.element.style.width = '';
+          terminal.element.style.height = '';
+        }
+        element.inert = true;
+        element.setAttribute('aria-hidden', 'true');
+        element.dataset.presentation = 'tile';
+        element.style.inset = '0 auto auto 0';
+        element.style.overflow = 'hidden';
+        element.style.transformOrigin = 'top left';
+      } else {
+        for (const property of tileStyles) element.style[property] = '';
+        element.inert = false;
+        element.removeAttribute('aria-hidden');
+        delete element.dataset.presentation;
+        delete element.dataset.tileScale;
+        terminal.options.disableStdin = false;
+        terminal.options.cursorBlink = true;
+        if (tileWebglReleased) {
+          tileWebglReleased = false;
+          resumeFrame = window.requestAnimationFrame(() => {
+            resumeFrame = undefined;
+            if (!disposed && !parked && !tiled && !webgl) loadWebgl();
+          });
+        }
+      }
+    }
+    reparent();
+    claim();
+  };
+  element.addEventListener(TERMINAL_VIEWPORT_PRESENTATION_EVENT, present);
+  own(() => {
+    element.removeEventListener(TERMINAL_VIEWPORT_PRESENTATION_EVENT, present);
   });
   const focus = () => {
       if (fixedDashboardGrid && element.dataset.geometryReady !== 'true') return;
@@ -1132,7 +1231,7 @@ function initializeTerminalViewport(
     }, TERMINAL_INPUT_PROBE_TIMEOUT_MS);
   };
   const sendInput = (value: string) => {
-    if (scaledPreview) return;
+    if (scaledPreview || tiled) return;
     const current = socket;
     if (current?.readyState === WebSocket.OPEN && !socketStale()) {
       if (

@@ -135,6 +135,30 @@ export const TERMINAL_VIEWPORT_RESUME_EVENT = 'hs-terminal-viewport-resume';
  * instead of being disposed and recreated (HS2-AMNNBR, HS2-TBQQ00).
  */
 export const TERMINAL_VIEWPORT_REPARENT_EVENT = 'hs-terminal-viewport-reparent';
+/**
+ * Sent to a live dedicated viewport its owner moved into (`detail.tile: true`) or out of (`false`) a
+ * grid tile (HS2-EYD24K). In a tile the same emulator and socket keep running: the local grid mirrors
+ * the PTY's size, the emulator is CSS-scaled to the tile frame with letterboxing, input is disabled,
+ * and its size claims never drive the PTY. Leaving the tile refits it and lets it drive again.
+ */
+export const TERMINAL_VIEWPORT_PRESENTATION_EVENT = 'hs-terminal-viewport-presentation';
+export interface TerminalViewportPresentationDetail {
+  tile: boolean;
+}
+/**
+ * Where a tile-presented emulator sits in its tile frame: scaled to fit the frame while keeping its
+ * aspect, and centered on the axis it does not fill (letterboxing).
+ */
+export function terminalTileLayout(
+  screenWidth: number,
+  screenHeight: number,
+  frameWidth: number,
+  frameHeight: number,
+): { scale: number; x: number; y: number } | undefined {
+  if (screenWidth <= 0 || screenHeight <= 0 || frameWidth <= 0 || frameHeight <= 0) return undefined;
+  const scale = Math.min(frameWidth / screenWidth, frameHeight / screenHeight);
+  return { scale, x: (frameWidth - screenWidth * scale) / 2, y: (frameHeight - screenHeight * scale) / 2 };
+}
 /** Dispatched by a parked viewport whose socket closed, so its owner evicts it. */
 export const TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT = 'hs-terminal-viewport-parked-closed';
 /** How long an automatic initial focus waits for a second attempt, after layout and mounts settle. */

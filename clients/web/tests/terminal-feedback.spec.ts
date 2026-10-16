@@ -755,11 +755,18 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
   expect(dashboardFrames.slice(firstDashboardFrame, readyDashboardFrame).every((frame) => frame?.hidden)).toBe(true);
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator('[data-terminal-key="terminal-feedback:terminal-new"]'),
-    assertFixed = async (viewport: typeof dedicated) => {
-      await expect(viewport).toHaveAttribute('data-grid-size', '80x24');
-      await expect(viewport).toHaveAttribute('data-pty-size', '80x24');
-      await expect(viewport).toHaveAttribute('data-sizing-focus', 'true');
-      await expect(viewport).toHaveAttribute('data-viewport-visible', 'true');
+    // The tile shows the drawer's own instance (HS2-EYD24K): it mirrors the PTY's current size rather
+    // than resizing it to 80x24, and its claims never drive the size.
+    assertTiled = async (viewport: typeof dedicated) => {
+      await expect(viewport).toHaveAttribute('data-presentation', 'tile');
+      await expect
+        .poll(
+          async () =>
+            (await viewport.getAttribute('data-grid-size')) === (await viewport.getAttribute('data-pty-size')),
+        )
+        .toBe(true);
+      await expect(viewport).toHaveAttribute('data-sizing-focus', 'false');
+      await expect(viewport).toHaveAttribute('data-viewport-visible', 'false');
       await expect(viewport).toHaveAttribute('data-renderer', 'dom');
       await expect(viewport.locator('canvas')).toHaveCount(0);
       await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
@@ -790,7 +797,7 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
         })
         .toBe(true);
     };
-  await assertFixed(tile.locator('[data-display-mode="scaled-preview"]'));
+  await assertTiled(tile.locator('[data-presentation="tile"]'));
   const magnifiedFramesId = await startTerminalFrameSampling(
     page,
     '[data-magnified="true"] [data-display-mode="interactive"]',
@@ -806,7 +813,7 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
   await assertFitted(magnified.locator('[data-display-mode="interactive"]'));
   await magnified.click({ position: { x: 5, y: 5 } });
   await expect(magnified).toHaveCount(0);
-  await assertFixed(tile.locator('[data-display-mode="scaled-preview"]'));
+  await assertTiled(tile.locator('[data-presentation="tile"]'));
   await tile.dblclick();
   drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
@@ -871,11 +878,13 @@ test('marks genuine terminal interaction claims so the last-interacted viewport 
   // Evidence: the terminal still renders content (not empty) on a phone-width viewport.
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await page.setViewportSize({ width: 390, height: 844 });
+  // The tile now shows the drawer's own instance (HS2-EYD24K): scaled, and never driving the PTY size.
   const mobileTile = page
     .getByRole('region', { name: 'Workspace Grid' })
-    .locator('[data-terminal-key="terminal-feedback:terminal-new"] [data-display-mode="scaled-preview"]');
-  await expect(mobileTile).toHaveAttribute('data-geometry-ready', 'true');
-  await expect(mobileTile).toHaveAttribute('data-sizing-focus', 'true');
+    .locator('[data-terminal-key="terminal-feedback:terminal-new"] [data-presentation="tile"]');
+  await expect(mobileTile).toHaveAttribute('data-connection', 'connected');
+  await expect(mobileTile).toHaveAttribute('data-sizing-focus', 'false');
+  await expect(mobileTile.locator('.xterm-rows')).not.toBeEmpty();
   await page.screenshot({ path: 'target/visual-captures/hs2-3zbqdg-mobile-terminal-grid.png', fullPage: true });
 });
 

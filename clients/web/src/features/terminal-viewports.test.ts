@@ -543,3 +543,254 @@ describe('live grid viewports survive a re-rendered container (HS2-AMNNBR, HS2-T
     expect(mount).toHaveBeenCalledTimes(3);
   });
 });
+
+describe('one live instance moves between the drawer and grid tiles (HS2-EYD24K)', () => {
+  /** A minimal DOM node: enough tree, dataset, style, and event behavior for the controller's moves. */
+  class FakeNode extends EventTarget {
+    parentElement: FakeNode | null = null;
+    children: FakeNode[] = [];
+    style: Record<string, string> = {};
+    classList = { contains: () => false };
+    events: string[] = [];
+    constructor(
+      readonly dataset: Record<string, string>,
+      readonly root = false,
+    ) {
+      super();
+    }
+    get isConnected(): boolean {
+      return this.root || (this.parentElement?.isConnected ?? false);
+    }
+    private detach() {
+      const parent = this.parentElement;
+      if (parent) parent.children.splice(parent.children.indexOf(this), 1);
+      this.parentElement = null;
+    }
+    append(child: FakeNode) {
+      child.detach();
+      child.parentElement = this;
+      this.children.push(child);
+    }
+    replaceWith(other: FakeNode) {
+      const parent = this.parentElement!;
+      other.detach();
+      parent.children[parent.children.indexOf(this)] = other;
+      other.parentElement = parent;
+      this.parentElement = null;
+    }
+    remove() {
+      this.detach();
+    }
+    removeAttribute(name: string) {
+      if (name === 'style') this.style = {};
+    }
+    closest(selector: string): FakeNode | null {
+      const match = /^\[data-([\w-]+)="([^"]*)"\]$/.exec(selector);
+      if (!match) return null;
+      const key = match[1].replace(/-(\w)/g, (_, letter: string) => letter.toUpperCase());
+      if (this.dataset[key] === match[2]) return this;
+      return this.parentElement?.closest(selector) ?? null;
+    }
+    override dispatchEvent(event: Event): boolean {
+      const detail = (event as CustomEvent<{ tile?: boolean } | null>).detail;
+      this.events.push(detail && 'tile' in detail ? `${event.type}:${String(detail.tile)}` : event.type);
+      return super.dispatchEvent(event);
+    }
+    *walk(): Generator<FakeNode> {
+      for (const child of this.children) {
+        yield child;
+        yield* child.walk();
+      }
+    }
+  }
+  const asElement = (node: FakeNode) => node as unknown as HTMLElement;
+
+  function setup(warmLimit = { value: 12 }) {
+    const root = new FakeNode({}, true),
+      holder = new FakeNode({}),
+      disposals = new Map<HTMLElement, ReturnType<typeof vi.fn>>();
+    mount.mockImplementation((element) => {
+      const dispose = vi.fn();
+      disposals.set(element, dispose);
+      return dispose;
+    });
+    vi.stubGlobal('document', {
+      querySelectorAll: () => [...root.walk()].filter((node) => node.dataset.component === 'terminal-viewport'),
+    });
+    const owner = createTerminalViewportsController({
+      projects: signal([project('a')]),
+      pendingTerminalFocus: undefined,
+      openTicketReference: vi.fn(),
+      parking: {
+        park: (element) => {
+          holder.append(element as unknown as FakeNode);
+        },
+        restore: (placeholder, element) => {
+          (placeholder as unknown as FakeNode).replaceWith(element as unknown as FakeNode);
+        },
+      },
+      warmTerminalLimit: () => warmLimit.value,
+    });
+    /** The drawer's dedicated, kept-alive viewport for `id`, inside a fresh terminal session. */
+    const drawer = (id: string) => {
+      const session = new FakeNode({ component: 'terminal-session' }),
+        dedicated = new FakeNode({
+          component: 'terminal-viewport',
+          projectId: 'a',
+          terminalId: id,
+          displayMode: 'interactive',
+          mountPolicy: 'keep-alive',
+        });
+      session.append(dedicated);
+      root.append(session);
+      return { session, dedicated };
+    };
+    /** A grid tile's progressive preview placeholder for `id`, optionally in a magnified card. */
+    const tile = (id: string, magnified = false) => {
+      const card = new FakeNode({
+          component: 'terminal-tile',
+          ...(magnified ? { fixedAspectTerminalCard: 'magnified' } : {}),
+        }),
+        frame = new FakeNode({}),
+        preview = new FakeNode({
+          component: 'terminal-viewport',
+          projectId: 'a',
+          terminalId: id,
+          displayMode: 'scaled-preview',
+          mountPolicy: 'visible-progressive',
+        });
+      frame.append(preview);
+      card.append(frame);
+      root.append(card);
+      return { card, preview };
+    };
+    const sync = () => {
+      owner.syncTerminalViewportMounts();
+    };
+    const clear = () => {
+      for (const child of [...root.children]) child.remove();
+    };
+    return { root, holder, disposals, owner, drawer, tile, sync, clear };
+  }
+
+  it('walks drawer → grid → drawer → grid on one emulator and socket, never remounting', async () => {
+    const view = setup(),
+      first = view.drawer('x');
+    view.sync();
+    expect(mount).toHaveBeenCalledTimes(1);
+    const instance = first.dedicated;
+
+    for (let round = 0; round < 3; round += 1) {
+      // The drawer switches to its grid tab: the session leaves and a tile for the same terminal appears.
+      view.clear();
+      const grid = view.tile('x');
+      view.sync();
+      expect(instance.parentElement, `round ${String(round)}: hosted in the tile`).toBe(grid.preview);
+      expect(grid.preview.dataset.hostingInstance).toBe('true');
+      expect(grid.preview.style).toMatchObject({ width: '100%', height: '100%', display: 'block' });
+      expect(instance.events.at(-1)).toBe('hs-terminal-viewport-presentation:true');
+      await paint();
+      expect(mount, 'the tile never mounts its own preview').toHaveBeenCalledTimes(1);
+
+      // Back to the terminal tab: the drawer takes the same instance back.
+      view.clear();
+      const back = view.drawer('x');
+      view.sync();
+      expect(instance.parentElement).toBe(back.session);
+      expect(instance.events.slice(-2)).toEqual([
+        'hs-terminal-viewport-presentation:false',
+        'hs-terminal-viewport-resume',
+      ]);
+      await paint();
+      expect(mount).toHaveBeenCalledTimes(1);
+    }
+    expect(view.disposals.get(asElement(instance))).not.toHaveBeenCalled();
+  });
+
+  it('gives the instance to the drawer while a still-visible tile falls back to its lightweight preview', async () => {
+    const view = setup(),
+      first = view.drawer('x');
+    view.sync();
+    const instance = first.dedicated;
+    view.clear();
+    const grid = view.tile('x');
+    view.sync();
+    expect(instance.parentElement).toBe(grid.preview);
+
+    // A Workspace Grid tile stays on screen while the drawer shows the terminal again.
+    const back = view.drawer('x');
+    view.sync();
+    expect(instance.parentElement).toBe(back.session);
+    expect(grid.preview.dataset.hostingInstance).toBeUndefined();
+    expect(grid.preview.style).toEqual({});
+    await paint();
+    expect(mount).toHaveBeenCalledTimes(2);
+    expect(mount.mock.calls[1][0]).toBe(asElement(grid.preview));
+
+    // The drawer closes again: the tile's lightweight preview gives way to the instance.
+    back.session.remove();
+    view.sync();
+    expect(view.disposals.get(asElement(grid.preview))).toHaveBeenCalledTimes(1);
+    expect(instance.parentElement).toBe(grid.preview);
+  });
+
+  it('prefers the drawer when the drawer and a tile both ask for a parked instance in one pass', () => {
+    const view = setup(),
+      first = view.drawer('x');
+    view.sync();
+    const instance = first.dedicated;
+    first.session.remove();
+    view.sync();
+    expect(instance.parentElement).toBe(view.holder);
+    const grid = view.tile('x'),
+      back = view.drawer('x');
+    view.sync();
+    expect(instance.parentElement).toBe(back.session);
+    expect(grid.preview.dataset.hostingInstance).toBeUndefined();
+  });
+
+  it('parks a hosted instance when its tile leaves, and never hosts in a magnified card', async () => {
+    const view = setup(),
+      first = view.drawer('x');
+    view.sync();
+    const instance = first.dedicated;
+    view.clear();
+    const grid = view.tile('x');
+    view.sync();
+    grid.card.remove();
+    view.sync();
+    expect(instance.parentElement).toBe(view.holder);
+    expect(instance.dataset.parked).toBe('true');
+    const magnified = view.tile('x', true);
+    view.sync();
+    expect(instance.parentElement).toBe(view.holder);
+    await paint();
+    expect(mount.mock.calls.at(-1)?.[0]).toBe(asElement(magnified.preview));
+  });
+
+  it('counts tile-hosted instances in the warm limit, returning the oldest tile to its preview', async () => {
+    const warm = { value: 2 },
+      view = setup(warm),
+      x = view.drawer('x'),
+      y = view.drawer('y');
+    view.sync();
+    view.clear();
+    const tileX = view.tile('x'),
+      tileY = view.tile('y');
+    view.sync();
+    expect(x.dedicated.parentElement).toBe(tileX.preview);
+    expect(y.dedicated.parentElement).toBe(tileY.preview);
+    warm.value = 1;
+    view.owner.enforceWarmTerminalLimit();
+    // The oldest hosted instance is disposed and its tile mounts the lightweight preview.
+    expect(view.disposals.get(asElement(x.dedicated))).toHaveBeenCalledTimes(1);
+    expect(x.dedicated.parentElement).toBeNull();
+    expect(y.dedicated.parentElement).toBe(tileY.preview);
+    await paint();
+    expect(mount.mock.calls.at(-1)?.[0]).toBe(asElement(tileX.preview));
+    // A zero limit keeps nothing: the other tile falls back too.
+    warm.value = 0;
+    view.owner.enforceWarmTerminalLimit();
+    expect(view.disposals.get(asElement(y.dedicated))).toHaveBeenCalledTimes(1);
+  });
+});
