@@ -354,6 +354,67 @@ pub fn report(checkout: &Checkout) -> RepositorySizeReport {
     }
 }
 
+/// The git object size of the repository holding `path`, or `None` when it cannot be
+/// measured (not a repository, Git unavailable). Cheap: one `git count-objects -v`, no
+/// attachment walk, so `sync` can compare the level before and after a push (HS2-P1GYWH).
+#[must_use]
+pub fn git_object_size(path: &Path) -> Option<GitObjectSize> {
+    match probe_git(path) {
+        GitProbe::Measured { size, .. } => Some(size),
+        GitProbe::NotRepository | GitProbe::Unavailable(_) => None,
+    }
+}
+
+/// One line naming an entry over a GitHub limit, or `None` for an entry within limits.
+#[must_use]
+pub fn limit_message(label: &str, bytes: u64, level: SizeLevel) -> Option<String> {
+    match level {
+        SizeLevel::Ok => None,
+        SizeLevel::Warning => Some(format!(
+            "{label} is {} of git objects, over GitHub's {} soft limit; large attachments are the usual cause",
+            format_bytes(bytes),
+            format_bytes(WARNING_BYTES)
+        )),
+        SizeLevel::Critical => Some(format!(
+            "{label} is {} of git objects, over GitHub's {} hard limit; GitHub rejects pushes this large",
+            format_bytes(bytes),
+            format_bytes(CRITICAL_BYTES)
+        )),
+    }
+}
+
+/// The attention lines for every entry of `report` over a GitHub limit (for `doctor`).
+#[must_use]
+pub fn limit_messages(report: &RepositorySizeReport) -> Vec<(SizeLevel, String)> {
+    report
+        .entries
+        .iter()
+        .filter_map(|entry| {
+            let kind = match entry.kind {
+                RepositoryKind::Code => "code repository",
+                RepositoryKind::TicketStore => "ticket store",
+            };
+            limit_message(
+                &format!("{kind} {}", entry.label),
+                entry.git.map_or(0, |git| git.total_bytes),
+                entry.level,
+            )
+            .map(|line| (entry.level, line))
+        })
+        .collect()
+}
+
+/// The warning to print after a sync that moved a repository from `before` to a higher
+/// level (HS2-P1GYWH). Staying at, or dropping below, a level already reported says nothing,
+/// so a repository over a limit is not re-announced on every sync.
+#[must_use]
+pub fn crossing_message(label: &str, before: SizeLevel, after: GitObjectSize) -> Option<String> {
+    let level = SizeLevel::for_bytes(after.total_bytes);
+    (level > before)
+        .then(|| limit_message(label, after.total_bytes, level))
+        .flatten()
+}
+
 /// A byte count in decimal units (GitHub states its limits in GB), e.g. `4.2 GB`.
 #[must_use]
 pub fn format_bytes(bytes: u64) -> String {
@@ -453,6 +514,60 @@ mod tests {
             default_source: None,
             default_source_cleared: false,
         }
+    }
+
+    fn objects(total_bytes: u64) -> GitObjectSize {
+        GitObjectSize {
+            total_bytes,
+            ..GitObjectSize::default()
+        }
+    }
+
+    #[test]
+    fn crossing_messages_fire_only_when_a_sync_raises_the_level() {
+        let cases = [
+            (SizeLevel::Ok, 1_000, None),
+            (SizeLevel::Ok, WARNING_BYTES, Some("soft limit")),
+            (SizeLevel::Ok, CRITICAL_BYTES, Some("hard limit")),
+            (SizeLevel::Warning, WARNING_BYTES + 1, None),
+            (SizeLevel::Warning, CRITICAL_BYTES, Some("hard limit")),
+            (SizeLevel::Critical, CRITICAL_BYTES * 2, None),
+            (SizeLevel::Critical, 1_000, None),
+            (SizeLevel::Warning, 1_000, None),
+        ];
+        for (before, after, expected) in cases {
+            let message = crossing_message("ticket store tickets", before, objects(after));
+            match expected {
+                None => assert_eq!(message, None, "{before:?} -> {after}"),
+                Some(limit) => {
+                    let message = message.unwrap();
+                    assert!(message.contains(limit), "{message}");
+                    assert!(message.starts_with("ticket store tickets is "), "{message}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn limit_messages_name_each_entry_over_a_limit_and_measure_a_store_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(git_object_size(dir.path()), None);
+        git(dir.path(), &["init", "-q"]);
+        std::fs::write(dir.path().join("a.txt"), "a\n").unwrap();
+        git(dir.path(), &["add", "a.txt"]);
+        git(dir.path(), &["commit", "-qm", "a"]);
+        let measured = git_object_size(dir.path()).unwrap();
+        assert!(measured.total_bytes > 0 || measured.loose_objects > 0);
+        let mut report = report(&checkout(dir.path(), Vec::new()));
+        assert!(limit_messages(&report).is_empty());
+        report.entries[0].level = SizeLevel::Critical;
+        report.entries[0].git = Some(objects(CRITICAL_BYTES));
+        let lines = limit_messages(&report);
+        assert_eq!(lines.len(), 1);
+        let (level, line) = &lines[0];
+        assert_eq!(*level, SizeLevel::Critical);
+        assert!(line.starts_with("code repository demo is 10 GB"), "{line}");
+        assert!(line.contains("rejects pushes"), "{line}");
     }
 
     #[test]

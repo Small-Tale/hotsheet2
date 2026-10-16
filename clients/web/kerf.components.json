@@ -4423,7 +4423,9 @@
         "zones": [
           {
             "id": "controls",
-            "jsx": { "prop": "controls" },
+            "jsx": {
+              "prop": "controls"
+            },
             "accepts": ["KerfUiContent"],
             "cardinality": {
               "min": 0,
@@ -5184,7 +5186,12 @@
         "wiring": {
           "required": true,
           "helpers": ["wireTokenSearchFields", "wireTicketSearchFields"],
-          "sources": [{ "export": "wireTicketSearchFields", "source": "src/interactions/ticket-search-field.ts" }],
+          "sources": [
+            {
+              "export": "wireTicketSearchFields",
+              "source": "src/interactions/ticket-search-field.ts"
+            }
+          ],
           "obligations": [
             "Wire Kerf's wireTokenSearchFields for editor chrome, submit, and collapsible behavior.",
             "Wire wireTicketSearchFields once per root and route every callback by the field id it receives."
@@ -5741,6 +5748,72 @@
           "The running server was built from older local source than the workspace, and no client build contradicts the running pair."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific SourceStaleNoticeBanner behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
+      "id": "repository-size-banner",
+      "name": "RepositorySizeBanner",
+      "kind": "component",
+      "purpose": "Dismissible project shell strip while any of the project's repositories is over GitHub's 5 GB soft or 10 GB hard size limit, linking to the statistics view (HS2-P1GYWH).",
+      "source": "src/components/repository-size-banner.tsx",
+      "publicExports": [
+        {
+          "name": "RepositorySizeBanner"
+        },
+        {
+          "name": "showsRepositorySizeBanner"
+        }
+      ],
+      "sourceLinks": ["src/components/repository-size-banner.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/repository-size-banner.tsx",
+        "composition": "src/components/repository-size-banner.tsx"
+      },
+      "selection": {
+        "useWhen": ["The server-computed repository size report for the open project is over a GitHub limit."],
+        "avoidWhen": ["The repository sizes themselves are needed; the statistics view uses RepositorySize."],
         "documentation": "../../docs/ux-components.md"
       }
     },
@@ -6342,7 +6415,9 @@
         "zones": [
           {
             "id": "headerActions",
-            "jsx": { "prop": "headerActions" },
+            "jsx": {
+              "prop": "headerActions"
+            },
             "accepts": ["KerfUiContent"],
             "cardinality": {
               "min": 0,
@@ -6778,8 +6853,14 @@
           "required": true,
           "helpers": ["wireTokenSearchFields", "wireTicketSearchFields", "wireWorkspaceOverflowKeyboard"],
           "sources": [
-            { "export": "wireTicketSearchFields", "source": "src/interactions/ticket-search-field.ts" },
-            { "export": "wireWorkspaceOverflowKeyboard", "source": "src/components/workspace-controls.tsx" }
+            {
+              "export": "wireTicketSearchFields",
+              "source": "src/interactions/ticket-search-field.ts"
+            },
+            {
+              "export": "wireWorkspaceOverflowKeyboard",
+              "source": "src/components/workspace-controls.tsx"
+            }
           ],
           "obligations": [
             "Wire the workspace search, sort, overflow, and selection actions once at the application root."

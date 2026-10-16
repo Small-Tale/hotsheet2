@@ -1362,6 +1362,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "repository-size-banner",
+      "name": "RepositorySizeBanner",
+      "kind": "component",
+      "purpose": "Dismissible project shell strip while any of the project's repositories is over GitHub's 5 GB soft or 10 GB hard size limit, linking to the statistics view (HS2-P1GYWH).",
+      "useWhen": [
+        "The server-computed repository size report for the open project is over a GitHub limit."
+      ],
+      "avoidWhen": [
+        "The repository sizes themselves are needed; the statistics view uses RepositorySize."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/repository-size-banner.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "repository-status-popover",
       "name": "RepositoryStatusPopover",
       "kind": "composition",

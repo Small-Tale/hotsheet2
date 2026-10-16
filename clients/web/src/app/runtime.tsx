@@ -1142,6 +1142,23 @@ export async function startHotSheetWebClient() {
     void refreshTicketCollection(view);
   });
   const project = () => projects.value.find((item) => item.id === selectedProjectId.value);
+  // Measure each project's repositories once when it is first shown, so the shell can warn while
+  // one is over a GitHub limit (HS2-P1GYWH). One request per project, never repeated on a timer;
+  // the statistics view refreshes the same report when it opens.
+  const repositorySizeRequested = new Set<string>();
+  effect(() => {
+    const current = project();
+    if (!current || repositorySizeRequested.has(current.id)) return;
+    repositorySizeRequested.add(current.id);
+    // Outside this effect's tracking scope, like the statistics loads (HS2-QF44T7).
+    queueMicrotask(() => {
+      void loadRepositorySize(current);
+    });
+  });
+  const repositorySizeReport = (projectId: string) => {
+    const state = repositorySizeByProject.value[projectId] as RepositorySizeState | undefined;
+    return state?.status === 'ready' ? state.report : undefined;
+  };
   // Still-opening remembered roots stay remembered, in place, if the set is saved mid-restore (HS2-2BEJXD).
   const currentRememberedProjectRoots = () => [
     ...new Set([
@@ -3618,6 +3635,7 @@ export async function startHotSheetWebClient() {
     projectTabClaimClock,
     projectTerminalDrawerProps,
     projectTicketCounts,
+    repositorySizeReport,
     searchHelpOpen,
     searchOpen,
     previewInspectorProps,

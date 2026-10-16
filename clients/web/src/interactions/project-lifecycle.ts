@@ -240,6 +240,22 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     }),
   );
   lifetime.add(
+    // Dismissed for this open at the shown level; a higher level shows it again (HS2-P1GYWH).
+    delegate(
+      document.body,
+      'click',
+      PROJECT_LIFECYCLE_ACTIONS.dismissRepositorySizeWarning.selector,
+      (_event, target) => {
+        const current = project(),
+          level = data(target).level;
+        if (!current || (level !== 'warning' && level !== 'critical')) return;
+        projects.value = projects.value.map((item) =>
+          item.id === current.id ? { ...item, repositorySizeWarningDismissed: level } : item,
+        );
+      },
+    ),
+  );
+  lifetime.add(
     // The newer-source notice is dismissed for every project at once, keyed on its build pair (HS2-B84P1S).
     delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.dismissSourceStaleNotice.selector, () => {
       const compatibility = project()?.compatibility;

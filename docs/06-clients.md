@@ -3688,8 +3688,19 @@ completion summary) shows its completion-confidence calibration:
 - **States:** loading, error, and "Nothing to Measure" use Kerf `EmptyState` /
   `StateBanner`. Sizes use decimal units (`5 GB`), matching GitHub and the CLI.
 - **Freshness:** measured once each time the statistics view opens; it never polls.
+- **Project shell warning (HS2-P1GYWH):** the client also requests the report once when a
+  project is first shown in a session. While the report's level is `warning` or `critical`,
+  the project shell shows `RepositorySizeBanner`, a warning-toned `ShellBanner` naming the
+  repositories at that level and GitHub's soft or hard limit. It has two actions:
+  - **View Repository Size** opens that project's statistics view.
+  - **Dismiss** hides the strip at that level for this open. A later report at a higher
+    level, such as from the statistics view's refresh, shows it again.
+
+  The banner reuses the server-computed level and the statistics view's per-project report,
+  so it adds no timer and no request beyond the one per project.
   Repository size changes with commits, not ticket events, so ticket change-stream events do
   not reload it.
+
 - **Narrow widths:** value tables stack under their labels.
 - **Load start:** opening the view starts both reports outside the opening effect's
   dependency tracking. Previously, starting a request synchronously inside the effect made

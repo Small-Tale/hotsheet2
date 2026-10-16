@@ -4073,6 +4073,73 @@
       }
     },
     {
+      "key": "hotsheet-web:repository-size-banner",
+      "package": "hotsheet-web",
+      "id": "repository-size-banner",
+      "name": "RepositorySizeBanner",
+      "kind": "component",
+      "purpose": "Dismissible project shell strip while any of the project's repositories is over GitHub's 5 GB soft or 10 GB hard size limit, linking to the statistics view (HS2-P1GYWH).",
+      "publicExports": [
+        {
+          "name": "RepositorySizeBanner"
+        },
+        {
+          "name": "showsRepositorySizeBanner"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/repository-size-banner.tsx"
+      ],
+      "source": "src/components/repository-size-banner.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/repository-size-banner.tsx",
+        "composition": "src/components/repository-size-banner.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:repository-status-popover",
       "package": "hotsheet-web",
       "id": "repository-status-popover",

@@ -5,6 +5,7 @@ import { createScope } from 'kerfjs/scope';
 
 import type { RepositorySizeEntry, RepositorySizeReport } from '../api';
 import { RepositorySize, type RepositorySizeState } from '../components/repository-size';
+import { RepositorySizeBanner } from '../components/repository-size-banner';
 import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
 
@@ -168,6 +169,33 @@ export function RepositorySizeSettings() {
   );
 }
 
+function readyReport(name: string): RepositorySizeReport | undefined {
+  const state = repositorySizeDemoState(name);
+  return state.status === 'ready' ? state.report : undefined;
+}
+
+/** The project shell strip shown while a repository is over a GitHub limit (HS2-P1GYWH). */
+export function RepositorySizeBannerDemo() {
+  return (
+    <>
+      <CatalogExample
+        label="Over Soft Limit"
+        note="Shown above the project workspace once the project's repository size has loaded. Dismiss hides it for this level until the project reopens."
+        viewport={{ width: 'full' }}
+      >
+        {RepositorySizeBanner({ report: readyReport('warning'), projectId: 'hotsheet2-1a2b3c' })}
+      </CatalogExample>
+      <CatalogExample
+        label="Over Hard Limit"
+        note="A warning dismissed earlier shows again when the repository crosses the hard limit."
+        viewport={{ width: 'full' }}
+      >
+        {RepositorySizeBanner({ report: readyReport('critical'), dismissed: 'warning', projectId: 'hotsheet2-1a2b3c' })}
+      </CatalogExample>
+    </>
+  );
+}
+
 /** Install this file's demo interactions on the catalog root. */
 function wireRepositorySizeDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
@@ -191,6 +219,7 @@ export const demoModule: DemoModule = {
       Settings: RepositorySizeSettings,
       reset: resetRepositorySizeDemo,
     },
+    'repository-size-banner': { catalogExamples: true, Demo: RepositorySizeBannerDemo },
   },
   wire: wireRepositorySizeDemo,
 };

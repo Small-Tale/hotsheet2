@@ -10,6 +10,7 @@ import {
   type CorruptTicket,
   type CustomView,
   type FullTicket,
+  type RepositorySizeReport,
   type TicketRow as WireTicketRow,
 } from '../api';
 import { type AppRegionId } from '../app-region-resize';
@@ -33,6 +34,7 @@ import { ProjectSetupWarningBanner } from '../components/project-setup-warning-b
 import type { ProjectStripMode } from '../components/project-strip-actions';
 import { type ProjectTabProps } from '../components/project-tab';
 import { CompatibilityBannerSurface } from '../components/reader-overlay-surfaces';
+import { RepositorySizeBanner } from '../components/repository-size-banner';
 import { ServerBuildNoticeBanner } from '../components/server-build-notice-banner';
 import { type SettingsCategory, settingsCategoryTitle } from '../components/settings-navigation';
 import { SourceStaleNoticeBanner } from '../components/source-stale-notice-banner';
@@ -124,6 +126,8 @@ export interface HotSheetShellDependencies {
   projectTabClaimClock: Signal<number>;
   projectTerminalDrawerProps: () => TerminalDrawerProps | undefined;
   projectTicketCounts: (projectId: string) => CheckoutTicketCounts;
+  /** The project's last repository size report, when one has loaded (HS2-P1GYWH). */
+  repositorySizeReport: (projectId: string) => RepositorySizeReport | undefined;
   searchHelpOpen: Signal<boolean>;
   searchOpen: Signal<boolean>;
   selectedCorruptKey: Signal<string | undefined>;
@@ -207,6 +211,7 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     projectTabClaimClock,
     projectTerminalDrawerProps,
     projectTicketCounts,
+    repositorySizeReport,
     searchHelpOpen,
     searchOpen,
     selectedCorruptKey,
@@ -562,6 +567,11 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
             {current.setupWarning && <ProjectSetupWarningBanner detail={current.setupWarning} />}
             {current.codexHooksChanged && <CodexHooksNoticeBanner path={current.codexHooksChanged} />}
             {showsStaleSourceNotice(current.compatibility) && <SourceStaleNoticeBanner />}
+            {RepositorySizeBanner({
+              report: repositorySizeReport(current.id),
+              dismissed: current.repositorySizeWarningDismissed,
+              projectId: current.id,
+            })}
             {current.serverBuildNotice && !current.serverBuildNoticeDismissed && (
               <ServerBuildNoticeBanner detail={current.serverBuildNotice} />
             )}

@@ -243,8 +243,21 @@ server endpoint (HS2-R0131R).
   `shared_with_code`, since its git size is the code repository's. A non-repository directory
   reports `not_repository`, a missing path `unavailable`, and a non-git provider source
   (GitHub Issues, Jira, ...) `unsupported`; each carries a `detail` sentence.
-- **Cost:** the server measures on the blocking pool. Nothing polls it; the web statistics
-  view requests it once when it opens.
+- **Cost:** the server measures on the blocking pool. Nothing polls it. The web client
+  requests it once when a project is first shown (for the shell warning) and once each time
+  the statistics view opens.
+- **Proactive warnings (HS2-P1GYWH):**
+  - `hotsheet doctor` prints a `Repository size:` line for the registered checkout of
+    `--project` (default `.`), or for the store alone when no checkout is registered. Each
+    repository over a limit gets its own line. Over the 10 GB hard limit is an issue (`  !`,
+    nonzero exit) because GitHub rejects the push. Over the 5 GB soft limit is a
+    `  warning:` that does not fail doctor.
+  - `hotsheet sync` measures the store's git objects (one `git count-objects`, no attachment
+    walk) before and after a sync that pulled or pushed. It prints a `warning:` to stderr
+    only when the level rose across a threshold, so a repository already over a limit is not
+    re-announced on every sync.
+  - The web project shell shows a persistent warning strip while any repository is over a
+    limit (see [06](06-clients.md) "Repository size").
 
 Historical cumulative-flow data is explicitly reported unavailable because current ticket
 files do not preserve status transitions.

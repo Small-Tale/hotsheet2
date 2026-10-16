@@ -415,7 +415,12 @@ pub(crate) fn cmd_link(store: &Path) -> Result<()> {
 
 pub(crate) fn cmd_sync(path: &Path) -> Result<()> {
     use hotsheet_ticketing::SyncReport;
+    use hotsheet_ticketing::repository_size::{self, SizeLevel};
     FsStore::open(path)?; // validate it's a store before touching git
+    // The level before the sync, so a sync that carries the store over a GitHub limit says
+    // so once (HS2-P1GYWH). One `git count-objects`, no attachment walk.
+    let before = repository_size::git_object_size(path)
+        .map_or(SizeLevel::Ok, |size| SizeLevel::for_bytes(size.total_bytes));
     match hotsheet_ticketing::sync_once(path) {
         SyncReport::NoRemote => println!("Local-only store — no remote to sync."),
         SyncReport::UpToDate => println!("Already up to date."),
@@ -428,6 +433,11 @@ pub(crate) fn cmd_sync(path: &Path) -> Result<()> {
                 parts.push("pushed local commits");
             }
             println!("Synced — {}.", parts.join(" + "));
+            if let Some(line) = repository_size::git_object_size(path).and_then(|after| {
+                repository_size::crossing_message("this ticket store", before, after)
+            }) {
+                eprintln!("warning: {line}. Run `hotsheet checkout repo-size` for details.");
+            }
         }
         SyncReport::Offline => {
             println!("Remote unreachable — kept working locally; the next sync will retry.")
@@ -525,12 +535,71 @@ pub(crate) fn cmd_doctor(path: &PathBuf, project: &Path) -> Result<()> {
         issues += 1;
     }
 
+    issues += print_repository_size(path, project);
+
     print_onboarding_report(path, project);
     if issues == 0 {
         println!("No issues found.");
         Ok(())
     } else {
         bail!("{issues} issue(s) found")
+    }
+}
+
+/// The repository size section of `doctor` (HS2-P1GYWH): the registered checkout for
+/// `project` when there is one (its code repository and every linked store), otherwise this
+/// store alone. A repository over GitHub's 10 GB hard limit is an issue (GitHub rejects its
+/// pushes); one over the 5 GB soft limit is a warning that does not fail doctor.
+fn print_repository_size(store: &Path, project: &Path) -> usize {
+    use hotsheet_ticketing::repository_size::{self, SizeLevel};
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+    );
+    let lines: Vec<(SizeLevel, String)> = match registry.describe(&project.display().to_string()) {
+        Ok(checkout) => {
+            let report = repository_size::report(&checkout);
+            println!(
+                "Repository size: {} (checkout {}; `checkout repo-size` for details)",
+                level_word(report.level),
+                checkout.alias
+            );
+            repository_size::limit_messages(&report)
+        }
+        Err(_) => match repository_size::git_object_size(store) {
+            Some(size) => {
+                let level = SizeLevel::for_bytes(size.total_bytes);
+                println!(
+                    "Repository size: {} ({} of git objects in this store)",
+                    level_word(level),
+                    repository_size::format_bytes(size.total_bytes)
+                );
+                repository_size::limit_message("this ticket store", size.total_bytes, level)
+                    .map(|line| vec![(level, line)])
+                    .unwrap_or_default()
+            }
+            None => {
+                println!("Repository size: not measured (the store is not in a git repository)");
+                Vec::new()
+            }
+        },
+    };
+    let mut issues = 0;
+    for (level, line) in lines {
+        if level == SizeLevel::Critical {
+            println!("  ! {line}");
+            issues += 1;
+        } else {
+            println!("  warning: {line}");
+        }
+    }
+    issues
+}
+
+fn level_word(level: hotsheet_ticketing::repository_size::SizeLevel) -> &'static str {
+    match level {
+        hotsheet_ticketing::repository_size::SizeLevel::Ok => "ok",
+        hotsheet_ticketing::repository_size::SizeLevel::Warning => "WARNING",
+        hotsheet_ticketing::repository_size::SizeLevel::Critical => "CRITICAL",
     }
 }
 

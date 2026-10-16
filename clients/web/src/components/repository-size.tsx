@@ -155,12 +155,19 @@ function namesList(names: string[]): string {
   return `${names.slice(0, -1).join(', ')}, and ${names.at(-1) ?? ''}`;
 }
 
+/**
+ * The repositories at the report's highest level, as readable prose with its verb, for
+ * banners naming what is over a GitHub limit (HS2-QF44T7, HS2-P1GYWH).
+ */
+export function limitSubject(report: RepositorySizeReport): { subject: string; verb: 'is' | 'are' } {
+  const over = report.entries.filter((entry) => entry.level === report.level).map(repositorySizeEntryTitle);
+  return { subject: namesList(over), verb: over.length === 1 ? 'is' : 'are' };
+}
+
 /** The banner naming the repositories over GitHub's limits; none while every entry is ok. */
 function limitBanner(report: RepositorySizeReport) {
   if (report.level === 'ok') return;
-  const over = report.entries.filter((entry) => entry.level === report.level).map(repositorySizeEntryTitle);
-  const subject = namesList(over),
-    verb = over.length === 1 ? 'is' : 'are';
+  const { subject, verb } = limitSubject(report);
   if (report.level === 'critical')
     return (
       <StateBanner

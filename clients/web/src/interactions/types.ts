@@ -31,6 +31,8 @@ export interface Project {
   serverBuildNotice?: string;
   /** The user dismissed that notice for this open; the next open re-evaluates it (HS2-46BKH7). */
   serverBuildNoticeDismissed?: boolean;
+  /** The repository size level whose banner the user dismissed for this open (HS2-P1GYWH). */
+  repositorySizeWarningDismissed?: 'warning' | 'critical';
 }
 
 export type Control = HTMLElement & { value: string; open?: boolean; show?(): void; hide?(): void };

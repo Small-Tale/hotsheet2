@@ -8076,3 +8076,42 @@ fn provider_connect_creates_a_jira_source_and_fills_site_and_email_from_its_acco
     .failure()
     .stderr(predicate::str::contains("--api-base applies to GitLab"));
 }
+
+#[test]
+fn doctor_reports_repository_size_for_the_checkout_or_the_store_alone() {
+    let store = tempfile::tempdir().unwrap();
+    let code = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let cli = |args: &[&str]| {
+        let mut cmd = hs(store.path());
+        cmd.env("HOTSHEET_HOME", home.path()).args(args);
+        cmd
+    };
+    cli(&["init"]).assert().success();
+    let project = code.path().to_str().unwrap();
+    // Unregistered project: the store alone (or "not measured" outside a repository).
+    let alone = cli(&["doctor", "--project", project]).assert().success();
+    let alone = String::from_utf8_lossy(&alone.get_output().stdout).into_owned();
+    assert!(
+        alone.contains("of git objects in this store)")
+            || alone.contains("Repository size: not measured"),
+        "{alone}"
+    );
+    let status = hotsheet_ticketing::git::command_in(code.path())
+        .args(["init", "-q"])
+        .status()
+        .unwrap();
+    assert!(status.success());
+    cli(&["checkout", "register", project, "--alias", "sized"])
+        .arg("--store")
+        .arg(store.path())
+        .assert()
+        .success();
+    cli(&["doctor", "--project", project])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Repository size: ok (checkout sized; `checkout repo-size` for details)",
+        ))
+        .stdout(predicate::str::contains("warning:").not());
+}

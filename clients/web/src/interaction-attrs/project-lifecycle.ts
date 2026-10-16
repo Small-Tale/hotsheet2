@@ -25,6 +25,7 @@ export const PROJECT_LIFECYCLE_ACTIONS = {
   dismissCodexHooksNotice: action('dismiss-codex-hooks-notice'),
   dismissServerBuildNotice: action('dismiss-server-build-notice'),
   dismissSourceStaleNotice: action('dismiss-source-stale-notice'),
+  dismissRepositorySizeWarning: action('dismiss-repository-size-warning'),
   dismissHs1Cleanup: action('dismiss-hs1-cleanup'),
   dismissTicketSourceSetup: action('dismiss-ticket-source-setup'),
   submitGitSourceRelink: action('submit-git-source-relink'),

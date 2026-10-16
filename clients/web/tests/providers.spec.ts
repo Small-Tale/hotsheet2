@@ -27822,9 +27822,11 @@ test('shows the project repository size from the real server (HS2-QF44T7)', asyn
     await expect(panel.locator('[data-component="state-banner"]')).toHaveCount(0);
     await panel.scrollIntoViewIfNeeded();
     await page.screenshot({ path: 'target/visual-captures/claude/hs2-qf44t7-real-server-wide.png' });
-    // Opened once, measured once: the section never polls.
+    // Measured once when the project opened (for the shell's size warning, HS2-P1GYWH) and once
+    // when the statistics view opened; neither polls.
     await page.waitForTimeout(1500);
-    expect({ sizeRequests, calibrationRequests }).toEqual({ sizeRequests: 1, calibrationRequests: 1 });
+    expect({ sizeRequests, calibrationRequests }).toEqual({ sizeRequests: 2, calibrationRequests: 1 });
+    await expect(page.locator('[data-component="repository-size-banner"]')).toHaveCount(0);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(500); // let the responsive shell settle before capturing evidence
     await panel.scrollIntoViewIfNeeded();
@@ -27836,6 +27838,96 @@ test('shows the project repository size from the real server (HS2-QF44T7)', asyn
   } finally {
     await server.stop();
   }
+});
+
+test('warns in the project shell while a repository is over a GitHub size limit (HS2-P1GYWH)', async ({ page }) => {
+  test.setTimeout(120_000);
+  await mockProject(page);
+  const thresholds = { warning_bytes: 5_000_000_000, critical_bytes: 10_000_000_000 };
+  const git = (total: number) => ({
+    loose_objects: 0,
+    loose_bytes: 0,
+    packed_objects: 9,
+    packs: 1,
+    packed_bytes: total,
+    total_bytes: total,
+  });
+  const sizeReport = (level: 'warning' | 'critical', bytes: number) => ({
+    checkout_id: 'demo-checkout',
+    thresholds,
+    level,
+    entries: [
+      {
+        kind: 'code',
+        label: 'demo',
+        locator: '/work/demo',
+        status: 'measured',
+        git: git(40_000_000),
+        shared_with_code: false,
+        level: 'ok',
+      },
+      {
+        kind: 'ticket_store',
+        connection_id: 'abc123',
+        provider: 'git',
+        label: 'demo.hs2',
+        locator: '/work/demo.hs2',
+        status: 'measured',
+        git: git(bytes),
+        attachments: { bytes: bytes - 100_000_000, files: 812, truncated: false },
+        shared_with_code: false,
+        level,
+      },
+    ],
+  });
+  let current = sizeReport('warning', 6_200_000_000),
+    sizeRequests = 0;
+  await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/repository/size', (route) => {
+    sizeRequests += 1;
+    return route.fulfill({ json: current });
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const banner = page.locator('[data-component="repository-size-banner"]');
+  await expect(banner).toBeVisible({ timeout: 15_000 });
+  await expect(banner).toContainText("Ticket store: demo.hs2 is over GitHub's 5 GB soft limit");
+  await expect(banner).toContainText('GitHub rejects repositories over 10 GB');
+  await expect(banner.getByRole('button', { name: 'Dismiss' })).toHaveCSS('cursor', 'pointer');
+  await page.screenshot({ path: 'target/visual-captures/claude/hs2-p1gywh-banner-warning-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(500); // let the responsive shell settle before capturing evidence
+  await expect(banner).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
+  ).toBeLessThanOrEqual(0);
+  await page.screenshot({ path: 'target/visual-captures/claude/hs2-p1gywh-banner-warning-narrow.png' });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // One measurement per open: the banner never polls.
+  await page.waitForTimeout(1500);
+  expect(sizeRequests).toBe(1);
+
+  // Dismiss hides it for this level.
+  await banner.getByRole('button', { name: 'Dismiss' }).click();
+  await expect(banner).toHaveCount(0);
+
+  // The statistics view re-measures; a store now over the hard limit brings the banner back.
+  current = sizeReport('critical', 10_600_000_000);
+  await page.locator('[data-component="project-summary"]').first().click();
+  const panel = page.locator('[data-component="repository-size"]');
+  await expect(panel).toHaveAttribute('data-level', 'critical', { timeout: 15_000 });
+  expect(sizeRequests).toBe(2);
+  await page.locator('[data-tab-kind="project"]').first().click();
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText("Ticket store: demo.hs2 is over GitHub's 10 GB hard limit");
+  await expect(banner).toContainText('GitHub rejects pushes to repositories this large');
+  await page.screenshot({ path: 'target/visual-captures/claude/hs2-p1gywh-banner-critical-wide.png' });
+
+  // View Repository Size opens the project's statistics on its Repository Size section.
+  await banner.getByRole('button', { name: 'View Repository Size' }).click();
+  await expect(panel).toBeVisible();
+  await expect(panel).toHaveAttribute('data-level', 'critical');
 });
 
 test('records the web client as the human actor on the real server (HS2-XF81CJ)', async ({ page }) => {
