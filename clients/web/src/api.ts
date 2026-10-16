@@ -718,6 +718,11 @@ export interface ToolSession {
   project: string;
   session_id: string;
   updated_at_ms: number;
+  /**
+   * The chat's last permission mode (HS2-Z5QVXW). The server restores it when this session's
+   * drive is recreated, so recovery sends no mode of its own.
+   */
+  permission_mode?: string;
 }
 export interface TerminalInfo {
   id: string;

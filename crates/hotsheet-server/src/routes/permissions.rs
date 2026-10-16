@@ -501,12 +501,15 @@ fn saved_permission_mode(
 }
 
 /// The launch permission mode for a new drive (HS2-NHRDMW): the requested mode (validated when
-/// the tool is discovered), else the project's saved default for the tool, else the machine-wide
-/// one, else `None` (the plugin's declared default applies at launch).
+/// the tool is discovered), else the mode the resumed chat last used (HS2-Z5QVXW), else the
+/// project's saved default for the tool, else the machine-wide one, else `None` (the plugin's
+/// declared default applies at launch). A remembered or saved mode the installed tool no longer
+/// declares is skipped rather than failing the launch.
 async fn launch_permission_mode(
     state: &AppState,
     tool: &str,
     requested: Option<String>,
+    resumed: Option<String>,
     project: Option<&Settings>,
 ) -> Result<Option<String>, ApiError> {
     let tools = discovered_ai_tools_off_runtime(state, false).await;
@@ -516,6 +519,13 @@ async fn launch_permission_mode(
             hotsheet_plugins::validate_permission_mode(descriptor, &mode)
                 .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
         }
+        return Ok(Some(mode));
+    }
+    if let Some(mode) = resumed.filter(|mode| {
+        descriptor.is_none_or(|descriptor| {
+            hotsheet_plugins::validate_permission_mode(descriptor, mode).is_ok()
+        })
+    }) {
         return Ok(Some(mode));
     }
     let saved = project
@@ -704,10 +714,18 @@ pub(crate) async fn create_drive_connection(
                 state.store.clone(),
             )
         };
+    let resumed_mode = request.session_id.as_deref().and_then(|session_id| {
+        state.client_drives.session_permission_mode(
+            &project_path.display().to_string(),
+            &request.tool,
+            session_id,
+        )
+    });
     let permission_mode = launch_permission_mode(
         &state,
         &request.tool,
         request.permission_mode,
+        resumed_mode,
         project_settings.as_ref(),
     )
     .await?;

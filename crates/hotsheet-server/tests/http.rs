@@ -688,6 +688,217 @@ permission_modes = [
     );
 }
 
+/// HS2-Z5QVXW: a chat's permission-mode switch survives a server restart. Switch on a turn,
+/// restart with the same session catalog, recover the drive by its session the way the web
+/// client does (no mode in the request), and the next turn runs in the switched mode. A mode
+/// the reinstalled tool no longer declares falls back instead of failing recovery.
+#[tokio::test]
+async fn a_chats_permission_mode_survives_a_server_restart() {
+    let plugins = tempfile::tempdir().unwrap();
+    let fixture = plugins.path().join("mode-fixture");
+    std::fs::create_dir(&fixture).unwrap();
+    std::fs::write(fixture.join("instructions.md"), "Fixture.\n").unwrap();
+    let manifest = |modes: &str| {
+        format!(
+            r#"
+id = "mode-fixture"
+display_name = "Mode Fixture"
+product_name = "Mode Fixture"
+tier = "cli-agent"
+[detection]
+binaries = ["rustc"]
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".fixture/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{{store}}"]
+[drive]
+transport = "spawn"
+program = "rustc"
+content = "arg"
+models = [{{ id = "m", label = "M" }}]
+default_model = "m"
+session_options = ["model", "permission_mode"]
+default_permission_mode = "ask"
+permission_modes = [{modes}]
+"#
+        )
+    };
+    let both = r#"{ id = "ask", label = "Ask" }, { id = "yolo", label = "Yolo" }"#;
+    std::fs::write(fixture.join("manifest.toml"), manifest(both)).unwrap();
+    let (store_dir, base) = state();
+    let machine = tempfile::tempdir().unwrap();
+    let sessions = machine.path().join("sessions.json");
+    let homes = machine.path().join("homes");
+    let boot = |store: FsStore, backend: Arc<FakeClientDriveBackend>| {
+        app(AppState::new(store, SECRET.into())
+            .unwrap()
+            .with_machine_home(machine.path().join("machine-home"))
+            .with_plugin_dirs(vec![plugins.path().to_path_buf()])
+            .with_client_drive_backend_persistence(backend, sessions.clone(), homes.clone())
+            .unwrap())
+    };
+    drop(base);
+    let wait_idle = |router: axum::Router, id: &'static str| async move {
+        loop {
+            let listed = body_json(
+                router
+                    .clone()
+                    .oneshot(authed("GET", "/connections", None))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            let found = listed
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|item| item["id"] == id)
+                .cloned()
+                .unwrap();
+            if !found["busy"].as_bool().unwrap() {
+                return found;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    };
+    let discover = |router: axum::Router| async move {
+        router
+            .oneshot(authed("GET", "/ai-tools?refresh=true", None))
+            .await
+            .unwrap()
+    };
+
+    let first_backend = Arc::new(FakeClientDriveBackend::default());
+    let first = boot(
+        FsStore::open(store_dir.path()).unwrap(),
+        first_backend.clone(),
+    );
+    discover(first.clone()).await;
+    let created = first
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections",
+            Some(r#"{"tool":"mode-fixture","connection_id":"chat"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let switched = first
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections/chat/turns",
+            Some(r#"{"content":"one","permission_mode":"yolo"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(switched.status(), StatusCode::ACCEPTED);
+    assert_eq!(
+        wait_idle(first.clone(), "chat").await["permission_mode"],
+        "yolo"
+    );
+    let listed = body_json(
+        first
+            .clone()
+            .oneshot(authed("GET", "/drive/sessions", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed[0]["session_id"], "thread-1");
+    assert_eq!(
+        listed[0]["permission_mode"], "yolo",
+        "persisted with the session"
+    );
+    drop(first);
+
+    // Restart: the client recovers the chat by session id without naming a mode.
+    let second_backend = Arc::new(FakeClientDriveBackend::default());
+    let second = boot(
+        FsStore::open(store_dir.path()).unwrap(),
+        second_backend.clone(),
+    );
+    discover(second.clone()).await;
+    let recovered = body_json(
+        second
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/drive/connections",
+                Some(r#"{"tool":"mode-fixture","connection_id":"chat","session_id":"thread-1"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(recovered["permission_mode"], "yolo");
+    assert_eq!(
+        *second_backend.launch_modes.lock().unwrap(),
+        [Some("yolo".to_string())]
+    );
+    let next = second
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections/chat/turns",
+            Some(r#"{"content":"two"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(next.status(), StatusCode::ACCEPTED);
+    wait_idle(second.clone(), "chat").await;
+    assert_eq!(
+        *second_backend.turn_modes.lock().unwrap(),
+        [Some("yolo".to_string())]
+    );
+    drop(second);
+
+    // The tool no longer declares the remembered mode: recovery still succeeds, on the
+    // plugin default.
+    std::fs::write(
+        fixture.join("manifest.toml"),
+        manifest(r#"{ id = "ask", label = "Ask" }"#),
+    )
+    .unwrap();
+    let third_backend = Arc::new(FakeClientDriveBackend::default());
+    let third = boot(
+        FsStore::open(store_dir.path()).unwrap(),
+        third_backend.clone(),
+    );
+    discover(third.clone()).await;
+    let fallback = third
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections",
+            Some(r#"{"tool":"mode-fixture","connection_id":"chat","session_id":"thread-1"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(fallback.status(), StatusCode::CREATED);
+    assert_eq!(*third_backend.launch_modes.lock().unwrap(), [None]);
+    // An explicit request still wins over the remembered mode.
+    let explicit = body_json(
+        third
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/drive/connections",
+                Some(r#"{"tool":"mode-fixture","connection_id":"other","session_id":"thread-1","permission_mode":"ask"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(explicit["permission_mode"], "ask");
+}
+
 #[tokio::test]
 async fn ai_tool_discovery_and_machine_defaults_are_authenticated_and_validated() {
     let plugins = tempfile::tempdir().unwrap();

@@ -81,6 +81,58 @@ describe('production project drive control', () => {
       session_id: 'newest',
     });
   });
+  it('resumes a recovered chat in the permission mode the server remembered across a restart (HS2-Z5QVXW)', async () => {
+    // Before the restart the user switched this chat to `yolo`; the restarted server answers the
+    // session-only recreate with that remembered mode.
+    const createToolConnection = vi.fn().mockImplementation(async (value) =>
+      connection({
+        id: value.connection_id,
+        tool: value.tool,
+        session_id: value.session_id,
+        permission_mode: 'yolo',
+      }),
+    );
+    const recovered = await recoverProjectConnections(
+      { createToolConnection },
+      [],
+      [
+        {
+          connection_id: 'hotsheet-drawer-chat-01',
+          tool: 'codex',
+          project: '/repo',
+          session_id: 'thread-1',
+          updated_at_ms: 1,
+          permission_mode: 'yolo',
+        },
+      ],
+      'checkout',
+      '/repo',
+    );
+    // Recovery names no mode: the server's remembered (and validated) mode decides.
+    expect(createToolConnection).toHaveBeenCalledWith({
+      tool: 'codex',
+      checkout: 'checkout',
+      connection_id: 'hotsheet-drawer-chat-01',
+      session_id: 'thread-1',
+    });
+    const previous = {
+      id: 'ai-chat:hotsheet-drawer-chat-01',
+      connectionId: 'hotsheet-drawer-chat-01',
+      tool: 'codex',
+      name: 'Codex chat',
+      permissionMode: 'ask',
+    };
+    const [chat] = restoreDrawerAIChats(recovered, 'checkout', [previous], (tool) => tool);
+    expect(chat.permissionMode).toBe('yolo');
+    // A server that remembers nothing keeps the chat's own last-known mode.
+    const [kept] = restoreDrawerAIChats(
+      [connection({ id: 'hotsheet-drawer-chat-01', tool: 'codex' })],
+      'checkout',
+      [previous],
+      (tool) => tool,
+    );
+    expect(kept.permissionMode).toBe('ask');
+  });
   it('keeps project chat separate from the dedicated driven session', () => {
     expect(projectChatConnectionId(checkout, 'codex')).not.toBe(sidebarDriveConnectionId(checkout, 'codex'));
   });

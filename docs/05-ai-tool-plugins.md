@@ -850,11 +850,23 @@ hard-code mode names.
   machine-local settings with the machine-wide fallback. Settings → AI tools shows a
   "Chat permissions" Select per provider; the headless equivalent is
   `hotsheet-cli ai-settings set|set-provider --permission-mode <mode>`.
-- **Per chat:** `POST /drive/connections` takes an optional `permission_mode`; omitted, the
-  server uses the project's saved mode for that tool, else the machine-wide one, else the
-  plugin default. A turn's `permission_mode` switches the chat from that turn on; the mode is
-  per connection and in memory (refused while a turn runs, reset to the project default after
-  a server restart, `HS2-Z5QVXW`). `GET /connections` and every drive event report the active mode.
+- **Per chat:** `POST /drive/connections` takes an optional `permission_mode`. When it is
+  omitted, the server picks the first of these that applies:
+  1. the mode the resumed `session_id` last ran in;
+  2. the project's saved mode for that tool;
+  3. the machine-wide saved mode;
+  4. the plugin default.
+
+  A turn's `permission_mode` switches the chat from that turn on, and the switch is refused
+  while a turn runs. The mode is per connection.
+
+- **Across restarts (HS2-Z5QVXW):** the client session catalog records the chat's mode with
+  its session. A new chat records it with its first recorded session; later idle switches
+  persist immediately. A restarted server that recreates the drive from that session
+  (`recoverProjectConnections` sends only `session_id`) resumes the chat in the mode the user
+  picked, and `GET /drive/sessions` reports it. A remembered mode the tool no longer declares
+  is skipped, so recovery never fails on it. `GET /connections` and every drive event report
+  the active mode.
 - **Validation:** a mode the tool does not declare is a `400` (a Claude value is not a Codex
   policy); a saved mode the tool no longer declares falls back to the plugin default. At
   launch Codex maps any non-Codex value to `never` rather than passing it through.

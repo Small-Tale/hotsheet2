@@ -267,7 +267,8 @@ struct ConnectionState {
     control: Option<TurnControl>,
     last_error: Option<String>,
     active_session_key: Option<String>,
-    /// The active permission mode; per chat and in memory only (HS2-NHRDMW).
+    /// The active permission mode, per chat (HS2-NHRDMW). It is persisted with the chat's
+    /// session catalog entry so a restarted server resumes the chat in it (HS2-Z5QVXW).
     permission_mode: Option<String>,
 }
 
@@ -278,6 +279,9 @@ pub struct ClientSessionInfo {
     pub project: String,
     pub session_id: String,
     pub updated_at_ms: u64,
+    /// The chat's last permission mode (HS2-Z5QVXW), restored when the session resumes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permission_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -289,6 +293,10 @@ struct StoredClientSession {
     updated_at_ms: u64,
     #[serde(default)]
     home_id: String,
+    /// The chat's permission mode when this session was last recorded or switched
+    /// (HS2-Z5QVXW). Catalogs written before it read as `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    permission_mode: Option<String>,
 }
 
 impl From<&StoredClientSession> for ClientSessionInfo {
@@ -299,6 +307,7 @@ impl From<&StoredClientSession> for ClientSessionInfo {
             project: session.project.clone(),
             session_id: session.session_id.clone(),
             updated_at_ms: session.updated_at_ms,
+            permission_mode: session.permission_mode.clone(),
         }
     }
 }
@@ -511,8 +520,9 @@ impl ClientDriveManager {
         self.begin_correlated_turn(id, explicit_session, model, effort, None)
     }
 
-    /// Switch an idle chat's permission mode (HS2-NHRDMW). The mode sticks for later turns,
-    /// stays in memory, and is never applied to a running turn.
+    /// Switch an idle chat's permission mode (HS2-NHRDMW). The mode sticks for later turns and
+    /// is never applied to a running turn. A chat with a recorded session persists the switch
+    /// right away (HS2-Z5QVXW); a new chat persists it with its first recorded session.
     pub fn set_permission_mode(
         &self,
         id: &str,
@@ -521,7 +531,7 @@ impl ClientDriveManager {
         let connection = self
             .connection(id)?
             .ok_or_else(|| ClientDriveError::NotFound(id.into()))?;
-        {
+        let session_id = {
             let mut state = connection.state.lock_or_recover();
             if state.closing {
                 return Err(ClientDriveError::NotFound(id.into()));
@@ -531,9 +541,37 @@ impl ClientDriveManager {
                     "connection '{id}' already has a running turn"
                 )));
             }
-            state.permission_mode = Some(mode);
+            state.permission_mode = Some(mode.clone());
+            state.session_id.clone()
+        };
+        if let Some(session_id) = session_id
+            && let Err(error) = self.update_catalog(|catalog| {
+                for session in &mut catalog.sessions {
+                    if session.project == connection.project
+                        && session.tool == connection.tool
+                        && session.session_id == session_id
+                    {
+                        session.permission_mode = Some(mode.clone());
+                    }
+                }
+            })
+        {
+            // The switch still applies for this run; the next recorded turn retries persisting.
+            tracing::warn!(connection = %id, %error, "persisting the permission mode failed");
         }
         Ok(connection_info(&connection))
+    }
+
+    /// The permission mode last recorded for a resumable session (HS2-Z5QVXW), so a drive
+    /// recreated after a server restart resumes the chat in the mode the user picked.
+    pub fn session_permission_mode(
+        &self,
+        project: &str,
+        tool: &str,
+        session_id: &str,
+    ) -> Option<String> {
+        self.stored_session(project, tool, session_id)
+            .and_then(|session| session.permission_mode)
     }
 
     /// [`Self::begin_turn`] with the caller's turn correlation id (HS2-14X4AF). A client that
@@ -733,6 +771,7 @@ impl ClientDriveManager {
         connection: &ClientConnection,
         session_id: String,
     ) -> Result<(), ClientDriveError> {
+        let permission_mode = connection.state.lock_or_recover().permission_mode.clone();
         self.update_catalog(|next| {
             next.sessions.retain(|session| {
                 !(session.project == connection.project
@@ -746,6 +785,7 @@ impl ClientDriveManager {
                 session_id,
                 updated_at_ms: now_ms(),
                 home_id: connection.home_id.clone(),
+                permission_mode,
             });
         })
     }
@@ -1286,6 +1326,91 @@ mod tests {
             manager.set_permission_mode("missing", "plan".into()),
             Err(ClientDriveError::NotFound(_))
         ));
+    }
+
+    /// HS2-Z5QVXW transition matrix over a persisted catalog: a new chat's switch persists
+    /// with its first recorded session; a later idle switch persists immediately; a restart
+    /// (a fresh manager over the same file) reports the remembered mode; a catalog written
+    /// before the field reads as no remembered mode.
+    #[test]
+    fn a_chats_permission_mode_is_persisted_with_its_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sessions.json");
+        let backend = Arc::new(StubBackend {
+            supports_interrupt: false,
+            envs: Mutex::default(),
+        });
+        let open = || {
+            ClientDriveManager::with_persistence(
+                backend.clone(),
+                path.clone(),
+                dir.path().join("homes"),
+            )
+            .unwrap()
+        };
+        let manager = open();
+        manager
+            .create_or_attach(prepare("/project"), Some("chat".into()), None)
+            .unwrap();
+        // No session yet: the switch is in memory only.
+        manager.set_permission_mode("chat", "auto".into()).unwrap();
+        assert_eq!(
+            manager.session_permission_mode("/project", "fake", "thread-1"),
+            None
+        );
+        let job = manager.begin_turn("chat", None, None, None).unwrap();
+        manager.finish_turn(
+            &job,
+            &Ok(TurnDone {
+                reason: hotsheet_aitools::DoneReason::Completed,
+                session_id: Some("thread-1".into()),
+            }),
+        );
+        assert_eq!(
+            manager
+                .session_permission_mode("/project", "fake", "thread-1")
+                .as_deref(),
+            Some("auto"),
+            "the first recorded session carries the chat's mode"
+        );
+        assert_eq!(
+            manager.sessions("/project")[0].permission_mode.as_deref(),
+            Some("auto")
+        );
+        // An idle switch on a chat with a session persists without waiting for a turn.
+        manager.set_permission_mode("chat", "plan".into()).unwrap();
+        drop(manager);
+
+        let restarted = open();
+        assert_eq!(
+            restarted
+                .session_permission_mode("/project", "fake", "thread-1")
+                .as_deref(),
+            Some("plan")
+        );
+        // Another tool or project never sees this chat's mode.
+        assert_eq!(
+            restarted.session_permission_mode("/project", "other", "thread-1"),
+            None
+        );
+        assert_eq!(
+            restarted.session_permission_mode("/elsewhere", "fake", "thread-1"),
+            None
+        );
+        drop(restarted);
+
+        // A catalog from before HS2-Z5QVXW has no mode field.
+        std::fs::write(
+            &path,
+            r#"{"sessions":[{"connection_id":"chat","tool":"fake","project":"/project","session_id":"thread-1","updated_at_ms":1}]}"#,
+        )
+        .unwrap();
+        let legacy = open();
+        assert_eq!(
+            legacy.session_permission_mode("/project", "fake", "thread-1"),
+            None
+        );
+        assert_eq!(legacy.sessions("/project")[0].permission_mode, None);
     }
 
     #[test]
