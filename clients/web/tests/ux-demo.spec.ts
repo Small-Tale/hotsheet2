@@ -432,7 +432,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['ticket-board-column', 1],
     ['ticket-search-field', 6],
     ['ticket-code-review', 5],
-    ['ticket-attachments', 5],
+    ['ticket-attachments', 6],
     ['attachment-gallery', 1],
     ['ticket-info-panel', 2],
     ['list', 3],
