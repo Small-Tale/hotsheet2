@@ -18,7 +18,7 @@ use hotsheet_model::{ClaimEventKind, StartedPhase, Status, Ticket, Timestamp};
 use serde::Serialize;
 use time::OffsetDateTime;
 
-use crate::phase_timing::{median_ms, phase_spans};
+use crate::phase_timing::{PhaseSpan, median_ms, phase_spans, phase_spans_from_activity};
 
 /// Every Started phase, in workflow order.
 pub const PHASES: [StartedPhase; 6] = [
@@ -313,11 +313,82 @@ pub fn phase_report(
 /// The phases a ticket never recorded among `working` and `initial_testing`, the two the
 /// guidance most often sees skipped. Drives the completion nudge.
 pub fn unrecorded_core_phases(ticket: &Ticket) -> Vec<StartedPhase> {
-    let recorded: Vec<StartedPhase> = phase_spans(ticket).iter().map(|span| span.phase).collect();
+    missing_core_phases(&phase_spans(ticket))
+}
+
+/// [`unrecorded_core_phases`] over already-derived phase spans.
+pub fn missing_core_phases(spans: &[PhaseSpan]) -> Vec<StartedPhase> {
+    let recorded: Vec<StartedPhase> = spans.iter().map(|span| span.phase).collect();
     [StartedPhase::Working, StartedPhase::InitialTesting]
         .into_iter()
         .filter(|phase| !recorded.contains(phase))
         .collect()
+}
+
+/// The reminder for a ticket just completed whose phase history skipped `working` or
+/// `initial_testing` (HS2-JS7E61), shared by the CLI, MCP, and HTTP completion paths
+/// (HS2-8N7QZ2). `None` for a ticket that never recorded a phase or recorded both.
+pub fn completion_phase_reminder(slug: &str, spans: &[PhaseSpan]) -> Option<String> {
+    if spans.is_empty() {
+        return None;
+    }
+    let missing = missing_core_phases(spans);
+    if missing.is_empty() {
+        return None;
+    }
+    let names: Vec<&str> = missing.iter().map(|phase| phase_key(*phase)).collect();
+    Some(format!(
+        "note: {slug} completed without recording {}. Record each started_phase transition as it \
+         happens; `phase-report` measures time per phase.",
+        names.join(" or ")
+    ))
+}
+
+/// Whether a ticket's Completed status is a real completion rather than a close as not
+/// planned, duplicate, obsolete, or works as designed (which also land in Completed).
+fn completed_as_done(status: Status, reason: Option<hotsheet_model::CloseReason>) -> bool {
+    status == Status::Completed
+        && reason.is_none_or(|reason| reason == hotsheet_model::CloseReason::Completed)
+}
+
+/// [`completion_phase_reminder`] for a model ticket that is now Completed (as done).
+pub fn ticket_completion_phase_reminder(ticket: &Ticket) -> Option<String> {
+    if !completed_as_done(ticket.status, ticket.close_reason) {
+        return None;
+    }
+    completion_phase_reminder(ticket.slug.as_str(), &phase_spans(ticket))
+}
+
+/// [`completion_phase_reminder`] for a wire ticket a client received after completing it.
+pub fn api_completion_phase_reminder(ticket: &crate::ApiTicket) -> Option<String> {
+    if !completed_as_done(ticket.status, ticket.close_reason) {
+        return None;
+    }
+    let spans = phase_spans_from_activity(
+        ticket
+            .notes
+            .iter()
+            .filter(|note| note.kind == hotsheet_model::NoteKind::Activity)
+            .map(|note| (Timestamp::new(note.created_at.clone()), note.text.as_str())),
+    );
+    completion_phase_reminder(&ticket.slug, &spans)
+}
+
+/// A report range bound: a `YYYY-MM-DD` day (midnight UTC) or an RFC 3339 instant. The
+/// error names the parameter (`--since`, `since`) the caller used.
+pub fn parse_report_bound(name: &str, raw: &str) -> Result<Timestamp, String> {
+    let text = if raw.len() == 10 {
+        format!("{raw}T00:00:00Z")
+    } else {
+        raw.to_string()
+    };
+    let at = Timestamp::new(text);
+    if at.instant().is_none() {
+        return Err(format!(
+            "{name} must be YYYY-MM-DD or an RFC 3339 timestamp, got '{raw}'"
+        ));
+    }
+    Ok(at)
 }
 
 /// Compact human duration: `45s`, `12.5m`, `3.2h`.
@@ -783,5 +854,51 @@ mod tests {
         assert_eq!(format_duration(45_000), "45s");
         assert_eq!(format_duration(4 * 60_000 + 6_000), "4.1m");
         assert_eq!(format_duration(3 * 3_600_000 + 720_000), "3.2h");
+    }
+
+    /// HS2-8N7QZ2: the shared bound parser and the completion reminder behave the same for
+    /// model tickets and for the wire tickets MCP and HTTP callers receive.
+    #[test]
+    fn report_bounds_and_the_completion_reminder_are_shared() {
+        assert_eq!(
+            parse_report_bound("since", "2026-10-01").unwrap().as_str(),
+            "2026-10-01T00:00:00Z"
+        );
+        assert_eq!(
+            parse_report_bound("until", "2026-10-01T08:30:00Z")
+                .unwrap()
+                .as_str(),
+            "2026-10-01T08:30:00Z"
+        );
+        assert_eq!(
+            parse_report_bound("--since", "soon").unwrap_err(),
+            "--since must be YYYY-MM-DD or an RFC 3339 timestamp, got 'soon'"
+        );
+        let span = |phase| PhaseSpan {
+            phase,
+            start: Timestamp::new("2026-10-16T08:00:00Z"),
+            end: None,
+        };
+        assert_eq!(completion_phase_reminder("HS-1", &[]), None);
+        assert_eq!(
+            completion_phase_reminder(
+                "HS-1",
+                &[
+                    span(StartedPhase::Working),
+                    span(StartedPhase::InitialTesting)
+                ]
+            ),
+            None
+        );
+        let reminder = completion_phase_reminder("HS-1", &[span(StartedPhase::Analyzing)]).unwrap();
+        assert!(
+            reminder
+                .starts_with("note: HS-1 completed without recording working or initial_testing.")
+        );
+        assert!(
+            completion_phase_reminder("HS-1", &[span(StartedPhase::Working)])
+                .unwrap()
+                .contains("without recording initial_testing.")
+        );
     }
 }

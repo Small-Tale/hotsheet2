@@ -19,6 +19,7 @@ fn primary_store_route(path: &str) -> bool {
         "/setup",
         "/analytics",
         "/confidence-report",
+        "/phase-report",
         "/commands",
         "/command-groups",
         "/command-runs",

@@ -51,6 +51,79 @@ pub(crate) async fn checkout_confidence_report(
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
 }
 
+/// `since`/`until` for the phase report: a `YYYY-MM-DD` day or an RFC 3339 instant.
+#[derive(Deserialize)]
+pub(crate) struct PhaseReportParams {
+    since: Option<String>,
+    until: Option<String>,
+}
+
+type ReportBounds = (
+    Option<hotsheet_model::Timestamp>,
+    Option<hotsheet_model::Timestamp>,
+);
+
+fn phase_report_bounds(params: &PhaseReportParams) -> Result<ReportBounds, ApiError> {
+    let bound = |name: &str, raw: &Option<String>| {
+        raw.as_deref()
+            .filter(|raw| !raw.is_empty())
+            .map(|raw| hotsheet_ticketing::phase_report::parse_report_bound(name, raw))
+            .transpose()
+            .map_err(|message| ApiError::new(StatusCode::BAD_REQUEST, message))
+    };
+    Ok((
+        bound("since", &params.since)?,
+        bound("until", &params.until)?,
+    ))
+}
+
+fn phase_report_of(
+    tickets: &[hotsheet_model::Ticket],
+    (since, until): &ReportBounds,
+) -> hotsheet_ticketing::phase_report::PhaseReport {
+    hotsheet_ticketing::phase_report::phase_report(
+        tickets,
+        since.as_ref(),
+        until.as_ref(),
+        time::OffsetDateTime::now_utc(),
+    )
+}
+
+/// `GET /phase-report?since=&until=`: per-phase durations of completed tickets in the
+/// default store (HS2-8N7QZ2), the same report as `hotsheet-cli phase-report --json`.
+pub(crate) async fn phase_report(
+    State(state): State<AppState>,
+    Query(params): Query<PhaseReportParams>,
+) -> Result<Json<hotsheet_ticketing::phase_report::PhaseReport>, ApiError> {
+    let bounds = phase_report_bounds(&params)?;
+    let store = state.store.clone();
+    tokio::task::spawn_blocking(move || {
+        let tickets = store.list_tickets_resilient()?.tickets;
+        Ok(Json(phase_report_of(&tickets, &bounds)))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+}
+
+/// `GET /checkouts/{reference}/phase-report?since=&until=`: the phase report across every
+/// git store the checkout links (HS2-8N7QZ2), like its confidence report.
+pub(crate) async fn checkout_phase_report(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Query(params): Query<PhaseReportParams>,
+) -> Result<Json<hotsheet_ticketing::phase_report::PhaseReport>, ApiError> {
+    let bounds = phase_report_bounds(&params)?;
+    tokio::task::spawn_blocking(move || {
+        let mut tickets = Vec::new();
+        for (_, entry) in checkout_entries(&state, &reference)? {
+            tickets.extend(entry.store.list_tickets_resilient()?.tickets);
+        }
+        Ok(Json(phase_report_of(&tickets, &bounds)))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+}
+
 pub(crate) async fn usage_metrics_summary(
     State(state): State<AppState>,
 ) -> Result<Json<hotsheet_ticketing::metrics::Rollup>, ApiError> {

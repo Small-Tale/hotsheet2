@@ -117,6 +117,15 @@ fn base_tools_list() -> Value {
             } }
         },
         {
+            "name": "hotsheet_phase_report",
+            "description": "Phase-duration report: for tickets completed in [since, until), how many recorded each started_phase and the median, p75, p90, and total of per-ticket wall time and active (live-claim) time, plus a per-ticket breakdown. Same report as `hotsheet-cli phase-report --json`. Read-only.",
+            "inputSchema": { "type": "object", "properties": {
+                "checkout": str_prop("optional checkout id/alias/path; aggregates its git stores"),
+                "since": str_prop("optional inclusive start: YYYY-MM-DD (midnight UTC) or an RFC 3339 instant"),
+                "until": str_prop("optional exclusive end: YYYY-MM-DD (midnight UTC) or an RFC 3339 instant")
+            } }
+        },
+        {
             "name": "hotsheet_query",
             "description": "List/filter tickets (status, priority, category, tags, text, up_next, open, close_reason, closed, sort). Returns compact rows (no Markdown body) by default — pass compact=false for bodies, or use hotsheet_get for one ticket. Use limit to cap results. Every query returns at most 500 rows: an uncapped query matching more fails, so pass limit (at most 500) and page — store queries with page_after, checkout queries with page_size + cursor (served with or without a running server).",
             "inputSchema": { "type": "object", "properties": {
@@ -655,6 +664,29 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
                 .get(&checkout_route(args, "/confidence-report"), &[])
                 .map_err(be_msg)
         }
+        "hotsheet_phase_report" => {
+            if args
+                .get("connection")
+                .and_then(Value::as_str)
+                .is_some_and(|value| !value.is_empty())
+            {
+                return Err(
+                    "phase report covers git ticket stores; pass checkout, not connection".into(),
+                );
+            }
+            let range: Vec<(String, String)> = ["since", "until"]
+                .into_iter()
+                .filter_map(|key| {
+                    args.get(key)
+                        .and_then(Value::as_str)
+                        .filter(|value| !value.is_empty())
+                        .map(|value| (key.to_string(), value.to_string()))
+                })
+                .collect();
+            backend
+                .get(&checkout_route(args, "/phase-report"), &range)
+                .map_err(be_msg)
+        }
         "hotsheet_query" => backend
             .get(&checkout_route(args, "/tickets"), &query_pairs(args))
             .map_err(be_msg),
@@ -680,27 +712,34 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
         }
         "hotsheet_update" => {
             let id = arg_str(args, "id")?;
-            backend
+            let updated = backend
                 .send(
                     "PATCH",
                     &checkout_route(args, &format!("/tickets/{id}")),
                     &without_many(args, &["id", "checkout", "connection"]),
                 )
-                .map_err(be_msg)
+                .map_err(be_msg)?;
+            let completes = args.get("status").and_then(Value::as_str) == Some("completed");
+            Ok(with_completion_phase_reminder(updated, completes))
         }
         "hotsheet_close" => {
             let id = arg_str(args, "id")?;
+            let reason = arg_str(args, "reason")?;
             let body = json!({
-                "reason": arg_str(args, "reason")?,
+                "reason": reason,
                 "duplicate_of": args.get("duplicate_of").cloned().unwrap_or(Value::Null),
             });
-            backend
+            let closed = backend
                 .send(
                     "POST",
                     &checkout_route(args, &format!("/tickets/{id}/close")),
                     &body,
                 )
-                .map_err(be_msg)
+                .map_err(be_msg)?;
+            Ok(with_completion_phase_reminder(
+                closed,
+                reason == "completed",
+            ))
         }
         "hotsheet_restore" => {
             let id = arg_str(args, "id")?;
@@ -911,6 +950,32 @@ fn without_many(args: &Value, keys: &[&str]) -> Value {
         }
     }
     v
+}
+
+/// HS2-8N7QZ2: a completion through MCP gets the same skipped-phase reminder as the CLI's,
+/// appended to the response's `warnings` (kept alongside any other warning). A response that
+/// is not a ticket, or a completion whose phase history is whole, is returned unchanged.
+fn with_completion_phase_reminder(mut response: Value, completes: bool) -> Value {
+    if !completes {
+        return response;
+    }
+    let Ok(ticket) = serde_json::from_value::<hotsheet_ticketing::ApiTicket>(response.clone())
+    else {
+        return response;
+    };
+    let Some(reminder) = hotsheet_ticketing::phase_report::api_completion_phase_reminder(&ticket)
+    else {
+        return response;
+    };
+    if let Some(object) = response.as_object_mut() {
+        match object.get_mut("warnings").and_then(Value::as_array_mut) {
+            Some(warnings) => warnings.push(Value::String(reminder)),
+            None => {
+                object.insert("warnings".into(), json!([reminder]));
+            }
+        }
+    }
+    response
 }
 
 fn checkout_route(args: &Value, suffix: &str) -> String {
@@ -1258,6 +1323,39 @@ mod core_backend {
         }
     }
 
+    type ReportBounds = (
+        Option<hotsheet_model::Timestamp>,
+        Option<hotsheet_model::Timestamp>,
+    );
+
+    /// The server's `since`/`until` parsing for the phase report: a bad bound is a 400.
+    fn phase_report_bounds(query: &[(String, String)]) -> Result<ReportBounds, BackendError> {
+        let bound = |name: &str| {
+            query
+                .iter()
+                .find(|(key, value)| key == name && !value.is_empty())
+                .map(|(_, raw)| hotsheet_ticketing::phase_report::parse_report_bound(name, raw))
+                .transpose()
+                .map_err(|message| BackendError {
+                    status: Some(400),
+                    message,
+                })
+        };
+        Ok((bound("since")?, bound("until")?))
+    }
+
+    fn phase_report_of(
+        tickets: &[hotsheet_model::Ticket],
+        (since, until): &ReportBounds,
+    ) -> hotsheet_ticketing::phase_report::PhaseReport {
+        hotsheet_ticketing::phase_report::phase_report(
+            tickets,
+            since.as_ref(),
+            until.as_ref(),
+            time::OffsetDateTime::now_utc(),
+        )
+    }
+
     impl Backend for CoreBackend {
         fn get(&self, path: &str, query: &[(String, String)]) -> Result<Value, BackendError> {
             if path == "/providers" {
@@ -1286,6 +1384,28 @@ mod core_backend {
                 return Ok(to_value(&hotsheet_ticketing::calibration::calibration(
                     &tickets,
                 )));
+            }
+            // Phase-duration report (HS2-8N7QZ2): the server's report shape and bounds.
+            if path == "/phase-report" {
+                let bounds = phase_report_bounds(query)?;
+                let tickets = self
+                    .store
+                    .list_tickets_resilient()
+                    .map_err(store_err)?
+                    .tickets;
+                return Ok(to_value(&phase_report_of(&tickets, &bounds)));
+            }
+            if let Some(checkout) = path
+                .strip_prefix("/checkouts/")
+                .and_then(|rest| rest.strip_suffix("/phase-report"))
+            {
+                let bounds = phase_report_bounds(query)?;
+                let (_, stores) = self.checkout_context(checkout)?;
+                let mut tickets = Vec::new();
+                for store in stores {
+                    tickets.extend(store.list_tickets_resilient().map_err(store_err)?.tickets);
+                }
+                return Ok(to_value(&phase_report_of(&tickets, &bounds)));
             }
             if let Some(checkout) = path
                 .strip_prefix("/checkouts/")
@@ -4448,6 +4568,173 @@ mod tests {
             json!({ "connection": "github-main" }),
         );
         assert!(refused["error"].as_str().unwrap().contains("pass checkout"));
+    }
+
+    /// HS2-8N7QZ2: `hotsheet_phase_report` serves the CLI's phase report serverless, with the
+    /// server's `since`/`until` bounds, and refuses a provider connection.
+    #[test]
+    fn phase_report_tool_matches_the_cli_report_and_bounds() {
+        let (_d, backend) = core();
+        let id = call(&backend, "hotsheet_create", json!({ "title": "Measure" }))["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        for args in [
+            json!({ "id": id, "status": "started" }),
+            json!({ "id": id, "started_phase": "working" }),
+            json!({ "id": id, "started_phase": "initial_testing" }),
+            json!({ "id": id, "status": "completed" }),
+        ] {
+            call(&backend, "hotsheet_update", args);
+        }
+        let report = call(&backend, "hotsheet_phase_report", json!({}));
+        assert_eq!(report["completed_tickets"], 1, "{report}");
+        assert_eq!(report["tickets_with_phases"], 1, "{report}");
+        let phases: Vec<&str> = report["phases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["phase"].as_str().unwrap())
+            .collect();
+        assert_eq!(phases, ["analyzing", "working", "initial_testing"]);
+        // A range that ends before any completion is empty; a bad bound names its parameter.
+        let empty = call(
+            &backend,
+            "hotsheet_phase_report",
+            json!({ "since": "2000-01-01", "until": "2000-01-02" }),
+        );
+        assert_eq!(empty["completed_tickets"], 0, "{empty}");
+        assert_eq!(empty["since"], "2000-01-01T00:00:00Z");
+        let bad = call(
+            &backend,
+            "hotsheet_phase_report",
+            json!({ "since": "soon" }),
+        );
+        assert!(
+            bad["error"]
+                .as_str()
+                .unwrap()
+                .contains("since must be YYYY-MM-DD"),
+            "{bad}"
+        );
+        let refused = call(
+            &backend,
+            "hotsheet_phase_report",
+            json!({ "connection": "github-main" }),
+        );
+        assert!(refused["error"].as_str().unwrap().contains("pass checkout"));
+    }
+
+    /// HS2-8N7QZ2: completing through `hotsheet_update` or `hotsheet_close` after skipping
+    /// `working`/`initial_testing` returns the CLI's reminder in `warnings`; a whole phase
+    /// history, a ticket that never recorded a phase, and a non-completing edit stay quiet.
+    #[test]
+    fn mcp_completions_warn_when_core_phases_were_skipped() {
+        let (_d, backend) = core();
+        let started = |title: &str, phases: &[&str]| {
+            let id = call(&backend, "hotsheet_create", json!({ "title": title }))["id"]
+                .as_str()
+                .unwrap()
+                .to_string();
+            call(
+                &backend,
+                "hotsheet_update",
+                json!({ "id": id, "status": "started" }),
+            );
+            for phase in phases {
+                call(
+                    &backend,
+                    "hotsheet_update",
+                    json!({ "id": id, "started_phase": phase }),
+                );
+            }
+            id
+        };
+        let skipped = started("Skipped", &["analyzing", "integrating"]);
+        let renamed = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": skipped, "title": "Skipped still" }),
+        );
+        assert!(renamed.get("warnings").is_none(), "{renamed}");
+        let done = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": skipped, "status": "completed" }),
+        );
+        let warning = done["warnings"][0].as_str().unwrap();
+        assert!(
+            warning.contains("completed without recording working or initial_testing"),
+            "{done}"
+        );
+        assert_eq!(done["status"], "completed");
+
+        let closed_id = started("Closed", &["working"]);
+        let closed = call(
+            &backend,
+            "hotsheet_close",
+            json!({ "id": closed_id, "reason": "completed" }),
+        );
+        assert!(
+            closed["warnings"][0]
+                .as_str()
+                .unwrap()
+                .contains("without recording initial_testing."),
+            "{closed}"
+        );
+        let dropped_id = started("Dropped", &["analyzing"]);
+        let dropped = call(
+            &backend,
+            "hotsheet_close",
+            json!({ "id": dropped_id, "reason": "not_planned" }),
+        );
+        assert!(dropped.get("warnings").is_none(), "{dropped}");
+
+        // Starting records `analyzing`, so only a ticket completed without ever starting is
+        // unphased.
+        let whole = started("Whole", &["working", "initial_testing"]);
+        let unphased = call(&backend, "hotsheet_create", json!({ "title": "Unphased" }))["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        for (title, id) in [("Whole", whole), ("Unphased", unphased)] {
+            let done = call(
+                &backend,
+                "hotsheet_update",
+                json!({ "id": id, "status": "completed" }),
+            );
+            assert!(done.get("warnings").is_none(), "{title}: {done}");
+        }
+    }
+
+    #[test]
+    fn completion_phase_reminder_keeps_existing_warnings() {
+        let (_d, backend) = core();
+        let mut response = call(&backend, "hotsheet_create", json!({ "title": "Wire" }));
+        response["status"] = json!("completed");
+        response["slug"] = json!("HS-1");
+        response["warnings"] = json!(["attachment missing"]);
+        response["notes"] = json!([{
+            "id": "n", "kind": "activity", "created_at": "2026-10-16T08:00:00Z",
+            "edited_at": "2026-10-16T08:00:00Z", "human_edited": false,
+            "text": "Started phase changed from Unspecified to Analyzing"
+        }]);
+        let warned = with_completion_phase_reminder(response.clone(), true);
+        assert_eq!(warned["warnings"][0], "attachment missing");
+        assert!(
+            warned["warnings"][1]
+                .as_str()
+                .unwrap()
+                .contains("HS-1 completed")
+        );
+        assert_eq!(
+            with_completion_phase_reminder(response.clone(), false),
+            response
+        );
+        assert_eq!(
+            with_completion_phase_reminder(json!({ "error": "x" }), true),
+            json!({ "error": "x" })
+        );
     }
 
     /// HS2-R0131R: `hotsheet_repository_size` returns the same JSON as

@@ -884,28 +884,13 @@ pub(crate) fn cmd_edit(
 
 /// HS2-JS7E61: completing a ticket whose phase history skipped `working` or
 /// `initial_testing` gets a reminder, since `phase-report` measures those phases. Tickets
-/// that never recorded a phase, and edits that do not complete, stay silent.
+/// that never recorded a phase, and edits that do not complete, stay silent. The same
+/// reminder reaches MCP and HTTP callers (HS2-8N7QZ2).
 fn completion_phase_nudge(before: Status, updated: &hotsheet_model::Ticket) -> Option<String> {
-    if before == Status::Completed || updated.status != Status::Completed {
+    if before == Status::Completed {
         return None;
     }
-    if hotsheet_ticketing::phase_timing::phase_spans(updated).is_empty() {
-        return None;
-    }
-    let missing = hotsheet_ticketing::phase_report::unrecorded_core_phases(updated);
-    if missing.is_empty() {
-        return None;
-    }
-    let names: Vec<&str> = missing
-        .iter()
-        .map(|phase| hotsheet_ticketing::phase_report::phase_key(*phase))
-        .collect();
-    Some(format!(
-        "note: {} completed without recording {}. Record each started_phase transition as it \
-         happens; `phase-report` measures time per phase.",
-        updated.slug,
-        names.join(" or ")
-    ))
+    hotsheet_ticketing::phase_report::ticket_completion_phase_reminder(updated)
 }
 
 pub(crate) fn cmd_batch(
@@ -992,16 +977,7 @@ pub(crate) fn cmd_confidence_report(path: &Path, json: bool) -> Result<()> {
 
 /// A `--since`/`--until` bound: a `YYYY-MM-DD` day (midnight UTC) or an RFC 3339 instant.
 fn report_bound(flag: &str, raw: &str) -> Result<hotsheet_model::Timestamp> {
-    let text = if raw.len() == 10 {
-        format!("{raw}T00:00:00Z")
-    } else {
-        raw.to_string()
-    };
-    let at = hotsheet_model::Timestamp::new(text);
-    if at.instant().is_none() {
-        bail!("{flag} must be YYYY-MM-DD or an RFC 3339 timestamp, got '{raw}'");
-    }
-    Ok(at)
+    hotsheet_ticketing::phase_report::parse_report_bound(flag, raw).map_err(anyhow::Error::msg)
 }
 
 pub(crate) fn cmd_phase_report(
@@ -1090,6 +1066,9 @@ pub(crate) fn cmd_close(
         hotsheet_ticketing::actor::note_actor(actor).as_ref(),
     )?;
     println!("Closed {} ({reason})", closed.slug);
+    if let Some(nudge) = completion_phase_nudge(ticket.status, &closed) {
+        eprintln!("{nudge}");
+    }
     Ok(())
 }
 

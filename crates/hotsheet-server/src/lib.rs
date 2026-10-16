@@ -106,13 +106,13 @@ use routes::permissions::{
 };
 use routes::project_tools::{
     acknowledge_notification, cancel_checkout_command_run, cancel_command_run,
-    checkout_confidence_report, confidence_report, get_checkout_command_run, get_command_run,
-    list_checkout_command_groups, list_checkout_command_runs, list_checkout_commands,
-    list_checkout_custom_views, list_command_groups, list_command_runs, list_commands,
-    list_custom_views, list_notifications, publish_notification, run_checkout_command, run_command,
-    save_checkout_command_groups, save_checkout_commands, save_checkout_custom_views,
-    save_command_groups, save_commands, save_custom_views, synthesize_speech, ticket_flow_summary,
-    usage_metrics_summary,
+    checkout_confidence_report, checkout_phase_report, confidence_report, get_checkout_command_run,
+    get_command_run, list_checkout_command_groups, list_checkout_command_runs,
+    list_checkout_commands, list_checkout_custom_views, list_command_groups, list_command_runs,
+    list_commands, list_custom_views, list_notifications, phase_report, publish_notification,
+    run_checkout_command, run_command, save_checkout_command_groups, save_checkout_commands,
+    save_checkout_custom_views, save_command_groups, save_commands, save_custom_views,
+    synthesize_speech, ticket_flow_summary, usage_metrics_summary,
 };
 use routes::providers::{
     assign_provider_ticket, close_provider_ticket, copy_provider_attachment,
@@ -1231,6 +1231,10 @@ pub fn app(state: AppState) -> Router {
             get(checkout_confidence_report),
         )
         .route(
+            "/checkouts/{reference}/phase-report",
+            get(checkout_phase_report),
+        )
+        .route(
             "/checkouts/{reference}/corrupt-tickets/repair",
             post(create_corrupt_ticket_repair),
         )
@@ -1448,6 +1452,7 @@ pub fn app(state: AppState) -> Router {
         .route("/analytics/tickets", get(ticket_flow_summary))
         .route("/analytics/usage", get(usage_metrics_summary))
         .route("/confidence-report", get(confidence_report))
+        .route("/phase-report", get(phase_report))
         .route("/commands", get(list_commands).put(save_commands))
         .route(
             "/command-groups",

@@ -672,6 +672,7 @@ hotsheet ls --max-confidence 69 --sort confidence   # low-confidence completions
 hotsheet confidence-report [--json]        # reported confidence vs. later reopen/verified outcomes per band
                                            # (also GET /confidence-report, /checkouts/{ref}/confidence-report, MCP hotsheet_confidence_report)
 hotsheet phase-report [--since D] [--until D] [--json]  # time per started_phase: wall vs. live-claim time (HS2-JS7E61)
+                                           # (also GET /phase-report, /checkouts/{ref}/phase-report, MCP hotsheet_phase_report; HS2-8N7QZ2)
 hotsheet checkout repo-size [ref] [--json] # git object + attachment sizes vs. GitHub's 5 GB / 10 GB limits (HS2-QF44T7)
 hotsheet ls --text "flicker"              # text search via the local index
 hotsheet show HS-7f3k9q

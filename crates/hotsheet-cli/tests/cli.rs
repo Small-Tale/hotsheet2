@@ -7676,6 +7676,49 @@ fn phase_report_measures_phase_time_from_phase_and_claim_history() {
         ));
 }
 
+/// HS2-8N7QZ2: `close <slug> --reason completed` gets the same skipped-phase reminder as
+/// `edit --status completed`; other close reasons and a whole phase history stay quiet.
+#[test]
+fn close_completed_reminds_about_skipped_core_phases() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+    let started = |title: &str, phases: &[&str]| {
+        let slug = new_ticket(p, title);
+        hs(p)
+            .args(["edit", &slug, "--status", "started"])
+            .assert()
+            .success();
+        for phase in phases {
+            hs(p)
+                .args(["edit", &slug, "--started-phase", phase])
+                .assert()
+                .success();
+        }
+        slug
+    };
+    let skipped = started("Skipped", &["integrating"]);
+    hs(p)
+        .args(["close", &skipped, "--reason", "completed"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(format!(
+            "note: {skipped} completed without recording working or initial_testing."
+        )));
+    let dropped = started("Dropped", &["integrating"]);
+    hs(p)
+        .args(["close", &dropped, "--reason", "not_planned"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("completed without recording").not());
+    let whole = started("Whole", &["working", "initial_testing"]);
+    hs(p)
+        .args(["close", &whole, "--reason", "completed"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("completed without recording").not());
+}
+
 /// HS2-RD4M29: `confidence-report` compares reported completion confidence with what
 /// happened next (reopened vs. verified) per rubric band, as text and JSON.
 #[test]

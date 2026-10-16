@@ -608,9 +608,18 @@ no new storage.
 - **Report:** per phase, the number of tickets that recorded it and the median,
   nearest-rank p75 and p90, and total of the per-ticket wall and active times. `--json`
   adds every ticket's per-phase `wall_ms`, `active_ms`, and span count.
-- **Completion nudge:** when `edit --status completed` completes a ticket whose phase
-  history never recorded `working` or `initial_testing`, the CLI prints a reminder on
-  stderr. Tickets with no phase history get no reminder.
+- **Completion nudge:** when `edit --status completed` or `close --reason completed`
+  completes a ticket whose phase history never recorded `working` or `initial_testing`, the
+  CLI prints a reminder on stderr. Through MCP, `hotsheet_update` (status `completed`) and
+  `hotsheet_close` (reason `completed`) append the same text to the response's `warnings`
+  array (HS2-8N7QZ2). Tickets with no phase history, and closes for another reason, get no
+  reminder.
+- **Other surfaces (HS2-8N7QZ2):** the same JSON report is served by
+  `GET /phase-report?since=&until=` (default store), by
+  `GET /checkouts/{reference}/phase-report` (every git store the checkout links), and by the
+  read-only MCP tool `hotsheet_phase_report` (optional `checkout`, `since`, `until`), with or
+  without a server. A malformed bound is a `400` naming the parameter. A web statistics panel
+  is not built yet (HS2-QYXMM7).
 
 Run against this repository's store for 2026-09-15 to 2026-10-16, the report reproduces
 the HS2-JS7E61 baseline (636 analyzing tickets at a 4.1 m median, integrating 330 at

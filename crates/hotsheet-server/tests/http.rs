@@ -20512,6 +20512,98 @@ async fn github_provider_detail_route_reads_comments_past_the_first_page() {
     assert!(transport.responses.lock().unwrap().is_empty());
 }
 
+/// HS2-8N7QZ2: `GET /phase-report` and `GET /checkouts/{reference}/phase-report` serve the
+/// CLI's phase-duration report with its `since`/`until` bounds; a bad bound is a 400.
+#[tokio::test]
+async fn phase_report_routes_serve_the_cli_report_with_bounds() {
+    let (primary, st) = state();
+    let store = FsStore::open(primary.path()).unwrap();
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(store.root());
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    std::fs::create_dir(&checkout).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let get = |uri: String| {
+        let app = app.clone();
+        async move { app.oneshot(authed("GET", &uri, None)).await.unwrap() }
+    };
+    let empty = body_json(get("/phase-report".into()).await).await;
+    assert_eq!(empty["completed_tickets"], 0, "{empty}");
+    let id = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/tickets", Some(r#"{"title":"Measure"}"#)))
+            .await
+            .unwrap(),
+    )
+    .await["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    for body in [
+        serde_json::json!({"status":"started"}),
+        serde_json::json!({"started_phase":"working"}),
+        serde_json::json!({"started_phase":"initial_testing"}),
+        serde_json::json!({"status":"completed"}),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/tickets/{id}"),
+                Some(&body.to_string()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{body}");
+    }
+    let phases = |report: &serde_json::Value| -> Vec<String> {
+        report["phases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["phase"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let report = body_json(get("/phase-report".into()).await).await;
+    assert_eq!(report["completed_tickets"], 1, "{report}");
+    assert_eq!(phases(&report), ["analyzing", "working", "initial_testing"]);
+    assert!(report["tickets"][0]["slug"].is_string(), "{report}");
+    // A range before the completion is empty and echoes its normalized bounds.
+    let old = body_json(get("/phase-report?since=2000-01-01&until=2000-01-02".into()).await).await;
+    assert_eq!(old["completed_tickets"], 0, "{old}");
+    assert_eq!(old["since"], "2000-01-01T00:00:00Z");
+    assert_eq!(old["until"], "2000-01-02T00:00:00Z");
+    let bad = get("/phase-report?until=tomorrow".into()).await;
+    assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        body_json(bad).await["error"]
+            .as_str()
+            .unwrap()
+            .contains("until must be YYYY-MM-DD"),
+    );
+    // The checkout route aggregates the checkout's git stores.
+    let opened = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({ "root": checkout, "sources": [source] }).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap().to_string();
+    let scoped = body_json(get(format!("/checkouts/{checkout_id}/phase-report")).await).await;
+    assert_eq!(scoped["completed_tickets"], 1, "{scoped}");
+    assert_eq!(phases(&scoped), phases(&report));
+    let scoped_bad = get(format!("/checkouts/{checkout_id}/phase-report?since=x")).await;
+    assert_eq!(scoped_bad.status(), StatusCode::BAD_REQUEST);
+    let missing = get("/checkouts/no-such-checkout/phase-report".into()).await;
+    assert!(missing.status().is_client_error(), "{}", missing.status());
+}
+
 /// HS2-Q1WCCY: `GET /confidence-report` serves the calibration report: each completion's
 /// reported score against what happened next, per rubric band.
 #[tokio::test]

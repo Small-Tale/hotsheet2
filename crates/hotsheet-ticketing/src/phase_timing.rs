@@ -72,11 +72,23 @@ fn transition(text: &str) -> Option<Transition> {
 
 /// Every phase span recorded in a ticket's activity notes, oldest first.
 pub fn phase_spans(ticket: &Ticket) -> Vec<PhaseSpan> {
-    let mut events: Vec<(&Timestamp, Transition)> = ticket
-        .notes
-        .iter()
-        .filter(|note| note.kind == NoteKind::Activity)
-        .filter_map(|note| Some((&note.created_at, transition(&note.text)?)))
+    phase_spans_from_activity(
+        ticket
+            .notes
+            .iter()
+            .filter(|note| note.kind == NoteKind::Activity)
+            .map(|note| (note.created_at.clone(), note.text.as_str())),
+    )
+}
+
+/// [`phase_spans`] over `(created_at, text)` pairs of activity notes, from any source: a
+/// model ticket, or the wire notes an MCP or HTTP client received (HS2-8N7QZ2).
+pub fn phase_spans_from_activity<'a>(
+    activity: impl IntoIterator<Item = (Timestamp, &'a str)>,
+) -> Vec<PhaseSpan> {
+    let mut events: Vec<(Timestamp, Transition)> = activity
+        .into_iter()
+        .filter_map(|(at, text)| Some((at, transition(text)?)))
         .collect();
     // Notes are appended in time order, but merges can interleave them; a stable sort by
     // instant keeps same-instant transitions in their recorded order.
