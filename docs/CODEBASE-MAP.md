@@ -292,6 +292,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/real-pty-profile.spec.ts  #   Opt-in isolated local-server/OS-PTY transport profile (`profile:pty:real`)
     tests/firefox-pty-profile.spec.ts  #   Opt-in Firefox WebGL/DOM PTY throughput and park/resume profile (`profile:pty:firefox`)
     tests/ticket-page-fixture.ts # ticketsJson(request, rows): Playwright fake mirroring the real checkout ticket page envelope/plain-list split with client-derived counts (HS2-5T7QHE)
+    tests/platform-labels.ts # Host-platform reveal labels (Finder / File Explorer / file manager) so specs pass on macOS and Linux CI (HS2-6H4M85)
     tests/insecure-origin.ts # Streaming HTTP proxy preserving actual non-loopback browser security rules
     tests/browser-ids-lan.spec.ts # LAN WebKit draft/attachment persistence, visibility and chat identity transitions
     tests/terminal-safari.spec.ts # Real WebKit on ordinary HTTP origin: real PTY glyph pixels across preview/magnified/drawer, resize/reconnect and visible startup failures
@@ -486,6 +487,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     e2e-headless-claude.sh   #   headless loop: setup + drive hotsheet-mcp (serverless + server) [HS2-99]
   docs/                      # design docs 00–17 (+ this map)
   .github/workflows/ci.yml   # Rust fmt/lint/nextest/coverage · web lint/unit/build/Chromium smoke/WebKit · full Playwright suite in 4 shards + merged report (HS2-D95TXJ) · migrator lint/coverage
+  .github/fontconfig/fonts.conf # browser-full shards pin system-ui/sans-serif to Liberation Sans (HS2-6H4M85)
   .github/workflows/live.yml # creds-gated nightly live tier (#[ignore] codex/claude turns, GitHub/GitLab/Jira providers)
   .env                       # gitignored, machine-local live-provider settings as 1Password refs; `op run --env-file=.env -- …` (docs/12 §12.7.6)
 ```

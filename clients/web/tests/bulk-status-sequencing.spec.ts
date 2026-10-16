@@ -258,7 +258,7 @@ test('serializes rapid Verified then Archive batches onto fresh concurrency toke
   await page.screenshot({ path: 'target/visual-captures/hs2-0k2zp3-sequenced-bulk-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 720 });
   await page.screenshot({ path: 'target/visual-captures/hs2-0k2zp3-sequenced-bulk-narrow.png', fullPage: true });
-  await page.keyboard.press('Meta+z');
+  await page.keyboard.press('ControlOrMeta+z');
   await expect.poll(() => mock.getRows().map((row) => row.status)).toEqual(['verified', 'verified']);
   await page.locator('[data-action="select-view"][data-item-id="all"]').click();
   await expect(page.locator('[data-column-id="verified"] [data-ticket-slug]')).toHaveCount(2);

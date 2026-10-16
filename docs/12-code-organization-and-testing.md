@@ -618,7 +618,15 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   file level so the default suite never launches it. The shards share one Vite dev server per
   shard; its project WebSocket bridge owns every upgraded socket's errors, so a browser
   reset mid-handshake cannot crash the server and fail the rest of the shard with
-  `ERR_CONNECTION_REFUSED`. The job verifies the full suite during a ticket's
+  `ERR_CONNECTION_REFUSED`. The shards pin the browsers' UI font: the runner's default
+  `system-ui` is DejaVu Sans, about 15% wider than the macOS and Windows UI fonts the layout
+  specs are calibrated against, so `.github/fontconfig/fonts.conf` maps `system-ui`,
+  `ui-sans-serif`, and `sans-serif` to the metric-compatible Liberation Sans (HS2-6H4M85;
+  the Linux-default layout itself is HS2-85H820). Specs stay platform-neutral: a label the
+  client derives from the platform comes from `tests/platform-labels.ts`, and shortcuts use
+  `ControlOrMeta`. To reproduce a shard locally, run it in
+  `mcr.microsoft.com/playwright:v<version>-noble` with that `fonts.conf` mounted at
+  `/root/.config/fontconfig/fonts.conf` and `--cpus=2`. The job verifies the full suite during a ticket's
   `final_testing` handoff, so the local requirement is the affected specs only. The
   `@ci-smoke` group stays as the fast early signal. Until the job has run green on main
   it is `continue-on-error` (HS2-6H4M85 makes it required), so check its result

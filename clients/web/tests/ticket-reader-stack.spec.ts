@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import type { Attachment } from '../src/api';
+import { attachmentRevealLabel } from './platform-labels';
 import { ticketsJson } from './ticket-page-fixture';
 
 const projects = {
@@ -809,12 +810,12 @@ test('saves gallery markup and runs gallery-menu actions from a linked reader ag
   await expect(gallery).toHaveCount(0);
   await expect(linked).toBeVisible();
 
-  // Show in Finder from the gallery's own attachment menu: a host action on the frame's ticket.
+  // Show the file location from the gallery's own attachment menu: a host action on the frame's ticket.
   await openInGallery('linked-second.png');
   await gallery.getByRole('button', { name: 'More image actions' }).click();
   const menu = page.locator('[data-context-menu="attachment"]');
   await page.screenshot({ path: 'target/visual-captures/hs2-kkb9vf-linked-gallery-menu-1280.png' });
-  await menu.getByRole('menuitem', { name: 'Show in Finder' }).click();
+  await menu.getByRole('menuitem', { name: attachmentRevealLabel }).click();
   await expect.poll(() => writes.at(-1)).toMatchObject({ method: 'POST', body: { action: 'reveal' } });
   expect(writes.at(-1)!.path).toMatch(
     /\/project-api\/target-project\/.*\/tickets\/git-target:target\/attachments\/LINKED-IMG2\/action$/,

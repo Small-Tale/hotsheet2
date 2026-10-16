@@ -26,7 +26,10 @@ row has no marker.
 
 <!-- quarantine:begin -->
 
-| Ticket | Tier | File | Test | Since | Reason |
-| ------ | ---- | ---- | ---- | ----- | ------ |
+| Ticket     | Tier       | File                                  | Test                                                                                                                   | Since      | Reason                                                                                          |
+| ---------- | ---------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------- |
+| HS2-9PDWMK | Playwright | `clients/web/tests/providers.spec.ts` | paints terminal dashboard transitions immediately and progressively mounts only visible previews at scale (HS2-XEGA6V) | 2026-10-16 | 100 ms transition budget exceeded (184 ms) on a 2-vCPU `browser-full` shard in one of two runs  |
+| HS2-WGZMQE | Playwright | `clients/web/tests/providers.spec.ts` | keeps primary 138-ticket interactions within the painted UI budget                                                     | 2026-10-16 | 100 ms painted budget exceeded (107-227 ms) on a 2-vCPU `browser-full` shard in one of two runs |
+| HS2-X0A331 | Playwright | `clients/web/tests/providers.spec.ts` | switches and searches large ticket views without cloning every row into motion ghosts                                  | 2026-10-16 | 250 ms budget times the Playwright `fill` round trip (284 ms on a CI shard)                     |
 
 <!-- quarantine:end -->

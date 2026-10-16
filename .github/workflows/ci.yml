@@ -371,6 +371,15 @@ jobs:
           echo "::error::Playwright dependency install failed after three bounded attempts"
           exit 1
 
+      # The runner's default sans-serif, DejaVu Sans, sets text about 15% wider than the macOS
+      # and Windows UI fonts the layout specs are calibrated against (HS2-6H4M85).
+      - name: Pin the browsers' UI font to metric-compatible Liberation Sans
+        run: |
+          sudo apt-get install -y fonts-liberation
+          mkdir -p ~/.config/fontconfig
+          cp .github/fontconfig/fonts.conf ~/.config/fontconfig/fonts.conf
+          fc-match system-ui | grep -q 'Liberation Sans'
+
       - name: Run shard ${{ matrix.shard }} of the full suite
         working-directory: clients/web
         timeout-minutes: 35

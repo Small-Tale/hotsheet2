@@ -12,6 +12,7 @@ import type { ConversationMessage } from '../src/ai-conversation';
 import type { FullTicket, MediaAnnotation, Note, TicketRow } from '../src/api';
 import type { ConversationExportPayload } from '../src/conversation-export';
 import { createConversationExportBridge } from '../src/conversation-export-bridge';
+import { attachmentRevealLabel, ticketFileRevealLabel } from './platform-labels';
 import { seedLocalGitTickets } from './real-ticket-fixture';
 import { realTicketServer } from './real-ticket-server';
 import { ticketsJson } from './ticket-page-fixture';
@@ -1145,9 +1146,12 @@ async function mockProject(
       action: string;
       always_allow_supported: boolean;
     }> = [];
+  // Long polls held open until an event arrives, as the real server holds them (HS2-6H4M85).
+  const drivePollWaiters = new Set<() => void>();
   const pushDriveEvent = (event: Omit<MockDriveEvent, 'cursor' | 'store'>) => {
     driveCursor += 1;
     driveEvents.push({ cursor: driveCursor, store: '/work/demo.hs2', ...event });
+    for (const wake of [...drivePollWaiters]) wake();
   };
   const replayLastDriveEvent = () => {
     const event = driveEvents.at(-1);
@@ -2025,9 +2029,24 @@ async function mockProject(
           return { cursor: events.length ? driveCursor : since, events, overflow: false };
         };
       const immediate = respond();
-      if (immediate.events.length) return route.fulfill({ json: immediate });
-      await new Promise((resolve) => setTimeout(resolve, 1_000));
-      return route.fulfill({ json: respond() });
+      // Like the real server, hold an empty poll until an event arrives or its `timeout_ms` runs out
+      // (HS2-6H4M85). A fixed one-second hold returned early, which the client correctly treats as a
+      // server that ignored the timeout: it then waited out its WebSocket retry window with no poll
+      // open, so an event could reach the page tens of seconds late, or mid-way through a fake-clock
+      // jump, where its stamp reads as a server clock running behind.
+      const timeoutMs = Math.min(Number(url.searchParams.get('timeout_ms') ?? 25_000), 25_000);
+      if (immediate.events.length || !(timeoutMs > 0)) return route.fulfill({ json: immediate });
+      await new Promise<void>((resolve) => {
+        const wake = () => {
+          clearTimeout(timer);
+          drivePollWaiters.delete(wake);
+          resolve();
+        };
+        const timer = setTimeout(wake, timeoutMs);
+        drivePollWaiters.add(wake);
+      });
+      // The page may have closed or aborted the poll while it was held.
+      return route.fulfill({ json: respond() }).catch(() => undefined);
     }
     if (path.endsWith('/repository/status'))
       return route.fulfill({
@@ -4704,7 +4723,7 @@ test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restor
   await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-drawer-grid-zoom.png', fullPage: true });
 });
 
-test('paints terminal dashboard transitions immediately and progressively mounts only visible previews at scale (HS2-XEGA6V)', async ({
+test('paints terminal dashboard transitions immediately and progressively mounts only visible previews at scale (HS2-XEGA6V) @quarantine HS2-9PDWMK', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -15553,7 +15572,7 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
       await icon.evaluate((node) => [node.getBoundingClientRect().width, node.getBoundingClientRect().height]),
     ).toEqual([16, 16]);
   }
-  await inspector.getByRole('button', { name: 'Reveal in Finder' }).click();
+  await inspector.getByRole('button', { name: ticketFileRevealLabel }).click();
   await expect(page.locator('.app-toast')).toContainText('Opened the file location.');
   await expect(inspector).not.toContainText('Opened the file location.');
   expect(recoveryRequests.reveal).toEqual({ path: '/work/demo.hs2/tickets/01/01M1DNB977BK0NG7YJ77RVZXTV.md' });
@@ -15613,7 +15632,7 @@ test('identifies a ticket from newer HS2 as upgrade-required instead of corrupt'
   await newer.getByRole('button', { name: 'Open recovery for HS2-NEWER' }).click();
   const inspector = page.locator('[data-component="corrupt-ticket-inspector"]');
   await expect(inspector).toContainText('created by a newer version');
-  await expect(inspector.getByRole('button', { name: 'Reveal in Finder' })).toBeVisible();
+  await expect(inspector.getByRole('button', { name: ticketFileRevealLabel })).toBeVisible();
   await expect(inspector.getByRole('button', { name: 'Attempt AI repair' })).toHaveCount(0);
 });
 
@@ -16208,7 +16227,9 @@ test('projects Up Next immediately and reconciles without a full project refresh
   await expect(row.getByRole('button', { name: 'Add to Up Next' })).toBeVisible();
 });
 
-test('keeps primary 138-ticket interactions within the painted UI budget', async ({ page }, testInfo) => {
+test('keeps primary 138-ticket interactions within the painted UI budget @quarantine HS2-WGZMQE', async ({
+  page,
+}, testInfo) => {
   const largeRows = [
     row,
     ...Array.from({ length: 137 }, (_, index) => ({
@@ -18609,6 +18630,43 @@ test('shows a spinner instead of an empty assistant bubble while a turn is think
 });
 
 /**
+ * Resolves once the page has received the stamped PreToolUse turn event and opened its next change
+ * poll, which it does only after consuming the event. The client samples the server clock from each
+ * stamped event (HS2-GA5ASE), so a fake-clock jump must wait for it: an event that lands mid-jump
+ * reads as a server whose clock runs behind and shortens every elapsed time (HS2-6H4M85).
+ */
+function stampedToolEventDelivered(page: import('@playwright/test').Page): Promise<void> {
+  let polls = 0,
+    deliveredAt = -1;
+  return new Promise<void>((resolve) => {
+    const finish = () => {
+      page.off('request', onRequest);
+      page.off('response', onResponse);
+      resolve();
+    };
+    const onRequest = (request: import('@playwright/test').Request) => {
+      if (!request.url().includes('/ws/poll')) return;
+      polls += 1;
+      if (deliveredAt >= 0 && polls > deliveredAt) finish();
+    };
+    const onResponse = (response: import('@playwright/test').Response) => {
+      if (!response.url().includes('/ws/poll')) return;
+      const issued = polls;
+      void response.text().then(
+        (body) => {
+          if (deliveredAt >= 0 || !body.includes('PreToolUse')) return;
+          deliveredAt = issued;
+          if (polls > issued) finish();
+        },
+        () => undefined,
+      );
+    };
+    page.on('request', onRequest);
+    page.on('response', onResponse);
+  });
+}
+
+/**
  * HS2-XV1VCR: a server-timed turn whose tool call stays open and silent. The line names the tool
  * and its elapsed time, the local render clock advances it, and after the tool bound the turn may
  * be stuck: a warning banner whose Stop is the toolbar's delegated action.
@@ -18620,11 +18678,13 @@ async function runLongTurnUntilStuck(
   widths: readonly number[],
 ) {
   await host.getByLabel('Message Codex').fill('Run the long test suite.');
+  const delivered = stampedToolEventDelivered(page);
   await host.getByLabel('Message Codex').press('Enter');
   const line = host.locator('.ai-conversation__composer .ai-conversation__turn-progress');
   await expect(line).toHaveAttribute('data-state', 'tool');
   await expect(line).toContainText(/Running Bash · \d+s · last activity/);
   await expect(line.locator('.kui-loading-spinner')).toBeVisible();
+  await delivered;
   // The local render clock advances the line without any network request.
   await page.clock.runFor(125_000);
   await expect(line).toContainText(/Running Bash · 2m \d+s · last activity 2m \d+s ago/);
@@ -18697,8 +18757,10 @@ for (const width of [1280, 390] as const)
       await expect(host.locator('.ai-conversation__message--assistant')).toHaveCount(turn + 1);
     }
     await field.fill('Run the long test suite.');
+    const delivered = stampedToolEventDelivered(page);
     await field.press('Enter');
     const line = form.locator('.ai-conversation__turn-progress');
+    await delivered;
     await page.clock.runFor(305_000);
     await expect(line).toHaveAttribute('data-state', 'stuck');
     // A six-row draft waits in the (busy, disabled) composer beneath the stuck banner.
@@ -18767,9 +18829,11 @@ for (const [server, content] of [
     await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
     const host = drawer.locator('[data-component="ai-conversation"]');
     await host.getByLabel('Message Codex').fill(content);
+    const delivered = stampedToolEventDelivered(page);
     await host.getByLabel('Message Codex').press('Enter');
     const line = host.locator('.ai-conversation__composer .ai-conversation__turn-progress');
     await expect(line).toHaveAttribute('data-state', 'tool');
+    await delivered;
     // By this device's clock the server's stamps lie three minutes in the future (pinning the turn at 0s
     // and calling it stuck three minutes late) or in the past (calling it stuck at once). The server
     // clock estimated from the stamped events times it from its start instead, short only by the
@@ -21424,10 +21488,10 @@ test('renders attachment identity from a selected real ticket', async ({ page })
     'Download',
     'Copy reference',
     'Rename',
-    'Show in Finder',
+    attachmentRevealLabel,
     'Remove',
   ]);
-  await attachmentMenu.getByRole('menuitem', { name: 'Show in Finder' }).click();
+  await attachmentMenu.getByRole('menuitem', { name: attachmentRevealLabel }).click();
   await expect.poll(() => hostActions.filter((action) => action.includes('"reveal"')).length).toBe(1);
   await more.click();
   await attachmentMenu.getByRole('menuitem', { name: 'Open' }).click();
@@ -21463,7 +21527,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
     node.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 1278, clientY: 718 })),
   );
   attachmentMenu = page.locator('[data-context-menu="attachment"]');
-  await expect(attachmentMenu.getByRole('menuitem', { name: 'Show in Finder' })).toBeVisible();
+  await expect(attachmentMenu.getByRole('menuitem', { name: attachmentRevealLabel })).toBeVisible();
   // Web Awesome's popup panel is what must stay inside the viewport.
   const menuBounds = await attachmentMenu.evaluate((node) => {
     const rect = node.shadowRoot!.querySelector('[part="menu"]')!.getBoundingClientRect();
@@ -21527,7 +21591,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await item.click({ button: 'right' });
   attachmentMenu = page.locator('[data-context-menu="attachment"]');
   await expect(attachmentMenu.getByRole('menuitem')).toHaveCount(6);
-  await expect(attachmentMenu.getByRole('menuitem', { name: 'Show in Finder' })).toBeVisible();
+  await expect(attachmentMenu.getByRole('menuitem', { name: attachmentRevealLabel })).toBeVisible();
   await page
     .locator('#app-right-rail')
     .screenshot({ path: 'target/visual-captures/hs2-vqvf5b-attachment-menu-wide.png' });
@@ -21536,7 +21600,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
   await item.scrollIntoViewIfNeeded();
   await more.click();
-  await expect(attachmentMenu.getByRole('menuitem', { name: 'Show in Finder' })).toBeVisible();
+  await expect(attachmentMenu.getByRole('menuitem', { name: attachmentRevealLabel })).toBeVisible();
   await page
     .locator('#app-right-rail')
     .screenshot({ path: 'target/visual-captures/hs2-vqvf5b-attachment-menu-narrow.png' });
@@ -24209,7 +24273,9 @@ test('derives board columns from the selected view and merges Verified by projec
   await page.screenshot({ path: 'target/visual-captures/hs2-v20ewj-archive-column.png', fullPage: true });
 });
 
-test('switches and searches large ticket views without cloning every row into motion ghosts', async ({ page }) => {
+test('switches and searches large ticket views without cloning every row into motion ghosts @quarantine HS2-X0A331', async ({
+  page,
+}) => {
   const statuses: Array<'not_started' | 'backlog' | 'archive'> = [
     ...Array.from({ length: 60 }, () => 'not_started' as const),
     ...Array.from({ length: 18 }, () => 'backlog' as const),
