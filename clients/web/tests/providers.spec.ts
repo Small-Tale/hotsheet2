@@ -18943,7 +18943,13 @@ for (const [server, content] of [
     await expect(line).toContainText(/Running Bash · [12]m \d+s · last activity [12]m \d+s ago/);
     await page.clock.runFor(200_000);
     await expect(line).toHaveAttribute('data-state', 'stuck');
-    await expect(line).toContainText(/Running Bash · 5m \d+s/);
+    // A default-height drawer chat shows the stuck banner's one-line form (HS2-SZZGC6); either form
+    // proves the turn went stuck by the server clock, not three minutes early or late.
+    if ((await line.getAttribute('data-density')) === 'compact') {
+      await expect(line).toContainText('May be stuck · no activity for 5m');
+    } else {
+      await expect(line).toContainText(/Running Bash · 5m \d+s/);
+    }
     page.once('dialog', (dialog) => void dialog.accept());
     await line.getByRole('button', { name: 'Stop Codex' }).click();
     await expect(line).toHaveCount(0);
