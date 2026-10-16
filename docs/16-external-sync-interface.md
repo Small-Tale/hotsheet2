@@ -457,6 +457,50 @@ token-usable upload API, so a GitLab connection reports `attachments: true` and
   and closes one issue, and writes only with `HOTSHEET_GITLAB_LIVE_WRITE=1`. It has not
   run yet because it needs live credentials.
 
+**Jira attachments through the native attachment API (HS2-KE18XX).** Jira stores files
+itself, so a Jira connection reports `attachments: true` and `attachment_crop: true` with no
+extra setting. Jira can delete an attachment but not rename it. `attachment_edit` covers
+rename, delete, labels, and annotations together, so it stays `false` until a finer-grained
+delete capability exists.
+
+- **Upload:** `POST /rest/api/3/issue/{key}/attachments` (multipart `file`,
+  `X-Atlassian-Token: no-check`). Jira returns the created attachment.
+- **Identity:** each Jira attachment projects as one Hot Sheet attachment whose `id` is the
+  Jira attachment id, so files people attach in Jira itself appear too (without Hot Sheet
+  metadata). `created_at` is Jira's `created`, normalized to an RFC 3339 offset.
+- **Metadata:** one issue property per attachment, `hotsheet.attachment.<jira id>`, holds
+  what Jira has no field for:
+  - the Hot Sheet attachment id (`hotsheet_id`), so a retried or transferred add returns
+    the existing file;
+  - the batch, actor, and purpose;
+  - the crop and annotations;
+  - the current `rendition_id`.
+
+  One property per attachment stays far below Jira's 32 KB property limit, and writes to
+  different attachments cannot overwrite each other. A detail read fetches every property
+  with `GET /issue/{key}?fields=attachment&properties=*all`, and only when the issue has
+  attachments.
+
+- **Reading:** `GET /rest/api/3/attachment/content/{id}?redirect=false` through the
+  authenticated API. Crop renditions are never readable as attachments of their own.
+- **Crop and markup:** a crop uploads a content-addressed rendition named
+  `hotsheet-<jira id>-crop-<hash>.<ext>` and points the property at it. The original file
+  is never changed.
+  - Renditions are hidden by that name even when the property write failed, and a retry
+    reuses the same rendition.
+  - Re-cropping or clearing the crop deletes the replaced rendition (best effort) after
+    the property moves away from it.
+  - Writes are checked against the per-attachment revision (SHA-256 of the record), and the
+    property is re-read before `PUT …/properties/…`. Jira properties have no
+    compare-and-swap, so the same small window as GitLab remains.
+- **Known gap:** if an upload succeeds but its property write fails, a retry uploads the
+  file again. Jira cannot attach a client id to a file, so the first copy stays visible as
+  a plain native attachment.
+- **Tests:** stateful fake-Jira transport tests, a server route test, and the
+  parametrized Playwright upload flow. The opt-in `jira_live_attachment_upload_crop_and_read`
+  test writes to an operator-prepared issue (`HOTSHEET_JIRA_LIVE_ATTACHMENT_ISSUE`, with
+  `HOTSHEET_JIRA_LIVE_WRITE=1`). It has not run yet because it needs live credentials.
+
 GitHub has only `open`/`closed` plus a `completed`/`not_planned` close reason, so the
 provider carries the rest of Hot Sheet's state on **provider-owned labels** it writes and
 reads itself and never surfaces as tags (HS2-K8R3T8). `state` decides open versus closed and
@@ -549,11 +593,11 @@ they need live credentials:
 | Activity `summary`             | yes                      | no (falls back to the comment body)  | no                                       | no                                             |
 | `latest_confidence` derivation | current completion cycle | since last `reopened` event (detail) | since last reopened state event (detail) | since last changelog exit from `done` (detail) |
 
-| Attachment capability                                   | git              | GitHub Issues                                           | GitLab                                    | Jira |
-| ------------------------------------------------------- | ---------------- | ------------------------------------------------------- | ----------------------------------------- | ---- |
-| `attachments` (add and read)                            | yes, store files | only with `attachment_repo`; assets repo + link comment | yes, project upload + marked note (17.4+) | no   |
-| `attachment_edit` (rename, delete, labels, annotations) | yes              | no                                                      | no                                        | no   |
-| `attachment_crop` (reversible image crop)               | yes              | with `attachment_repo`                                  | yes, rendition upload + note rewrite      | no   |
+| Attachment capability                                   | git              | GitHub Issues                                           | GitLab                                    | Jira                                            |
+| ------------------------------------------------------- | ---------------- | ------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------- |
+| `attachments` (add and read)                            | yes, store files | only with `attachment_repo`; assets repo + link comment | yes, project upload + marked note (17.4+) | yes, native attachments + metadata property     |
+| `attachment_edit` (rename, delete, labels, annotations) | yes              | no                                                      | no                                        | no (Jira can delete, not rename)                |
+| `attachment_crop` (reversible image crop)               | yes              | with `attachment_repo`                                  | yes, rendition upload + note rewrite      | yes, hidden rendition upload + property rewrite |
 
 In the web dialog a new GitHub connection starts from sign-in (HS2-1JT25R): its other settings
 stay hidden and **Connect** stays disabled until GitHub authorizes. **Sign in with GitHub**

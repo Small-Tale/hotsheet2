@@ -538,7 +538,9 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   `HOTSHEET_JIRA_LIVE_PROJECT` (the `HS2T` test project), `HOTSHEET_JIRA_LIVE_TOKEN`
   (classic API token, Basic auth), and the operator-prepared reopen pair
   `HOTSHEET_JIRA_LIVE_REOPENED_ISSUE` / `HOTSHEET_JIRA_LIVE_REOPENED_EXPECTED` (a score or
-  `none`); GitLab `HOTSHEET_GITLAB_LIVE_TOKEN`, `HOTSHEET_GITLAB_LIVE_PROJECT`,
+  `none`), and the attachment pair `HOTSHEET_JIRA_LIVE_WRITE=1` /
+  `HOTSHEET_JIRA_LIVE_ATTACHMENT_ISSUE` (an operator-prepared issue that receives test
+  attachments, HS2-KE18XX); GitLab `HOTSHEET_GITLAB_LIVE_TOKEN`, `HOTSHEET_GITLAB_LIVE_PROJECT`,
   `HOTSHEET_GITLAB_LIVE_WRITE`; benchmark targets `HOTSHEET_BENCH_JIRA_ISSUES`,
   `HOTSHEET_BENCH_JIRA_ISSUE`, `HOTSHEET_BENCH_GITLAB_ISSUE`. In CI the same names come
   from repository Actions secrets; a test whose variables are unset skips. The normal `check` job

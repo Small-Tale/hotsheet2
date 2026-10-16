@@ -12477,6 +12477,23 @@ test('uploads staged files to a GitLab source through native project uploads and
   });
 });
 
+test('uploads staged files to a Jira source as native issue attachments and shows them read-only (HS2-KE18XX)', async ({
+  page,
+}, testInfo) => {
+  await uploadsToAppendOnlySource(page, testInfo, {
+    connection_id: 'jira-eng',
+    provider: 'jira',
+    display_name: 'Jira ENG',
+    locator: 'ENG',
+    native_id: 'ENG-7',
+    slug: 'ENG-7',
+    native_url: 'https://acme.atlassian.net/browse/ENG-7',
+    short_slug: 'ENG-7',
+    crop: true,
+    capture: 'hs2-ke18xx',
+  });
+});
+
 async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source: AppendOnlySource): Promise<void> {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);

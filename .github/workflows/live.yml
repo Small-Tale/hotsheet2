@@ -77,4 +77,7 @@ jobs:
           HOTSHEET_JIRA_LIVE_TOKEN: ${{ secrets.HOTSHEET_JIRA_LIVE_TOKEN }}
           HOTSHEET_JIRA_LIVE_REOPENED_ISSUE: ${{ secrets.HOTSHEET_JIRA_LIVE_REOPENED_ISSUE }}
           HOTSHEET_JIRA_LIVE_REOPENED_EXPECTED: ${{ secrets.HOTSHEET_JIRA_LIVE_REOPENED_EXPECTED }}
+          # Native attachment round trip (HS2-KE18XX) on an operator-prepared issue.
+          HOTSHEET_JIRA_LIVE_WRITE: ${{ secrets.HOTSHEET_JIRA_LIVE_WRITE }}
+          HOTSHEET_JIRA_LIVE_ATTACHMENT_ISSUE: ${{ secrets.HOTSHEET_JIRA_LIVE_ATTACHMENT_ISSUE }}
         run: cargo nextest run --all-features --run-ignored all

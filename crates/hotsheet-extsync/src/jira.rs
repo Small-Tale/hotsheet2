@@ -15,6 +15,8 @@ use serde_json::{Value, json};
 
 use crate::note_trailer;
 
+mod attachments;
+
 /// Native page size for value-keyset walks; fixed so resume hints stay positionally valid.
 const NATIVE_KEYSET_PAGE: usize = 100;
 
@@ -102,6 +104,11 @@ impl JiraProvider {
                 ticket: self.config.connection_id.clone(),
                 message,
             })?;
+        self.checked(url, response)
+    }
+
+    /// Map a Jira status to a typed provider error (shared by JSON and binary requests).
+    fn checked(&self, url: &str, response: HttpResponse) -> Result<HttpResponse, ProviderError> {
         match response.status {
             200..=299 => Ok(response),
             401 | 403 => Err(ProviderError::Authentication {
@@ -590,7 +597,11 @@ impl TicketProvider for JiraProvider {
     }
 
     fn get(&self, native_id: &str) -> Result<ApiTicket, ProviderError> {
-        let mut ticket = self.ticket(self.issue(native_id)?, self.comments(native_id)?);
+        let issue = self.issue(native_id)?;
+        let files = issue.fields.attachment.clone();
+        let mut ticket = self.ticket(issue, self.comments(native_id)?);
+        // Native attachments with their Hot Sheet metadata properties (HS2-KE18XX).
+        ticket.attachments = self.project_attachments(native_id, &files)?;
         if note_trailer::needs_reopen_history(ticket.status, &ticket.notes) {
             let reopens = self.reopen_times(native_id)?;
             ticket.latest_confidence = note_trailer::latest_confidence(
@@ -748,6 +759,41 @@ impl TicketProvider for JiraProvider {
         self.get(native_id)
     }
 
+    fn add_attachment(
+        &self,
+        native_id: &str,
+        attachment: hotsheet_ticketing::wire::ApiAttachment,
+        bytes: Vec<u8>,
+    ) -> Result<ApiTicket, ProviderError> {
+        self.add_native_attachment(native_id, attachment, bytes)
+    }
+
+    fn attachment_bytes(
+        &self,
+        native_id: &str,
+        attachment_id: &str,
+    ) -> Result<Vec<u8>, ProviderError> {
+        self.native_attachment_bytes(native_id, attachment_id, true)
+    }
+
+    fn attachment_original_bytes(
+        &self,
+        native_id: &str,
+        attachment_id: &str,
+    ) -> Result<Vec<u8>, ProviderError> {
+        self.native_attachment_bytes(native_id, attachment_id, false)
+    }
+
+    fn set_attachment_markup(
+        &self,
+        native_id: &str,
+        attachment_id: &str,
+        expected_revision: Option<&str>,
+        markup: hotsheet_ticketing::store::AttachmentMarkup,
+    ) -> Result<ApiTicket, ProviderError> {
+        self.update_native_markup(native_id, attachment_id, expected_revision, markup)
+    }
+
     fn close(
         &self,
         _: &str,
@@ -819,6 +865,9 @@ struct JiraFields {
     updated: String,
     #[serde(rename = "resolutiondate")]
     resolution_date: Option<String>,
+    /// Present on detail reads; search pages do not request it.
+    #[serde(default)]
+    attachment: Vec<attachments::JiraAttachment>,
 }
 #[derive(Debug, Clone, Deserialize)]
 struct JiraStatus {
@@ -949,9 +998,12 @@ fn capabilities() -> ProviderCapabilities {
         notes: true,
         note_edit: false,
         note_delete: false,
-        attachments: false,
+        // Native issue attachments plus per-attachment Hot Sheet metadata properties
+        // (HS2-KE18XX). Jira can delete but not rename, and `attachment_edit` is
+        // all-or-nothing, so existing attachments stay read-only.
+        attachments: true,
         attachment_edit: false,
-        attachment_crop: false,
+        attachment_crop: true,
         assignment: true,
         review_requests: false,
         dependencies: false,

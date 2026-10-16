@@ -19743,6 +19743,209 @@ async fn gitlab_checkout_attachments_upload_natively_and_read_back() {
     assert_eq!(transport.uploads.lock().unwrap().len(), 1);
 }
 
+/// A stateful fake of Jira Cloud's issue, property, and attachment endpoints
+/// (HS2-KE18XX), with Jira's shapes: the attachment POST returns a `200` array and the
+/// content endpoint returns raw bytes.
+#[derive(Default)]
+struct FakeJiraAttachments {
+    files: Mutex<Vec<(String, String, Vec<u8>)>>,
+    properties: Mutex<serde_json::Map<String, serde_json::Value>>,
+}
+
+impl FakeJiraAttachments {
+    fn attachment_json(&self) -> serde_json::Value {
+        self.files
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(id, filename, bytes)| serde_json::json!({"id":id,"filename":filename,"created":"2026-10-01T00:00:05.000+0000","size":bytes.len()}))
+            .collect()
+    }
+}
+
+impl GitHubTransport for FakeJiraAttachments {
+    fn request(
+        &self,
+        method: &str,
+        url: &str,
+        _: &[(&str, String)],
+        body: Option<&serde_json::Value>,
+    ) -> Result<HttpResponse, String> {
+        let path = url
+            .strip_prefix("https://jira.test/rest/api/3/")
+            .ok_or("unexpected host")?;
+        let value = if method == "GET" && path == "issue/ENG-7" {
+            serde_json::json!({"key":"ENG-7","fields":{"summary":"with evidence","description":null,"status":{"statusCategory":{"key":"new"}},"priority":{"name":"Medium"},"issuetype":{"name":"Bug"},"labels":[],"assignee":null,"created":"2026-10-01T00:00:00.000+0000","updated":"2026-10-01T00:00:00.000+0000","resolutiondate":null,"attachment":self.attachment_json()}})
+        } else if method == "GET" && path == "issue/ENG-7?fields=attachment&properties=*all" {
+            serde_json::json!({"key":"ENG-7","fields":{"attachment":self.attachment_json()},"properties":*self.properties.lock().unwrap()})
+        } else if method == "GET" && path.starts_with("issue/ENG-7/comment?") {
+            serde_json::json!({"comments":[],"total":0})
+        } else if method == "PUT"
+            && let Some(key) = path.strip_prefix("issue/ENG-7/properties/")
+        {
+            self.properties
+                .lock()
+                .unwrap()
+                .insert(key.into(), body.unwrap().clone());
+            return Ok(github_response(201, serde_json::json!({})));
+        } else {
+            return Err(format!("unexpected request {method} {url}"));
+        };
+        Ok(github_response(200, value))
+    }
+
+    fn request_raw(
+        &self,
+        method: &str,
+        url: &str,
+        headers: &[(&str, String)],
+        body: Option<hotsheet_extsync::github::RawBody<'_>>,
+    ) -> Result<hotsheet_extsync::github::BinaryResponse, String> {
+        let path = url
+            .strip_prefix("https://jira.test/rest/api/3/")
+            .ok_or("unexpected host")?;
+        let respond = |status: u16, body: Vec<u8>| hotsheet_extsync::github::BinaryResponse {
+            status,
+            headers: HashMap::new(),
+            body,
+        };
+        if method == "POST" && path == "issue/ENG-7/attachments" {
+            assert!(
+                headers
+                    .iter()
+                    .any(|(name, value)| *name == "X-Atlassian-Token" && value == "no-check")
+            );
+            let body = body.ok_or("upload without body")?;
+            let text = String::from_utf8_lossy(body.bytes).into_owned();
+            let name = text
+                .split("filename=\"")
+                .nth(1)
+                .and_then(|rest| rest.split('"').next())
+                .ok_or("multipart without filename")?
+                .to_owned();
+            let start = text.find("\r\n\r\n").ok_or("multipart without body")? + 4;
+            let end = text.rfind("\r\n--").ok_or("multipart without end")?;
+            let mut files = self.files.lock().unwrap();
+            let id = (10_001 + files.len()).to_string();
+            files.push((id.clone(), name.clone(), body.bytes[start..end].to_vec()));
+            drop(files);
+            let created = serde_json::json!([{"id":id,"filename":name,"created":"2026-10-01T00:00:05.000+0000"}]);
+            return Ok(respond(200, created.to_string().into_bytes()));
+        }
+        if method == "GET"
+            && let Some(id) = path
+                .strip_prefix("attachment/content/")
+                .and_then(|rest| rest.strip_suffix("?redirect=false"))
+        {
+            return Ok(
+                match self.files.lock().unwrap().iter().find(|file| file.0 == id) {
+                    Some(file) => respond(200, file.2.clone()),
+                    None => respond(404, br#"{"errorMessages":["Not found"]}"#.to_vec()),
+                },
+            );
+        }
+        Err(format!("unexpected raw request {method} {url}"))
+    }
+}
+
+/// HS2-KE18XX: a Jira source takes attachments through the checkout attachment route
+/// (native Jira attachment plus a Hot Sheet metadata property), serves the bytes back
+/// through the attachment content API, and refuses store-only edits by name.
+#[tokio::test]
+async fn jira_checkout_attachments_upload_natively_and_read_back() {
+    let (_dir, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let transport = Arc::new(FakeJiraAttachments::default());
+    let provider = JiraProvider::new(
+        JiraConfig {
+            connection_id: "jira-eng".into(),
+            project_key: "ENG".into(),
+            base_url: "https://jira.test".into(),
+            email: "dev@example.com".into(),
+            token: "fixture-token".into(),
+            default: false,
+        },
+        transport.clone(),
+    );
+    let app = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(provider)));
+    let connection = serde_json::json!({
+        "id":"jira-eng","provider":"jira","locator":"ENG","default":false,
+        "settings":{"credential":{"secret":"fixture-token"},"base_url":"https://jira.test","email":"dev@example.com"}
+    });
+    let created = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/provider-connections",
+            Some(&connection.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let registration = serde_json::json!({
+        "root": checkout.path(),
+        "alias": "external-jira",
+        "sources": [{"connection_id":"jira-eng","provider":"jira","locator":"ENG"}],
+        "default_source": "jira-eng"
+    })
+    .to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    let upload = Request::builder()
+        .method("POST")
+        .uri("/checkouts/external-jira/tickets/jira-eng:ENG-7/attachments")
+        .header("x-hotsheet-secret", SECRET)
+        .header("x-hotsheet-filename", "proof.png")
+        .header("x-hotsheet-attachment-purpose", "problem_evidence")
+        .body(Body::from("png bytes"))
+        .unwrap();
+    let response = app.clone().oneshot(upload).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let attached = body_json(response).await;
+    assert_eq!(attached["store"], "jira-eng");
+    assert_eq!(attached["attachments"][0]["id"], "10001");
+    assert_eq!(attached["attachments"][0]["filename"], "proof.png");
+    assert_eq!(attached["attachments"][0]["purpose"], "problem_evidence");
+    assert_eq!(
+        transport.properties.lock().unwrap()["hotsheet.attachment.10001"]["purpose"],
+        "problem_evidence"
+    );
+    let read = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            "/checkouts/external-jira/tickets/jira-eng:ENG-7/attachments/10001",
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(read.status(), StatusCode::OK);
+    assert_eq!(read.headers()[header::CONTENT_TYPE], "image/png");
+    let bytes = read.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(&bytes[..], b"png bytes");
+    let deleted = app
+        .clone()
+        .oneshot(authed(
+            "DELETE",
+            "/checkouts/external-jira/tickets/jira-eng:ENG-7/attachments/10001",
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(deleted.status(), StatusCode::CONFLICT);
+    let message = body_json(deleted).await.to_string();
+    assert!(
+        message.contains("does not support this operation"),
+        "{message}"
+    );
+    assert_eq!(transport.files.lock().unwrap().len(), 1);
+}
+
 #[tokio::test]
 async fn github_checkout_detail_batches_manifests_and_uses_the_winning_revision() {
     let (_dir, st) = state();

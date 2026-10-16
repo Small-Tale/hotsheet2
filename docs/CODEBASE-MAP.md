@@ -289,9 +289,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/github.rs            #   GitHub Issues mapping, pagination/incremental reads, webhook invalidation, errors/auth/concurrency, 25-alias GraphQL crop-manifest detail batches with REST fallback, Contents-SHA CAS and comment repair, fake + opt-in live tests (HS2-JAXS4Z/HS2-X09EJ1/HS2-5MFV7Q)
       src/gitlab.rs            #   GitLab Issues mapping, native IDs/URLs, pagination/incremental reads, typed errors/concurrency, fake + opt-in live drift tests (HS2-0RK4YC)
       src/gitlab/attachments.rs #  GitLab native attachments: multipart project uploads, marked upload notes (GitHub marker shape), uploads-API reads, rendition crop + note rewrite, stateful fake + opt-in live tests (HS2-ENHE8K)
-      src/attachment_crop.rs   #   crop rendition + marker revision helpers shared by the GitLab/Jira attachment paths
+      src/attachment_crop.rs   #   crop rendition + marker revision helpers shared by the GitLab/Jira attachment paths (HS2-ENHE8K/HS2-KE18XX)
       src/jira.rs              #   Jira Cloud issue/ADF mapping, token pagination/incremental JQL, honest workflow capabilities, fake + opt-in live drift tests (HS2-0RK4YC)
       src/source_connect.rs    #   `connect_source`: the one validated create-or-reconnect-and-link workflow behind `POST /checkouts/{ref}/provider-connections` and `provider-connect` (HS2-65KYVP)
+      src/jira/attachments.rs  #   Jira native attachments: multipart upload, per-attachment `hotsheet.attachment.<id>` metadata properties, content reads, name-hidden crop renditions, stateful fake + opt-in live tests (HS2-KE18XX)
       src/github_attachments.rs #   GitHub assets-repository attachments: HS1 setting keys/defaults, evidence and per-attachment revision-manifest paths, raw link URL, marked link comment write/parse (HS2-HSA64D/HS2-X09EJ1)
       src/github_live_tests.rs #   opt-in (#[ignore]) live GitHub attachment tests: upload round trip, crop-manifest CAS, 1/10/100 batched-manifest measurement (HS2-VQSCA1/HS2-GWY4AK/HS2-QB6XJ4)
       src/native_id.rs         #   unqualified_native_id: offline GitHub/GitLab issue-number and Jira project-key shape check that gates provider probes for unqualified checkout ids (HS2-FXGKBD)
