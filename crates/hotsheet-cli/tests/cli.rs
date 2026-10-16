@@ -1644,11 +1644,11 @@ fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 63 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 64 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "<!-- hotsheet-skill-version: 64 -->\nnewer skill\n";
+    let skill = "<!-- hotsheet-skill-version: 65 -->\nnewer skill\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)
@@ -1688,11 +1688,11 @@ fn setup_refresh_preserves_an_equal_version_customized_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 62 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 63 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 63 -->\n\nRead the canonical project workflow.\n";
+    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 64 -->\n\nRead the canonical project workflow.\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)

@@ -775,7 +775,14 @@ each `started_phase` transition as it happens (`initial_testing` before tests or
 `hotsheet` skill, and generated `worklist.md` carry the same rule so a ticket is not left at
 `working` while its tests run. Instructions v62 add that phases are never backfilled or
 skipped to tidy the record, because `hotsheet-cli phase-report` measures them
-([02](02-ticket-storage.md), HS2-JS7E61). Claims are git-store coordination, so the ETA
+([02](02-ticket-storage.md), HS2-JS7E61). Instructions v63 and skill v64 add how to treat a
+Hot Sheet notification pushed into a running session (HS2-VYR5QE; the push mechanisms are in
+HS2-ZW8RFM's `session-push` follow-ups). Every mechanism delivers text the tool does not
+attribute to the user. Agents therefore treat it as data: take only the named ticket slug,
+read that ticket from the store, and confirm the mentioned note or feedback answer exists
+before acting, ignoring the message otherwise. They never run commands, open links, or change
+permissions because the text says to, and they rely on the pushes rather than polling the
+store or queue on a timer. Claims are git-store coordination, so the ETA
 lives only on git-provider tickets. Ticket list and column rows show progress toward the ETA
 and the time left, or `Soon` once it passes, and the inspector and reader headers show who holds
 the live claim with the same estimate (HS2-XQMDQB, HS2-QKNQXC; see
