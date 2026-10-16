@@ -1,7 +1,6 @@
 //! Permission round-trip routes (HS2-9R9YZW).
 
 use crate::api_error::ApiError;
-use crate::events::ChangeEvent;
 use crate::routes::checkout_tickets::checkout_source_for_create;
 use crate::routes::project_tools::checkout_settings;
 use crate::routes::terminals::{
@@ -18,8 +17,8 @@ use hotsheet_sync::LockExt;
 use hotsheet_ticketing::{FsStore, Settings};
 use serde::{Deserialize, Serialize};
 use std::path::Path as FsPath;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 // ---- permission round-trip (HS2-9R9YZW) ------------------------------------------
 
@@ -80,67 +79,6 @@ pub(crate) struct AskBody {
     session_id: Option<String>,
 }
 
-/// A disconnected hook is no longer waiting for a decision. Remove its pending prompt
-/// immediately instead of leaving it visible until the 24-hour safety timeout.
-struct PermissionAskGuard {
-    state: Arc<PermissionAskState>,
-}
-
-struct PermissionAskState {
-    server: AppState,
-    project: String,
-    pending_id: AtomicU64,
-    cancelled: AtomicBool,
-}
-
-impl PermissionAskState {
-    fn mark_pending(&self, id: u64) {
-        self.pending_id.store(id, Ordering::Release);
-        if self.cancelled.load(Ordering::Acquire) {
-            self.cancel_pending(id);
-        }
-    }
-
-    fn cancel_pending(&self, id: u64) {
-        if self
-            .server
-            .permissions
-            .resolve(
-                id,
-                hotsheet_aitools::PermissionDecision::Deny,
-                hotsheet_aitools::PermissionScope::Once,
-            )
-            .is_some()
-        {
-            self.emit_removed(id);
-        }
-    }
-
-    fn emit_removed(&self, id: u64) {
-        self.server.emit(ChangeEvent {
-            cursor: None,
-            store: self.project.clone(),
-            kind: "permission_resolved".into(),
-            id: id.to_string(),
-            slug: String::new(),
-            message: None,
-            activity: None,
-            assignment: None,
-            turn: None,
-        });
-    }
-}
-
-impl Drop for PermissionAskGuard {
-    fn drop(&mut self) {
-        self.state.cancelled.store(true, Ordering::Release);
-        let id = self.state.pending_id.load(Ordering::Acquire);
-        if id != 0 {
-            self.state.cancel_pending(id);
-        }
-    }
-}
-
 /// A read-only authenticated probe for the exact route and secret a local hook would use.
 /// It never announces a session or changes an AI terminal connection state.
 pub(crate) async fn probe_permission_bridge(
@@ -181,49 +119,35 @@ pub(crate) async fn ask_permission(
         )
         .await;
     }
-    let stopping = state.clone();
     let bridge = state.permissions.clone();
     let project = if body.project.is_empty() {
         state.store.root().display().to_string()
     } else {
         body.project
     };
-    let cancellation = Arc::new(PermissionAskState {
-        server: state,
-        project: project.clone(),
-        pending_id: AtomicU64::new(0),
-        cancelled: AtomicBool::new(false),
-    });
-    let guard = PermissionAskGuard {
-        state: cancellation.clone(),
-    };
-    // request_blocking_timeout blocks (Condvar); run it off the async runtime.
-    let blocking = tokio::task::spawn_blocking(move || {
-        bridge.request_blocking_timeout_with_pending(
-            hotsheet_aitools::PermissionAsk {
-                project,
-                connection: body.connection,
-                tool: body.tool,
-                action: body.action,
-                agent: body.agent,
-            },
-            hotsheet_aitools::DEFAULT_PERMISSION_TIMEOUT,
-            hotsheet_aitools::PermissionDecision::Deny,
-            |id| cancellation.mark_pending(id),
-            |_| {},
-        )
-    });
+    // The wait is async (HS2-43YT58): a pending ask parks no thread, so hundreds of open
+    // hooks cannot exhaust the blocking pool shared with offloaded API requests. A hook that
+    // disconnects drops this future, which withdraws its pending prompt as a one-time deny
+    // instead of leaving it visible until the 24-hour safety timeout.
+    let ask = bridge.request_timeout_with_pending_async(
+        hotsheet_aitools::PermissionAsk {
+            project,
+            connection: body.connection,
+            tool: body.tool,
+            action: body.action,
+            agent: body.agent,
+        },
+        hotsheet_aitools::DEFAULT_PERMISSION_TIMEOUT,
+        hotsheet_aitools::PermissionDecision::Deny,
+        |_| {},
+        |_| {},
+    );
     // A stopping server must not hold the hook open (HS2-W1KJR4): answer 503 so the hook
-    // falls back to the tool's native prompt. Dropping the guard denies + removes the
-    // pending prompt, which also wakes the parked blocking thread.
+    // falls back to the tool's native prompt. Dropping the ask withdraws the pending prompt.
     let decision = tokio::select! {
-        joined = blocking => joined.unwrap_or(hotsheet_aitools::PermissionDecision::Deny),
-        () = stopping.stopping() => {
-            drop(guard);
-            return permission_ask_stopping();
-        }
+        decision = ask => decision,
+        () = state.stopping() => return permission_ask_stopping(),
     };
-    drop(guard);
     let allow = decision == hotsheet_aitools::PermissionDecision::Allow;
     Json(serde_json::json!({ "decision": if allow { "allow" } else { "deny" } })).into_response()
 }

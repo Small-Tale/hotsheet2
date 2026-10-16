@@ -406,6 +406,9 @@ pub struct SharedPermissionBridge {
     /// Decisions delivered by `resolve`, keyed by request id, awaiting their waiter.
     results: Mutex<HashMap<u64, Decision>>,
     cvar: Condvar,
+    /// Async counterpart of `cvar`: every `resolve`/`cancel` also wakes the server-side
+    /// awaiting asks, so a pending `/permissions/ask` parks no thread (HS2-43YT58).
+    async_notify: tokio::sync::Notify,
     /// Fired when a request is enqueued (goes `Pending`) — the server sets this to push a
     /// "permission_asked" nudge over its event bus so attached clients fetch + answer it
     /// (HS2-9R9YZW). `None` = headless / no observer.
@@ -419,6 +422,7 @@ impl SharedPermissionBridge {
             inner: Mutex::new(bridge),
             results: Mutex::new(HashMap::new()),
             cvar: Condvar::new(),
+            async_notify: tokio::sync::Notify::new(),
             on_pending: Mutex::new(None),
             on_removed: Mutex::new(None),
         }
@@ -549,6 +553,75 @@ impl SharedPermissionBridge {
         on_pending: impl FnOnce(u64),
         on_expired: impl FnOnce(u64),
     ) -> Decision {
+        let request = match self.enqueue(ask) {
+            Enqueued::Answered(decision) => return decision,
+            Enqueued::Pending(request) => request,
+        };
+        let id = request.id;
+        on_pending(id);
+        let deadline = Instant::now() + timeout;
+        let mut results = self.results.lock_or_recover();
+        loop {
+            if let Some(d) = results.remove(&id) {
+                return d;
+            }
+            let now = Instant::now();
+            if now >= deadline {
+                drop(results);
+                return self.expire(&request, on_timeout, on_expired);
+            }
+            let (guard, _) = self.cvar.wait_timeout(results, deadline - now).unwrap();
+            results = guard;
+        }
+    }
+
+    /// The async form of [`request_blocking_timeout_with_pending`] for a server-side ask
+    /// (`POST /permissions/ask`): the wait parks **no thread**, not even a blocking-pool
+    /// one, so any number of pending asks cannot starve offloaded API work (HS2-43YT58).
+    /// Dropping the future before it settles withdraws the ask as a one-time denial (the
+    /// asking hook went away), firing the removed observer, and leaves no result behind.
+    ///
+    /// [`request_blocking_timeout_with_pending`]: Self::request_blocking_timeout_with_pending
+    pub async fn request_timeout_with_pending_async(
+        &self,
+        ask: PermissionAsk,
+        timeout: Duration,
+        on_timeout: Decision,
+        on_pending: impl FnOnce(u64),
+        on_expired: impl FnOnce(u64),
+    ) -> Decision {
+        let request = match self.enqueue(ask) {
+            Enqueued::Answered(decision) => return decision,
+            Enqueued::Pending(request) => request,
+        };
+        let mut waiter = AsyncAsk {
+            bridge: self,
+            id: request.id,
+            settled: false,
+        };
+        on_pending(request.id);
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            // Register for the wakeup *before* checking, so a resolve landing between the
+            // check and the await is never lost.
+            let notified = self.async_notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            let answered = self.results.lock_or_recover().remove(&request.id);
+            if let Some(d) = answered {
+                waiter.settled = true;
+                return d;
+            }
+            if tokio::time::timeout_at(deadline, notified).await.is_err() {
+                waiter.settled = true;
+                return self.expire(&request, on_timeout, on_expired);
+            }
+        }
+    }
+
+    /// Apply the allow-rules; an unanswered ask is enqueued (firing the pending observer)
+    /// and returned for the caller to wait on.
+    fn enqueue(&self, ask: PermissionAsk) -> Enqueued {
         let PermissionAsk {
             project,
             connection,
@@ -563,7 +636,7 @@ impl SharedPermissionBridge {
             action.clone(),
             agent.clone(),
         ) {
-            Outcome::Auto(d) => return d,
+            Outcome::Auto(d) => return Enqueued::Answered(d),
             Outcome::Pending(id) => id,
         };
         let request = Request {
@@ -577,36 +650,36 @@ impl SharedPermissionBridge {
         if let Some(f) = self.on_pending.lock_or_recover().as_ref() {
             f(&request);
         }
-        on_pending(id);
-        let deadline = Instant::now() + timeout;
-        let mut results = self.results.lock_or_recover();
-        loop {
-            if let Some(d) = results.remove(&id) {
-                return d;
-            }
-            let now = Instant::now();
-            if now >= deadline {
-                drop(results);
-                // Win the race to abandon it; if a human resolved it just now, honor that.
-                let expired = self
-                    .inner
-                    .lock_or_recover()
-                    .resolve(id, on_timeout, Scope::Once)
-                    .is_some();
-                if expired {
-                    on_expired(id);
-                    self.notify_removed(&request);
-                    return on_timeout;
-                }
-                return self
-                    .results
-                    .lock_or_recover()
-                    .remove(&id)
-                    .unwrap_or(on_timeout);
-            }
-            let (guard, _) = self.cvar.wait_timeout(results, deadline - now).unwrap();
-            results = guard;
+        Enqueued::Pending(request)
+    }
+
+    /// Settle a timed-out ask: win the race to abandon it, or honor a human answer that
+    /// landed just now.
+    fn expire(
+        &self,
+        request: &Request,
+        on_timeout: Decision,
+        on_expired: impl FnOnce(u64),
+    ) -> Decision {
+        let expired = self
+            .inner
+            .lock_or_recover()
+            .resolve(request.id, on_timeout, Scope::Once)
+            .is_some();
+        if expired {
+            on_expired(request.id);
+            self.notify_removed(request);
+            return on_timeout;
         }
+        self.results
+            .lock_or_recover()
+            .remove(&request.id)
+            .unwrap_or(on_timeout)
+    }
+
+    fn wake_waiters(&self) {
+        self.cvar.notify_all();
+        self.async_notify.notify_waiters();
     }
 
     /// The pending requests (for the server to push over the WS to clients).
@@ -626,7 +699,7 @@ impl SharedPermissionBridge {
                 results.insert(cascaded.id, cascaded.decision);
             }
         }
-        self.cvar.notify_all();
+        self.wake_waiters();
         Some(resolved)
     }
 
@@ -670,7 +743,7 @@ impl SharedPermissionBridge {
             request
         };
         self.results.lock_or_recover().insert(id, Decision::Deny);
-        self.cvar.notify_all();
+        self.wake_waiters();
         self.notify_removed(&request);
         true
     }
@@ -678,6 +751,29 @@ impl SharedPermissionBridge {
     fn notify_removed(&self, request: &Request) {
         if let Some(callback) = self.on_removed.lock_or_recover().as_ref() {
             callback(request);
+        }
+    }
+}
+
+/// Whether an ask was answered by a rule or is now queued for a human.
+enum Enqueued {
+    Answered(Decision),
+    Pending(Request),
+}
+
+/// An in-flight async ask. Dropped unsettled (its caller went away), it withdraws the
+/// pending request and clears any decision delivered for it so nothing leaks.
+struct AsyncAsk<'a> {
+    bridge: &'a SharedPermissionBridge,
+    id: u64,
+    settled: bool,
+}
+
+impl Drop for AsyncAsk<'_> {
+    fn drop(&mut self) {
+        if !self.settled {
+            self.bridge.cancel(self.id);
+            self.bridge.results.lock_or_recover().remove(&self.id);
         }
     }
 }
@@ -1354,5 +1450,215 @@ mod tests {
         );
         assert_eq!(load_rules(&path).len(), 1);
         assert!(!remove_rule(&dir.path().join("missing.json"), "p", "Bash", "ls").unwrap());
+    }
+
+    fn ask(action: &str) -> PermissionAsk {
+        PermissionAsk {
+            project: "p".into(),
+            connection: "c".into(),
+            tool: "Bash".into(),
+            action: action.into(),
+            agent: None,
+        }
+    }
+
+    async fn first_pending(bridge: &SharedPermissionBridge, count: usize) -> Vec<u64> {
+        loop {
+            let pending = bridge.pending();
+            if pending.len() >= count {
+                return pending.into_iter().map(|request| request.id).collect();
+            }
+            tokio::task::yield_now().await;
+        }
+    }
+
+    // HS2-43YT58: the async server-side ask parks no thread and keeps the sync semantics.
+    #[tokio::test(flavor = "current_thread")]
+    async fn async_ask_waits_without_a_thread_and_wakes_on_resolve() {
+        use std::sync::Arc;
+        let bridge = Arc::new(SharedPermissionBridge::default());
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let marked = seen.clone();
+        let waiter = bridge.clone();
+        // A current-thread runtime with no blocking work: the ask can only make progress if
+        // its wait is a real async wait.
+        let task = tokio::spawn(async move {
+            waiter
+                .request_timeout_with_pending_async(
+                    ask("rm x"),
+                    Duration::from_secs(60),
+                    Decision::Deny,
+                    move |id| marked.lock_or_recover().push(id),
+                    |_| panic!("answered asks never expire"),
+                )
+                .await
+        });
+        let ids = first_pending(&bridge, 1).await;
+        assert_eq!(
+            *seen.lock_or_recover(),
+            ids,
+            "on_pending names the queued id"
+        );
+        bridge
+            .resolve(ids[0], Decision::Allow, Scope::Once)
+            .unwrap();
+        assert_eq!(task.await.unwrap(), Decision::Allow);
+        assert!(bridge.pending().is_empty());
+        assert!(
+            bridge.results.lock_or_recover().is_empty(),
+            "no result leaks"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn async_ask_honors_rules_timeouts_and_resolves_before_the_await() {
+        let ruled = SharedPermissionBridge::new(PermissionBridge::with_rules(vec![Rule {
+            project: "p".into(),
+            tool: "Bash".into(),
+            action: "ls".into(),
+            decision: Decision::Allow,
+            persist: false,
+            connection: None,
+        }]));
+        let decision = ruled
+            .request_timeout_with_pending_async(
+                ask("ls"),
+                Duration::from_secs(60),
+                Decision::Deny,
+                |_| panic!("a ruled ask is never pending"),
+                |_| panic!("a ruled ask never expires"),
+            )
+            .await;
+        assert_eq!(decision, Decision::Allow);
+
+        let bridge = SharedPermissionBridge::default();
+        let removed = std::sync::Arc::new(Mutex::new(0));
+        let observed = removed.clone();
+        bridge.set_on_removed(move |_| *observed.lock_or_recover() += 1);
+        let expired = Mutex::new(Vec::new());
+        let decision = bridge
+            .request_timeout_with_pending_async(
+                ask("slow"),
+                Duration::from_millis(5),
+                Decision::Deny,
+                |_| {},
+                |id| expired.lock_or_recover().push(id),
+            )
+            .await;
+        assert_eq!(decision, Decision::Deny, "timed out: the safe fallback");
+        assert_eq!(expired.lock_or_recover().len(), 1);
+        assert_eq!(*removed.lock_or_recover(), 1);
+        assert!(bridge.pending().is_empty());
+
+        // An answer delivered from on_pending (before the first await) is not lost.
+        let bridge = std::sync::Arc::new(SharedPermissionBridge::default());
+        let answering = bridge.clone();
+        let decision = bridge
+            .request_timeout_with_pending_async(
+                ask("fast"),
+                Duration::from_secs(60),
+                Decision::Deny,
+                move |id| {
+                    answering.resolve(id, Decision::Allow, Scope::Once).unwrap();
+                },
+                |_| panic!("answered asks never expire"),
+            )
+            .await;
+        assert_eq!(decision, Decision::Allow);
+        assert!(bridge.results.lock_or_recover().is_empty());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn dropping_an_async_ask_withdraws_it_once_and_leaves_no_result() {
+        use std::sync::Arc;
+        let bridge = Arc::new(SharedPermissionBridge::default());
+        let removed = Arc::new(Mutex::new(Vec::new()));
+        let observed = removed.clone();
+        bridge.set_on_removed(move |request| observed.lock_or_recover().push(request.id));
+        let waiter = bridge.clone();
+        let task = tokio::spawn(async move {
+            waiter
+                .request_timeout_with_pending_async(
+                    ask("rm x"),
+                    Duration::from_secs(60),
+                    Decision::Deny,
+                    |_| {},
+                    |_| panic!("a withdrawn ask does not expire"),
+                )
+                .await
+        });
+        let ids = first_pending(&bridge, 1).await;
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert!(bridge.pending().is_empty(), "the dropped ask was withdrawn");
+        assert_eq!(
+            *removed.lock_or_recover(),
+            ids,
+            "removed observer fired once"
+        );
+        assert!(bridge.results.lock_or_recover().is_empty());
+        // A late answer for the withdrawn id is a no-op.
+        assert!(
+            bridge
+                .resolve(ids[0], Decision::Allow, Scope::Once)
+                .is_none()
+        );
+        assert!(bridge.results.lock_or_recover().is_empty());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn async_and_blocking_asks_share_cascades_and_cancellation() {
+        use std::sync::Arc;
+        let bridge = Arc::new(SharedPermissionBridge::default());
+        // A tool thread (sync) and two server asks (async) wait on the same (tool, action).
+        let sync_bridge = bridge.clone();
+        let sync = std::thread::spawn(move || {
+            sync_bridge.request_blocking_timeout_with_pending(
+                ask("same"),
+                Duration::from_secs(60),
+                Decision::Deny,
+                |_| {},
+                |_| {},
+            )
+        });
+        let spawn_async = |action: &'static str| {
+            let waiter = bridge.clone();
+            tokio::spawn(async move {
+                waiter
+                    .request_timeout_with_pending_async(
+                        ask(action),
+                        Duration::from_secs(60),
+                        Decision::Deny,
+                        |_| {},
+                        |_| {},
+                    )
+                    .await
+            })
+        };
+        let same = spawn_async("same");
+        let other = spawn_async("other");
+        let ids = first_pending(&bridge, 3).await;
+        // Answering one with Always cascades to the identical waiting asks, sync and async.
+        let same_id = bridge
+            .pending()
+            .into_iter()
+            .find(|request| request.action == "same")
+            .unwrap()
+            .id;
+        let resolved = bridge
+            .resolve(same_id, Decision::Allow, Scope::Always)
+            .unwrap();
+        assert_eq!(resolved.cascaded.len(), 1);
+        assert_eq!(same.await.unwrap(), Decision::Allow);
+        assert_eq!(sync.join().unwrap(), Decision::Allow);
+        // Cancelling the remaining async ask denies it once.
+        let other_id = *ids
+            .iter()
+            .find(|id| bridge.pending().iter().any(|request| request.id == **id))
+            .unwrap();
+        assert!(bridge.cancel(other_id));
+        assert_eq!(other.await.unwrap(), Decision::Deny);
+        assert!(bridge.pending().is_empty());
+        assert!(bridge.results.lock_or_recover().is_empty());
     }
 }

@@ -424,3 +424,89 @@ async fn pending_permission_asks_do_not_queue_unrelated_requests() {
     .await
     .expect("aborted asks withdraw their prompts");
 }
+
+/// More pending permission asks than Tokio's default blocking pool (512 threads) must not
+/// starve offloaded API work (HS2-43YT58). Before the async wait each pending ask parked one
+/// blocking-pool thread on the bridge Condvar, so the 513th `spawn_blocking` (every offloaded
+/// request) queued inside Tokio, invisible to the offload-slot saturation warning.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pending_permission_asks_beyond_the_blocking_pool_leave_offloaded_requests_prompt() {
+    use tower::ServiceExt;
+    const TOKIO_DEFAULT_MAX_BLOCKING_THREADS: usize = 512;
+    let (_root, state, project, ticket) = project_fixture();
+    let bridge = state.permissions.clone();
+    let router = app(state);
+    let asks = TOKIO_DEFAULT_MAX_BLOCKING_THREADS + 64;
+    let pending: Vec<_> = (0..asks)
+        .map(|index| {
+            let request = axum::http::Request::builder()
+                .method("POST")
+                .uri("/permissions/ask")
+                .header("x-hotsheet-secret", "secret")
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    serde_json::json!({
+                        "connection": format!("agent-{index}"),
+                        "tool": "Bash",
+                        "action": format!("run {index}"),
+                    })
+                    .to_string(),
+                ))
+                .unwrap();
+            tokio::spawn(router.clone().oneshot(request))
+        })
+        .collect();
+    tokio::time::timeout(Duration::from_secs(20), async {
+        while bridge.pending().len() < asks {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("every ask should be pending");
+    // Offloaded store reads still run promptly, and a direct spawn_blocking is served.
+    let uri = format!("/checkouts/{project}/tickets/{}", ticket.id);
+    for _ in 0..4 {
+        let response =
+            tokio::time::timeout(Duration::from_secs(2), router.clone().oneshot(routed(&uri)))
+                .await
+                .expect("an offloaded request queued behind pending permission asks")
+                .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+    tokio::time::timeout(Duration::from_secs(2), tokio::task::spawn_blocking(|| ()))
+        .await
+        .expect("the blocking pool is exhausted by pending permission asks")
+        .unwrap();
+    // Answering one ask still wakes exactly that hook with the human decision.
+    let first = bridge.pending()[0].id;
+    bridge
+        .resolve(
+            first,
+            hotsheet_aitools::PermissionDecision::Allow,
+            hotsheet_aitools::PermissionScope::Once,
+        )
+        .unwrap();
+    assert_eq!(bridge.pending().len(), asks - 1);
+    for ask in &pending {
+        ask.abort();
+    }
+    let mut answered = 0;
+    for ask in pending {
+        if let Ok(Ok(response)) = ask.await {
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let decision: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(decision["decision"], "allow");
+            answered += 1;
+        }
+    }
+    assert!(answered <= 1, "only the answered ask completes");
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !bridge.pending().is_empty() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("aborted asks withdraw their prompts");
+}
