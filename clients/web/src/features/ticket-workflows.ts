@@ -36,6 +36,7 @@ import { flushDraftInputs } from '../draft-input-coalescing';
 import { presentedNoteKind } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { syncFocusedDraftControl } from '../focused-draft-sync';
+import { SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
 import { beginInteractionTiming } from '../interaction-performance';
 import { data } from '../interactions/dom';
 import type { Control, NotWorkingTarget, PendingEvidence, Project } from '../interactions/types';
@@ -2148,6 +2149,28 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       }),
     );
   }
+  /**
+   * Run `focus` once the closing composer dialog has handed focus back to its launcher. Web Awesome
+   * restores that focus in a task after its hide animation ends, so a fixed delay raced it on a busy
+   * main thread: the editor took focus first, the restore moved it to the launcher, and the blur
+   * closed the new ticket's details editor (HS2-8YHY6V).
+   */
+  function afterComposerFocusRestore(focus: () => void) {
+    const dialog = document.querySelector<HTMLElement>(SEARCH_AND_COMPOSER_TARGETS.quickTicketComposer.selector),
+      closing = dialog?.shadowRoot?.querySelector('dialog')?.open;
+    if (!dialog || !closing) {
+      window.setTimeout(focus, 0);
+      return;
+    }
+    dialog.addEventListener(
+      'wa-after-hide',
+      () => {
+        // The restore is queued just before this event; focus in the task after it.
+        window.setTimeout(focus, 0);
+      },
+      { once: true },
+    );
+  }
   function resetTicketComposer(clearStored = true) {
     const ids = composerAttachments.value.map((item) => item.id),
       scope = draftScope('composer');
@@ -2285,7 +2308,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           revealTicketInspector();
           presentTicket(created);
           beginDetailsEdit();
-          window.setTimeout(() => {
+          afterComposerFocusRestore(() => {
             const source = activeTicketSurface().querySelector<HTMLElement>('[name="markdown-source"]'),
               active = document.activeElement; // Only claim focus for the details editor if the user has not already focused another control (e.g. opened the priority select) — otherwise this delayed focus steals it and closes their popup (HS2-43F14D).
             if (
@@ -2296,7 +2319,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
                 active.closest('[data-component="quick-ticket-composer-launcher"]'))
             )
               source.focus();
-          }, 300);
+          });
         },
       );
       const failure = describeNewTicketAttachmentFailures(result.failed);

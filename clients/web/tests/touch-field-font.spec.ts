@@ -391,8 +391,10 @@ test.describe('desktop', () => {
     expect(sizes.details).toEqual([14]);
     expect(sizes.markdown).toEqual([14]);
     expect(sizes.tag).toEqual([12]);
-    expect(new Set(sizes.purpose)).toEqual(new Set([12]));
-    expect(new Set(sizes.locator)).toEqual(new Set([12]));
+    // The purpose pill is a Kerf Select now; the batch label editor is the attachment text field (HS2-K9HSXZ).
+    expect(new Set(sizes.batchLabel)).toEqual(new Set([14]));
+    // The repository field is a Kerf Combobox at its compact 14px desktop size (HS2-EN1E76).
+    expect(new Set(sizes.locator)).toEqual(new Set([14]));
   });
   test('keeps the compact Not working note with a mouse (HS2-JDXSND)', async ({ page }) => {
     await page.goto('/ux-demo?component=not-working-dialog');

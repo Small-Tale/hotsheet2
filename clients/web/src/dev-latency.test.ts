@@ -123,7 +123,11 @@ function trackerHarness(options: { settleMs?: number; maxWaitMs?: number } = {})
     clock += ms;
     for (const callback of paints.splice(0)) callback();
   };
-  return { tracker, advance, paint, completed };
+  /** The main thread is busy: time passes but no timer gets to run. */
+  const stall = (ms: number) => {
+    clock += ms;
+  };
+  return { tracker, advance, paint, stall, completed };
 }
 
 describe('interaction tracker', () => {
@@ -175,6 +179,29 @@ describe('interaction tracker', () => {
     paint();
     expect(completed).toHaveLength(1);
     expect(completed[0].requests).toEqual([]);
+  });
+
+  it('attributes a request started past the window while a busy main thread delayed the settle timer', () => {
+    const { tracker, advance, paint, stall, completed } = trackerHarness();
+    tracker.begin('click row', 0);
+    // The click's own render runs for 120 ms, then issues the detail read before any timer runs.
+    stall(120);
+    const detail = tracker.requestStarted('GET /tickets/{id}', false);
+    advance(0); // the overdue settle timer runs now
+    paint();
+    expect(completed).toEqual([]);
+    advance(400);
+    detail({ label: 'GET /tickets/{id}', duration_ms: 400 });
+    paint(10);
+    expect(completed).toHaveLength(1);
+    expect(completed[0].duration_ms).toBe(530);
+    expect(completed[0].requests).toEqual([{ label: 'GET /tickets/{id}', duration_ms: 400 }]);
+    // Once the settle timer has run, a later request is not the click's.
+    tracker.begin('click again', 530);
+    advance(100);
+    tracker.requestStarted('GET /later', false);
+    paint();
+    expect(completed.map((sample) => sample.label)).toEqual(['click row', 'click again']);
   });
 
   it('attributes a request to the newest open interaction only', () => {

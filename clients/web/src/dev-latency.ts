@@ -21,7 +21,10 @@ export const DEV_LATENCY_PEAK_BUDGET_MS = 150;
 export const DEV_LATENCY_WINDOW = 20;
 /** The average is judged only once this many samples exist, so one cold start is not an average. */
 export const DEV_LATENCY_MIN_AVERAGE_SAMPLES = 5;
-/** A request that starts this soon after an interaction belongs to it. */
+/**
+ * A request that starts this soon after an interaction belongs to it. So does one started before the
+ * settle timer actually ran, when the interaction's own synchronous work delayed that timer.
+ */
 export const DEV_LATENCY_SETTLE_MS = 50;
 /** An interaction still waiting after this long is reported as-is rather than tracked forever. */
 export const DEV_LATENCY_MAX_WAIT_MS = 60_000;
@@ -247,7 +250,11 @@ export function createInteractionTracker(options: InteractionTrackerOptions) {
       const at = options.now();
       const owner = longRunning
         ? undefined
-        : [...pending].reverse().find((interaction) => !interaction.done && at <= interaction.settleUntil);
+        : // A request the interaction's own work starts before the settle timer could run (a busy
+          // main thread delays that timer) still belongs to it.
+          [...pending]
+            .reverse()
+            .find((interaction) => !interaction.done && (!interaction.settled || at <= interaction.settleUntil));
       if (owner) owner.open += 1;
       let ended = false;
       return (timing) => {

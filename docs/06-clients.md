@@ -317,7 +317,9 @@ preview/download, server directory browser) are separate design work.
   overlay (range/toggle multi-select taps and the terminal ticket rail are excluded); tapping
   away returns to the list, and the selection persists so tapping reopens it (HS2-N7RPFP).
   Creating a ticket likewise opens the overlay on the new ticket with its details editor focused,
-  as on desktop, instead of leaving the editor inert in a closed overlay (HS2-QFW2A7). The
+  as on desktop, instead of leaving the editor inert in a closed overlay (HS2-QFW2A7). The editor
+  takes focus only after the closing composer has returned focus to its launcher, so a busy main
+  thread cannot let that restore blur and close the editor (HS2-8YHY6V). The
   left/right sidebar keyboard shortcuts use the same mutually exclusive mobile overlays without
   changing the persisted desktop sidebar preferences (HS2-KN79XP). Crossing from desktop into mobile closes the desktop panels;
   reopening the inspector positions it fully within the viewport, including at 940px.
@@ -542,8 +544,9 @@ preview/download, server directory browser) are separate design work.
   violation reports once per crossing and re-arms after recovering). Separately from the
   explicit `hotsheet:interaction-timing` call sites, the monitor times every trusted
   click and action key (Enter, Escape, Space on non-text controls, Cmd/Ctrl shortcuts).
-  It attributes the API requests that start within 50 ms of the event and waits for
-  them, then the next paint. Requests for expected long-running work (AI turns and drive
+  It attributes the API requests that start within 50 ms of the event, or later but
+  before that 50 ms timer could run because the interaction's own work kept the main
+  thread busy, and waits for them, then the next paint. Requests for expected long-running work (AI turns and drive
   connections, terminal launch, setup and migration, uploads, command runs, lifecycle,
   sync, project open) are not waited for, so only their immediate feedback is judged.
   Every API request other than idle long polls is also judged on its own against the

@@ -19876,6 +19876,48 @@ test('keeps the priority select open when opened right after creating a ticket (
   await page.screenshot({ path: 'target/visual-captures/hs2-43f14d-priority-open-after-create.png' });
 });
 
+for (const width of [390, 1280])
+  test(`keeps the new ticket's details editor open when a busy main thread delays the composer's focus restore at ${width}px (HS2-8YHY6V)`, async ({
+    page,
+  }) => {
+    await mockProject(page);
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    const launcher = page.getByRole('button', { name: 'New ticket…' });
+    await launcher.click();
+    const form = page.locator('[data-action="create-ticket-form"]');
+    await form.locator('wa-input[name="new-ticket-title"]').evaluate((node: HTMLElement & { value: string }) => {
+      node.value = 'Busy create';
+      node.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    // A loaded CI runner: the composer's hide animation ends while a long task holds the main
+    // thread past the old fixed 300 ms focus delay, so the editor took focus just before Web
+    // Awesome returned focus to the launcher, and that blur closed the editor.
+    await page.evaluate(() => {
+      const style = document.createElement('style');
+      style.textContent = 'wa-dialog { --hide-duration: 250ms !important; }';
+      document.head.append(style);
+      document.addEventListener(
+        'click',
+        (event) => {
+          if (!(event.target as Element).closest('[data-action="create-ticket-form"] [type="submit"]')) return;
+          setTimeout(() => {
+            const until = performance.now() + 250;
+            while (performance.now() < until);
+          }, 200);
+        },
+        { capture: true, once: true },
+      );
+    });
+    await form.getByRole('button', { name: 'Create ticket' }).click();
+    const editor = page.getByRole('textbox', { name: 'Ticket details' });
+    await expect(editor).toBeFocused();
+    await page.waitForTimeout(300);
+    await expect(editor).toBeFocused();
+  });
+
 test('focuses the ticket title every time the real composer expands', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
