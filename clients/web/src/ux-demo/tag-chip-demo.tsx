@@ -7,6 +7,7 @@ import { TAG_CHIP_REMOVE_ACTION } from '../components/tag-chip';
 import { TagChip, type TagChipAppearance, type TagChipSize, type TagChipVariant } from '../components/tag-chip';
 import { DemoEvent } from './components/demo-event';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 export const tagChipSettings = {
@@ -75,7 +76,7 @@ export function TagChipDemo() {
 
 export function TagChipSettings() {
   return (
-    <form class="settings-form" data-settings="tag-chip">
+    <DemoSettingsForm settings="tag-chip">
       <wa-input name="label" label="Label" value={tagChipSettings.label.value} />
       <Select
         name="variant"
@@ -113,7 +114,7 @@ export function TagChipSettings() {
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

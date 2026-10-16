@@ -7,6 +7,7 @@ import { createScope } from 'kerfjs/scope';
 import { ChoiceCard, type ChoiceCardTone } from '../components/choice-card';
 import { DemoEvent } from './components/demo-event';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 type ChoiceCardDemoType = 'radio' | 'checkbox';
@@ -77,7 +78,7 @@ export function ChoiceCardDemo() {
 
 export function ChoiceCardSettings() {
   return (
-    <form class="settings-form" data-settings="choice-card">
+    <DemoSettingsForm settings="choice-card">
       <Select
         name="type"
         label="Input type"
@@ -99,7 +100,7 @@ export function ChoiceCardSettings() {
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

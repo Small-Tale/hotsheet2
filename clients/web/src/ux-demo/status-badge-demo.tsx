@@ -6,6 +6,7 @@ import { createScope } from 'kerfjs/scope';
 import type { StartedPhase } from '../api';
 import { StatusBadge, type StatusBadgeAppearance, type TicketStatus } from '../components/status-badge';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 export const statusBadgeSettings = {
@@ -53,7 +54,7 @@ export function StatusBadgeDemo() {
 
 export function StatusBadgeSettings() {
   return (
-    <form class="settings-form" data-settings="status-badge">
+    <DemoSettingsForm settings="status-badge">
       <Select
         name="status"
         label="Status"
@@ -95,7 +96,7 @@ export function StatusBadgeSettings() {
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

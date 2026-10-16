@@ -47,27 +47,6 @@ body[data-resizing-project-sidebar='true'] {
   cursor: row-resize;
   user-select: none;
 }
-/* The form is the content of Kerf's Catalog settings pane, which leaves its content inset to the app. */
-.settings-form {
-  display: grid;
-  gap: remify(16px);
-  padding: 0 remify(16px) remify(16px);
-}
-.workspace-settings-preview {
-  display: grid;
-  max-width: remify(608px);
-  margin: remify(32px) auto;
-  padding: remify(32px);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(16px);
-  background: var(--wa-color-surface-default);
-  box-shadow: var(--wa-shadow-l);
-  gap: remify(16px);
-}
-.workspace-settings-preview__title,
-.workspace-settings-preview__description {
-  margin: 0;
-}
 /* Demo-owned color contexts for the MarkdownPreview and AIContentLabel inherit/inverse tones; Kerf's
    CatalogExample surfaces cover only the default and lowered fills. */
 .demo-tone-surface {
@@ -98,25 +77,6 @@ body[data-resizing-project-sidebar='true'] {
   width: remify(390px);
   max-width: 100%;
   contain: paint;
-}
-.shell-mode-surface {
-  display: grid;
-  min-height: remify(320px);
-  padding: remify(32px);
-  border: 1px dashed var(--wa-color-neutral-border-normal);
-  border-radius: remify(12.8px);
-  color: var(--wa-color-neutral-on-quiet);
-  background: var(--wa-color-surface-default);
-  align-content: center;
-  justify-items: center;
-  text-align: center;
-}
-.shell-mode-surface h2 {
-  margin: 0 0 remify(6.4px);
-  color: var(--wa-color-neutral-on-normal);
-}
-.shell-mode-surface p {
-  margin: 0;
 }
 @media (max-width: remify(960px)) {
   body {

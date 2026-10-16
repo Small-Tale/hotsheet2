@@ -24,6 +24,7 @@ import { loadLucideCatalog } from '../lucide-catalog';
 import { DemoEvent } from './components/demo-event';
 import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 export const selectedViewId = signal('all');
@@ -56,7 +57,7 @@ export function resetProjectSidebarDemo(controlRoot?: ParentNode): void {
 }
 export function ProjectSidebarSettings() {
   return (
-    <form class="settings-form" data-settings="project-sidebar">
+    <DemoSettingsForm settings="project-sidebar">
       <wa-checkbox name="conversation-open" checked={projectSidebarSettings.conversationOpen.value}>
         Conversation open
       </wa-checkbox>
@@ -76,7 +77,7 @@ export function ProjectSidebarSettings() {
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 export const projectSidebarHeight = signal(640);

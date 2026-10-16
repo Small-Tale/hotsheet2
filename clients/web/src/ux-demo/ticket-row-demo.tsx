@@ -12,6 +12,7 @@ import { type TicketPriority, TicketRow } from '../components/ticket-row';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
 import { DemoEvent } from './components/demo-event';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 /** Claim ETA states the demo exposes (HS2-XQMDQB). */
@@ -186,7 +187,7 @@ export function TicketRowDemo() {
 
 export function TicketRowSettings() {
   return (
-    <form class="settings-form" data-settings="ticket-list-row">
+    <DemoSettingsForm settings="ticket-list-row">
       <wa-input name="title" label="Title" value={ticketRowSettings.title.value} />
       <Select
         name="status"
@@ -282,7 +283,7 @@ export function TicketRowSettings() {
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

@@ -32,6 +32,7 @@ import { DemoEvent } from './components/demo-event';
 import { type DemoDevice, DeviceSetting } from './components/device-setting';
 import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { sidebarEvent } from './project-sidebar-demo';
 import { syncSettingsControls } from './settings-controls';
 
@@ -328,7 +329,7 @@ export function resetAIConversationDemo(root?: ParentNode): void {
 
 export function AIConversationSettings() {
   return (
-    <form class="settings-form" data-settings="ai-conversation">
+    <DemoSettingsForm settings="ai-conversation">
       <Select
         name="presentation"
         label="Presentation"
@@ -364,7 +365,7 @@ export function AIConversationSettings() {
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

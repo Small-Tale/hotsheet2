@@ -14,6 +14,7 @@ import {
 } from '../components/content-transition';
 import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 export const transitionSide = signal<ContentTransitionSide>('a'),
@@ -105,7 +106,7 @@ export function resetContentTransitionDemo(root?: ParentNode): void {
 
 export function ContentTransitionSettings() {
   return (
-    <form class="settings-form" data-settings="content-transition">
+    <DemoSettingsForm settings="content-transition">
       <Select
         name="transition-style"
         label="Transition style"
@@ -128,7 +129,7 @@ export function ContentTransitionSettings() {
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

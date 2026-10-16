@@ -199,3 +199,22 @@ the remaining wrapper markup that only existed because Badge lacked props:
 - Owned contracts that stay: the key bar's sticky Fn group, touch scroller, and safe-area backing;
   focus-mode placement and backdrop; grid fitting, canvas, previews, magnification, and mobile
   keyboard geometry. Generic tile identity and footer typography remain in `HS2-9J6MYJ`.
+
+## Development and catalog UI update (HS2-3AZ08H)
+
+- The Dev Review tool and its stylesheet were already removed (HS2-03PV1C), and the earlier
+  CatalogExample migrations retired most demo stage CSS.
+- `ux-demo/style.css` drops its generic rules:
+  - Every entry's settings form is `DemoSettingsForm`, a Kerf `List` with the standard gap and 8px
+    control insets (24 forms).
+  - The Project Settings stand-in is `DemoSettingsPreview`, a framed Kerf `ContentItem` surface of
+    `Text` at the reading inset.
+  - The AppShell workspace and terminal-drawer placeholders are Kerf `EmptyState`s.
+  - `.settings-form`, `.workspace-settings-preview*`, and `.shell-mode-surface*` are gone.
+- Retained as legitimate catalog stage CSS:
+  - The theme/contrast/reduced-motion display controls.
+  - The project-sidebar resize cursor.
+  - The `demo-tone-surface` inherit/inverse color contexts (CatalogExample surfaces cover only the
+    default and lowered fills).
+  - The phone-sized terminal focus stage.
+    None of them restyles a nested production component.

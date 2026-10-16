@@ -20,6 +20,7 @@ import { DemoEvent } from './components/demo-event';
 import { type DemoDevice, DeviceSetting } from './components/device-setting';
 import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 export type RepositoryDemoScenario = 'clean' | 'dirty' | 'ahead' | 'behind' | 'diverged' | 'conflicted' | 'error';
@@ -184,7 +185,7 @@ export function ChangeEvidenceDialogDemo() {
 
 export function RepositoryStatusPopoverSettings() {
   return (
-    <form class="settings-form" data-settings="repository-status-popover">
+    <DemoSettingsForm settings="repository-status-popover">
       <Select
         name="scenario"
         label="Repository scenario"
@@ -198,18 +199,18 @@ export function RepositoryStatusPopoverSettings() {
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 
 export function ChangeEvidenceDialogSettings() {
   return (
-    <form class="settings-form" data-settings="change-evidence-dialog">
+    <DemoSettingsForm settings="change-evidence-dialog">
       <DeviceSetting value={repositoryDemoClient.value} />
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

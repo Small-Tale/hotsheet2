@@ -30,6 +30,7 @@ import { DemoEvent } from './components/demo-event';
 import { selectDemo, selectedId } from './components/demo-state';
 import { DEMO_ACTIONS, DEMO_COMPONENTS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import {
   blockedReasonAutosave,
   markdownAutosave,
@@ -341,7 +342,7 @@ export function resetMarkdownEditorDemo(root: ParentNode): void {
 /** The MarkdownEditor's public appearance and inset variants (HS2-MGVE50). */
 export function MarkdownEditorSettings() {
   return (
-    <form class="settings-form" data-settings="markdown-editor">
+    <DemoSettingsForm settings="markdown-editor">
       <Select
         name="markdown-appearance"
         label="Appearance"
@@ -363,7 +364,7 @@ export function MarkdownEditorSettings() {
       <wa-button type="button" {...DEMO_ACTIONS.resetSettings.attrs}>
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

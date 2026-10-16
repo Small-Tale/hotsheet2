@@ -4,6 +4,7 @@ import { signal } from 'kerfjs';
 import { type SettingsCategory, settingsCategoryTitle } from '../components/settings-navigation';
 import type { PermissionAutomationAction } from '../permission-notifications';
 import { DEMO_ACTIONS } from './demo-actions';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 /** Every SettingsWorkspace category, in navigator order: project categories, then app categories (HS2-PS9BQV). */
@@ -35,7 +36,7 @@ export function resetSettingsWorkspaceDemo(root: ParentNode): void {
 
 export function SettingsWorkspaceSettings() {
   return (
-    <form class="settings-form" data-settings="settings-workspace">
+    <DemoSettingsForm settings="settings-workspace">
       <Select
         name="workspace-category"
         label="Category"
@@ -56,6 +57,6 @@ export function SettingsWorkspaceSettings() {
       <wa-button type="button" {...DEMO_ACTIONS.resetSettings.attrs}>
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }

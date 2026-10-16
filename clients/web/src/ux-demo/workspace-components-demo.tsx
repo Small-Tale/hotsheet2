@@ -71,6 +71,7 @@ import {
 } from './content-components-demo';
 import { DEMO_ACTIONS, DEMO_FIELDS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm, DemoSettingsPreview } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 import { collectionEvent, collectionTickets, recordCollectionEvent } from './ticket-collections-demo';
 import { statusMenuDemoStartedPhase, statusMenuDemoStatus } from './ticket-metadata-demo';
@@ -427,11 +428,7 @@ function WorkspaceContent() {
   const tickets = filteredWorkspaceTickets();
   if (workspaceMode.value === 'settings')
     return (
-      <section class="workspace-settings-preview" aria-label="Project Settings">
-        <h2 class="workspace-settings-preview__title">Project Settings</h2>
-        <p class="workspace-settings-preview__description">
-          Configure ticket providers, project defaults, commands, and local checkout behavior for Hot Sheet 2.
-        </p>
+      <DemoSettingsPreview description="Configure ticket providers, project defaults, commands, and local checkout behavior for Hot Sheet 2.">
         <Select
           name="default-ticket-provider"
           label="Default ticket provider"
@@ -441,7 +438,7 @@ function WorkspaceContent() {
             { value: 'github', label: 'GitHub Issues' },
           ]}
         />
-      </section>
+      </DemoSettingsPreview>
     );
   return workspaceMode.value === 'list' ? (
     <TicketList tickets={tickets} label="Workspace tickets" />
@@ -497,7 +494,7 @@ export function resetQuickTicketComposerDemo(root?: ParentNode): void {
 
 export function QuickTicketComposerSettings() {
   return (
-    <form class="settings-form" data-settings="quick-ticket-composer">
+    <DemoSettingsForm settings="quick-ticket-composer">
       <Select
         name="composer-source-count"
         label="Writable ticket sources"
@@ -510,7 +507,7 @@ export function QuickTicketComposerSettings() {
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 
@@ -631,7 +628,7 @@ export function resetTicketInspectorDemo(root?: ParentNode): void {
 
 export function TicketInspectorSettings() {
   return (
-    <form class="settings-form" data-settings="ticket-inspector">
+    <DemoSettingsForm settings="ticket-inspector">
       <Select
         name="inspector-live-claim"
         label="Live claim (AI working)"
@@ -667,7 +664,7 @@ export function TicketInspectorSettings() {
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

@@ -8,6 +8,7 @@ import { NotificationsPausedBanner } from '../components/notifications-paused-ba
 import { type DemoDevice, DeviceSetting } from './components/device-setting';
 import { DEMO_ACTIONS, DEMO_COMPONENTS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 export function ValueTableDemo() {
@@ -58,12 +59,12 @@ export function Hs1MigrationDialogDemo() {
 }
 export function Hs1MigrationDialogSettings() {
   return (
-    <form class="settings-form" data-settings="hs1-migration-dialog">
+    <DemoSettingsForm settings="hs1-migration-dialog">
       <DeviceSetting value={hs1MigrationDialogDemoDevice.value} />
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

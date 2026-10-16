@@ -16,6 +16,7 @@ import { wireTrashSettings } from '../components/trash-settings-interactions';
 import { type PermissionAutomationAction } from '../permission-notifications';
 import { type DemoDevice, DeviceSetting } from './components/device-setting';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { DEMO_ACCOUNTS, DEMO_PROJECT_SOURCES } from './fixtures';
 import { syncSettingsControls } from './settings-controls';
 import {
@@ -43,12 +44,12 @@ export const ticketSourceDevice = signal<DemoDevice>('host');
 
 export function TicketSourceSetupDialogSettings() {
   return (
-    <form class="settings-form" data-settings="ticket-source-setup-dialog">
+    <DemoSettingsForm settings="ticket-source-setup-dialog">
       <DeviceSetting value={ticketSourceDevice.value} />
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

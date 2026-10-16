@@ -5,6 +5,7 @@ import { createScope } from 'kerfjs/scope';
 
 import { SearchScopeToolbar, wireSearchScopeToolbar } from '../components/search-scope-toolbar';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 /** Searched views of each kind, including a long custom-view name. */
@@ -50,7 +51,7 @@ export function SearchScopeToolbarDemo() {
 
 export function SearchScopeToolbarSettings() {
   return (
-    <form class="settings-form" data-settings="search-scope-toolbar">
+    <DemoSettingsForm settings="search-scope-toolbar">
       <Select
         name="scope"
         label="Scope"
@@ -69,7 +70,7 @@ export function SearchScopeToolbarSettings() {
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

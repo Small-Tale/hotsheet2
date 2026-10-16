@@ -6,6 +6,7 @@ import { createScope } from 'kerfjs/scope';
 import type { CalibrationReport } from '../api';
 import { ConfidenceCalibration, type ConfidenceCalibrationState } from '../components/confidence-calibration';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 /** A deterministic report covering every band shape: rated, unresolved, empty, and unscored. */
@@ -95,12 +96,12 @@ export function ConfidenceCalibrationDemo() {
 
 export function ConfidenceCalibrationSettings() {
   return (
-    <form class="settings-form" data-settings="confidence-calibration">
+    <DemoSettingsForm settings="confidence-calibration">
       <Select name="state" label="State" value={confidenceCalibrationSettings.state.value} choices={STATE_CHOICES} />
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

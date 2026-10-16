@@ -7,6 +7,7 @@ import type { RepositorySizeEntry, RepositorySizeReport } from '../api';
 import { RepositorySize, type RepositorySizeState } from '../components/repository-size';
 import { RepositorySizeBanner } from '../components/repository-size-banner';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 const THRESHOLDS = { warning_bytes: 5_000_000_000, critical_bytes: 10_000_000_000 };
@@ -160,12 +161,12 @@ export function RepositorySizeDemo() {
 
 export function RepositorySizeSettings() {
   return (
-    <form class="settings-form" data-settings="repository-size">
+    <DemoSettingsForm settings="repository-size">
       <Select name="state" label="State" value={repositorySizeSettings.state.value} choices={STATE_CHOICES} />
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

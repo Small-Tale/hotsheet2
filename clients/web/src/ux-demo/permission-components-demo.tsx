@@ -18,6 +18,7 @@ import {
 import { selectedId } from './components/demo-state';
 import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 const pending: PermissionItem = {
@@ -232,7 +233,7 @@ export function PermissionRequestDemo() {
 
 export function PermissionRequestSettings() {
   return (
-    <form class="settings-form" data-settings="permission-request">
+    <DemoSettingsForm settings="permission-request">
       <Select
         name="presentation"
         label="Presentation"
@@ -288,7 +289,7 @@ export function PermissionRequestSettings() {
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

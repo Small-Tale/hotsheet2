@@ -6,6 +6,7 @@ import { createScope } from 'kerfjs/scope';
 import type { CompatibilityAssessment } from '../compatibility';
 import { ConnectionDetailsDialog } from '../components/connection-details-dialog';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 export type ConnectionDetailsScenario =
@@ -91,7 +92,7 @@ export function ConnectionDetailsDialogDemo() {
 }
 export function ConnectionDetailsDialogSettings() {
   return (
-    <form class="settings-form" data-settings="connection-details-dialog">
+    <DemoSettingsForm settings="connection-details-dialog">
       <Select
         name="scenario"
         label="Compatibility scenario"
@@ -108,7 +109,7 @@ export function ConnectionDetailsDialogSettings() {
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

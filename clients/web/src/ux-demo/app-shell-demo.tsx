@@ -1,5 +1,6 @@
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { px } from '@kerfjs/ui/css-values';
+import { EmptyState } from '@kerfjs/ui/empty-state';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -40,6 +41,7 @@ import {
 } from './content-components-demo';
 import { DEMO_ACTIONS, DEMO_MARKERS } from './demo-actions';
 import { type DemoModule, type FormControl, listen } from './demo-module';
+import { DemoSettingsForm, DemoSettingsPreview } from './demo-settings-form';
 import {
   collapsedCommandGroups,
   commandGroupExpanded,
@@ -134,7 +136,7 @@ export function resetAppShellDemo(root?: ParentNode): void {
 
 export function AppShellSettings() {
   return (
-    <form class="settings-form" data-settings="app-shell">
+    <DemoSettingsForm settings="app-shell">
       <Select
         name="presentation"
         label="Presentation"
@@ -153,7 +155,7 @@ export function AppShellSettings() {
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 
@@ -458,12 +460,7 @@ export function AppShellDemo() {
     switch (workspaceMode.value) {
       case 'settings':
         return (
-          <section class="workspace-settings-preview" aria-label="Project Settings">
-            <h2 class="workspace-settings-preview__title">Project Settings</h2>
-            <p class="workspace-settings-preview__description">
-              Configure ticket providers, project defaults, commands, and checkout behavior.
-            </p>
-          </section>
+          <DemoSettingsPreview description="Configure ticket providers, project defaults, commands, and checkout behavior." />
         );
       case 'board':
         return <TicketBoard columns={workspaceColumns()} label="Project board" />;
@@ -478,21 +475,27 @@ export function AppShellDemo() {
     switch (activeShellMode) {
       case 'terminals':
         return (
-          <section class="shell-mode-surface" aria-label="Workspace Grid Workspace">
-            <h2>Workspace Grid</h2>
-            <p>Monitor and arrange terminals, AI chats, and future workspace tools across connected projects.</p>
+          <section aria-label="Workspace Grid Workspace">
+            <EmptyState
+              title="Workspace Grid"
+              detail="Monitor and arrange terminals, AI chats, and future workspace tools across connected projects."
+            />
           </section>
         );
       case 'stats':
         return shellStatsProjectName.value ? (
-          <section class="shell-mode-surface" aria-label={`${shellStatsProjectName.value} Project Statistics`}>
-            <h2>{shellStatsProjectName.value} project statistics</h2>
-            <p>Detailed ticket-flow and usage charts are coming in a future Hot Sheet update.</p>
+          <section aria-label={`${shellStatsProjectName.value} Project Statistics`}>
+            <EmptyState
+              title={`${shellStatsProjectName.value} Project Statistics`}
+              detail="Detailed ticket-flow and usage charts are coming in a future Hot Sheet update."
+            />
           </section>
         ) : (
-          <section class="shell-mode-surface" aria-label="Cross-Project Stats Workspace">
-            <h2>Cross-Project Stats</h2>
-            <p>Compare ticket flow and activity across connected projects.</p>
+          <section aria-label="Cross-Project Stats Workspace">
+            <EmptyState
+              title="Cross-Project Stats"
+              detail="Compare ticket flow and activity across connected projects."
+            />
           </section>
         );
       case 'project':
@@ -550,11 +553,15 @@ export function AppShellDemo() {
         workspace={workspace}
         workspacePresentation={workspaceMode.value === 'board' && !globalMode ? 'edge-to-edge' : 'inset'}
         terminalDrawer={
-          <section class="shell-mode-surface" aria-label="Example Terminal Drawer">
-            <h2>Terminal drawer</h2>
-            <button type="button" data-action="toggle-app-shell-demo-terminal-drawer">
-              Hide Terminal Drawer
-            </button>
+          <section aria-label="Example Terminal Drawer">
+            <EmptyState
+              title="Terminal Drawer"
+              action={
+                <wa-button size="small" data-action="toggle-app-shell-demo-terminal-drawer">
+                  Hide Terminal Drawer
+                </wa-button>
+              }
+            />
           </section>
         }
         terminalDrawerVisible={shellTerminalDrawerVisible.value}

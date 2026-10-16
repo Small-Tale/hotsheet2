@@ -5,6 +5,7 @@ import { createScope } from 'kerfjs/scope';
 
 import { ConfidenceBadge } from '../components/confidence-badge';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 /** Every public ConfidenceBadge variant: both appearances across all four rubric bands. */
@@ -46,7 +47,7 @@ export function ConfidenceBadgeDemo() {
 
 export function ConfidenceBadgeSettings() {
   return (
-    <form class="settings-form" data-settings="confidence-badge">
+    <DemoSettingsForm settings="confidence-badge">
       <Select
         name="value"
         label="Confidence"
@@ -65,7 +66,7 @@ export function ConfidenceBadgeSettings() {
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

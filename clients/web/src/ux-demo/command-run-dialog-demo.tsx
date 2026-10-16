@@ -10,6 +10,7 @@ import { DemoEvent } from './components/demo-event';
 import { onDemoSelected } from './components/demo-state';
 import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 /** The two public presentations of CommandRunDialog: run output, or the `confirmStop` confirmation. */
@@ -109,7 +110,7 @@ export function CommandRunDialogDemo() {
 
 export function CommandRunDialogSettings() {
   return (
-    <form class="settings-form" data-settings="command-run-dialog">
+    <DemoSettingsForm settings="command-run-dialog">
       <Select
         name="presentation"
         label="Presentation"
@@ -122,7 +123,7 @@ export function CommandRunDialogSettings() {
       <wa-button type="button" {...DEMO_ACTIONS.resetSettings.attrs}>
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 

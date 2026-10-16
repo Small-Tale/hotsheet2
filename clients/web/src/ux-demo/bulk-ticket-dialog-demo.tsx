@@ -8,6 +8,7 @@ import { wireBulkTicketDialog } from '../components/bulk-ticket-dialog-interacti
 import { DemoEvent } from './components/demo-event';
 import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
+import { DemoSettingsForm } from './demo-settings-form';
 import { syncSettingsControls } from './settings-controls';
 
 /** Every public BulkTicketDialog presentation the production selection flows render (HS2-PS9BQV). */
@@ -90,7 +91,7 @@ export function BulkTicketDialogDemo() {
 
 export function BulkTicketDialogSettings() {
   return (
-    <form class="settings-form" data-settings="bulk-ticket-dialog">
+    <DemoSettingsForm settings="bulk-ticket-dialog">
       <Select
         name="bulk-scenario"
         label="Presentation"
@@ -100,7 +101,7 @@ export function BulkTicketDialogSettings() {
       <wa-button type="button" {...DEMO_ACTIONS.resetSettings.attrs}>
         Reset
       </wa-button>
-    </form>
+    </DemoSettingsForm>
   );
 }
 
