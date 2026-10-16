@@ -484,6 +484,7 @@ mod tests {
             default_model: Some("fallback".into()),
             default_effort: Some("medium".into()),
             actions: vec!["change_model".into()],
+            ..AiToolDescriptor::default()
         }
     }
 

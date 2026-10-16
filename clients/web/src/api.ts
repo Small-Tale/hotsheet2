@@ -645,18 +645,29 @@ export interface AiModelDescriptor {
   label: string;
   effort_levels?: string[];
 }
+/** One plugin-declared permission mode a chat can run under (HS2-NHRDMW). */
+export interface AiPermissionMode {
+  id: string;
+  label: string;
+  description?: string;
+  /** Present for a mode that removes a safety net; shown before and while it is active. */
+  warning?: string;
+}
 export interface AiToolDescriptor {
   id: string;
   display_name: string;
   models: AiModelDescriptor[];
   default_model?: string;
   default_effort?: string;
-  actions?: Array<'change_model' | 'change_effort'>;
+  actions?: Array<'change_model' | 'change_effort' | 'change_permission_mode'>;
+  permission_modes?: AiPermissionMode[];
+  default_permission_mode?: string;
 }
-/** One provider's default model and effort (HS2-EK24KF). */
+/** One provider's default model, effort, and permission mode (HS2-EK24KF, HS2-NHRDMW). */
 export interface AiProviderDefaults {
   model?: string;
   effort?: string;
+  permission_mode?: string;
 }
 /**
  * A project's AI defaults: the default provider with its model and effort, plus every provider's
@@ -666,6 +677,7 @@ export interface AiToolDefaults {
   tool: string;
   model?: string;
   effort?: string;
+  permission_mode?: string;
   providers?: Record<string, AiProviderDefaults>;
 }
 export interface ToolConnection {
@@ -680,6 +692,8 @@ export interface ToolConnection {
   last_error?: string;
   model?: string;
   effort?: string;
+  /** The chat's active permission mode (HS2-NHRDMW). */
+  permission_mode?: string;
   /** The running turn's correlation id while busy (HS2-14X4AF). */
   turn_id?: string;
 }
@@ -1416,12 +1430,13 @@ export class Api {
     session_id?: string;
     model?: string;
     effort?: string;
+    permission_mode?: string;
   }) => this.parsed(parseToolConnection, '/drive/connections', { method: 'POST', body: JSON.stringify(value) });
   sendToolTurn = (
     id: string,
     content: string,
     session_id?: string,
-    selection?: { model?: string; effort?: string },
+    selection?: { model?: string; effort?: string; permission_mode?: string },
     turn_id?: string,
   ) =>
     this.parsed(parseToolConnection, `/drive/connections/${encodeURIComponent(id)}/turns`, {

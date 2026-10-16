@@ -438,6 +438,54 @@ fn codex_client_starts_a_thread_and_completes_a_turn() {
     assert_eq!((usage.tokens_in, usage.tokens_out), (1200, 340));
 }
 
+/// HS2-NHRDMW: the selected approval policy rides `thread/start` and `thread/resume`, the
+/// sandbox stays `workspace-write`, and a non-Codex mode (a Claude value) keeps `never`.
+#[test]
+fn codex_client_opens_threads_with_the_selected_approval_policy() {
+    let (daemon, log) = ScriptedDaemon::recording(TurnMode::AutoComplete);
+    let cx = CodexAppServer::connect(daemon).unwrap();
+    let policies = |method: &str| -> Vec<(String, String)> {
+        log.lock()
+            .unwrap()
+            .iter()
+            .filter(|message| message["method"] == method)
+            .map(|message| {
+                (
+                    message["params"]["approvalPolicy"]
+                        .as_str()
+                        .unwrap()
+                        .to_string(),
+                    message["params"]["sandbox"].as_str().unwrap().to_string(),
+                )
+            })
+            .collect()
+    };
+    let cwd = std::path::Path::new("/w");
+    cx.open_thread(None, cwd).unwrap();
+    cx.set_approval_policy(Some("on-request"));
+    cx.open_thread(Some("thread-7"), cwd).unwrap();
+    cx.set_approval_policy(Some("acceptEdits"));
+    cx.open_thread(Some("thread-7"), cwd).unwrap();
+    cx.set_approval_policy(Some("untrusted"));
+    cx.open_thread(None, cwd).unwrap();
+    let ws = "workspace-write".to_string();
+    assert_eq!(
+        policies("thread/start"),
+        [
+            ("never".to_string(), ws.clone()),
+            ("untrusted".into(), ws.clone())
+        ]
+    );
+    assert_eq!(
+        policies("thread/resume"),
+        [("on-request".to_string(), ws.clone()), ("never".into(), ws)]
+    );
+    for mode in crate::codex::CODEX_APPROVAL_POLICIES {
+        assert_eq!(crate::codex::codex_approval_policy(Some(mode)), mode);
+    }
+    assert_eq!(crate::codex::codex_approval_policy(None), "never");
+}
+
 #[test]
 fn codex_client_reads_the_paginated_visible_runtime_model_catalog() {
     let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::AutoComplete)).unwrap();

@@ -85,3 +85,34 @@ describe('AiToolSettings (HS2-SW5S13, HS2-EK24KF)', () => {
     expect(existsSync(new URL('./ai-tool-settings.css', import.meta.url))).toBe(false);
   });
 });
+
+describe('AiToolSettings permission modes (HS2-NHRDMW)', () => {
+  const moded = [
+    {
+      ...tools[0],
+      permission_modes: [
+        { id: 'acceptEdits', label: 'Accept edits', description: 'Edits run without asking.' },
+        { id: 'bypassPermissions', label: 'Bypass permissions', warning: 'Runs everything without asking.' },
+      ],
+      default_permission_mode: 'acceptEdits',
+    },
+    tools[1],
+  ];
+  it('offers each declared mode, explains the selected one, and warns for a risky one', () => {
+    const plain = String(AiToolSettings({ tools: moded, selection: { tool: 'claude', model: 'sonnet' } }));
+    expect(selectValue(plain, 'ai-provider-permission-mode-claude')).toBe('acceptEdits');
+    expect(plain).toContain('label="Chat permissions"');
+    expect(plain).toContain('Edits run without asking.');
+    expect(plain).toContain('data-permission-mode="acceptEdits"');
+    // A provider without declared modes has no permission field.
+    expect(plain).not.toContain('ai-provider-permission-mode-codex');
+    const risky = String(
+      AiToolSettings({
+        tools: moded,
+        selection: { tool: 'claude', model: 'sonnet', permission_mode: 'bypassPermissions' },
+      }),
+    );
+    expect(selectValue(risky, 'ai-provider-permission-mode-claude')).toBe('bypassPermissions');
+    expect(risky).toContain('Warning: Runs everything without asking.');
+  });
+});

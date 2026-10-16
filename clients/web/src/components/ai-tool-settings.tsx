@@ -5,7 +5,7 @@ import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
 import { Text } from '@kerfjs/ui/text';
-import { Bot, Brain, Gauge, Pencil } from 'lucide';
+import { Bot, Brain, Gauge, Pencil, ShieldAlert, ShieldCheck } from 'lucide';
 
 import { providerSelection } from '../ai-provider-defaults';
 import type { AiToolDefaults } from '../api';
@@ -14,6 +14,7 @@ import type { AiToolDescriptor } from './drive-options-menu';
 /** The Select names of one provider's model and effort fields (HS2-EK24KF). */
 export const aiProviderModelName = (tool: string) => `ai-provider-model-${tool}`;
 export const aiProviderEffortName = (tool: string) => `ai-provider-effort-${tool}`;
+export const aiProviderPermissionModeName = (tool: string) => `ai-provider-permission-mode-${tool}`;
 
 /** A value that names no real model, used for the model menu's "Other…" choice. */
 function otherModelValue(tool: AiToolDescriptor, modelId: string) {
@@ -44,12 +45,17 @@ function ProviderDefaults({
       ...(customModel ? [{ value: customModel, label: customModel, icon: Brain, iconName: 'brain' }] : []),
       ...tool.models.map((item) => ({ value: item.id, label: item.label, icon: Brain, iconName: 'brain' })),
       { value: other, label: 'Other…', icon: Pencil, iconName: 'pencil', separatorBefore: true },
-    ];
+    ],
+    // HS2-NHRDMW: the provider's chat permission mode. The hint explains the selected mode; a mode
+    // that removes a safety net shows its warning instead.
+    permissionModes = tool.permission_modes ?? [],
+    permissionMode = permissionModes.find((mode) => mode.id === selection.permission_mode) ?? permissionModes.at(0);
   return (
     <section
       data-ai-provider={tool.id}
       data-ai-provider-default={String(isDefault)}
       data-other-model-value={other}
+      data-permission-mode={permissionMode?.id}
       aria-label={`${tool.display_name} Defaults`}
     >
       <List gap="xs">
@@ -65,6 +71,20 @@ function ProviderDefaults({
             disabled={!efforts.length}
             choices={efforts.map((value) => ({ value, label: value, icon: Gauge, iconName: 'gauge' }))}
           />
+          {permissionMode && (
+            <Select
+              name={aiProviderPermissionModeName(tool.id)}
+              label="Chat permissions"
+              value={permissionMode.id}
+              hint={permissionMode.warning ? `Warning: ${permissionMode.warning}` : permissionMode.description}
+              choices={permissionModes.map((mode) => ({
+                value: mode.id,
+                label: mode.label,
+                icon: mode.warning ? ShieldAlert : ShieldCheck,
+                iconName: mode.warning ? 'shield-alert' : 'shield-check',
+              }))}
+            />
+          )}
         </Grid>
       </List>
     </section>

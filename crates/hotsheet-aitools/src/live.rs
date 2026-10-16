@@ -35,8 +35,8 @@ pub struct LiveTrigger {
     /// Restrict a channel tool to only this MCP config (`--strict-mcp-config`), so it can
     /// reach the Hot Sheet shim but nothing else (ignored by other transports).
     pub mcp_config: Option<PathBuf>,
-    /// Claude permission mode for headless work (e.g. `"acceptEdits"`); the real bridge is
-    /// HS2-113.
+    /// The selected permission mode (HS2-NHRDMW): Claude's `--permission-mode` value (e.g.
+    /// `"acceptEdits"`) or Codex's `approvalPolicy` (e.g. `"on-request"`).
     pub permission_mode: Option<String>,
     /// Extra env for the launched process (e.g. an isolated `CODEX_HOME`).
     pub env: Vec<(String, String)>,
@@ -164,6 +164,9 @@ pub fn run_trigger_controlled(
             // Attach the live permission bridge (if any): approvals now BLOCK the turn for a
             // human answering over the server route-back instead of auto-approving
             // (HS2-Q1F6HV). Without one, the isolated headless default (auto-approve) holds.
+            // The chat's selected approval policy (HS2-NHRDMW); the sandbox stays
+            // workspace-write whatever the policy.
+            app.set_approval_policy(t.permission_mode.as_deref());
             if let Some(bridge) = &t.permission_bridge {
                 app.set_permission_policy(crate::codex::PermissionPolicy {
                     bridge: bridge.clone(),

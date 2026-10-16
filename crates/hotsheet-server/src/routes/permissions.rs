@@ -262,6 +262,8 @@ pub(crate) struct ConnectionInfo {
     model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    permission_mode: Option<String>,
 }
 
 /// `GET /connections` — what the server's driving loop is currently running (HS2-TCV3BF):
@@ -284,6 +286,7 @@ pub(crate) async fn list_connections(State(state): State<AppState>) -> Json<Vec<
             last_error: None,
             model: None,
             effort: None,
+            permission_mode: None,
         })
         .collect::<Vec<_>>();
     drop(reg);
@@ -304,6 +307,7 @@ pub(crate) async fn list_connections(State(state): State<AppState>) -> Json<Vec<
             last_error: client.last_error,
             model: client.model,
             effort: client.effort,
+            permission_mode: client.permission_mode,
         });
     }
     infos.sort_by(|left, right| left.id.cmp(&right.id));
@@ -317,6 +321,10 @@ pub(crate) struct CreateDriveConnectionReq {
     model: Option<String>,
     #[serde(default)]
     effort: Option<String>,
+    /// The chat's permission mode (HS2-NHRDMW); omitted = the project's saved default for
+    /// this tool, else the plugin default.
+    #[serde(default)]
+    permission_mode: Option<String>,
     #[serde(default)]
     checkout: Option<String>,
     #[serde(default)]
@@ -456,6 +464,62 @@ fn stored_ai_defaults(
         .and_then(|value| serde_json::from_value(value).ok()))
 }
 
+/// The permission mode saved for `tool` in one settings scope (HS2-NHRDMW): its provider entry,
+/// else the top-level value when it is the default provider.
+fn saved_permission_mode(
+    settings: &Settings,
+    scope: hotsheet_ticketing::Scope,
+    tool: &str,
+) -> Option<String> {
+    let defaults = stored_ai_defaults(settings, scope).ok().flatten()?;
+    defaults
+        .providers
+        .get(tool)
+        .and_then(|entry| entry.permission_mode.clone())
+        .or_else(|| {
+            (defaults.tool == tool)
+                .then_some(defaults.permission_mode)
+                .flatten()
+        })
+}
+
+/// The launch permission mode for a new drive (HS2-NHRDMW): the requested mode (validated when
+/// the tool is discovered), else the project's saved default for the tool, else the machine-wide
+/// one, else `None` (the plugin's declared default applies at launch).
+async fn launch_permission_mode(
+    state: &AppState,
+    tool: &str,
+    requested: Option<String>,
+    project: Option<&Settings>,
+) -> Result<Option<String>, ApiError> {
+    let tools = discovered_ai_tools_off_runtime(state, false).await;
+    let descriptor = tools.iter().find(|candidate| candidate.id == tool);
+    if let Some(mode) = requested {
+        if let Some(descriptor) = descriptor {
+            hotsheet_plugins::validate_permission_mode(descriptor, &mode)
+                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
+        }
+        return Ok(Some(mode));
+    }
+    let saved = project
+        .and_then(|settings| {
+            saved_permission_mode(settings, hotsheet_ticketing::Scope::Local, tool)
+        })
+        .or_else(|| {
+            saved_permission_mode(
+                &Settings::with_global_home(state.store.root(), state.machine_home()),
+                hotsheet_ticketing::Scope::Global,
+                tool,
+            )
+        });
+    // A saved mode the installed tool no longer declares falls back to the plugin default.
+    Ok(match descriptor {
+        Some(descriptor) => saved
+            .filter(|mode| hotsheet_plugins::validate_permission_mode(descriptor, mode).is_ok()),
+        None => None,
+    })
+}
+
 /// The effective AI defaults: the project's own choice (machine-local project settings, HS2-SW5S13),
 /// else the legacy machine-wide value, else the discovered default tool.
 async fn effective_ai_settings(
@@ -470,7 +534,7 @@ async fn effective_ai_settings(
     let saved = match project_defaults {
         Some(defaults) => Some(defaults),
         None => saved_ai_defaults(
-            &Settings::new(state.store.root()),
+            &Settings::with_global_home(state.store.root(), state.machine_home()),
             hotsheet_ticketing::Scope::Global,
             &tools,
         )?,
@@ -546,7 +610,7 @@ pub(crate) async fn put_ai_settings(
     Ok(Json(
         save_ai_settings(
             &state,
-            &Settings::new(state.store.root()),
+            &Settings::with_global_home(state.store.root(), state.machine_home()),
             hotsheet_ticketing::Scope::Global,
             &defaults,
         )
@@ -576,6 +640,7 @@ pub(crate) async fn create_drive_connection(
             .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
         }
     }
+    let mut project_settings = None;
     let (project_path, source_id, drive_store) =
         if let Some(reference) = request.checkout.as_deref() {
             let checkout = state
@@ -594,6 +659,7 @@ pub(crate) async fn create_drive_connection(
                     ApiError::new(status, error.to_string())
                 })?;
             let project_path = std::path::PathBuf::from(&checkout.root);
+            project_settings = Some(checkout.settings());
             let source = checkout_source_for_create(&state, reference, request.source.as_deref())?;
             if source.provider != "git" {
                 return Err(ApiError::new(
@@ -621,6 +687,13 @@ pub(crate) async fn create_drive_connection(
                 state.store.clone(),
             )
         };
+    let permission_mode = launch_permission_mode(
+        &state,
+        &request.tool,
+        request.permission_mode,
+        project_settings.as_ref(),
+    )
+    .await?;
     let mut env = vec![format!("HOTSHEET_PROJECT={}", project_path.display())];
     if let Some(url) = state.terminal_server_url.with_lock(|value| value.clone()) {
         env.push(format!("HOTSHEET_SERVER={url}"));
@@ -639,6 +712,7 @@ pub(crate) async fn create_drive_connection(
                 persistent_home: None,
                 model: request.model,
                 effort: request.effort,
+                permission_mode,
             },
             request.connection_id,
             request.session_id,
@@ -710,6 +784,9 @@ pub(crate) struct SendDriveTurnReq {
     model: Option<String>,
     #[serde(default)]
     effort: Option<String>,
+    /// Switch the chat's permission mode from this turn on (HS2-NHRDMW).
+    #[serde(default)]
+    permission_mode: Option<String>,
     /// Optional client-chosen correlation id for this turn's stream events (HS2-14X4AF).
     #[serde(default)]
     turn_id: Option<String>,
@@ -758,13 +835,36 @@ pub(crate) async fn send_drive_turn(
             hotsheet_plugins::validate_ai_defaults(
                 &tools,
                 &hotsheet_plugins::AiToolDefaults {
-                    tool: connection.tool,
+                    tool: connection.tool.clone(),
                     model: request.model.clone(),
                     effort: request.effort.clone(),
                     ..Default::default()
                 },
             )
             .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
+        }
+    }
+    if let Some(mode) = request.permission_mode {
+        if connection.permission_mode.as_deref() != Some(mode.as_str()) {
+            let tools = discovered_ai_tools_off_runtime(&state, false).await;
+            if let Some(descriptor) = tools.iter().find(|tool| tool.id == connection.tool) {
+                if !descriptor
+                    .actions
+                    .iter()
+                    .any(|action| action == "change_permission_mode")
+                {
+                    return Err(ApiError::new(
+                        StatusCode::BAD_REQUEST,
+                        "this AI tool cannot change permission mode within a session",
+                    ));
+                }
+                hotsheet_plugins::validate_permission_mode(descriptor, &mode)
+                    .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
+            }
+            state
+                .client_drives
+                .set_permission_mode(&id, mode)
+                .map_err(client_drive_api_error)?;
         }
     }
     let job = state

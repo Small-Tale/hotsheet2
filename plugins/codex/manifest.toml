@@ -52,7 +52,17 @@ models = [
 ]
 default_model = "gpt-6-astra"
 default_effort = "medium"
-session_options = ["model", "effort"]
+session_options = ["model", "effort", "permission_mode"]
+# Codex `approvalPolicy` values a chat can run under (docs/05 §5.7, HS2-NHRDMW). The sandbox
+# stays `workspace-write` for every policy; approval requests reach the Hot Sheet permission
+# popup. `never` (the historical headless behavior) remains the default.
+default_permission_mode = "never"
+permission_modes = [
+  { id = "never", label = "Never ask", description = "Codex works inside its workspace-write sandbox without asking; a blocked action fails instead." },
+  { id = "on-request", label = "Ask when needed", description = "Codex asks before an action it judges needs approval, such as leaving the sandbox." },
+  { id = "on-failure", label = "Ask on failure", description = "Commands run in the sandbox; Codex asks to retry one outside it after a failure." },
+  { id = "untrusted", label = "Ask for untrusted commands", description = "Only known-safe read commands run without asking; everything else asks first." },
+]
 
 [launch]
 # Interactive REPL; intentionally not the headless app-server drive command above.

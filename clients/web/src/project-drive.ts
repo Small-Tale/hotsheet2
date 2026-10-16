@@ -12,6 +12,8 @@ export interface DrawerAIChat {
   name: string;
   model?: string;
   effort?: string;
+  /** The chat's permission mode (HS2-NHRDMW); the connection's reported mode wins on restore. */
+  permissionMode?: string;
   drive?: boolean;
   readOnly?: boolean;
   localOnly?: boolean;
@@ -101,6 +103,7 @@ export function restoreDrawerAIChats(
         name: previous?.name ?? `${label} ${kind === 'drive' ? 'Drive' : kind === 'saved' ? 'saved chat' : 'chat'}`,
         model: connection.model ?? previous?.model,
         effort: connection.effort ?? previous?.effort,
+        permissionMode: connection.permission_mode ?? previous?.permissionMode,
         drive: kind === 'drive' || undefined,
         readOnly: connection.actions?.includes('send_turn') ? false : previous?.readOnly,
       };

@@ -29,6 +29,8 @@ export interface AiConversationBindings {
   readonly selectProvider: (id: string) => void;
   readonly selectModel: (model: string) => void;
   readonly selectEffort: (effort: string) => void;
+  /** Switch the chat's permission mode (HS2-NHRDMW). */
+  readonly selectPermissionMode?: (mode: string) => void;
   readonly openManualModel: () => void;
 }
 
@@ -145,6 +147,11 @@ export function wireAiConversation(root: HTMLElement, bindings: AiConversationBi
   lifetime.add(
     delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.selectConversationEffort.selector, (_event, target) => {
       bindings.selectEffort(valueOf(target));
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.selectConversationPermissionMode.selector, (_event, target) => {
+      bindings.selectPermissionMode?.(valueOf(target));
     }),
   );
   lifetime.add(

@@ -1740,8 +1740,9 @@ fn ai_tool_catalog_and_machine_defaults_have_headless_cli_parity() {
     assert_eq!(tools[0]["id"], "codex");
     assert_eq!(
         tools[0]["actions"],
-        serde_json::json!(["change_model", "change_effort"])
+        serde_json::json!(["change_model", "change_effort", "change_permission_mode"])
     );
+    assert_eq!(tools[0]["default_permission_mode"], "never");
 
     hs(&store)
         .env("HOTSHEET_HOME", &home)
@@ -1849,6 +1850,51 @@ fn ai_tool_catalog_and_machine_defaults_have_headless_cli_parity() {
         switched["providers"]["codex"]["model"],
         "legacy model \"beta\""
     );
+    // HS2-NHRDMW: each provider's chat permission mode is settable headlessly and validated
+    // against that tool's own declared modes.
+    let moded = read_json(&[
+        "ai-settings",
+        "set-provider",
+        "--tool",
+        "codex",
+        "--model",
+        "gpt-6-astra",
+        "--permission-mode",
+        "on-request",
+    ]);
+    assert_eq!(moded["providers"]["codex"]["permission_mode"], "on-request");
+    let claude_mode = read_json(&[
+        "ai-settings",
+        "set",
+        "--tool",
+        "claude",
+        "--model",
+        "custom-claude",
+        "--permission-mode",
+        "auto",
+    ]);
+    assert_eq!(claude_mode["permission_mode"], "auto");
+    assert_eq!(
+        claude_mode["providers"]["claude"]["permission_mode"],
+        "auto"
+    );
+    assert_eq!(
+        claude_mode["providers"]["codex"]["permission_mode"],
+        "on-request"
+    );
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .env("PATH", &bin)
+        .args([
+            "ai-settings",
+            "set-provider",
+            "--tool",
+            "codex",
+            "--permission-mode",
+            "acceptEdits",
+        ])
+        .assert()
+        .failure();
 }
 
 #[test]

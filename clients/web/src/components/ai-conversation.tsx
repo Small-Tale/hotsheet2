@@ -86,6 +86,10 @@ export interface AIConversationProps {
   efforts?: readonly string[];
   canChangeModel?: boolean;
   canChangeEffort?: boolean;
+  /** The chat's active permission mode and the tool's declared modes (HS2-NHRDMW). */
+  permissionMode?: string;
+  permissionModes?: readonly { id: string; label: string; description?: string; warning?: string }[];
+  canChangePermissionMode?: boolean;
   readOnly?: boolean;
   readOnlyContext?: 'saved' | 'preview';
   savedSource?: string;
@@ -339,6 +343,9 @@ export function AIConversationToolbar({
   efforts = [],
   canChangeModel = false,
   canChangeEffort = false,
+  permissionMode,
+  permissionModes = [],
+  canChangePermissionMode = false,
   readOnly = false,
   readOnlyContext = 'saved',
   hostActionsAvailable = hostActionsAvailableHere(),
@@ -380,9 +387,14 @@ export function AIConversationToolbar({
     currentEffort = effort ?? (efforts.length ? efforts[0] : undefined);
   const providerChoices = providers.filter((item) => item.id !== providerId),
     providerChangeable = canChangeProvider && providerChoices.length > 0,
-    currentProviderLabel = providers.find((item) => item.id === providerId)?.label ?? tool;
+    currentProviderLabel = providers.find((item) => item.id === providerId)?.label ?? tool,
+    permissionChangeable = canChangePermissionMode && permissionModes.length > 0;
   const sessionControls =
-    !readOnly && (providerChangeable || (canChangeModel && models.length) || (canChangeEffort && efforts.length)) ? (
+    !readOnly &&
+    (providerChangeable ||
+      (canChangeModel && models.length) ||
+      (canChangeEffort && efforts.length) ||
+      permissionChangeable) ? (
       <>
         {/* The current-model label and its popup trigger group are siblings in the host toolbar zone,
             so the Kerf group keeps its cataloged Toolbar parent. */}
@@ -406,7 +418,11 @@ export function AIConversationToolbar({
         </span>
         <ToolbarControlGroup single nestedDropdown {...groupStyle}>
           <PopupMenu
-            label="Change Provider, Model, and Effort"
+            label={
+              permissionChangeable
+                ? 'Change Provider, Model, Effort, and Permissions'
+                : 'Change Provider, Model, and Effort'
+            }
             icon={<LucideIcon icon={ChevronDown} name="chevron-down" />}
             caret={false}
             placement={embedded ? 'top-end' : 'bottom-end'}
@@ -417,6 +433,7 @@ export function AIConversationToolbar({
                 model: 'select-conversation-model',
                 effort: 'select-conversation-effort',
                 manualModel: 'open-conversation-manual-model',
+                permissionMode: 'select-conversation-permission-mode',
               },
               providers: providerChangeable
                 ? { choices: providers, currentId: providerId, currentLabel: currentProviderLabel }
@@ -426,6 +443,7 @@ export function AIConversationToolbar({
                   ? { choices: models, currentId: activeModel?.id, currentLabel: currentModelLabel, customModel }
                   : undefined,
               effort: canChangeEffort && efforts.length > 0 ? { efforts, current: currentEffort } : undefined,
+              permission: permissionChangeable ? { modes: permissionModes, current: permissionMode } : undefined,
             })}
           />
         </ToolbarControlGroup>

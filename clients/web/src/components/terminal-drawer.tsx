@@ -21,6 +21,8 @@ import {
   PanelBottomClose,
   Plug,
   Plus,
+  ShieldAlert,
+  ShieldCheck,
   SquareTerminal,
   TriangleAlert,
   Unplug,
@@ -55,6 +57,8 @@ export interface TerminalDrawerChatTab {
   busy?: boolean;
   summary?: string;
   error?: string;
+  /** The chat's active permission mode (HS2-NHRDMW), shown as a shield on its tab. */
+  permissionMode?: { label: string; warning?: string };
 }
 /** An AI provider the drawer can open an AI shell with (HS2-3HT4PA). */
 export interface TerminalDrawerAiProvider {
@@ -308,6 +312,25 @@ export function TerminalDrawer({
                   title={`Stopped: ${chat.error}`}
                 >
                   <LucideIcon size="s" icon={TriangleAlert} name="triangle-alert" color={uiColor('danger-on-quiet')} />
+                </span>
+              ) : chat.permissionMode ? (
+                <span
+                  class="terminal-drawer__permission-mode"
+                  role="img"
+                  data-permission-warning={String(Boolean(chat.permissionMode.warning))}
+                  aria-label={`Permissions: ${chat.permissionMode.label}`}
+                  title={
+                    chat.permissionMode.warning
+                      ? `Permissions: ${chat.permissionMode.label}. ${chat.permissionMode.warning}`
+                      : `Permissions: ${chat.permissionMode.label}`
+                  }
+                >
+                  <LucideIcon
+                    size="s"
+                    icon={chat.permissionMode.warning ? ShieldAlert : ShieldCheck}
+                    name={chat.permissionMode.warning ? 'shield-alert' : 'shield-check'}
+                    color={uiColor(chat.permissionMode.warning ? 'danger-on-quiet' : 'neutral-on-quiet')}
+                  />
                 </span>
               ) : undefined
             }

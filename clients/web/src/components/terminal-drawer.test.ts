@@ -619,3 +619,33 @@ describe('AI connection to Hot Sheet (HS2-EV1XK3)', () => {
     expect(halted).not.toContain('data-ai-connection');
   });
 });
+
+describe('TerminalDrawer chat permission indicator (HS2-NHRDMW)', () => {
+  it('shows the active permission mode on the chat tab, as a warning for a risky mode', () => {
+    const draw = (permissionMode?: { label: string; warning?: string }, error?: string) =>
+      String(
+        TerminalDrawer({
+          projectId: 'project',
+          projectName: 'Project',
+          sessions: [],
+          chatTabs: [
+            { id: 'chat:one', name: 'Claude chat', tool: 'Claude', content: '' as never, permissionMode, error },
+          ],
+          width: 900,
+          height: 320,
+          fitAcross: 2,
+          fitHigh: 2,
+          selectedId: 'chat:one',
+        }),
+      );
+    const safe = draw({ label: 'Accept edits' });
+    expect(safe).toContain('aria-label="Permissions: Accept edits"');
+    expect(safe).toContain('data-permission-warning="false"');
+    const risky = draw({ label: 'Bypass permissions', warning: 'Runs everything.' });
+    expect(risky).toContain('data-permission-warning="true"');
+    expect(risky).toContain('title="Permissions: Bypass permissions. Runs everything."');
+    // A stopped chat's error takes the trailing slot; no mode means no indicator.
+    expect(draw({ label: 'Accept edits' }, 'Model at capacity')).not.toContain('Permissions:');
+    expect(draw()).not.toContain('terminal-drawer__permission-mode');
+  });
+});

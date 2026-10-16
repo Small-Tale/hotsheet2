@@ -25,6 +25,7 @@ const SECRET: &str = "test-secret";
 type RecordedClientTurns =
     Arc<Mutex<Vec<(String, Option<String>, Option<String>, Option<String>)>>>;
 type RecordedClientHomes = Arc<Mutex<Vec<Option<std::path::PathBuf>>>>;
+type RecordedPermissionModes = Arc<Mutex<Vec<Option<String>>>>;
 type RecordedClientPreparations =
     Arc<Mutex<Vec<(std::path::PathBuf, std::path::PathBuf, String, Vec<String>)>>>;
 
@@ -40,12 +41,16 @@ struct FakeClientDriveBackend {
     homes: RecordedClientHomes,
     preparations: RecordedClientPreparations,
     supports_interrupt: bool,
+    /// HS2-NHRDMW: the launch mode of every prepared drive, then each turn's mode.
+    launch_modes: RecordedPermissionModes,
+    turn_modes: RecordedPermissionModes,
 }
 
 struct FakePreparedClientDrive {
     tool: String,
     turns: RecordedClientTurns,
     supports_interrupt: bool,
+    turn_modes: RecordedPermissionModes,
 }
 
 impl ClientDriveBackend for FakeClientDriveBackend {
@@ -57,10 +62,15 @@ impl ClientDriveBackend for FakeClientDriveBackend {
             request.source_id,
             request.env,
         ));
+        self.launch_modes
+            .lock()
+            .unwrap()
+            .push(request.permission_mode);
         Ok(Arc::new(FakePreparedClientDrive {
             tool: request.tool,
             turns: self.turns.clone(),
             supports_interrupt: self.supports_interrupt,
+            turn_modes: self.turn_modes.clone(),
         }))
     }
 }
@@ -230,6 +240,10 @@ impl PreparedClientDrive for FakePreparedClientDrive {
             request.model.map(str::to_owned),
             request.effort.map(str::to_owned),
         ));
+        self.turn_modes
+            .lock()
+            .unwrap()
+            .push(request.permission_mode.map(str::to_owned));
         on_event(&hotsheet_aitools::TurnEvent::Output("fake output".into()));
         if request.prompt == "transport-fail" {
             return Err("Provider connection lost".into());
@@ -469,6 +483,199 @@ async fn client_drive_requires_an_explicit_source_for_an_ambiguous_checkout() {
     );
 }
 
+/// HS2-NHRDMW: the chat permission mode flows from saved defaults or the create request into
+/// the prepared drive, is validated against the tool's declared modes, and a turn can switch
+/// it for the rest of the chat.
+#[tokio::test]
+async fn drive_permission_mode_is_validated_defaulted_and_switchable_per_chat() {
+    let plugins = tempfile::tempdir().unwrap();
+    let fixture = plugins.path().join("mode-fixture");
+    std::fs::create_dir(&fixture).unwrap();
+    std::fs::write(fixture.join("instructions.md"), "Fixture.\n").unwrap();
+    std::fs::write(
+        fixture.join("manifest.toml"),
+        r#"
+id = "mode-fixture"
+display_name = "Mode Fixture"
+product_name = "Mode Fixture"
+tier = "cli-agent"
+[detection]
+binaries = ["rustc"]
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".fixture/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+[drive]
+transport = "spawn"
+program = "rustc"
+content = "arg"
+models = [{ id = "m", label = "M" }]
+default_model = "m"
+session_options = ["model", "permission_mode"]
+default_permission_mode = "ask"
+permission_modes = [
+  { id = "ask", label = "Ask" },
+  { id = "yolo", label = "Yolo", warning = "Runs everything." },
+]
+"#,
+    )
+    .unwrap();
+    let (_dir, state) = state();
+    let backend = Arc::new(FakeClientDriveBackend::default());
+    let launch_modes = backend.launch_modes.clone();
+    let turn_modes = backend.turn_modes.clone();
+    let router = app(state
+        // Hermetic machine-wide AI defaults: never the real ${HOTSHEET_HOME}.
+        .with_machine_home(_dir.path().join("machine-home"))
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()])
+        .with_client_drive_backend(backend));
+    let tools = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/ai-tools?refresh=true", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let tool = tools
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["id"] == "mode-fixture")
+        .unwrap();
+    assert_eq!(tool["default_permission_mode"], "ask");
+    assert_eq!(tool["permission_modes"][1]["warning"], "Runs everything.");
+    assert!(
+        tool["actions"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("change_permission_mode"))
+    );
+    let post = |body: &str| authed("POST", "/drive/connections", Some(body));
+
+    // Nothing saved: the request carries no mode, the plugin default applies at launch.
+    let plain = router
+        .clone()
+        .oneshot(post(r#"{"tool":"mode-fixture","connection_id":"plain"}"#))
+        .await
+        .unwrap();
+    assert_eq!(plain.status(), StatusCode::CREATED);
+    // An undeclared mode is refused before anything launches.
+    let bogus = router
+        .clone()
+        .oneshot(post(
+            r#"{"tool":"mode-fixture","connection_id":"bogus","permission_mode":"acceptEdits"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(bogus.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        body_json(bogus).await["error"]
+            .as_str()
+            .unwrap()
+            .contains("not supported")
+    );
+    // A saved default for the tool is used when the request names none.
+    let saved = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            "/ai-settings",
+            Some(r#"{"tool":"mode-fixture","model":"m","permission_mode":"yolo"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(saved).await["providers"]["mode-fixture"]["permission_mode"],
+        "yolo"
+    );
+    let defaulted = body_json(
+        router
+            .clone()
+            .oneshot(post(
+                r#"{"tool":"mode-fixture","connection_id":"defaulted"}"#,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(defaulted["permission_mode"], "yolo");
+    // An explicit request wins over the saved default.
+    let explicit = body_json(
+        router
+            .clone()
+            .oneshot(post(
+                r#"{"tool":"mode-fixture","connection_id":"explicit","permission_mode":"ask"}"#,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(explicit["permission_mode"], "ask");
+    assert_eq!(
+        *launch_modes.lock().unwrap(),
+        [None, Some("yolo".to_string()), Some("ask".to_string())]
+    );
+
+    // A turn switches the chat's mode; later turns keep it; an unknown mode is refused.
+    let turn = |body: &'static str| authed("POST", "/drive/connections/explicit/turns", Some(body));
+    let wait_idle = || async {
+        loop {
+            let listed = body_json(
+                router
+                    .clone()
+                    .oneshot(authed("GET", "/connections", None))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            let explicit = listed
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|item| item["id"] == "explicit")
+                .cloned()
+                .unwrap();
+            if !explicit["busy"].as_bool().unwrap() {
+                return explicit;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    };
+    let switched = router
+        .clone()
+        .oneshot(turn(r#"{"content":"one","permission_mode":"yolo"}"#))
+        .await
+        .unwrap();
+    assert_eq!(switched.status(), StatusCode::ACCEPTED);
+    assert_eq!(body_json(switched).await["permission_mode"], "yolo");
+    assert_eq!(wait_idle().await["permission_mode"], "yolo");
+    let kept = router
+        .clone()
+        .oneshot(turn(r#"{"content":"two"}"#))
+        .await
+        .unwrap();
+    assert_eq!(kept.status(), StatusCode::ACCEPTED);
+    wait_idle().await;
+    let refused = router
+        .clone()
+        .oneshot(turn(r#"{"content":"three","permission_mode":"never"}"#))
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(wait_idle().await["permission_mode"], "yolo");
+    assert_eq!(
+        *turn_modes.lock().unwrap(),
+        [Some("yolo".to_string()), Some("yolo".to_string())]
+    );
+}
+
 #[tokio::test]
 async fn ai_tool_discovery_and_machine_defaults_are_authenticated_and_validated() {
     let plugins = tempfile::tempdir().unwrap();
@@ -512,7 +719,10 @@ session_options = ["model", "effort"]
     .unwrap();
 
     let (_dir, state) = state();
-    let router = app(state.with_plugin_dirs(vec![plugins.path().to_path_buf()]));
+    // Hermetic machine-wide AI defaults: never the real ${HOTSHEET_HOME}.
+    let router = app(state
+        .with_machine_home(_dir.path().join("machine-home"))
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()]));
     let unauthenticated = router
         .clone()
         .oneshot(
@@ -637,6 +847,8 @@ session_options = ["model", "effort"]
     let workspace = tempfile::tempdir().unwrap();
     let registry = tempfile::tempdir().unwrap();
     let router = app(state
+        // Hermetic machine-wide AI defaults: never the real ${HOTSHEET_HOME}.
+        .with_machine_home(_dir.path().join("machine-home"))
         .with_plugin_dirs(vec![plugins.path().to_path_buf()])
         .with_checkout_registry(registry.path().join("checkouts.json")));
     let mut checkouts = Vec::new();
@@ -962,6 +1174,8 @@ async fn ai_tool_discovery_is_memoized_with_refresh_and_setup_invalidation() {
     let scans = Arc::new(Mutex::new(Vec::<bool>::new()));
     let scan_log = scans.clone();
     let router = app(state
+        // Hermetic machine-wide AI defaults: never the real ${HOTSHEET_HOME}.
+        .with_machine_home(_dir.path().join("machine-home"))
         .with_plugin_dirs(vec![plugins.path().to_path_buf()])
         .with_ai_tool_discovery(
             std::time::Duration::from_secs(3600),

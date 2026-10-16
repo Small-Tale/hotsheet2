@@ -709,12 +709,16 @@ pub(crate) fn cmd_ai_settings(store: &Path, cwd: &Path, cmd: AiSettingsCmd) -> R
                 if let Some(effort) = defaults.effort {
                     println!("effort\t{effort}");
                 }
+                if let Some(mode) = defaults.permission_mode {
+                    println!("permission_mode\t{mode}");
+                }
             }
         }
         AiSettingsCmd::Set {
             tool,
             model,
             effort,
+            permission_mode,
             global,
         } => {
             // Keep every other provider's choices; only the default provider changes.
@@ -723,6 +727,7 @@ pub(crate) fn cmd_ai_settings(store: &Path, cwd: &Path, cmd: AiSettingsCmd) -> R
                 tool,
                 model,
                 effort,
+                permission_mode,
                 providers: current.map(|current| current.providers).unwrap_or_default(),
             };
             let saved = save_ai_defaults(store, cwd, global, &defaults)?;
@@ -732,13 +737,19 @@ pub(crate) fn cmd_ai_settings(store: &Path, cwd: &Path, cmd: AiSettingsCmd) -> R
             tool,
             model,
             effort,
+            permission_mode,
             global,
         } => {
             let mut defaults = effective_ai_defaults(store, cwd, global)?;
-            let entry = hotsheet_plugins::AiProviderDefaults { model, effort };
+            let entry = hotsheet_plugins::AiProviderDefaults {
+                model,
+                effort,
+                permission_mode,
+            };
             if defaults.tool == tool {
                 defaults.model = entry.model.clone();
                 defaults.effort = entry.effort.clone();
+                defaults.permission_mode = entry.permission_mode.clone();
             }
             defaults.providers.insert(tool, entry);
             let saved = save_ai_defaults(store, cwd, global, &defaults)?;
@@ -918,6 +929,10 @@ pub(crate) enum AiSettingsCmd {
         model: Option<String>,
         #[arg(long)]
         effort: Option<String>,
+        /// The chat permission mode (HS2-NHRDMW): a Claude `--permission-mode` such as
+        /// `acceptEdits`/`auto`/`plan`, or a Codex approval policy such as `on-request`.
+        #[arg(long)]
+        permission_mode: Option<String>,
         /// Save the machine-wide fallback used by projects without their own choice.
         #[arg(long)]
         global: bool,
@@ -931,6 +946,9 @@ pub(crate) enum AiSettingsCmd {
         model: Option<String>,
         #[arg(long)]
         effort: Option<String>,
+        /// The provider's chat permission mode (HS2-NHRDMW).
+        #[arg(long)]
+        permission_mode: Option<String>,
         /// Change the machine-wide fallback instead of this project.
         #[arg(long)]
         global: bool,

@@ -96,6 +96,7 @@ export interface CommandAndAiInteractionsDependencies {
   readonly selectConversationProvider: (providerId: string) => Promise<void>;
   readonly selectConversationModel: (model: string) => void;
   readonly selectConversationEffort: (effort: string) => void;
+  readonly selectConversationPermissionMode: (mode: string) => void;
   readonly selectedTicket: Signal<FullTicket | null>;
   readonly canGiveFeedback: () => boolean;
   readonly aiFeedbackDialog: Signal<AiFeedbackDialogState | undefined>;
@@ -145,6 +146,8 @@ export interface CommandAndAiInteractionsDependencies {
   readonly saveAiDefaults: (value: AiToolDefaults) => Promise<void>;
   readonly selectDefaultModel: (model: string, tool?: string) => void;
   readonly selectDefaultEffort: (effort: string, tool?: string) => void;
+  /** Returns false when the mode was not saved (unknown, or a warned mode the user declined). */
+  readonly selectDefaultPermissionMode: (mode: string, tool?: string) => boolean;
   readonly selectDefaultProvider: (tool: string) => void;
   readonly restoreCommandEditorAfterManualModel: (state: ManualModelDialogState | undefined) => void;
   manualModelDialogShown: boolean;
@@ -221,6 +224,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     selectConversationProvider,
     selectConversationModel,
     selectConversationEffort,
+    selectConversationPermissionMode,
     selectedTicket,
     canGiveFeedback,
     aiFeedbackDialog,
@@ -264,6 +268,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     appleShortcutPlatform,
     selectDefaultModel,
     selectDefaultEffort,
+    selectDefaultPermissionMode,
     selectDefaultProvider,
     restoreCommandEditorAfterManualModel,
     ticketSourceSetupProject,
@@ -418,6 +423,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       },
       selectModel: selectConversationModel,
       selectEffort: selectConversationEffort,
+      selectPermissionMode: selectConversationPermissionMode,
       openManualModel: () => {
         openManualModel('conversation');
       },
@@ -999,6 +1005,18 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     delegate(document.body, 'change', 'wa-select[name^="ai-provider-effort-"]', (_event, target) => {
       const tool = target.closest<HTMLElement>('[data-ai-provider]')?.dataset.aiProvider;
       if (tool) selectDefaultEffort((target as Control).value, tool);
+    }),
+  );
+  // Each provider's default chat permission mode (HS2-NHRDMW). Declining a warned mode puts the
+  // Select back on the saved value.
+  lifetime.add(
+    delegate(document.body, 'change', 'wa-select[name^="ai-provider-permission-mode-"]', (_event, target) => {
+      const block = target.closest<HTMLElement>('[data-ai-provider]'),
+        tool = block?.dataset.aiProvider,
+        control = target as Control;
+      if (!tool) return;
+      if (!selectDefaultPermissionMode(control.value, tool) && block.dataset.permissionMode)
+        control.value = block.dataset.permissionMode;
     }),
   );
   lifetime.add(

@@ -1,6 +1,6 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import type { PopupMenuEntry, PopupMenuItem } from '@kerfjs/ui/popup-menu';
-import { Bot, Brain, Gauge, type IconNode, Pencil } from 'lucide';
+import { Bot, Brain, Gauge, type IconNode, Pencil, Shield, ShieldAlert, ShieldCheck } from 'lucide';
 
 /** One id/label choice a submenu offers (a provider or a model). */
 export interface ProviderModelEffortChoice {
@@ -15,7 +15,7 @@ export interface ProviderModelEffortChoice {
  * host-level `click`s carrying `data-action`/`data-value`, matching the existing handlers. */
 export interface ProviderModelEffortSubmenusProps {
   /** Host-level actions each submenu stamps onto its rows. */
-  actions: { provider?: string; model: string; effort: string; manualModel: string };
+  actions: { provider?: string; model: string; effort: string; manualModel: string; permissionMode?: string };
   /** Provider submenu; omit to hide it (a single provider, or a read-only surface). */
   providers?: { choices: readonly ProviderModelEffortChoice[]; currentId?: string; currentLabel: string };
   /** Model submenu (with an optional ephemeral custom model row and the "Other…" entry);
@@ -30,6 +30,12 @@ export interface ProviderModelEffortSubmenusProps {
   /** Effort submenu; omit to hide it. When present but `efforts` is empty the parent item is
    * shown disabled (the Drive behavior), so a model without effort levels still lists Effort. */
   effort?: { efforts: readonly string[]; current?: string };
+  /** Permissions submenu (HS2-NHRDMW): the tool's declared permission modes; omit to hide it. A mode
+   * with a `warning` carries the shield-alert icon and danger tone so the risky choice stands out. */
+  permission?: {
+    modes: readonly { id: string; label: string; description?: string; warning?: string }[];
+    current?: string;
+  };
 }
 
 /**
@@ -42,6 +48,7 @@ export function providerModelEffortEntries({
   providers,
   model,
   effort,
+  permission,
 }: ProviderModelEffortSubmenusProps): PopupMenuEntry[] {
   const choice = (
     action: string,
@@ -101,5 +108,30 @@ export function providerModelEffortEntries({
         choice(actions.effort, value, value, value === effort.current, Gauge, 'gauge'),
       ),
     });
+  if (permission && actions.permissionMode && permission.modes.length) {
+    const current = permission.modes.find((mode) => mode.id === permission.current);
+    entries.push({
+      label: 'Permissions',
+      icon: (
+        <LucideIcon
+          icon={current?.warning ? ShieldAlert : Shield}
+          name={current?.warning ? 'shield-alert' : 'shield'}
+        />
+      ),
+      details: current ? <>{current.label}</> : undefined,
+      submenu: permission.modes.map((mode) => ({
+        ...choice(
+          actions.permissionMode!,
+          mode.id,
+          mode.label,
+          mode.id === permission.current,
+          mode.warning ? ShieldAlert : ShieldCheck,
+          mode.warning ? 'shield-alert' : 'shield-check',
+        ),
+        // A mode that removes a safety net reads as a risky choice; selecting it still asks first.
+        ...(mode.warning ? { tone: 'danger' as const } : {}),
+      })),
+    });
+  }
   return entries;
 }

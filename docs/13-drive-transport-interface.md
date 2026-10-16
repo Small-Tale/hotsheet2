@@ -35,8 +35,10 @@ Option<TurnEvent>` (`Output`/`PermissionAsked`/`Done`) — additive, so the sync
 > `turn/started`, streaming `item/agentMessage/delta` as user-visible `Output`, then
 > `turn/completed` (busy→done), `turn/interrupt`. A completed `agentMessage` is the
 > fallback when a transport omits deltas and is deduplicated when deltas were received.
-> Threads open with
-> `approvalPolicy:"never"` + `sandbox:"workspace-write"` (headless). The bytes ride an
+> Threads open with the chat's selected
+> `approvalPolicy` (default `"never"`; `on-request`/`on-failure`/`untrusted` route approvals to
+> the permission bridge, HS2-NHRDMW) + `sandbox:"workspace-write"` on both `thread/start` and
+> `thread/resume`; a Claude permission-mode value is never forwarded (it maps to `never`). The bytes ride an
 > injected `RpcTransport` (`send`/`recv` line-oriented JSON — the verified framing):
 > `StdioTransport` runs `codex app-server` **direct** (one persistent process per
 > connection — many turns, no process per play), and `UdsWsTransport` speaks the shared

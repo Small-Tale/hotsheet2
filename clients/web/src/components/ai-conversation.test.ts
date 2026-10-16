@@ -901,3 +901,38 @@ describe('AI conversation foreground pointer interactivity (HS2-Q5TRYD)', () => 
     );
   });
 });
+
+describe('AIConversationToolbar permission modes (HS2-NHRDMW)', () => {
+  const base: AIConversationProps = {
+    open: true,
+    tool: 'Claude',
+    messages: [],
+    draft: '',
+    busy: false,
+    interruptible: false,
+    presentation: 'embedded',
+    model: 'sonnet',
+    models: [{ id: 'sonnet', label: 'Sonnet' }],
+    canChangeModel: true,
+    permissionModes: [
+      { id: 'acceptEdits', label: 'Accept edits' },
+      { id: 'auto', label: 'Auto' },
+      { id: 'bypassPermissions', label: 'Bypass permissions', warning: 'Runs everything.' },
+    ],
+  };
+  it('offers the declared modes in the model menu only when the tool can change them', () => {
+    const hidden = String(AIConversationToolbar({ ...base, permissionMode: 'auto' }));
+    expect(hidden).not.toContain('select-conversation-permission-mode');
+    const markup = String(AIConversationToolbar({ ...base, permissionMode: 'auto', canChangePermissionMode: true }));
+    expect(markup).toContain('Change Provider, Model, Effort, and Permissions');
+    expect(markup.match(/data-action="select-conversation-permission-mode"/g)).toHaveLength(3);
+    expect(markup).toMatch(/data-action="select-conversation-permission-mode"[^>]*value="auto"[^>]*checked/);
+    // The risky mode reads as a danger choice.
+    expect(markup).toMatch(/value="bypassPermissions"[^>]*variant="danger"/);
+    // Permissions alone are enough to show the session menu.
+    const only = String(
+      AIConversationToolbar({ ...base, canChangeModel: false, permissionMode: 'auto', canChangePermissionMode: true }),
+    );
+    expect(only).toContain('select-conversation-permission-mode');
+  });
+});

@@ -307,6 +307,7 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
         connection_id: connectionId,
         model: selection.model,
         effort: selection.effort,
+        ...(selection.permission_mode ? { permission_mode: selection.permission_mode } : {}),
       });
       if (project()?.id !== current.id) return;
       driveConnectionsByProject.value = {
@@ -322,6 +323,7 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
         name: options.drive ? `${aiToolLabel(selection.tool)} Drive` : `${aiToolLabel(selection.tool)} chat`,
         model: selection.model,
         effort: selection.effort,
+        permissionMode: created.permission_mode ?? selection.permission_mode,
         drive: options.drive,
       };
       terminalDrawerChatsByProject.value = {

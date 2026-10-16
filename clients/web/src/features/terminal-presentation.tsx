@@ -221,6 +221,9 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
             efforts: selection.efforts,
             canChangeModel: descriptor?.actions?.includes('change_model'),
             canChangeEffort: descriptor?.actions?.includes('change_effort'),
+            permissionMode: selection.permissionMode,
+            permissionModes: selection.permissionModes,
+            canChangePermissionMode: descriptor?.actions?.includes('change_permission_mode'),
             readOnly: chat.readOnly,
             savedSource: chat.savedSource,
           };
@@ -231,6 +234,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           busy: connection?.busy ?? false,
           error: conversationError(state, connection),
           summary: state.progress ?? state.messages.at(-1)?.content ?? state.activity?.at(-1)?.summary,
+          permissionMode: activePermissionMode(selection.permissionModes, selection.permissionMode),
           content: <AIConversation {...conversation} />,
           toolbar: <AIConversationToolbar {...conversation} />,
         };
@@ -308,10 +312,22 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           efforts: selection.efforts,
           canChangeModel: descriptor?.actions?.includes('change_model'),
           canChangeEffort: descriptor?.actions?.includes('change_effort'),
+          permissionMode: selection.permissionMode,
+          permissionModes: selection.permissionModes,
+          canChangePermissionMode: descriptor?.actions?.includes('change_permission_mode'),
         }}
       />
     );
   }
 
   return { workspaceTerminalGroups, globalWorkspaceSurfaceProps, projectTerminalDrawerProps, aiConversationSurface };
+}
+
+/** The chat tab's permission indicator: the active declared mode (HS2-NHRDMW). */
+function activePermissionMode(
+  modes: readonly { id: string; label: string; warning?: string }[],
+  current: string | undefined,
+): { label: string; warning?: string } | undefined {
+  const mode = modes.find((item) => item.id === current);
+  return mode ? { label: mode.label, ...(mode.warning ? { warning: mode.warning } : {}) } : undefined;
 }

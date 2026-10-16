@@ -51,7 +51,18 @@ models = [
 ]
 default_model = "sonnet"
 default_effort = "medium"
-session_options = ["model", "effort"]
+session_options = ["model", "effort", "permission_mode"]
+# `--permission-mode` values a chat can run under (docs/05 §5.7, HS2-NHRDMW). Tool calls the
+# mode does not pre-approve reach the Hot Sheet permission popup through the PreToolUse hook.
+# `acceptEdits` stays the default until `auto` is validated in a driven stream-json session.
+default_permission_mode = "acceptEdits"
+permission_modes = [
+  { id = "acceptEdits", label = "Accept edits", description = "File edits run without asking; commands, web access, and other tools ask first." },
+  { id = "auto", label = "Auto", description = "Claude decides; it asks only for actions its safety check flags as risky." },
+  { id = "manual", label = "Ask every time", description = "Every tool call, including file edits, asks first." },
+  { id = "plan", label = "Plan only", description = "Read-only: Claude explores and proposes a plan without editing files or running commands." },
+  { id = "bypassPermissions", label = "Bypass permissions", description = "Every tool call runs without asking.", warning = "Claude can run any command and change any file in this project without asking. Use only in a disposable or fully backed-up checkout." },
+]
 
 [launch]
 # Interactive REPL; intentionally not the headless stream-json drive command above.

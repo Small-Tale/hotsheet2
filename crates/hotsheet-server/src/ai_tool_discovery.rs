@@ -107,6 +107,7 @@ mod tests {
             default_model: None,
             default_effort: None,
             actions: Vec::new(),
+            ..AiToolDescriptor::default()
         }
     }
 

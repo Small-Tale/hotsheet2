@@ -84,6 +84,9 @@ pub struct TurnRequest<'a> {
     pub model: Option<&'a str>,
     /// Plugin-validated provider effort override.
     pub effort: Option<&'a str>,
+    /// Plugin-validated permission-mode override for this turn (HS2-NHRDMW); `None` keeps
+    /// the mode the trigger was prepared with.
+    pub permission_mode: Option<&'a str>,
     pub worker: bool,
     pub conn_id: String,
 }
@@ -218,14 +221,16 @@ pub fn prepare_trigger_with_home(
         }
     };
 
+    let permission_mode = launch_permission_mode(&plugin, permission_mode);
     Ok(SafeTrigger {
         plugin,
         cwd,
         env,
         mcp_config,
-        // Headless work needs a non-blocking permission mode (channel tools); the real
-        // permission bridge round-trip is HS2-9R9YZW / HS2-Q1F6HV.
-        permission_mode: permission_mode.unwrap_or_else(|| "acceptEdits".to_string()),
+        // The requested mode, else the plugin's declared default (HS2-NHRDMW), else Claude's
+        // historical `acceptEdits`; tool calls the mode does not pre-approve reach the
+        // permission bridge (HS2-9R9YZW / HS2-Q1F6HV).
+        permission_mode,
         shared_daemon,
         permission_bridge: None,
         _shim: shim,
@@ -233,7 +238,29 @@ pub fn prepare_trigger_with_home(
     })
 }
 
+/// The permission mode a trigger launches with (HS2-NHRDMW): the requested mode, else the
+/// plugin's declared `default_permission_mode`, else Claude's historical `acceptEdits`.
+pub(crate) fn launch_permission_mode(
+    plugin: &hotsheet_plugins::Plugin,
+    requested: Option<String>,
+) -> String {
+    requested
+        .or_else(|| {
+            plugin
+                .manifest
+                .drive
+                .as_ref()
+                .and_then(|drive| drive.default_permission_mode.clone())
+        })
+        .unwrap_or_else(|| "acceptEdits".to_string())
+}
+
 impl SafeTrigger {
+    /// The permission mode turns run under unless a turn overrides it (HS2-NHRDMW).
+    pub fn permission_mode(&self) -> &str {
+        &self.permission_mode
+    }
+
     /// The plugin id being driven.
     pub fn tool(&self) -> &str {
         self.plugin.id()
@@ -311,6 +338,7 @@ impl SafeTrigger {
             resume,
             model,
             effort,
+            permission_mode,
             worker,
             conn_id,
         } = request;
@@ -327,7 +355,11 @@ impl SafeTrigger {
             conn_id,
             resume: resume.map(str::to_string),
             mcp_config: self.mcp_config.clone(),
-            permission_mode: Some(self.permission_mode.clone()),
+            permission_mode: Some(
+                permission_mode
+                    .map(str::to_string)
+                    .unwrap_or_else(|| self.permission_mode.clone()),
+            ),
             env: self.env.clone(),
             shared_daemon: self.shared_daemon,
             permission_bridge: self.permission_bridge.clone(),
@@ -341,5 +373,23 @@ impl SafeTrigger {
                 other => anyhow::Error::new(other),
             },
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::launch_permission_mode;
+
+    #[test]
+    fn launch_mode_prefers_the_request_then_the_plugin_default() {
+        let claude = hotsheet_plugins::find_in("claude", &[]).unwrap();
+        let codex = hotsheet_plugins::find_in("codex", &[]).unwrap();
+        assert_eq!(launch_permission_mode(&claude, None), "acceptEdits");
+        assert_eq!(launch_permission_mode(&codex, None), "never");
+        assert_eq!(launch_permission_mode(&claude, Some("auto".into())), "auto");
+        assert_eq!(
+            launch_permission_mode(&codex, Some("on-request".into())),
+            "on-request"
+        );
     }
 }

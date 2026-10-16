@@ -1107,6 +1107,7 @@ async function mockProject(
     session_id?: string;
     model?: string;
     effort?: string;
+    permission_mode?: string;
   };
   type MockDriveEvent = {
     cursor: number;
@@ -1617,6 +1618,7 @@ async function mockProject(
           ...(body.session_id ? { session_id: body.session_id } : {}),
           ...(body.model ? { model: body.model } : {}),
           ...(body.effort ? { effort: body.effort } : {}),
+          ...(body.permission_mode ? { permission_mode: body.permission_mode } : {}),
         };
       toolConnections = [...toolConnections.filter((item) => item.id !== created.id), created];
       driveEvent(created);
@@ -1627,7 +1629,13 @@ async function mockProject(
       const id = decodeURIComponent(driveTurn[1]),
         current = toolConnections.find((item) => item.id === id)!,
         body = request.postDataJSON(),
-        running = { ...current, busy: true, last_error: undefined };
+        // A turn's permission mode sticks for the chat, like the server (HS2-NHRDMW).
+        running = {
+          ...current,
+          busy: true,
+          last_error: undefined,
+          ...(body.permission_mode ? { permission_mode: body.permission_mode } : {}),
+        };
       toolConnections = toolConnections.map((item) => (item.id === id ? running : item));
       if (body.content === 'Fail this turn.' || body.content === 'Retry successfully.') {
         driveEvent(running);
@@ -5836,6 +5844,178 @@ test('changes the chat provider and re-seeds the new provider with the prior tra
   // No prior Codex turn was re-run against Claude: the only Claude turn is the single seed.
   expect(turnPosts.filter((turn) => turn.id === claudeId)).toHaveLength(1);
   await page.screenshot({ path: 'target/visual-captures/hs2-prbgrb-provider-reseed.png', fullPage: true });
+});
+
+test('picks per-project and per-chat AI permission modes and shows the active mode on the chat tab (HS2-NHRDMW)', async ({
+  page,
+}) => {
+  const connectionPosts: Array<Record<string, unknown>> = [],
+    turnPosts: Array<Record<string, unknown>> = [],
+    settingsPuts: Array<Record<string, unknown>> = [];
+  await mockProject(page);
+  // The plugin-declared modes, as /ai-tools serves them from the Claude and Codex manifests.
+  const modes = {
+    codex: {
+      default_permission_mode: 'never',
+      permission_modes: [
+        { id: 'never', label: 'Never ask', description: 'Codex works inside its sandbox without asking.' },
+        { id: 'on-request', label: 'Ask when needed', description: 'Codex asks before leaving the sandbox.' },
+      ],
+    },
+    claude: {
+      default_permission_mode: 'acceptEdits',
+      permission_modes: [
+        { id: 'acceptEdits', label: 'Accept edits', description: 'File edits run without asking.' },
+        { id: 'auto', label: 'Auto', description: 'Claude asks only for risky actions.' },
+        {
+          id: 'bypassPermissions',
+          label: 'Bypass permissions',
+          description: 'Every tool call runs without asking.',
+          warning: 'Claude can run any command without asking.',
+        },
+      ],
+    },
+  } as const;
+  await page.route('**/ai-tools*', (route) =>
+    route.fulfill({
+      json: aiToolCatalog.map((tool) => ({
+        ...tool,
+        actions: [...tool.actions, 'change_permission_mode'],
+        ...modes[tool.id as keyof typeof modes],
+      })),
+    }),
+  );
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() === 'POST' && path.endsWith('/drive/connections'))
+      connectionPosts.push(request.postDataJSON() as Record<string, unknown>);
+    if (request.method() === 'POST' && /\/drive\/connections\/[^/]+\/turns$/.test(path))
+      turnPosts.push(request.postDataJSON() as Record<string, unknown>);
+    if (request.method() === 'PUT' && path.endsWith('/ai-settings'))
+      settingsPuts.push(request.postDataJSON() as Record<string, unknown>);
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+
+  // Project scope: each provider's default chat permission mode lives in Settings → AI tools.
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: /AI tools/ }).click();
+  const claudeMode = page.locator('wa-select[name="ai-provider-permission-mode-claude"]'),
+    codexMode = page.locator('wa-select[name="ai-provider-permission-mode-codex"]');
+  await expect(claudeMode).toHaveJSProperty('value', 'acceptEdits');
+  await expect(codexMode).toHaveJSProperty('value', 'never');
+  await claudeMode.click();
+  await claudeMode.locator('wa-option[value="auto"]').click();
+  await expect.poll(() => settingsPuts.at(-1)?.providers).toMatchObject({ claude: { permission_mode: 'auto' } });
+  // A mode that removes a safety net is an explicit opt-in: declining keeps the saved mode.
+  const putsBeforeDecline = settingsPuts.length;
+  page.once('dialog', (dialog) => {
+    expect(dialog.message()).toContain('Claude can run any command without asking.');
+    void dialog.dismiss();
+  });
+  await claudeMode.click();
+  await claudeMode.locator('wa-option[value="bypassPermissions"]').click();
+  await expect(claudeMode).toHaveJSProperty('value', 'auto');
+  expect(settingsPuts).toHaveLength(putsBeforeDecline);
+  await expect(page.locator('[data-ai-provider="claude"]')).toContainText('Claude asks only for risky actions.');
+  await page.locator('[data-component="ai-tool-settings"]').screenshot({
+    path: 'target/visual-captures/hs2-nhrdmw-settings-permission-1280.png',
+  });
+
+  // A new chat launches with the provider's project default (Codex: never ask) and shows it on its tab.
+  await page.getByLabel('List View').click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
+  await expect.poll(() => connectionPosts.at(-1)).toMatchObject({ tool: 'codex', permission_mode: 'never' });
+  const tab = drawer.getByRole('tab', { name: 'Codex chat' });
+  await expect(tab.getByRole('img', { name: 'Permissions: Never ask' })).toBeVisible();
+
+  // Per chat: the model menu's Permissions submenu switches this chat only, from its next turn on.
+  await drawer.locator('[data-conversation-model-menu] [slot="trigger"]').click();
+  const permissions = drawer
+    .locator('[data-conversation-model-menu] > wa-dropdown-item')
+    .filter({ hasText: 'Permissions' });
+  await expect(permissions).toContainText('Never ask');
+  await permissions.hover();
+  await expect(permissions.locator('[data-action="select-conversation-permission-mode"]')).toHaveCount(2);
+  await page.screenshot({ path: 'target/visual-captures/hs2-nhrdmw-chat-permission-menu-1280.png' });
+  await permissions.locator('[data-action="select-conversation-permission-mode"][data-value="on-request"]').click();
+  await expect(tab.getByRole('img', { name: 'Permissions: Ask when needed' })).toBeVisible();
+  const conversation = drawer.locator('[data-component="ai-conversation"][data-presentation="embedded"]');
+  await conversation.getByLabel('Message Codex').fill('What time is it in California?');
+  await conversation.getByLabel('Message Codex').press('Enter');
+  await expect.poll(() => turnPosts.at(-1)).toMatchObject({ permission_mode: 'on-request' });
+  await expect(conversation.getByText('The event stream remains authoritative.')).toBeVisible();
+  // The server now reports the chat's mode, so later turns do not resend it.
+  await conversation.getByLabel('Message Codex').fill('And in New York?');
+  await conversation.getByLabel('Message Codex').press('Enter');
+  await expect.poll(() => turnPosts.length).toBe(2);
+  expect(turnPosts[1]).not.toHaveProperty('permission_mode');
+  await expect(tab.getByRole('img', { name: 'Permissions: Ask when needed' })).toBeVisible();
+  await drawer.screenshot({ path: 'target/visual-captures/hs2-nhrdmw-chat-tab-1280.png' });
+});
+
+test('keeps the AI permission controls legible on a phone-width layout (HS2-NHRDMW)', async ({ page }) => {
+  await mockProject(page);
+  await page.route('**/ai-tools*', (route) =>
+    route.fulfill({
+      json: aiToolCatalog.map((tool) => ({
+        ...tool,
+        actions: [...tool.actions, 'change_permission_mode'],
+        ...(tool.id === 'claude'
+          ? {
+              default_permission_mode: 'acceptEdits',
+              permission_modes: [
+                { id: 'acceptEdits', label: 'Accept edits', description: 'File edits run without asking.' },
+                {
+                  id: 'bypassPermissions',
+                  label: 'Bypass permissions',
+                  warning: 'Claude can run any command and change any file in this project without asking.',
+                },
+              ],
+            }
+          : {
+              default_permission_mode: 'never',
+              permission_modes: [
+                { id: 'never', label: 'Never ask', description: 'Codex works inside its sandbox without asking.' },
+                { id: 'on-request', label: 'Ask when needed' },
+              ],
+            }),
+      })),
+    }),
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
+  await page.getByRole('button', { name: /AI tools/ }).click();
+  await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
+  const claudeMode = page.locator('wa-select[name="ai-provider-permission-mode-claude"]');
+  page.once('dialog', (dialog) => void dialog.accept());
+  await claudeMode.click();
+  await claudeMode.locator('wa-option[value="bypassPermissions"]').click();
+  await expect(claudeMode).toHaveJSProperty('value', 'bypassPermissions');
+  await expect(page.locator('[data-ai-provider="claude"]')).toContainText('Warning: Claude can run any command');
+  const settings = page.locator('[data-component="ai-tool-settings"]');
+  const fits = await settings.evaluate((element) => element.scrollWidth <= element.clientWidth + 1);
+  expect(fits).toBe(true);
+  await claudeMode.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-nhrdmw-settings-permission-390.png' });
+  // The chat tab keeps its permission shield at phone width.
+  await page.getByLabel('List View').click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
+  const tab = drawer.getByRole('tab', { name: 'Codex chat' });
+  await expect(tab.getByRole('img', { name: 'Permissions: Never ask' })).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-nhrdmw-chat-tab-390.png' });
 });
 
 test("opens an AI shell per provider from the drawer submenu with each provider's own defaults (HS2-3HT4PA)", async ({

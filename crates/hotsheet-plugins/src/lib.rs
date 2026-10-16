@@ -236,6 +236,28 @@ pub struct DriveSpec {
     pub runtime_effort_levels: Vec<String>,
     #[serde(default)]
     pub runtime_default_effort: Option<String>,
+    /// Plugin-owned permission modes a driven session can run under (HS2-NHRDMW): Claude's
+    /// `--permission-mode` values, Codex's `approvalPolicy` values. Empty = the tool has no
+    /// selectable mode and a requested one is rejected.
+    #[serde(default)]
+    pub permission_modes: Vec<PermissionModeSpec>,
+    /// The mode used when neither the project nor the conversation picked one.
+    #[serde(default)]
+    pub default_permission_mode: Option<String>,
+}
+
+/// One selectable permission mode (HS2-NHRDMW). `id` is the provider-native value passed
+/// through unchanged (`--permission-mode <id>` for Claude, `approvalPolicy: <id>` for Codex).
+#[derive(Debug, Clone, Deserialize, serde::Serialize, PartialEq, Eq)]
+pub struct PermissionModeSpec {
+    pub id: String,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Set for a mode that removes a safety net (e.g. `bypassPermissions`): clients show it
+    /// as a warning before and while the mode is active.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, serde::Serialize, PartialEq, Eq)]
@@ -246,7 +268,7 @@ pub struct ModelSpec {
     pub effort_levels: Vec<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, serde::Serialize, PartialEq, Eq)]
 pub struct AiToolDescriptor {
     pub id: String,
     pub display_name: String,
@@ -257,6 +279,10 @@ pub struct AiToolDescriptor {
     pub default_effort: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub actions: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub permission_modes: Vec<PermissionModeSpec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_permission_mode: Option<String>,
 }
 
 /// A project's AI defaults: the default provider (`tool`) with its model and effort, plus the
@@ -268,6 +294,9 @@ pub struct AiToolDefaults {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+    /// The default provider's permission mode (HS2-NHRDMW); mirrors its `providers` entry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permission_mode: Option<String>,
     /// Per-provider default model and effort, used whenever that provider is picked (Drive,
     /// AI shells, commands) without an explicit model. The default provider's entry mirrors the
     /// top-level `model`/`effort`.
@@ -275,13 +304,15 @@ pub struct AiToolDefaults {
     pub providers: BTreeMap<String, AiProviderDefaults>,
 }
 
-/// One provider's default model and effort.
+/// One provider's default model, effort, and permission mode.
 #[derive(Debug, Clone, Default, serde::Serialize, Deserialize, PartialEq, Eq)]
 pub struct AiProviderDefaults {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permission_mode: Option<String>,
 }
 
 fn default_content_mode() -> String {
@@ -715,6 +746,8 @@ pub fn ai_tool_descriptor(plugin: &Plugin) -> Option<AiToolDescriptor> {
             .iter()
             .map(|option| format!("change_{option}"))
             .collect(),
+        permission_modes: drive.permission_modes.clone(),
+        default_permission_mode: drive.default_permission_mode.clone(),
     })
 }
 
@@ -737,6 +770,9 @@ pub fn validate_ai_defaults(
     if model_id.is_some_and(|id| id.trim().is_empty()) {
         return Err("model must not be blank".into());
     }
+    if let Some(mode) = defaults.permission_mode.as_deref() {
+        validate_permission_mode(tool, mode)?;
+    }
     let model = model_id.and_then(|id| tool.models.iter().find(|candidate| candidate.id == id));
     if let Some(effort) = defaults.effort.as_deref() {
         let Some(model_id) = model_id else {
@@ -757,6 +793,41 @@ pub fn validate_ai_defaults(
         }
     }
     Ok(())
+}
+
+/// Reject a permission mode the tool does not declare (HS2-NHRDMW), so an unsupported
+/// value fails explicitly instead of reaching the provider's command line.
+pub fn validate_permission_mode(tool: &AiToolDescriptor, mode: &str) -> Result<(), String> {
+    if tool.permission_modes.is_empty() {
+        return Err(format!(
+            "AI tool '{}' does not support a permission mode",
+            tool.id
+        ));
+    }
+    if tool.permission_modes.iter().any(|known| known.id == mode) {
+        return Ok(());
+    }
+    Err(format!(
+        "permission mode '{mode}' is not supported by '{}' (expected one of: {})",
+        tool.id,
+        tool.permission_modes
+            .iter()
+            .map(|known| known.id.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
+}
+
+/// The permission mode a drive launches with: the requested (validated) mode, else the
+/// tool's declared default. `None` for a tool without modes (HS2-NHRDMW).
+pub fn effective_permission_mode(
+    tool: &AiToolDescriptor,
+    requested: Option<&str>,
+) -> Option<String> {
+    requested
+        .filter(|mode| tool.permission_modes.iter().any(|known| known.id == *mode))
+        .map(str::to_string)
+        .or_else(|| tool.default_permission_mode.clone())
 }
 
 pub fn default_ai_settings(tools: &[AiToolDescriptor]) -> Option<AiToolDefaults> {
@@ -781,6 +852,7 @@ fn validate_provider_defaults(
             tool: tool.to_string(),
             model: defaults.model.clone(),
             effort: defaults.effort.clone(),
+            permission_mode: defaults.permission_mode.clone(),
             ..AiToolDefaults::default()
         },
     )
@@ -818,6 +890,7 @@ pub fn prepare_ai_defaults_for_save(
         AiProviderDefaults {
             model: submitted.model.clone(),
             effort: submitted.effort.clone(),
+            permission_mode: submitted.permission_mode.clone(),
         },
     );
     Ok(AiToolDefaults {

@@ -10,18 +10,27 @@ export interface AiToolModel {
   label: string;
   effort_levels?: readonly string[];
 }
+export interface AiToolPermissionMode {
+  id: string;
+  label: string;
+  description?: string;
+  warning?: string;
+}
 export interface AiToolDescriptor {
   id: string;
   display_name: string;
   models: readonly AiToolModel[];
   default_model?: string;
   default_effort?: string;
-  actions?: readonly ('change_model' | 'change_effort')[];
+  actions?: readonly ('change_model' | 'change_effort' | 'change_permission_mode')[];
+  permission_modes?: readonly AiToolPermissionMode[];
+  default_permission_mode?: string;
 }
 export interface AiToolSelection {
   tool?: string;
   model?: string;
   effort?: string;
+  permission_mode?: string;
 }
 
 export function DriveOptionsMenu({

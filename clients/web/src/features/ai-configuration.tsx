@@ -2,7 +2,12 @@ import type { Signal } from 'kerfjs';
 import { signal } from 'kerfjs';
 
 import { type ConversationState, EMPTY_CONVERSATION } from '../ai-conversation';
-import { providerSelection, withDefaultProvider, withProviderSelection } from '../ai-provider-defaults';
+import {
+  compatiblePermissionMode,
+  providerSelection,
+  withDefaultProvider,
+  withProviderSelection,
+} from '../ai-provider-defaults';
 import { type AiToolDefaults, type AiToolDescriptor, Api, type CommandDefinition, type ToolConnection } from '../api';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { type ManualModelDialogState } from '../components/manual-model-dialog';
@@ -15,7 +20,7 @@ export interface AiConfigurationDependencies {
   selectedProjectId: Signal<string>;
   project: () => Project | undefined;
   conversationConnectionId: Signal<string | undefined>;
-  conversationSelections: Signal<Record<string, { model?: string; effort?: string }>>;
+  conversationSelections: Signal<Record<string, { model?: string; effort?: string; permission_mode?: string }>>;
   terminalDrawerChatsByProject: Signal<Record<string, DrawerAIChat[]>>;
   driveConnectionsByProject: Signal<Record<string, ToolConnection[]>>;
   conversationStates: Signal<Record<string, ConversationState>>;
@@ -83,8 +88,14 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
       model = value.model ?? base.model,
       efforts = descriptor?.models.find((item) => item.id === model)?.effort_levels ?? [],
       requestedEffort = value.effort ?? (model === base.model ? base.effort : undefined) ?? descriptor?.default_effort,
-      effort = requestedEffort && efforts.includes(requestedEffort) ? requestedEffort : efforts.at(0);
-    return { tool, ...(model ? { model } : {}), ...(effort ? { effort } : {}) };
+      effort = requestedEffort && efforts.includes(requestedEffort) ? requestedEffort : efforts.at(0),
+      permissionMode = compatiblePermissionMode(descriptor, value.permission_mode, base.permission_mode);
+    return {
+      tool,
+      ...(model ? { model } : {}),
+      ...(effort ? { effort } : {}),
+      ...(permissionMode ? { permission_mode: permissionMode } : {}),
+    };
   }
 
   function effectiveCommandAiSelection(command: CommandDefinition): AiToolDefaults {
@@ -127,6 +138,26 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
   function selectDefaultEffort(effort: string, tool = aiDefaults.value.tool) {
     const current = providerSelection(aiDefaults.value, aiTools.value, tool);
     void saveAiDefaults(withProviderSelection(aiDefaults.value, tool, { model: current.model, effort }));
+  }
+
+  /**
+   * Save one provider's default permission mode for this project (HS2-NHRDMW). A mode that removes a
+   * safety net (its descriptor carries a `warning`) is an explicit opt-in: the user confirms it first.
+   */
+  function selectDefaultPermissionMode(mode: string, tool = aiDefaults.value.tool) {
+    const descriptor = aiTools.value.find((item) => item.id === tool),
+      declared = descriptor?.permission_modes?.find((item) => item.id === mode);
+    if (!declared) return false;
+    if (declared.warning && !window.confirm(`${declared.label}: ${declared.warning}`)) return false;
+    const current = providerSelection(aiDefaults.value, aiTools.value, tool);
+    void saveAiDefaults(
+      withProviderSelection(aiDefaults.value, tool, {
+        model: current.model,
+        effort: current.effort,
+        permission_mode: mode,
+      }),
+    );
+    return true;
   }
 
   /** Make `tool` the project's default provider, carrying its own saved model and effort. */
@@ -183,6 +214,29 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
       ...driveConnectionsByProject.value,
       [current.id]: (driveConnectionsByProject.value[current.id] ?? []).map((item) =>
         item.id === connectionId ? { ...item, effort } : item,
+      ),
+    };
+  }
+
+  /**
+   * Switch the active chat's permission mode (HS2-NHRDMW). It applies from the chat's next turn on and
+   * stays with that chat; a warned mode needs an explicit confirmation.
+   */
+  function selectConversationPermissionMode(mode: string) {
+    const current = project(),
+      connectionId = conversationConnectionId.value;
+    if (!current || !connectionId || !mode) return;
+    const declared = conversationAiSelection(connectionId).permissionModes.find((item) => item.id === mode);
+    if (!declared) return;
+    if (declared.warning && !window.confirm(`${declared.label}: ${declared.warning}`)) return;
+    conversationSelections.value = {
+      ...conversationSelections.value,
+      [connectionId]: { ...conversationSelections.value[connectionId], permission_mode: mode },
+    };
+    terminalDrawerChatsByProject.value = {
+      ...terminalDrawerChatsByProject.value,
+      [current.id]: (terminalDrawerChatsByProject.value[current.id] ?? []).map((item) =>
+        item.connectionId === connectionId ? { ...item, permissionMode: mode } : item,
       ),
     };
   }
@@ -469,8 +523,19 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
         chat?.effort,
         connection?.effort,
         descriptor?.default_effort,
+      ),
+      // Precedence (HS2-NHRDMW): this chat's pick, then its stored or server-reported mode, then the
+      // provider's project default.
+      permissionModes = descriptor?.permission_modes ?? [],
+      permissionMode = compatiblePermissionMode(
+        descriptor,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        override?.permission_mode,
+        chat?.permissionMode,
+        connection?.permission_mode,
+        providerSelection(aiDefaults.value, aiTools.value, tool).permission_mode,
       );
-    return { tool, descriptor, model, effort, efforts };
+    return { tool, descriptor, model, effort, efforts, permissionMode, permissionModes };
   }
 
   return {
@@ -489,9 +554,11 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     selectDriveModel,
     selectDefaultModel,
     selectDefaultEffort,
+    selectDefaultPermissionMode,
     selectDefaultProvider,
     selectConversationModel,
     selectConversationEffort,
+    selectConversationPermissionMode,
     aiToolOptions,
     selectConversationProvider,
     openManualModel,

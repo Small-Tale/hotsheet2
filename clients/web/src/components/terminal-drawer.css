@@ -57,7 +57,8 @@
   /* 2xs here plus the strip's 2xs padding keeps the tabs at the xs inline inset. */
   padding-inline: var(--kui-space-2xs);
 }
-.terminal-drawer__halt {
+.terminal-drawer__halt,
+.terminal-drawer__permission-mode {
   display: inline-flex;
   flex: none;
 }

@@ -28,6 +28,7 @@ export const COMMANDS_AND_AI_ACTIONS = {
   selectConversationProvider: action('select-conversation-provider'),
   selectConversationModel: action('select-conversation-model'),
   selectConversationEffort: action('select-conversation-effort'),
+  selectConversationPermissionMode: action('select-conversation-permission-mode'),
   openConversationManualModel: action('open-conversation-manual-model'),
   rateAiContent: action('rate-ai-content'),
   submitAiFeedback: action('submit-ai-feedback'),

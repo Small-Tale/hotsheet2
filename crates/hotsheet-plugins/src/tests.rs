@@ -242,6 +242,16 @@ fn codex_declares_its_project_local_skill() {
             .iter()
             .any(|option| option == "effort")
     );
+    // HS2-NHRDMW: Codex maps the permission mode to its approval policy, `never` by default.
+    assert_eq!(drive.default_permission_mode.as_deref(), Some("never"));
+    assert_eq!(
+        drive
+            .permission_modes
+            .iter()
+            .map(|mode| mode.id.as_str())
+            .collect::<Vec<_>>(),
+        ["never", "on-request", "on-failure", "untrusted"]
+    );
     let launch = p.manifest.launch.as_ref().expect("codex declares a launch");
     assert_eq!(launch.program, "codex");
     assert!(launch.args.is_empty());
@@ -306,7 +316,25 @@ fn codex_declares_its_project_local_skill() {
         ["low", "medium", "high", "xhigh", "max"]
     );
     assert_eq!(cd.default_effort.as_deref(), Some("medium"));
-    assert_eq!(cd.session_options, ["model", "effort"]);
+    assert_eq!(cd.session_options, ["model", "effort", "permission_mode"]);
+    // HS2-NHRDMW: Claude's selectable `--permission-mode` values, acceptEdits by default,
+    // and only bypassPermissions carries a warning.
+    assert_eq!(cd.default_permission_mode.as_deref(), Some("acceptEdits"));
+    assert_eq!(
+        cd.permission_modes
+            .iter()
+            .map(|mode| mode.id.as_str())
+            .collect::<Vec<_>>(),
+        ["acceptEdits", "auto", "manual", "plan", "bypassPermissions"]
+    );
+    assert_eq!(
+        cd.permission_modes
+            .iter()
+            .filter(|mode| mode.warning.is_some())
+            .map(|mode| mode.id.as_str())
+            .collect::<Vec<_>>(),
+        ["bypassPermissions"]
+    );
     let claude = find_in("claude", &[]).unwrap();
     assert_eq!(
         claude
@@ -333,20 +361,16 @@ fn codex_declares_its_project_local_skill() {
 fn plugin_model_catalog_suggests_models_without_rejecting_manual_ids() {
     let plugin = find_in("codex", &[]).unwrap();
     let drive = plugin.manifest.drive.as_ref().unwrap();
-    let tools = vec![AiToolDescriptor {
-        id: plugin.id().into(),
-        display_name: plugin.manifest.display_name.clone(),
-        models: drive.models.clone(),
-        default_model: drive.default_model.clone(),
-        default_effort: drive.default_effort.clone(),
-        actions: drive
-            .session_options
-            .iter()
-            .map(|option| format!("change_{option}"))
-            .collect(),
-    }];
+    let _ = drive;
+    let tools = vec![ai_tool_descriptor(&plugin).unwrap()];
     let defaults = default_ai_settings(&tools).unwrap();
     validate_ai_defaults(&tools, &defaults).unwrap();
+    assert!(
+        tools[0]
+            .actions
+            .iter()
+            .any(|action| action == "change_permission_mode")
+    );
     validate_ai_defaults(
         &tools,
         &AiToolDefaults {
@@ -613,6 +637,7 @@ fn per_provider_ai_defaults_merge_validate_and_sanitize() {
         default_model: models.first().map(|(model, _)| (*model).into()),
         default_effort: None,
         actions: Vec::new(),
+        ..AiToolDescriptor::default()
     };
     let tools = vec![
         tool(
@@ -624,6 +649,7 @@ fn per_provider_ai_defaults_merge_validate_and_sanitize() {
     let entry = |model: &str, effort: Option<&str>| AiProviderDefaults {
         model: Some(model.into()),
         effort: effort.map(Into::into),
+        permission_mode: None,
     };
     let previous = AiToolDefaults {
         tool: "claude".into(),
@@ -633,6 +659,7 @@ fn per_provider_ai_defaults_merge_validate_and_sanitize() {
             ("gemini".into(), entry("flash", None)),
             ("codex".into(), entry("gpt", Some("medium"))),
         ]),
+        ..AiToolDefaults::default()
     };
     // Switching the default to Codex keeps Claude's choice, the uninstalled Gemini entry, and
     // mirrors the default selection into its own entry.
@@ -641,6 +668,7 @@ fn per_provider_ai_defaults_merge_validate_and_sanitize() {
         model: Some("gpt".into()),
         effort: Some("medium".into()),
         providers: BTreeMap::from([("claude".into(), entry("opus", Some("high")))]),
+        ..AiToolDefaults::default()
     };
     let saved = prepare_ai_defaults_for_save(&tools, &submitted, Some(&previous)).unwrap();
     assert_eq!(saved.tool, "codex");
@@ -751,4 +779,75 @@ fn bundled_guidance_requires_integrating_worktree_and_delegated_work() {
         assert!(skill.contains("never complete a ticket\n   whose work exists only in a worktree"));
         assert!(skill.contains("confirm work done in a git worktree, side branch, or delegated"));
     }
+}
+
+/// HS2-NHRDMW: a permission mode validates against the tool's own declared modes, survives a
+/// save in both the default selection and a provider entry, and resolves to the plugin
+/// default when unset or no longer declared.
+#[test]
+fn permission_modes_validate_per_tool_and_fall_back_to_the_plugin_default() {
+    let claude = ai_tool_descriptor(&find_in("claude", &[]).unwrap()).unwrap();
+    let codex = ai_tool_descriptor(&find_in("codex", &[]).unwrap()).unwrap();
+    let opencode = ai_tool_descriptor(&find_in("opencode", &[]).unwrap()).unwrap();
+    validate_permission_mode(&claude, "auto").unwrap();
+    validate_permission_mode(&codex, "on-request").unwrap();
+    // A mode is provider-native: Claude's value is not a Codex approval policy.
+    let error = validate_permission_mode(&codex, "acceptEdits").unwrap_err();
+    assert!(error.contains("on-request"), "{error}");
+    assert!(validate_permission_mode(&opencode, "auto").is_err());
+    assert_eq!(
+        effective_permission_mode(&claude, None).as_deref(),
+        Some("acceptEdits")
+    );
+    assert_eq!(
+        effective_permission_mode(&claude, Some("plan")).as_deref(),
+        Some("plan")
+    );
+    assert_eq!(
+        effective_permission_mode(&codex, Some("acceptEdits")).as_deref(),
+        Some("never"),
+        "an undeclared mode falls back to the plugin default"
+    );
+    assert_eq!(effective_permission_mode(&opencode, None), None);
+
+    let tools = vec![claude, codex];
+    let submitted = AiToolDefaults {
+        tool: "claude".into(),
+        model: Some("sonnet".into()),
+        permission_mode: Some("auto".into()),
+        providers: BTreeMap::from([(
+            "codex".into(),
+            AiProviderDefaults {
+                permission_mode: Some("untrusted".into()),
+                ..AiProviderDefaults::default()
+            },
+        )]),
+        ..AiToolDefaults::default()
+    };
+    let saved = prepare_ai_defaults_for_save(&tools, &submitted, None).unwrap();
+    assert_eq!(
+        saved.providers["claude"].permission_mode.as_deref(),
+        Some("auto")
+    );
+    assert_eq!(
+        saved.providers["codex"].permission_mode.as_deref(),
+        Some("untrusted")
+    );
+    let wrong = AiToolDefaults {
+        permission_mode: Some("on-request".into()),
+        ..submitted.clone()
+    };
+    assert!(prepare_ai_defaults_for_save(&tools, &wrong, None).is_err());
+    let wrong_provider = AiToolDefaults {
+        providers: BTreeMap::from([(
+            "codex".into(),
+            AiProviderDefaults {
+                permission_mode: Some("bypassPermissions".into()),
+                ..AiProviderDefaults::default()
+            },
+        )]),
+        ..submitted
+    };
+    let error = prepare_ai_defaults_for_save(&tools, &wrong_provider, None).unwrap_err();
+    assert!(error.contains("provider 'codex'"), "{error}");
 }

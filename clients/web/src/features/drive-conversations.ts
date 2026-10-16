@@ -92,7 +92,7 @@ export function createDriveConversationsController(dependencies: DriveConversati
   const pendingConversationStarts = new Set<string>();
   const conversationStates = signal<Record<string, ConversationState>>(loadConversationStates(localStorage)),
     conversationDrafts = signal<Record<string, string>>({}),
-    conversationSelections = signal<Record<string, { model?: string; effort?: string }>>({}),
+    conversationSelections = signal<Record<string, { model?: string; effort?: string; permission_mode?: string }>>({}),
     conversationConnectionId = signal<string | undefined>(undefined),
     conversationOpen = signal(false);
   const conversationRenderRevision = signal(0);
@@ -316,6 +316,12 @@ export function createDriveConversationsController(dependencies: DriveConversati
           : {}),
         ...(selection.descriptor?.actions?.includes('change_effort') && selection.effort
           ? { effort: selection.effort }
+          : {}),
+        // The chat's permission mode rides each turn; the server keeps it for later turns (HS2-NHRDMW).
+        ...(selection.descriptor?.actions?.includes('change_permission_mode') &&
+        selection.permissionMode &&
+        selection.permissionMode !== connection?.permission_mode
+          ? { permission_mode: selection.permissionMode }
           : {}),
       };
     if (!connection?.actions?.includes('send_turn') || connection.busy) return;

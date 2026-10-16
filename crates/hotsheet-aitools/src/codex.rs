@@ -330,6 +330,21 @@ pub struct CodexAppServer {
     /// The most recently opened thread id — surfaced as the session id for cross-turn
     /// resume (HS2-3C1XK3).
     last_thread: Mutex<Option<String>>,
+    /// The `approvalPolicy` threads open with (HS2-NHRDMW); `never` unless set.
+    approval_policy: Mutex<&'static str>,
+}
+
+/// Codex `approvalPolicy` values a Hot Sheet chat may select (HS2-NHRDMW). The sandbox stays
+/// `workspace-write` for all of them.
+pub const CODEX_APPROVAL_POLICIES: [&str; 4] = ["untrusted", "on-request", "on-failure", "never"];
+
+/// Map a selected permission mode to the Codex `approvalPolicy` sent on `thread/start` and
+/// `thread/resume`: a known policy passes through; anything else (including a Claude-only mode
+/// such as `acceptEdits`) keeps the headless default `never` rather than reaching codex.
+pub fn codex_approval_policy(mode: Option<&str>) -> &'static str {
+    mode.and_then(|mode| CODEX_APPROVAL_POLICIES.iter().find(|known| **known == mode))
+        .copied()
+        .unwrap_or("never")
 }
 
 impl Drop for CodexAppServer {
@@ -352,6 +367,7 @@ impl CodexAppServer {
         let client = Self {
             inner: CodexRpc::start(transport, request_timeout),
             last_thread: Mutex::new(None),
+            approval_policy: Mutex::new("never"),
         };
         client.inner.request(
             "initialize",
@@ -371,6 +387,12 @@ impl CodexAppServer {
     /// Route Codex approval ServerRequests through a permission policy instead of
     /// auto-approving (HS2-0QGW07 / §5.7). Set it before running a turn; without one,
     /// approvals are auto-approved (the isolated headless default).
+    /// Select the `approvalPolicy` for threads opened from now on (HS2-NHRDMW); see
+    /// [`codex_approval_policy`] for the mapping.
+    pub fn set_approval_policy(&self, mode: Option<&str>) {
+        *self.approval_policy.lock_or_recover() = codex_approval_policy(mode);
+    }
+
     pub fn set_permission_policy(&self, policy: PermissionPolicy) {
         {
             let mut p = self.inner.permission.lock_or_recover();
@@ -484,16 +506,18 @@ fn thread_id_of(result: &Value) -> Result<String, AppServerError> {
 impl AppServerClient for CodexAppServer {
     fn open_thread(&self, resume: Option<&str>, cwd: &Path) -> Result<String, AppServerError> {
         let cwd = cwd.to_string_lossy().to_string();
-        // Headless: never prompt for approvals, and let the agent write in its workspace.
+        // The selected approval policy (default `never`: headless, no prompts); the agent
+        // always writes only in its workspace sandbox.
+        let policy = *self.approval_policy.lock_or_recover();
         let result = match resume {
             Some(thread_id) => self.inner.request(
                 "thread/resume",
                 json!({ "threadId": thread_id, "cwd": cwd,
-                        "approvalPolicy": "never", "sandbox": "workspace-write" }),
+                        "approvalPolicy": policy, "sandbox": "workspace-write" }),
             )?,
             None => self.inner.request(
                 "thread/start",
-                json!({ "cwd": cwd, "approvalPolicy": "never", "sandbox": "workspace-write" }),
+                json!({ "cwd": cwd, "approvalPolicy": policy, "sandbox": "workspace-write" }),
             )?,
         };
         let id = thread_id_of(&result)?;
@@ -1307,11 +1331,25 @@ pub(crate) mod scripted {
 
     pub struct ScriptedDaemon {
         mode: TurnMode,
+        log: Option<Arc<Mutex<Vec<Value>>>>,
     }
 
     impl ScriptedDaemon {
         pub fn new(mode: TurnMode) -> Box<Self> {
-            Box::new(Self { mode })
+            Box::new(Self { mode, log: None })
+        }
+
+        /// A daemon that also records every request the client sends, so a test can assert
+        /// the exact protocol parameters (HS2-NHRDMW).
+        pub fn recording(mode: TurnMode) -> (Box<Self>, Arc<Mutex<Vec<Value>>>) {
+            let log = Arc::new(Mutex::new(Vec::new()));
+            (
+                Box::new(Self {
+                    mode,
+                    log: Some(log.clone()),
+                }),
+                log,
+            )
         }
     }
 
@@ -1322,6 +1360,7 @@ pub(crate) mod scripted {
                 Box::new(ScriptWriter {
                     out: Some(tx),
                     mode: self.mode,
+                    log: self.log,
                 }),
                 Box::new(ScriptReader { inbox: rx }),
             )
@@ -1332,6 +1371,7 @@ pub(crate) mod scripted {
     struct ScriptWriter {
         out: Option<Sender<String>>,
         mode: TurnMode,
+        log: Option<Arc<Mutex<Vec<Value>>>>,
     }
 
     impl ScriptWriter {
@@ -1345,6 +1385,9 @@ pub(crate) mod scripted {
     impl RpcWriter for ScriptWriter {
         fn send(&mut self, msg: &str) -> std::io::Result<()> {
             let v: Value = serde_json::from_str(msg).expect("client sends valid JSON");
+            if let Some(log) = &self.log {
+                log.lock_or_recover().push(v.clone());
+            }
             let method = v.get("method").and_then(Value::as_str).unwrap_or("");
             let id = v.get("id").cloned();
             let params = v.get("params").cloned().unwrap_or(Value::Null);

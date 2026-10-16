@@ -23,6 +23,8 @@ pub struct PrepareDrive {
     pub persistent_home: Option<PathBuf>,
     pub model: Option<String>,
     pub effort: Option<String>,
+    /// The validated permission mode to launch with (HS2-NHRDMW); `None` = the plugin default.
+    pub permission_mode: Option<String>,
 }
 
 pub struct ClientTurnRequest<'a> {
@@ -31,6 +33,8 @@ pub struct ClientTurnRequest<'a> {
     pub connection_id: &'a str,
     pub model: Option<&'a str>,
     pub effort: Option<&'a str>,
+    /// The chat's active permission mode for this turn (HS2-NHRDMW).
+    pub permission_mode: Option<&'a str>,
     pub control: &'a TurnControl,
 }
 
@@ -39,6 +43,10 @@ pub struct ClientTurnRequest<'a> {
 pub trait PreparedClientDrive: Send + Sync {
     fn tool(&self) -> &str;
     fn supports_interrupt(&self) -> bool;
+    /// The permission mode the drive was prepared with, when it has one (HS2-NHRDMW).
+    fn permission_mode(&self) -> Option<&str> {
+        None
+    }
     fn run_turn(
         &self,
         request: ClientTurnRequest<'_>,
@@ -67,6 +75,7 @@ impl ClientDriveBackend for NativeClientDriveBackend {
                 // direct app-server transport while preserving the same client API/session.
                 shared_daemon: cfg!(unix),
                 persistent_codex_home: request.persistent_home,
+                permission_mode: request.permission_mode,
                 ..TriggerOptions::default()
             },
         )
@@ -85,6 +94,10 @@ impl PreparedClientDrive for NativePreparedDrive {
         self.0.supports_interrupt()
     }
 
+    fn permission_mode(&self) -> Option<&str> {
+        Some(self.0.permission_mode())
+    }
+
     fn run_turn(
         &self,
         request: ClientTurnRequest<'_>,
@@ -98,6 +111,7 @@ impl PreparedClientDrive for NativePreparedDrive {
                     resume: request.resume,
                     model: request.model,
                     effort: request.effort,
+                    permission_mode: request.permission_mode,
                     worker: false,
                     conn_id: request.connection_id.to_owned(),
                 },
@@ -126,6 +140,10 @@ pub struct ClientConnectionInfo {
     pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+    /// The chat's active permission mode (HS2-NHRDMW): the launch mode until a turn selects
+    /// another, which then sticks for later turns.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permission_mode: Option<String>,
     /// The running turn's correlation id while `busy` (HS2-14X4AF); the same id every
     /// `turn_event` of that turn carries.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -140,6 +158,8 @@ struct ConnectionState {
     control: Option<TurnControl>,
     last_error: Option<String>,
     active_session_key: Option<String>,
+    /// The active permission mode; per chat and in memory only (HS2-NHRDMW).
+    permission_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -312,6 +332,7 @@ impl ClientDriveManager {
         }
         let model = request.model.clone();
         let effort = request.effort.clone();
+        let requested_mode = request.permission_mode.clone();
         let source = request.source_id.clone();
         let store_path = request.store_path.clone();
         let drive = self
@@ -319,6 +340,7 @@ impl ClientDriveManager {
             .prepare(request)
             .map_err(ClientDriveError::Prepare)?;
         let tool = drive.tool().to_owned();
+        let permission_mode = requested_mode.or_else(|| drive.permission_mode().map(str::to_owned));
         let connection = Arc::new(ClientConnection {
             id: id.clone(),
             tool,
@@ -338,6 +360,7 @@ impl ClientDriveManager {
                 control: None,
                 last_error: None,
                 active_session_key: None,
+                permission_mode,
             }),
         });
         self.connections
@@ -376,6 +399,31 @@ impl ClientDriveManager {
         effort: Option<String>,
     ) -> Result<ClientTurnJob, ClientDriveError> {
         self.begin_correlated_turn(id, explicit_session, model, effort, None)
+    }
+
+    /// Switch an idle chat's permission mode (HS2-NHRDMW). The mode sticks for later turns,
+    /// stays in memory, and is never applied to a running turn.
+    pub fn set_permission_mode(
+        &self,
+        id: &str,
+        mode: String,
+    ) -> Result<ClientConnectionInfo, ClientDriveError> {
+        let connection = self
+            .connection(id)?
+            .ok_or_else(|| ClientDriveError::NotFound(id.into()))?;
+        {
+            let mut state = connection.state.lock_or_recover();
+            if state.closing {
+                return Err(ClientDriveError::NotFound(id.into()));
+            }
+            if state.busy {
+                return Err(ClientDriveError::Conflict(format!(
+                    "connection '{id}' already has a running turn"
+                )));
+            }
+            state.permission_mode = Some(mode);
+        }
+        Ok(connection_info(&connection))
     }
 
     /// [`Self::begin_turn`] with the caller's turn correlation id (HS2-14X4AF). A client that
@@ -425,6 +473,7 @@ impl ClientDriveManager {
             )));
         }
         let control = TurnControl::default();
+        let permission_mode = state.permission_mode.clone();
         state.busy = true;
         state.turn_id = Some(turn_id.clone());
         state.last_error = None;
@@ -438,6 +487,7 @@ impl ClientDriveManager {
             resume,
             model,
             effort,
+            permission_mode,
         })
     }
 
@@ -690,6 +740,7 @@ pub struct ClientTurnJob {
     resume: Option<String>,
     model: Option<String>,
     effort: Option<String>,
+    permission_mode: Option<String>,
 }
 
 impl ClientTurnJob {
@@ -714,6 +765,7 @@ impl ClientTurnJob {
                 connection_id: &self.connection.id,
                 model: self.model.as_deref().or(self.connection.model.as_deref()),
                 effort: self.effort.as_deref().or(self.connection.effort.as_deref()),
+                permission_mode: self.permission_mode.as_deref(),
                 control: &self.control,
             },
             on_event,
@@ -740,6 +792,7 @@ fn connection_info(connection: &ClientConnection) -> ClientConnectionInfo {
         last_error: state.last_error.clone(),
         model: connection.model.clone(),
         effort: connection.effort.clone(),
+        permission_mode: state.permission_mode.clone(),
         turn_id: state.turn_id.clone(),
     }
 }
@@ -801,6 +854,10 @@ mod tests {
             self.supports_interrupt
         }
 
+        fn permission_mode(&self) -> Option<&str> {
+            Some("plugin-default")
+        }
+
         fn run_turn(
             &self,
             _: ClientTurnRequest<'_>,
@@ -840,7 +897,67 @@ mod tests {
             persistent_home: None,
             model: None,
             effort: None,
+            permission_mode: None,
         }
+    }
+
+    /// HS2-NHRDMW transition matrix: launch mode (requested | drive default) → per-chat
+    /// switch while idle → refused while busy → sticky across turns → isolated per chat.
+    #[test]
+    fn permission_mode_is_per_chat_sticky_and_never_changes_a_running_turn() {
+        let manager = manager(false);
+        manager
+            .create_or_attach(prepare("/project"), Some("default".into()), None)
+            .unwrap();
+        let mut requested = prepare("/project");
+        requested.permission_mode = Some("auto".into());
+        manager
+            .create_or_attach(requested, Some("requested".into()), None)
+            .unwrap();
+        assert_eq!(
+            manager.get("default").unwrap().permission_mode.as_deref(),
+            Some("plugin-default"),
+            "without a request the drive's own default is reported"
+        );
+        assert_eq!(
+            manager.get("requested").unwrap().permission_mode.as_deref(),
+            Some("auto")
+        );
+
+        // A turn carries the active mode; switching while it runs is refused.
+        let job = manager.begin_turn("requested", None, None, None).unwrap();
+        assert_eq!(job.permission_mode.as_deref(), Some("auto"));
+        assert!(matches!(
+            manager.set_permission_mode("requested", "plan".into()),
+            Err(ClientDriveError::Conflict(_))
+        ));
+        manager.finish_turn(&job, &done(hotsheet_aitools::DoneReason::Completed));
+
+        // An idle switch sticks for every later turn, and only for this chat.
+        let info = manager
+            .set_permission_mode("requested", "plan".into())
+            .unwrap();
+        assert_eq!(info.permission_mode.as_deref(), Some("plan"));
+        for _ in 0..2 {
+            let job = manager.begin_turn("requested", None, None, None).unwrap();
+            assert_eq!(job.permission_mode.as_deref(), Some("plan"));
+            manager.finish_turn(&job, &done(hotsheet_aitools::DoneReason::Completed));
+        }
+        assert_eq!(
+            manager.get("default").unwrap().permission_mode.as_deref(),
+            Some("plugin-default")
+        );
+        // Re-attaching keeps the chat's switched mode rather than resetting it.
+        let mut again = prepare("/project");
+        again.permission_mode = Some("auto".into());
+        let attached = manager
+            .create_or_attach(again, Some("requested".into()), None)
+            .unwrap();
+        assert_eq!(attached.permission_mode.as_deref(), Some("plan"));
+        assert!(matches!(
+            manager.set_permission_mode("missing", "plan".into()),
+            Err(ClientDriveError::NotFound(_))
+        ));
     }
 
     #[test]

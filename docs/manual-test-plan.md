@@ -282,6 +282,22 @@ Repeat with `codex` run by hand in a plain shell terminal (only the `plug` state
 Real interactive Codex trust cannot run in CI; the automated tests drive the same hook adapter
 and server routes.
 
+### Driven chat permission modes with real tools (HS2-NHRDMW)
+
+The mode plumbing is automated against fake drives and a scripted Codex daemon; how the real
+tools behave under each mode is not. In the app, open an AI chat from the terminal drawer:
+
+1. Claude under `Accept edits`: ask for a file edit (no popup) and a shell command (popup).
+2. Switch the chat to `Auto` from the model menu's Permissions submenu: a harmless read-only
+   command runs without a popup, and a risky one still reaches the Hot Sheet popup
+   (validating this is `HS2-YAS0FR`).
+3. `Plan only` makes no edits; `Bypass permissions` asks for confirmation first and then runs
+   without popups.
+4. Codex under `Ask when needed`: an action outside the workspace sandbox reaches the popup;
+   under `Never ask` it fails instead of asking.
+
+Each chat tab's shield names the active mode throughout.
+
 ### AI completion confidence rubric compliance (HS2-DWTJ43)
 
 The storage, write surfaces, and display are automated; whether a live agent follows the

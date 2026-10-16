@@ -793,6 +793,41 @@ old five-minute transport timeout.
 This is also the seam for **other prompts** the ticket mentions — the bridge is a
 generic "the tool needs a human decision" channel, not just tool-permissions.
 
+**Permission modes for driven chats (HS2-NHRDMW).** How often a drawer or sidebar chat
+reaches the bridge depends on the mode its tool runs under. Each drivable plugin declares
+its selectable modes as provider-native values in `[drive] permission_modes` (id, label,
+description, optional `warning`) with a `default_permission_mode`, and lists
+`permission_mode` in `session_options` when a chat may switch mid-conversation (exposed as
+the `change_permission_mode` action). `GET /ai-tools` serves the declarations; clients never
+hard-code mode names.
+
+| Tool   | Modes (provider value → meaning)                                                                                                                                                                                                          | Default       |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| Claude | `--permission-mode`: `acceptEdits` (edits run, other tools ask), `auto` (Claude's own classifier asks only for risky actions), `manual` (every tool call asks), `plan` (read-only), `bypassPermissions` (nothing asks; carries a warning) | `acceptEdits` |
+| Codex  | `approvalPolicy`: `never`, `on-request`, `on-failure`, `untrusted`; the sandbox stays `workspace-write` for every policy                                                                                                                  | `never`       |
+
+- **Project scope:** `ai.defaults` stores a per-provider `permission_mode` beside model and
+  effort (the default provider's value mirrors at the top level), in the checkout's
+  machine-local settings with the machine-wide fallback. Settings → AI tools shows a
+  "Chat permissions" Select per provider; the headless equivalent is
+  `hotsheet-cli ai-settings set|set-provider --permission-mode <mode>`.
+- **Per chat:** `POST /drive/connections` takes an optional `permission_mode`; omitted, the
+  server uses the project's saved mode for that tool, else the machine-wide one, else the
+  plugin default. A turn's `permission_mode` switches the chat from that turn on; the mode is
+  per connection and in memory (refused while a turn runs, reset to the project default after
+  a server restart, `HS2-Z5QVXW`). `GET /connections` and every drive event report the active mode.
+- **Validation:** a mode the tool does not declare is a `400` (a Claude value is not a Codex
+  policy); a saved mode the tool no longer declares falls back to the plugin default. At
+  launch Codex maps any non-Codex value to `never` rather than passing it through.
+- **Opt-in:** a mode with a `warning` (Claude `bypassPermissions`) needs an explicit browser
+  confirmation in Settings and in the chat menu, and shows a shield-alert icon in danger tone.
+- **Visibility:** the chat's drawer tab carries a shield icon naming the active mode; the
+  conversation model menu has a Permissions submenu beside Provider, Model, and Effort.
+
+`auto` stays opt-in until it has been validated in a driven stream-json session (that the
+bridge still receives the prompts `auto` raises); making it the Claude default is
+`HS2-YAS0FR`.
+
 **External interactive terminals.** `hotsheet-cli launch <tool>` runs the plugin's
 interactive `[launch]` command in the caller's existing terminal after installing its
 setup artifacts and injecting the running server's `HOTSHEET_SERVER`/`HOTSHEET_SECRET`

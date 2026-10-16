@@ -474,19 +474,34 @@ export const parsePermissionDecision = shape<{ connection: string; decision: 'al
 export const parseToolConnection = shape<ToolConnection>(
   'tool connection',
   { id: isString, tool: isString, project: isString, role: isString, busy: isBoolean },
-  { source: isString, actions: isStringArray, session_id: isString, last_error: isString, turn_id: isString },
+  {
+    source: isString,
+    actions: isStringArray,
+    session_id: isString,
+    last_error: isString,
+    turn_id: isString,
+    model: isString,
+    effort: isString,
+    permission_mode: isString,
+  },
 );
 
 export const parseAiToolDescriptor = shape<AiToolDescriptor>(
   'AI tool',
   { id: isString, display_name: isString, models: listOf(isObject) },
-  { default_model: isString, default_effort: isString, actions: isStringArray },
+  {
+    default_model: isString,
+    default_effort: isString,
+    actions: isStringArray,
+    permission_modes: listOf(isObject),
+    default_permission_mode: isString,
+  },
 );
 
 export const parseAiToolDefaults = shape<AiToolDefaults>(
   'AI settings',
   { tool: isString },
-  { model: isString, effort: isString, providers: valuesOf(isObject) },
+  { model: isString, effort: isString, permission_mode: isString, providers: valuesOf(isObject) },
 );
 
 export const parseToolSession = shape<ToolSession>('tool session', {
