@@ -79,6 +79,7 @@ function withValidTurnTiming(value: ConversationState): ConversationState {
     (record.turnId === undefined || typeof record.turnId === 'string') &&
     optionalFinite(record.startedAt) &&
     optionalFinite(record.lastEventAt) &&
+    (record.serverStamped === undefined || typeof record.serverStamped === 'boolean') &&
     validTool
   )
     return value;

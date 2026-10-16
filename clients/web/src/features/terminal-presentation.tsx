@@ -21,6 +21,7 @@ import { type GlobalWorkspaceSurfaceProps } from '../components/workspace-compos
 import type { Project } from '../interactions/types';
 import type { MobileTerminalFocusState } from '../mobile-terminal-focus';
 import { type DrawerAIChat } from '../project-drive';
+import { type ServerClocks, serverClocks } from '../server-clock';
 import { TERMINAL_DASHBOARD_VISIBILITY_SCOPE } from '../terminal-visibility';
 import type { createAiConfigurationController } from './ai-configuration';
 import type { createPermissionsController } from './permissions';
@@ -77,6 +78,8 @@ export interface TerminalPresentationDependencies {
     'aiToolLabel' | 'conversationAiSelection' | 'aiToolOptions' | 'aiTools' | 'effectiveDriveSelection'
   >;
   permissions: Pick<ReturnType<typeof createPermissionsController>, 'pendingPermissions' | 'permissionPopupSurface'>;
+  /** Server-clock estimate for remote clients' turn timing (HS2-GA5ASE); defaults to the shared one. */
+  serverClocks?: Pick<ServerClocks, 'now'>;
 }
 /** Project terminal/chat surfaces from live feature owners during the root render. */
 export function createTerminalPresentation(dependencies: TerminalPresentationDependencies) {
@@ -124,6 +127,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
   } = dependencies.conversations;
   const { aiToolLabel, conversationAiSelection, aiToolOptions, aiTools, effectiveDriveSelection } = dependencies.ai;
   const { pendingPermissions, permissionPopupSurface } = dependencies.permissions;
+  const clocks = dependencies.serverClocks ?? serverClocks;
 
   /**
    * A chat's running-turn progress (HS2-XV1VCR) at the local render clock's `now`; an open
@@ -135,7 +139,8 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     state: ConversationState,
     connection: ToolConnection | undefined,
   ) {
-    return conversationTurnProgress(state, connection, Date.now(), {
+    // The server's clock, not this device's, measures server-stamped turn times (HS2-GA5ASE).
+    return conversationTurnProgress(state, connection, clocks.now(projectId), {
       waitingForPermission: pendingPermissions().some(
         (item) => item.projectId === projectId && item.connection === connectionId,
       ),

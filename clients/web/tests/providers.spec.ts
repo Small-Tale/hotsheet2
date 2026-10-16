@@ -1723,9 +1723,15 @@ async function mockProject(
       }
       if (body.content === 'Start sustained output') return route.fulfill({ status: 202, json: running });
       // HS2-XV1VCR: a server-timed turn whose Bash call stays open and silent.
-      if (body.content === 'Run the long test suite.') {
+      // HS2-GA5ASE: the same turn on a server whose clock runs three minutes ahead of or behind this device.
+      const longSuiteSkew: Record<string, number> = {
+        'Run the long test suite.': 0,
+        'Run the long suite on a server ahead.': 180_000,
+        'Run the long suite on a server behind.': -180_000,
+      };
+      if (body.content in longSuiteSkew) {
         // The mock server stamps from the page clock, as the real server stamps from its own.
-        const startedAt = await page.evaluate(() => Date.now());
+        const startedAt = (await page.evaluate(() => Date.now())) + longSuiteSkew[body.content];
         const tool = { name: 'Bash', started_at_ms: startedAt, count: 1 },
           timed = {
             ...running,
@@ -18740,6 +18746,42 @@ for (const width of [1280, 390] as const)
     });
     await expect.poll(published).toBeLessThan(tall);
     await expect.poll(async () => (await published()) - (await clearance())).toBe(0);
+  });
+
+for (const [server, content] of [
+  ['ahead of', 'Run the long suite on a server ahead.'],
+  ['behind', 'Run the long suite on a server behind.'],
+] as const)
+  test(`times a drive chat turn by the server clock when the server runs three minutes ${server} this device (HS2-GA5ASE)`, async ({
+    page,
+  }) => {
+    await page.clock.install({ time: XV1VCR_T0 });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await mockProject(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]');
+    await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+    await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+    const host = drawer.locator('[data-component="ai-conversation"]');
+    await host.getByLabel('Message Codex').fill(content);
+    await host.getByLabel('Message Codex').press('Enter');
+    const line = host.locator('.ai-conversation__composer .ai-conversation__turn-progress');
+    await expect(line).toHaveAttribute('data-state', 'tool');
+    // By this device's clock the server's stamps lie three minutes in the future (pinning the turn at 0s
+    // and calling it stuck three minutes late) or in the past (calling it stuck at once). The server
+    // clock estimated from the stamped events times it from its start instead, short only by the
+    // event's delivery delay.
+    await page.clock.runFor(125_000);
+    await expect(line).toContainText(/Running Bash · [12]m \d+s · last activity [12]m \d+s ago/);
+    await page.clock.runFor(200_000);
+    await expect(line).toHaveAttribute('data-state', 'stuck');
+    await expect(line).toContainText(/Running Bash · 5m \d+s/);
+    page.once('dialog', (dialog) => void dialog.accept());
+    await line.getByRole('button', { name: 'Stop Codex' }).click();
+    await expect(line).toHaveCount(0);
   });
 
 test('shows a conversation dialog turn working, then may-be-stuck with Stop (HS2-XV1VCR)', async ({ page }) => {

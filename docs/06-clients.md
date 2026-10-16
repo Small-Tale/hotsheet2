@@ -1586,6 +1586,13 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   connection and `at_ms` / `in_flight_tool` on each stream envelope; see
   [13](13-drive-transport-interface.md)); a local render-only clock re-renders it once a second
   while any connection is busy and issues no network request (`clients/web/src/turn-clock.ts`).
+  "Now" is the project's server clock (HS2-GA5ASE): every stamped stream envelope samples
+  `at_ms` against the browser's monotonic clock, the largest anchor seen (the least-delayed
+  delivery) estimates the server's time, and it applies only when it differs from the browser
+  clock by 30 s or more, so a phone or LAN client whose clock is minutes off times turns
+  correctly while same-machine and NTP-synced clients keep their own clock. A replayed or delayed
+  event can only make the estimate earlier (later "may be stuck", never earlier), and a local
+  turn's send time yields to the first server stamp (`clients/web/src/server-clock.ts`).
   After 120 s without a stream event (300 s while a tool call is open) the pill becomes a warning
   `StateBanner`, "No activity for 2m — may be stuck", naming what the turn was doing, with the
   same Stop action as the toolbar when the drive can be interrupted. The pill is not a live

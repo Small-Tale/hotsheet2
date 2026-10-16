@@ -55,7 +55,13 @@ describe('durable AI conversation state (HS2-YHQCS2)', () => {
 
   it('keeps valid running-turn timing and drops only a corrupt record (HS2-XV1VCR)', () => {
     const messages = [{ id: 'u', role: 'user', content: 'hello' }],
-      timing = { turnId: 't', startedAt: 1, lastEventAt: 2, inFlightTool: { name: 'Bash', startedAt: 1, count: 1 } };
+      timing = {
+        turnId: 't',
+        startedAt: 1,
+        lastEventAt: 2,
+        inFlightTool: { name: 'Bash', startedAt: 1, count: 1 },
+        serverStamped: true,
+      };
     const storage = {
       getItem: () =>
         JSON.stringify({
@@ -66,13 +72,16 @@ describe('durable AI conversation state (HS2-YHQCS2)', () => {
           time: { messages, turnTiming: { lastEventAt: 'soon' } },
           tool: { messages, turnTiming: { inFlightTool: { name: 'Bash' } } },
           nullTool: { messages, turnTiming: { inFlightTool: null } },
+          // HS2-GA5ASE: the server-stamp marker is a boolean.
+          stamped: { messages, turnTiming: { serverStamped: 'yes' } },
           nothing: { messages, turnTiming: null },
         }),
     };
     const loaded = loadConversationStates(storage);
     expect(loaded.kept).toEqual({ messages, turnTiming: timing });
     expect(loaded.bare).toEqual({ messages, turnTiming: {} });
-    for (const id of ['array', 'id', 'time', 'tool', 'nullTool', 'nothing']) expect(loaded[id]).toEqual({ messages });
+    for (const id of ['array', 'id', 'time', 'tool', 'nullTool', 'stamped', 'nothing'])
+      expect(loaded[id]).toEqual({ messages });
   });
 
   it('drops corrupt entries without sacrificing valid conversations', () => {

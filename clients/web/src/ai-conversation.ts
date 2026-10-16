@@ -49,6 +49,11 @@ export interface ConversationTurnTiming {
   startedAt?: number;
   lastEventAt?: number;
   inFlightTool?: ConversationInFlightTool;
+  /**
+   * Whether `lastEventAt` came from a server-stamped event (HS2-GA5ASE). Until one arrives it is the
+   * send time this client recorded, which a skewed remote clock would put ahead of the server's.
+   */
+  serverStamped?: boolean;
 }
 export interface ConversationState {
   messages: ConversationMessage[];
@@ -278,8 +283,12 @@ function recordTurnEventTiming(
   const stampedAt = typeof timing?.at_ms === 'number' ? timing.at_ms : undefined,
     at = stampedAt ?? receivedAt,
     base: ConversationTurnTiming = same && current ? current : { ...(turnId === undefined ? {} : { turnId }) },
-    next: ConversationTurnTiming = { ...base, lastEventAt: Math.max(base.lastEventAt ?? at, at) };
+    // The first server stamp replaces the locally recorded send time rather than racing it, so a
+    // remote client whose clock runs ahead cannot hold the last activity in the server's future.
+    previous = stampedAt !== undefined && !base.serverStamped ? undefined : base.lastEventAt,
+    next: ConversationTurnTiming = { ...base, lastEventAt: Math.max(previous ?? at, at) };
   if (stampedAt !== undefined) {
+    next.serverStamped = true;
     const tool = inFlightTool(timing?.in_flight_tool);
     if (tool) next.inFlightTool = tool;
     else delete next.inFlightTool;
@@ -465,7 +474,9 @@ export function conversationTurnProgress(
   // Timing kept for another turn (a stale local record) is not this turn's.
   if (timing?.turnId && connection.turn_id && timing.turnId !== connection.turn_id) timing = undefined;
   const serverLast = finite(connection.last_event_at_ms),
-    localLast = finite(timing?.lastEventAt),
+    // A locally recorded send time is on this device's clock: once the server reports the turn's
+    // last activity, only server-stamped local timing is comparable with it (HS2-GA5ASE).
+    localLast = serverLast !== undefined && !timing?.serverStamped ? undefined : finite(timing?.lastEventAt),
     startedAt = finite(connection.turn_started_at_ms) ?? finite(timing?.startedAt),
     lastEventAt = Math.max(localLast ?? -Infinity, serverLast ?? -Infinity, startedAt ?? -Infinity),
     // The fresher record names the in-flight tool: events after the connection snapshot win.

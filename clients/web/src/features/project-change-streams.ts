@@ -15,6 +15,7 @@ import {
   startProjectChangeStream,
 } from '../project-change-poll';
 import type { createRefreshBarrier } from '../refresh-barrier';
+import { type ServerClocks, serverClocks } from '../server-clock';
 import type { createDriveConversationsController } from './drive-conversations';
 import type { createPermissionsController } from './permissions';
 import type { createTerminalNamesController } from './terminal-names';
@@ -55,6 +56,8 @@ export interface ProjectChangeStreamsDependencies {
   useChangeStreamWorker?: boolean;
   /** Injected for tests; defaults to the bundled module worker. */
   createChangeStreamWorker?: () => ChangeStreamWorkerLike | undefined;
+  /** Server-clock estimate fed by stamped turn events (HS2-GA5ASE); defaults to the shared one. */
+  serverClocks?: ServerClocks;
 }
 
 /** Local setting that opts this browser into the shared change-stream worker (HS2-SH9179). */
@@ -110,6 +113,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
   } = dependencies;
   const projectChangeStreams = new Map<string, () => void>();
   const useWorker = dependencies.useChangeStreamWorker ?? changeStreamWorkerEnabled();
+  const clocks = dependencies.serverClocks ?? serverClocks;
   let workerHost: ReturnType<typeof createChangeStreamWorkerHost> | undefined;
   const startStream = (current: Project, streamOptions: ProjectChangeStreamOptions): (() => void) => {
     if (!useWorker) return startProjectChangeStream(streamOptions);
@@ -188,9 +192,18 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
                 serverResolvedPermission(key, resolution);
               }
               if (event.kind === 'turn_event' && event.turn && acceptedTurns.has(event.turn)) {
+                // Each stamped event also samples the server's clock for remote clients (HS2-GA5ASE).
+                clocks.observe(current.id, event.turn.at_ms);
                 updateConversation(
                   event.turn.connection_id,
-                  (state) => applyConversationEvent(state, event.turn!.event, event.turn!.turn_id, event.turn),
+                  (state) =>
+                    applyConversationEvent(
+                      state,
+                      event.turn!.event,
+                      event.turn!.turn_id,
+                      event.turn,
+                      clocks.now(current.id),
+                    ),
                   event.turn.event.type !== 'done',
                 );
                 if (event.turn.event.type === 'done') conversationPersistence.flush();

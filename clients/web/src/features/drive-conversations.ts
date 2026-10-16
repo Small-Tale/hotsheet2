@@ -35,6 +35,7 @@ import {
   SIDEBAR_DRIVE_PROMPT,
   sidebarDriveConnectionId,
 } from '../project-drive';
+import { type ServerClocks, serverClocks } from '../server-clock';
 import { createTurnClock } from '../turn-clock';
 import type { createAiConfigurationController } from './ai-configuration';
 
@@ -62,6 +63,8 @@ export interface DriveConversationsDependencies {
   setTerminalDrawerVisible: (visible: boolean) => void;
   /** Resolved lazily: the AI configuration owner is created after this one and reads its state. */
   aiConfiguration: () => AiConfiguration;
+  /** Server-clock estimate a local turn starts on (HS2-GA5ASE); defaults to the shared one. */
+  serverClocks?: Pick<ServerClocks, 'now'>;
 }
 
 /**
@@ -199,8 +202,13 @@ export function createDriveConversationsController(dependencies: DriveConversati
   function beginConversation(connectionId: string, content: string) {
     conversationStartGeneration += 1;
     pendingConversationStarts.add(connectionId);
-    const turnId = browserRandomId();
-    updateConversation(connectionId, (state) => beginConversationTurn(state, turnId, content));
+    const turnId = browserRandomId(),
+      // The turn starts on the server's clock, so a skewed remote client times it correctly (HS2-GA5ASE).
+      projectId = Object.entries(driveConnectionsByProject.peek()).find(([, connections]) =>
+        connections.some((item) => item.id === connectionId),
+      )?.[0],
+      now = projectId === undefined ? Date.now() : (dependencies.serverClocks ?? serverClocks).now(projectId);
+    updateConversation(connectionId, (state) => beginConversationTurn(state, turnId, content, now));
     return {
       turnId,
       finish: () => {

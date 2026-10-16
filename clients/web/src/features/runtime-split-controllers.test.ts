@@ -176,6 +176,56 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     owner.dispose();
   });
 
+  it('change streams: a stamped turn event samples that project server clock and times the event by it (HS2-GA5ASE)', async () => {
+    const projects = signal([project('a'), project('b')]),
+      noop = vi.fn(async () => undefined),
+      observe = vi.fn(),
+      updateConversation = vi.fn(),
+      turn = {
+        connection_id: 'chat-1',
+        turn_id: 't1',
+        at_ms: 1_800_000_180_000,
+        event: { type: 'output', content: 'hi', truncated: false },
+      },
+      owner = createProjectChangeStreamsController({
+        projects,
+        project: () => projects.value[0],
+        shellMode: signal('project'),
+        statsProjectId: signal(undefined),
+        localTicketMutationBarrier: createRefreshBarrier(),
+        localTicketChangeAcknowledgements: new LocalTicketChangeAcknowledgements(),
+        projectTabRefresh: { request: noop },
+        turnStreamEvents: (response) => (response.events as { turn?: unknown }[]).map((event) => event.turn),
+        conversationPersistence: { flush: vi.fn() } as never,
+        updateConversation,
+        conversationForActivity: vi.fn(),
+        refreshDriveConnections: noop,
+        refreshPermissions: noop,
+        serverResolvedPermission: vi.fn(),
+        permissionRulesChanged: vi.fn(),
+        applyTerminalRenamed: vi.fn(),
+        refreshTerminalDashboard: noop,
+        refreshProviderOutbox: noop,
+        refreshCommands: noop,
+        refreshCustomViews: noop,
+        refreshRepositoryStatus: noop,
+        loadConfidenceReport: noop,
+        loadRepositorySize: noop,
+        serverClocks: { observe, now: () => 1_800_000_200_000, offset: () => 180_000 },
+      });
+    owner.syncProjectChangeStreams();
+    await streams.onEvents.get('/api/b')!({ events: [{ kind: 'turn_event', id: '', turn }] });
+    expect(observe).toHaveBeenCalledWith('b', 1_800_000_180_000);
+    // An older server's unstamped event is timed at the project's server clock, not the device's.
+    const unstamped = { connection_id: turn.connection_id, turn_id: turn.turn_id, event: turn.event };
+    await streams.onEvents.get('/api/b')!({ events: [{ kind: 'turn_event', id: '', turn: unstamped }] });
+    type Update = (state: { messages: never[] }) => { turnTiming?: { lastEventAt?: number } };
+    const [stamped, fallback] = updateConversation.mock.calls.map((call): Update => call[1]);
+    expect(stamped({ messages: [] }).turnTiming?.lastEventAt).toBe(1_800_000_180_000);
+    expect(fallback({ messages: [] }).turnTiming?.lastEventAt).toBe(1_800_000_200_000);
+    owner.dispose();
+  });
+
   it('change streams: dispose stops every stream and pending repository refresh; restart builds a fresh owner (HS2-A9E7QB)', async () => {
     const projects = signal([project('a'), project('b')]),
       noop = vi.fn(async () => undefined),

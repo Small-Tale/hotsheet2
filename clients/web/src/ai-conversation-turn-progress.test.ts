@@ -137,7 +137,7 @@ describe('running turn timing (HS2-XV1VCR)', () => {
     });
     // Events after the snapshot win; the snapshot's start time still dates the turn.
     const later = applyConversationEvent(reloaded, output, 'turn-1', { at_ms: T0 + 70_000 });
-    expect(later.turnTiming).toEqual({ turnId: 'turn-1', lastEventAt: T0 + 70_000 });
+    expect(later.turnTiming).toEqual({ turnId: 'turn-1', lastEventAt: T0 + 70_000, serverStamped: true });
     expect(conversationTurnProgress(later, snapshot, T0 + 75_000)?.label).toBe(
       'Working · 1m 15s · last activity 5s ago',
     );
@@ -160,6 +160,23 @@ describe('running turn timing (HS2-XV1VCR)', () => {
     expect(conversationTurnProgress(reloaded, connection(), T0)?.label).toBe('Working · last activity just now');
   });
 
+  it('keeps a skewed device send time out of server-stamped timing (HS2-GA5ASE)', () => {
+    // This device runs three minutes ahead of the server: its send time is in the server's future.
+    const ahead = 180_000;
+    let state = beginConversationTurn({ messages: [] }, 'turn-9', 'Run it', T0 + ahead);
+    const running = connection({ turn_id: 'turn-9', turn_started_at_ms: T0, last_event_at_ms: T0 });
+    // The server's snapshot of the turn wins over the unstamped local send time.
+    expect(conversationTurnProgress(state, running, T0 + 130_000)?.state).toBe('stuck');
+    // The first stamped event replaces the local send time instead of losing to it.
+    state = applyConversationEvent(state, output, 'turn-9', { at_ms: T0 + 10_000 });
+    expect(state.turnTiming).toMatchObject({ lastEventAt: T0 + 10_000, serverStamped: true });
+    // Later stamps advance it as usual, and an out-of-order earlier stamp does not rewind it.
+    state = applyConversationEvent(state, output, 'turn-9', { at_ms: T0 + 20_000 });
+    state = applyConversationEvent(state, output, 'turn-9', { at_ms: T0 + 15_000 });
+    expect(state.turnTiming?.lastEventAt).toBe(T0 + 20_000);
+    expect(conversationTurnProgress(state, running, T0 + 30_000)?.label).toBe('Working · 30s · last activity 10s ago');
+  });
+
   it("times another client's turn from its events and forgets it when it ends", () => {
     let state: ConversationState = { messages: [] };
     state = applyConversationEvent(state, output, 'remote-1', { at_ms: T0 + 1_000, in_flight_tool: bash });
@@ -167,7 +184,7 @@ describe('running turn timing (HS2-XV1VCR)', () => {
     expect(state.messages).toEqual([]);
     // A different remote turn replaces it.
     state = applyConversationEvent(state, output, 'remote-2', { at_ms: T0 + 2_000 });
-    expect(state.turnTiming).toEqual({ turnId: 'remote-2', lastEventAt: T0 + 2_000 });
+    expect(state.turnTiming).toEqual({ turnId: 'remote-2', lastEventAt: T0 + 2_000, serverStamped: true });
     // The previous remote turn's late Done does not clear the newer one; its own Done does.
     state = applyConversationEvent(state, { type: 'done', reason: 'completed' }, 'remote-1');
     expect(state.turnTiming?.turnId).toBe('remote-2');
