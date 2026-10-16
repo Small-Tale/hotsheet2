@@ -80,6 +80,12 @@ export interface AIConversationProps {
   error?: string;
   feedbackAvailable?: boolean;
   presentation?: 'dialog' | 'embedded';
+  /**
+   * The embedded conversation's measured height in CSS pixels (the drawer content it fills). A short
+   * chat compacts its floating form so the transcript keeps room (HS2-SZZGC6); see
+   * `embeddedComposerLayout`. Omitted (or in the dialog) the form keeps its full layout.
+   */
+  availableHeight?: number;
   foreground?: SafeHtml;
   providerId?: string;
   providers?: readonly { id: string; label: string }[];
@@ -483,27 +489,56 @@ function TranscriptRow({ grid, children }: { grid: boolean; children: SafeHtml }
 }
 
 /**
+ * Below this chat height the chat is compact: the stuck banner takes its one-line form, the
+ * selection hint row steps aside while a turn's progress shows, and the draft grows to 3 rows.
+ */
+export const SHORT_CHAT_HEIGHT = 480;
+/** Below this chat height (a default phone or desktop drawer) the draft grows to 2 rows. */
+export const VERY_SHORT_CHAT_HEIGHT = 320;
+
+/**
+ * How large the embedded conversation's floating form may grow (HS2-SZZGC6). The form floats over
+ * the transcript, so in a short drawer a full may-be-stuck banner plus a six-row draft would cover
+ * every message. A short chat is therefore compact: the banner shows its one-line form, the
+ * "Click to select" hint row above the transcript steps aside while a turn's progress line shows
+ * (it returns when the turn ends, and the selection bar still appears once messages are selected),
+ * and the draft's growth is capped (it scrolls inside the Composer beyond that). A tall chat or the
+ * dialog keeps the full layout.
+ */
+export function embeddedComposerLayout(availableHeight: number | undefined): {
+  maxRows: number;
+  compact: boolean;
+} {
+  if (availableHeight === undefined || !Number.isFinite(availableHeight) || availableHeight >= SHORT_CHAT_HEIGHT)
+    return { maxRows: 6, compact: false };
+  return { maxRows: availableHeight < VERY_SHORT_CHAT_HEIGHT ? 2 : 3, compact: true };
+}
+
+/**
  * The running turn's progress beside the composer (HS2-XV1VCR): a spinner line naming what the
  * turn is doing and for how long, refreshed by the app's local render clock. After a bounded
  * silence it becomes a warning banner with the Stop action. The ticking line is not a live
  * region, so assistive technology is not interrupted every second; the stuck banner is a polite
- * status whose title changes at most once a minute.
+ * status whose title changes at most once a minute. `compact` (a short drawer chat, HS2-SZZGC6)
+ * gives the banner its one-line short form, still with the Stop action.
  */
 export function ConversationTurnProgressLine({
   progress,
   tool,
   interruptible,
+  compact = false,
 }: {
   progress: ConversationTurnProgress;
   tool: string;
   interruptible: boolean;
+  compact?: boolean;
 }) {
   if (progress.state === 'stuck')
     return (
-      <div class="ai-conversation__turn-progress" data-state="stuck">
+      <div class="ai-conversation__turn-progress" data-state="stuck" data-density={compact ? 'compact' : undefined}>
         <StateBanner
-          title={progress.label}
-          detail={progress.detail}
+          title={compact ? progress.short : progress.label}
+          detail={compact ? undefined : progress.detail}
           tone="warning"
           urgency="status"
           copyLayout="stacked"
@@ -559,6 +594,7 @@ export function AIConversation(props: AIConversationProps) {
     error,
     feedbackAvailable = false,
     presentation = 'dialog',
+    availableHeight,
     foreground,
     model,
     effort,
@@ -584,37 +620,42 @@ export function AIConversation(props: AIConversationProps) {
     selectedCount = selectedIds.size;
   // The selection bar is its own row above the transcript scroller, never floating over messages
   // (HS2-C4RTVS); the dialog's fill-last body and the drawer's flex column give it its height.
-  const selectionStatus = selectionEnabled ? (
-    <div class="ai-conversation__selection" data-active={String(selectedCount > 0)}>
-      <span>
-        {selectedCount
-          ? `${selectedCount} message${selectedCount === 1 ? '' : 's'} selected`
-          : conversationSelectionHint()}
-      </span>
-      {selectedCount > 0 && (
-        <span class="ai-conversation__selection-actions">
-          <wa-button
-            appearance="plain"
-            size="small"
-            {...COMMANDS_AND_AI_ACTIONS.copyConversationSelection.attrs}
-            aria-label="Copy Selected Messages"
-            title="Copy selected messages"
-          >
-            <LucideIcon size={14.4} icon={Copy} name="copy" />
-          </wa-button>
-          <wa-button
-            appearance="plain"
-            size="small"
-            {...COMMANDS_AND_AI_ACTIONS.clearConversationSelection.attrs}
-            aria-label="Clear Message Selection"
-            title="Clear message selection"
-          >
-            <LucideIcon size={14.4} icon={X} name="x" />
-          </wa-button>
+  const formLayout = embeddedComposerLayout(presentation === 'embedded' ? availableHeight : undefined);
+  // While a turn's progress shows in a compact (short) drawer chat, the hint row steps aside so the
+  // transcript keeps its room; it returns when the turn ends (HS2-SZZGC6).
+  const hintStepsAside = formLayout.compact && selectedCount === 0 && busy && Boolean(turnProgress) && !readOnly;
+  const selectionStatus =
+    selectionEnabled && !hintStepsAside ? (
+      <div class="ai-conversation__selection" data-active={String(selectedCount > 0)}>
+        <span>
+          {selectedCount
+            ? `${selectedCount} message${selectedCount === 1 ? '' : 's'} selected`
+            : conversationSelectionHint()}
         </span>
-      )}
-    </div>
-  ) : null;
+        {selectedCount > 0 && (
+          <span class="ai-conversation__selection-actions">
+            <wa-button
+              appearance="plain"
+              size="small"
+              {...COMMANDS_AND_AI_ACTIONS.copyConversationSelection.attrs}
+              aria-label="Copy Selected Messages"
+              title="Copy selected messages"
+            >
+              <LucideIcon size={14.4} icon={Copy} name="copy" />
+            </wa-button>
+            <wa-button
+              appearance="plain"
+              size="small"
+              {...COMMANDS_AND_AI_ACTIONS.clearConversationSelection.attrs}
+              aria-label="Clear Message Selection"
+              title="Clear message selection"
+            >
+              <LucideIcon size={14.4} icon={X} name="x" />
+            </wa-button>
+          </span>
+        )}
+      </div>
+    ) : null;
   const timeline = conversationTimeline(messages, activity),
     selectedActivity = selectedActivityGroups(timeline, selectedIds),
     timelineRows = (
@@ -731,7 +772,12 @@ export function AIConversation(props: AIConversationProps) {
       {...COMMANDS_AND_AI_ACTIONS.sendConversationTurn.attrs}
     >
       {busy && turnProgress && (
-        <ConversationTurnProgressLine progress={turnProgress} tool={tool} interruptible={interruptible} />
+        <ConversationTurnProgressLine
+          progress={turnProgress}
+          tool={tool}
+          interruptible={interruptible}
+          compact={formLayout.compact}
+        />
       )}
       <Composer
         label={`Message ${tool}`}
@@ -739,7 +785,7 @@ export function AIConversation(props: AIConversationProps) {
         id={`ai-conversation-draft-${presentation}`}
         value={draft}
         placeholder={`Message ${tool}…`}
-        maxRows={6}
+        maxRows={formLayout.maxRows}
         disabled={busy}
         submitOnEnter
         actions={

@@ -52,6 +52,10 @@ export const aiConversationScenario = signal<AIConversationScenario>('streaming'
 export const aiConversationDevice = signal<DemoDevice>('host');
 export const aiConversationDemoOpen = signal(true);
 export const aiConversationPresentation = signal<'dialog' | 'embedded'>('dialog');
+/** The embedded chat's measured height: the full stage, or a default-height drawer (HS2-SZZGC6). */
+export const aiConversationChatHeight = signal<'full' | 'short'>('full');
+/** The default drawer's chat height at 390x844 and 1280x800, which compacts the floating form. */
+const SHORT_DRAWER_CHAT_HEIGHT = 262;
 export const aiConversationSaveCount = signal(0);
 /** Transcript selection, driven by the production plain / Cmd-Ctrl / Shift pick rules (HS2-WV88W3). */
 export const aiConversationSelection = signal<ConversationMessageSelection>(EMPTY_CONVERSATION_SELECTION);
@@ -234,6 +238,7 @@ export function AIConversationDemo() {
   const embedded = aiConversationPresentation.value === 'embedded';
   const conversation: AIConversationProps = {
     presentation: aiConversationPresentation.value,
+    availableHeight: embedded && aiConversationChatHeight.value === 'short' ? SHORT_DRAWER_CHAT_HEIGHT : undefined,
     open: aiConversationDemoOpen.value,
     tool: aiConversationProviderLabel(),
     sessionId: '019-demo-session',
@@ -313,6 +318,7 @@ export function AIConversationDemo() {
 /** Restore the canonical conversation settings and sync the live controls (HS2-X1SM48). */
 export function resetAIConversationDemo(root?: ParentNode): void {
   aiConversationPresentation.value = 'dialog';
+  aiConversationChatHeight.value = 'full';
   aiConversationScenario.value = 'streaming';
   aiConversationSelection.value = EMPTY_CONVERSATION_SELECTION;
   aiConversationDevice.value = 'host';
@@ -321,6 +327,7 @@ export function resetAIConversationDemo(root?: ParentNode): void {
     syncSettingsControls(root, 'ai-conversation', {
       values: {
         presentation: aiConversationPresentation.value,
+        'chat-height': aiConversationChatHeight.value,
         scenario: aiConversationScenario.value,
         device: aiConversationDevice.value,
       },
@@ -339,6 +346,17 @@ export function AIConversationSettings() {
           { value: 'embedded', label: 'Embedded' },
         ]}
       />
+      {aiConversationPresentation.value === 'embedded' && (
+        <Select
+          name="chat-height"
+          label="Chat height"
+          value={aiConversationChatHeight.value}
+          choices={[
+            { value: 'full', label: 'Tall Chat' },
+            { value: 'short', label: 'Short Drawer Chat' },
+          ]}
+        />
+      )}
       <Select
         name="scenario"
         label="Public state"
@@ -385,6 +403,11 @@ function wireAiConversationDemo(root: HTMLElement): () => void {
     delegate(root, 'change', '[data-settings="ai-conversation"] [name="presentation"]', (_event, target) => {
       aiConversationPresentation.value = (target as FormControl).value as typeof aiConversationPresentation.value;
       openAIConversationDemo(root);
+    }),
+  );
+  demoListeners.add(
+    delegate(root, 'change', '[data-settings="ai-conversation"] [name="chat-height"]', (_event, target) => {
+      aiConversationChatHeight.value = (target as FormControl).value as typeof aiConversationChatHeight.value;
     }),
   );
   demoListeners.add(

@@ -9,6 +9,7 @@ import {
   AIConversation,
   type AIConversationProps,
   AIConversationToolbar,
+  embeddedComposerLayout,
   isConversationSurfaceLifecycleEvent,
   selectedActivityGroups,
 } from './ai-conversation';
@@ -1009,6 +1010,50 @@ describe('running turn progress beside the composer (HS2-XV1VCR)', () => {
     expect(stoppable).toContain('Working · 2m 4s');
     expect(stoppable).toMatch(/kui-state-banner[\s\S]*data-action="stop-conversation"[^>]*>\s*Stop\s*</);
     expect(stuck(false)).not.toMatch(/kui-state-banner[\s\S]*data-action="stop-conversation"/);
+  });
+  // HS2-SZZGC6: a short drawer chat compacts its floating form so the transcript keeps room.
+  it('sizes the embedded floating form by the chat height', () => {
+    expect(embeddedComposerLayout(undefined)).toEqual({ maxRows: 6, compact: false });
+    expect(embeddedComposerLayout(Number.NaN)).toEqual({ maxRows: 6, compact: false });
+    expect(embeddedComposerLayout(480)).toEqual({ maxRows: 6, compact: false });
+    expect(embeddedComposerLayout(479)).toEqual({ maxRows: 3, compact: true });
+    expect(embeddedComposerLayout(320)).toEqual({ maxRows: 3, compact: true });
+    expect(embeddedComposerLayout(319)).toEqual({ maxRows: 2, compact: true });
+    expect(embeddedComposerLayout(262)).toEqual({ maxRows: 2, compact: true });
+  });
+  it('compacts the stuck banner, draft rows, and running-turn selection hint only in a short embedded chat', () => {
+    const stuck = {
+        state: 'stuck' as const,
+        label: 'No activity for 5m — may be stuck',
+        short: 'May be stuck · no activity for 5m',
+        detail: 'Running Bash · 5m 5s',
+        idleMs: 300_000,
+      },
+      render = (overrides: Partial<AIConversationProps>) =>
+        String(AIConversation(base({ selectionId: 'chat', turnProgress: stuck, ...overrides })));
+    const short = render({ presentation: 'embedded', availableHeight: 262 });
+    expect(short).toMatch(/ai-conversation__turn-progress" data-state="stuck" data-density="compact"/);
+    expect(short).toContain('May be stuck · no activity for 5m');
+    expect(short).not.toContain('Running Bash · 5m 5s');
+    expect(short).toMatch(/kui-state-banner[\s\S]*data-action="stop-conversation"/);
+    expect(short).not.toContain('ai-conversation__selection');
+    // A selection still shows its bar and actions in a short chat, and the hint returns once idle.
+    expect(render({ presentation: 'embedded', availableHeight: 262, selectedMessageIds: ['q'] })).toContain(
+      'ai-conversation__selection',
+    );
+    expect(render({ presentation: 'embedded', availableHeight: 262, busy: false })).toContain(
+      'ai-conversation__selection',
+    );
+    // A tall drawer chat and the dialog keep the full layout whatever height is passed.
+    for (const full of [
+      render({ presentation: 'embedded', availableHeight: 640 }),
+      render({ presentation: 'dialog', availableHeight: 262 }),
+    ]) {
+      expect(full).toMatch(/ai-conversation__turn-progress" data-state="stuck">/);
+      expect(full).toContain('No activity for 5m — may be stuck');
+      expect(full).toContain('Running Bash · 5m 5s');
+      expect(full).toContain('ai-conversation__selection');
+    }
   });
   it('renders no progress line while idle or read-only', () => {
     const progress = { state: 'working' as const, label: 'Working · 1s', short: 'Working · 1s', idleMs: 0 };

@@ -8912,6 +8912,43 @@ for (const theme of ['light', 'dark'] as const) {
   });
 }
 
+test('exposes the short drawer chat variant of the embedded conversation (HS2-SZZGC6)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=ai-conversation');
+  await setDemoSettingsOpen(page, true);
+  const settings = page.locator('[data-settings="ai-conversation"]'),
+    host = page.locator('[data-component="ai-conversation"]'),
+    line = host.locator('.ai-conversation__turn-progress'),
+    choose = (name: string, value: string) =>
+      settings.locator(`[name="${name}"]`).evaluate((node: HTMLElement & { value: string }, next) => {
+        node.value = next;
+        node.dispatchEvent(new Event('change', { bubbles: true }));
+      }, value);
+  await choose('presentation', 'embedded');
+  await choose('scenario', 'stuck');
+  await expect(line).toHaveAttribute('data-state', 'stuck');
+  await expect(line).not.toHaveAttribute('data-density', 'compact');
+  await expect(line).toContainText('may be stuck');
+  await expect(settings.locator('[name="chat-height"]')).toHaveJSProperty('value', 'full');
+  await choose('chat-height', 'short');
+  await expect(line).toHaveAttribute('data-density', 'compact');
+  await expect(line).toContainText('May be stuck · no activity for 6m');
+  await expect(host.locator('.ai-conversation__selection')).toHaveCount(0);
+  await setDemoSettingsOpen(page, false);
+  await page
+    .locator('.ai-conversation-demo')
+    .screenshot({ path: 'target/visual-captures/hs2-szzgc6-demo-short-1280.png' });
+  await setDemoSettingsOpen(page, true);
+  await choose('chat-height', 'full');
+  await expect(line).not.toHaveAttribute('data-density', 'compact');
+  // Reset restores the tall chat with the rest of the canonical settings.
+  await choose('chat-height', 'short');
+  await settings.locator('[data-action="reset-settings"]').click();
+  await expect(host).toHaveAttribute('data-presentation', 'dialog');
+  await choose('presentation', 'embedded');
+  await expect(settings.locator('[name="chat-height"]')).toHaveJSProperty('value', 'full');
+});
+
 test('keeps equal notification card gaps across pending and history groups (HS2-D38KZF)', async ({ page }) => {
   await page.goto('/ux-demo?component=notification-center');
   const center = page.locator('[data-component="notification-center"]'),

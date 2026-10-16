@@ -225,6 +225,8 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           conversation: AIConversationProps = {
             open: true,
             presentation: 'embedded',
+            // The drawer content the chat fills sizes its floating form (HS2-SZZGC6).
+            availableHeight: terminalDrawerBounds.value.height,
             tool,
             sessionId: connection?.session_id ?? chat.sourceSessionId,
             selectionId: chat.connectionId,

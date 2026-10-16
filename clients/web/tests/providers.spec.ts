@@ -18705,8 +18705,13 @@ async function runLongTurnUntilStuck(
   // A silent open tool call becomes "may be stuck" after its longer bound.
   await page.clock.runFor(180_000);
   await expect(line).toHaveAttribute('data-state', 'stuck');
-  await expect(line).toContainText('may be stuck');
-  await expect(line).toContainText(/Running Bash · 5m \d+s/);
+  // A short (default-height) drawer chat shows the banner's one-line form (HS2-SZZGC6).
+  if ((await line.getAttribute('data-density')) === 'compact') {
+    await expect(line).toContainText('May be stuck · no activity for 5m');
+  } else {
+    await expect(line).toContainText('may be stuck');
+    await expect(line).toContainText(/Running Bash · 5m \d+s/);
+  }
   for (const width of widths) {
     await page.setViewportSize({ width, height: width < 640 ? 844 : 800 });
     await expect(line.getByRole('button', { name: 'Stop Codex' })).toBeInViewport({ ratio: 1 });
@@ -18818,6 +18823,94 @@ for (const width of [1280, 390] as const)
     await expect.poll(async () => (await published()) - (await clearance())).toBe(0);
   });
 
+for (const width of [390, 1280] as const)
+  test(`keeps the last message visible in a default-height drawer chat with a stuck banner and six-row draft at ${width}px (HS2-SZZGC6)`, async ({
+    page,
+  }) => {
+    await page.clock.install({ time: XV1VCR_T0 });
+    await page.setViewportSize({ width, height: width < 640 ? 844 : 800 });
+    await mockProject(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    // The drawer keeps its default (not maximized) height.
+    const drawer = page.locator('[data-component="terminal-drawer"]');
+    await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+    await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+    const host = drawer.locator('[data-component="ai-conversation"]'),
+      field = host.getByLabel('Message Codex'),
+      form = host.locator('.ai-conversation__composer'),
+      transcript = host.locator('.ai-conversation__transcript');
+    for (let turn = 0; turn < 3; turn += 1) {
+      await field.fill('What time is it in California?');
+      await field.press('Enter');
+      await expect(host.locator('.ai-conversation__message--assistant')).toHaveCount(turn + 1);
+    }
+    await field.fill('Run the long test suite.');
+    await field.press('Enter');
+    const line = form.locator('.ai-conversation__turn-progress');
+    await page.clock.runFor(305_000);
+    await expect(line).toHaveAttribute('data-state', 'stuck');
+    await field.evaluate((element: HTMLTextAreaElement) => {
+      element.value = Array.from({ length: 8 }, (_, row) => `Draft line ${row + 1}`).join('\n');
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await expect(field).toHaveValue(/Draft line 8/);
+    await transcript.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    const geometry = () =>
+      host.evaluate((node) => {
+        const rect = (selector: string) => node.querySelector(selector)!.getBoundingClientRect();
+        const messages = node.querySelectorAll('.ai-conversation__message');
+        return {
+          host: node.getBoundingClientRect().height,
+          transcriptTop: rect('.ai-conversation__transcript').top,
+          formTop: rect('.ai-conversation__composer').top,
+          form: rect('.ai-conversation__composer').height,
+          lastTop: messages[messages.length - 1].getBoundingClientRect().top,
+          lastBottom: messages[messages.length - 1].getBoundingClientRect().bottom,
+        };
+      });
+    // The default drawer gives the chat about 262 px: a short chat compacts its floating form.
+    const banner = line.locator('[role="status"]'),
+      // The rows the Composer field shows, from its rendered height and line height.
+      visibleRows = () =>
+        field.evaluate((element: HTMLTextAreaElement) => {
+          const style = getComputedStyle(element),
+            padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+          return Math.round((element.clientHeight - padding) / Number.parseFloat(style.lineHeight));
+        });
+    await expect.poll(visibleRows).toBe(2);
+    await expect(banner).toContainText('May be stuck · no activity for 5m');
+    await expect(banner).not.toContainText('Running Bash');
+    await expect(host.locator('.ai-conversation__selection')).toHaveCount(0);
+    await expect(line.getByRole('button', { name: 'Stop Codex' })).toBeInViewport({ ratio: 1 });
+    await expect
+      .poll(async () => {
+        const box = await geometry();
+        return (
+          box.form <= box.host * 0.7 && box.lastBottom <= box.formTop - 8 && box.lastBottom - box.transcriptTop >= 40
+        );
+      })
+      .toBe(true);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `target/visual-captures/hs2-szzgc6-default-drawer-stuck-draft-${width}.png` });
+    const compactForm = (await geometry()).form;
+    // Maximized, the chat is tall again: the full banner, the selection hint, and a six-row draft return.
+    await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dispatchEvent('dblclick');
+    await expect(drawer).toHaveAttribute('data-maximized', 'true');
+    await expect(banner).toContainText('Running Bash');
+    await expect(host.locator('.ai-conversation__selection')).toHaveCount(1);
+    await expect.poll(visibleRows).toBe(6);
+    await expect.poll(async () => (await geometry()).form).toBeGreaterThan(compactForm + 100);
+    await transcript.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    await expect.poll(async () => (await geometry()).lastBottom <= (await geometry()).formTop - 8).toBe(true);
+  });
+
 for (const [server, content] of [
   ['ahead of', 'Run the long suite on a server ahead.'],
   ['behind', 'Run the long suite on a server behind.'],
@@ -18896,7 +18989,8 @@ for (const [server, content] of [
     await expect(line).toContainText(/Running Bash · 4m \d+s/);
     await page.clock.runFor(65_000);
     await expect(line).toHaveAttribute('data-state', 'stuck');
-    await expect(line).toContainText(/Running Bash · 5m \d+s/);
+    // The default-height drawer shows the stuck banner's one-line form (HS2-SZZGC6).
+    await expect(line).toContainText('May be stuck · no activity for 5m');
   });
 
 test('shows a conversation dialog turn working, then may-be-stuck with Stop (HS2-XV1VCR)', async ({ page }) => {

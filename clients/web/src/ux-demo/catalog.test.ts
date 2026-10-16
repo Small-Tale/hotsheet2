@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import componentCatalogExtension from '../../ai/component-catalog-extension.json';
 import { createDevApp } from '../dev-server';
 import {
+  aiConversationChatHeight,
   aiConversationDemoOpen,
   aiConversationPresentation,
   aiConversationScenario,
@@ -624,6 +625,7 @@ describe('UX demo catalog', () => {
     inspectorLiveClaim.value = 'overrun';
     composerMultipleSources.value = false;
     aiConversationPresentation.value = 'embedded';
+    aiConversationChatHeight.value = 'short';
     aiConversationScenario.value = 'failed';
     aiConversationDemoOpen.value = false;
     transitionStyle.value = 'crossfade';
@@ -637,6 +639,7 @@ describe('UX demo catalog', () => {
       liveClaim: inspectorLiveClaim.value,
       multipleSources: composerMultipleSources.value,
       presentation: aiConversationPresentation.value,
+      chatHeight: aiConversationChatHeight.value,
       scenario: aiConversationScenario.value,
       open: aiConversationDemoOpen.value,
       style: transitionStyle.value,
@@ -646,6 +649,7 @@ describe('UX demo catalog', () => {
       liveClaim: 'none',
       multipleSources: true,
       presentation: 'dialog',
+      chatHeight: 'full',
       scenario: 'streaming',
       open: true,
       style: 'push',

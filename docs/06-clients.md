@@ -1617,7 +1617,16 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   `scrollClearance="block-end"` transcript `List`: the dialog's `DialogSurface` floating footer
   publishes it, and the drawer chat measures its composer form
   (`components/embedded-composer-clearance.ts`), so the last message rests above the composer
-  instead of behind a fixed reservation (HS2-W0KJVQ). A turn another client started is
+  instead of behind a fixed reservation (HS2-W0KJVQ). A short drawer chat (the default drawer
+  gives it about 262 px at 390x844 and at 1280x800) compacts that floating form so the transcript
+  keeps room (HS2-SZZGC6): below a 480 px chat height the stuck banner shows its one-line short form
+  (same warning tone, icon, and Stop), the "Click to select" hint row steps aside while a turn's
+  progress shows (it returns when the turn ends, and the selection bar still appears once messages
+  are selected), and the draft grows to 3 rows; below
+  320 px it grows to 2 rows. A longer draft scrolls inside the Composer. A taller or maximized
+  drawer and the dialog keep the full banner, the hint, and six rows. The drawer passes its measured
+  content height as `AIConversationProps.availableHeight` (`embeddedComposerLayout`). A turn
+  another client started is
   timed from the connection snapshot and its own events. Native activity and permission
   events provide specific progress text, and connection-matched permission requests reuse the
   standard decision card inline. Completed, failed, and interrupted outcomes remain on their
