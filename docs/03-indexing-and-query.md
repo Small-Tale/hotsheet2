@@ -256,9 +256,11 @@ request (until the full re-check it triggers is applied), or a stopped watcher â
 miss back to the walk. Freshness is sampled before and after the candidate query, so an
 event queued meanwhile also walks. A stale candidate still walks. The one blind spot is
 the few milliseconds between an external write and the stream delivering its event; a
-lookup racing an external create can miss it, as one sent a moment earlier would. A slug
-held only by a file that was never parseable while indexed resolves as a miss rather than
-as that file's parse error. Measured on a 3,000-ticket store (debug build, in-memory
+lookup racing an external create can miss it, as one sent a moment earlier would. A
+corrupt ticket file is never indexed, so before trusting an in-sync miss `StoreEntry::resolve`
+consults the entry's stat-validated corrupt-file cache (only changed files are re-read);
+when a corrupt file still declares the slug, the walk runs and returns that file's parse
+error, keeping the lookup pointed at recovery (HS2-SGNK11). Measured on a 3,000-ticket store (debug build, in-memory
 index): a miss took about 89 ms through the walk and about 1.6 ms in sync.
 
 ## 3.5 The query surface

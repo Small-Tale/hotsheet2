@@ -39,13 +39,39 @@ impl StoreEntry {
     /// file and falling back to the store walk on a miss or stale entry (HS2-ZXFNE6).
     /// The index lock is held only for the candidate query, never across file reads.
     /// A miss is final while the watcher reports the index in sync (HS2-3R0C6G).
+    ///
+    /// A corrupt ticket file is never indexed, so an in-sync miss on the slug it declares
+    /// would 404. Before trusting such a miss, the stat-validated corrupt-file cache is
+    /// consulted (it re-reads only changed files); when a corrupt file still declares the
+    /// slug, the walk runs and reports that file's parse error so the user is pointed at
+    /// recovery (HS2-SGNK11).
     pub fn resolve(&self, needle: &str) -> Result<Option<Ticket>, StoreError> {
-        hotsheet_index::resolve_ticket_with_freshness(
+        let in_sync = self.freshness.in_sync();
+        let found = hotsheet_index::resolve_ticket_with_freshness(
             &self.store,
             needle,
             |slug| self.index.lock_or_recover().slug_candidates(slug),
             &self.freshness,
-        )
+        )?;
+        if found.is_some() || !in_sync || Ulid::from_string(needle).is_ok() {
+            // A walked miss already failed on any corrupt file declaring the slug.
+            return Ok(found);
+        }
+        let corrupt_declares_slug = self
+            .corrupt
+            .lock_or_recover()
+            .corrupt_tickets(&self.store)?
+            .iter()
+            .any(|file| {
+                file.slug
+                    .as_deref()
+                    .is_some_and(|slug| slug.eq_ignore_ascii_case(needle))
+            });
+        if corrupt_declares_slug {
+            hotsheet_ticketing::ops::resolve(&self.store, needle)
+        } else {
+            Ok(None)
+        }
     }
 
     /// [`StoreEntry::resolve`] as a shareable resolver, for a `GitProvider` over this
@@ -409,6 +435,64 @@ mod tests {
                 .resolve(n))
             .unwrap(),
             vec![late.id]
+        );
+    }
+
+    /// HS2-SGNK11: a slug held only by a never-parseable ticket file reports that file's
+    /// parse error in both freshness states, instead of an in-sync 404; a genuine miss
+    /// stays a miss, and repairing the file makes the slug resolve again.
+    #[test]
+    fn a_corrupt_files_slug_reports_its_parse_error_in_sync_and_walking() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        let entry = entry_for(store.clone());
+        entry
+            .index
+            .lock_or_recover()
+            .rebuild_from_store(&store)
+            .unwrap();
+        let id = Ulid::new();
+        let path = store.ticket_path(&id);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "---\nslug: HS-BROKEN\n---\nbroken").unwrap();
+
+        for live in [true, false, true] {
+            entry.freshness.set_live(live);
+            assert_eq!(entry.freshness.in_sync(), live);
+            let error = entry.resolve("hs-broken").unwrap_err().to_string();
+            assert!(
+                error.contains(&path.display().to_string()),
+                "the walk's parse error names the corrupt file: {error}"
+            );
+            assert!(entry.resolve("HS-NOPE").unwrap().is_none());
+        }
+
+        // Repaired and reindexed: the old slug is a plain miss and the repair resolves.
+        std::fs::remove_file(&path).unwrap();
+        let repaired = hotsheet_ticketing::ops::create(
+            &store,
+            id,
+            "HS",
+            hotsheet_model::Timestamp::new("2026-10-16T00:00:00Z"),
+            hotsheet_ticketing::ops::NewTicket {
+                title: "repaired".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        entry
+            .index
+            .lock_or_recover()
+            .rebuild_from_store(&store)
+            .unwrap();
+        assert!(entry.freshness.in_sync());
+        assert!(entry.resolve("hs-broken").unwrap().is_none());
+        assert_eq!(
+            entry
+                .resolve(&repaired.slug)
+                .unwrap()
+                .map(|ticket| ticket.id),
+            Some(id)
         );
     }
 
