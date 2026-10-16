@@ -528,7 +528,8 @@ pub(crate) fn hosted_provider_registry(state: &AppState) -> Result<ProviderRegis
             .ok_or_else(|| ApiError::not_found(&id))?;
         registry
             .register(Arc::new(
-                GitProvider::new(id.clone(), entry.store)
+                GitProvider::new(id.clone(), entry.store.clone())
+                    .with_resolver(entry.resolver())
                     .with_default(id == default_id && !external_default),
             ))
             .map_err(provider_transfer_error)?;
@@ -563,7 +564,9 @@ pub(crate) fn provider_for(
     connection_id: &str,
 ) -> Result<Arc<dyn hotsheet_ticketing::TicketProvider>, ApiError> {
     if let Some(entry) = state.host.get(connection_id) {
-        return Ok(Arc::new(GitProvider::new(connection_id, entry.store)));
+        return Ok(Arc::new(
+            GitProvider::new(connection_id, entry.store.clone()).with_resolver(entry.resolver()),
+        ));
     }
     // Refuse before building a client, so a disabled source is never contacted (HS2-SF6W34).
     if connection_disabled(state, connection_id)? {

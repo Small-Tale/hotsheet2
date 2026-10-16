@@ -372,6 +372,41 @@ fn filename_glob_matches(pattern: &str, filename: &str) -> bool {
     pattern.ends_with('*') || remainder.is_empty()
 }
 
+/// A shareable ULID-or-slug lookup for one store (HS2-HEKMKH). A caller that holds the
+/// store's index injects its index-backed, verify-then-fallback resolver (for example
+/// into a [`crate::GitProvider`] the server builds); without one, [`TicketResolver::walk`]
+/// uses [`resolve`]. Every resolver must return what [`resolve`] would for the store.
+#[derive(Clone)]
+pub struct TicketResolver(std::sync::Arc<ResolveFn>);
+
+/// The lookup a [`TicketResolver`] wraps.
+type ResolveFn = dyn Fn(&str) -> Result<Option<Ticket>, StoreError> + Send + Sync;
+
+impl TicketResolver {
+    /// Wrap an injected lookup.
+    pub fn new(
+        resolve: impl Fn(&str) -> Result<Option<Ticket>, StoreError> + Send + Sync + 'static,
+    ) -> Self {
+        Self(std::sync::Arc::new(resolve))
+    }
+
+    /// The index-free lookup: [`resolve`] over `store`.
+    pub fn walk(store: FsStore) -> Self {
+        Self::new(move |needle| resolve(&store, needle))
+    }
+
+    /// Resolve `needle` (a ULID or slug).
+    pub fn resolve(&self, needle: &str) -> Result<Option<Ticket>, StoreError> {
+        (self.0)(needle)
+    }
+}
+
+impl std::fmt::Debug for TicketResolver {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("TicketResolver(..)")
+    }
+}
+
 /// Resolve a ticket by ULID (exact) or by slug (case-insensitive).
 ///
 /// A slug is found by [`FsStore::find_ticket_by_slug`], a pre-filtered walk of the store.
@@ -576,9 +611,20 @@ pub fn resolve_blockers(
     target: Option<&Ulid>,
     needles: &[String],
 ) -> Result<Vec<Ulid>, OpError> {
+    resolve_blockers_with(target, needles, |needle| resolve(store, needle))
+}
+
+/// [`resolve_blockers`] through a caller-supplied resolver: the server passes its
+/// index-backed, verify-then-fallback lookup (HS2-HEKMKH) so a blocker reference does not
+/// walk the store.
+pub fn resolve_blockers_with(
+    target: Option<&Ulid>,
+    needles: &[String],
+    mut resolve: impl FnMut(&str) -> Result<Option<Ticket>, StoreError>,
+) -> Result<Vec<Ulid>, OpError> {
     let mut ids = Vec::with_capacity(needles.len());
     for n in needles {
-        let t = resolve(store, n)?.ok_or_else(|| OpError::UnknownTicket(n.clone()))?;
+        let t = resolve(n)?.ok_or_else(|| OpError::UnknownTicket(n.clone()))?;
         if target == Some(&t.id) {
             return Err(OpError::SelfBlock(t.slug));
         }
@@ -2578,6 +2624,56 @@ mod tests {
         );
         assert!(resolve(&store, &broken.slug).is_err());
         assert!(resolve(&store, "HS-ZZZZZZ").unwrap().is_none());
+    }
+
+    #[test]
+    fn blocker_references_resolve_through_the_injected_resolver() {
+        // HS2-HEKMKH: callers holding an index pass their resolver; the walk never runs.
+        let (_dir, store) = store();
+        let target = titled(&store, "target");
+        let blocker = titled(&store, "blocker");
+        let mut asked = Vec::new();
+        let ids = resolve_blockers_with(
+            Some(&target.id),
+            &[
+                blocker.slug.to_lowercase(),
+                blocker.id.to_string(),
+                blocker.slug.clone(),
+            ],
+            |needle| {
+                asked.push(needle.to_string());
+                Ok(Some(blocker.clone()))
+            },
+        )
+        .unwrap();
+        assert_eq!(ids, vec![blocker.id]);
+        assert_eq!(asked.len(), 3);
+
+        let self_block = resolve_blockers_with(Some(&target.id), &["x".into()], |_| {
+            Ok(Some(target.clone()))
+        });
+        assert!(matches!(self_block, Err(OpError::SelfBlock(slug)) if slug == target.slug));
+        let unknown = resolve_blockers_with(None, &["HS-NOSUCH".into()], |_| Ok(None));
+        assert!(matches!(unknown, Err(OpError::UnknownTicket(n)) if n == "HS-NOSUCH"));
+        let failed = resolve_blockers_with(None, &["HS-BROKEN".into()], |_| {
+            Err(StoreError::Git("index lookup failed".into()))
+        });
+        assert!(failed.is_err());
+        // The store-walk wrapper keeps its behavior.
+        assert_eq!(
+            resolve_blockers(
+                &store,
+                Some(&target.id),
+                std::slice::from_ref(&blocker.slug)
+            )
+            .unwrap(),
+            vec![blocker.id]
+        );
+        assert!(
+            resolve_blockers_with(None, &[], |_| unreachable!())
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

@@ -1163,6 +1163,9 @@ pub struct GitProvider {
     connection_id: String,
     display_name: String,
     store: FsStore,
+    /// ULID/slug lookups (HS2-HEKMKH): the store walk unless the owner of the store's
+    /// index injects its index-backed resolver with [`GitProvider::with_resolver`].
+    resolver: ops::TicketResolver,
     is_default: bool,
     transfer_lock: Arc<Mutex<()>>,
     #[cfg(test)]
@@ -1176,6 +1179,7 @@ impl GitProvider {
         Self {
             connection_id: connection_id.into(),
             display_name: "Git tickets".into(),
+            resolver: ops::TicketResolver::walk(store.clone()),
             store,
             is_default: false,
             transfer_lock: Arc::new(Mutex::new(())),
@@ -1188,6 +1192,15 @@ impl GitProvider {
 
     pub fn with_default(mut self, is_default: bool) -> Self {
         self.is_default = is_default;
+        self
+    }
+
+    /// Resolve this store's ULIDs and slugs (single-ticket lookups and `blocked_by`
+    /// references) through `resolver` instead of the store walk. It must give the walk's
+    /// answer for this store, as the index-backed verify-then-fallback resolver does.
+    #[must_use]
+    pub fn with_resolver(mut self, resolver: ops::TicketResolver) -> Self {
+        self.resolver = resolver;
         self
     }
 
@@ -1209,14 +1222,22 @@ impl GitProvider {
     }
 
     fn ticket(&self, native_id: &str) -> Result<hotsheet_model::Ticket, ProviderError> {
-        ops::resolve(&self.store, native_id)?.ok_or_else(|| ProviderError::NotFound {
-            connection_id: self.connection_id.clone(),
-            native_id: native_id.to_string(),
-        })
+        self.resolver
+            .resolve(native_id)?
+            .ok_or_else(|| ProviderError::NotFound {
+                connection_id: self.connection_id.clone(),
+                native_id: native_id.to_string(),
+            })
     }
 
-    fn blockers(&self, values: &[String]) -> Result<Vec<Ulid>, ProviderError> {
-        Ok(ops::resolve_blockers(&self.store, None, values)?)
+    fn blockers(
+        &self,
+        target: Option<&Ulid>,
+        values: &[String],
+    ) -> Result<Vec<Ulid>, ProviderError> {
+        Ok(ops::resolve_blockers_with(target, values, |needle| {
+            self.resolver.resolve(needle)
+        })?)
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
@@ -1351,7 +1372,7 @@ impl TicketProvider for GitProvider {
         draft: ProviderDraft,
     ) -> Result<ApiTicket, ProviderError> {
         let prefix = self.store.metadata()?.ticket_prefix;
-        let blocked_by = self.blockers(&draft.blocked_by)?;
+        let blocked_by = self.blockers(None, &draft.blocked_by)?;
         let _transfer_guard = if draft.transfer.is_some() {
             Some(self.transfer_lock.lock_or_recover())
         } else {
@@ -1421,7 +1442,8 @@ impl TicketProvider for GitProvider {
         let blocked_by = patch
             .blocked_by
             .as_deref()
-            .map(|v| self.blockers(v))
+            // A ticket cannot block itself, matching the server route.
+            .map(|v| self.blockers(Some(&ticket.id), v))
             .transpose()?;
         let updated = ops::update(
             &self.store,
@@ -2182,6 +2204,108 @@ mod tests {
             now: Timestamp::new(at),
             generated_id: id,
         }
+    }
+
+    fn draft(title: &str, blocked_by: Vec<String>) -> ProviderDraft {
+        ProviderDraft {
+            title: title.into(),
+            category: "task".into(),
+            priority: Priority::Default,
+            status: Status::NotStarted,
+            details: String::new(),
+            tags: vec![],
+            up_next: false,
+            blocked_by,
+            transfer: None,
+        }
+    }
+
+    /// HS2-HEKMKH: an injected resolver answers every git-provider ULID/slug lookup —
+    /// single-ticket reads and writes and `blocked_by` on create and update — so a
+    /// server-built provider never walks the store.
+    #[test]
+    fn an_injected_resolver_answers_every_git_provider_lookup() {
+        let (_dir, walking) = git_provider();
+        let store = walking.store().clone();
+        let blocker = walking
+            .create(
+                ctx(Ulid::new(), "2026-10-16T00:00:00Z"),
+                draft("blocker", vec![]),
+            )
+            .unwrap();
+        let blocker_id = Ulid::from_string(&blocker.id).unwrap();
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let resolver = {
+            let store = store.clone();
+            let calls = calls.clone();
+            ops::TicketResolver::new(move |needle| {
+                calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                // An alias only the injected resolver knows proves the lookup used it.
+                if needle == "ALIAS" {
+                    return Ok(Some(store.read_ticket(&blocker_id)?));
+                }
+                ops::resolve(&store, needle)
+            })
+        };
+        let provider = GitProvider::new("local", store.clone()).with_resolver(resolver);
+
+        assert!(matches!(
+            walking.get("ALIAS"),
+            Err(ProviderError::NotFound { .. })
+        ));
+        assert_eq!(provider.get("ALIAS").unwrap().id, blocker.id);
+        let blocked = provider
+            .create(
+                ctx(Ulid::new(), "2026-10-16T00:01:00Z"),
+                draft("blocked", vec!["ALIAS".into(), blocker.slug.clone()]),
+            )
+            .unwrap();
+        // Both references name the same ticket: resolved through the injected lookup and
+        // deduplicated.
+        assert_eq!(blocked.blocked_by, vec![blocker.id.clone()]);
+        let cleared = provider
+            .update(
+                "ALIAS",
+                Timestamp::new("2026-10-16T00:02:00Z"),
+                ProviderPatch {
+                    title: Some("renamed via alias".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(cleared.title, "renamed via alias");
+        let reblocked = provider
+            .update(
+                &blocked.slug,
+                Timestamp::new("2026-10-16T00:03:00Z"),
+                ProviderPatch {
+                    blocked_by: Some(vec![]),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(reblocked.blocked_by.is_empty());
+        assert!(calls.load(std::sync::atomic::Ordering::SeqCst) >= 5);
+
+        // A self-reference resolved through the alias is still refused.
+        let self_block = provider.update(
+            &blocker.slug,
+            Timestamp::new("2026-10-16T00:04:00Z"),
+            ProviderPatch {
+                blocked_by: Some(vec!["ALIAS".into()]),
+                ..Default::default()
+            },
+        );
+        assert!(self_block.is_err());
+        // An unknown reference is an error, not a silently dropped blocker.
+        assert!(
+            provider
+                .create(
+                    ctx(Ulid::new(), "2026-10-16T00:05:00Z"),
+                    draft("dangling", vec!["HS-NOSUCH".into()]),
+                )
+                .is_err()
+        );
     }
 
     #[test]

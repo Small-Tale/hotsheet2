@@ -47,6 +47,13 @@ impl StoreEntry {
             &self.freshness,
         )
     }
+
+    /// [`StoreEntry::resolve`] as a shareable resolver, for a `GitProvider` over this
+    /// store and other ticketing calls that would otherwise walk it (HS2-HEKMKH).
+    pub fn resolver(&self) -> hotsheet_ticketing::ops::TicketResolver {
+        let entry = self.clone();
+        hotsheet_ticketing::ops::TicketResolver::new(move |needle| entry.resolve(needle))
+    }
 }
 
 /// The stable, URL-safe id for a store: the first 16 hex of the canonical-root hash — the
@@ -316,6 +323,94 @@ impl StoreHost {
 mod tests {
     use super::*;
     use hotsheet_ticketing::StoreMetadata;
+
+    /// HS2-HEKMKH: a git provider built over a hosted entry, and `blocked_by` resolution,
+    /// go through the entry's index-backed resolver: an indexed slug reads only its
+    /// verified candidate, and a stale row or a miss falls back to the walk.
+    #[test]
+    fn the_entry_resolver_backs_git_provider_and_blocker_lookups() {
+        use hotsheet_model::Timestamp;
+        use hotsheet_ticketing::{GitProvider, TicketProvider, ops};
+
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        let create = |title: &str| {
+            ops::create(
+                &store,
+                Ulid::new(),
+                "HS",
+                Timestamp::new("2026-10-16T00:00:00Z"),
+                ops::NewTicket {
+                    title: title.into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+        };
+        let indexed = create("indexed");
+        let entry = entry_for(store.clone());
+        entry
+            .index
+            .lock_or_recover()
+            .rebuild_from_store(&store)
+            .unwrap();
+        // An unparseable file declaring the same slug fails the store walk, so success
+        // proves the lookup read only the indexed candidate.
+        let decoy = store.ticket_path(&Ulid::new());
+        std::fs::create_dir_all(decoy.parent().unwrap()).unwrap();
+        std::fs::write(&decoy, format!("---\nslug: {}\n---\nbroken", indexed.slug)).unwrap();
+        let walking = GitProvider::new("local", store.clone());
+        assert!(walking.get(&indexed.slug).is_err());
+
+        let provider = GitProvider::new("local", store.clone()).with_resolver(entry.resolver());
+        assert_eq!(
+            provider.get(&indexed.slug.to_lowercase()).unwrap().id,
+            indexed.id.to_string()
+        );
+        let target = create("target");
+        assert!(
+            ops::resolve_blockers(
+                &store,
+                Some(&target.id),
+                std::slice::from_ref(&indexed.slug)
+            )
+            .is_err()
+        );
+        assert_eq!(
+            ops::resolve_blockers_with(
+                Some(&target.id),
+                std::slice::from_ref(&indexed.slug),
+                |n| { entry.resolve(n) }
+            )
+            .unwrap(),
+            vec![indexed.id]
+        );
+
+        // Stale row: renamed outside the index → the walk decides (finds it by its new
+        // slug; the old slug now names only the corrupt decoy, so it fails as the walk
+        // would).
+        std::fs::remove_file(&decoy).unwrap();
+        let mut renamed = store.read_ticket(&indexed.id).unwrap();
+        renamed.slug = "HS-RENAMD".into();
+        store.write_ticket(&renamed).unwrap();
+        assert!(matches!(
+            provider.get(&indexed.slug),
+            Err(hotsheet_ticketing::ProviderError::NotFound { .. })
+        ));
+        assert_eq!(
+            provider.get("hs-renamd").unwrap().id,
+            indexed.id.to_string()
+        );
+        // A miss on an unwatched entry walks, so an unindexed ticket is still found.
+        let late = create("written after the index was built");
+        assert_eq!(provider.get(&late.slug).unwrap().id, late.id.to_string());
+        assert_eq!(
+            ops::resolve_blockers_with(None, std::slice::from_ref(&late.slug), |n| entry
+                .resolve(n))
+            .unwrap(),
+            vec![late.id]
+        );
+    }
 
     #[test]
     fn permission_rules_are_machine_local_and_store_scoped() {

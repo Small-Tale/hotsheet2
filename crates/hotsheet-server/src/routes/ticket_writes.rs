@@ -81,8 +81,10 @@ pub(crate) fn do_create(
 ) -> Result<ApiTicket, ApiError> {
     let prefix = entry.store.metadata()?.ticket_prefix;
     let status = initial_status(req.status.as_deref())?;
-    let blocked_by =
-        ops::resolve_blockers(&entry.store, None, &req.blocked_by.unwrap_or_default())?;
+    // Index-backed blocker lookups (HS2-HEKMKH).
+    let blocked_by = ops::resolve_blockers_with(None, &req.blocked_by.unwrap_or_default(), |n| {
+        entry.resolve(n)
+    })?;
     let new = NewTicket {
         title: req.title,
         category: req.category.unwrap_or_else(|| "issue".to_string()),
@@ -169,10 +171,10 @@ pub(crate) fn do_update_with_ticket(
     let confidence_change = req.note_confidence_change(edit_note_id.is_some())?;
     // A present `blocked_by` (even []) replaces the set; absent leaves it unchanged.
     let blocked_by = match req.blocked_by {
-        Some(needles) => Some(ops::resolve_blockers(
-            &entry.store,
+        Some(needles) => Some(ops::resolve_blockers_with(
             Some(&ticket.id),
             &needles,
+            |n| entry.resolve(n),
         )?),
         None => None,
     };

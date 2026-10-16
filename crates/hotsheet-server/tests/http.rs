@@ -20570,6 +20570,73 @@ async fn slug_routes_resolve_through_the_index_and_survive_a_stale_index() {
     assert_eq!(body_json(unindexed).await["id"], external.id.to_string());
 }
 
+/// HS2-HEKMKH: `blocked_by` on server writes and the provider routes' git lookups resolve
+/// through the store index too. A corrupt file declaring the blocker's slug fails the
+/// store walk, so these succeed only because the indexed candidate was read and verified.
+#[tokio::test]
+async fn blocker_and_provider_lookups_resolve_through_the_index() {
+    let (dir, st) = state();
+    let store = FsStore::open(dir.path()).unwrap();
+    let connection = hotsheet_ticketing::git_connection_id(&store);
+    let application = app(st);
+    let post = |body: String| {
+        let application = application.clone();
+        async move {
+            application
+                .oneshot(authed("POST", "/tickets", Some(&body)))
+                .await
+                .unwrap()
+        }
+    };
+    let blocker = body_json(post(r#"{"title":"Blocker"}"#.into()).await).await;
+    let blocker_id = blocker["id"].as_str().unwrap().to_owned();
+    let blocker_slug = blocker["slug"].as_str().unwrap().to_owned();
+    let decoy = store.ticket_path(&hotsheet_model::Ulid::new());
+    std::fs::create_dir_all(decoy.parent().unwrap()).unwrap();
+    std::fs::write(&decoy, format!("---\nslug: {blocker_slug}\n---\nbroken")).unwrap();
+    assert!(hotsheet_ticketing::ops::resolve(&store, &blocker_slug).is_err());
+
+    let created = post(
+        serde_json::json!({"title":"Blocked","blocked_by":[blocker_slug.to_lowercase()]})
+            .to_string(),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created = body_json(created).await;
+    assert_eq!(created["blocked_by"][0], blocker_id.as_str());
+    let other = body_json(post(r#"{"title":"Other"}"#.into()).await).await;
+    let patched = application
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/tickets/{}", other["slug"].as_str().unwrap()),
+            Some(&serde_json::json!({"blocked_by":[blocker_slug]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(patched.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(patched).await["blocked_by"][0],
+        blocker_id.as_str()
+    );
+
+    let via_provider = application
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/providers/{connection}/tickets/{blocker_slug}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(via_provider.status(), StatusCode::OK);
+    assert_eq!(body_json(via_provider).await["id"], blocker_id.as_str());
+
+    // An unknown blocker is still refused rather than dropped.
+    let dangling = post(r#"{"title":"Dangling","blocked_by":["HS-NOSUCH"]}"#.into()).await;
+    assert!(dangling.status().is_client_error(), "{}", dangling.status());
+}
+
 /// A provider transport that answers by URL suffix (404 otherwise) and records every
 /// requested URL, so a test can prove which ids reached a third-party API.
 struct RoutedTransport {

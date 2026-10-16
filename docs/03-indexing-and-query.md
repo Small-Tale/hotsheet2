@@ -237,6 +237,12 @@ back to the store walk, which gives the same answer as before. The walk
 CLI and MCP) reads each file's frontmatter `slug:` line and fully parses only possible
 matches. It parses a file whose slug line is not a plain token, keeps lowest-ULID-wins for
 duplicate slugs, and lets a corrupt file fail only the lookup of its own recoverable slug.
+Server `blocked_by` references on create and update (`ops::resolve_blockers_with`) and the
+git provider the server builds for each hosted store (`GitProvider::with_resolver`, given
+`StoreEntry::resolver`) resolve through the same index-backed lookup, so provider routes
+and blocker references never walk a hosted store on a hit (HS2-HEKMKH); the git provider's
+own default, used without an index (CLI, MCP), stays the walk. The git provider also
+refuses a self-referencing `blocked_by` on update, as the server route does.
 On a generated 3,000-ticket store (debug build), a slug `GET /tickets/<SLUG>` dropped from
 about 1.7 s to about 3 ms; a miss, which still walks, dropped to about 130 ms.
 
