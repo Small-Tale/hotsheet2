@@ -25,6 +25,7 @@ import { wireTrashSettings } from '../components/trash-settings-interactions';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
 import { type ConversationExportDraft } from '../conversation-export';
+import { type ConversationHistoryDirection } from '../conversation-history';
 import { type ConversationSelectionModifiers } from '../conversation-selection';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
@@ -85,8 +86,11 @@ export interface CommandAndAiInteractionsDependencies {
   readonly conversationExportDialog: Signal<ConversationExportDialogState | undefined>;
   readonly finishConversationExport: () => Promise<void>;
   readonly updateConversationExportDraft: (update: (draft: ConversationExportDraft) => ConversationExportDraft) => void;
-  readonly conversationConnectionId: Signal<string | undefined>;
-  readonly conversationDrafts: Signal<Record<string, string>>;
+  readonly setConversationDraft: (value: string) => void;
+  readonly recallConversationHistory: (
+    direction: ConversationHistoryDirection,
+    currentValue: string,
+  ) => string | undefined;
   readonly sendConversationTurn: () => Promise<void>;
   readonly stopConversation: () => Promise<void>;
   readonly selectConversationProvider: (providerId: string) => Promise<void>;
@@ -210,8 +214,8 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     conversationExportDialog,
     finishConversationExport,
     updateConversationExportDraft,
-    conversationConnectionId,
-    conversationDrafts,
+    setConversationDraft,
+    recallConversationHistory,
     sendConversationTurn,
     stopConversation,
     selectConversationProvider,
@@ -401,10 +405,8 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       },
       save: openConversationExport,
       pickMessage: pickConversationMessage,
-      setDraft: (value) => {
-        const id = conversationConnectionId.value;
-        if (id) conversationDrafts.value = { ...conversationDrafts.value, [id]: value };
-      },
+      setDraft: setConversationDraft,
+      recallHistory: recallConversationHistory,
       send: () => {
         void sendConversationTurn();
       },

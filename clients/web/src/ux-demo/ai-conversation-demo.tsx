@@ -10,6 +10,11 @@ import { type ConversationActivity, type ConversationMessage, conversationUsage 
 import { AIConversation, type AIConversationProps, AIConversationToolbar } from '../components/ai-conversation';
 import { wireAiConversation } from '../components/ai-conversation-interactions';
 import {
+  type ConversationHistoryCursor,
+  conversationSentHistory,
+  stepConversationHistory,
+} from '../conversation-history';
+import {
   type ConversationMessageSelection,
   conversationSelectionAfterPick,
   EMPTY_CONVERSATION_SELECTION,
@@ -330,6 +335,7 @@ export function openAIConversationDemo(root: HTMLElement): void {
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireAiConversationDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
+  let demoHistoryCursor: ConversationHistoryCursor | undefined;
   demoListeners.add(
     delegate(root, 'change', '[data-settings="ai-conversation"] [name="presentation"]', (_event, target) => {
       aiConversationPresentation.value = (target as FormControl).value as typeof aiConversationPresentation.value;
@@ -384,7 +390,20 @@ function wireAiConversationDemo(root: HTMLElement): () => void {
         sidebarEvent.value = `Picked conversation message ${messageId}.`;
       },
       setDraft: (value) => {
+        demoHistoryCursor = undefined;
         aiConversationDraft.value = value;
+      },
+      recallHistory: (direction, currentValue) => {
+        const step = stepConversationHistory(
+          conversationSentHistory(scenarioState().messages),
+          demoHistoryCursor,
+          direction,
+          currentValue,
+        );
+        if (!step) return;
+        demoHistoryCursor = step.cursor;
+        aiConversationDraft.value = step.value;
+        return step.value;
       },
       send: () => {
         aiConversationScenario.value = 'streaming';

@@ -11,6 +11,12 @@ import {
 import { type AiToolDefaults, Api, type ToolConnection } from '../api';
 import { browserRandomId } from '../browser-id';
 import {
+  type ConversationHistoryCursor,
+  type ConversationHistoryDirection,
+  conversationSentHistory,
+  stepConversationHistory,
+} from '../conversation-history';
+import {
   createConversationPersistence,
   loadConversationStates,
   saveConversationStates,
@@ -90,6 +96,8 @@ export function createDriveConversationsController(dependencies: DriveConversati
     conversationConnectionId = signal<string | undefined>(undefined),
     conversationOpen = signal(false);
   const conversationRenderRevision = signal(0);
+  /** Per-conversation composer history positions; typing or sending returns to the draft. */
+  const conversationHistoryCursors = new Map<string, ConversationHistoryCursor>();
   const conversationRenderScheduler = createConversationRenderScheduler(() => {
     conversationRenderRevision.value += 1;
   });
@@ -270,6 +278,30 @@ export function createDriveConversationsController(dependencies: DriveConversati
       drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: false };
     }
   }
+  /** Record what the person typed in the active conversation's composer (HS2-AJQKK0). */
+  function setConversationDraft(value: string) {
+    const connectionId = conversationConnectionId.value;
+    if (!connectionId) return;
+    conversationHistoryCursors.delete(connectionId);
+    conversationDrafts.value = { ...conversationDrafts.value, [connectionId]: value };
+  }
+  /** Step the active composer through its own conversation's sent messages (HS2-AJQKK0). */
+  function recallConversationHistory(direction: ConversationHistoryDirection, currentValue: string) {
+    const connectionId = conversationConnectionId.value;
+    if (!connectionId) return;
+    const step = stepConversationHistory(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted per-connection state may be missing at this runtime boundary.
+      conversationSentHistory(conversationStates.peek()[connectionId]?.messages ?? []),
+      conversationHistoryCursors.get(connectionId),
+      direction,
+      currentValue,
+    );
+    if (!step) return;
+    if (step.cursor) conversationHistoryCursors.set(connectionId, step.cursor);
+    else conversationHistoryCursors.delete(connectionId);
+    conversationDrafts.value = { ...conversationDrafts.value, [connectionId]: step.value };
+    return step.value;
+  }
   async function sendConversationTurn() {
     const current = project(),
       connectionId = conversationConnectionId.value,
@@ -288,6 +320,7 @@ export function createDriveConversationsController(dependencies: DriveConversati
       };
     if (!connection?.actions?.includes('send_turn') || connection.busy) return;
     const start = beginConversation(connectionId, draft);
+    conversationHistoryCursors.delete(connectionId);
     conversationDrafts.value = { ...conversationDrafts.value, [connectionId]: '' };
     const composer = document.querySelector<HTMLTextAreaElement>('[name="conversation-draft"]');
     if (composer) composer.value = '';
@@ -371,6 +404,8 @@ export function createDriveConversationsController(dependencies: DriveConversati
     refreshDriveConnections,
     toggleSidebarDrive,
     openSidebarConversation,
+    setConversationDraft,
+    recallConversationHistory,
     sendConversationTurn,
     stopConversation,
   };

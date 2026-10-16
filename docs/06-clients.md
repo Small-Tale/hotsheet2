@@ -1575,7 +1575,13 @@ preview/download, server directory browser) are separate design work.
   each latest connection/session before restoring eligible drawer tabs; corrupt local entries or
   one unavailable provider are isolated instead of discarding other conversations (HS2-YHQCS2).
   Stop appears only for a busy connection advertising `interrupt`; Enter sends and
-  Shift+Enter adds a line. Plugins may advertise live model and effort changes, which the
+  Shift+Enter adds a line. Up and Down browse the conversation's own previously sent messages
+  like a shell history: Up recalls only while the caret is on the composer's first line (or
+  the composer is empty) and Down only on its last line, with no selection, modifier, or IME
+  composition. The in-progress draft is set aside while browsing and returns after the newest
+  entry; Up stops at the oldest. Blank sends are skipped and consecutive repeats collapse.
+  Typing in a recalled message makes it the new draft, and each drawer chat and the dialog
+  keep separate history (`clients/web/src/conversation-history.ts`, HS2-AJQKK0). Plugins may advertise live model and effort changes, which the
   conversation applies to subsequent turns without changing provider. Closing a nested
   model or effort popup does not dismiss the owning conversation; only the conversation
   surface's own hide lifecycle closes it. The active effort is revalidated against every

@@ -3,6 +3,7 @@ import { delegate, delegateCapture } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { toggleActivityGroup } from '../conversation-activity-disclosure';
+import { type ConversationHistoryDirection, conversationHistoryDirection } from '../conversation-history';
 import { type ConversationSelectionModifiers, conversationSelectionModifiers } from '../conversation-selection';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import { isConversationSurfaceLifecycleEvent } from './ai-conversation';
@@ -18,6 +19,11 @@ export interface AiConversationBindings {
   /** Plain, toggle (Cmd on Apple platforms, Ctrl elsewhere), or Shift-extend pick (HS2-WV88W3). */
   readonly pickMessage: (connectionId: string, messageId: string, modifiers: ConversationSelectionModifiers) => void;
   readonly setDraft: (value: string) => void;
+  /**
+   * Step the composer through this conversation's sent messages (HS2-AJQKK0). Returns the text
+   * to show, or `undefined` when there is nowhere to go and the arrow key keeps its default.
+   */
+  readonly recallHistory: (direction: ConversationHistoryDirection, currentValue: string) => string | undefined;
   readonly send: () => void;
   readonly stop: () => void;
   readonly selectProvider: (id: string) => void;
@@ -98,6 +104,19 @@ export function wireAiConversation(root: HTMLElement, bindings: AiConversationBi
   lifetime.add(
     delegate(root, 'input', COMMANDS_AND_AI_TARGETS.conversationDraftField.selector, (_event, target) => {
       bindings.setDraft((target as HTMLTextAreaElement).value);
+    }),
+  );
+  // Up/Down on the composer's first/last line browse sent messages like a shell (HS2-AJQKK0).
+  lifetime.add(
+    delegate(root, 'keydown', COMMANDS_AND_AI_TARGETS.conversationDraftField.selector, (event, target) => {
+      const field = target as HTMLTextAreaElement,
+        direction = conversationHistoryDirection(event as KeyboardEvent, field);
+      if (!direction || field.disabled || field.readOnly) return;
+      const value = bindings.recallHistory(direction, field.value);
+      if (value === undefined) return;
+      event.preventDefault();
+      field.value = value;
+      field.setSelectionRange(value.length, value.length);
     }),
   );
   // Kerf owns Enter-to-send (IME, empty, and auto-repeat guards) for the submitOnEnter Composer.

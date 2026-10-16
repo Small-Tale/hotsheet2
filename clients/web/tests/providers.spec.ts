@@ -18018,6 +18018,84 @@ test('shows a spinner instead of an empty assistant bubble while a turn is think
   await dialog.screenshot({ path: 'target/visual-captures/hs2-77kjkr-dialog-thinking-390.png' });
 });
 
+test('cycles each chat composer through its own sent messages with Up and Down (HS2-AJQKK0)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const caretAt = (field: Locator) => field.evaluate((element: HTMLTextAreaElement) => element.selectionStart);
+  // Drawer chat tab: send two messages, then browse them around an in-progress draft.
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+  const embedded = drawer.locator('[data-component="ai-conversation"]'),
+    drawerField = embedded.getByLabel('Message Codex');
+  await drawerField.fill('What time is it in California?');
+  await drawerField.press('Enter');
+  await expect(embedded.locator('.ai-conversation__message--assistant').last()).toHaveAttribute(
+    'data-status',
+    'completed',
+  );
+  await drawerField.fill('Export the referenced proof.');
+  await drawerField.press('Enter');
+  await expect(embedded).toContainText('The referenced proof is ready.');
+  await expect(drawerField).toHaveValue('');
+  await drawerField.fill('half-typed draft');
+  await drawerField.press('ArrowUp');
+  await expect(drawerField).toHaveValue('Export the referenced proof.');
+  expect(await caretAt(drawerField)).toBe('Export the referenced proof.'.length);
+  await drawerField.press('ArrowUp');
+  await expect(drawerField).toHaveValue('What time is it in California?');
+  // The oldest entry stays put.
+  await drawerField.press('ArrowUp');
+  await expect(drawerField).toHaveValue('What time is it in California?');
+  await drawerField.press('ArrowDown');
+  await expect(drawerField).toHaveValue('Export the referenced proof.');
+  await drawerField.press('ArrowDown');
+  await expect(drawerField).toHaveValue('half-typed draft');
+  // Down on the draft itself keeps the default caret behavior.
+  await drawerField.press('ArrowDown');
+  await expect(drawerField).toHaveValue('half-typed draft');
+  // A multi-line draft moves the caret between lines before Up reaches history.
+  await drawerField.fill('');
+  await drawerField.pressSequentially('line one');
+  await drawerField.press('Shift+Enter');
+  await drawerField.pressSequentially('line two');
+  await drawerField.press('ArrowUp');
+  await expect(drawerField).toHaveValue('line one\nline two');
+  expect(await caretAt(drawerField)).toBeLessThanOrEqual('line one'.length);
+  await drawerField.press('ArrowUp');
+  await expect(drawerField).toHaveValue('Export the referenced proof.');
+  // Editing a recalled message makes it the new draft; Up then starts from the newest again.
+  await drawerField.pressSequentially(' Again');
+  await drawerField.press('ArrowUp');
+  await expect(drawerField).toHaveValue('Export the referenced proof.');
+  await drawerField.press('ArrowDown');
+  await expect(drawerField).toHaveValue('Export the referenced proof. Again');
+  await page.screenshot({ path: 'target/visual-captures/hs2-ajqkk0-drawer-history-1280.png' });
+  // Conversation dialog: its own conversation, so it never recalls the drawer chat's messages.
+  await page.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
+  const host = page.locator('[data-component="ai-conversation"][data-presentation="dialog"]'),
+    dialogField = host.getByLabel('Message Codex');
+  await expect(host.getByRole('dialog')).toBeVisible();
+  await dialogField.press('ArrowUp');
+  await expect(dialogField).toHaveValue('');
+  await dialogField.fill('What time is it in California?');
+  await dialogField.press('Enter');
+  await expect(host.locator('.ai-conversation__message--assistant').last()).toHaveAttribute('data-status', 'completed');
+  await expect(dialogField).toHaveValue('');
+  await dialogField.press('ArrowUp');
+  await expect(dialogField).toHaveValue('What time is it in California?');
+  await dialogField.press('ArrowUp');
+  await expect(dialogField).toHaveValue('What time is it in California?');
+  await dialogField.press('ArrowDown');
+  await expect(dialogField).toHaveValue('');
+});
+
 test('moves the chat model selector and export into the drawer and dialog toolbars (HS2-59F7WK, HS2-DMH8MX)', async ({
   page,
 }) => {

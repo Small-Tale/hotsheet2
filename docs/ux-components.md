@@ -449,7 +449,9 @@ does not introduce polling or another network request.
     raised frame, focus-within border, auto-growing borderless field, and action row, and
     `submitOnEnter` with `wireComposers` owns Enter-to-send (IME, empty, and auto-repeat guards).
     No presentation shows an "Enter to send" hint; the field's `aria-keyshortcuts="Enter"` keeps
-    the shortcut available to assistive technology (HS2-3VQSZD).
+    the shortcut available to assistive technology (HS2-3VQSZD). Up/Down on the field's first/last
+    line recall the conversation's sent messages through the `recallHistory` binding, preserving the
+    draft (`clients/web/src/conversation-history.ts`, HS2-AJQKK0).
     The dialog floats it as a Kerf `DialogSurface` floating footer over a `fill-last` body
     (KF-913AT2, 8 px offset on handsets), so no `::part()` rules remain. Referenced files render
     as Kerf link `Chip`s (`href`, `download`, `tone="inherit"`, truncating; KF-H658D6) (HS2-94T958)

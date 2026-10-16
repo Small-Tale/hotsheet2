@@ -25,6 +25,7 @@ const bindings = () => ({
   save: vi.fn(),
   pickMessage: vi.fn(),
   setDraft: vi.fn(),
+  recallHistory: vi.fn<(direction: string, value: string) => string | undefined>(),
   send: vi.fn(),
   stop: vi.fn(),
   selectProvider: vi.fn(),
@@ -44,10 +45,81 @@ describe('wireAiConversation (HS2-RWY78R)', () => {
     const root = {} as HTMLElement;
     wireAiConversation(root, bindings());
     expect(wireComposers).toHaveBeenCalledWith(root);
-    // The only keydown handler is the message-selection chord handler, never a composer one.
+    // Keydown handlers: the message-selection chords and composer history recall, never Enter-to-send.
     expect(registrations.filter((item) => item.event === 'keydown').map((item) => item.selector)).toEqual([
       '[data-action="pick-conversation-message"]',
+      '[name="conversation-draft"]',
     ]);
+  });
+
+  describe('composer history recall (HS2-AJQKK0)', () => {
+    const field = (value: string, caret = value.length, overrides: Partial<HTMLTextAreaElement> = {}) => {
+        const element = {
+          value,
+          selectionStart: caret,
+          selectionEnd: caret,
+          disabled: false,
+          readOnly: false,
+          setSelectionRange: vi.fn((start: number, end: number) => {
+            element.selectionStart = start;
+            element.selectionEnd = end;
+          }),
+          ...overrides,
+        };
+        return element;
+      },
+      key = (keyName: string, modifiers: Partial<KeyboardEvent> = {}) =>
+        ({
+          key: keyName,
+          shiftKey: false,
+          altKey: false,
+          metaKey: false,
+          ctrlKey: false,
+          isComposing: false,
+          preventDefault: vi.fn(),
+          ...modifiers,
+        }) as unknown as KeyboardEvent;
+    const keydown = () => handler('keydown', '[name="conversation-draft"]');
+
+    it('replaces the field with the recalled message, moves the caret to its end, and cancels the key', () => {
+      const state = bindings();
+      state.recallHistory.mockReturnValue('earlier\nmessage');
+      wireAiConversation({} as HTMLElement, state);
+      const preventDefault = vi.fn(),
+        target = field('draft', 0),
+        event = key('ArrowUp', { preventDefault });
+      keydown()(event, target as unknown as Element);
+      expect(state.recallHistory).toHaveBeenCalledWith('previous', 'draft');
+      expect(target.value).toBe('earlier\nmessage');
+      expect(target.setSelectionRange).toHaveBeenCalledWith(15, 15);
+      expect(preventDefault).toHaveBeenCalled();
+    });
+
+    it('keeps the default caret move when there is nothing to recall', () => {
+      const state = bindings();
+      state.recallHistory.mockReturnValue(undefined);
+      wireAiConversation({} as HTMLElement, state);
+      const preventDefault = vi.fn(),
+        target = field(''),
+        event = key('ArrowDown', { preventDefault });
+      keydown()(event, target as unknown as Element);
+      expect(state.recallHistory).toHaveBeenCalledWith('next', '');
+      expect(preventDefault).not.toHaveBeenCalled();
+      expect(target.value).toBe('');
+    });
+
+    it('never recalls from a middle line, a selection, a modifier chord, IME, or a disabled field', () => {
+      const state = bindings();
+      wireAiConversation({} as HTMLElement, state);
+      keydown()(key('ArrowUp'), field('one\ntwo', 5) as unknown as Element);
+      keydown()(key('ArrowDown'), field('one\ntwo', 1) as unknown as Element);
+      keydown()(key('ArrowUp'), field('text', 0, { selectionEnd: 2 }) as unknown as Element);
+      keydown()(key('ArrowUp', { shiftKey: true }), field('') as unknown as Element);
+      keydown()(key('ArrowUp', { isComposing: true }), field('') as unknown as Element);
+      keydown()(key('ArrowUp'), field('', 0, { disabled: true }) as unknown as Element);
+      keydown()(key('Enter'), field('') as unknown as Element);
+      expect(state.recallHistory).not.toHaveBeenCalled();
+    });
   });
 
   const message = {
