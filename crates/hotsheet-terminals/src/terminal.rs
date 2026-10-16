@@ -8,7 +8,7 @@
 
 use hotsheet_sync::LockExt;
 use std::collections::VecDeque;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -18,6 +18,7 @@ use tokio::sync::broadcast;
 
 use crate::busy::{Activity, BusyDetector};
 use crate::env::scrub_env;
+use crate::input_queue::InputQueue;
 use crate::osc::{OscScanner, TermState};
 use crate::sizing::{Decision, SizeArbiter, SizePolicy, ViewportClaim};
 
@@ -233,7 +234,9 @@ pub struct Terminal {
     kind: TerminalKind,
     master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
-    writer: Mutex<Box<dyn Write + Send>>,
+    /// Ordered input drained by a dedicated writer thread, so a PTY that is not accepting
+    /// input never blocks an async worker (HS2-FERD7N).
+    input: InputQueue,
     output: Arc<OutputReplay>,
     busy: Arc<Mutex<BusyDetector>>,
     /// Informational OSC 7/8/9 state (cwd / hyperlink / progress), parsed from output (HS2-RCKEJ9).
@@ -431,7 +434,7 @@ impl Terminal {
             kind: spec.kind,
             master,
             child,
-            writer: Mutex::new(writer),
+            input: InputQueue::spawn(writer),
             output,
             busy,
             osc,
@@ -553,12 +556,34 @@ impl Terminal {
         self.output.subscribe_with_snapshot()
     }
 
-    /// Write input bytes to the terminal (keystrokes / a command).
+    /// Write input bytes to the terminal (keystrokes / a command) and wait for the PTY to take
+    /// them. Blocks the calling thread; async callers use [`write_async`](Self::write_async) or
+    /// [`queue_input`](Self::queue_input). All three share one FIFO, so input stays ordered.
     pub fn write(&self, bytes: &[u8]) -> Result<(), TermError> {
-        let mut w = self.writer.lock_or_recover();
-        w.write_all(bytes)?;
-        w.flush()?;
-        Ok(())
+        Ok(self.input.write(bytes.to_vec())?)
+    }
+
+    /// Write input and wait for the PTY's result without holding any thread (HS2-FERD7N).
+    pub async fn write_async(&self, bytes: Vec<u8>) -> Result<(), TermError> {
+        Ok(self.input.write_async(bytes).await?)
+    }
+
+    /// Queue a viewer's input behind earlier input and return without waiting for the PTY, so
+    /// an attach keeps reading its control frames while a child is not reading stdin
+    /// (HS2-FERD7N). Waits, parking no thread, only while [`INPUT_BUDGET_BYTES`] of earlier
+    /// input is still unwritten.
+    ///
+    /// [`INPUT_BUDGET_BYTES`]: crate::input_queue::INPUT_BUDGET_BYTES
+    pub async fn queue_input(&self, bytes: Vec<u8>) -> Result<(), TermError> {
+        self.input
+            .queue(bytes)
+            .await
+            .map_err(|closed| TermError::Io(closed.into()))
+    }
+
+    /// Input accepted but not yet written to the PTY (diagnostics and tests).
+    pub fn queued_input_bytes(&self) -> usize {
+        self.input.queued_bytes()
     }
 
     /// Resize the PTY (one size per terminal; multi-viewer arbitration is HS2-62).
@@ -967,5 +992,74 @@ mod tests {
         );
         term.kill().unwrap();
         assert!(wait_until(|| !term.is_alive(), 5), "kill stops cat");
+    }
+
+    /// HS2-FERD7N adversarial: a child that never reads stdin plus a paste larger than the PTY
+    /// input buffer must not stall the runtime, another terminal, or later input. A
+    /// current-thread runtime makes a blocked worker fatal: the timeouts could not fire.
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_child_that_never_reads_stdin_stalls_neither_the_runtime_nor_other_terminals() {
+        use std::time::Duration;
+        let mut spec = TermSpec::new("sh");
+        spec.args = vec![
+            "-c".into(),
+            "stty raw -echo; echo stuck-ready; exec sleep 60".into(),
+        ];
+        let stuck = Terminal::spawn(spec).expect("spawn a child that never reads stdin");
+        for _ in 0..500 {
+            if String::from_utf8_lossy(&stuck.scrollback()).contains("stuck-ready") {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let paste = vec![b'x'; 512 * 1024];
+        tokio::time::timeout(Duration::from_secs(2), stuck.queue_input(paste))
+            .await
+            .expect("queueing a paste waited for the PTY")
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(
+            stuck.queued_input_bytes() > 0,
+            "the PTY input buffer filled, so its writer thread is blocked"
+        );
+
+        let other = Terminal::spawn(TermSpec::new("cat")).expect("spawn cat");
+        tokio::time::timeout(
+            Duration::from_secs(2),
+            other.queue_input(b"still-live\n".to_vec()),
+        )
+        .await
+        .expect("another terminal's input waited behind the stuck one")
+        .unwrap();
+        let mut echoed = false;
+        for _ in 0..500 {
+            if String::from_utf8_lossy(&other.scrollback()).contains("still-live") {
+                echoed = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(echoed, "another terminal keeps round-tripping input");
+        // Later keystrokes to the stuck terminal still queue promptly, in order.
+        tokio::time::timeout(Duration::from_secs(2), stuck.queue_input(b"more".to_vec()))
+            .await
+            .expect("later input waited for the PTY")
+            .unwrap();
+
+        // Killing the child unblocks the writer; the queue drains (as errors) and closes.
+        stuck.kill().unwrap();
+        let mut drained = false;
+        for _ in 0..500 {
+            if stuck.queued_input_bytes() == 0 {
+                drained = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(
+            drained,
+            "a killed terminal's writer thread drains its queue"
+        );
+        other.kill().unwrap();
     }
 }

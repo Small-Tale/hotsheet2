@@ -17,6 +17,7 @@ pub mod broker;
 pub mod broker_socket;
 pub mod busy;
 pub mod env;
+pub mod input_queue;
 pub mod limits;
 pub mod manager;
 pub mod osc;
@@ -32,6 +33,7 @@ pub use broker::{
 };
 pub use busy::{Activity, BusyDetector, contains_spinner};
 pub use env::scrub_env;
+pub use input_queue::INPUT_BUDGET_BYTES;
 pub use limits::{REPLAY_BYTES_BOUNDS, physical_memory_bytes};
 pub use manager::{TermKey, TerminalManager};
 pub use osc::{OscScanner, TermState};

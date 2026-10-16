@@ -556,6 +556,14 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   fan-out lag. Only past 256 KiB of coalesced output (the default replay size) does it fall
   back to a scrollback replacement. The replay buffer itself is configurable and sized from the
   client history (`docs/06` §6.7.8, HS2-Y5DYC0). The server writes liveness pongs ahead of queued output.
+- **PTY input never blocks an async worker (HS2-FERD7N).** Each terminal owns one ordered
+  input queue drained by a dedicated writer thread, shared by every input path so order is
+  kept. An attach (server direct, broker WebSocket, and the broker stream) only queues its
+  input and keeps reading resize claims and probes even while a child is not reading stdin;
+  it waits, parking no thread, only once 1 MiB of earlier input is still unwritten (a larger
+  single chunk is accepted into an empty queue). `POST /terminals/{id}/input` and the broker
+  `input` request await the write result asynchronously. Killing the child unblocks the
+  writer; dropping a terminal discards its unwritten input.
 - Survival across server restarts via a **detached PTY broker process** (carried
   from HS1 `src/terminals/broker/`) — terminals aren't killed when the server
   recycles or is explicitly stopped. Detached hosting is the server default; ordinary

@@ -756,7 +756,8 @@ pub(crate) async fn write_terminal(
         .terminals
         .get(&term_key(&state, &id))
         .ok_or_else(|| ApiError::not_found(&id))?;
-    term.write(body.data.as_bytes())
+    term.write_async(body.data.into_bytes())
+        .await
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(StatusCode::NO_CONTENT)
 }

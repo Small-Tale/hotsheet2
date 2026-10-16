@@ -286,7 +286,7 @@ async fn handle_connection(
                 return stream_terminal(lines, write, project, manager, id, bytes).await;
             }
             Ok(req) => {
-                let resp = handle_request(project, manager, req);
+                let resp = handle_request(project, manager, req).await;
                 write_line(&mut write, &resp).await?;
             }
             Err(e) => {
@@ -397,7 +397,7 @@ async fn stream_terminal(
                 Ok(Some(l)) if !l.trim().is_empty() => {
                     if let Ok(inbound) = serde_json::from_str::<StreamIn>(&l) {
                         match inbound {
-                            StreamIn::Input { data } => { let _ = term.write(&data); }
+                            StreamIn::Input { data } => { let _ = term.queue_input(data.into_vec()).await; }
                             StreamIn::Resize { viewer_id, cols, rows, focus, visible, interacting } => {
                                 my_viewer = Some(viewer_id.clone());
                                 let now = now_ms();
@@ -425,7 +425,9 @@ async fn stream_terminal(
 }
 
 /// Run one request against the manager (synchronous — PTY ops are quick, non-blocking).
-fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Request) -> Response {
+/// Answer one request. Only `Input` awaits (the PTY write runs on the terminal's writer
+/// thread, HS2-FERD7N); the other requests are immediate.
+async fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Request) -> Response {
     let key = |id: &str| (project.to_string(), id.to_string());
     match req {
         Request::Ping => Response::Pong,
@@ -481,7 +483,7 @@ fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Request) -
             None => Response::NotFound,
         },
         Request::Input { id, data } => match manager.get(&key(&id)) {
-            Some(term) => match term.write(&data) {
+            Some(term) => match term.write_async(data).await {
                 Ok(()) => Response::Ok,
                 Err(e) => Response::Err {
                     message: e.to_string(),
@@ -714,10 +716,17 @@ mod tests {
         let sized = serde_json::to_value(open(Some(512 * 1024))).unwrap();
         assert_eq!(sized["replay_bytes"], 512 * 1024);
         let manager = Arc::new(TerminalManager::new());
-        assert!(matches!(
-            handle_request("proj", &manager, serde_json::from_value(sized).unwrap()),
-            Response::Terminal { .. }
-        ));
+        // `handle_request` is async since input awaits the terminal's writer thread (HS2-FERD7N).
+        let response = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(handle_request(
+                "proj",
+                &manager,
+                serde_json::from_value(sized).unwrap(),
+            ));
+        assert!(matches!(response, Response::Terminal { .. }));
         let term = manager.get(&("proj".into(), "sized".into())).unwrap();
         assert_eq!(term.replay_capacity(), 512 * 1024);
         term.kill().unwrap();

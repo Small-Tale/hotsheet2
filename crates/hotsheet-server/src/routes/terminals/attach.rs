@@ -286,8 +286,10 @@ async fn terminal_attach_loop(
         tokio::select! {
             _ = &mut writer => break, // the terminal ended or the viewer stopped accepting output
             message = inbound.next() => match message {
+                // Input is queued for the terminal's writer thread, so a child that is not
+                // reading stdin never parks this worker or stops control frames (HS2-FERD7N).
                 // A write to an exited PTY is dropped; the exit is reported separately.
-                Some(Ok(Message::Binary(b))) => { let _ = term.write(&b); }
+                Some(Ok(Message::Binary(b))) => { let _ = term.queue_input(b.to_vec()).await; }
                 Some(Ok(Message::Text(t))) => {
                     match classify_terminal_text(&t) {
                         // A size claim: feed the arbiter (it resizes + broadcasts if the size changed).
@@ -315,7 +317,7 @@ async fn terminal_attach_loop(
                         // A malformed control frame is never terminal input: dropping it avoids
                         // echoing protocol JSON into the user's shell during transient layout.
                         TerminalText::InvalidControl => {}
-                        TerminalText::Input(input) => { let _ = term.write(input.as_bytes()); }
+                        TerminalText::Input(input) => { let _ = term.queue_input(input.as_bytes().to_vec()).await; }
                     }
                 }
                 Some(Ok(Message::Close(_))) | None => break,
