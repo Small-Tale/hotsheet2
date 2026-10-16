@@ -173,7 +173,7 @@ impl ProcessSignals for ChildSignals {
 /// Every live `(pid, parent pid)` pair, from `ps` (macOS and Linux alike).
 #[cfg(unix)]
 fn process_table() -> Vec<(u32, u32)> {
-    let Ok(output) = std::process::Command::new("ps")
+    let Ok(output) = hotsheet_ticketing::git::launch("ps")
         .args(["-A", "-o", "pid=", "-o", "ppid="])
         .stderr(Stdio::null())
         .output()
