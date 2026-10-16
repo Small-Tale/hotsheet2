@@ -2,6 +2,7 @@ import { browserRandomId } from './browser-id';
 import { assertHostAction, type HostOnlyAction } from './host-only-actions';
 import { errorMessageOf, responseJson, responseJsonBody } from './json-value';
 import { prioritiesToWire } from './priority-wire';
+import { observeRequest } from './request-observer';
 import { beginServerRequest, describeServerRequest, endServerRequest } from './server-busy';
 import {
   ignoreBody,
@@ -971,13 +972,17 @@ export class Api {
       headers.set('Content-Type', 'application/json');
     const trackBusy = trackRequest && this.trackBusy;
     if (trackBusy) beginServerRequest(describeServerRequest(init.method ?? 'GET', path));
+    const observed = trackRequest ? observeRequest(init.method ?? 'GET', path) : undefined;
+    let response: Response | undefined;
     try {
-      const response = await fetch(`${this.origin}${path}`, { ...init, headers });
+      response = await fetch(`${this.origin}${path}`, { ...init, headers });
       if (!response.ok)
         throw new ApiHttpError(errorMessageOf(await responseJson(response)) ?? `${response.status}`, response.status);
       onResponse?.(response);
       return response.status === 204 ? undefined : await responseJsonBody(response);
     } finally {
+      // After the body is read, so the timing covers the whole response (HS2-ZGBQ5Q).
+      observed?.(response);
       if (trackBusy) endServerRequest();
     }
   }

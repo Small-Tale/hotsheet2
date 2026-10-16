@@ -6,6 +6,7 @@ describe('development server route boundary', () => {
   it.each([
     '/ux-demo',
     '/__hotsheet/checkouts',
+    '/__hotsheet/dev/latency',
     '/__hotsheet/folders/choose',
     '/__hotsheet/conversation-exports/open',
     '/__hotsheet/projects/open',

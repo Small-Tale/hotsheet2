@@ -958,7 +958,9 @@ deadline. The shared
   logs a `warn` with method, matched route template (never concrete ids), status,
   `elapsed_ms`, and `budget_ms`. Ordinary API requests have a 100 ms budget; attachment,
   provider-attachment, and speech routes 2 s; WebSocket, long-poll, and terminal-attach
-  routes are not timed.
+  routes are not timed. Every timed response also carries `Server-Timing: handler;dur=<ms>`
+  (appended after any route-specific entries) so clients can separate server time from
+  queueing (HS2-ZGBQ5Q).
   Request handlers never run blocking store work on the async workers (HS2-9Z0Q8N): the
   router-wide `blocking_offload` layer runs every non-streaming request (auth plus handler)
   on tokio's blocking pool, so a handler stuck on a ticket-file `flock`, an index mutex, a

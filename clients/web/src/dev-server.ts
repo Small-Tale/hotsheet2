@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { Checkout } from './api';
 import type { ConversationExportPayload } from './conversation-export';
 import { createConversationExportBridge } from './conversation-export-bridge';
+import { createDevLatencyLog } from './dev-latency-log';
 import { type MigrationJobApi, migrationJobApi } from './migration-job-bridge';
 import type { MigrationStart } from './migration-progress';
 import {
@@ -32,8 +33,23 @@ export function createDevApp(
   recover: (value: UnhealthyServerRecovery) => Promise<unknown> = recoverUnhealthyServer,
   listCheckouts: () => Promise<Checkout[]> = listServerCheckouts,
   jobs: MigrationJobApi = migrationJobApi,
+  latencyLog: Pick<ReturnType<typeof createDevLatencyLog>, 'record' | 'recent' | 'file'> = createDevLatencyLog(),
 ): Hono {
   const app = new Hono();
+  // The development latency monitor's durable log (HS2-ZGBQ5Q): the browser posts each slow
+  // interaction/request once (event-driven, never polled); GET reads the recent reports back.
+  app.post('/__hotsheet/dev/latency', async (context) => {
+    if (!dev) return context.notFound();
+    try {
+      return context.json({ accepted: await latencyLog.record(await context.req.json()) });
+    } catch (error) {
+      return context.json({ error: error instanceof Error ? error.message : 'Invalid latency report.' }, 400);
+    }
+  });
+  app.get('/__hotsheet/dev/latency', (context) => {
+    if (!dev) return context.notFound();
+    return context.json({ file: latencyLog.file, reports: latencyLog.recent() });
+  });
   const conversationExports = createConversationExportBridge(chooseFolder);
   // The cross-device project picker (a non-loopback client can't browse the filesystem) lists the
   // checkouts the bootstrap server knows about. Unlike the local-filesystem endpoints this is NOT

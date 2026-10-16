@@ -5,6 +5,20 @@ When automation lands, remove the manual-only step and record it below.
 
 ## Current manual checks
 
+### Development latency monitor (HS2-ZGBQ5Q)
+
+Automation runs with `navigator.webdriver`, where the monitor is off unless opted in, so
+the default-on path is checked by hand.
+
+1. Run `npm run dev` from `clients/web` and open the app in an ordinary browser (do not
+   set `localStorage['hotsheet-dev-latency']`).
+2. Throttle the network in DevTools (Slow 4G) and click a ticket row. Confirm a
+   warning toast appears at the bottom start, the console prints a
+   `[hotsheet dev latency]` line, and the dev-server terminal prints the report and
+   names `~/.hotsheet2/logs/dev-latency.jsonl`, which gains a JSON line.
+3. Set `localStorage['hotsheet-dev-latency'] = 'off'`, reload, and confirm no toast or
+   report appears for the same click.
+
 ### OS credential stores
 
 1. On macOS, run `hotsheet-cli key set test-provider`, confirm it displays one hidden

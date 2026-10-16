@@ -15,11 +15,13 @@
 
 use axum::{
     extract::{MatchedPath, Request},
-    http::Method,
+    http::{HeaderName, HeaderValue, Method},
     middleware::Next,
     response::Response,
 };
 use std::time::{Duration, Instant};
+
+const SERVER_TIMING: HeaderName = HeaderName::from_static("server-timing");
 
 /// Budget for an ordinary local API request.
 pub(crate) const API_BUDGET: Duration = Duration::from_millis(100);
@@ -83,6 +85,11 @@ pub(crate) fn evaluate(
     })
 }
 
+/// The `Server-Timing` entry for a handler duration, in milliseconds with microsecond precision.
+pub(crate) fn server_timing(elapsed: Duration) -> String {
+    format!("handler;dur={:.3}", elapsed.as_secs_f64() * 1_000.0)
+}
+
 /// Axum middleware: time the request and warn when it exceeds its class budget. The
 /// route template (never the concrete path) is logged so ticket ids and checkout paths
 /// do not leak into logs and slow routes aggregate cleanly.
@@ -93,13 +100,16 @@ pub(crate) async fn time_request(request: Request, next: Next) -> Response {
         |path| path.as_str().to_string(),
     );
     let started = Instant::now();
-    let response = next.run(request).await;
-    if let Some(slow) = evaluate(
-        &method,
-        &route,
-        response.status().as_u16(),
-        started.elapsed(),
-    ) {
+    let mut response = next.run(request).await;
+    let elapsed = started.elapsed();
+    // Expose the handler time so the web client's dev latency monitor can tell server time
+    // from browser/proxy queueing (HS2-ZGBQ5Q). Streams are never timed.
+    if classify(&route).budget().is_some() {
+        if let Ok(value) = HeaderValue::from_str(&server_timing(elapsed)) {
+            response.headers_mut().append(SERVER_TIMING, value);
+        }
+    }
+    if let Some(slow) = evaluate(&method, &route, response.status().as_u16(), elapsed) {
         tracing::warn!(
             method = %slow.method,
             route = %slow.route,
@@ -169,6 +179,14 @@ mod tests {
         );
     }
 
+    #[test]
+    fn server_timing_reports_milliseconds() {
+        assert_eq!(
+            server_timing(Duration::from_micros(12_345)),
+            "handler;dur=12.345"
+        );
+    }
+
     #[derive(Clone, Default)]
     struct Capture(Arc<Mutex<Vec<u8>>>);
 
@@ -223,6 +241,16 @@ mod tests {
                 .await
                 .unwrap();
             assert_eq!(response.status(), 200);
+            // Timed routes expose their handler time; streams do not (HS2-ZGBQ5Q).
+            let timing = response
+                .headers()
+                .get("server-timing")
+                .map(|value| value.to_str().unwrap().to_string());
+            if uri == "/ws/poll" {
+                assert_eq!(timing, None);
+            } else {
+                assert!(timing.unwrap().starts_with("handler;dur="), "{uri}");
+            }
         }
         let log = String::from_utf8(capture.0.lock().unwrap().clone()).unwrap();
         let warnings = log

@@ -535,6 +535,36 @@ preview/download, server directory browser) are separate design work.
   Web Awesome select is open, including the new-ticket composer, so a background
   ticket column move cannot replace the control or dismiss its popup.
 
+- **Development latency monitor (HS2-ZGBQ5Q).** Development builds flag slowness
+  automatically, from the user's point of view. An action is too slow when the time from
+  a click (or action key) until the result has painted exceeds **150 ms at peak** or
+  **100 ms on average** over the last 20 samples (judged from 5 samples; an average
+  violation reports once per crossing and re-arms after recovering). Separately from the
+  explicit `hotsheet:interaction-timing` call sites, the monitor times every trusted
+  click and action key (Enter, Escape, Space on non-text controls, Cmd/Ctrl shortcuts).
+  It attributes the API requests that start within 50 ms of the event and waits for
+  them, then the next paint. Requests for expected long-running work (AI turns and drive
+  connections, terminal launch, setup and migration, uploads, command runs, lifecycle,
+  sync, project open) are not waited for, so only their immediate feedback is judged.
+  Every API request other than idle long polls is also judged on its own against the
+  same budget. Timed server routes return `Server-Timing: handler;dur=<ms>`, so each
+  report separates server handler time from browser, bridge, or queueing time. Route
+  labels template ids out (`GET /checkouts/{id}/tickets/{id}`).
+  Each violation produces:
+  - a `[hotsheet dev latency]` console warning with the full detail;
+  - a non-blocking, dismissible Web Awesome warning toast (bottom-start, 8 s, one at a
+    time, where a request report never replaces a showing interaction report);
+  - a debounced, event-driven POST to the dev bridge's `/__hotsheet/dev/latency`. The bridge
+    prints a warning in the dev-server terminal and appends one JSON line per report to
+    `${HOTSHEET_HOME:-~/.hotsheet2}/logs/dev-latency.jsonl` (override with
+    `HOTSHEET_DEV_LATENCY_LOG`). `GET /__hotsheet/dev/latency` returns the most recent 200 reports
+    with the log path, and `window.__hotsheetDevLatency.reports()` lists the page's last 100.
+    Nothing polls.
+    The monitor is loaded only from the development diagnostics entry and is excluded from
+    production bundles (`check-production-bundle.mjs` fails the build if it leaks). Under
+    browser automation (`navigator.webdriver`) it stays off unless
+    `localStorage['hotsheet-dev-latency']` is `on`; `off` disables it in a developer browser.
+
 - **Server-busy indicator.** A decorative full-width strip pinned to the top of the app's safe area
   ripples a row of yellow (the Up Next star color) bars while the server is busy, so activity
   is apparent without hunting for a spinner (HS2-MW1V3M). It is a `position:fixed` overlay that
