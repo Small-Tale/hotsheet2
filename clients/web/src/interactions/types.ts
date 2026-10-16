@@ -14,6 +14,8 @@ export interface Project {
   name: string;
   stores: string[];
   apiPath: string;
+  /** The bridge's multiplexed change long-poll path, when it serves one (HS2-6W1NNF). */
+  changeMuxPath?: string;
   compatibility: CompatibilityAssessment;
   needsTicketSetup?: boolean;
   needsHs1Migration?: boolean;

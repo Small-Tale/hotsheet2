@@ -17,6 +17,11 @@ export interface ChangeStreamWorkerOpen {
   apiUrl: string;
   /** Absolute `ws:`/`wss:` change-stream URL, or undefined for long-poll only. */
   webSocketUrl?: string;
+  /**
+   * Absolute URL of the bridge's multiplexed change long-poll (HS2-6W1NNF), when the bridge
+   * advertised one. Every project with the same URL shares one long-poll request.
+   */
+  changeMuxUrl?: string;
   clientId: string;
   /** Present when the stream continues one another owner followed (see transport `resume`). */
   resume?: { cursor?: number };
@@ -56,6 +61,7 @@ export function parseChangeStreamMainMessage(value: unknown): ChangeStreamMainMe
     return isCount(value.seq) ? { type: 'ack', project, generation, seq: value.seq } : undefined;
   if (value.type !== 'open' || typeof value.apiUrl !== 'string' || typeof value.clientId !== 'string') return undefined;
   if (value.webSocketUrl !== undefined && typeof value.webSocketUrl !== 'string') return undefined;
+  if (value.changeMuxUrl !== undefined && typeof value.changeMuxUrl !== 'string') return undefined;
   let resume: { cursor?: number } | undefined;
   if (value.resume !== undefined) {
     if (!isRecord(value.resume)) return undefined;
@@ -69,6 +75,7 @@ export function parseChangeStreamMainMessage(value: unknown): ChangeStreamMainMe
     apiUrl: value.apiUrl,
     clientId: value.clientId,
     ...(value.webSocketUrl === undefined ? {} : { webSocketUrl: value.webSocketUrl }),
+    ...(value.changeMuxUrl === undefined ? {} : { changeMuxUrl: value.changeMuxUrl }),
     ...(resume ? { resume } : {}),
   };
 }

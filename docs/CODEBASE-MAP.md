@@ -196,6 +196,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/change-stream-worker-protocol.ts # Versioned main<->worker change-stream messages (generation tokens, acks), their validators, and the bounded coalescing per-project delivery queue (HS2-SH9179)
     src/change-stream-worker-runtime.ts # Worker-side runtime: one transport per open project, worker poll client, open/close/ack handling (HS2-SH9179)
     src/change-stream.worker.ts # Dedicated module-worker entry for the shared change stream (HS2-SH9179)
+    src/change-poll-mux.ts # Per-origin, per-tab ChangePollMultiplexer: every project's `/ws/poll` joins one shared bridge request; abort+reissue on join/close, per-project fan-out and errors, permanent direct fallback on an older bridge (HS2-6W1NNF)
+    src/change-mux-bridge.ts # Bridge half of the multiplexed change poll: `POST /__hotsheet/change-mux/poll` request validation and first-completion-plus-grace fan-in over each project's upstream `/ws/poll` (HS2-6W1NNF)
     src/change-stream-worker-host.ts # Main-thread worker owner: ordered per-project apply + ack, crash restart replaying from the last applied cursor, skew/ready/crash-loop fallback to the main-thread stream (HS2-SH9179)
     src/change-stream-worker.test.ts # Transition-matrix tests: handshake, gap, repeat, out-of-order, reconnect, cancel, restart, skew, coalescing/overflow
     src/local-bridge-client.ts # Typed `/__hotsheet/*` local-bridge adapter: JSON parse as unknown, server-error surfacing, and per-endpoint response parsers (HS2-313JET)
@@ -289,6 +291,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       command-run-dialog-demo.tsx # CommandRunDialog fixture: run-output / stop-confirmation Presentation setting, open-signal remount, wa-hide/dismiss/stop fixture events (HS2-CWWX7S, HS2-Z7C27E)
       demo-actions.ts      # Kerf attr() specs (DEMO_ACTIONS/COMPONENTS/FIELDS/MARKERS) for every simple selector the catalog delegates on (HS2-G838PZ)
     tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in UI and binary-PTY load traces (`profile:ui`, `profile:ui:worker`, `profile:pty`)
+    tests/change-poll-mux.spec.ts # Eight projects with failing WebSockets share one change long-poll (main thread and worker), event fan-out to one project, close drops it; older bridge 404 keeps per-project polls (HS2-6W1NNF)
     tests/change-stream-worker.spec.ts # Two projects followed through the opt-in shared change-stream worker while switching/searching/updating; bounded idle long polls; close cancels one project; setting off keeps the main-thread stream (HS2-SH9179)
     tests/real-pty-profile.spec.ts  #   Opt-in isolated local-server/OS-PTY transport profile (`profile:pty:real`)
     tests/firefox-pty-profile.spec.ts  #   Opt-in Firefox WebGL/DOM PTY throughput and park/resume profile (`profile:pty:firefox`)

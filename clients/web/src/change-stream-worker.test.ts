@@ -83,6 +83,9 @@ describe('change-stream worker protocol (HS2-SH9179)', () => {
       resume: { cursor: 4 },
     });
     expect(parseChangeStreamMainMessage(open('a', 1, { resume: {} }))).toMatchObject({ resume: {} });
+    expect(parseChangeStreamMainMessage(open('a', 1, { changeMuxUrl: 'http://host/m' }))).toMatchObject({
+      changeMuxUrl: 'http://host/m',
+    });
     for (const bad of [
       null,
       [],
@@ -90,6 +93,7 @@ describe('change-stream worker protocol (HS2-SH9179)', () => {
       { type: 'open', project: 'a', generation: -1, apiUrl: 'x', clientId: 'c' },
       { type: 'open', project: 'a', generation: 1, apiUrl: 'x' },
       { ...open('a', 1), webSocketUrl: 4 },
+      { ...open('a', 1), changeMuxUrl: 4 },
       { ...open('a', 1), resume: 'yes' },
       { ...open('a', 1), resume: { cursor: 1.5 } },
       { type: 'ack', project: 'a', generation: 1 },
@@ -301,6 +305,43 @@ describe('change-stream worker runtime (HS2-SH9179)', () => {
     expect(polls[4]).toContain('timeout_ms=0&since=12');
     runtime.dispose();
     expect(sockets[1].readyState).toBe(3);
+  });
+
+  it('shares one multiplexed long-poll across projects whose bridge advertises it (HS2-6W1NNF)', async () => {
+    const posted: ChangeStreamWorkerMessage[] = [];
+    const requests: Array<{ url: string; body: { client: string; polls: Array<{ project: string }> } }> = [];
+    const fetcher = ((url: string, init?: RequestInit) => {
+      if (!url.endsWith('/__hotsheet/change-mux/poll')) return Promise.reject(new Error(`direct poll ${url}`));
+      const body = JSON.parse(init!.body as string) as (typeof requests)[number]['body'];
+      requests.push({ url, body });
+      if (requests.length > 1) return new Promise<Response>(() => undefined);
+      return Promise.resolve(
+        Response.json({
+          version: 1,
+          results: body.polls.map((poll, index) => ({ project: poll.project, status: 200, body: page(index + 1) })),
+        }),
+      );
+    }) as unknown as typeof fetch;
+    const runtime = createChangeStreamWorkerRuntime({ post: (message) => posted.push(message), fetch: fetcher });
+    const mux = { changeMuxUrl: 'http://host/__hotsheet/change-mux/poll' };
+    runtime.handle(open('a', 1, { apiUrl: 'http://host/__hotsheet/project-api/a', ...mux }));
+    runtime.handle(open('b', 1, { apiUrl: 'http://host/__hotsheet/project-api/b', ...mux }));
+    await vi.waitFor(() => {
+      expect(batches(posted)).toHaveLength(2);
+    }, 3_000);
+    expect(requests[0].body).toMatchObject({ client: 'tab-1', polls: [{ project: 'a' }, { project: 'b' }] });
+    expect(
+      batches(posted).map((batch) => [batch.project, batch.kind, 'cursor' in batch ? batch.cursor : undefined]),
+    ).toEqual([
+      ['a', 'resync', 1],
+      ['b', 'resync', 2],
+    ]);
+    // Both live long-polls then wait in one shared request.
+    await vi.waitFor(() => {
+      expect(requests).toHaveLength(2);
+    });
+    expect(requests[1].body.polls.map((poll) => poll.project)).toEqual(['a', 'b']);
+    runtime.dispose();
   });
 
   it('turns a failed poll into a reconnect resync without a tight request loop', async () => {

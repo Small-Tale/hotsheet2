@@ -1682,6 +1682,30 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   workspace. The existing local-mutation barrier,
   acknowledgement suppression, overflow recovery, and event consumers receive the same
   `PollResponse` batches regardless of which transport delivered them.
+  **Multiplexed long-poll (HS2-6W1NNF).** A local bridge that serves
+  `POST /__hotsheet/change-mux/poll` advertises it as `changeMuxPath` in its project-open
+  response. Every project with that path then sends its `/ws/poll` requests through one
+  shared per-origin, per-tab request, on the main thread and in the worker alike. Projects
+  whose WebSockets keep failing therefore hold one browser connection instead of one each.
+  Each project's transport still owns its own cursor, replay, gap checks, backoff, and sink;
+  only the HTTP request is shared.
+  The request carries `{version: 1, client, polls: [{project, since?, timeout_ms}]}`. The
+  bridge forwards each poll to that project's upstream `/ws/poll`, keeping its `checkout=`
+  presence, answers with the first completion plus any others that land within 50 ms, and
+  aborts the rest. An aborted poll consumes nothing, because a cursor advances only on a
+  delivered page.
+  A poll that arrives, or a project that closes, while a request is in flight replaces that
+  request with one carrying every waiting project and its remaining deadline. Projects
+  without an answer stay waiting. An upstream error status rejects only that project, and a
+  failed shared request rejects every project it carried; each transport then backs off on
+  its own bounded schedule.
+  Version skew: an older bridge does not advertise the path, so its projects poll directly.
+  A bridge answering 400, 404, 405, or 501, an unsupported or empty answer, or more than 64
+  waiting projects switches that multiplexer permanently to direct per-project polls. An
+  older server behind a new bridge surfaces as that project's own error, as before.
+  Not multiplexed yet: the WebSocket itself (one per project, in a separate browser
+  connection pool), presence for several checkouts on one upstream stream, and cross-tab
+  sharing (`HS2-QJR1K6`, `HS2-XAGJP3`, `HS2-NP7R42`).
   With the off-by-default `hotsheet.change-stream-worker` local setting, one dedicated
   worker runs these transports for every open project and posts only validated, ordered,
   coalesced change events. The main thread applies them through the same consumer. A

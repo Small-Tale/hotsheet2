@@ -2,6 +2,7 @@ import type { Signal } from 'kerfjs';
 
 import { applyConversationActivity, applyConversationEvent } from '../ai-conversation';
 import { Api, CHANGE_STREAM_CLIENT_ID, type PollResponse } from '../api';
+import { changeMuxTarget, createChangePollMultiplexers } from '../change-poll-mux';
 import { type ChangeStreamWorkerLike, createChangeStreamWorkerHost } from '../change-stream-worker-host';
 import type { ProjectTabBarMode } from '../components/project-tab-bar';
 import type { Project } from '../interactions/types';
@@ -16,6 +17,7 @@ import {
 } from '../project-change-poll';
 import type { createRefreshBarrier } from '../refresh-barrier';
 import { type ServerClocks, serverClocks } from '../server-clock';
+import { parsePollResponse } from '../server-response-parsers';
 import type { createDriveConversationsController } from './drive-conversations';
 import type { createPermissionsController } from './permissions';
 import type { createTerminalNamesController } from './terminal-names';
@@ -115,7 +117,22 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
   const useWorker = dependencies.useChangeStreamWorker ?? changeStreamWorkerEnabled();
   const clocks = dependencies.serverClocks ?? serverClocks;
   let workerHost: ReturnType<typeof createChangeStreamWorkerHost> | undefined;
-  const startStream = (current: Project, streamOptions: ProjectChangeStreamOptions): (() => void) => {
+  // Projects whose bridge advertises it share one change long-poll per origin (HS2-6W1NNF),
+  // on the main thread and in the worker alike.
+  const multiplexerFor = createChangePollMultiplexers({ parse: parsePollResponse });
+  const changeMuxUrl = (current: Project): string | undefined =>
+    current.changeMuxPath ? new URL(current.changeMuxPath, location.href).href : undefined;
+  const startStream = (current: Project, directOptions: ProjectChangeStreamOptions): (() => void) => {
+    const muxUrl = changeMuxUrl(current);
+    const streamOptions: ProjectChangeStreamOptions = muxUrl
+      ? {
+          ...directOptions,
+          client: multiplexerFor(muxUrl, CHANGE_STREAM_CLIENT_ID).client(
+            changeMuxTarget(current.apiPath, '')?.project ?? current.id,
+            directOptions.client,
+          ),
+        }
+      : directOptions;
     if (!useWorker) return startProjectChangeStream(streamOptions);
     workerHost ??= createChangeStreamWorkerHost({
       createWorker: dependencies.createChangeStreamWorker ?? createBundledChangeStreamWorker,
@@ -125,6 +142,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     return workerHost.start(current.id, streamOptions, {
       apiUrl: new URL(current.apiPath, location.href).href.replace(/\/$/u, ''),
       webSocketUrl: api.changeWebSocketUrl(),
+      ...(muxUrl ? { changeMuxUrl: muxUrl } : {}),
     });
   };
   const repositoryRefreshTimers = new Map<string, number>();

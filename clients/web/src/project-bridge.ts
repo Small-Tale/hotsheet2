@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 
 import type { Checkout } from './api';
+import { CHANGE_MUX_PATH } from './change-mux-bridge';
 import { spawn } from './child-process';
 import { assessCompatibility, type CompatibilityAssessment, type ServerCompatibility } from './compatibility';
 import {
@@ -37,6 +38,8 @@ export interface ProjectSession {
   name: string;
   stores: string[];
   apiPath: string;
+  /** Advertises the multiplexed change long-poll (HS2-6W1NNF); older bridges omit it. */
+  changeMuxPath?: string;
   compatibility: CompatibilityAssessment;
   needsTicketSetup: boolean;
   needsHs1Migration: boolean;
@@ -1538,6 +1541,7 @@ async function openPreparedLocalProject(
     name: opened.checkout.alias,
     stores: opened.checkout.stores,
     apiPath: `/__hotsheet/project-api/${encodeURIComponent(opened.checkout.id)}`,
+    changeMuxPath: CHANGE_MUX_PATH,
     compatibility,
     ...(setupResult.warning ? { setupWarning: setupResult.warning } : {}),
     ...(setupResult.codexHooksChanged ? { codexHooksChanged: setupResult.codexHooksChanged } : {}),
@@ -1579,7 +1583,13 @@ export async function listServerCheckouts(
   return checkouts.filter((_, index) => available[index]);
 }
 
-export async function proxyProjectRequest(projectId: string, path: string, request: Request): Promise<Response> {
+export async function proxyProjectRequest(
+  projectId: string,
+  path: string,
+  request: Request,
+  /** Cancels the upstream request; only the change multiplexer passes one (HS2-6W1NNF). */
+  signal?: AbortSignal,
+): Promise<Response> {
   const target = sessions.get(projectId);
   if (!target) return Response.json({ error: 'Project session is not open.' }, { status: 404 });
   const headers = new Headers(request.headers);
@@ -1593,12 +1603,15 @@ export async function proxyProjectRequest(projectId: string, path: string, reque
       headers,
       body,
       redirect: 'manual',
+      ...(signal ? { signal } : {}),
     });
     return new Response(response.body, { status: response.status, headers: response.headers });
   };
   try {
     return await forward();
   } catch (error) {
+    // A cancelled multiplexed poll is not evidence that the server went away.
+    if (signal?.aborted) throw error;
     if (!target.serverStore) throw error;
     // A failed forward means the verified instance may be gone: re-probe instead of trusting it.
     forgetVerifiedServer(target.serverStore);

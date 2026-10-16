@@ -1,4 +1,5 @@
 import type { Api } from './api';
+import { changeMuxTarget, createChangePollMultiplexers } from './change-poll-mux';
 import {
   CHANGE_STREAM_WORKER_PROTOCOL,
   type ChangeStreamDelivery,
@@ -48,6 +49,17 @@ export function createWorkerChangeClient(open: ChangeStreamWorkerOpen, fetcher: 
 export function createChangeStreamWorkerRuntime(options: ChangeStreamWorkerRuntimeOptions) {
   const fetcher = options.fetch ?? ((input, init) => fetch(input, init));
   const run = options.runTransport ?? runProjectChangeTransport;
+  // One shared long-poll per bridge for every project it serves (HS2-6W1NNF).
+  const multiplexerFor = createChangePollMultiplexers({
+    parse: parsePollResponse,
+    fetch: fetcher,
+  });
+  const changeClient = (message: ChangeStreamWorkerOpen): ChangeClient => {
+    const direct = createWorkerChangeClient(message, fetcher);
+    if (!message.changeMuxUrl) return direct;
+    const project = changeMuxTarget(new URL(message.apiUrl).pathname, '')?.project ?? message.project;
+    return multiplexerFor(message.changeMuxUrl, message.clientId).client(project, direct);
+  };
   const subscriptions = new Map<
     string,
     { generation: number; controller: AbortController; queue: ChangeStreamDeliveryQueue }
@@ -73,7 +85,7 @@ export function createChangeStreamWorkerRuntime(options: ChangeStreamWorkerRunti
     subscriptions.set(project, { generation, controller, queue });
     run(
       {
-        client: createWorkerChangeClient(message, fetcher),
+        client: changeClient(message),
         ...(options.openWebSocket ? { openWebSocket: options.openWebSocket } : {}),
         ...(message.resume ? { resume: message.resume } : {}),
         onError: (reason) => {

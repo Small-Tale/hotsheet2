@@ -260,4 +260,59 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
       ]),
     );
   }, 120_000);
+
+  it("multiplexes two real projects' change long-polls over one bridge request (HS2-6W1NNF)", async () => {
+    const app = createDevApp(),
+      roots = [await mkdtemp(join(workspace, 'mux-a-')), await mkdtemp(join(workspace, 'mux-b-'))],
+      [first, second] = await Promise.all(
+        roots.map(async (root) => openLocalProject(root, await createLocalGitTicketStore(root))),
+      );
+    expect(first.changeMuxPath).toBe('/__hotsheet/change-mux/poll');
+    const mux = async (polls: Array<{ project: string; since?: number; timeout_ms: number }>) => {
+      const response = await app.request('/__hotsheet/change-mux/poll', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ version: 1, client: 'integration-tab', polls }),
+      });
+      expect(response.status).toBe(200);
+      return (await response.json()) as {
+        version: number;
+        results: Array<{ project: string; status: number; body: { cursor: number; events: unknown[] } }>;
+      };
+    };
+    // Handshakes return at once with each project's replay cursor.
+    const handshake = await mux([
+      { project: first.id, timeout_ms: 0 },
+      { project: second.id, timeout_ms: 0 },
+    ]);
+    expect(handshake.results.map((result) => [result.project, result.status]).sort()).toEqual(
+      [
+        [first.id, 200],
+        [second.id, 200],
+      ].sort(),
+    );
+    const cursorOf = (id: string) => handshake.results.find((result) => result.project === id)!.body.cursor;
+    // A held poll for both wakes on a real write instead of waiting out its timeout.
+    const started = Date.now();
+    const held = mux([
+      { project: first.id, since: cursorOf(first.id), timeout_ms: 20_000 },
+      { project: second.id, since: cursorOf(second.id), timeout_ms: 20_000 },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const created = await app.request(
+      `/__hotsheet/project-api/${encodeURIComponent(first.id)}/checkouts/${encodeURIComponent(first.id)}/tickets`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title: 'Multiplexed change' }),
+      },
+    );
+    expect(created.status).toBeLessThan(300);
+    const woke = await held;
+    expect(Date.now() - started).toBeLessThan(15_000);
+    expect(woke.results.some((result) => result.status === 200 && result.body.events.length > 0)).toBe(true);
+    // An unknown project is that project's error, not the whole request's.
+    const unknown = await mux([{ project: 'not-open', timeout_ms: 0 }]);
+    expect(unknown.results).toEqual([expect.objectContaining({ project: 'not-open', status: 404 })]);
+  }, 120_000);
 });

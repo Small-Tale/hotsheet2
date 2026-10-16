@@ -1,6 +1,12 @@
 import { Hono } from 'hono';
 
 import type { Checkout } from './api';
+import {
+  CHANGE_MUX_PATH,
+  type ChangeMuxForward,
+  multiplexChangePolls,
+  parseChangeMuxRequest,
+} from './change-mux-bridge';
 import type { ConversationExportPayload } from './conversation-export';
 import { createConversationExportBridge } from './conversation-export-bridge';
 import { createDevLatencyLog } from './dev-latency-log';
@@ -34,6 +40,8 @@ export function createDevApp(
   listCheckouts: () => Promise<Checkout[]> = listServerCheckouts,
   jobs: MigrationJobApi = migrationJobApi,
   latencyLog: Pick<ReturnType<typeof createDevLatencyLog>, 'record' | 'recent' | 'file'> = createDevLatencyLog(),
+  forwardChangePoll: ChangeMuxForward = (project, path, signal) =>
+    proxyProjectRequest(project, path, new Request(new URL(path, 'http://bridge.invalid')), signal),
 ): Hono {
   const app = new Hono();
   // The development latency monitor's durable log (HS2-ZGBQ5Q): the browser posts each slow
@@ -203,6 +211,20 @@ export function createDevApp(
         400,
       );
     }
+  });
+  // Every open project's change long-poll over one browser request (HS2-6W1NNF), so projects
+  // whose WebSockets fail cannot fill the browser's per-origin HTTP/1.1 connection pool.
+  app.post(CHANGE_MUX_PATH, async (context) => {
+    if (!dev) return context.notFound();
+    let body: unknown;
+    try {
+      body = await context.req.json();
+    } catch {
+      return context.json({ error: 'Expected a JSON body.' }, 400);
+    }
+    const request = parseChangeMuxRequest(body);
+    if (typeof request === 'string') return context.json({ error: request }, 400);
+    return context.json(await multiplexChangePolls(request, forwardChangePoll, context.req.raw.signal));
   });
   app.all('/__hotsheet/project-api/:project/*', async (context) => {
     if (!dev) return context.notFound();

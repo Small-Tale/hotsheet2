@@ -20,6 +20,8 @@ export interface ChangeStreamWorkerLike {
 export interface ChangeStreamEndpoints {
   apiUrl: string;
   webSocketUrl?: string;
+  /** The bridge's multiplexed long-poll URL (HS2-6W1NNF), when advertised. */
+  changeMuxUrl?: string;
 }
 
 export type ChangeStreamHostMode = 'worker' | 'fallback';
@@ -92,6 +94,7 @@ export function createChangeStreamWorkerHost(options: ChangeStreamWorkerHostOpti
       generation: hosted.generation,
       apiUrl: hosted.endpoints.apiUrl,
       ...(hosted.endpoints.webSocketUrl ? { webSocketUrl: hosted.endpoints.webSocketUrl } : {}),
+      ...(hosted.endpoints.changeMuxUrl ? { changeMuxUrl: hosted.endpoints.changeMuxUrl } : {}),
       clientId: options.clientId,
       ...(resume ? { resume } : {}),
     });
