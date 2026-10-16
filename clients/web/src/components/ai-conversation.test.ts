@@ -380,8 +380,22 @@ describe('AIConversation', () => {
     expect(css).toMatch(
       /\.ai-conversation__transcript-content \{[^}]*padding: remify\(16px\)[^}]*box-sizing: border-box/,
     );
-    expect(css).toMatch(
-      /\.ai-conversation--embedded\[data-read-only='false'\] \.ai-conversation__transcript-content \{[^}]*padding-bottom: remify\(176px\)/,
+    // The drawer's transcript clears its floating composer by the measured height published as Kerf's
+    // scroll-clearance context, never a fixed app padding (HS2-W0KJVQ).
+    expect(css).not.toMatch(/padding-bottom: remify\(176px\)/);
+    const embedded = String(
+      AIConversation({
+        open: true,
+        tool: 'Codex',
+        messages: [],
+        draft: '',
+        busy: false,
+        interruptible: false,
+        presentation: 'embedded',
+      }),
+    );
+    expect(embedded).toMatch(
+      /class="kui-list[^"]*ai-conversation__transcript"[^>]*data-scroll-clearance="block-end"|data-scroll-clearance="block-end"[^>]*ai-conversation__transcript/,
     );
     // Kerf owns the dialog body layout, floating footer, composer frame, and file chips.
     expect(css).not.toContain('::part(');

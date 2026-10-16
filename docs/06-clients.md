@@ -1591,7 +1591,13 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   same Stop action as the toolbar when the drive can be interrupted. The pill is not a live
   region; the stuck banner is a polite status whose title changes at most once a minute. The
   dialog header, the drawer tab summary, and the terminal-grid chat tile show the short form
-  ("Running Bash · 2m", "May be stuck · no activity for 2m"). A turn another client started is
+  ("Running Bash · 2m", "May be stuck · no activity for 2m"). In both presentations the
+  transcript clears the floating composer (pill or stuck banner plus a draft of up to six rows) by
+  its measured height through Kerf's `--kui-scroll-clearance-block-end` context and a
+  `scrollClearance="block-end"` transcript `List`: the dialog's `DialogSurface` floating footer
+  publishes it, and the drawer chat measures its composer form
+  (`components/embedded-composer-clearance.ts`), so the last message rests above the composer
+  instead of behind a fixed reservation (HS2-W0KJVQ). A turn another client started is
   timed from the connection snapshot and its own events. Native activity and permission
   events provide specific progress text, and connection-matched permission requests reuse the
   standard decision card inline. Completed, failed, and interrupted outcomes remain on their

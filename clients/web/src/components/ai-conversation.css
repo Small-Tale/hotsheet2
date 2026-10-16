@@ -78,10 +78,6 @@
   flex-direction: column;
   gap: remify(12.8px);
 }
-/* The embedded drawer floats its own composer, so its transcript reserves room for it. */
-.ai-conversation--embedded[data-read-only='false'] .ai-conversation__transcript-content {
-  padding-bottom: remify(176px);
-}
 /* The selection hint/count bar is a non-scrolling row above the transcript, inset like the
    transcript column, so it reserves its own height instead of covering messages (HS2-C4RTVS). */
 .ai-conversation__selection {

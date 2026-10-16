@@ -649,12 +649,13 @@ export function AIConversation(props: AIConversationProps) {
       </>
     ),
     transcript = (
-      // Kerf List is the transcript scroller: in the dialog its block-end scrollClearance lets messages
-      // scroll beneath the floating Composer footer while the last one still rests above it
-      // (KF-913AT2, HS2-HVZVEA). The app-owned content column inside keeps the transcript's own inset.
+      // Kerf List is the transcript scroller: its block-end scrollClearance lets messages scroll
+      // beneath the floating Composer while the last one still rests above it. The dialog's
+      // DialogSurface footer publishes that clearance (KF-913AT2, HS2-HVZVEA); in the drawer the
+      // measured composer form does (HS2-W0KJVQ). The app-owned content column keeps its own inset.
       <List
         scrollable
-        scrollClearance={presentation === 'dialog' ? 'block-end' : undefined}
+        scrollClearance="block-end"
         flex={presentation === 'embedded' ? flex(1, 1, px(0)) : undefined}
         className="ai-conversation__transcript"
         rootAttributes={{ role: 'region', 'aria-label': 'Conversation Transcript', 'aria-live': 'polite' }}

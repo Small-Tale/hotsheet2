@@ -18664,6 +18664,84 @@ for (const width of [1280, 390] as const)
     await runLongTurnUntilStuck(page, drawer.locator('[data-component="ai-conversation"]'), 'drawer', [width]);
   });
 
+for (const width of [1280, 390] as const)
+  test(`keeps the drawer chat's last message above a stuck banner and six-row draft at ${width}px (HS2-W0KJVQ)`, async ({
+    page,
+  }) => {
+    await page.clock.install({ time: XV1VCR_T0 });
+    await page.setViewportSize({ width, height: width < 640 ? 844 : 800 });
+    await mockProject(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]');
+    // Maximized at both widths: a six-row draft under the stuck banner is taller than the default phone drawer.
+    await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
+    await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+    await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+    const host = drawer.locator('[data-component="ai-conversation"]'),
+      field = host.getByLabel('Message Codex'),
+      form = host.locator('.ai-conversation__composer'),
+      transcript = host.locator('.ai-conversation__transcript');
+    // Enough answered turns to overflow the transcript, then a long turn that becomes stuck.
+    for (let turn = 0; turn < 4; turn += 1) {
+      await field.fill('What time is it in California?');
+      await field.press('Enter');
+      await expect(host.locator('.ai-conversation__message--assistant')).toHaveCount(turn + 1);
+    }
+    await field.fill('Run the long test suite.');
+    await field.press('Enter');
+    const line = form.locator('.ai-conversation__turn-progress');
+    await page.clock.runFor(305_000);
+    await expect(line).toHaveAttribute('data-state', 'stuck');
+    // A six-row draft waits in the (busy, disabled) composer beneath the stuck banner.
+    await field.evaluate((element: HTMLTextAreaElement) => {
+      element.value = Array.from({ length: 8 }, (_, row) => `Draft line ${row + 1}`).join('\n');
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await expect(field).toHaveValue(/Draft line 8/);
+    const clearance = async () => {
+      const [hostBox, formBox] = await Promise.all([
+        host.evaluate((node) => node.getBoundingClientRect().bottom),
+        form.evaluate((node) => node.getBoundingClientRect().top),
+      ]);
+      return Math.ceil(hostBox - formBox);
+    };
+    const published = () =>
+      host.evaluate((node) =>
+        Number.parseFloat(getComputedStyle(node).getPropertyValue('--kui-scroll-clearance-block-end')),
+      );
+    // The published clearance tracks the measured composer form (pill/banner plus composer).
+    await expect.poll(async () => (await published()) - (await clearance())).toBe(0);
+    expect(await clearance()).toBeGreaterThan(176);
+    await transcript.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    const rests = async () => {
+      const [lastBottom, formTop] = await Promise.all([
+        host
+          .locator('.ai-conversation__message')
+          .last()
+          .evaluate((node) => node.getBoundingClientRect().bottom),
+        form.evaluate((node) => node.getBoundingClientRect().top),
+      ]);
+      return formTop - lastBottom;
+    };
+    // Scrolled to the end, the last message rests clear of the stuck banner and the draft.
+    await expect.poll(rests).toBeGreaterThanOrEqual(8);
+    await expect(line.getByRole('button', { name: 'Stop Codex' })).toBeInViewport({ ratio: 1 });
+    await page.screenshot({ path: `target/visual-captures/hs2-w0kjvq-drawer-stuck-draft-${width}.png` });
+    // Clearing the draft shrinks the composer, and the clearance follows it down.
+    const tall = await published();
+    await field.evaluate((element: HTMLTextAreaElement) => {
+      element.value = '';
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await expect.poll(published).toBeLessThan(tall);
+    await expect.poll(async () => (await published()) - (await clearance())).toBe(0);
+  });
+
 test('shows a conversation dialog turn working, then may-be-stuck with Stop (HS2-XV1VCR)', async ({ page }) => {
   await page.clock.install({ time: XV1VCR_T0 });
   await page.setViewportSize({ width: 1280, height: 800 });

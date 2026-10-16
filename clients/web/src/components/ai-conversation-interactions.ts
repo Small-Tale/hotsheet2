@@ -7,6 +7,7 @@ import { type ConversationHistoryDirection, conversationHistoryDirection } from 
 import { type ConversationSelectionModifiers, conversationSelectionModifiers } from '../conversation-selection';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import { isConversationSurfaceLifecycleEvent } from './ai-conversation';
+import { wireEmbeddedComposerClearance } from './embedded-composer-clearance';
 
 /**
  * Side effects for the AIConversation surface (HS2-RWY78R). Production passes the conversation
@@ -123,6 +124,8 @@ export function wireAiConversation(root: HTMLElement, bindings: AiConversationBi
   );
   // Kerf owns Enter-to-send (IME, empty, and auto-repeat guards) for the submitOnEnter Composer.
   lifetime.add(wireComposers(root));
+  // The drawer chat's transcript clears its floating composer by the measured height (HS2-W0KJVQ).
+  lifetime.add(wireEmbeddedComposerClearance(root));
   lifetime.add(
     delegate(root, 'submit', COMMANDS_AND_AI_ACTIONS.sendConversationTurn.selector, (event) => {
       event.preventDefault();
