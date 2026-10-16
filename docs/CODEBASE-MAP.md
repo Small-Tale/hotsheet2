@@ -439,6 +439,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/limits.rs          #   Physical memory (sysconf) and the spawn-time replay bounds behind the terminal limits (HS2-Y5DYC0)
       src/terminal.rs        #   Terminal: spawn a command in a PTY, scrollback ring, sized per spawn by TermSpec.replay_bytes (HS2-Y5DYC0), drain thread (slave kept until the child exits and output is drained, HS2-BCE5XG), write/resize/kill; env-scrubbed + parent-env-inherited; subscribe() live output fan-out (tokio broadcast) for the WS attach (HS2-XTTTMV)
       src/input_queue.rs     #   InputQueue (HS2-FERD7N): one ordered PTY input FIFO per terminal drained by a writer thread; attaches queue (1 MiB budget, async wait), request paths await write_async, sync write for threads
+      src/pty_io.rs          #   PtyWriter/PtyReader (HS2-RA494E, unix): non-blocking PTY master I/O waiting in poll(2); the writer gives up once the child exits so a killed terminal never strands it
       src/manager.rs         #   TerminalManager: per-(project,terminal) lazy spawn + shared Arc<Terminal> + list/get/kill/reap
       src/busy.rs            #   BusyDetector: streaming OSC-133 busy/idle inference + contains_spinner hint (feeds HS2-107)
       src/osc.rs             #   OscScanner: streaming OSC 7/8/9 parser → TermState{cwd,link,progress,notify}; surfaced on the terminal read/list state (HS2-RCKEJ9)

@@ -21,6 +21,8 @@ pub mod input_queue;
 pub mod limits;
 pub mod manager;
 pub mod osc;
+#[cfg(unix)]
+mod pty_io;
 pub mod sizing;
 pub mod terminal;
 pub mod viewer_output;

@@ -562,8 +562,14 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   input and keeps reading resize claims and probes even while a child is not reading stdin;
   it waits, parking no thread, only once 1 MiB of earlier input is still unwritten (a larger
   single chunk is accepted into an empty queue). `POST /terminals/{id}/input` and the broker
-  `input` request await the write result asynchronously. Killing the child unblocks the
-  writer; dropping a terminal discards its unwritten input.
+  `input` request await the write result asynchronously. Dropping a terminal discards its
+  unwritten input.
+- **A killed terminal never strands its input writer (HS2-RA494E).** The PTY master is
+  non-blocking: the writer thread waits for input room in `poll(2)` with a short local
+  timeout and, once the child has exited or the terminal is gone, fails the in-progress and
+  remaining queued input instead of waiting. This matters on Linux, where a kernel write
+  blocked on a full input buffer is not woken when the child dies. The output drain shares
+  the master and waits in `poll(2)` too, ending on EOF/EIO as before.
 - Survival across server restarts via a **detached PTY broker process** (carried
   from HS1 `src/terminals/broker/`) — terminals aren't killed when the server
   recycles or is explicitly stopped. Detached hosting is the server default; ordinary

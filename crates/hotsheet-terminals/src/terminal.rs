@@ -324,6 +324,37 @@ fn release_slave_when_drained(
     });
 }
 
+/// Switch the master to non-blocking I/O and wrap its reader and writer so both wait in
+/// `poll(2)`; the writer gives up once the child has exited or the terminal is gone
+/// (HS2-RA494E, see [`crate::pty_io`]).
+#[cfg(unix)]
+fn interruptible_pty_io(
+    master: &dyn MasterPty,
+    reader: Box<dyn std::io::Read + Send>,
+    writer: Box<dyn std::io::Write + Send>,
+    child: &Arc<Mutex<Box<dyn Child + Send + Sync>>>,
+) -> Result<(crate::pty_io::PtyReader, crate::pty_io::PtyWriter), TermError> {
+    use crate::pty_io::{PtyReader, PtyWriter, dup_owned, set_nonblocking};
+    let fd = master
+        .as_raw_fd()
+        .ok_or_else(|| TermError::Pty("the PTY master has no file descriptor".into()))?;
+    let read_fd = dup_owned(fd).map_err(TermError::Io)?;
+    let write_fd = dup_owned(fd).map_err(TermError::Io)?;
+    set_nonblocking(&write_fd).map_err(TermError::Io)?;
+    let child = Arc::downgrade(child);
+    let abandoned = move || {
+        child.upgrade().is_none_or(|child| {
+            child
+                .with_lock(|child| child.try_wait().ok())
+                .is_none_or(|status| status.is_some())
+        })
+    };
+    Ok((
+        PtyReader::new(reader, read_fd),
+        PtyWriter::new(writer, write_fd, abandoned),
+    ))
+}
+
 /// Bytes waiting to be read from a PTY master (`FIONREAD`); 0 when it cannot tell.
 #[cfg(unix)]
 fn unread_bytes(fd: std::os::unix::io::RawFd) -> usize {
@@ -380,10 +411,20 @@ impl Terminal {
         }
 
         let child = pair.slave.spawn_command(cmd).map_err(pty_err)?;
-        let mut reader = pair.master.try_clone_reader().map_err(pty_err)?;
+        let reader = pair.master.try_clone_reader().map_err(pty_err)?;
         let writer = pair.master.take_writer().map_err(pty_err)?;
-        let master = Arc::new(Mutex::new(pair.master));
         let child = Arc::new(Mutex::new(child));
+        // HS2-RA494E: a non-blocking master so a killed child can never strand the input
+        // writer in a kernel write on a full input buffer (Linux does not wake it).
+        #[cfg(unix)]
+        let (mut reader, writer) = {
+            let (reader, writer) = interruptible_pty_io(&*pair.master, reader, writer, &child)?;
+            let writer: Box<dyn std::io::Write + Send> = Box::new(writer);
+            (reader, writer)
+        };
+        #[cfg(not(unix))]
+        let mut reader = reader;
+        let master = Arc::new(Mutex::new(pair.master));
         // HS2-BCE5XG: on macOS the *last* close of a PTY slave waits only briefly (about half a
         // second here) for the master to read pending output, then discards it. A command that
         // writes and exits while the drain thread is starved under load therefore lost
@@ -998,12 +1039,6 @@ mod tests {
     /// input buffer must not stall the runtime, another terminal, or later input. A
     /// current-thread runtime makes a blocked worker fatal: the timeouts could not fire.
     #[tokio::test(flavor = "current_thread")]
-    // On Linux a write blocked on a full PTY input buffer is not woken when the child is
-    // killed, so the final drain assertion fails; the product fix is HS2-RA494E.
-    #[cfg_attr(
-        target_os = "linux",
-        ignore = "HS2-RA494E: blocked PTY writer is not woken on Linux"
-    )]
     async fn a_child_that_never_reads_stdin_stalls_neither_the_runtime_nor_other_terminals() {
         use std::time::Duration;
         let mut spec = TermSpec::new("sh");
