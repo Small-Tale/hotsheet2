@@ -292,6 +292,20 @@ clarity, context, verification realism, scope deviation/assumptions, deferred ga
 the same integer arrived as structured `confidence` metadata (`hotsheet-cli show` prints
 `confidence: NN`), and that the web inspector shows the matching header badge.
 
+### AI chat transcript selection with a screen reader (HS2-S9W63Q)
+
+Playwright asserts the accessibility tree. What a real screen reader announces is not
+automated. With VoiceOver on macOS (Safari and the Tauri app), and NVDA on Windows if
+available, open an AI chat in the terminal drawer and in the conversation dialog, then check:
+
+- The transcript's message area is announced as the multi-selectable "Conversation Messages"
+  grid.
+- Each message is a row that reports selected or not selected when it gets focus.
+- Cmd/Ctrl+Space and Shift+Enter announce the selection change.
+- Up/Down and Home/End move between messages.
+- Activity groups and skipped-message dividers read as ordinary rows without a selection state.
+- Their Activity toggle remains operable.
+
 ## Automated Coverage Summary
 
 - Terminal sizing policy transitions and disconnect healing are automated in Rust and

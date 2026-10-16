@@ -501,6 +501,55 @@ describe('AIConversation', () => {
       expect(scroller).toBeGreaterThan(bar);
     }
   });
+  it.each(['dialog', 'embedded'] as const)(
+    'owns selectable %s messages with a labeled multi-select grid whose children are all rows (HS2-S9W63Q)',
+    (presentation) => {
+      const render = (selectionId?: string) =>
+        String(
+          AIConversation({
+            open: true,
+            presentation,
+            tool: 'Codex',
+            selectionId,
+            selectedMessageIds: ['one'],
+            messages: [
+              { id: 'one', role: 'user', content: 'First.', sequence: 0 },
+              { id: 'two', role: 'assistant', content: 'Second.', status: 'completed', sequence: 2 },
+            ],
+            activity: [
+              { id: 'act', tool: 'Codex', kind: 'edit', summary: 'Edited', importance: 'normal', sequence: 1 },
+            ],
+            skippedBefore: { two: 2 },
+            permissions: [permission],
+            error: 'Turn failed.',
+            draft: '',
+            busy: false,
+            interruptible: false,
+          }),
+        );
+      const markup = render('connection-1'),
+        gridStart = markup.search(/<div[^>]*role="grid"/),
+        grid = markup.slice(gridStart, markup.indexOf('data-permission-key'));
+      expect(markup.match(/role="grid"/g)).toHaveLength(1);
+      expect(grid).toMatch(
+        /^<div[^>]*role="grid"[^>]*aria-label="Conversation Messages"[^>]*aria-multiselectable="true"/,
+      );
+      // Messages are selectable rows; activity and the skipped divider are plain rows; each has one cell.
+      expect(grid.match(/role="row"[^>]*aria-selected="true"/g)).toHaveLength(1);
+      expect(grid.match(/role="row"[^>]*aria-selected="false"/g)).toHaveLength(1);
+      expect(grid.match(/<div role="row" class="ai-conversation__row">/g)).toHaveLength(2);
+      expect(grid.match(/role="row"/g)).toHaveLength(4);
+      expect(grid.match(/role="gridcell"/g)).toHaveLength(4);
+      expect(grid).not.toContain('role="option"');
+      // Permission cards and failures stay outside the grid, in the scrolling transcript region.
+      expect(markup.indexOf('data-permission-key')).toBeGreaterThan(gridStart);
+      expect(grid).not.toContain('Conversation Unavailable');
+      // Without a selection owner nothing claims grid or row semantics.
+      const plain = render(undefined);
+      expect(plain).not.toMatch(/role="(grid|row|gridcell|option)"/);
+      expect(plain).toContain('2 messages skipped');
+    },
+  );
   it('renders live read-only previews without saved-transcript or mutation affordances', () => {
     const markup = withToolbar({
       open: true,

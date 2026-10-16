@@ -7,7 +7,7 @@ import { Badge } from '@kerfjs/ui/badge';
 import { Chip } from '@kerfjs/ui/chip';
 import { Composer } from '@kerfjs/ui/composer';
 import { ContentItem } from '@kerfjs/ui/content-item';
-import { flex, px, remify, uiColor } from '@kerfjs/ui/css-values';
+import { flex, px, rem, remify, uiColor } from '@kerfjs/ui/css-values';
 import { deviceClass } from '@kerfjs/ui/device-class';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
@@ -128,7 +128,8 @@ export function ConversationMessages({
     <>
       {messages.map((message) => (
         // Kerf ContentItem chat bubbles (KF-M3HJK8, HS2-P16J04): the person's messages sit at the end on the
-        // brand-loud fill, responses at the start; a selectable transcript makes each one an option.
+        // brand-loud fill, responses at the start; a selectable transcript makes each one a row of its
+        // multi-select grid, announced with aria-selected (HS2-S9W63Q).
         <ContentItem
           bubble={message.role === 'user' ? 'end' : 'start'}
           appearance={message.status === 'failed' ? 'danger' : message.role === 'user' ? 'brand-loud' : 'neutral'}
@@ -139,7 +140,7 @@ export function ConversationMessages({
                 interactive: true as const,
                 action: selectionAction,
                 itemId: message.id,
-                selectionMode: 'single' as const,
+                selectionMode: 'multiple' as const,
                 selected: Boolean(selectedIds?.has(message.id)),
                 rootAttributes: { 'data-message-id': message.id, 'data-status': message.status },
               }
@@ -445,6 +446,20 @@ export function AIConversationToolbar({
   );
 }
 
+/**
+ * Non-message content between messages (activity groups, skipped-message dividers). Inside the
+ * multi-select grid every child must be a row, so it becomes a non-selectable row with one cell;
+ * outside the grid it renders as is (HS2-S9W63Q). Kerf has no non-selectable row yet (KF-RAEXQ7).
+ */
+function TranscriptRow({ grid, children }: { grid: boolean; children: SafeHtml }) {
+  if (!grid) return children;
+  return (
+    <div role="row" class="ai-conversation__row">
+      <div role="gridcell">{children}</div>
+    </div>
+  );
+}
+
 function SkippedMessages({ count }: { count?: number }) {
   if (!count || count < 1) return <></>;
   return (
@@ -529,6 +544,37 @@ export function AIConversation(props: AIConversationProps) {
   ) : null;
   const timeline = conversationTimeline(messages, activity),
     selectedActivity = selectedActivityGroups(timeline, selectedIds),
+    timelineRows = (
+      <>
+        {timeline.map((group, index) =>
+          group.kind === 'message' ? (
+            <>
+              {Boolean(skippedBefore[group.message.id]) && (
+                <TranscriptRow grid={selectionEnabled}>
+                  <SkippedMessages count={skippedBefore[group.message.id]} />
+                </TranscriptRow>
+              )}
+              <ConversationMessages
+                tool={tool}
+                messages={[group.message]}
+                feedbackAvailable={feedbackAvailable}
+                selectedIds={selectedIds}
+                selectionAction={selectionEnabled ? 'pick-conversation-message' : undefined}
+              />
+            </>
+          ) : (
+            <TranscriptRow grid={selectionEnabled}>
+              <ConversationActivityGroup
+                activity={group.activity}
+                feedbackAvailable={feedbackAvailable}
+                selected={selectedActivity.has(index)}
+                connectionId={selectionId}
+              />
+            </TranscriptRow>
+          ),
+        )}
+      </>
+    ),
     transcript = (
       // Kerf List is the transcript scroller: in the dialog its block-end scrollClearance lets messages
       // scroll beneath the floating Composer footer while the last one still rests above it
@@ -553,26 +599,14 @@ export function AIConversation(props: AIConversationProps) {
               }
             />
           )}
-          {timeline.map((group, index) =>
-            group.kind === 'message' ? (
-              <>
-                <SkippedMessages count={skippedBefore[group.message.id]} />
-                <ConversationMessages
-                  tool={tool}
-                  messages={[group.message]}
-                  feedbackAvailable={feedbackAvailable}
-                  selectedIds={selectedIds}
-                  selectionAction={selectionEnabled ? 'pick-conversation-message' : undefined}
-                />
-              </>
-            ) : (
-              <ConversationActivityGroup
-                activity={group.activity}
-                feedbackAvailable={feedbackAvailable}
-                selected={selectedActivity.has(index)}
-                connectionId={selectionId}
-              />
-            ),
+          {selectionEnabled ? (
+            // While messages are selectable the timeline is Kerf's labeled multi-select grid, so
+            // assistive technology announces it as one multi-selectable owner (HS2-S9W63Q).
+            <List selectionMode="multiple" ariaLabel="Conversation Messages" gap={rem(0.8)}>
+              {timelineRows}
+            </List>
+          ) : (
+            timelineRows
           )}
           {inlinePermissions.map((item) => (
             <div data-permission-key={item.key}>

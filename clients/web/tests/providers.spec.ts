@@ -7061,6 +7061,26 @@ async function exerciseConversationSelection(
   await messages.nth(3).click({ modifiers: ['ControlOrMeta'] });
   await expect.poll(selectedFlags).toEqual(['true', 'false', 'false', 'true']);
   await expect(status).toContainText('2 messages selected');
+  // One labeled multi-select grid owns the message rows in the accessibility tree (HS2-S9W63Q).
+  const grid = conversation.getByRole('grid', { name: 'Conversation Messages' });
+  await expect(grid).toHaveCount(1);
+  await expect(grid).toHaveAttribute('aria-multiselectable', 'true');
+  await expect(grid.getByRole('row', { selected: true })).toHaveCount(2);
+  await expect(grid.getByRole('row')).toHaveCount(4);
+  await expect(grid.getByRole('gridcell')).toHaveCount(4);
+  await expect(conversation.getByRole('option')).toHaveCount(0);
+  const tree = await grid.ariaSnapshot();
+  expect(tree).toMatch(/^- grid "Conversation Messages":/);
+  expect(tree.match(/^ {2}- row "[^"\n]*" \[selected\]/gm)).toHaveLength(2);
+  // Up/Down move focus between message rows (Kerf wireContentItems grid navigation).
+  await messages.nth(0).focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(messages.nth(1)).toBeFocused();
+  await page.keyboard.press('End');
+  await expect(messages.nth(3)).toBeFocused();
+  await page.keyboard.press('Home');
+  await expect(messages.nth(0)).toBeFocused();
+  await expect.poll(selectedFlags).toEqual(['true', 'false', 'false', 'true']);
   // The modified click picked a message without leaving a page text selection behind.
   expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe('');
   await conversation.locator('.ai-conversation__transcript').evaluate((node) => {
@@ -17676,8 +17696,13 @@ test('keeps activity before the result that resumes after a permission pause', a
   await permission.getByRole('button', { name: 'Allow Once' }).click();
   await expect(permission).toHaveCount(0);
   await expect(transcript.getByText("It's 3:23 PM according to your system clock.", { exact: true })).toBeVisible();
+  // Document order of the timeline; inside the selection grid each entry sits in its own row (HS2-S9W63Q).
   const order = await transcript.evaluate((node) =>
-    [...node.querySelector('.ai-conversation__transcript-content')!.children].flatMap((child) =>
+    [
+      ...node.querySelectorAll(
+        '.ai-conversation__message--user, .ai-conversation__activity, .ai-conversation__message--assistant',
+      ),
+    ].flatMap((child) =>
       child.matches('.ai-conversation__message--user')
         ? ['user']
         : child.matches('.ai-conversation__activity')

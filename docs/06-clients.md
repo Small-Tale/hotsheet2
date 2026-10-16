@@ -1698,6 +1698,14 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
     The bar is its own non-scrolling row above the transcript scroller in both the drawer and the
     dialog, so it reserves its height and never covers a message, whether the transcript is pinned
     to its latest message or scrolled to the top (HS2-C4RTVS).
+  - While messages are selectable, the timeline is one Kerf `List selectionMode="multiple"`
+    grid labeled "Conversation Messages" (`aria-multiselectable="true"`). Each message is a
+    `ContentItem selectionMode="multiple"` row with `aria-selected`, and Up/Down/Home/End move
+    between message rows. Activity groups and skipped-message dividers between messages are
+    non-selectable rows with one gridcell; until Kerf ships that row (KF-RAEXQ7), an app-owned
+    wrapper provides it. Permission cards, progress, and failures stay outside the grid in the
+    transcript region. Without a selection owner (live previews), no grid or row roles are
+    rendered (HS2-S9W63Q).
 
   Copy writes the selected messages as Markdown and inserts an italic `N messages skipped` line
   wherever a run of unselected messages lies between two selected ones. Leading and trailing

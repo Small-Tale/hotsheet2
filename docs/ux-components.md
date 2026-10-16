@@ -463,7 +463,10 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   - selection: plain click selects one message, Cmd/Ctrl-click (Cmd on Apple platforms) toggles one,
     Shift-click extends from the anchor, and Shift or Cmd/Ctrl with Enter/Space do the same from the
     keyboard. Selections may be non-contiguous; Copy marks each skipped interior run
-    (`clients/web/src/conversation-selection.ts`, HS2-WV88W3)
+    (`clients/web/src/conversation-selection.ts`, HS2-WV88W3). The selectable timeline is a labeled
+    Kerf `List selectionMode="multiple"` grid of `ContentItem selectionMode="multiple"` message rows.
+    Interleaved activity and skipped dividers are app-owned non-selectable `row` > `gridcell`
+    wrappers pending KF-RAEXQ7 (HS2-S9W63Q)
   - save/reopen: the header Save action reuses the live transcript selection. If messages are selected,
     a compact `ConversationExportDialog` offers Entire conversation or the already-selected messages
     without presenting another picker; if nothing is selected it skips directly to the vertically
