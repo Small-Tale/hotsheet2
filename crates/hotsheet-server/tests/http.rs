@@ -18299,6 +18299,172 @@ async fn closing_a_chat_drive_releases_its_session_claims() {
     assert!(released_eventually(&store, &busy).await);
 }
 
+/// HS2-XTXPK1: closing a drive connection forgets that chat's "Allow for this chat" rules
+/// and publishes one replayable `permission_rules_changed` event for its project; closing a
+/// connection that held no chat rule (or one that is already gone) publishes nothing.
+#[tokio::test]
+async fn closing_a_drive_connection_drops_its_chat_rules_and_emits_one_rules_event() {
+    let (store_dir, base) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(store_dir.path());
+    let backend = Arc::new(FakeClientDriveBackend::default());
+    let base = base
+        .with_checkout_registry(store_dir.path().join("checkouts.json"))
+        .with_client_drive_backend(backend);
+    let bridge = base.permission_bridge();
+    let router = app(base);
+    let opened = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root": checkout.path(), "sources": [source]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    let opened = body_json(opened).await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap().to_owned();
+    let project = std::path::PathBuf::from(opened["checkout"]["root"].as_str().unwrap())
+        .display()
+        .to_string();
+    for id in ["with-rule", "no-rule"] {
+        let created = router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/drive/connections",
+                Some(
+                    &serde_json::json!({"tool": "fake", "checkout": checkout_id, "connection_id": id})
+                        .to_string(),
+                ),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(created.status(), StatusCode::CREATED);
+    }
+
+    // The "with-rule" chat answers Allow for This Chat: a listed chat rule.
+    let waiter = {
+        let bridge = bridge.clone();
+        let project = project.clone();
+        std::thread::spawn(move || {
+            bridge.request_blocking_for_project(project, "with-rule", "Bash", "npm test")
+        })
+    };
+    let id = loop {
+        let list = body_json(
+            router
+                .clone()
+                .oneshot(authed("GET", "/permissions", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if let Some(first) = list.as_array().unwrap().first() {
+            break first["id"].as_u64().unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    let answered = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/permissions/{id}"),
+            Some(r#"{"decision":"allow","scope":"chat"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(answered.status(), StatusCode::OK);
+    assert_eq!(format!("{:?}", waiter.join().unwrap()), "Allow");
+    let chat_rules = || {
+        let router = router.clone();
+        async move {
+            body_json(
+                router
+                    .oneshot(authed("GET", "/permissions/rules", None))
+                    .await
+                    .unwrap(),
+            )
+            .await
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|rule| rule["scope"] == "chat")
+            .map(|rule| (rule["project"].clone(), rule["connection"].clone()))
+            .collect::<Vec<_>>()
+        }
+    };
+    assert_eq!(
+        chat_rules().await,
+        [(serde_json::json!(project), serde_json::json!("with-rule"))]
+    );
+
+    let cursor = || {
+        let router = router.clone();
+        async move {
+            body_json(
+                router
+                    .oneshot(authed("GET", "/ws/poll?timeout_ms=1", None))
+                    .await
+                    .unwrap(),
+            )
+            .await["cursor"]
+                .as_u64()
+                .unwrap()
+        }
+    };
+    let rule_events = |since: u64| {
+        let router = router.clone();
+        async move {
+            body_json(
+                router
+                    .oneshot(authed(
+                        "GET",
+                        &format!("/ws/poll?since={since}&timeout_ms=1"),
+                        None,
+                    ))
+                    .await
+                    .unwrap(),
+            )
+            .await["events"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|event| event["kind"] == "permission_rules_changed")
+                .cloned()
+                .collect::<Vec<_>>()
+        }
+    };
+    let close = |id: &str| {
+        let router = router.clone();
+        let request = authed_owned(
+            "DELETE",
+            format!("/checkouts/{checkout_id}/drive/connections/{id}"),
+        );
+        async move { router.oneshot(request).await.unwrap().status() }
+    };
+
+    // A connection that held no chat rule closes silently and leaves the other chat's rule.
+    let since = cursor().await;
+    assert_eq!(close("no-rule").await, StatusCode::NO_CONTENT);
+    assert!(rule_events(since).await.is_empty());
+    assert_eq!(chat_rules().await.len(), 1);
+
+    // Closing the chat that remembered the answer drops its rule and publishes once.
+    let since = cursor().await;
+    assert_eq!(close("with-rule").await, StatusCode::NO_CONTENT);
+    assert!(chat_rules().await.is_empty(), "the chat's rule is gone");
+    let events = rule_events(since).await;
+    assert_eq!(events.len(), 1, "{events:?}");
+    assert_eq!(events[0]["store"], project);
+
+    // Closing it again finds nothing to drop: no further event.
+    let since = cursor().await;
+    assert_eq!(close("with-rule").await, StatusCode::NO_CONTENT);
+    assert!(rule_events(since).await.is_empty());
+}
+
 fn authed_owned(method: &str, uri: String) -> Request<Body> {
     authed(method, &uri, None)
 }
