@@ -538,6 +538,15 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   connected clients; any activity resets the grace. A server that outlives that idle
   exit reconnects through one shared restart lock, launches a fresh broker when the
   socket is gone, and retries the connection before serving the next terminal request.
+  The server's per-terminal status pollers (busy feed, session-exit release, and the shell
+  AI exit watch, every 500 ms) and its attach/launch existence checks use the broker's
+  `info` op, which returns the terminal's state without its scrollback. A `read`
+  re-encodes the whole 256 KiB scrollback as a JSON number array, about 850 KB per call,
+  and polling it kept an idle broker and server at roughly 30-50% CPU each (HS2-7RRAA8).
+  A broker that predates `info` answers it as a bad request; the server's handle then
+  falls back to `list`, which also carries no scrollback, so a long-lived older broker gets
+  the same relief without a restart. MCP presence sweeps check lease pids with a direct
+  `kill(pid, 0)` rather than spawning `kill -0`.
   New broker sockets use `/tmp/hotsheet2-brokers-<effective-uid>/<home-project-hash>.sock`:
   the short path stays within Unix socket address limits even when `HOTSHEET_HOME` is
   under macOS's long temporary-directory root. The private directory is owned by the

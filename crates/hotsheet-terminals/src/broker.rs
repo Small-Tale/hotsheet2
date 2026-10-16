@@ -58,6 +58,11 @@ pub enum Request {
     List,
     /// The terminal's state + scrollback snapshot.
     Read { id: String },
+    /// The terminal's state alone, answered with [`Response::Terminal`] (HS2-7RRAA8). Status
+    /// pollers use it: a `read` carries the whole 256 KiB scrollback as a JSON number array, and
+    /// two of those a second per terminal kept the broker and server busy while idle. Brokers
+    /// that predate it answer `Err { "bad request: …" }`, which callers treat as "use `list`".
+    Info { id: String },
     /// Write input bytes to the terminal's PTY.
     Input { id: String, data: Vec<u8> },
     /// Kill + forget the terminal.
@@ -413,6 +418,12 @@ fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Request) -
                 .collect();
             Response::List { terminals }
         }
+        Request::Info { id } => match manager.get(&key(&id)) {
+            Some(term) => Response::Terminal {
+                info: info_of(&term, &id),
+            },
+            None => Response::NotFound,
+        },
         Request::Read { id } => match manager.get(&key(&id)) {
             Some(term) => Response::Read {
                 info: info_of(&term, &id),
@@ -658,6 +669,85 @@ mod tests {
                 .unwrap(),
             Response::NotFound
         ));
+        assert!(matches!(
+            client
+                .request(&Request::Info { id: "t1".into() })
+                .await
+                .unwrap(),
+            Response::NotFound
+        ));
+    }
+
+    /// The status op a poller sends twice a second stays a few hundred bytes however full the
+    /// scrollback is, unlike `read`, which re-encodes the whole ring each time (HS2-7RRAA8).
+    #[tokio::test]
+    async fn info_reports_state_without_shipping_the_scrollback() {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("broker.sock");
+        let listener = UnixListener::bind(&sock).unwrap();
+        let manager = Arc::new(TerminalManager::new());
+        tokio::spawn(serve_broker(listener, "proj".into(), manager.clone()));
+        let mut client = BrokerClient::connect(&sock).await.unwrap();
+        client
+            .request(&Request::Open {
+                id: "big".into(),
+                kind: TerminalKind::Shell,
+                command: "cat".into(),
+                args: vec![],
+                cwd: None,
+                env: vec![],
+            })
+            .await
+            .unwrap();
+        // Short lines: a canonical-mode PTY caps one input line (1 KiB on macOS).
+        for _ in 0..200 {
+            let mut line = vec![b'x'; 200];
+            line.push(b'\n');
+            client
+                .request(&Request::Input {
+                    id: "big".into(),
+                    data: line,
+                })
+                .await
+                .unwrap();
+        }
+        assert!(
+            wait_until(
+                || {
+                    manager
+                        .get(&("proj".into(), "big".into()))
+                        .is_some_and(|t| t.scrollback().len() > 32 * 1024)
+                },
+                10,
+            )
+            .await,
+            "the echo fills the scrollback"
+        );
+        // Measure the raw reply lines: the cost is in their encoded size.
+        let reply = |op: &'static str| {
+            let sock = sock.clone();
+            async move {
+                let stream = tokio::net::UnixStream::connect(&sock).await.unwrap();
+                let (read, mut write) = stream.into_split();
+                let request = serde_json::json!({ "op": op, "id": "big" }).to_string() + "\n";
+                write.write_all(request.as_bytes()).await.unwrap();
+                let mut line = String::new();
+                tokio::io::BufReader::new(read)
+                    .read_line(&mut line)
+                    .await
+                    .unwrap();
+                line
+            }
+        };
+        let info = reply("info").await;
+        let read = reply("read").await;
+        assert!(info.len() < 1024, "info stays small: {} bytes", info.len());
+        assert!(read.len() > 32 * 1024, "read carries the scrollback");
+        match serde_json::from_str::<Response>(&info).unwrap() {
+            Response::Terminal { info } => assert!(info.alive && info.id == "big"),
+            other => panic!("expected Terminal, got {other:?}"),
+        }
     }
 
     #[tokio::test]

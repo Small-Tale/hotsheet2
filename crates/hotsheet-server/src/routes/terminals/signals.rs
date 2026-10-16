@@ -477,13 +477,9 @@ pub(crate) async fn connect_terminal_ai(
 /// when the terminal is gone or the platform cannot tell.
 async fn terminal_foreground_command(state: &AppState, id: &str) -> Option<bool> {
     if let Some(tb) = &state.terminal_broker {
-        return match tb
-            .call(hotsheet_terminals::BrokerRequest::Read { id: id.to_owned() })
-            .await
-        {
-            Ok(hotsheet_terminals::BrokerResponse::Read { info, .. }) if info.alive => {
-                info.foreground_command
-            }
+        // Polled every 500 ms by the shell AI exit watch: never fetch the scrollback (HS2-7RRAA8).
+        return match tb.info(id).await {
+            Ok(Some(info)) if info.alive => info.foreground_command,
             _ => None,
         };
     }

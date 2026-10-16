@@ -2,7 +2,7 @@
 
 use crate::AppState;
 use crate::dto::WsParams;
-use crate::routes::terminals::{broker_err, term_key};
+use crate::routes::terminals::term_key;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -26,15 +26,11 @@ pub(crate) async fn attach_terminal(
     // 404) before upgrading, then bridge the WebSocket to a streaming broker connection
     // (HS2-ERT00F item 4). The size self-heal on disconnect happens broker-side.
     if let Some(tb) = &state.terminal_broker {
-        match tb
-            .call(hotsheet_terminals::BrokerRequest::Read { id: id.clone() })
-            .await
-        {
-            Ok(hotsheet_terminals::BrokerResponse::Read { .. }) => {}
-            Ok(hotsheet_terminals::BrokerResponse::NotFound) => {
+        match tb.info(&id).await {
+            Ok(Some(_)) => {}
+            Ok(None) => {
                 return (StatusCode::NOT_FOUND, "no such terminal").into_response();
             }
-            Ok(other) => return broker_err(other).into_response(),
             Err(e) => {
                 return (StatusCode::INTERNAL_SERVER_ERROR, format!("broker: {e}")).into_response();
             }

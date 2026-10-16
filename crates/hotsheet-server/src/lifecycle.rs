@@ -379,7 +379,21 @@ impl Drop for InstanceGuard {
 
 /// Whether a process is alive (`kill -0`).
 pub fn pid_alive(pid: u32) -> bool {
-    signal(pid, "0")
+    // A direct `kill(pid, 0)`, not a spawned `kill -0`: MCP presence sweeps check every lease's
+    // pid each heartbeat, and a process spawn per check showed up as steady idle CPU (HS2-7RRAA8).
+    // Same answer as the command: only a signalable process (not EPERM) counts as alive.
+    #[cfg(unix)]
+    {
+        if pid == 0 || pid > i32::MAX as u32 {
+            return false;
+        }
+        // SAFETY: signal 0 performs only the existence and permission check; it delivers nothing.
+        unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
+    }
+    #[cfg(not(unix))]
+    {
+        signal(pid, "0")
+    }
 }
 
 #[cfg(unix)]

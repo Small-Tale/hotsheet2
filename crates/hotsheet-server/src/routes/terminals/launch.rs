@@ -49,11 +49,7 @@ pub(crate) async fn open_terminal(
     if let Some(tb) = &state.terminal_broker {
         // Newly-spawned vs reattach: a pre-check keeps the `connect` busy feed one-per-terminal
         // (no duplicate poll task on a reattach), mirroring the in-process path.
-        let newly_spawned = !matches!(
-            tb.call(hotsheet_terminals::BrokerRequest::Read { id: id.clone() })
-                .await,
-            Ok(hotsheet_terminals::BrokerResponse::Read { .. })
-        );
+        let newly_spawned = !matches!(tb.info(&id).await, Ok(Some(_)));
         let resp = tb
             .call(hotsheet_terminals::BrokerRequest::Open {
                 id: id.clone(),
@@ -503,8 +499,9 @@ fn register_terminal_connection(
 }
 
 /// The broker-mode counterpart of [`register_terminal_connection`] (HS2-ERT00F item 5): the
-/// PTY lives in the broker, so the busy feed **polls the broker over the socket** (a `Read`
-/// every 500ms) for the terminal's busy/idle instead of reading an in-process `Terminal`. Ends
+/// PTY lives in the broker, so the busy feed **polls the broker over the socket** (an `Info`
+/// every 500ms, never the scrollback-carrying `Read`, HS2-7RRAA8) for the terminal's busy/idle
+/// instead of reading an in-process `Terminal`. Ends
 /// (and unregisters) when the terminal is gone (NotFound / not alive) or the broker is
 /// unreachable.
 fn register_broker_terminal_connection(
@@ -532,13 +529,8 @@ fn register_broker_terminal_connection(
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            match broker
-                .call(hotsheet_terminals::BrokerRequest::Read {
-                    id: conn_id.clone(),
-                })
-                .await
-            {
-                Ok(hotsheet_terminals::BrokerResponse::Read { info, .. }) if info.alive => {
+            match broker.info(&conn_id).await {
+                Ok(Some(info)) if info.alive => {
                     let mut r = registry.lock_or_recover();
                     if info.busy {
                         r.note_activity(&conn_id, now_ms());
@@ -654,11 +646,8 @@ fn watch_broker_terminal_session_exit(
         let mut foreground = ForegroundCommand::default();
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            match broker
-                .call(hotsheet_terminals::BrokerRequest::Read { id: id.clone() })
-                .await
-            {
-                Ok(hotsheet_terminals::BrokerResponse::Read { info, .. }) if info.alive => {
+            match broker.info(&id).await {
+                Ok(Some(info)) if info.alive => {
                     if foreground.finished(info.foreground_command) {
                         release_session_claims(host.clone(), worker.clone()).await;
                     }

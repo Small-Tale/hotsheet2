@@ -10,8 +10,9 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use hotsheet_terminals::{BrokerClient, BrokerRequest, BrokerResponse};
+use hotsheet_terminals::{BrokerClient, BrokerRequest, BrokerResponse, BrokerTermInfo};
 
 /// A project's broker coordinates: the Unix socket + the project id the broker serves.
 #[derive(Debug, Clone)]
@@ -19,6 +20,14 @@ pub struct TerminalBroker {
     pub socket: PathBuf,
     pub project: String,
     restart: Arc<tokio::sync::Mutex<()>>,
+    /// Set once the broker rejected `info` as unknown: it predates the op, so status reads
+    /// fall back to `list` (HS2-7RRAA8). A restarted broker is the current build again, but
+    /// the flag only costs a slightly larger reply, never correctness, so it is not reset.
+    legacy_list_only: Arc<AtomicBool>,
+}
+
+fn unexpected(response: BrokerResponse) -> std::io::Error {
+    std::io::Error::other(format!("unexpected terminal broker response: {response:?}"))
 }
 
 impl TerminalBroker {
@@ -47,6 +56,7 @@ impl TerminalBroker {
                 socket,
                 project,
                 restart: Arc::new(tokio::sync::Mutex::new(())),
+                legacy_list_only: Arc::default(),
             });
         }
         spawn_broker(&socket, &project)?;
@@ -58,6 +68,7 @@ impl TerminalBroker {
                     socket,
                     project,
                     restart: Arc::new(tokio::sync::Mutex::new(())),
+                    legacy_list_only: Arc::default(),
                 });
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
@@ -73,6 +84,7 @@ impl TerminalBroker {
             socket,
             project,
             restart: Arc::new(tokio::sync::Mutex::new(())),
+            legacy_list_only: Arc::default(),
         })
     }
 
@@ -101,6 +113,7 @@ impl TerminalBroker {
             socket: socket.into(),
             project: project.into(),
             restart: Arc::new(tokio::sync::Mutex::new(())),
+            legacy_list_only: Arc::default(),
         }
     }
 
@@ -111,6 +124,33 @@ impl TerminalBroker {
             .connect_or_restart(|| spawn_broker(&self.socket, &self.project))
             .await?;
         client.request(&req).await
+    }
+
+    /// A terminal's state without its scrollback, `None` when the broker has no such terminal
+    /// (HS2-7RRAA8). Status pollers call this twice a second per terminal, so it uses the small
+    /// `info` op. A broker that predates `info` (it outlives server upgrades, so the maintainer's
+    /// long-lived broker is exactly that) rejects it as a bad request; this handle then remembers
+    /// to use `list`, which every broker answers with each terminal's state and no scrollback.
+    pub async fn info(&self, id: &str) -> std::io::Result<Option<BrokerTermInfo>> {
+        if !self.legacy_list_only.load(Ordering::Relaxed) {
+            match self
+                .call(BrokerRequest::Info { id: id.to_string() })
+                .await?
+            {
+                BrokerResponse::Terminal { info } => return Ok(Some(info)),
+                BrokerResponse::NotFound => return Ok(None),
+                BrokerResponse::Err { message } if message.starts_with("bad request") => {
+                    self.legacy_list_only.store(true, Ordering::Relaxed);
+                }
+                other => return Err(unexpected(other)),
+            }
+        }
+        match self.call(BrokerRequest::List).await? {
+            BrokerResponse::List { terminals } => {
+                Ok(terminals.into_iter().find(|terminal| terminal.id == id))
+            }
+            other => Err(unexpected(other)),
+        }
     }
 
     async fn connect_or_restart(
@@ -373,6 +413,117 @@ mod tests {
         assert!(
             matches!(broker.call(BrokerRequest::List).await.unwrap(),BrokerResponse::List { terminals } if terminals.is_empty())
         );
+    }
+
+    /// A scripted broker that records each request's `op` and answers it like a broker of the
+    /// given age: a legacy broker rejects `info` exactly as the real dispatcher rejects an
+    /// unknown op.
+    fn scripted_broker(socket: &Path, legacy: bool) -> Arc<std::sync::Mutex<Vec<String>>> {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+        let ops = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let listener = tokio::net::UnixListener::bind(socket).unwrap();
+        let recorded = ops.clone();
+        tokio::spawn(async move {
+            loop {
+                let Ok((stream, _)) = listener.accept().await else {
+                    return;
+                };
+                let recorded = recorded.clone();
+                tokio::spawn(async move {
+                    let (read, mut write) = stream.into_split();
+                    let mut lines = tokio::io::BufReader::new(read).lines();
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        let request: serde_json::Value = serde_json::from_str(&line).unwrap();
+                        let op = request["op"].as_str().unwrap().to_string();
+                        recorded.lock().unwrap().push(op.clone());
+                        let info = serde_json::json!({ "id": "t1", "alive": true, "busy": true });
+                        let reply = match (op.as_str(), legacy) {
+                            ("info", false) => {
+                                serde_json::json!({ "result": "terminal", "info": info })
+                            }
+                            ("info", true) => serde_json::json!({
+                                "result": "err",
+                                "message": "bad request: unknown variant `info`"
+                            }),
+                            ("read", _) => serde_json::json!({
+                                "result": "read",
+                                "info": info,
+                                "scrollback": vec![b'x'; 4096],
+                            }),
+                            ("list", _) => {
+                                serde_json::json!({ "result": "list", "terminals": [info] })
+                            }
+                            _ => serde_json::json!({ "result": "not_found" }),
+                        };
+                        let mut out = reply.to_string();
+                        out.push('\n');
+                        if write.write_all(out.as_bytes()).await.is_err() {
+                            return;
+                        }
+                    }
+                });
+            }
+        });
+        ops
+    }
+
+    /// The status pollers' broker call never ships the scrollback on a current broker, and
+    /// keeps working against a broker that predates `info` (HS2-7RRAA8). A broker outlives
+    /// server upgrades, so both directions of that version skew are live.
+    #[tokio::test]
+    async fn info_skips_the_scrollback_and_falls_back_once_for_a_legacy_broker() {
+        let dir = tempfile::tempdir().unwrap();
+        let current_socket = dir.path().join("current.sock");
+        let current_ops = scripted_broker(&current_socket, false);
+        let current = TerminalBroker::at(&current_socket, "proj");
+        for _ in 0..3 {
+            let info = current.info("t1").await.unwrap().unwrap();
+            assert!(info.alive && info.busy);
+        }
+        assert_eq!(*current_ops.lock().unwrap(), ["info", "info", "info"]);
+
+        let legacy_socket = dir.path().join("legacy.sock");
+        let legacy_ops = scripted_broker(&legacy_socket, true);
+        let legacy = TerminalBroker::at(&legacy_socket, "proj");
+        // A clone shares the learned fallback, as the per-terminal pollers' clones do.
+        let poller = legacy.clone();
+        assert!(legacy.info("t1").await.unwrap().unwrap().busy);
+        assert!(poller.info("t1").await.unwrap().unwrap().busy);
+        assert!(legacy.info("missing").await.unwrap().is_none());
+        // Never `read`: an old broker's scrollback stays out of the poll path too.
+        assert_eq!(
+            *legacy_ops.lock().unwrap(),
+            ["info", "list", "list", "list"]
+        );
+    }
+
+    #[tokio::test]
+    async fn info_reports_a_missing_terminal_as_none_on_a_real_broker() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("broker.sock");
+        let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+        tokio::spawn(serve_broker(
+            listener,
+            "proj".into(),
+            Arc::new(TerminalManager::new()),
+        ));
+        let broker = TerminalBroker::at(&socket, "proj");
+        assert!(broker.info("nope").await.unwrap().is_none());
+        let mut client = BrokerClient::connect(&socket).await.unwrap();
+        client
+            .request(&BrokerRequest::Open {
+                kind: hotsheet_terminals::TerminalKind::Shell,
+                id: "t1".into(),
+                command: "cat".into(),
+                args: vec![],
+                cwd: None,
+                env: vec![],
+            })
+            .await
+            .unwrap();
+        let info = broker.info("t1").await.unwrap().unwrap();
+        assert!(info.alive);
+        assert!(!broker.legacy_list_only.load(Ordering::Relaxed));
     }
 
     #[test]
