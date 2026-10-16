@@ -88,6 +88,7 @@ export const demoCatalog: DemoCategory[] = [
         'ticket-board',
         'notification-center',
       ]),
+      cataloged('search-scope-toolbar', ['floating-toolbar', 'toolbar-control-group']),
       cataloged('project-tab', ['app-tab']),
       cataloged('project-tabs', ['project-tab', 'select']),
       demo('resizable-region', 'ResizableRegion', 'Accessible horizontal and vertical shell splitters.'),

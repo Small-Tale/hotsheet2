@@ -16,7 +16,7 @@ pub(crate) struct ListParams {
     /// Checkout page only: read local git sources without touching external credentials.
     pub(crate) source: Option<String>,
     status: Option<String>,
-    /// Built-in multi-status client collection (`queue`, `archive`, or `trash`).
+    /// Built-in multi-status client collection (`queue`, `archive`, `trash`, or `all`).
     collection: Option<String>,
     priority: Option<String>,
     category: Option<String>,

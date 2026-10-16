@@ -1179,6 +1179,14 @@ with search disabled in Notifications (HS2-TNSD4K).
 - Active filters and removable chips — **built** into the toolbar search; chips
   remain inline without internal truncation, expose labeled edit/remove actions, and return to
   text at the same caret position for editing by button or double-click.
+- `SearchScopeToolbar` — **built, demo built** (HS2-4J6764): a Kerf `FloatingToolbar` centered
+  at the bottom of the ticket work area, holding a `ToolbarControlGroup` with a two-choice
+  `SegmentedControl` (the searched view's name, or **All Tickets**). It appears only while a
+  search-bar query is active outside Trash and Ticket errors. The app-owned wrapper sets Kerf's
+  public neutral-fill token to the shared floating-control surface, the same way the drawer
+  restore control does. While it shows, the workspace's ticket scrollers add its height to their
+  end inset so the last row scrolls clear. `wireSearchScopeToolbar` reports the chosen scope; its
+  demo exposes both scopes and long view names.
 
 Saved views are created and managed from the Views section rather than from a separate
 search overlay. The controlled open state and native dialog autofocus own initial name

@@ -8,7 +8,7 @@
  * cursor, while the loaded rows still live in the flat `tickets.value` union so selection, the
  * inspector, mutations, and drag/drop are unaffected. */
 
-import type { TicketView } from './ticket-views';
+import { ALL_TICKETS_SCOPE, type TicketScope } from './ticket-views';
 
 /** The primary wire status of a board column, or undefined for a column that is not status-scoped
  * (single-collection board views paginate globally instead). This identifies *whether* a column
@@ -59,8 +59,15 @@ export interface BoardColumnStream {
 /** Board views whose columns are status-scoped and therefore paginate per column (the multi-status
  * board). Single-column collection views (backlog/archive/trash) and search results have one column,
  * so they keep the global cursor without the starvation problem. */
-export function isPerColumnBoardView(view: TicketView, searchActive: boolean): boolean {
-  return !searchActive && view !== 'backlog' && view !== 'archive' && view !== 'trash' && view !== 'errors';
+export function isPerColumnBoardView(view: TicketScope, searchActive: boolean): boolean {
+  return (
+    !searchActive &&
+    view !== ALL_TICKETS_SCOPE &&
+    view !== 'backlog' &&
+    view !== 'archive' &&
+    view !== 'trash' &&
+    view !== 'errors'
+  );
 }
 
 /** Per-column pagination state: how many rows have been loaded for the column across all of its

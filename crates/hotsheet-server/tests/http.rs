@@ -6422,6 +6422,98 @@ async fn empty_trash_purges_all_deleted_checkout_tickets_and_is_idempotent() {
 }
 
 #[tokio::test]
+async fn all_collection_spans_every_lifecycle_collection_except_trash() {
+    // The web client's All Tickets search (HS2-4J6764) scopes to `collection=all`.
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap();
+    for (title, status) in [
+        ("Search queue", "started"),
+        ("Search backlog", "backlog"),
+        ("Search done", "completed"),
+        ("Search archived", "archive"),
+        ("Search trashed", "deleted"),
+    ] {
+        let created = body_json(
+            router
+                .clone()
+                .oneshot(authed(
+                    "POST",
+                    &format!("/checkouts/{checkout_id}/tickets"),
+                    Some(&serde_json::json!({"title":title}).to_string()),
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(authed(
+                    "PATCH",
+                    &format!(
+                        "/checkouts/{checkout_id}/tickets/{}",
+                        created["id"].as_str().unwrap()
+                    ),
+                    Some(&serde_json::json!({"status":status}).to_string()),
+                ))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::OK
+        );
+    }
+    let all = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!(
+                    "/checkouts/{checkout_id}/tickets?collection=all&text=search&page_size=50"
+                ),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let mut titles: Vec<&str> = all["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["title"].as_str().unwrap())
+        .collect();
+    titles.sort_unstable();
+    assert_eq!(
+        titles,
+        [
+            "Search archived",
+            "Search backlog",
+            "Search done",
+            "Search queue"
+        ]
+    );
+}
+
+#[tokio::test]
 async fn trash_purge_preview_counts_without_purging_and_apply_keeps_recent_trash() {
     let (_primary, st) = state();
     let workspace = tempfile::tempdir().unwrap();

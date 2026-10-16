@@ -45,6 +45,7 @@ function sidebar(mode: WorkspaceViewMode, overrides: Partial<SidebarSurfaceDepen
     projectTicketCounts: () => counts,
     searchBarActive: () => false,
     searchSignature: () => '',
+    searchScope: () => 'all',
     customViewsFor: () => [{ id: 'v1', name: 'Mine', query: 'status:started' }],
     effectiveDriveSelection: () => ({ tool: 'codex' }),
     commandRunFor: () => ({ id: 'r1', command_id: 'c1', state: 'failed', exit_code: 2 }) as never,
@@ -87,6 +88,7 @@ describe('sidebar search-count scope (HS2-S6TXSW)', () => {
   const searching = (selected: string, values: Record<string, number>, pending: string[] = []) => {
     const props = sidebar('list', {
       selectedView: read(selected as never),
+      searchScope: () => selected as never,
       searchBarActive: () => true,
       searchSignature: () => 'sig',
       projectTicketCounts: () =>
@@ -118,9 +120,34 @@ describe('sidebar search-count scope (HS2-S6TXSW)', () => {
     expect(views['custom:v1']).toMatchObject({ count: 1, searchCount: true });
   });
 
+  it('counts every sidebar view and selects none while the search covers All Tickets (HS2-4J6764)', () => {
+    const props = sidebar('list', {
+      selectedView: read('backlog'),
+      searchScope: () => 'all-tickets',
+      searchBarActive: () => true,
+      searchSignature: () => 'sig',
+      projectTicketCounts: () => ({ queued: 3, backlog: 1, archive: 2, trash: 13 }) as never,
+      sidebarSearchCounts: read({
+        projectId: 'p1',
+        signature: 'sig',
+        generation: 1,
+        values: { all: 2, backlog: 1, archive: 4, 'custom:v1': 0 },
+        pending: [],
+      }),
+    });
+    if (props.kind !== 'project') throw new Error('expected the project sidebar');
+    const views = Object.fromEntries(props.sidebar.views.map((view) => [view.id, view]));
+    expect(props.sidebar.selectedViewId).toBe('all-tickets');
+    expect(views.all).toMatchObject({ count: 2, searchCount: true });
+    expect(views.backlog).toMatchObject({ count: 1, searchCount: true });
+    expect(views.archive).toMatchObject({ count: 4, searchCount: true });
+    expect(views.trash).toMatchObject({ count: 13, searchCount: false });
+  });
+
   it('drops search counts again once the search ends', () => {
     const props = sidebar('list', {
       selectedView: read('trash'),
+      searchScope: () => 'trash',
       projectTicketCounts: () => ({ queued: 3, backlog: 1, archive: 2, trash: 13 }) as never,
       sidebarSearchCounts: read({
         projectId: 'p1',

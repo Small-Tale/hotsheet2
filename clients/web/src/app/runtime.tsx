@@ -273,6 +273,8 @@ export async function startHotSheetWebClient() {
     };
   }
   const sidebarSearchCounts = signal<SidebarSearchCounts | undefined>(undefined);
+  /** The transient All Tickets search mode (HS2-4J6764); never persisted. */
+  const searchAllTickets = signal(false);
   const duplicateBacklinkState = signal<{
     key: string;
     backlinks: DuplicateBacklink[];
@@ -1293,6 +1295,8 @@ export async function startHotSheetWebClient() {
       }
       resetProgressiveTicketRendering();
       resetBoardColumnPages();
+      // Choosing a sidebar view leaves All Tickets for that view (HS2-4J6764).
+      searchAllTickets.value = false;
       selectedView.value = next;
       if (definition) activateCustomView();
       else if (customTicketViewKey(previous)) searchMatchKeys.value = undefined;
@@ -1839,6 +1843,8 @@ export async function startHotSheetWebClient() {
   async function restoreProjectSession(current: Project, generation = projectActivationGeneration) {
     const stored = loadProjectWorkspaceSession(localStorage, current.id),
       active = () => generation === projectActivationGeneration && project()?.id === current.id;
+    // A project's restored search starts in its own view, never in another project's All Tickets.
+    if (active()) searchAllTickets.value = false;
     if (!stored || !active()) return;
     const run = ++projectSessionRestoreRun,
       restoreComposerOpen =
@@ -2134,6 +2140,9 @@ export async function startHotSheetWebClient() {
   const {
     searchBarActive,
     workspaceSearchActive,
+    searchScope,
+    allTicketsSearchAvailable,
+    setAllTicketsSearch,
     selectedViewSearch,
     workspaceSearchModel,
     workspaceSearchTokenOffset,
@@ -2151,6 +2160,7 @@ export async function startHotSheetWebClient() {
     searchMatchKeys,
     sidebarSearchCounts,
     selectedView,
+    searchAllTickets,
     error,
     ticketPageQuery,
     ticketNextCursor,
@@ -3307,6 +3317,7 @@ export async function startHotSheetWebClient() {
     }
   }
   const { sidebarSurfaceProps } = createSidebarSurface({
+    searchScope,
     viewMode,
     notificationView,
     notificationsPaused,
@@ -3537,6 +3548,7 @@ export async function startHotSheetWebClient() {
     titleEditingSurface,
   });
   const { workspaceSurfaceProps } = createWorkspaceSurface({
+    searchScope,
     boardColumnLoading,
     boardColumnPages,
     continueProgressiveTicketRendering,
@@ -3603,6 +3615,8 @@ export async function startHotSheetWebClient() {
     workspaceSearchModel,
   });
   const { HotSheetShell } = createHotSheetShell({
+    searchScope,
+    allTicketsSearchAvailable,
     appRegionSize,
     capabilitiesFor,
     conversationOpen,
@@ -4314,6 +4328,7 @@ export async function startHotSheetWebClient() {
     searchQuery,
     searchTokens,
     scheduleTicketSearch,
+    setAllTicketsSearch,
     sort,
     sortDirection,
     openTicketComposer,

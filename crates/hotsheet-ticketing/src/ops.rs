@@ -91,6 +91,9 @@ pub enum TicketCollection {
     Archive,
     /// Soft-deleted (`deleted`) tickets awaiting restore or retention purge (HS2-MWDR19).
     Trash,
+    /// Every collection except Trash: Queue, Backlog, and Archive (including `moved`
+    /// tombstones), for the web client's All Tickets search (HS2-4J6764).
+    All,
 }
 
 impl FromStr for TicketCollection {
@@ -101,6 +104,7 @@ impl FromStr for TicketCollection {
             "queue" => Ok(Self::Queue),
             "archive" => Ok(Self::Archive),
             "trash" => Ok(Self::Trash),
+            "all" => Ok(Self::All),
             other => Err(format!("invalid collection '{other}'")),
         }
     }
@@ -260,6 +264,7 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
                 }
                 TicketCollection::Archive => matches!(t.status, Status::Archive | Status::Moved),
                 TicketCollection::Trash => t.status == Status::Deleted,
+                TicketCollection::All => t.status != Status::Deleted,
             })
             && q.priority.is_none_or(|p| t.priority == p)
             && q.category.as_deref().is_none_or(|c| t.category == c)
@@ -269,7 +274,10 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
             && (!q.open_only || is_open(t))
             // Moved tombstones are hidden from lists unless explicitly asked for (docs/03 §3.5).
             && (q.status == Some(Status::Moved)
-                || q.collection == Some(TicketCollection::Archive)
+                || matches!(
+                    q.collection,
+                    Some(TicketCollection::Archive | TicketCollection::All)
+                )
                 || t.status != Status::Moved)
             && q.close_reason.is_none_or(|r| t.close_reason == Some(r))
             && q.closed.is_none_or(|want| t.close_reason.is_some() == want)

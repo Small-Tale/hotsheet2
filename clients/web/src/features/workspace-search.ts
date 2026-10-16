@@ -13,7 +13,16 @@ import type { Project } from '../interactions/types';
 import { customViewSearch } from '../saved-views';
 import { createSearchProjection } from '../search-projection-coalescing';
 import { createTicketSearchModel, inlineSearchTokens } from '../ticket-search-model';
-import { customTicketViewKey, ticketSearchCountViews, type TicketView, ticketViewQuery } from '../ticket-views';
+import {
+  ALL_TICKETS_SCOPE,
+  canSearchAllTickets,
+  customTicketViewKey,
+  type TicketScope,
+  ticketSearchCountViews,
+  ticketSearchScope,
+  type TicketView,
+  ticketViewQuery,
+} from '../ticket-views';
 import type { WorkspaceSortPreference } from '../workspace-preferences';
 
 /** Per-view sidebar match counts for the current search-bar query. */
@@ -33,6 +42,8 @@ export interface WorkspaceSearchDependencies {
   searchMatchKeys: Signal<Set<string> | undefined>;
   sidebarSearchCounts: Signal<SidebarSearchCounts | undefined>;
   selectedView: Signal<TicketView>;
+  /** The transient All Tickets search mode; it lasts only while the search bar holds a query (HS2-4J6764). */
+  searchAllTickets: Signal<boolean>;
   error: Signal<string>;
   ticketPageQuery: Signal<CheckoutTicketQuery>;
   ticketNextCursor: Signal<string | undefined>;
@@ -63,6 +74,7 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
     searchMatchKeys,
     sidebarSearchCounts,
     selectedView,
+    searchAllTickets,
     error,
     ticketPageQuery,
     ticketNextCursor,
@@ -87,10 +99,26 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
   function workspaceSearchActive() {
     return searchBarActive() || customViewFor(selectedView.value) !== undefined;
   }
+  /** The scope the search covers: All Tickets while that mode is on, else the selected view (HS2-4J6764). */
+  function searchScope(view = selectedView.value): TicketScope {
+    return ticketSearchScope(view, searchAllTickets.value, searchBarActive());
+  }
+  /** Whether the floating search toolbar offers All Tickets: a bar search outside Trash and Ticket errors. */
+  function allTicketsSearchAvailable() {
+    return searchBarActive() && canSearchAllTickets(selectedView.value);
+  }
+  /** Switch the active search into All Tickets (`true`) or back to the view it was started from. */
+  function setAllTicketsSearch(allTickets: boolean) {
+    if (!allTicketsSearchAvailable() || searchAllTickets.value === allTickets) return;
+    searchAllTickets.value = allTickets;
+    resetProgressiveTicketRendering();
+    searchMatchKeys.value = undefined;
+    void refreshTicketSearch();
+  }
   /** The search that selects the visible rows: the bar query, scoped by the selected shared view's query. */
   function selectedViewSearch(view = selectedView.value) {
     const bar = effectiveSearch(searchQuery.value, searchTokens.value),
-      definition = customViewFor(view);
+      definition = searchScope(view) === ALL_TICKETS_SCOPE ? undefined : customViewFor(view);
     return definition ? combinedCustomViewSearch(definition, bar) : bar;
   }
 
@@ -161,7 +189,7 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
   }
   type EffectiveTicketSearch = ReturnType<typeof effectiveSearch>;
   const searchSignature = () => JSON.stringify([searchQuery.value.trim(), searchTokens.value]);
-  const searchScopeQuery = (view: TicketView) => (customTicketViewKey(view) ? {} : ticketViewQuery(view));
+  const searchScopeQuery = (view: TicketScope) => (customTicketViewKey(view) ? {} : ticketViewQuery(view));
   function sortedTicketQuery(query: CheckoutTicketQuery): CheckoutTicketQuery {
     const active = activeWorkspaceSort();
     return { ...query, sort: active.sort, direction: active.sortDirection };
@@ -174,7 +202,7 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
         .map((token) => token.value.toLowerCase());
     return matched.filter((ticket) => tags.every((tag) => ticket.tags.some((value) => value.toLowerCase() === tag)));
   }
-  function searchRequest(effective: EffectiveTicketSearch, view: TicketView): CheckoutTicketQuery {
+  function searchRequest(effective: EffectiveTicketSearch, view: TicketScope): CheckoutTicketQuery {
     const advanced = usesAdvancedSearchExpression(effective.text),
       serverTokens = usesBooleanSearchExpression(effective.text) ? [] : effective.tokens;
     return sortedTicketQuery({
@@ -233,21 +261,24 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
   }
   async function refreshSidebarSearchCounts(
     current: Project,
-    selected: TicketView,
+    selected: TicketScope,
     effective: EffectiveTicketSearch,
     state: SidebarSearchCounts,
     first: { rows: WireTicketRow[]; cursor?: string; query: CheckoutTicketQuery; sourceErrors?: string[] },
     refreshEveryView: boolean,
   ) {
-    const client = new Api(current.apiPath),
-      selectedDefinition = customViewFor(selected, current.id),
-      selectedSearch = selectedDefinition ? combinedCustomViewSearch(selectedDefinition, effective) : effective;
-    try {
-      await countSearchView(client, current, selected, selectedSearch, state, first);
-    } catch (reason) {
-      updateSidebarSearchCount(state, selected);
-      if (activeSidebarSearchCount(state))
-        updateSearchPartialWarning(reason instanceof Error ? reason.message : String(reason));
+    const client = new Api(current.apiPath);
+    // An All Tickets page spans every view, so it seeds no single view's count; each is counted below.
+    if (selected !== ALL_TICKETS_SCOPE) {
+      const selectedDefinition = customViewFor(selected, current.id),
+        selectedSearch = selectedDefinition ? combinedCustomViewSearch(selectedDefinition, effective) : effective;
+      try {
+        await countSearchView(client, current, selected, selectedSearch, state, first);
+      } catch (reason) {
+        updateSidebarSearchCount(state, selected);
+        if (activeSidebarSearchCount(state))
+          updateSearchPartialWarning(reason instanceof Error ? reason.message : String(reason));
+      }
     }
     if (!refreshEveryView || !activeSidebarSearchCount(state)) return;
     const views = ticketSearchCountViews(
@@ -274,6 +305,7 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
     resetBoardColumnPages();
     const current = project(),
       view = selectedView.value,
+      scope = searchScope(view),
       effective = selectedViewSearch(view),
       barEffective = effectiveSearch(searchQuery.value, searchTokens.value),
       countSidebar = Boolean(barEffective.text || barEffective.tokens.length),
@@ -296,7 +328,7 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
     }
     const countViews = ticketSearchCountViews(
         customViewsFor(current.id).map((item) => item.id),
-        view,
+        scope,
       ),
       previous = sidebarSearchCounts.value,
       countsComplete =
@@ -309,11 +341,11 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
         signature,
         generation,
         values: countsComplete ? { ...previous.values } : {},
-        pending: countsComplete ? [view] : countViews,
+        pending: countsComplete ? (scope === ALL_TICKETS_SCOPE ? [] : [view]) : countViews,
       };
     sidebarSearchCounts.value = countSidebar ? countState : undefined;
     try {
-      const query = searchRequest(effective, view),
+      const query = searchRequest(effective, scope),
         client = new Api(current.apiPath),
         page = await client.checkoutTicketPage(current.id, 200, undefined, query),
         boolean = usesBooleanSearchExpression(effective.text),
@@ -321,6 +353,7 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
           generation === searchGeneration &&
           project()?.id === current.id &&
           selectedView.value === view &&
+          searchScope() === scope &&
           searchSignature() === signature,
         sourceErrors = new Set(page.source_errors ?? []),
         allMatches = boolean
@@ -349,7 +382,7 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
       if (countSidebar)
         void refreshSidebarSearchCounts(
           current,
-          view,
+          scope,
           barEffective,
           countState,
           { rows, cursor: boolean ? undefined : page.next_cursor, query, sourceErrors: [...sourceErrors] },
@@ -388,6 +421,8 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
     scheduleProjectSessionPersistence();
     searchGeneration += 1;
     sidebarSearchCounts.value = undefined;
+    // All Tickets lasts only while the search does (HS2-4J6764).
+    if (!searchBarActive() && searchAllTickets.peek()) searchAllTickets.value = false;
     if (searchTimer !== undefined) window.clearTimeout(searchTimer);
     if (!workspaceSearchActive()) {
       searchTimer = undefined;
@@ -403,6 +438,9 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
   return {
     searchBarActive,
     workspaceSearchActive,
+    searchScope,
+    allTicketsSearchAvailable,
+    setAllTicketsSearch,
     selectedViewSearch,
     workspaceSearchModel,
     workspaceSearchTokenOffset,

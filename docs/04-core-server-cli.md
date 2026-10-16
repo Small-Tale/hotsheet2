@@ -141,8 +141,10 @@ their complete row sets. GitHub, GitLab, and Jira adapters return their own opaq
 page cursors and aggregate summaries page by page, so the host never materializes a complete
 external-provider result merely to slice it or calculate navigation counts. The aggregate
 counts keep Queue/Backlog/Archive and project-tab summaries exact.
-Paged clients may pass `collection=queue|archive` for the built-in multi-status collections;
-the lifecycle predicate is applied by each source index before the page cap, so a mixed-status
+Paged clients may pass `collection=queue|archive|trash|all` for the built-in multi-status
+collections. `all` is every collection except Trash: Queue, Backlog, and Archive, with moved
+tombstones included as in Archive. The web client's All Tickets search uses it (HS2-4J6764).
+The lifecycle predicate is applied by each source index before the page cap, so a mixed-status
 first page cannot make the browser show fewer rows than the selected collection contains.
 Omitting `page_size` preserves the legacy array response for existing integrations.
 

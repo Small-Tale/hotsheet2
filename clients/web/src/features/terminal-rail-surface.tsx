@@ -27,7 +27,13 @@ import { type Project } from '../interactions/types';
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
 import { ticketBoardGroups } from '../ticket-board-layout';
 import { canBulkUpdate } from '../ticket-bulk-operations';
-import { canCreateTicketInView, customTicketViewId, ticketsForView, type TicketView } from '../ticket-views';
+import {
+  canCreateTicketInView,
+  customTicketViewId,
+  type TicketScope,
+  ticketsForView,
+  type TicketView,
+} from '../ticket-views';
 import type { WorkspaceSortPreference } from '../workspace-preferences';
 import { compareWorkspaceTickets } from '../workspace-ticket-sort';
 import type { createInspectorSurface } from './inspector-surface';
@@ -66,7 +72,7 @@ export interface TerminalRailSurfaceDependencies {
     label?: string,
     size?: 'default' | 'compact',
   ) => TicketViewActionSpec | undefined;
-  ticketViewTitle: (view: TicketView) => string;
+  ticketViewTitle: (view: TicketScope) => string;
   viewMode: Signal<WorkspaceViewMode>;
   workspaceSearchModel: TokenSearchModel;
 }

@@ -1204,6 +1204,16 @@ preview/download, server directory browser) are separate design work.
   Searching from Trash searches only Trash: no other view is searched or counted, so Queue,
   Backlog, Archive, and custom views keep their ordinary totals without the search marker,
   and only the Trash row carries the search marker and search-relative count (HS2-S6TXSW).
+  Searching from any view except Trash and Ticket errors also offers **All Tickets** through a
+  floating scope toolbar centered at the bottom of the search results (HS2-4J6764). The search
+  stays in the selected view by default. Choosing All Tickets searches every collection except
+  Trash (`collection=all`), titles the page **All Tickets**, and drops a shared view's own query.
+  In Columns mode it shows Backlog, Not Started, Started, Completed, Verified (only while the
+  Verified column is enabled), and Archive. The sidebar marks no view as selected and shows each
+  view's search-relative count, so those counts add up to the All Tickets results. Choosing the
+  view in the toolbar returns to it. The mode lasts only while the search does: clearing the
+  search, choosing a sidebar view, or switching projects turns it off, and it is never persisted.
+  On phones the page header shows the All Tickets title instead of the view picker.
   Pending searchable-view counts use a compact spinner;
   settled search-derived counts put a small magnifying-glass marker beside the number inside
   the same badge and remain inside the

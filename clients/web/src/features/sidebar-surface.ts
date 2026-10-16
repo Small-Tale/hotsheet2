@@ -17,7 +17,7 @@ import type { WorkspaceViewMode } from '../components/workspace-header';
 import type { Project } from '../interactions/types';
 import { projectChatConnectionId, projectDriveControlState } from '../project-drive';
 import { ticketCompletionTrend } from '../ticket-completion-trend';
-import { customTicketViewId, ticketSearchCountViews, type TicketView } from '../ticket-views';
+import { customTicketViewId, type TicketScope, ticketSearchCountViews, type TicketView } from '../ticket-views';
 import type { SidebarSearchCounts } from './workspace-search';
 
 /** A signal as the sidebar projection reads it. */
@@ -58,6 +58,8 @@ export interface SidebarSurfaceDependencies {
   projectTicketCounts: (projectId: string) => CheckoutTicketCounts;
   searchBarActive: () => boolean;
   searchSignature: () => string;
+  /** The search's scope; while it is All Tickets no sidebar view is selected (HS2-4J6764). */
+  searchScope: () => TicketScope;
   customViewsFor: (projectId: string) => CustomView[];
   effectiveDriveSelection: (projectId: string) => AiToolDefaults;
   commandRunFor: (commandId: string) => CommandRun | undefined;
@@ -104,6 +106,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
     projectTicketCounts,
     searchBarActive,
     searchSignature,
+    searchScope,
     customViewsFor,
     effectiveDriveSelection,
     commandRunFor,
@@ -134,14 +137,14 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
         searchBarActive() && searchCounts?.projectId === current.id && searchCounts.signature === searchSignature(),
       // Only the views the search actually covers carry a search-relative count: searching Trash
       // counts Trash alone, and every other row keeps its ordinary total (HS2-S6TXSW).
-      searchScope = new Set(
+      searchScopeViews = new Set(
         ticketSearchCountViews(
           customViewsFor(current.id).map((view) => view.id),
-          selectedView.value,
+          searchScope(),
         ),
       ),
       searchView = (id: TicketView, fallback?: number) => {
-        const searched = searchActive && searchScope.has(id);
+        const searched = searchActive && searchScopeViews.has(id);
         return {
           count: searched ? searchCounts.values[id] : fallback,
           countLoading: searched && searchCounts.pending.includes(id),
@@ -202,7 +205,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
         conflicted: repo?.conflicted ?? 0,
         repositoryError: Boolean(repositoryError.value),
         views,
-        selectedViewId: selectedView.value,
+        selectedViewId: searchScope(),
         commandGroupLabel: 'Project commands',
         commands: commandDefinitions.value.map((command) => {
           const latest = commandRunFor(command.id);

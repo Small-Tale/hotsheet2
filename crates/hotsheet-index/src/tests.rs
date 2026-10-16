@@ -422,6 +422,14 @@ fn trash_is_counted_and_queried_separately_from_archive() {
             TicketCollection::Trash,
             HashSet::from(["01ARZ3NDEKTSV4RRFFQ69G5FB1".to_string()]),
         ),
+        // All Tickets search: every collection except Trash, moved tombstones included (HS2-4J6764).
+        (
+            TicketCollection::All,
+            HashSet::from([
+                "01ARZ3NDEKTSV4RRFFQ69G5FB0".to_string(),
+                "01ARZ3NDEKTSV4RRFFQ69G5FB2".to_string(),
+            ]),
+        ),
     ] {
         let q = TicketQuery {
             collection: Some(collection),
@@ -474,6 +482,10 @@ fn structured_filters_match_the_file_scan() {
         },
         TicketQuery {
             collection: Some(TicketCollection::Trash),
+            ..Default::default()
+        },
+        TicketQuery {
+            collection: Some(TicketCollection::All),
             ..Default::default()
         },
         // A cap must pick the same rows on both paths (both order by id, then cap).

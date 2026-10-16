@@ -1455,6 +1455,32 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "search-scope-toolbar",
+      "name": "SearchScopeToolbar",
+      "kind": "component",
+      "purpose": "Floating search scope switch centered over search results: the searched view or All Tickets (every collection except Trash).",
+      "useWhen": [
+        "A workspace search needs to switch between the searched view and All Tickets."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific SearchScopeToolbar behavior."
+      ],
+      "publicClasses": [
+        "search-scope-toolbar"
+      ],
+      "publicTokens": [],
+      "source": "src/components/search-scope-toolbar.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child",
+        "notes": [
+          "The FloatingToolbar positions itself at the bottom center of its nearest positioned ancestor, which the owner provides."
+        ]
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "server-build-notice-banner",
       "name": "ServerBuildNoticeBanner",
       "kind": "component",

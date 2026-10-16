@@ -680,6 +680,7 @@ pub fn filter_provider_ticket_page(
                     matches!(ticket.status, Status::Archive | Status::Moved)
                 }
                 crate::TicketCollection::Trash => ticket.status == Status::Deleted,
+                crate::TicketCollection::All => ticket.status != Status::Deleted,
             })
             && query.priority.is_none_or(|value| ticket.priority == value)
             && (!query.up_next_only || ticket.up_next)

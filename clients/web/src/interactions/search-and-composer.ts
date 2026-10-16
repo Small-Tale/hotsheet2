@@ -7,6 +7,7 @@ import { createScope } from 'kerfjs/scope';
 import { type TicketRow as WireTicketRow } from '../api';
 import { STRANDED_ATTACHMENTS_MESSAGE } from '../components/quick-ticket-composer';
 import { wireQuickTicketComposer } from '../components/quick-ticket-composer-interactions';
+import { wireSearchScopeToolbar } from '../components/search-scope-toolbar';
 import { wireTicketRowUpNextToggle } from '../components/ticket-collection-interactions';
 import {
   type WorkspaceSort,
@@ -40,6 +41,8 @@ export interface SearchAndComposerInteractionsDependencies {
   readonly searchQuery: Signal<string>;
   readonly searchTokens: Signal<InlineSearchToken[]>;
   readonly scheduleTicketSearch: () => void;
+  /** Switch the active search into All Tickets and back (HS2-4J6764). */
+  readonly setAllTicketsSearch: (allTickets: boolean) => void;
   readonly refreshProject: (options?: { showLoading?: boolean }) => Promise<unknown>;
   readonly sort: { value: WorkspaceSort };
   readonly sortDirection: { value: WorkspaceSortDirection };
@@ -86,6 +89,7 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     searchQuery,
     searchTokens,
     scheduleTicketSearch,
+    setAllTicketsSearch,
     refreshProject,
     sort,
     sortDirection,
@@ -284,6 +288,7 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
       },
     }),
   );
+  lifetime.add(wireSearchScopeToolbar(document.body, { setAllTickets: setAllTicketsSearch }));
   const resetComposerAttachmentMessage = () => {
     composerAttachmentMessage.value = '';
     composerAttachmentError.value = false;

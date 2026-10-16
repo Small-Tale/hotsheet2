@@ -871,6 +871,7 @@ impl Index {
                 }
                 TicketCollection::Archive => "t.status IN ('archive','moved')".into(),
                 TicketCollection::Trash => "t.status = 'deleted'".into(),
+                TicketCollection::All => "t.status <> 'deleted'".into(),
             });
         }
         if let Some(p) = q.priority {
@@ -892,7 +893,10 @@ impl Index {
         // Moved tombstones are hidden from lists unless the caller explicitly asks for them
         // via `status = moved` (docs/03 §3.5, HS2-T84F9F).
         if q.status.map(|s| enum_str(&s)).as_deref() != Some("moved")
-            && q.collection != Some(TicketCollection::Archive)
+            && !matches!(
+                q.collection,
+                Some(TicketCollection::Archive | TicketCollection::All)
+            )
         {
             wheres.push("t.status IS NOT 'moved'".into());
         }

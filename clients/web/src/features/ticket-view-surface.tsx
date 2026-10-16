@@ -7,7 +7,13 @@ import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import { type TicketPriority } from '../components/ticket-row';
 import { type TicketViewActionSpec } from '../components/workspace-header';
 import { canBulkUpdate } from '../ticket-bulk-operations';
-import { isArchivedTicket, isTrashedTicket, type TicketView } from '../ticket-views';
+import {
+  ALL_TICKETS_SCOPE,
+  isArchivedTicket,
+  isTrashedTicket,
+  type TicketScope,
+  type TicketView,
+} from '../ticket-views';
 
 /** Live application bindings createTicketViewSurface reads (HS2-K0VC2C). */
 export interface TicketViewSurfaceDependencies {
@@ -38,7 +44,8 @@ export function createTicketViewSurface(dependencies: TicketViewSurfaceDependenc
     ticketContextMenu,
     tickets,
   } = dependencies;
-  function ticketViewTitle(view: TicketView) {
+  function ticketViewTitle(view: TicketScope) {
+    if (view === ALL_TICKETS_SCOPE) return 'All Tickets';
     return view === 'archive'
       ? 'Archive'
       : view === 'trash'

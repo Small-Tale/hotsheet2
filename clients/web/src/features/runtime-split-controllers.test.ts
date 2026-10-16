@@ -203,6 +203,7 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
       searchMatchKeys,
       sidebarSearchCounts: signal<SidebarSearchCounts | undefined>(undefined),
       selectedView: signal<TicketView>('all'),
+      searchAllTickets: signal(false),
       error: signal(''),
       ticketPageQuery,
       ticketNextCursor,
@@ -240,5 +241,101 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     expect(ticketNextCursor.value).toBeUndefined();
     expect(ticketPageQuery.value).toEqual({});
     expect(refreshProject).toHaveBeenCalledWith({ showLoading: false });
+  });
+  it('workspace search: All Tickets scope toggles, re-scopes the request, and ends with the search (HS2-4J6764)', async () => {
+    const searchQuery = signal(''),
+      searchTokens = signal<InlineSearchToken[]>([]),
+      searchMatchKeys = signal<Set<string> | undefined>(undefined),
+      sidebarSearchCounts = signal<SidebarSearchCounts | undefined>(undefined),
+      selectedView = signal<TicketView>('all'),
+      searchAllTickets = signal(false),
+      fetchMock = vi.fn<typeof fetch>(async () =>
+        Response.json({
+          items: [],
+          counts: { total: 0, queued: 0, backlog: 0, archive: 0, open: 0, up_next: 0, active: 0, started: 0 },
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const owner = createWorkspaceSearchController({
+      searchQuery,
+      searchTokens,
+      searchHelpOpen: signal(false),
+      searchMatchKeys,
+      sidebarSearchCounts,
+      selectedView,
+      searchAllTickets,
+      error: signal(''),
+      ticketPageQuery: signal<CheckoutTicketQuery>({}),
+      ticketNextCursor: signal<string | undefined>(undefined),
+      tickets: signal<TicketRow[]>([]),
+      ticketRowsByProject: signal({}),
+      project: () => project('a'),
+      customViewFor: (view) =>
+        view === 'custom:mine' ? { id: 'mine', name: 'Mine', query: 'status:started' } : undefined,
+      customViewsFor: () => [{ id: 'mine', name: 'Mine', query: 'status:started' }],
+      activeWorkspaceSort: () => ({ sort: 'priority', sortDirection: 'descending' }),
+      ticketSearchKey: (ticket) => `${ticket.connection_id}:${ticket.native_id}`,
+      mergeTicketLinkRows: (_existing, incoming) => [...incoming],
+      refreshProject: vi.fn(async () => undefined),
+      resetBoardColumnPages: vi.fn(),
+      resetProgressiveTicketRendering: vi.fn(),
+      scheduleProjectSessionPersistence: vi.fn(),
+    });
+    const scopes = () =>
+      fetchMock.mock.calls
+        .map(([url]) => new URL(url instanceof Request ? url.url : url, 'http://x'))
+        .filter((url) => url.pathname.endsWith('/tickets') && url.searchParams.get('text') === 'badge')
+        .map((url) => url.searchParams.get('status') ?? url.searchParams.get('collection'));
+    // Without a search there is nothing to widen: the toggle is unavailable and inert.
+    expect(owner.allTicketsSearchAvailable()).toBe(false);
+    owner.setAllTicketsSearch(true);
+    expect(searchAllTickets.value).toBe(false);
+    replaceTicketSearch(owner.workspaceSearchModel, 'badge');
+    await vi.advanceTimersByTimeAsync(200);
+    expect(owner.searchScope()).toBe('all');
+    expect(scopes()[0]).toBe('queue');
+    await vi.waitFor(() => {
+      expect(sidebarSearchCounts.value?.pending).toEqual([]);
+    });
+    expect(sidebarSearchCounts.value?.values).toEqual({ all: 0, backlog: 0, archive: 0, 'custom:mine': 0 });
+    // Entering All Tickets searches every collection except Trash and counts each sidebar view itself.
+    fetchMock.mockClear();
+    owner.setAllTicketsSearch(true);
+    expect(owner.searchScope()).toBe('all-tickets');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(scopes()[0]).toBe('all');
+    expect(scopes()).not.toContain('trash');
+    expect(sidebarSearchCounts.value?.pending).toEqual([]);
+    // Toggling again returns to the view the search started from, reusing its settled counts.
+    fetchMock.mockClear();
+    owner.setAllTicketsSearch(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(owner.searchScope()).toBe('all');
+    expect(scopes()).toEqual(['queue']);
+    // A shared view's own query drops out while All Tickets covers everything.
+    selectedView.value = 'custom:mine';
+    expect(owner.selectedViewSearch().text).toContain('status:started');
+    owner.setAllTicketsSearch(true);
+    expect(owner.searchScope()).toBe('all-tickets');
+    expect(owner.selectedViewSearch().text).not.toContain('status:started');
+    // Clearing the search ends the mode, so the next search starts in its own view again.
+    replaceTicketSearch(owner.workspaceSearchModel, '');
+    await vi.advanceTimersByTimeAsync(200);
+    expect(searchAllTickets.value).toBe(false);
+    replaceTicketSearch(owner.workspaceSearchModel, 'badge');
+    expect(owner.searchScope()).toBe('custom:mine');
+    // Trash never offers All Tickets, even with the mode left on.
+    selectedView.value = 'trash';
+    searchAllTickets.value = true;
+    expect(owner.allTicketsSearchAvailable()).toBe(false);
+    expect(owner.searchScope()).toBe('trash');
+    owner.setAllTicketsSearch(false);
+    expect(searchAllTickets.value).toBe(true);
+    // Choosing the scope already in effect does nothing.
+    selectedView.value = 'all';
+    fetchMock.mockClear();
+    owner.setAllTicketsSearch(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(scopes()).toEqual([]);
   });
 });

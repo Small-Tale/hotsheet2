@@ -169,6 +169,18 @@
 .app-shell__workspace[data-bottom-edge='true'] {
   --hotsheet-scroll-end-inset: var(--hotsheet-safe-area-bottom);
 }
+/* Floating workspace controls (the search scope toolbar, HS2-4J6764) cover the bottom of the work area,
+   so ticket scrollers end far enough above them for the last row to scroll clear. */
+.app-shell__workspace[data-floating-controls='true'] {
+  --hotsheet-scroll-end-inset: remify(72px);
+}
+.app-shell__workspace[data-floating-controls='true'][data-bottom-edge='true'] {
+  --hotsheet-scroll-end-inset: calc(var(--hotsheet-safe-area-bottom) + remify(72px));
+}
+.app-shell__workspace[data-floating-controls='true']:not([data-presentation='edge-to-edge']) {
+  padding-bottom: calc(var(--app-shell-workspace-padding) + var(--hotsheet-scroll-end-inset));
+  scroll-padding-bottom: var(--hotsheet-scroll-end-inset);
+}
 .app-shell__workspace[data-bottom-edge='true']:not([data-presentation='edge-to-edge']) {
   padding-bottom: calc(var(--app-shell-workspace-padding) + var(--hotsheet-scroll-end-inset));
   scroll-padding-bottom: var(--hotsheet-scroll-end-inset);

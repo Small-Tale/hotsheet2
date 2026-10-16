@@ -51,6 +51,9 @@ export interface AppShellProps {
   /** On a phone, a compact view-switcher page header that replaces `pageHeader`. */
   mobileView?: AppShellMobileView;
   workspace: SafeHtml;
+  /** Controls floating over the bottom of the ticket workspace, outside its scroller, such as the search
+   * scope toolbar (HS2-4J6764). The workspace's ticket scrollers reserve end space while it is present. */
+  workspaceFloating?: SafeHtml;
   composer?: SafeHtml;
   /** The right rail's panel parts; the Workbench composes its toolbar, header, and collapse toggle and
    * relocates the toggle to the trailing edge of the workspace toolbar while the rail is collapsed. */
@@ -110,6 +113,7 @@ export function AppShell({
   pageHeader,
   mobileView,
   workspace,
+  workspaceFloating,
   composer,
   inspector,
   inspectorVisible = true,
@@ -309,10 +313,12 @@ export function AppShell({
                 // A phone column reaches the screen's bottom edge unless the expanded terminal drawer
                 // owns that edge; its ticket scrollers then inset their content (HS2-4A29RR).
                 data-bottom-edge={String(mobile && !terminalDrawerExpanded)}
+                data-floating-controls={workspaceFloating ? 'true' : undefined}
                 aria-label="Ticket Workspace"
               >
                 {workspace}
               </section>
+              {workspaceFloating}
             </div>
             {/* Passive backdrop inside the Workbench's stacking context, so it paints under its overlay
             rails (z 41) and over everything else in the main column; Kerf's Workbench overlays have no

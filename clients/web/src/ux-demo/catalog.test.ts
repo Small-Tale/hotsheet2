@@ -72,6 +72,7 @@ describe('UX demo catalog', () => {
       'drive-control',
       'drive-options-menu',
       'workspace-header',
+      'search-scope-toolbar',
       'project-tab',
       'project-tabs',
       'resizable-region',
@@ -189,6 +190,7 @@ describe('UX demo catalog', () => {
     expect(demosUsing('toolbar-control-group').map((entry) => entry.id)).toEqual([
       'app-shell',
       'workspace-header',
+      'search-scope-toolbar',
       'ticket-inspector',
       'terminal-dashboard',
       'terminal-key-bar',
@@ -196,7 +198,11 @@ describe('UX demo catalog', () => {
       'floating-toolbar',
       'ticket-search-field',
     ]);
-    expect(demosUsing('floating-toolbar').map((entry) => entry.id)).toEqual(['app-shell', 'terminal-dashboard']);
+    expect(demosUsing('floating-toolbar').map((entry) => entry.id)).toEqual([
+      'app-shell',
+      'search-scope-toolbar',
+      'terminal-dashboard',
+    ]);
     expect(findDemo('project-tabs')?.uses).toEqual(['project-tab', 'select']);
     expect(findDemo('project-tab')?.uses).toEqual(['app-tab']);
     expect(findDemo('terminal-drawer')?.uses).toEqual([

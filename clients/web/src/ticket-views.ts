@@ -3,16 +3,32 @@ import type { CheckoutTicketQuery, TicketRow } from './api';
 export type BuiltInTicketView = 'all' | 'backlog' | 'archive' | 'trash' | 'errors';
 export type TicketView = BuiltInTicketView | `custom:${string}`;
 
+/**
+ * The All Tickets search scope: every collection except Trash, entered from a search's floating
+ * toolbar and lasting only while that search is active (HS2-4J6764). It is never a sidebar view.
+ */
+export const ALL_TICKETS_SCOPE = 'all-tickets';
+/** What a workspace search covers: the selected view, or All Tickets. */
+export type TicketScope = TicketView | typeof ALL_TICKETS_SCOPE;
+
 export const customTicketViewId = (id: string): TicketView => `custom:${id}`;
-export const customTicketViewKey = (view: TicketView): string | undefined =>
+export const customTicketViewKey = (view: TicketScope): string | undefined =>
   view.startsWith('custom:') ? view.slice('custom:'.length) : undefined;
 /**
  * The sidebar views a search-bar query is counted in. Searching from Trash searches only Trash, so
  * only the Trash row carries a search-relative count; every other search counts the ordinary views
  * and never Trash (HS2-S6TXSW).
  */
-export const ticketSearchCountViews = (customViewIds: readonly string[] = [], selected?: TicketView): TicketView[] =>
+export const ticketSearchCountViews = (customViewIds: readonly string[] = [], selected?: TicketScope): TicketView[] =>
   selected === 'trash' ? ['trash'] : ['all', 'backlog', 'archive', ...customViewIds.map(customTicketViewId)];
+
+/** Whether a search from `view` may switch into All Tickets: never from Trash or Ticket errors. */
+export const canSearchAllTickets = (view: TicketView): boolean => view !== 'trash' && view !== 'errors';
+
+/** The scope a search covers: All Tickets while that mode is on, the search is active, and `view` allows it. */
+export function ticketSearchScope(view: TicketView, allTickets: boolean, searching: boolean): TicketScope {
+  return allTickets && searching && canSearchAllTickets(view) ? ALL_TICKETS_SCOPE : view;
+}
 
 export const canCreateTicketInView = (view: TicketView): boolean => !['archive', 'trash', 'errors'].includes(view);
 export const newTicketStatusForView = (view: TicketView): 'not_started' | 'backlog' =>
@@ -23,7 +39,8 @@ export const newTicketCreationPlacement = (view: TicketView, upNext: boolean) =>
 });
 
 /** Match a built-in collection on the server before its page size is applied. */
-export function ticketViewQuery(view: TicketView): CheckoutTicketQuery {
+export function ticketViewQuery(view: TicketScope): CheckoutTicketQuery {
+  if (view === ALL_TICKETS_SCOPE) return { collection: 'all' };
   if (view === 'backlog') return { status: 'backlog' };
   if (view === 'archive') return { collection: 'archive' };
   if (view === 'trash') return { collection: 'trash' };
@@ -51,8 +68,9 @@ export function isQueuedTicket(ticket: TicketRow): boolean {
   return ticket.status !== 'backlog' && !isArchivedTicket(ticket) && !isTrashedTicket(ticket);
 }
 
-export function ticketsForView(tickets: readonly TicketRow[], view: TicketView): TicketRow[] {
+export function ticketsForView(tickets: readonly TicketRow[], view: TicketScope): TicketRow[] {
   if (view === 'errors') return [];
+  if (view === ALL_TICKETS_SCOPE) return tickets.filter((ticket) => !isTrashedTicket(ticket));
   if (view === 'archive') return tickets.filter(isArchivedTicket);
   if (view === 'trash') return tickets.filter(isTrashedTicket);
   if (view === 'backlog') return tickets.filter((ticket) => ticket.status === 'backlog');

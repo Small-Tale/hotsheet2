@@ -1,0 +1,7 @@
+/* The search scope switch floats over the light ticket workspace like the app's other floating
+   controls: its app-owned wrapper sets Kerf's public neutral-fill token to the shared floating-control
+   surface, so the forced-dark ToolbarControlGroup paints a solid dark track (HS2-4J6764). */
+.search-scope-toolbar {
+  display: contents;
+  --kui-color-neutral-fill-normal: var(--hs-floating-control-surface);
+}

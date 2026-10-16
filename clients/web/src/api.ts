@@ -415,7 +415,8 @@ export interface CheckoutTicketQuery {
   source?: 'git';
   text?: string;
   status?: string;
-  collection?: 'queue' | 'archive' | 'trash';
+  /** `all` is every collection except Trash, for the All Tickets search (HS2-4J6764). */
+  collection?: 'queue' | 'archive' | 'trash' | 'all';
   open?: boolean;
   up_next?: boolean;
   blocked?: boolean;

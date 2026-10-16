@@ -1,6 +1,7 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
-// Search scope across the built-in views: searching from Trash searches only Trash (HS2-S6TXSW).
+// Search scope across the built-in views: searching from Trash searches only Trash (HS2-S6TXSW), and
+// any other search can switch into All Tickets from its floating toolbar (HS2-4J6764).
 
 const capabilities = {
   create: true,
@@ -203,5 +204,135 @@ for (const width of [1280, 390]) {
     await expect(viewCount(navigation, 'Trash')).not.toHaveAttribute('data-search-count', 'true');
     await expect(viewCount(navigation, 'Trash')).toHaveText('2');
     expect(searches.slice(searches.lastIndexOf('trash') + 1).sort()).toEqual(['archive', 'backlog', 'queue']);
+  });
+}
+
+const columnNames = (board: Locator) =>
+  board
+    .locator('[data-component="ticket-board-column"]')
+    .evaluateAll((columns) => columns.map((column) => column.getAttribute('aria-label')));
+
+for (const width of [1280, 390]) {
+  test(`switches a search into All Tickets and back from the floating toolbar at ${width}px (HS2-4J6764)`, async ({
+    page,
+  }) => {
+    // A long multi-step flow; leave headroom when several agents share the machine.
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width, height: width > 600 ? 820 : 844 });
+    const searches = await mockSearchProject(page);
+    const toolbar = page.getByRole('toolbar', { name: 'Search Scope' }),
+      toggle = toolbar.getByRole('button', { name: 'All Tickets' }),
+      viewChoice = toolbar.getByRole('button', { name: 'Queue' }),
+      title = page.locator('#workspace-page-title'),
+      search = page.getByRole('searchbox', { name: 'Search tickets' }),
+      // Phones name a sidebar view in the page header's view picker and All Tickets in its title.
+      expectTitle = async (text: string) => {
+        if (width > 600 || text === 'All Tickets') await expect(title).toHaveText(text);
+        else {
+          await expect(title).toHaveCount(0);
+          await expect(page.locator('[name="mobile-view"]')).toContainText(text);
+        }
+      };
+    // No search, no scope toolbar.
+    await expect(toolbar).toHaveCount(0);
+    await page.getByRole('button', { name: 'Search tickets' }).click();
+    await search.fill('badge');
+    await expect(page.locator('[data-ticket-slug="HS2-QUEUE1"]').first()).toBeVisible();
+    await expect(page.locator('[data-ticket-slug="HS2-BACK01"]')).toHaveCount(0);
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(viewChoice).toHaveAttribute('aria-pressed', 'true');
+    // The toolbar floats centered at the bottom of the ticket work area.
+    const area = (await page.getByLabel('Ticket work area').boundingBox())!,
+      bar = (await toolbar.boundingBox())!;
+    expect(Math.abs(bar.x + bar.width / 2 - (area.x + area.width / 2))).toBeLessThan(2);
+    expect(area.y + area.height - (bar.y + bar.height)).toBeLessThan(40);
+    expect(area.y + area.height - (bar.y + bar.height)).toBeGreaterThanOrEqual(0);
+    await toolbar.screenshot({ path: `target/visual-captures/hs2-4j6764-scope-toolbar-view-${width}.png` });
+
+    // All Tickets searches every collection except Trash.
+    searches.length = 0;
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expectTitle('All Tickets');
+    for (const slug of ['HS2-QUEUE1', 'HS2-DONE01', 'HS2-BACK01', 'HS2-ARCH01'])
+      await expect(page.locator(`[data-ticket-slug="${slug}"]`).first()).toBeVisible();
+    await expect(page.locator('[data-ticket-slug="HS2-TRASH1"]')).toHaveCount(0);
+    expect(searches[0]).toBe('all');
+    expect(searches).not.toContain('trash');
+    await page.screenshot({ path: `target/visual-captures/hs2-4j6764-all-tickets-list-${width}.png` });
+    await toolbar.screenshot({ path: `target/visual-captures/hs2-4j6764-scope-toolbar-all-${width}.png` });
+    // The sidebar shows each view's share of the All Tickets search and selects none of them.
+    const navigation = await viewNavigation(page);
+    await expect(navigation.locator('[data-search-count="true"]')).toHaveCount(3);
+    await expect(viewCount(navigation, 'Queue')).toContainText('2');
+    await expect(viewCount(navigation, 'Backlog')).toContainText('1');
+    await expect(viewCount(navigation, 'Archive')).toContainText('1');
+    await expect(viewCount(navigation, 'Trash')).not.toHaveAttribute('data-search-count', 'true');
+    await expect(navigation.locator('[aria-current]')).toHaveCount(0);
+    await expect(page.locator('#app-left-rail .kui-workbench__panel-content')).toHaveCSS('transform', 'none');
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `target/visual-captures/hs2-4j6764-all-tickets-sidebar-${width}.png` });
+    await closeOverlaySidebar(page);
+
+    // Columns: Backlog, the lifecycle columns, then Archive; never Trash.
+    const columnsView = page.getByRole('button', { name: 'Columns View' });
+    if (await columnsView.isVisible()) await columnsView.click();
+    else {
+      await page.getByRole('button', { name: 'More Workspace Controls' }).click();
+      await page.getByRole('menuitemcheckbox', { name: 'Show Columns View' }).click();
+    }
+    const board = page.locator('[data-component="ticket-board"]');
+    await expect
+      .poll(() => columnNames(board))
+      .toEqual([
+        'Backlog Column',
+        'Not Started Column',
+        'Started Column',
+        'Completed Column',
+        'Verified Column',
+        'Archive Column',
+      ]);
+    await expect(board.locator('[data-ticket-slug="HS2-BACK01"]')).toHaveCount(1);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `target/visual-captures/hs2-4j6764-all-tickets-columns-${width}.png` });
+    // The toolbar paints above the board columns, not under them.
+    expect(
+      await toolbar.evaluate((node) => {
+        const box = node.getBoundingClientRect(),
+          hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        return node.contains(hit);
+      }),
+    ).toBe(true);
+
+    // Choosing the view again returns the search to the view it started from.
+    await viewChoice.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expectTitle('Queue');
+    await expect
+      .poll(() => columnNames(board))
+      .toEqual(['Not Started Column', 'Started Column', 'Completed Column', 'Verified Column']);
+    await expect(page.locator('[data-ticket-slug="HS2-BACK01"]')).toHaveCount(0);
+
+    // The mode lasts only while the search does.
+    await toggle.click();
+    await expectTitle('All Tickets');
+    await search.fill('');
+    await expect(toolbar).toHaveCount(0);
+    await expectTitle('Queue');
+    await search.fill('badge');
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expectTitle('Queue');
+
+    // Choosing a sidebar view leaves All Tickets for that view; Trash never offers it.
+    await toggle.click();
+    await expectTitle('All Tickets');
+    await (await viewNavigation(page)).getByRole('button', { name: /^Backlog/ }).click();
+    await closeOverlaySidebar(page);
+    await expectTitle('Backlog');
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await (await viewNavigation(page)).getByRole('button', { name: /^Trash/ }).click();
+    await closeOverlaySidebar(page);
+    await expect(page.locator('[data-ticket-slug="HS2-TRASH1"]').first()).toBeVisible();
+    await expect(toolbar).toHaveCount(0);
   });
 }

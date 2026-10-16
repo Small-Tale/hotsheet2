@@ -842,6 +842,83 @@
       }
     },
     {
+      "id": "search-scope-toolbar",
+      "name": "SearchScopeToolbar",
+      "kind": "component",
+      "purpose": "Floating search scope switch centered over search results: the searched view or All Tickets (every collection except Trash).",
+      "source": "src/components/search-scope-toolbar.tsx",
+      "publicExports": [
+        {
+          "name": "SearchScopeToolbar"
+        },
+        {
+          "name": "wireSearchScopeToolbar"
+        }
+      ],
+      "sourceLinks": ["src/components/search-scope-toolbar.tsx", "src/components/search-scope-toolbar.css"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": true,
+          "helpers": ["wireSearchScopeToolbar"],
+          "sources": [
+            {
+              "export": "wireSearchScopeToolbar",
+              "source": "src/components/search-scope-toolbar.tsx"
+            }
+          ],
+          "obligations": [
+            "Wire choice clicks with wireSearchScopeToolbar and render the toolbar only while a search is active outside Trash."
+          ]
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child",
+            "notes": [
+              "The FloatingToolbar positions itself at the bottom center of its nearest positioned ancestor, which the owner provides."
+            ]
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["search-scope-toolbar"],
+        "publicTokens": [],
+        "placeableClasses": ["search-scope-toolbar"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/search-scope-toolbar.tsx",
+        "composition": "src/components/search-scope-toolbar.tsx"
+      },
+      "selection": {
+        "useWhen": ["A workspace search needs to switch between the searched view and All Tickets."],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific SearchScopeToolbar behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "project-tab",
       "name": "ProjectTab",
       "kind": "component",

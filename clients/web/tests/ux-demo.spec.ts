@@ -57,6 +57,23 @@ test('clears the halted terminal example from its menu at wide and phone widths 
   }
 });
 
+test('switches the search scope demo through its production wiring (HS2-4J6764)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/ux-demo?component=search-scope-toolbar');
+    const toolbar = page.getByRole('toolbar', { name: 'Search Scope' }),
+      view = toolbar.getByRole('button', { name: 'Queue' }),
+      all = toolbar.getByRole('button', { name: 'All Tickets' });
+    await expect(view).toHaveAttribute('aria-pressed', 'true');
+    await all.click();
+    await expect(all).toHaveAttribute('aria-pressed', 'true');
+    await expect(view).toHaveAttribute('aria-pressed', 'false');
+    await page.screenshot({ path: `target/visual-captures/hs2-4j6764-ux-demo-${width}.png` });
+    await view.click();
+    await expect(view).toHaveAttribute('aria-pressed', 'true');
+  }
+});
+
 test('previews project loading and ticket update progress in the app indicator (HS2-TPF3EB)', async ({ page }) => {
   await page.goto('/ux-demo?component=app-loading-indicator');
   const indicator = page.locator('#app-loading-indicator');

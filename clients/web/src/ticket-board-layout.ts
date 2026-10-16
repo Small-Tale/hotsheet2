@@ -1,5 +1,5 @@
 import type { CheckoutTicketCounts, TicketRow } from './api';
-import { isArchivedTicket, type TicketView } from './ticket-views';
+import { ALL_TICKETS_SCOPE, isArchivedTicket, type TicketScope } from './ticket-views';
 
 export interface TicketBoardGroup {
   id: string;
@@ -10,7 +10,7 @@ export interface TicketBoardGroup {
 export function ticketBoardGroupTotal(
   id: string,
   loaded: number,
-  view: TicketView,
+  view: TicketScope,
   counts: CheckoutTicketCounts | undefined,
   hideVerified: boolean,
 ): number {
@@ -33,7 +33,7 @@ export function ticketBoardGroupTotal(
 
 export function ticketBoardGroups(
   tickets: readonly TicketRow[],
-  view: TicketView,
+  view: TicketScope,
   hideVerified: boolean,
 ): TicketBoardGroup[] {
   if (view === 'backlog') return [{ id: 'backlog', title: 'Backlog', tickets: [...tickets] }];
@@ -60,5 +60,13 @@ export function ticketBoardGroups(
       tickets: tickets.filter((ticket) => ticket.status === 'verified'),
     });
   }
+  // All Tickets brackets the lifecycle columns with Backlog and Archive; Trash is never part of it
+  // (HS2-4J6764).
+  if (view === ALL_TICKETS_SCOPE)
+    return [
+      { id: 'backlog', title: 'Backlog', tickets: tickets.filter((ticket) => ticket.status === 'backlog') },
+      ...groups,
+      { id: 'archive', title: 'Archive', tickets: tickets.filter(isArchivedTicket) },
+    ];
   return groups;
 }

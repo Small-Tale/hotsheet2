@@ -63,6 +63,7 @@ const registrations = new Set([
   'wireTerminalClipboardSheets',
   'wireTerminalRenameDialog',
   'wireWorkspaceHeaderActions',
+  'wireSearchScopeToolbar',
   'wireAttachmentGalleryControls',
   'wireTicketAttachmentActions',
   'wireQuickTicketComposer',

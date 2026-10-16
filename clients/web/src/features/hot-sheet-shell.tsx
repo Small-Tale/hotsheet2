@@ -35,6 +35,7 @@ import type { ProjectStripMode } from '../components/project-strip-actions';
 import { type ProjectTabProps } from '../components/project-tab';
 import { CompatibilityBannerSurface } from '../components/reader-overlay-surfaces';
 import { RepositorySizeBanner } from '../components/repository-size-banner';
+import { SearchScopeToolbar } from '../components/search-scope-toolbar';
 import { ServerBuildNoticeBanner } from '../components/server-build-notice-banner';
 import { type SettingsCategory, settingsCategoryTitle } from '../components/settings-navigation';
 import { SourceStaleNoticeBanner } from '../components/source-stale-notice-banner';
@@ -86,7 +87,13 @@ import { interleaveByRank } from '../tab-order';
 import type { TerminalVisibilityState } from '../terminal-visibility';
 import { activeTerminalVisibilityGroup, TERMINAL_DASHBOARD_VISIBILITY_SCOPE } from '../terminal-visibility';
 import { canBulkUpdate } from '../ticket-bulk-operations';
-import { canCreateTicketInView, customTicketViewId, type TicketView } from '../ticket-views';
+import {
+  ALL_TICKETS_SCOPE,
+  canCreateTicketInView,
+  customTicketViewId,
+  type TicketScope,
+  type TicketView,
+} from '../ticket-views';
 import { hs1CleanupPromptDismissed } from '../workspace-session';
 
 /** Live application bindings createHotSheetShell reads (HS2-K0VC2C). */
@@ -165,11 +172,14 @@ export interface HotSheetShellDependencies {
     label?: string,
     size?: 'default' | 'compact',
   ) => TicketViewActionSpec | undefined;
-  ticketViewTitle: (view: TicketView) => string;
+  ticketViewTitle: (view: TicketScope) => string;
   viewMode: Signal<WorkspaceViewMode>;
   viewportMobile: Signal<boolean>;
   workspaceSearchModel: TokenSearchModel;
   workspaceSurfaceProps: () => WorkspaceSurfaceProps;
+  /** The search's scope and whether it may switch into All Tickets (HS2-4J6764). */
+  searchScope: () => TicketScope;
+  allTicketsSearchAvailable: () => boolean;
 }
 
 /**
@@ -249,6 +259,8 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
     viewportMobile,
     workspaceSearchModel,
     workspaceSurfaceProps,
+    searchScope,
+    allTicketsSearchAvailable,
   } = dependencies;
   const pendingProjectName = (root: string) => root.split('/').filter(Boolean).at(-1) ?? root;
   function HotSheetShell() {
@@ -441,8 +453,9 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
           return settingsCategoryTitle(settingsCategory());
         case 'board':
         case 'list':
-          // Searching filters the selected view; the heading keeps that view's title (HS2-18Y67S).
-          return ticketViewTitle(selectedView.value);
+          // Searching filters the selected view; the heading keeps that view's title (HS2-18Y67S) unless
+          // the search covers All Tickets (HS2-4J6764).
+          return ticketViewTitle(searchScope());
         default:
           return viewMode.value satisfies never;
       }
@@ -469,8 +482,11 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
         trailing={headingAction && <TicketViewAction action={headingAction} />}
       />
     );
+    const allTickets = searchScope() === ALL_TICKETS_SCOPE,
+      ticketWorkspace = viewMode.value === 'list' || viewMode.value === 'board';
+    // The phone view picker names sidebar views only; All Tickets shows its title header instead.
     const mobileView: AppShellMobileView | undefined =
-        viewportMobile.value && !['settings', 'notifications'].includes(viewMode.value)
+        viewportMobile.value && !['settings', 'notifications'].includes(viewMode.value) && !allTickets
           ? {
               value: selectedView.value,
               choices: mobileChoices,
@@ -586,6 +602,11 @@ export function createHotSheetShell(dependencies: HotSheetShellDependencies) {
         pageHeader={pageHeader}
         mobileView={mobileView}
         workspace={<WorkspaceSurface {...workspaceSurfaceProps()} />}
+        workspaceFloating={
+          ticketWorkspace && allTicketsSearchAvailable() ? (
+            <SearchScopeToolbar allTickets={allTickets} viewLabel={ticketViewTitle(selectedView.value)} />
+          ) : undefined
+        }
         workspacePresentation={viewMode.value === 'board' && selectedView.value !== 'errors' ? 'edge-to-edge' : 'inset'}
         terminalDrawer={
           drawerViewAllowed ? (

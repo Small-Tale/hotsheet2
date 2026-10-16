@@ -67,6 +67,42 @@ describe('ticketBoardGroups', () => {
     expect(groups.flatMap((group) => group.tickets)).toHaveLength(queue.length);
   });
 
+  it('brackets the All Tickets search columns with Backlog and Archive and never shows Trash (HS2-4J6764)', () => {
+    const everything = [
+      'backlog',
+      'not_started',
+      'started',
+      'completed',
+      'verified',
+      'archive',
+      'moved',
+      'deleted',
+    ].map(ticket);
+    const groups = ticketBoardGroups(everything, 'all-tickets', false);
+    expect(groups.map((group) => group.title)).toEqual([
+      'Backlog',
+      'Not Started',
+      'Started',
+      'Completed',
+      'Verified',
+      'Archive',
+    ]);
+    expect(groups.map((group) => group.tickets.map((item) => item.status))).toEqual([
+      ['backlog'],
+      ['not_started'],
+      ['started'],
+      ['completed'],
+      ['verified'],
+      ['archive', 'moved'],
+    ]);
+    // Verified appears only while its column is enabled; otherwise it merges into Completed.
+    const merged = ticketBoardGroups(everything, 'all-tickets', true);
+    expect(merged.map((group) => group.title)).toEqual(['Backlog', 'Not Started', 'Started', 'Completed', 'Archive']);
+    expect(merged[3].tickets.map((item) => item.status)).toEqual(['completed', 'verified']);
+    // Searched totals are the loaded matches: All Tickets has no checkout-summary column total.
+    expect(ticketBoardGroupTotal('backlog', 2, 'all-tickets', undefined, false)).toBe(2);
+  });
+
   it('derives absolute built-in column totals from the checkout summary', () => {
     const counts = {
       total: 390,

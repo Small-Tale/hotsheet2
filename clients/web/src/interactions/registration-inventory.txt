@@ -246,6 +246,7 @@ search-and-composer	document.addEventListener	'pointerup'
 search-and-composer	document.addEventListener	'pointercancel'
 search-and-composer	delegate	document.body	'focusout'	workspaceSearchEditor.selector
 search-and-composer	wireWorkspaceHeaderActions	document.body
+search-and-composer	wireSearchScopeToolbar	document.body
 search-and-composer	wireQuickTicketComposer	document.body
 search-and-composer	wireTicketRowUpNextToggle	document.body
 attachments-and-gallery	document.addEventListener	'visibilitychange'

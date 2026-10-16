@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { TicketRow } from './api';
 import {
   canCreateTicketInView,
+  canSearchAllTickets,
   createdTicketVisibleInView,
   customTicketViewId,
   customTicketViewKey,
@@ -16,6 +17,7 @@ import {
   selectionAfterTicketViewChange,
   selectionVisibleInView,
   ticketSearchCountViews,
+  ticketSearchScope,
   ticketsForView,
   ticketViewQuery,
 } from './ticket-views';
@@ -88,6 +90,23 @@ describe('ticket views', () => {
     ]);
     // Searching from Trash searches only Trash (HS2-S6TXSW).
     expect(ticketSearchCountViews(['needs-docs'], 'trash')).toEqual(['trash']);
+  });
+
+  it('scopes an All Tickets search to every collection except Trash, only while searching (HS2-4J6764)', () => {
+    expect(ticketViewQuery('all-tickets')).toEqual({ collection: 'all' });
+    expect(
+      ticketsForView(['backlog', 'started', 'archive', 'deleted'].map(ticket), 'all-tickets').map((t) => t.status),
+    ).toEqual(['backlog', 'started', 'archive']);
+    expect(ticketSearchCountViews(['mine'], 'all-tickets')).toEqual(['all', 'backlog', 'archive', 'custom:mine']);
+    expect(canSearchAllTickets('all')).toBe(true);
+    expect(canSearchAllTickets('custom:mine')).toBe(true);
+    expect(canSearchAllTickets('trash')).toBe(false);
+    expect(canSearchAllTickets('errors')).toBe(false);
+    // The scope widens only for an active search in a view that allows it.
+    expect(ticketSearchScope('backlog', true, true)).toBe('all-tickets');
+    expect(ticketSearchScope('backlog', true, false)).toBe('backlog');
+    expect(ticketSearchScope('backlog', false, true)).toBe('backlog');
+    expect(ticketSearchScope('trash', true, true)).toBe('trash');
   });
 
   it('creates into the visible active destination and disables creation for Archive', () => {

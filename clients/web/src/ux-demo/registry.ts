@@ -28,6 +28,7 @@ import { demoModule as projectSidebar } from './project-sidebar-demo';
 import { demoModule as providerIcon } from './provider-icon-demo';
 import { demoModule as repositorySize } from './repository-size-demo';
 import { demoModule as repositoryStatus } from './repository-status-demo';
+import { demoModule as searchScopeToolbar } from './search-scope-toolbar-demo';
 import { demoModule as select } from './select-demo';
 import { demoModule as setupSettings } from './setup-settings-demo';
 import { demoModule as statusBadge } from './status-badge-demo';
@@ -86,6 +87,7 @@ export const demoModules: readonly DemoModule[] = [
   toolbarText,
   providerIcon,
   select,
+  searchScopeToolbar,
   list,
   listItem,
   listHeader,

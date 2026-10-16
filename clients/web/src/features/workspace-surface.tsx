@@ -15,7 +15,7 @@ import { type Project } from '../interactions/types';
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
 import { BOARD_COLUMN_PAGE_SIZE } from '../project-ticket-refresh';
 import { ticketBoardGroups, ticketBoardGroupTotal } from '../ticket-board-layout';
-import { type TicketView } from '../ticket-views';
+import { type TicketScope, type TicketView } from '../ticket-views';
 
 /** Live application bindings createWorkspaceSurface reads (HS2-K0VC2C). */
 export interface WorkspaceSurfaceDependencies {
@@ -46,11 +46,13 @@ export interface WorkspaceSurfaceDependencies {
   ticketNextCursor: Signal<string | undefined>;
   ticketPageLoading: Signal<boolean>;
   tickets: Signal<WireTicketRow[]>;
-  ticketViewTitle: (view: TicketView) => string;
+  ticketViewTitle: (view: TicketScope) => string;
   viewMode: Signal<WorkspaceViewMode>;
   viewportMobile: Signal<boolean>;
   visibleTickets: () => WireTicketRow[];
   workspaceSearchActive: () => boolean;
+  /** The search's scope: the selected view, or All Tickets (HS2-4J6764). */
+  searchScope: () => TicketScope;
 }
 
 /**
@@ -91,6 +93,7 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
     viewportMobile,
     visibleTickets,
     workspaceSearchActive,
+    searchScope,
   } = dependencies;
   function workspaceEmptyState(): TicketEmptyStateProps | undefined {
     if (loading.value) return { kind: 'loading' };
@@ -103,7 +106,7 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
         viewLabel: ticketViewTitle(selectedView.value),
       };
     if (tickets.value.length === 0 && corruptTickets.value.length === 0) return { kind: 'project' };
-    return { kind: 'view', viewLabel: ticketViewTitle(selectedView.value) };
+    return { kind: 'view', viewLabel: ticketViewTitle(searchScope()) };
   }
   function workspaceSurfaceProps(): WorkspaceSurfaceProps {
     const waitingForBoardPages =
@@ -164,11 +167,12 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
             ? undefined
             : ticketCountsByProject.value[selectedProjectId.value],
         hideVerified = hideVerifiedColumn(),
-        groups = ticketBoardGroups(shown, selectedView.value, hideVerified);
+        scope = searchScope(),
+        groups = ticketBoardGroups(shown, scope, hideVerified);
       // Per-column pagination (HS2-8NBGBX): each status column gets its own continuation from its own
       // cursor/loaded count, so a short column can load more independently of a long one. Single-column
       // views (backlog/archive/trash) and search keep the global cursor pinned to their one column.
-      const perColumn = isPerColumnBoardView(selectedView.value, workspaceSearchActive()),
+      const perColumn = isPerColumnBoardView(scope, workspaceSearchActive()),
         lastShown = shown.at(-1),
         globalColumnId = perColumn
           ? undefined
@@ -176,7 +180,7 @@ export function createWorkspaceSurface(dependencies: WorkspaceSurfaceDependencie
             [...groups].reverse().find((group) => group.tickets.length)?.id ??
             groups[0]?.id);
       const columns = groups.map((group) => {
-        const total = ticketBoardGroupTotal(group.id, group.tickets.length, selectedView.value, counts, hideVerified),
+        const total = ticketBoardGroupTotal(group.id, group.tickets.length, scope, counts, hideVerified),
           status = boardColumnStatus(group.id),
           visible = Object.hasOwn(boardColumnPages.value, group.id)
             ? (boardColumnPages.value[group.id].visible ?? BOARD_COLUMN_PAGE_SIZE)
