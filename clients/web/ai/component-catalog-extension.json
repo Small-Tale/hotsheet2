@@ -429,9 +429,7 @@
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific ConfidenceBadge behavior."
       ],
-      "publicClasses": [
-        "confidence-badge"
-      ],
+      "publicClasses": [],
       "publicTokens": [],
       "source": "src/components/confidence-badge.tsx",
       "geometry": {

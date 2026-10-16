@@ -121,7 +121,7 @@ describe('TicketList', () => {
         label: 'Tickets',
       }),
     );
-    expect(markup.match(/data-component="confidence-badge"/gu)).toHaveLength(1);
+    expect(markup.match(/data-confidence-badge=/gu)).toHaveLength(1);
     expect(markup).toContain('data-band="verified"');
   });
 });

@@ -79,6 +79,26 @@ describe('NoteCard', () => {
     expect(String(ConfidenceBadge({ value: 82, appearance: 'labeled' }))).toContain('Confidence 82%');
   });
 
+  it('renders ConfidenceBadge as a single Kerf Badge root with no wrapper element (HS2-PQHN1J)', () => {
+    for (const appearance of ['compact', 'labeled'] as const) {
+      const markup = String(ConfidenceBadge({ value: 82, appearance }));
+      // Badge is the root: it carries the identity, band, labeled-image name, and title itself.
+      expect(markup).toMatch(
+        new RegExp(
+          `^<span data-confidence-badge="${appearance}" data-band="assumed" data-confidence="82" class="kui-badge" data-component="badge"`,
+          'u',
+        ),
+      );
+      expect(markup).toContain('data-has-icon="true"');
+      expect(markup).toContain('role="img" aria-label="Confidence 82 percent"');
+      expect(markup).toContain('title="AI-reported confidence 82%: verified with minor assumptions"');
+      expect(markup).not.toContain('aria-hidden="true" data-component');
+      expect(markup).not.toContain('class="confidence-badge"');
+      expect(markup).not.toContain('data-component="row"');
+      expect(markup.match(/<span /gu)).toHaveLength(2);
+    }
+  });
+
   it('renders a controlled editor only when editing is requested', () => {
     const markup = String(
       NoteCard({

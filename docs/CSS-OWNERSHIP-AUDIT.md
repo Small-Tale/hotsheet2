@@ -152,3 +152,22 @@ footer styling now comes from public Kerf components. Its preview shell is delib
 in `DialogSurface`, whose beta.76 props lack the modal gutter/max-height configuration required to
 preserve the existing phone preview behavior. `KF-E2J9ND` requests the missing configuration, and
 `HS2-FXAAA6` tracks downstream adoption. No Kerf component root or child styles are overridden.
+
+## Metadata migration update (HS2-PQHN1J)
+
+The metadata scope's stylesheets were already gone or reduced by earlier tickets:
+`confidence-badge.css` (HS2-MBFKJF), `tag-chip.css` (HS2-ET9109), and `ticket-status-menu.css`
+(HS2-X2AGAE) are removed, and `StatusBadge` composes Kerf `Badge` (HS2-3FMK0T). This update removes
+the remaining wrapper markup that only existed because Badge lacked props:
+
+- `ConfidenceBadge` renders Kerf `Badge` as its root. `KF-2YKKK5`'s `icon`, `title`, `label`
+  (labeled image), and `rootAttributes` carry the gauge icon, explanation, accessible name, and
+  `data-confidence-badge`/`data-band`/`data-confidence` identity. The former wrapper also inflated
+  the pill's line box (23px instead of Badge's 20px compact height); the Kerf root restores Badge's
+  own geometry. The gauge icon uses Badge's 1em icon box.
+- `BlockedBadge` renders Kerf's solid `Badge` directly, identified by `data-blocked-badge`.
+- `TagChip` already renders Kerf `Chip` directly; nothing remains.
+- `TicketStatusMenu` keeps Kerf `PopupMenu` because its Started item has a nested phase submenu that
+  `Select` cannot express. `status-badge.css` keeps only the native trigger button's UA reset and pill
+  focus ring: app-owned native-button CSS, not a Kerf override. `KF-PHGQ6D` requests a public Badge
+  menu trigger, and `HS2-M414Z9` removes the stylesheet when it ships.

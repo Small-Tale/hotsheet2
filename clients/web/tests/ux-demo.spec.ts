@@ -2008,10 +2008,10 @@ test('round-trips ConfidenceBadge appearance and band controls through reset and
   page,
 }) => {
   await page.goto('/ux-demo?component=confidence-badge');
-  const badge = page.locator('[data-catalog-example] [data-component="confidence-badge"]');
+  const badge = page.locator('[data-catalog-example] [data-confidence-badge]');
   await expect(badge).toHaveText('82%');
   await expect(badge).toHaveAttribute('data-band', 'assumed');
-  await expect(badge).toHaveAttribute('data-appearance', 'compact');
+  await expect(badge).toHaveAttribute('data-confidence-badge', 'compact');
   await page.locator('[data-action="toggle-settings"]').first().click();
   const inspector = page.getByRole('complementary', { name: 'ConfidenceBadge Settings' });
   const value = inspector.locator('wa-select[name="value"]');
@@ -2033,7 +2033,7 @@ test('round-trips ConfidenceBadge appearance and band controls through reset and
   }
   await set(appearance, 'labeled');
   await expect(badge).toHaveText('Confidence 20%');
-  await expect(badge).toHaveAttribute('data-appearance', 'labeled');
+  await expect(badge).toHaveAttribute('data-confidence-badge', 'labeled');
   await expect(badge.locator('[data-lucide="gauge"]')).toHaveCount(1);
   await setDemoSettingsOpen(page, true);
   await inspector.getByRole('button', { name: 'Reset' }).click();
@@ -2041,7 +2041,7 @@ test('round-trips ConfidenceBadge appearance and band controls through reset and
   await expect(appearance).toHaveJSProperty('value', 'compact');
   await expect(badge).toHaveText('82%');
   await expect(badge).toHaveAttribute('data-band', 'assumed');
-  await expect(badge).toHaveAttribute('data-appearance', 'compact');
+  await expect(badge).toHaveAttribute('data-confidence-badge', 'compact');
   await set(value, '55');
   await expect(badge).toHaveText('55%');
   await expect(badge).toHaveAttribute('data-band', 'partial');
@@ -2703,7 +2703,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   // HS2-A0Q6G6: a verified row shows the compact confidence pill; changing the score
   // updates its percentage and band, and unscored removes it.
   const confidence = inspector.locator('wa-select[name="confidence"]');
-  const confidencePill = row.locator('[data-component="confidence-badge"]');
+  const confidencePill = row.locator('[data-confidence-badge]');
   const setConfidence = (value: string) =>
     confidence.evaluate((node: HTMLElement & { value: string }, next) => {
       node.value = next;
@@ -2730,7 +2730,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await feedbackNeeded.click();
   await expect(row).toContainText('Fix selection synchronization');
   await expect(row).toContainText('Verified');
-  await expect(row.locator('[data-component="blocked-badge"]')).toHaveText('Blocked');
+  await expect(row.locator('[data-blocked-badge]')).toHaveText('Blocked');
   // Rows use the colored (filled) status variant like the inspector (HS2-Y3H2Z5).
   await expect(row.locator('[data-component="status-badge"]')).toHaveAttribute('data-appearance', 'filled');
   await expect(row.locator('[data-component="status-badge"] [data-component="badge"]')).toHaveAttribute(
@@ -2929,13 +2929,13 @@ test('presents note kinds and round-trips reader and Markdown editor composition
     ['scored-partial', 55, 'partial'],
     ['scored-low', 32, 'unverified'],
   ] as const) {
-    const badge = noteById(id).locator('.note-card__header-end [data-component="confidence-badge"]');
+    const badge = noteById(id).locator('.note-card__header-end [data-confidence-badge]');
     await expect(badge).toHaveAttribute('data-band', band);
     await expect(badge).toHaveAccessibleName(`Confidence ${value} percent`);
     await expect(badge.locator('[data-lucide="gauge"]')).toBeVisible();
   }
   for (const id of ['status', 'feedback', 'draft'])
-    await expect(noteById(id).locator('[data-component="confidence-badge"]')).toHaveCount(0);
+    await expect(noteById(id).locator('[data-confidence-badge]')).toHaveCount(0);
   const standaloneNote = noteById('regular');
   const feedbackNote = noteById('feedback'),
     activityNote = noteById('activity');
@@ -5170,7 +5170,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(blockedReason).toBeFocused();
   await blockedReason.fill('Waiting for API review.');
   await blockedReason.blur();
-  await expect(inspector.locator('[data-component="blocked-badge"]')).toHaveText('Blocked');
+  await expect(inspector.locator('[data-blocked-badge]')).toHaveText('Blocked');
   await expect(inspector.getByText('Waiting for API review.')).toBeVisible();
   const blockedSection = inspector.locator('.ticket-info-panel__blocked-section');
   const detailsSection = inspector.locator('.ticket-info-panel__details-section');

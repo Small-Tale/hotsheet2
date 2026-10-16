@@ -123,13 +123,14 @@ export function StatusBadge({
   );
 }
 
-/** The solid neutral "Blocked" marker beside a ticket's status. */
+/**
+ * The solid neutral "Blocked" marker beside a ticket's status. Kerf's `Badge` is the root; its
+ * identity is the `data-blocked-badge` root attribute (HS2-PQHN1J), so there is no wrapper.
+ */
 export function BlockedBadge({ compact = false }: { compact?: boolean }) {
   return (
-    <span data-component="blocked-badge">
-      <Badge appearance="solid" size={compact ? 'compact' : 'default'}>
-        Blocked
-      </Badge>
-    </span>
+    <Badge appearance="solid" size={compact ? 'compact' : 'default'} rootAttributes={{ 'data-blocked-badge': 'true' }}>
+      Blocked
+    </Badge>
   );
 }

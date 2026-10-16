@@ -380,10 +380,8 @@ describe('TicketRow', () => {
         blocked: true,
       }),
     );
-    expect(markup).toContain('data-component="blocked-badge"');
-    expect(markup.indexOf('data-component="status-badge"')).toBeLessThan(
-      markup.indexOf('data-component="blocked-badge"'),
-    );
+    expect(markup).toContain('data-blocked-badge=');
+    expect(markup.indexOf('data-component="status-badge"')).toBeLessThan(markup.indexOf('data-blocked-badge='));
   });
 
   it('shows an animated yellow activity indicator only for a live claim lease', () => {
@@ -540,8 +538,7 @@ describe('TicketRow', () => {
     for (const status of ['completed', 'verified'] as const) {
       for (const presentation of ['list', 'column'] as const) {
         const markup = String(TicketRow({ ...base, status, presentation }));
-        expect(markup).toContain('data-component="confidence-badge"');
-        expect(markup).toContain('data-appearance="compact"');
+        expect(markup).toContain('data-confidence-badge="compact"');
         expect(markup).toContain('data-band="assumed"');
         expect(markup).toContain('aria-label="Confidence 82 percent"');
         expect(markup).toContain('data-lucide="gauge"');

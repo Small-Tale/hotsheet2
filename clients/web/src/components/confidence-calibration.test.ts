@@ -62,7 +62,7 @@ describe('ConfidenceCalibration (HS2-Q1WCCY)', () => {
     expect(recent).toContain('Unscored');
     expect(recent).toContain('Awaiting outcome');
     expect(recent).toContain('data-outcome="reopened"');
-    expect(recent).toContain('data-component="confidence-badge"');
+    expect(recent).toContain('data-confidence-badge=');
   });
 
   it('shows loading, error, and empty states', () => {

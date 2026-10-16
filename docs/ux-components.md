@@ -1420,7 +1420,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   - `StatusPicker`
   - `StatusBadge` — **built**: readable status text on a Kerf `Badge` whose semantic tone
     follows the status (HS2-3FMK0T), optional reinforcing Lucide icon, filled/plain appearances,
-    and regular/compact sizing; every public variant is exposed with unit and bidirectional `/ux-demo` coverage
+    and regular/compact sizing; every public variant is exposed with unit and bidirectional `/ux-demo` coverage.
+    `BlockedBadge` renders Kerf's solid `Badge` directly, identified by `data-blocked-badge`
+    (HS2-PQHN1J). The interactive trigger's native-button reset stays app-owned until Kerf offers
+    a Badge menu trigger (`KF-PHGQ6D`)
   - `ConfidenceCalibration` — **built** (`components/confidence-calibration.tsx`,
     HS2-Q1WCCY): a project's per-band calibration table, with a reopen-rate bar and
     recent completions. Its `/ux-demo` entry exposes the report, empty, loading, and error
@@ -1434,7 +1437,9 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   - `ConfidenceBadge` — **built** (`components/confidence-badge.tsx`, HS2-A0Q6G6): the
     banded AI completion confidence. The `compact` pill is used on note cards and ticket
     list/board summaries; `labeled` is used in the inspector/reader header. Its own
-    `/ux-demo` entry exposes both appearances across all four rubric bands
+    `/ux-demo` entry exposes both appearances across all four rubric bands. Kerf's `Badge`
+    is the root (HS2-PQHN1J): its `icon`, `title`, labeled-image `label`, and `rootAttributes`
+    (`data-confidence-badge`, `data-band`, `data-confidence`) replace the former wrapper span
   - assignee/reviewer/claim fields when supported
   - capability-aware validation and unsupported-field explanation
 - `TicketDetailsSection` — section header remains outside its visually distinct

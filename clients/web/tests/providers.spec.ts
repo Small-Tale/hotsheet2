@@ -10480,7 +10480,7 @@ test('shows Blocked only when the ticket has a visible blocked reason', async ({
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
-  await expect(ticket.locator('[data-component="blocked-badge"]')).toHaveCount(0);
+  await expect(ticket.locator('[data-blocked-badge]')).toHaveCount(0);
   await ticket.screenshot({ path: 'target/visual-captures/hs2-e3c530-edge-without-reason.png' });
   await page.route(/\/tickets(?:\?.*)?$/, (route) =>
     route.request().method() === 'GET'
@@ -10490,7 +10490,7 @@ test('shows Blocked only when the ticket has a visible blocked reason', async ({
       : route.fallback(),
   );
   await page.reload();
-  await expect(ticket.locator('[data-component="blocked-badge"]')).toHaveText('Blocked');
+  await expect(ticket.locator('[data-blocked-badge]')).toHaveText('Blocked');
   await ticket.screenshot({ path: 'target/visual-captures/hs2-e3c530-visible-blocked-reason.png' });
 });
 
@@ -11008,7 +11008,7 @@ test('shows the compact confidence pill on completed list rows and board cards a
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
-  const pillOf = (slug: string) => page.locator(`[data-ticket-slug="${slug}"] [data-component="confidence-badge"]`);
+  const pillOf = (slug: string) => page.locator(`[data-ticket-slug="${slug}"] [data-confidence-badge]`);
   const assertPills = async (score: string, band: string) => {
     const pill = pillOf('HS2-DONE01');
     await expect(pill).toHaveText(score);
@@ -11032,7 +11032,7 @@ test('shows the compact confidence pill on completed list rows and board cards a
   // The pill sits on the metadata line with the other pills, at chip height.
   const doneRow = page.locator('[data-ticket-slug="HS2-DONE01"][data-component="ticket-list-row"]').first();
   await expect(doneRow).toHaveAttribute('data-presentation', 'list');
-  await expect(doneRow.locator('.ticket-list-row__metadata [data-component="confidence-badge"]')).toHaveCount(1);
+  await expect(doneRow.locator('.ticket-list-row__metadata [data-confidence-badge]')).toHaveCount(1);
   await page.screenshot({ path: 'target/visual-captures/claude/hs2-a0q6g6-list-wide.png' });
 
   await page.getByLabel('Columns View').click();
@@ -17005,7 +17005,7 @@ test('aligns Status controls without duplicating badge insets and preserves sele
   await inspector.getByRole('button', { name: 'Block ticket' }).click();
   await inspector.getByRole('textbox', { name: 'Blocked Reason' }).fill('Waiting for review');
   await inspector.getByRole('textbox', { name: 'Blocked Reason' }).blur();
-  await expect(inspector.locator('[data-status-line] [data-component="blocked-badge"]')).toBeVisible();
+  await expect(inspector.locator('[data-status-line] [data-blocked-badge]')).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 700 });
   await expectStatusGeometry(inspector);
   await captureInspectorStatus(inspector, 'target/visual-captures/hs2-ahadnk-status-blocked-narrow.png');
@@ -28416,8 +28416,7 @@ test('shows recorded completion confidence through the real server (HS2-DWTJ43)'
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
     const inspector = page.locator('#app-right-rail'),
       header = inspector.locator('.ticket-inspector__confidence'),
-      noteBadge = (id: string) =>
-        inspector.locator(`article[data-note-id="${id}"] [data-component="confidence-badge"]`);
+      noteBadge = (id: string) => inspector.locator(`article[data-note-id="${id}"] [data-confidence-badge]`);
     // Completed-ticket header shows the derived latest score, not the historical one.
     await expect(header).toHaveAttribute('data-confidence', '86');
     await expect(header.getByRole('img', { name: 'Confidence 86 percent' })).toBeVisible();
@@ -28428,7 +28427,7 @@ test('shows recorded completion confidence through the real server (HS2-DWTJ43)'
     await expect(noteBadge(first.id)).toHaveAccessibleName('Confidence 48 percent');
     await expect(noteBadge(second.id)).toHaveAttribute('data-band', 'assumed');
     await expect(noteBadge(second.id)).toHaveText('86%');
-    await expect(inspector.locator('[data-component="confidence-badge"]')).toHaveCount(3);
+    await expect(inspector.locator('[data-confidence-badge]')).toHaveCount(3);
     await inspector.locator(`article[data-note-id="${second.id}"]`).scrollIntoViewIfNeeded();
     await inspector.screenshot({ path: 'target/visual-captures/claude/hs2-dwtj43-inspector-wide.png' });
     // Timeline: each completion carries the score it was completed with.
@@ -28464,9 +28463,7 @@ test('shows recorded completion confidence through the real server (HS2-DWTJ43)'
     await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
     const reader = page.getByRole('dialog').filter({ has: page.locator('[data-component="ticket-inspector"]') });
     await expect(reader.locator('.ticket-inspector__confidence')).toHaveAttribute('data-confidence', '93');
-    await expect(reader.locator(`article[data-note-id="${first.id}"] [data-component="confidence-badge"]`)).toHaveText(
-      '48%',
-    );
+    await expect(reader.locator(`article[data-note-id="${first.id}"] [data-confidence-badge]`)).toHaveText('48%');
     await page.waitForTimeout(500); // let the reader's open transition settle before capturing evidence
     await reader.screenshot({ path: 'target/visual-captures/claude/hs2-dwtj43-reader-wide.png' });
     await page.setViewportSize({ width: 390, height: 844 });
@@ -28523,9 +28520,9 @@ test('reflects a corrected or cleared note confidence from the real server (HS2-
     const inspector = page.locator('#app-right-rail'),
       header = inspector.locator('.ticket-inspector__confidence'),
       card = inspector.locator(`[data-component="note-card"][data-note-id="${scored.id}"]`),
-      badge = card.locator('[data-component="confidence-badge"]'),
+      badge = card.locator('[data-confidence-badge]'),
       rowPill = page.locator(
-        `[data-component="ticket-list-row"][data-ticket-slug="${created.slug}"] [data-component="confidence-badge"]`,
+        `[data-component="ticket-list-row"][data-ticket-slug="${created.slug}"] [data-confidence-badge]`,
       );
     const openTicket = async () => {
       await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();

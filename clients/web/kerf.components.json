@@ -2376,9 +2376,8 @@
       },
       "boundaries": {
         "rootClass": null,
-        "publicClasses": ["confidence-badge"],
-        "publicTokens": [],
-        "placeableClasses": ["confidence-badge"]
+        "publicClasses": [],
+        "publicTokens": []
       },
       "accessibility": {
         "obligations": []

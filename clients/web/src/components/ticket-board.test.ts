@@ -223,7 +223,7 @@ describe('TicketBoard', () => {
         ],
       }),
     );
-    expect(markup.match(/data-component="confidence-badge"/gu)).toHaveLength(1);
+    expect(markup.match(/data-confidence-badge=/gu)).toHaveLength(1);
     expect(markup).toMatch(/data-ticket-slug="HS2-DONE"[\s\S]*data-band="unverified"/u);
   });
 });

@@ -1,6 +1,5 @@
 import { Badge } from '@kerfjs/ui/badge';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Row } from '@kerfjs/ui/row';
 import { Gauge } from 'lucide';
 
 export type ConfidenceBand = 'verified' | 'assumed' | 'partial' | 'unverified';
@@ -33,9 +32,10 @@ export const CONFIDENCE_BAND_TONES = {
  * icon + percentage) is the pill used on note cards and ticket list/board summaries
  * (HS2-A0Q6G6); `labeled` ("Confidence NN%") is reserved for the inspector/reader header.
  *
- * Kerf's `Badge` owns the pill, its band tone, and both sizes, so there is no stylesheet
- * (HS2-MBFKJF). The bare outer span only carries the band identity, accessible name, and
- * explanatory title, which Badge cannot take yet (KF-2YKKK5).
+ * Kerf's `Badge` is the root and there is no stylesheet (HS2-MBFKJF, HS2-PQHN1J): it owns the
+ * pill, band tone, both sizes, the leading icon, the explanatory `title`, the labeled-image
+ * accessible name, and the band identity in `rootAttributes` (KF-2YKKK5). Select the badge by
+ * `data-confidence-badge` (its appearance); Badge protects `data-component`.
  */
 export function ConfidenceBadge({
   value,
@@ -47,22 +47,19 @@ export function ConfidenceBadge({
   const band = confidenceBand(value);
   const labeled = appearance === 'labeled';
   return (
-    <span
-      class="confidence-badge"
-      data-component="confidence-badge"
-      data-appearance={appearance}
-      data-band={band}
-      data-confidence={value}
-      role="img"
-      aria-label={`Confidence ${value} percent`}
+    <Badge
+      tone={CONFIDENCE_BAND_TONES[band]}
+      size={labeled ? 'default' : 'compact'}
+      icon={<LucideIcon icon={Gauge} name="gauge" />}
+      label={`Confidence ${value} percent`}
       title={`AI-reported confidence ${value}%: ${confidenceBandLabels[band]}`}
+      rootAttributes={{
+        'data-confidence-badge': appearance,
+        'data-band': band,
+        'data-confidence': String(value),
+      }}
     >
-      <Badge tone={CONFIDENCE_BAND_TONES[band]} size={labeled ? 'default' : 'compact'} ariaHidden>
-        <Row gap="2xs" vAlign="middle">
-          <LucideIcon icon={Gauge} name="gauge" size={labeled ? 's' : 'xs'} />
-          <span>{labeled ? `Confidence ${value}%` : `${value}%`}</span>
-        </Row>
-      </Badge>
-    </span>
+      {labeled ? `Confidence ${value}%` : `${value}%`}
+    </Badge>
   );
 }

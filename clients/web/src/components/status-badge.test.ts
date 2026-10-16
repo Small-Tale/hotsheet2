@@ -16,6 +16,10 @@ describe('StatusBadge', () => {
     expect(String(BlockedBadge({ compact: true }))).toMatch(
       /data-appearance="solid"[^>]*data-size="compact"[^>]*>Blocked/u,
     );
+    // Badge is the root; its identity is a root attribute, not a wrapper span (HS2-PQHN1J).
+    expect(String(BlockedBadge({}))).toMatch(
+      /^<span data-blocked-badge="true" class="kui-badge" data-component="badge"[^>]*>Blocked<\/span>$/u,
+    );
     const trigger = String(StatusBadge({ status: 'started', interactive: true, actionLabel: 'Change Status' }));
     expect(trigger).toMatch(/^<button type="button" class="status-badge"/u);
     expect(trigger).toContain('data-interactive="true"');
