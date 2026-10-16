@@ -71,6 +71,21 @@ export function workspaceSearchFit(
 }
 
 /**
+ * Point the title-text observer at the header's current title (HS2-2RD2M9): a replaced title drops the
+ * old target, an unchanged title keeps its observation, and a missing title observes nothing.
+ */
+export function retargetIdentityTextObserver<T>(
+  observer: Pick<MutationObserver, 'disconnect'> & { observe(target: T, options: MutationObserverInit): void },
+  current: T | null,
+  next: T | null,
+): T | null {
+  if (next === current) return current;
+  observer.disconnect();
+  if (next) observer.observe(next, { characterData: true, childList: true, subtree: true });
+  return next;
+}
+
+/**
  * Measured search widths live in one adopted rule scoped to this toolbar's search slot. Like the
  * mount root, a stylesheet survives Kerf morphs; unlike inherited properties on the root, a rule
  * change restyles only the slot instead of every descendant of the app (HS2-KCXMAT).
@@ -94,9 +109,16 @@ export function wireWorkspaceToolbarVisibility(
 ): () => void {
   let header: HTMLElement | null = null;
   let observedSearchSlot: HTMLElement | null = null;
+  let observedIdentity: HTMLElement | null = null;
   const sizingStyle = searchSizingStyle(root, selector);
   const measuredWidths = new WeakMap<HTMLElement, { width: number; sizing: string | null }>();
   const resize = new ResizeObserver(() => {
+    refresh();
+  });
+  // A view change can replace only the title's text (Kerf morphs it as character data), which neither
+  // resizes the header nor touches an observed attribute. Remeasure on it so the fit yields groups to
+  // the More menu instead of leaving the title ellipsized for its previous, shorter text (HS2-2RD2M9).
+  const identityText = new MutationObserver(() => {
     refresh();
   });
 
@@ -140,6 +162,7 @@ export function wireWorkspaceToolbarVisibility(
       if (observedSearchSlot) resize.observe(observedSearchSlot);
     }
     const identity = header.querySelector<HTMLElement>('.workspace-header__identity');
+    observedIdentity = retargetIdentityTextObserver<HTMLElement>(identityText, observedIdentity, identity);
     const groups = [
       header.querySelector<HTMLElement>('.view-mode-switcher'),
       header.querySelector<HTMLElement>('.workspace-header__sort-group'),
@@ -260,6 +283,8 @@ export function wireWorkspaceToolbarVisibility(
     if (header) resize.unobserve(header);
     if (observedSearchSlot) resize.unobserve(observedSearchSlot);
     observedSearchSlot = null;
+    identityText.disconnect();
+    observedIdentity = null;
     header = next;
     if (header) {
       resize.observe(header);
@@ -288,6 +313,7 @@ export function wireWorkspaceToolbarVisibility(
   findHeader();
   return () => {
     mutations.disconnect();
+    identityText.disconnect();
     resize.disconnect();
     sizingStyle.dispose();
   };

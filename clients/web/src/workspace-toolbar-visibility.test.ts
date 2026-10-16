@@ -1,6 +1,11 @@
 import { expect, it } from 'vitest';
 
-import { applyWorkspaceSearchSizing, workspaceSearchFit, workspaceToolbarHidden } from './workspace-toolbar-visibility';
+import {
+  applyWorkspaceSearchSizing,
+  retargetIdentityTextObserver,
+  workspaceSearchFit,
+  workspaceToolbarHidden,
+} from './workspace-toolbar-visibility';
 
 it('uses strict lower and inclusive upper width boundaries', () => {
   expect(workspaceToolbarHidden(223, 224)).toBe(true);
@@ -44,4 +49,37 @@ it('writes search sizing to its morph-stable rule without redundant style writes
   expect(applyWorkspaceSearchSizing(style, { ...sizing, width: 320 })).toBe(true);
   expect(properties.get('--hs-workspace-search-slot-width')).toBe('320px');
   expect(writes).toBe(3);
+});
+
+it('follows the title through replacement, repeat, removal, and return to remeasure on text changes (HS2-2RD2M9)', () => {
+  const calls: string[] = [];
+  const observer = {
+    disconnect() {
+      calls.push('disconnect');
+    },
+    observe(target: string, options: MutationObserverInit) {
+      calls.push(`observe ${target} ${JSON.stringify(options)}`);
+    },
+  };
+  const options = JSON.stringify({ characterData: true, childList: true, subtree: true });
+  let current = retargetIdentityTextObserver(observer, null, 'queue-title');
+  expect(current).toBe('queue-title');
+  expect(calls).toEqual(['disconnect', `observe queue-title ${options}`]);
+  // The same title element (only its text changed) keeps the existing observation.
+  calls.length = 0;
+  current = retargetIdentityTextObserver(observer, current, 'queue-title');
+  expect(calls).toEqual([]);
+  // A replaced title moves the observation; a header without a title observes nothing.
+  current = retargetIdentityTextObserver(observer, current, 'all-tickets-title');
+  current = retargetIdentityTextObserver(observer, current, null);
+  expect(current).toBeNull();
+  current = retargetIdentityTextObserver(observer, current, null);
+  expect(retargetIdentityTextObserver(observer, current, 'queue-title')).toBe('queue-title');
+  expect(calls).toEqual([
+    'disconnect',
+    `observe all-tickets-title ${options}`,
+    'disconnect',
+    'disconnect',
+    `observe queue-title ${options}`,
+  ]);
 });

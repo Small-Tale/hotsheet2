@@ -76,7 +76,7 @@ function inScope(ticket: (typeof rows)[number], url: URL) {
 }
 
 /** Mock one project whose ticket endpoint scopes rows the way the server does, recording each search scope. */
-async function mockSearchProject(page: Page) {
+async function mockSearchProject(page: Page, views: Array<{ id: string; name: string; query: string }> = []) {
   const searches: string[] = [];
   await page.route('**/*', async (route) => {
     const request = route.request(),
@@ -120,6 +120,7 @@ async function mockSearchProject(page: Page) {
         },
       });
     }
+    if (path.endsWith('/views')) return route.fulfill({ json: views });
     if (path.endsWith('/repository/status'))
       return route.fulfill({
         json: { branch: 'main', ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0, clean: true },
@@ -134,7 +135,6 @@ async function mockSearchProject(page: Page) {
       path.endsWith('/connections') ||
       path.endsWith('/commands') ||
       path.endsWith('/command-runs') ||
-      path.endsWith('/views') ||
       path.endsWith('/corrupt-tickets')
     )
       return route.fulfill({ json: [] });
@@ -336,3 +336,45 @@ for (const width of [1280, 390]) {
     await expect(toolbar).toHaveCount(0);
   });
 }
+
+/** Whether the workspace title shows its whole text rather than an ellipsis. */
+const titleFits = (page: Page) =>
+  page.locator('#workspace-page-title').evaluate((title) => {
+    const text = title.querySelector<HTMLElement>('.kui-toolbar-text__text') ?? (title as HTMLElement);
+    return text.scrollWidth <= text.clientWidth;
+  });
+
+test('keeps the workspace title whole when a search changes it to a longer title at 1280px (HS2-2RD2M9)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 820 });
+  await mockSearchProject(page, [{ id: 'long-view', name: 'Release blockers for the spring launch', query: 'badge' }]);
+  const title = page.locator('#workspace-page-title'),
+    utility = page.getByRole('group', { name: 'View Actions' }),
+    more = page.getByRole('button', { name: 'More Workspace Controls' });
+  await page.getByRole('button', { name: 'Search tickets' }).click();
+  await page.getByRole('searchbox', { name: 'Search tickets' }).fill('badge');
+  await expect(title).toHaveText('Queue');
+  await expect(utility).toBeVisible();
+  // All Tickets changes only the title's text; the header remeasures and yields actions to More.
+  await page.getByRole('toolbar', { name: 'Search Scope' }).getByRole('button', { name: 'All Tickets' }).click();
+  await expect(title).toHaveText('All Tickets');
+  await expect.poll(() => titleFits(page)).toBe(true);
+  await expect(utility).toBeHidden();
+  await expect(more).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-2rd2m9-all-tickets-search-1280.png' });
+  // Back to the shorter title, every action returns.
+  await page.getByRole('toolbar', { name: 'Search Scope' }).getByRole('button', { name: 'Queue' }).click();
+  await expect(title).toHaveText('Queue');
+  await expect(utility).toBeVisible();
+  await expect.poll(() => titleFits(page)).toBe(true);
+  // A long saved-view name stays whole too.
+  await page
+    .getByRole('navigation', { name: 'Ticket Views' })
+    .getByRole('button', { name: /^Release blockers/ })
+    .click();
+  await expect(title).toHaveText('Release blockers for the spring launch');
+  await expect.poll(() => titleFits(page)).toBe(true);
+  await expect(page.getByText('Searching tickets')).toHaveCount(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-2rd2m9-long-view-search-1280.png' });
+});

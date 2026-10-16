@@ -1247,6 +1247,8 @@ preview/download, server directory browser) are separate design work.
   star, sort, view switcher, then title yield. The editor fills the remaining space;
   search stays beside a persistent More menu when controls yield. More includes the same capability-checked
   Up Next toggle and keeps the empty search open while the menu is used (HS2-NZK4KA).
+  The fit remeasures when only the title's text changes (switching a search to All Tickets
+  or to a long saved-view name), so controls yield before the title ellipsizes (HS2-2RD2M9).
   Typing or clearing a query keeps search filling the available space through reactive rerenders.
   The measured widths live on the stable app root as CSS variables, so Kerf can morph the
   search slot without resetting its width or triggering a style-observer render loop.
