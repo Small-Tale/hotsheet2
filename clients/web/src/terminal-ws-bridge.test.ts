@@ -1,5 +1,6 @@
-import { once } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import { createServer } from 'node:http';
+import { PassThrough } from 'node:stream';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket, { WebSocketServer } from 'ws';
@@ -142,6 +143,34 @@ describe('terminal WebSocket bridge', () => {
     expect(isProjectWebSocketPath('/__hotsheet/project-api/p/ws/sync?client=c')).toBe(true);
     expect(isProjectWebSocketPath('/vite-hmr')).toBe(false);
     expect(isProjectWebSocketPath(undefined)).toBe(false);
+  });
+
+  it('survives a browser resetting a project socket mid-resolve and leaves foreign sockets alone (HS2-D95TXJ)', async () => {
+    const httpServer = new EventEmitter();
+    let finishResolve: (target: string | undefined) => void = () => undefined;
+    installProjectWebSocketBridge(
+      { httpServer },
+      () => undefined,
+      () =>
+        new Promise<string | undefined>((resolve) => {
+          finishResolve = resolve;
+        }),
+    );
+    const projectSocket = new PassThrough(),
+      foreignSocket = new PassThrough();
+    httpServer.emit('upgrade', { url: '/__hotsheet/project-api/p/ws/sync' }, projectSocket, Buffer.alloc(0));
+    httpServer.emit('upgrade', { url: '/vite-hmr' }, foreignSocket, Buffer.alloc(0));
+    // Node's HTTP server leaves upgraded sockets without an error listener; a reset while the target
+    // is still resolving used to throw out of the dev server's event loop.
+    expect(() =>
+      projectSocket.emit('error', Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' })),
+    ).not.toThrow();
+    expect(projectSocket.destroyed).toBe(true);
+    // A resolve that settles after the reset neither writes to nor upgrades the dead socket.
+    finishResolve('ws://127.0.0.1:1/ws/sync');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(foreignSocket.listenerCount('error')).toBe(0);
+    foreignSocket.destroy();
   });
 
   it('forwards live project change frames without exposing the upstream secret', async () => {

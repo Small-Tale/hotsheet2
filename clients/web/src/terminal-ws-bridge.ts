@@ -64,14 +64,23 @@ export function installProjectWebSocketBridge(
 ): void {
   const browserServer = new WebSocketServer({ noServer: true });
   server.httpServer?.on('upgrade', (request, socket, head) => {
+    // Another upgrade handler (Vite's HMR socket) owns every other path.
+    if (!isProjectWebSocketPath(request.url)) return;
+    // Node's HTTP server drops its own socket error handler when it hands an upgrade off. A browser
+    // that resets the connection while the target is still resolving (a test closing its page, a
+    // tab reload) then emitted an unhandled 'error' that crashed the whole dev server, failing every
+    // later browser test with ERR_CONNECTION_REFUSED (HS2-D95TXJ). Own the socket's errors from here.
+    socket.on('error', () => {
+      socket.destroy();
+    });
     void browserProjectWebSocketTarget(request.url, resolveTerminal, resolveSync)
       .then((target) => {
+        if (socket.destroyed) return;
         if (!target) {
-          // Another upgrade handler (Vite's HMR socket) owns every other path. A Hot Sheet path
-          // the bridge cannot resolve (no open session, unreachable server) used to be left
-          // pending forever, so the browser waited out its handshake timeout on each retry;
+          // A Hot Sheet path the bridge cannot resolve (no open session, unreachable server) used to
+          // be left pending forever, so the browser waited out its handshake timeout on each retry;
           // refuse it at once instead (HS2-CNWHW3).
-          if (isProjectWebSocketPath(request.url)) refuseUpgrade(socket);
+          refuseUpgrade(socket);
           return;
         }
         browserServer.handleUpgrade(request, socket, head, (browser) => {

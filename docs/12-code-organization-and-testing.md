@@ -612,7 +612,13 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   keeps the large `providers.spec.ts` from serializing one shard; the suite has no serial
   or `beforeAll`-coupled tests. `browser-full-report` merges the shard blobs into one HTML
   report (artifact `playwright-report-full`) and prints the slowest browser tests via
-  `scripts/test-profile.mjs`. The job verifies the full suite during a ticket's
+  `scripts/test-profile.mjs`. The shards install only Chromium and WebKit, cached under
+  `~/.cache/ms-playwright` per Playwright version, with three bounded install attempts.
+  An opt-in profiler that needs another browser (Firefox, `profile:pty:firefox`) skips at
+  file level so the default suite never launches it. The shards share one Vite dev server per
+  shard; its project WebSocket bridge owns every upgraded socket's errors, so a browser
+  reset mid-handshake cannot crash the server and fail the rest of the shard with
+  `ERR_CONNECTION_REFUSED`. The job verifies the full suite during a ticket's
   `final_testing` handoff, so the local requirement is the affected specs only. The
   `@ci-smoke` group stays as the fast early signal. Until the job has run green on main
   it is `continue-on-error` (HS2-6H4M85 makes it required), so check its result

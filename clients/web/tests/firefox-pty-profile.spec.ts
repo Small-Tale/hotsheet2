@@ -5,6 +5,10 @@ import { expect, test } from '@playwright/test';
 import { realTicketServer } from './real-ticket-server';
 
 test.use({ browserName: 'firefox' });
+// An opt-in profiler. Skip at file level: an in-test skip still launched Firefox for the `page`
+// fixture first, so the default suite failed wherever Firefox is not installed, such as the CI
+// shards that install only Chromium and WebKit (HS2-D95TXJ).
+test.skip(process.env.HOTSHEET_FIREFOX_PTY_PROFILE !== '1', 'Run npm run profile:pty:firefox.');
 
 const PYTHON_PROFILE = [
   'import sys,time',
@@ -47,7 +51,6 @@ for (const viewport of [
   { name: 'desktop-dom', width: 1440, height: 900, forceDom: true },
 ]) {
   test('profiles Firefox real PTY output at ' + viewport.name + ' (HS2-527G7P)', async ({ page }, testInfo) => {
-    test.skip(process.env.HOTSHEET_FIREFOX_PTY_PROFILE !== '1', 'Run npm run profile:pty:firefox.');
     test.setTimeout(120_000);
     const server = await realTicketServer();
     try {

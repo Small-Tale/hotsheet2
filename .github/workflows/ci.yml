@@ -343,16 +343,32 @@ jobs:
         working-directory: clients/web
         run: npm ci
 
+      - name: Read the installed Playwright version
+        id: playwright
+        working-directory: clients/web
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # The suite launches only Chromium and WebKit: the Firefox PTY profiler is opt-in and skips
+      # at file level unless HOTSHEET_FIREFOX_PTY_PROFILE=1.
+      - name: Cache the Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}-chromium-webkit
+
       - name: Install Playwright Chromium, WebKit, and Linux dependencies
         working-directory: clients/web
         run: |
-          for attempt in 1 2; do
+          # A cached browser is not downloaded again; --with-deps still installs the apt packages.
+          # apt mirrors can stall, so each attempt is bounded and a transient failure is retried.
+          for attempt in 1 2 3; do
             if timeout --kill-after=15s 8m npx playwright install --with-deps chromium webkit; then
               exit 0
             fi
             echo "::warning::Playwright dependency install attempt $attempt failed or timed out"
+            sleep $((attempt * 15))
           done
-          echo "::error::Playwright dependency install failed after two bounded attempts"
+          echo "::error::Playwright dependency install failed after three bounded attempts"
           exit 1
 
       - name: Run shard ${{ matrix.shard }} of the full suite
