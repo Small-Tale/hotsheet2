@@ -595,7 +595,9 @@ they need live credentials:
   only with `HOTSHEET_GITLAB_LIVE_WRITE=1`.
 - **Jira:** the adapter cannot transition status, so
   `jira_live_reopen_bounds_latest_confidence` reads an operator-prepared reopened issue
-  (`HOTSHEET_JIRA_LIVE_REOPENED_ISSUE`, `..._EXPECTED`).
+  (`HOTSHEET_JIRA_LIVE_REOPENED_ISSUE`, `..._EXPECTED`). The one-time opt-in helper
+  `jira_live_prepare_reopened_issue` prepares that issue through the REST transitions API
+  and prints both values ([12 §12.7.6](12-code-organization-and-testing.md#1276-fixtures--ci)).
 
 | Note capability                | git                      | GitHub Issues                        | GitLab                                   | Jira                                           |
 | ------------------------------ | ------------------------ | ------------------------------------ | ---------------------------------------- | ---------------------------------------------- |

@@ -587,7 +587,17 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   attachments, HS2-KE18XX); GitLab `HOTSHEET_GITLAB_LIVE_TOKEN`, `HOTSHEET_GITLAB_LIVE_PROJECT`,
   `HOTSHEET_GITLAB_LIVE_WRITE`; benchmark targets `HOTSHEET_BENCH_JIRA_ISSUES`,
   `HOTSHEET_BENCH_JIRA_ISSUE`, `HOTSHEET_BENCH_GITLAB_ISSUE`. In CI the same names come
-  from repository Actions secrets; a test whose variables are unset skips. The normal `check` job
+  from repository Actions secrets; a test whose variables are unset skips.
+  The reopen pair is prepared once by the opt-in helper `jira_live_prepare_reopened_issue`
+  (HS2-JNM42S), which needs `HOTSHEET_JIRA_LIVE_WRITE=1` and refuses any issue outside
+  `HOTSHEET_JIRA_LIVE_PROJECT`. It creates an `[HS2 benchmark] reopened-history` issue
+  (label `hs2-benchmark`; optional `HOTSHEET_JIRA_LIVE_ISSUE_TYPE`, default `Task`), posts a
+  Hot Sheet scored comment, takes the issue's own workflow transitions to Done, back to a
+  not-done status, and to Done again, optionally posts a later scored comment
+  (`HOTSHEET_JIRA_LIVE_REOPENED_LATER_SCORE`), and prints the two `.env` lines. Without a
+  later score the expectation is `none`, because the pre-reopen score must not survive:
+  `op run --env-file=.env -- cargo nextest run -p hotsheet-extsync --all-features --run-ignored only -E 'test(jira_live_prepare_reopened_issue)'`.
+  The normal `check` job
   runs a bounded Chromium Playwright smoke group covering deep links, gallery save retry,
   image/video freehand strokes, feedback replies, popup anchoring, concurrent autosave,
   bulk provider projection, and ticket context menus (HS2-28MBS9, HS2-ZHN7XS). Locally, agents run

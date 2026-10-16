@@ -1675,6 +1675,360 @@ mod tests {
         assert_eq!(ticket.latest_confidence, expected);
     }
 
+    /// The Hot Sheet scored comment payload the prep helper posts: exactly what
+    /// `add_note_with_metadata` writes, so the live read parses the same trailer.
+    fn scored_note_payload(text: &str, score: u8, note_id: hotsheet_model::Ulid) -> Value {
+        let confidence = hotsheet_model::Confidence::new(u64::from(score)).expect("0-100 score");
+        json!({ "body": text_to_adf(&note_trailer::compose_comment(text, Some(confidence), note_id)) })
+    }
+
+    /// The transition the prep helper takes next from a `GET issue/{key}/transitions`
+    /// response, and whether it lands in the wanted category. Toward done it takes a direct
+    /// done-category transition, or else steps through an in-progress one (workflows that
+    /// forbid To Do -> Done). Toward reopen it takes any not-done target, preferring
+    /// in-progress over to-do.
+    fn next_transition(transitions: &Value, want_done: bool) -> Option<(String, bool)> {
+        let candidates = transitions
+            .get("transitions")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|transition| {
+                let id = transition.get("id").and_then(Value::as_str)?;
+                let category = transition
+                    .pointer("/to/statusCategory/key")
+                    .and_then(Value::as_str)?;
+                Some((id.to_owned(), category.to_owned()))
+            })
+            .collect::<Vec<_>>();
+        let find = |category: &str| {
+            candidates
+                .iter()
+                .find(|(_, candidate)| candidate == category)
+                .map(|(id, _)| id.clone())
+        };
+        if want_done {
+            find("done")
+                .map(|id| (id, true))
+                .or_else(|| find("indeterminate").map(|id| (id, false)))
+        } else {
+            find("indeterminate")
+                .or_else(|| find("new"))
+                .map(|id| (id, true))
+        }
+    }
+
+    /// The live prep helper only writes with an explicit opt-in.
+    fn require_write_opt_in(write: Option<&str>) -> Result<(), String> {
+        (write == Some("1"))
+            .then_some(())
+            .ok_or_else(|| "set HOTSHEET_JIRA_LIVE_WRITE=1 to create the reopened issue".into())
+    }
+
+    /// The live prep helper only touches issues of the configured project.
+    fn require_project_issue(project: &str, key: &str) -> Result<(), String> {
+        match key
+            .strip_prefix(project)
+            .and_then(|rest| rest.strip_prefix('-'))
+        {
+            Some(number) if !number.is_empty() && number.bytes().all(|b| b.is_ascii_digit()) => {
+                Ok(())
+            }
+            _ => Err(format!(
+                "{key} is not an issue of HOTSHEET_JIRA_LIVE_PROJECT={project}; refusing to write"
+            )),
+        }
+    }
+
+    /// The score the prepared issue should report: the pre-reopen score never survives the
+    /// reopen (`note_trailer::latest_confidence` keeps only notes strictly after the last
+    /// reopen), so only a scored comment written after the final re-completion counts.
+    fn expected_reopened_confidence(later_score: Option<u8>) -> Option<u8> {
+        later_score
+    }
+
+    fn status_category(provider: &JiraProvider, key: &str) -> String {
+        let response = provider
+            .request(
+                "GET",
+                &provider.endpoint(&format!("issue/{key}?fields=status")),
+                None,
+            )
+            .unwrap();
+        provider
+            .json::<Value>(response)
+            .unwrap()
+            .pointer("/fields/status/statusCategory/key")
+            .and_then(Value::as_str)
+            .expect("issue status category")
+            .to_owned()
+    }
+
+    /// Transition `key` until it is (or is no longer) in the done category, discovering
+    /// transition ids from the issue's own workflow. Returns the transition ids taken.
+    fn drive_status(provider: &JiraProvider, key: &str, want_done: bool) -> Vec<String> {
+        let mut taken = Vec::new();
+        for _ in 0..4 {
+            if (status_category(provider, key) == "done") == want_done {
+                return taken;
+            }
+            let url = provider.endpoint(&format!("issue/{key}/transitions"));
+            let transitions = provider
+                .json::<Value>(provider.request("GET", &url, None).unwrap())
+                .unwrap();
+            let (id, _) = next_transition(&transitions, want_done).unwrap_or_else(|| {
+                panic!("{key} has no transition toward done={want_done}: {transitions}")
+            });
+            provider
+                .request("POST", &url, Some(&json!({"transition":{"id":id}})))
+                .unwrap();
+            taken.push(id);
+        }
+        panic!("{key} did not reach done={want_done} within 4 transitions");
+    }
+
+    /// HS2-JNM42S: one-time preparation of the issue `jira_live_reopen_bounds_latest_confidence`
+    /// reads. Creates an `[HS2 benchmark]` issue in `HOTSHEET_JIRA_LIVE_PROJECT`, posts a
+    /// scored comment, moves it Done -> reopened -> Done (optionally a later scored comment
+    /// from `HOTSHEET_JIRA_LIVE_REOPENED_LATER_SCORE`), and prints the `.env` lines.
+    #[test]
+    #[ignore = "writes a real Jira issue; set HOTSHEET_JIRA_LIVE_BASE_URL/PROJECT/EMAIL/TOKEN and HOTSHEET_JIRA_LIVE_WRITE=1"]
+    fn jira_live_prepare_reopened_issue() {
+        require_write_opt_in(std::env::var("HOTSHEET_JIRA_LIVE_WRITE").ok().as_deref()).unwrap();
+        let env = |name: &str| std::env::var(name).unwrap_or_else(|_| panic!("{name}"));
+        let project = env("HOTSHEET_JIRA_LIVE_PROJECT");
+        let later_score = std::env::var("HOTSHEET_JIRA_LIVE_REOPENED_LATER_SCORE")
+            .ok()
+            .map(|value| value.parse::<u8>().expect("later score 0-100"));
+        let provider = JiraProvider::live(JiraConfig {
+            connection_id: "jira-live".into(),
+            project_key: project.clone(),
+            base_url: env("HOTSHEET_JIRA_LIVE_BASE_URL"),
+            email: env("HOTSHEET_JIRA_LIVE_EMAIL"),
+            token: env("HOTSHEET_JIRA_LIVE_TOKEN"),
+            default: false,
+        });
+        let found = provider
+            .json::<Value>(
+                provider
+                    .request(
+                        "GET",
+                        &provider.endpoint(&format!("project/{project}")),
+                        None,
+                    )
+                    .unwrap(),
+            )
+            .unwrap();
+        assert_eq!(
+            found.get("key").and_then(Value::as_str),
+            Some(project.as_str()),
+            "the live site's project must be HOTSHEET_JIRA_LIVE_PROJECT"
+        );
+        let issue_type = std::env::var("HOTSHEET_JIRA_LIVE_ISSUE_TYPE").unwrap_or("Task".into());
+        let created: JiraCreated = provider
+            .json(
+                provider
+                    .request(
+                        "POST",
+                        &provider.endpoint("issue"),
+                        Some(&json!({"fields":{
+                            "project":{"key":project},
+                            "summary":"[HS2 benchmark] reopened-history",
+                            "description":text_to_adf("Prepared by jira_live_prepare_reopened_issue (HS2-JNM42S) for jira_live_reopen_bounds_latest_confidence."),
+                            "issuetype":{"name":issue_type},
+                            "labels":["hs2-benchmark"]
+                        }})),
+                    )
+                    .unwrap(),
+            )
+            .unwrap();
+        let key = created.key;
+        require_project_issue(&project, &key).unwrap();
+        let comment_url = provider.endpoint(&format!("issue/{key}/comment"));
+        // Distinct second-level timestamps keep comment < done < reopen < done < comment.
+        let pause = || std::thread::sleep(std::time::Duration::from_millis(1500));
+        provider
+            .request(
+                "POST",
+                &comment_url,
+                Some(&scored_note_payload(
+                    "Shipped before the reopen.",
+                    80,
+                    hotsheet_model::Ulid::new(),
+                )),
+            )
+            .unwrap();
+        pause();
+        let done = drive_status(&provider, &key, true);
+        pause();
+        let reopened = drive_status(&provider, &key, false);
+        pause();
+        let redone = drive_status(&provider, &key, true);
+        if let Some(score) = later_score {
+            pause();
+            provider
+                .request(
+                    "POST",
+                    &comment_url,
+                    Some(&scored_note_payload(
+                        "Shipped again after the reopen.",
+                        score,
+                        hotsheet_model::Ulid::new(),
+                    )),
+                )
+                .unwrap();
+        }
+        println!(
+            "jira-live-prep {key}: transitions done={done:?} reopen={reopened:?} done={redone:?}"
+        );
+        println!("HOTSHEET_JIRA_LIVE_REOPENED_ISSUE={key}");
+        println!(
+            "HOTSHEET_JIRA_LIVE_REOPENED_EXPECTED={}",
+            expected_reopened_confidence(later_score)
+                .map_or_else(|| "none".to_owned(), |score| score.to_string())
+        );
+    }
+
+    #[test]
+    fn prep_scored_comment_parses_back_as_a_hot_sheet_score() {
+        let note_id = hotsheet_model::Ulid::new();
+        let payload = scored_note_payload("Shipped before the reopen.", 80, note_id);
+        let body = adf_to_text(payload.get("body"));
+        assert!(body.contains(&note_trailer::note_marker(note_id)));
+        assert_eq!(
+            note_trailer::parse_comment(&body),
+            ("Shipped before the reopen.".to_owned(), Some(80))
+        );
+    }
+
+    #[test]
+    fn prep_transition_selection_follows_status_categories() {
+        let transitions = |targets: &[(&str, &str)]| {
+            json!({"transitions": targets.iter().map(|(id, category)| json!({
+                "id": id, "name": id, "to": {"statusCategory": {"key": category}}
+            })).collect::<Vec<_>>()})
+        };
+        let all = transitions(&[("11", "new"), ("21", "indeterminate"), ("31", "done")]);
+        assert_eq!(next_transition(&all, true), Some(("31".into(), true)));
+        assert_eq!(next_transition(&all, false), Some(("21".into(), true)));
+        let no_done = transitions(&[("11", "new"), ("21", "indeterminate")]);
+        assert_eq!(next_transition(&no_done, true), Some(("21".into(), false)));
+        let to_do_only = transitions(&[("11", "new"), ("31", "done")]);
+        assert_eq!(
+            next_transition(&to_do_only, false),
+            Some(("11".into(), true))
+        );
+        let done_only = transitions(&[("31", "done")]);
+        assert_eq!(next_transition(&done_only, false), None);
+        assert_eq!(next_transition(&transitions(&[("11", "new")]), true), None);
+        assert_eq!(next_transition(&json!({}), true), None);
+        assert_eq!(
+            next_transition(&json!({"transitions":[{"id":"9"}]}), true),
+            None,
+            "a transition without a target category is never taken"
+        );
+    }
+
+    /// The driver steps To Do -> In Progress -> Done when a workflow has no direct edge,
+    /// then reopens with one transition, posting each discovered id.
+    #[test]
+    fn prep_drives_status_through_discovered_transitions() {
+        let status = |category: &str| {
+            response(
+                200,
+                json!({"fields":{"status":{"statusCategory":{"key":category}}}}),
+            )
+        };
+        let edges = |targets: &[(&str, &str)]| {
+            response(
+                200,
+                json!({"transitions": targets.iter().map(|(id, category)| json!({
+                    "id": id, "to": {"statusCategory": {"key": category}}
+                })).collect::<Vec<_>>()}),
+            )
+        };
+        let no_content = || HttpResponse {
+            status: 204,
+            headers: HashMap::new(),
+            body: String::new(),
+        };
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(
+                vec![
+                    status("new"),
+                    edges(&[("21", "indeterminate")]),
+                    no_content(),
+                    status("indeterminate"),
+                    edges(&[("11", "new"), ("31", "done")]),
+                    no_content(),
+                    status("done"),
+                    status("done"),
+                    edges(&[("21", "indeterminate"), ("11", "new")]),
+                    no_content(),
+                    status("indeterminate"),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        });
+        let jira = provider(fake.clone());
+        assert_eq!(drive_status(&jira, "ENG-7", true), ["21", "31"]);
+        assert_eq!(drive_status(&jira, "ENG-7", false), ["21"]);
+        let requests = fake.requests.lock_or_recover();
+        assert!(requests[0].1.ends_with("/issue/ENG-7?fields=status"));
+        assert_eq!(requests[1].0, "GET");
+        assert!(requests[1].1.ends_with("/issue/ENG-7/transitions"));
+        assert_eq!(requests[2].0, "POST");
+        assert_eq!(requests[2].3, Some(json!({"transition":{"id":"21"}})));
+        assert_eq!(requests[5].3, Some(json!({"transition":{"id":"31"}})));
+        assert_eq!(requests[9].3, Some(json!({"transition":{"id":"21"}})));
+        assert_eq!(requests.len(), 11);
+    }
+
+    #[test]
+    fn prep_guards_require_opt_in_and_the_configured_project() {
+        assert!(require_write_opt_in(Some("1")).is_ok());
+        assert!(require_write_opt_in(Some("true")).is_err());
+        assert!(require_write_opt_in(None).is_err());
+        assert!(require_project_issue("HS2T", "HS2T-42").is_ok());
+        for key in [
+            "ENG-42", "HS2TX-42", "HS2T-", "HS2T-4a", "HS2T42", "hs2t-42",
+        ] {
+            assert!(require_project_issue("HS2T", key).is_err(), "{key}");
+        }
+    }
+
+    /// The printed expectation matches the provider's own bound on the prepared timeline:
+    /// score 80, Done, reopened, Done, then an optional later score.
+    #[test]
+    fn prep_expected_score_matches_the_reopen_bound() {
+        let note = |created: &str, score: u8| ApiNote {
+            id: created.into(),
+            kind: NoteKind::Regular,
+            created_at: created.into(),
+            edited_at: created.into(),
+            summary: None,
+            confidence: Some(score),
+            feedback_for: None,
+            ai_feedback: hotsheet_model::AiFeedback::from_legacy_text("Shipped."),
+            human_edited: false,
+            actor: None,
+            text: "Shipped.".into(),
+        };
+        let reopen = Some("2026-08-26T00:00:03.000+0000");
+        let before = note("2026-08-26T00:00:00.000+0000", 80);
+        for later in [None, Some(66)] {
+            let mut notes = vec![before.clone()];
+            if let Some(score) = later {
+                notes.push(note("2026-08-26T00:00:06.000+0000", score));
+            }
+            assert_eq!(
+                note_trailer::latest_confidence(Status::Completed, &notes, reopen),
+                expected_reopened_confidence(later)
+            );
+        }
+    }
+
     fn scored_comment(id: &str, score: u64, created: &str) -> Value {
         let body = text_to_adf(&note_trailer::compose_comment(
             "Shipped.",
