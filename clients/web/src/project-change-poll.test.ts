@@ -255,6 +255,8 @@ describe('project change WebSocket stream', () => {
       .mockResolvedValueOnce(response(4))
       .mockResolvedValueOnce(response(4))
       .mockResolvedValueOnce(replay)
+      // The rest of the fallback window is long-polled (HS2-BX4MCH) before the upgrade retry.
+      .mockResolvedValueOnce(response(6))
       .mockResolvedValueOnce(response(6));
     const refresh = vi.fn().mockResolvedValue(undefined),
       onEvents = vi.fn().mockResolvedValue(undefined),
@@ -369,6 +371,95 @@ describe('project change WebSocket stream', () => {
     expect(delays[2]).toBeLessThanOrEqual(2_000);
     expect(delays[3]).toBeLessThanOrEqual(2_000);
     expect(Math.max(...delays)).toBeLessThanOrEqual(2_000);
+  });
+
+  // HS2-BX4MCH: without a WebSocket, an event that arrives after an early-returning replay
+  // page used to wait out the rest of the retry window (up to `maxRetryMs`) undelivered.
+  const event = (cursor: number, kind: string) => ({ cursor, store: 'local', kind, id: '01', slug: 'HS2-ONE' });
+  const failingSocket = (sockets: FakeSocket[]) => () => {
+    const socket = new FakeSocket();
+    sockets.push(socket);
+    queueMicrotask(() => {
+      socket.fail();
+    });
+    return socket as unknown as WebSocket;
+  };
+
+  it('keeps long-polling through the retry window after a fallback page delivers events', async () => {
+    const halted = { cursor: 5, events: [event(5, 'terminal_halted')], overflow: false },
+      cleared = { cursor: 6, events: [event(6, 'terminal_halted')], overflow: false },
+      waiting = deferred<undefined>(),
+      pollEvents = vi
+        .fn()
+        .mockResolvedValueOnce(response(4))
+        .mockResolvedValueOnce(halted)
+        .mockResolvedValueOnce(cleared)
+        .mockResolvedValueOnce(response(6));
+    const onEvents = vi.fn().mockResolvedValue(undefined),
+      wait = vi.fn(() => waiting.promise),
+      sockets: FakeSocket[] = [];
+    const stop = startProjectChangeStream({
+      client: { pollEvents, changeWebSocketUrl: () => 'ws://localhost/project/ws/sync' },
+      refresh: vi.fn().mockResolvedValue(undefined),
+      onEvents,
+      wait,
+      retryMs: 5_000,
+      openWebSocket: failingSocket(sockets),
+    });
+    await vi.waitFor(() => {
+      expect(wait).toHaveBeenCalledTimes(1);
+    });
+    // Both event pages were delivered by consecutive long polls, before any sleep.
+    expect(onEvents.mock.calls.map(([page]) => page as PollResponse)).toEqual([halted, cleared]);
+    expect(pollEvents).toHaveBeenCalledTimes(4);
+    const timeouts = pollEvents.mock.calls.slice(1).map((call) => call[2] as number);
+    expect(pollEvents.mock.calls.slice(1).map((call) => call[0] as number)).toEqual([4, 5, 6]);
+    expect(timeouts[0]).toBe(5_000);
+    for (const [index, timeout] of timeouts.entries()) {
+      expect(timeout).toBeGreaterThan(0);
+      if (index > 0) expect(timeout).toBeLessThanOrEqual(timeouts[index - 1]);
+    }
+    // Only the empty page ends the window early, and it still sleeps out the remainder.
+    expect((wait.mock.calls[0] as unknown[])[0]).toBeGreaterThan(0);
+    expect(sockets).toHaveLength(1);
+    stop();
+    waiting.resolve(undefined);
+  });
+
+  it('ends the fallback window on time even while every page carries events', async () => {
+    let now = 1_000_000;
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now),
+      sockets: FakeSocket[] = [],
+      timeouts: number[] = [];
+    let cursor = 0,
+      stop = () => {};
+    const pollEvents = vi.fn((since: number | undefined, _signal?: AbortSignal, timeoutMs?: number) => {
+      if (since === undefined) return Promise.resolve(response(0));
+      timeouts.push(timeoutMs ?? -1);
+      now += 300;
+      cursor += 1;
+      if (sockets.length === 2) stop();
+      return Promise.resolve({ cursor, events: [event(cursor, 'activity')], overflow: false });
+    });
+    const wait = vi.fn().mockResolvedValue(undefined);
+    try {
+      stop = startProjectChangeStream({
+        client: { pollEvents, changeWebSocketUrl: () => 'ws://localhost/project/ws/sync' },
+        refresh: vi.fn().mockResolvedValue(undefined),
+        wait,
+        retryMs: 500,
+        openWebSocket: failingSocket(sockets),
+      });
+      await vi.waitFor(() => {
+        expect(sockets).toHaveLength(2);
+      });
+      // A 500 ms window holds two 300 ms polls, then retries the upgrade with no extra sleep.
+      expect(timeouts.slice(0, 2)).toEqual([500, 200]);
+      expect(wait).not.toHaveBeenCalled();
+    } finally {
+      stop();
+      clock.mockRestore();
+    }
   });
 });
 

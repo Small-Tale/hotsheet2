@@ -363,13 +363,23 @@ export function runProjectChangeTransport(options: ProjectChangeTransportOptions
       if (!outcome.reason) options.onError?.(new Error('Project change WebSocket closed.'));
       const fallbackStarted = Date.now();
       try {
-        const replay = await poll(cursor, retryDelay);
-        // The replay cursor is authoritative. An empty gap after a failed upgrade does not
-        // invalidate ticket state; forcing a refresh here made every unsupported WebSocket
-        // retry wake the entire workspace. Ticket events and overflow still reconcile through
-        // consume(), while an actual poll outage falls back to the fresh-handshake path below.
-        cursor = replay.cursor;
-        await consume(replay);
+        // Long-poll through the whole retry window (HS2-BX4MCH). A page that returns early
+        // with events is followed by another long poll for the rest of the window, so an
+        // event that arrives later in it is delivered at once. Sleeping out the remainder
+        // instead delayed it by up to `maxRetryMs`. Only an empty page ends the window early:
+        // either the server held the poll for the whole window, or it ignored the timeout. In
+        // that case the bounded wait below still rate-limits the retries.
+        for (;;) {
+          const replay = await poll(cursor, Math.max(0, retryDelay - (Date.now() - fallbackStarted)));
+          // The replay cursor is authoritative. An empty gap after a failed upgrade does not
+          // invalidate ticket state; forcing a refresh here made every unsupported WebSocket
+          // retry wake the entire workspace. Ticket events and overflow still reconcile through
+          // consume(), while an actual poll outage falls back to the fresh-handshake path below.
+          cursor = replay.cursor;
+          await consume(replay);
+          if (wasAborted(controller.signal)) return;
+          if (replay.events.length === 0 || Date.now() - fallbackStarted >= retryDelay) break;
+        }
       } catch (reason) {
         options.onError?.(reason);
         cursor = undefined;

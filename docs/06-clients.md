@@ -1606,7 +1606,11 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   one zero-wait replay after the socket opens closes the subscribe race; an idle healthy
   socket issues no further requests. Disconnects, rejected upgrades, and older servers
   fall back through `/ws/poll`, replay the missing cursor span, and retry WebSocket with
-  capped exponential backoff. Replay refreshes ticket state only when it carries a ticket
+  capped exponential backoff. Each backoff window is long-polled rather than slept
+  (HS2-BX4MCH): a page that returns early with events is followed by another long poll
+  for the rest of the window, so a later event is delivered at once instead of waiting out
+  the backoff. Only an empty early page (a server that ignores the poll timeout) sleeps
+  for the rest of the window. Replay refreshes ticket state only when it carries a ticket
   invalidation or overflow; an empty replay after a rejected upgrade does not wake the
   workspace. The existing local-mutation barrier,
   acknowledgement suppression, overflow recovery, and event consumers receive the same

@@ -231,7 +231,14 @@ describe('change-stream worker runtime (HS2-SH9179)', () => {
     const posted: ChangeStreamWorkerMessage[] = [];
     const sockets: FakeSocket[] = [];
     const polls: string[] = [];
-    const pages = [page(10), page(10), page(12, [event(11), event(12)]), page(14, [event(13), event(14)])];
+    const pages = [
+      page(10),
+      page(10),
+      page(12, [event(11), event(12)]),
+      // HS2-BX4MCH: the fallback keeps long-polling its retry window after an event page.
+      page(12),
+      page(14, [event(13), event(14)]),
+    ];
     const fetcher = vi.fn(async (url: string | URL | Request) => {
       polls.push(url instanceof Request ? url.url : url.toString());
       const next = pages.shift();
@@ -269,13 +276,15 @@ describe('change-stream worker runtime (HS2-SH9179)', () => {
     sockets[0].message(event(undefined, 'announce'));
     sockets[0].message(event(13)); // gap: 12 missing
     await vi.waitFor(() => {
-      expect(polls).toHaveLength(3);
+      expect(polls.length).toBeGreaterThanOrEqual(3);
     });
     // The gap closes the socket and replays from the last applied cursor.
     expect(polls[2]).toContain('since=11');
     await vi.waitFor(() => {
       expect(sockets).toHaveLength(2);
     });
+    expect(polls[3]).toContain('since=12');
+    expect(polls[3]).not.toContain('timeout_ms=0&');
     const delivered = batches(posted).flatMap((batch) =>
       batch.kind === 'deliver'
         ? batch.response.events.map((item) => item.cursor ?? item.kind)
@@ -287,9 +296,9 @@ describe('change-stream worker runtime (HS2-SH9179)', () => {
     );
     sockets[1].open();
     await vi.waitFor(() => {
-      expect(polls).toHaveLength(4);
+      expect(polls).toHaveLength(5);
     });
-    expect(polls[3]).toContain('since=12');
+    expect(polls[4]).toContain('timeout_ms=0&since=12');
     runtime.dispose();
     expect(sockets[1].readyState).toBe(3);
   });
