@@ -121,12 +121,7 @@
   white-space: pre-wrap;
 }
 .ai-conversation__message-meta {
-  display: flex;
   margin-top: remify(7.2px);
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--wa-space-2xs);
 }
 .ai-conversation__message-meta .ai-conversation__usage {
   margin: 0;

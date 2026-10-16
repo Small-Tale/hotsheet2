@@ -14,6 +14,7 @@ import { List } from '@kerfjs/ui/list';
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
+import { Row } from '@kerfjs/ui/row';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Toolbar } from '@kerfjs/ui/toolbar';
@@ -202,11 +203,15 @@ export function ConversationMessages({
             </ul>
           )}
           {(message.usage || (message.role === 'assistant' && feedbackAvailable && message.status === 'completed')) && (
+            // A Kerf Row spreads the usage line and the feedback actions; the footer keeps only its
+            // offset from the message (HS2-ZA1EAG).
             <footer class="ai-conversation__message-meta">
-              {message.usage && <UsageLine usage={message.usage} />}
-              {message.role === 'assistant' && feedbackAvailable && message.status === 'completed' && (
-                <AIContentFeedback tool={tool} feedbackTarget={`conversation:${message.id}`} />
-              )}
+              <Row hAlign="space-between" vAlign="middle" gap="2xs" wrap>
+                {message.usage && <UsageLine usage={message.usage} />}
+                {message.role === 'assistant' && feedbackAvailable && message.status === 'completed' && (
+                  <AIContentFeedback tool={tool} feedbackTarget={`conversation:${message.id}`} />
+                )}
+              </Row>
             </footer>
           )}
         </ContentItem>

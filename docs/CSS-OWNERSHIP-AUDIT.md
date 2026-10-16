@@ -247,6 +247,18 @@ frame` insets its rows. Also retained are the phrasing-only copy grids inside ro
   - The search help's inline `code` chips and the date helper's responsive tracks.
 - The icon picker's square 36px toggles wait on `KF-K60RRM`; `HS2-XA11C3` adopts it.
 
+## Notes, conversation, and editor update (HS2-ZA1EAG)
+
+- TicketNotes stacks its header, cards or empty line, composer, and add row in a Kerf `List`. Only the
+  section's `min-width` remains. The render is pixel-identical at 1280 and 390px.
+- The AIConversation message meta row is a Kerf `Row` (space-between, wrap). Its footer keeps only
+  the offset from the message.
+- The Add tag field stays a styled native datalist input. A prototype Kerf `Combobox` inside the
+  `AnchoredSurface` clipped its listbox to one row (`KF-C558Z9`); `HS2-C32ERK` adopts the fix.
+- The remaining generic chrome is split into its own tickets: NoteCard (`HS2-CDPB73`), AIConversation
+  (`HS2-4RXG6W`), and MarkdownEditor, TicketInfoPanel surfaces, and TicketFieldConflict versions
+  (`HS2-26E5P7`).
+
 ## Terminal chrome update (HS2-1Q6GER)
 
 - `TerminalDashboard` empty, loading, and message copy now composes Kerf `List` and `Text`. The

@@ -1,8 +1,6 @@
-/* The notes section: header, cards or empty state, composer, and add row in one stack. */
+/* The notes section's stack is a Kerf List (HS2-ZA1EAG); the section may shrink in its column. */
 .ticket-notes {
-  display: grid;
   min-width: 0;
-  gap: var(--kui-space-xs);
 }
 /* The empty-state line takes the surrounding column's inline margin, as the note cards do. */
 .ticket-notes .ticket-notes__empty-inset {

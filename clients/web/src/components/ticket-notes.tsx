@@ -53,17 +53,19 @@ function PlaceholderNote({ kind }: { kind: 'activity' | 'regular' }) {
 function TicketNotesPlaceholder() {
   return (
     <section class="ticket-notes" data-component="ticket-notes" data-placeholder="true">
-      <ListHeader
-        label="Notes"
-        actionDisabled
-        action="add-ticket-note"
-        actionLabel="Add Note"
-        actionIcon={<LucideIcon icon={Plus} name="plus" />}
-      />
-      <List gap="m">
-        <PlaceholderNote kind="activity" />
-        <PlaceholderNote kind="activity" />
-        <PlaceholderNote kind="regular" />
+      <List gap="xs">
+        <ListHeader
+          label="Notes"
+          actionDisabled
+          action="add-ticket-note"
+          actionLabel="Add Note"
+          actionIcon={<LucideIcon icon={Plus} name="plus" />}
+        />
+        <List gap="m">
+          <PlaceholderNote kind="activity" />
+          <PlaceholderNote kind="activity" />
+          <PlaceholderNote kind="regular" />
+        </List>
       </List>
     </section>
   );
@@ -156,62 +158,65 @@ function LoadedTicketNotes({
     );
   const activeFeedbackNoteId = latestExchangeNote?.kind === 'feedback_needed' ? latestExchangeNote.id : undefined;
   return (
+    // A Kerf List stacks the header, cards or empty line, composer, and add row (HS2-ZA1EAG).
     <section class="ticket-notes" data-component="ticket-notes">
-      {canAdd && !composing ? (
-        <ListHeader
-          label="Notes"
-          count={visibleNotes.length}
-          countLabel={`${visibleNotes.length} ${visibleNotes.length === 1 ? 'note' : 'notes'}`}
-          action="add-ticket-note"
-          actionLabel="Add Note"
-          actionIcon={<LucideIcon icon={Plus} name="plus" />}
-        />
-      ) : (
-        <ListHeader
-          label="Notes"
-          count={visibleNotes.length}
-          countLabel={`${visibleNotes.length} ${visibleNotes.length === 1 ? 'note' : 'notes'}`}
-        />
-      )}
-      {visibleNotes.length > 0 ? (
-        <List className="ticket-notes__list" gap={rem(0.55)}>
-          {visibleNotes.map((note) => (
-            <NoteCard
-              {...note}
-              density="compact"
-              editable={canEdit}
-              deletable={canDelete}
-              editing={note.id === editingNoteId}
-              editingPrompt={note.id === editingNoteId && isFeedbackPromptEdit(note.id)}
-              draft={note.id === editingNoteId ? noteDraft : undefined}
-              readerMode={readerMode}
-              respondToFeedback={!readerMode && note.id === activeFeedbackNoteId}
-              inlineReplies={inlineFeedbackReplies[note.id]}
-              selectedChoices={feedbackChoiceSelections[note.id]}
-              attachmentContext={attachmentContext}
-            />
-          ))}
-        </List>
-      ) : (
-        !composing && (
-          <div class="ticket-notes__empty-inset">
-            <ListInsetText sides="rl">
-              <Text variant="span" tone="quiet">
-                <em class="ticket-notes__empty">No notes added.</em>
-              </Text>
-            </ListInsetText>
-          </div>
-        )
-      )}
-      {composing && <NoteComposer value={composerDraft} />}
-      {canAdd && !composing && (
-        <ListItem
-          className="ticket-notes__add"
-          action="add-ticket-note"
-          icon={<LucideIcon icon={Plus} name="plus" />}
-          label="Add Note"
-        />
-      )}
+      <List gap="xs">
+        {canAdd && !composing ? (
+          <ListHeader
+            label="Notes"
+            count={visibleNotes.length}
+            countLabel={`${visibleNotes.length} ${visibleNotes.length === 1 ? 'note' : 'notes'}`}
+            action="add-ticket-note"
+            actionLabel="Add Note"
+            actionIcon={<LucideIcon icon={Plus} name="plus" />}
+          />
+        ) : (
+          <ListHeader
+            label="Notes"
+            count={visibleNotes.length}
+            countLabel={`${visibleNotes.length} ${visibleNotes.length === 1 ? 'note' : 'notes'}`}
+          />
+        )}
+        {visibleNotes.length > 0 ? (
+          <List className="ticket-notes__list" gap={rem(0.55)}>
+            {visibleNotes.map((note) => (
+              <NoteCard
+                {...note}
+                density="compact"
+                editable={canEdit}
+                deletable={canDelete}
+                editing={note.id === editingNoteId}
+                editingPrompt={note.id === editingNoteId && isFeedbackPromptEdit(note.id)}
+                draft={note.id === editingNoteId ? noteDraft : undefined}
+                readerMode={readerMode}
+                respondToFeedback={!readerMode && note.id === activeFeedbackNoteId}
+                inlineReplies={inlineFeedbackReplies[note.id]}
+                selectedChoices={feedbackChoiceSelections[note.id]}
+                attachmentContext={attachmentContext}
+              />
+            ))}
+          </List>
+        ) : (
+          !composing && (
+            <div class="ticket-notes__empty-inset">
+              <ListInsetText sides="rl">
+                <Text variant="span" tone="quiet">
+                  <em class="ticket-notes__empty">No notes added.</em>
+                </Text>
+              </ListInsetText>
+            </div>
+          )
+        )}
+        {composing && <NoteComposer value={composerDraft} />}
+        {canAdd && !composing && (
+          <ListItem
+            className="ticket-notes__add"
+            action="add-ticket-note"
+            icon={<LucideIcon icon={Plus} name="plus" />}
+            label="Add Note"
+          />
+        )}
+      </List>
     </section>
   );
 }
