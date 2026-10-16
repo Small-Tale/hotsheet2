@@ -1,5 +1,6 @@
 import type { Capabilities, CodeReview, FullTicket } from './api';
 import type { InspectorTab } from './components/ticket-inspector';
+import type { InlineFeedbackReply } from './feedback-replies';
 
 export interface TicketReaderFrame {
   id: string;
@@ -34,6 +35,12 @@ export interface TicketReaderEditState {
   blockedReasonDraft: string;
   blockedReasonBase: string;
   blockedReasonGeneration: number;
+  /** This frame's own new-note composer (HS2-ANRXAE); a new note is a submission, not an autosaved edit. */
+  composingNote: boolean;
+  newNoteDraft: string;
+  /** Inline feedback reply drafts and choice selections, keyed by note id within this frame (HS2-ANRXAE). */
+  inlineFeedbackReplies: Record<string, InlineFeedbackReply[]>;
+  feedbackChoiceSelections: Record<string, string[]>;
 }
 
 export function ticketReaderEditState(ticket: FullTicket): TicketReaderEditState {
@@ -49,6 +56,10 @@ export function ticketReaderEditState(ticket: FullTicket): TicketReaderEditState
     blockedReasonDraft: ticket.blocked_reason ?? '',
     blockedReasonBase: ticket.blocked_reason ?? '',
     blockedReasonGeneration: 0,
+    composingNote: false,
+    newNoteDraft: '',
+    inlineFeedbackReplies: {},
+    feedbackChoiceSelections: {},
   };
 }
 
@@ -157,4 +168,34 @@ export function ticketEditTarget(
 /** Whether a linked reader layer offers field editing: only the interactive top layer does (HS2-KRVWKF). */
 export function linkedReaderCanUpdate(frame: TicketReaderFrame, active: boolean): boolean {
   return active && frame.capabilities.update;
+}
+
+const NOTE_ADD_FIELDS = new Set(['note', 'note_kind']),
+  NOTE_EDIT_FIELDS = new Set(['note', 'note_id', 'edit_feedback_prompt']);
+
+/**
+ * Whether a linked reader's provider accepts `patch`: adding a note needs `notes`, editing one needs
+ * `note_edit`, and every other field needs `update` (HS2-ANRXAE).
+ */
+export function linkedReaderPatchAllowed(capabilities: Capabilities, patch: Record<string, unknown>): boolean {
+  const keys = Object.keys(patch).filter((key) => key !== 'expected_token');
+  if (keys.length > 0 && keys.every((key) => NOTE_ADD_FIELDS.has(key))) return capabilities.notes;
+  if (keys.includes('note_id') && keys.every((key) => NOTE_EDIT_FIELDS.has(key))) return capabilities.note_edit;
+  return capabilities.update;
+}
+
+/** The started phase a menu item selects, moving a ticket that is not yet Started to Started (HS2-ANRXAE). */
+export function startedPhasePatch(ticket: FullTicket | null | undefined, phase: string): Record<string, unknown> {
+  const patch: Record<string, unknown> = { started_phase: phase || null };
+  if (ticket?.status !== 'started') patch.status = 'started';
+  return patch;
+}
+
+/** Remove one frame's state for a note's feedback reply after it was answered (HS2-ANRXAE). */
+export function clearFrameFeedbackReply(edit: TicketReaderEditState, noteId: string): TicketReaderEditState {
+  return {
+    ...edit,
+    inlineFeedbackReplies: { ...edit.inlineFeedbackReplies, [noteId]: [] },
+    feedbackChoiceSelections: { ...edit.feedbackChoiceSelections, [noteId]: [] },
+  };
 }

@@ -119,8 +119,8 @@ describe('ticket field editor wiring (HS2-KAWNER)', () => {
     click({ target: nested, metaKey: false, ctrlKey: false, shiftKey: false }, choice);
     click({ target: choice, metaKey: false, ctrlKey: false, shiftKey: false }, { dataset: {} });
     expect(bindings.toggle.mock.calls).toEqual([
-      ['n', 'c', { additive: true, range: false }],
-      ['n', 'c', { additive: false, range: true }],
+      ['n', 'c', { additive: true, range: false }, choice],
+      ['n', 'c', { additive: false, range: true }, choice],
     ]);
   });
 });

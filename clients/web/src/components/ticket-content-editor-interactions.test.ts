@@ -33,16 +33,21 @@ describe('ticket content editor wiring (HS2-KM3DNM)', () => {
   it('routes the note composer open, draft, cancel, and submit', () => {
     const bindings = { open: vi.fn(), setDraft: vi.fn(), cancel: vi.fn(), submit: vi.fn() };
     wireNoteComposer({} as HTMLElement, bindings);
-    handler('click', 'add-ticket-note')({}, {});
-    handler('input', 'new-note-body')({}, { value: 'Draft' });
-    handler('click', 'cancel-new-note')({}, {});
+    const button = { id: 'button' },
+      field = { value: 'Draft' },
+      cancel = { id: 'cancel' },
+      form = { id: 'form' };
+    handler('click', 'add-ticket-note')({}, button);
+    handler('input', 'new-note-body')({}, field);
+    handler('click', 'cancel-new-note')({}, cancel);
     const submit = cancelable();
-    handler('submit', 'create-note-form')(submit, {});
-    expect(bindings.open).toHaveBeenCalledTimes(1);
-    expect(bindings.setDraft).toHaveBeenCalledWith('Draft');
-    expect(bindings.cancel).toHaveBeenCalledTimes(1);
+    handler('submit', 'create-note-form')(submit, form);
+    // Every gesture names its composer element so a linked reader frame owns its own composer (HS2-ANRXAE).
+    expect(bindings.open).toHaveBeenCalledWith(button);
+    expect(bindings.setDraft).toHaveBeenCalledWith('Draft', field);
+    expect(bindings.cancel).toHaveBeenCalledWith(cancel);
     expect(submit.preventDefault).toHaveBeenCalled();
-    expect(bindings.submit).toHaveBeenCalledTimes(1);
+    expect(bindings.submit).toHaveBeenCalledWith(form);
   });
 
   it('begins note edits only when the click or key qualifies and the note has an id', () => {

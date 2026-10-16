@@ -1848,8 +1848,14 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   its own provider grants `update`, the top layer edits title, category, priority, status, tags,
   Up Next, details, blocked reason, and notes, routing every write to that layer's owning
   project and qualified ticket identity. Title and tag edits flush before the layer closes; a
-  provider without `update` keeps the layer view-only. Adding or deleting notes, attachment
-  management, and started-phase edits remain workspace-reader-only for now. Each layer's
+  provider without `update` keeps the layer view-only. The top layer also adds notes (gated by
+  its provider's `notes` capability), deletes them (`note_delete`), and records git started
+  phases from its status menu when its ticket's own project serves it from a git source
+  (HS2-ANRXAE); the workspace reader offers the same started-phase submenu. Each linked layer
+  owns its new-note composer and its inline feedback replies and choice selections, so two
+  readers never share a draft, even for the same note id; a new note is submitted explicitly
+  and frame reply drafts are not session-persisted. Attachment management remains
+  workspace-reader-only for now (HS2-W8VEMP). Each layer's
   Code Review tab loads its own ticket's commits from its owning project when selected, shows
   the commit list, empty state, or load error like the workspace reader, and opens a commit's
   diff against that project (HS2-9Q4AFB).

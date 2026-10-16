@@ -37,7 +37,13 @@ import { INSPECTOR_AND_EDITOR_ACTIONS, INSPECTOR_AND_EDITOR_TARGETS } from '../i
 import { manuallyResizedTicketEditorHeight, saveTicketEditorSize, ticketEditorKind } from '../ticket-editor-size';
 import { noteEditPatch, type TicketFieldConflict } from '../ticket-field-reconciliation';
 import { type TicketPatch } from '../ticket-operations';
-import { ticketEditTarget, type TicketReaderFrame } from '../ticket-reader-stack';
+import {
+  clearFrameFeedbackReply,
+  reconcileTicketReaderFrame,
+  startedPhasePatch,
+  ticketEditTarget,
+  type TicketReaderFrame,
+} from '../ticket-reader-stack';
 import { type TicketTitleEditSurface, ticketTitleEditSurfaceOf } from '../ticket-title-editing';
 import { type TicketView } from '../ticket-views';
 import { data } from './dom';
@@ -68,6 +74,8 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly fieldConflict: Signal<TicketFieldConflict | undefined>;
   readonly canUpdateSelected: () => boolean;
   readonly canEditStartedPhaseSelected: () => boolean;
+  /** Whether a ticket of `connectionId` in project `projectId` records git started phases (HS2-ANRXAE). */
+  readonly canEditStartedPhaseFor: (projectId: string, connectionId: string) => boolean;
   /** The one surface whose title editor is open (HS2-2M5BBN). */
   readonly titleEditingSurface: Signal<TicketTitleEditSurface | undefined>;
   readonly activeTicketSurface: () => ParentNode;
@@ -160,6 +168,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     fieldConflict,
     canUpdateSelected,
     canEditStartedPhaseSelected,
+    canEditStartedPhaseFor,
     titleEditingSurface,
     activeTicketSurface,
     titleAutosave,
@@ -303,12 +312,17 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       'click',
       INSPECTOR_AND_EDITOR_ACTIONS.setInspectorStartedPhase.selector,
       (_event, target) => {
-        if (!canEditStartedPhaseSelected()) return;
+        // A linked reader frame records its own ticket's phase through its own project (HS2-ANRXAE).
+        const frame = linkedReaderFrame(target);
+        if (
+          frame
+            ? !frame.capabilities.update || !canEditStartedPhaseFor(frame.projectId, frame.ticket.connection_id)
+            : !canEditStartedPhaseSelected()
+        )
+          return;
         const phase = (target as HTMLElement).dataset.startedPhase;
         if (phase === undefined) return;
-        const patch: TicketPatch = { started_phase: phase || null };
-        if (selectedTicket.value?.status !== 'started') patch.status = 'started';
-        void updateSelectedTracked(patch);
+        void updateSelectedTracked(startedPhasePatch(frame?.ticket ?? selectedTicket.value, phase));
       },
     ),
   );
@@ -357,7 +371,27 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
           edit: { ...current.edit, blockedReasonDraft: value },
         }));
       },
+    ),
+    linkedNewNoteDraftInput = coalescedKeyedDraft<{ frameId: string; value: string }>(
+      ({ frameId }) => frameId,
+      ({ frameId, value }) => {
+        replaceLinkedReaderFrame(frameId, (current) => ({
+          ...current,
+          edit: { ...current.edit, newNoteDraft: value },
+        }));
+      },
     );
+  function setFrameComposer(frameId: string, composing: boolean, draft: string) {
+    replaceLinkedReaderFrame(frameId, (current) => ({
+      ...current,
+      edit: {
+        ...current.edit,
+        ...(composing ? { editingNoteId: undefined } : {}),
+        composingNote: composing,
+        newNoteDraft: draft,
+      },
+    }));
+  }
   lifetime.add(() => {
     flushDraftInputs();
   });
@@ -647,7 +681,19 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   }
   lifetime.add(
     wireNoteComposer(document.body, {
-      open: () => {
+      open: (target) => {
+        const frame = linkedReaderFrame(target);
+        if (frame) {
+          // A linked reader frame owns its composer, so it never borrows the workspace draft (HS2-ANRXAE).
+          if (!frame.capabilities.notes) return;
+          setFrameComposer(frame.id, true, '');
+          queueMicrotask(() =>
+            document
+              .querySelector<HTMLElement>(`[data-reader-frame-id="${CSS.escape(frame.id)}"] [name="new-note-body"]`)
+              ?.focus(),
+          );
+          return;
+        }
         if (!canAddNotes()) return;
         editingNoteId.value = undefined;
         composingNote.value = true;
@@ -655,17 +701,36 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         scheduleProjectSessionPersistence();
         queueMicrotask(() => activeTicketSurface().querySelector<HTMLElement>('[name="new-note-body"]')?.focus());
       },
-      setDraft: (value) => {
-        newNoteDraftInput.schedule(value);
+      setDraft: (value, target) => {
+        const frame = linkedReaderFrame(target);
+        if (frame) linkedNewNoteDraftInput.schedule({ frameId: frame.id, value });
+        else newNoteDraftInput.schedule(value);
       },
-      cancel: () => {
+      cancel: (target) => {
         flushDraftInputs();
+        const frame = linkedReaderFrame(target);
+        if (frame) {
+          setFrameComposer(frame.id, false, '');
+          return;
+        }
         composingNote.value = false;
         newNoteDraft.value = '';
         scheduleProjectSessionPersistence();
       },
-      submit: () => {
+      submit: (target) => {
         flushDraftInputs();
+        const frame = linkedReaderFrame(target);
+        if (frame) {
+          const text = frame.edit.newNoteDraft.trim();
+          if (!text || !frame.capabilities.notes) return;
+          // The new note lands on the frame's own ticket through its owning project (HS2-ANRXAE).
+          void linkedReaderSaves(frame.id)
+            .respond(text)
+            .then((saved) => {
+              if (saved) setFrameComposer(frame.id, false, '');
+            });
+          return;
+        }
         const text = newNoteDraft.value.trim();
         if (!text || !canAddNotes()) return;
         void updateSelected({ note: text, note_kind: 'regular' }).then((saved) => {
@@ -678,26 +743,59 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       },
     }),
   );
-  function focusInlineFeedbackReply(noteId: string, offset: number) {
-    const existing = readerInlineFeedbackReplies.value[noteId] ?? [];
-    if (!existing.some((reply) => reply.offset === offset))
-      readerInlineFeedbackReplies.value = {
-        ...readerInlineFeedbackReplies.value,
-        [noteId]: [...existing, { offset, text: '' }],
-      };
+  // Inline feedback replies and choice selections belong to the reader that shows the prompt: the
+  // workspace reader keeps them in its session-persisted signals, and each linked frame in its own
+  // edit state, so two readers never share a draft or a details-prompt key (HS2-ANRXAE).
+  const choiceAnchorKey = (noteId: string, frameId?: string) => (frameId ? `${frameId}\u0000${noteId}` : noteId);
+  function feedbackReplies(noteId: string, frameId?: string): InlineFeedbackReply[] {
+    const frame = frameId ? linkedReaderStack.value.find((item) => item.id === frameId) : undefined;
+    const replies: Partial<Record<string, InlineFeedbackReply[]>> = frame
+      ? frame.edit.inlineFeedbackReplies
+      : readerInlineFeedbackReplies.value;
+    return replies[noteId] ?? [];
+  }
+  function setFeedbackReplies(noteId: string, replies: InlineFeedbackReply[], frameId?: string) {
+    if (frameId) {
+      replaceLinkedReaderFrame(frameId, (current) => ({
+        ...current,
+        edit: {
+          ...current.edit,
+          inlineFeedbackReplies: { ...current.edit.inlineFeedbackReplies, [noteId]: replies },
+        },
+      }));
+      return;
+    }
+    readerInlineFeedbackReplies.value = { ...readerInlineFeedbackReplies.value, [noteId]: replies };
     scheduleProjectSessionPersistence();
+  }
+  function feedbackChoiceSelection(noteId: string, frameId?: string): string[] {
+    const frame = frameId ? linkedReaderStack.value.find((item) => item.id === frameId) : undefined;
+    const selections: Partial<Record<string, string[]>> = frame
+      ? frame.edit.feedbackChoiceSelections
+      : readerFeedbackChoiceSelections.value;
+    return selections[noteId] ?? [];
+  }
+  function focusInlineFeedbackReply(noteId: string, offset: number, frameId?: string) {
+    const existing = feedbackReplies(noteId, frameId);
+    if (!existing.some((reply) => reply.offset === offset))
+      setFeedbackReplies(noteId, [...existing, { offset, text: '' }], frameId);
+    else if (!frameId) scheduleProjectSessionPersistence();
+    const field = `[name="inline-feedback-response"][data-note-id="${noteId}"][data-offset="${offset}"]`;
     queueMicrotask(() =>
-      activeTicketSurface()
-        .querySelector<HTMLElement>(
-          `[name="inline-feedback-response"][data-note-id="${noteId}"][data-offset="${offset}"]`,
-        )
-        ?.focus(),
+      (frameId
+        ? document.querySelector<HTMLElement>(`[data-reader-frame-id="${CSS.escape(frameId)}"] ${field}`)
+        : activeTicketSurface().querySelector<HTMLElement>(field)
+      )?.focus(),
     );
   }
-  function clearFeedbackReplyState(id: string) {
+  function clearFeedbackReplyState(id: string, frameId?: string) {
+    readerFeedbackChoiceAnchors.delete(choiceAnchorKey(id, frameId));
+    if (frameId) {
+      replaceLinkedReaderFrame(frameId, (current) => ({ ...current, edit: clearFrameFeedbackReply(current.edit, id) }));
+      return;
+    }
     readerInlineFeedbackReplies.value = { ...readerInlineFeedbackReplies.value, [id]: [] };
     readerFeedbackChoiceSelections.value = { ...readerFeedbackChoiceSelections.value, [id]: [] };
-    readerFeedbackChoiceAnchors.delete(id);
   }
   /** Save or answer a note inside a linked reader frame, against that frame's own ticket. */
   function saveLinkedReaderNote(frame: TicketReaderFrame, target: HTMLElement) {
@@ -709,9 +807,9 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       value = response
         ? combineFeedbackReply(
             note.text,
-            readerInlineFeedbackReplies.value[id] ?? [],
+            feedbackReplies(id, frame.id),
             frame.edit.noteDraft,
-            readerFeedbackChoiceSelections.value[id] ?? [],
+            feedbackChoiceSelection(id, frame.id),
           )
         : frame.edit.noteDraft;
     if (!value.trim()) return;
@@ -723,19 +821,18 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         ...current,
         edit: { ...current.edit, editingNoteId: undefined, noteDraft: '', noteBase: '' },
       }));
-      if (response) clearFeedbackReplyState(id);
+      if (response) clearFeedbackReplyState(id, frame.id);
     });
   }
-  function feedbackSource(noteId: string) {
-    return noteId === DETAILS_FEEDBACK_ID
-      ? selectedTicket.value?.details
-      : selectedTicket.value?.notes.find((item) => item.id === noteId)?.text;
+  function feedbackSource(noteId: string, frameId?: string) {
+    const ticket = frameId ? linkedReaderStack.value.find((item) => item.id === frameId)?.ticket : selectedTicket.value;
+    return noteId === DETAILS_FEEDBACK_ID ? ticket?.details : ticket?.notes.find((item) => item.id === noteId)?.text;
   }
   function inlineFeedbackClickOffset(event: MouseEvent, target: Element) {
     const start = Number(data(target).segmentStart),
       end = Number(data(target).segmentEnd),
       noteId = data(target).noteId!,
-      source = feedbackSource(noteId)?.slice(start, end) ?? '',
+      source = feedbackSource(noteId, linkedReaderFrame(target)?.id)?.slice(start, end) ?? '',
       caretDocument = document as Document & {
         caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
       },
@@ -751,7 +848,11 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   lifetime.add(
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.addInlineFeedbackReply.selector, (event, target) => {
       if ((event.target as Element).closest('a')) return;
-      focusInlineFeedbackReply(data(target).noteId!, inlineFeedbackClickOffset(event as MouseEvent, target));
+      focusInlineFeedbackReply(
+        data(target).noteId!,
+        inlineFeedbackClickOffset(event as MouseEvent, target),
+        linkedReaderFrame(target)?.id,
+      );
     }),
   );
   lifetime.add(
@@ -762,21 +863,25 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       (event, target) => {
         if ((event.target as Element).closest('a') || !['Enter', ' '].includes((event as KeyboardEvent).key)) return;
         event.preventDefault();
-        focusInlineFeedbackReply(data(target).noteId!, Number(data(target).segmentEnd));
+        focusInlineFeedbackReply(data(target).noteId!, Number(data(target).segmentEnd), linkedReaderFrame(target)?.id);
       },
     ),
   );
   // Keystrokes coalesce for 150 ms before rebuilding the reply map (HS2-2YW8R3); blur, removal, and
   // every submit path flush first so no typed text is lost or answered stale.
-  const inlineFeedbackReplyInput = createKeyedCoalescedInput<{ noteId: string; offset: number; text: string }>(
-    ({ noteId, offset }) => `${noteId}:${offset}`,
-    ({ noteId, offset, text }) => {
-      const existing = readerInlineFeedbackReplies.value[noteId] ?? [];
-      readerInlineFeedbackReplies.value = {
-        ...readerInlineFeedbackReplies.value,
-        [noteId]: existing.map((reply) => (reply.offset === offset ? { ...reply, text } : reply)),
-      };
-      scheduleProjectSessionPersistence();
+  const inlineFeedbackReplyInput = createKeyedCoalescedInput<{
+    noteId: string;
+    offset: number;
+    text: string;
+    frameId?: string;
+  }>(
+    ({ noteId, offset, frameId }) => `${frameId ?? ''}\u0000${noteId}:${offset}`,
+    ({ noteId, offset, text, frameId }) => {
+      setFeedbackReplies(
+        noteId,
+        feedbackReplies(noteId, frameId).map((reply) => (reply.offset === offset ? { ...reply, text } : reply)),
+        frameId,
+      );
     },
   );
   lifetime.add(() => {
@@ -792,6 +897,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
           noteId: data(target).noteId!,
           offset: Number(data(target).offset),
           text: (target as HTMLTextAreaElement).value,
+          frameId: linkedReaderFrame(target)?.id,
         });
       },
     ),
@@ -810,28 +916,45 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         inlineFeedbackReplyInput.flush();
         const noteId = data(target).noteId!,
           offset = Number(data(target).offset),
-          existing = readerInlineFeedbackReplies.value[noteId] ?? [];
-        readerInlineFeedbackReplies.value = {
-          ...readerInlineFeedbackReplies.value,
-          [noteId]: existing.filter((reply) => reply.offset !== offset),
-        };
-        scheduleProjectSessionPersistence();
+          frameId = linkedReaderFrame(target)?.id;
+        setFeedbackReplies(
+          noteId,
+          feedbackReplies(noteId, frameId).filter((reply) => reply.offset !== offset),
+          frameId,
+        );
       },
     ),
   );
-  function toggleFeedbackChoice(noteId: string, choiceId: string, modifiers: FeedbackChoiceModifiers) {
-    const source = feedbackSource(noteId),
+  function toggleFeedbackChoice(
+    noteId: string,
+    choiceId: string,
+    modifiers: FeedbackChoiceModifiers,
+    target: HTMLElement,
+  ) {
+    const frameId = linkedReaderFrame(target)?.id,
+      source = feedbackSource(noteId, frameId),
       choices = source && parseFeedbackChoices(source);
     if (!choices) return;
-    const next = updateFeedbackChoiceDocumentSelection(
-      choices,
-      readerFeedbackChoiceSelections.value[noteId] ?? [],
-      choiceId,
-      readerFeedbackChoiceAnchors.get(noteId),
-      modifiers,
-    );
+    const anchorKey = choiceAnchorKey(noteId, frameId),
+      next = updateFeedbackChoiceDocumentSelection(
+        choices,
+        feedbackChoiceSelection(noteId, frameId),
+        choiceId,
+        readerFeedbackChoiceAnchors.get(anchorKey),
+        modifiers,
+      );
+    if (next.anchor) readerFeedbackChoiceAnchors.set(anchorKey, next.anchor);
+    if (frameId) {
+      replaceLinkedReaderFrame(frameId, (current) => ({
+        ...current,
+        edit: {
+          ...current.edit,
+          feedbackChoiceSelections: { ...current.edit.feedbackChoiceSelections, [noteId]: next.selected },
+        },
+      }));
+      return;
+    }
     readerFeedbackChoiceSelections.value = { ...readerFeedbackChoiceSelections.value, [noteId]: next.selected };
-    if (next.anchor) readerFeedbackChoiceAnchors.set(noteId, next.anchor);
     scheduleProjectSessionPersistence();
   }
   lifetime.add(wireFeedbackChoices(document.body, { toggle: toggleFeedbackChoice }));
@@ -947,12 +1070,17 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
           ? linkedReaderSaves(frame.id).respond('No response needed')
           : updateSelected({ note: 'No response needed', note_kind: 'regular' });
       void saved.then((ok) => {
-        if (ok) clearFeedbackReplyState(id);
+        if (ok) clearFeedbackReplyState(id, frame?.id);
       });
     }),
   );
   lifetime.add(
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.deleteNote.selector, (_event, target) => {
+      const frame = linkedReaderFrame(target);
+      if (frame) {
+        deleteLinkedReaderNote(frame, data(target).noteId);
+        return;
+      }
       const current = project(),
         ticket = selectedTicket.value,
         noteId = data(target).noteId;
@@ -983,6 +1111,26 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       else void loadNextTicketPage();
     }),
   );
+  /** Delete a note from a linked reader frame's own ticket through its owning project (HS2-ANRXAE). */
+  function deleteLinkedReaderNote(frame: TicketReaderFrame, noteId: string | undefined) {
+    if (!noteId || !frame.capabilities.note_delete) return;
+    void new Api(frame.apiPath)
+      .deleteCheckoutNote(frame.projectId, frame.ticket.qualified_id, noteId)
+      .then((result) => {
+        replaceLinkedReaderFrame(frame.id, (current) =>
+          reconcileTicketReaderFrame(
+            current.edit.editingNoteId === noteId
+              ? { ...current, edit: { ...current.edit, editingNoteId: undefined, noteDraft: '', noteBase: '' } }
+              : current,
+            result.ticket,
+          ),
+        );
+        clearFeedbackReplyState(noteId, frame.id);
+      })
+      .catch((reason: unknown) => {
+        error.value = reason instanceof Error ? reason.message : String(reason);
+      });
+  }
   function beginBlockedReasonEdit(reader = false, frame?: TicketReaderFrame) {
     if (frame) {
       if (!frame.capabilities.update) return;

@@ -1,5 +1,6 @@
 import type { Signal } from 'kerfjs';
 
+import { phaseEstimatePresentation } from '../active-ticket-work';
 import type { CodeReview, FullTicket, TicketRow as WireTicketRow } from '../api';
 import {
   type AttachmentLabelEditing,
@@ -43,6 +44,9 @@ export interface ReaderLayersSurfaceDependencies {
   attachmentMessage: Signal<string>;
   canAddNotes: () => boolean;
   canDeleteNotes: () => boolean;
+  /** Whether a ticket of `connectionId` in project `projectId` records git started phases (HS2-ANRXAE). */
+  canEditStartedPhaseFor: (projectId: string, connectionId: string) => boolean;
+  canEditStartedPhaseSelected: () => boolean;
   canEditAttachments: () => boolean;
   canEditNotes: () => boolean;
   canUpdateSelected: () => boolean;
@@ -122,6 +126,8 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
     attachmentMessage,
     canAddNotes,
     canDeleteNotes,
+    canEditStartedPhaseFor,
+    canEditStartedPhaseSelected,
     canEditAttachments,
     canEditNotes,
     canUpdateSelected,
@@ -183,9 +189,10 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
     stackSize: number;
   }) {
     const linked = frame?.edit,
-      capabilities = frame ? { ...frame.capabilities, notes: false, note_delete: false } : undefined,
+      capabilities = frame?.capabilities,
       // The top linked reader edits its ticket's fields exactly like the workspace reader, gated only by
-      // its own provider's update capability (HS2-KRVWKF).
+      // its own provider's update capability (HS2-KRVWKF). It adds and deletes notes and records started
+      // phases through the same frame-owned routing (HS2-ANRXAE).
       linkedWritable = frame ? linkedReaderCanUpdate(frame, active) : false,
       canUpdate = frame ? linkedWritable : editable && canUpdateSelected(),
       titleOwner = editable || linkedWritable;
@@ -198,12 +205,19 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
         titleDraft={titleOwner ? titleDraft.value : ticket.title}
         canUpdate={canUpdate}
         canEditText={frame ? capabilities!.update : canUpdate}
-        canAddNotes={frame ? capabilities!.notes : editable && canAddNotes()}
+        canAddNotes={frame ? active && capabilities!.notes : editable && canAddNotes()}
         canEditNotes={frame ? capabilities!.note_edit : editable && canEditNotes()}
-        canDeleteNotes={frame ? capabilities!.note_delete : editable && canDeleteNotes()}
-        composingNote={editable && composingNote.value}
-        composerDraft={editable ? newNoteDraft.value : ''}
+        canDeleteNotes={frame ? active && capabilities!.note_delete : editable && canDeleteNotes()}
+        canEditStartedPhase={
+          frame
+            ? linkedWritable && canEditStartedPhaseFor(frame.projectId, ticket.connection_id)
+            : editable && canEditStartedPhaseSelected()
+        }
+        composingNote={linked ? linked.composingNote : editable && composingNote.value}
+        composerDraft={linked ? linked.newNoteDraft : editable ? newNoteDraft.value : ''}
         status={status(ticket.status)}
+        startedPhase={ticket.started_phase}
+        phaseEstimate={phaseEstimatePresentation(ticket)}
         priority={priority(ticket.priority)}
         category={ticket.category ?? 'issue'}
         tags={ticket.tags}
@@ -224,8 +238,12 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
         notes={notes(ticket)}
         editingNoteId={linked?.editingNoteId ?? (editable ? readerEditingNoteId.value : undefined)}
         noteDraft={linked?.noteDraft ?? (editable ? readerNoteDraft.value : '')}
-        inlineFeedbackReplies={editable ? readerInlineFeedbackReplies.value : {}}
-        feedbackChoiceSelections={editable ? readerFeedbackChoiceSelections.value : {}}
+        inlineFeedbackReplies={
+          linked ? linked.inlineFeedbackReplies : editable ? readerInlineFeedbackReplies.value : {}
+        }
+        feedbackChoiceSelections={
+          linked ? linked.feedbackChoiceSelections : editable ? readerFeedbackChoiceSelections.value : {}
+        }
         blockedReason={ticket.blocked_reason}
         blockedReasonEditing={linked?.blockedReasonEditing ?? (editable && readerBlockedReasonEditing.value)}
         blockedReasonDraft={
@@ -265,7 +283,7 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
         style={stackPosition < stackSize ? `--ticket-reader-offset:${(stackSize - stackPosition) * -10}px` : undefined}
         attachmentMenu={attachmentMenuSurfaceProps({ readerScope })}
         evidence={changeEvidenceSurfaceProps(readerScope)}
-        readOnly={frame ? !capabilities!.update && !capabilities!.note_edit : !editable}
+        readOnly={frame ? !capabilities!.update && !capabilities!.note_edit && !capabilities!.notes : !editable}
       />
     );
   }

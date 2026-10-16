@@ -713,3 +713,234 @@ for (const action of ['Respond', 'No Response Needed'] as const) {
     );
   });
 }
+
+/** A stateful target-ticket server: note adds, deletes, and started phases persist (HS2-ANRXAE). */
+async function statefulTargetTicket(page: Page, initialNotes: Array<Record<string, unknown>> = []) {
+  const state = {
+    notes: [...initialNotes],
+    status: target.status,
+    started_phase: null as string | null,
+    token: 1,
+  };
+  const requests: Array<{ method: string; path: string; body?: Record<string, unknown> }> = [];
+  const ticketJson = () => ({
+    store: target.connection_id,
+    ...target,
+    status: state.status,
+    started_phase: state.started_phase,
+    blocked_reason: null,
+    concurrency_token: `token-target-${state.token}`,
+    notes: state.notes,
+    attachments: [],
+  });
+  await page.route('**/project-api/target-project/**/tickets/git-target%3Atarget**', async (route) => {
+    const request = route.request(),
+      path = decodeURIComponent(new URL(request.url()).pathname),
+      method = request.method();
+    if (path.endsWith('/code-review') || path.includes('/attachments')) return route.fallback();
+    const noteId = path.match(/\/notes\/([^/]+)$/)?.[1];
+    if (noteId && method === 'DELETE') {
+      requests.push({ method, path });
+      state.notes = state.notes.filter((note) => note.id !== noteId);
+      state.token += 1;
+      return route.fulfill({ json: ticketJson() });
+    }
+    if (method === 'GET') return route.fulfill({ json: ticketJson() });
+    if (method !== 'PATCH') return route.fallback();
+    const body = request.postDataJSON() as Record<string, unknown>;
+    requests.push({ method, path, body });
+    if (typeof body.note === 'string' && typeof body.note_id !== 'string')
+      state.notes = [
+        ...state.notes,
+        {
+          id: `ADDED${state.notes.length + 1}`,
+          kind: body.note_kind ?? 'regular',
+          created_at: '2026-09-11T00:03:00Z',
+          edited_at: '2026-09-11T00:03:00Z',
+          text: body.note,
+        },
+      ];
+    if (typeof body.status === 'string') state.status = body.status;
+    if (Object.hasOwn(body, 'started_phase')) state.started_phase = (body.started_phase as string | null) ?? null;
+    state.token += 1;
+    return route.fulfill({ json: ticketJson() });
+  });
+  return requests;
+}
+
+test('adds and deletes notes and records the started phase in a link-opened reader (HS2-ANRXAE)', async ({ page }) => {
+  const workspaceWrites: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() !== 'GET' && request.url().includes('/project-api/source-project/'))
+      workspaceWrites.push(`${request.method()} ${request.url()}`);
+  });
+  await mockLayeredProjects(page);
+  const requests = await statefulTargetTicket(page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openProjects(page);
+  await page.locator('#app-right-rail').getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
+  await expect(reader).toBeVisible();
+  // The frame owns its composer: opening it never opens the workspace inspector's composer.
+  await reader.locator('[data-action="add-ticket-note"]').first().click();
+  const composer = reader.getByRole('textbox', { name: 'New note' });
+  await expect(composer).toBeFocused();
+  await expect(page.locator('#app-right-rail [name="new-note-body"]')).toHaveCount(0);
+  await composer.pressSequentially('Noted from a linked reader', { delay: 10 });
+  // A new note is a submission, never an autosave: typing alone writes nothing.
+  await page.waitForTimeout(300);
+  expect(requests).toEqual([]);
+  await page.screenshot({ path: 'target/visual-captures/hs2-anrxae-linked-composer-wide.png' });
+  await reader.getByRole('button', { name: 'Add Note' }).click();
+  await expect
+    .poll(() => requests.map((item) => [item.method, item.body?.note, item.body?.note_kind]))
+    .toEqual([['PATCH', 'Noted from a linked reader', 'regular']]);
+  const added = reader.locator('article[data-note-id="ADDED1"]');
+  await expect(added).toContainText('Noted from a linked reader');
+  await expect(reader.locator('[name="new-note-body"]')).toHaveCount(0);
+  // Delete the note through the frame's own checkout and qualified identity.
+  await added.hover();
+  await added.getByRole('button', { name: 'Delete Note' }).click();
+  await expect(added).toHaveCount(0);
+  expect(requests.at(-1)).toMatchObject({
+    method: 'DELETE',
+    path: expect.stringMatching(/checkouts\/target-project\/tickets\/git-target:target\/notes\/ADDED1$/),
+  });
+  // Record a started phase from the reader's status menu, routed to the owning project.
+  const status = reader.locator('.ticket-status-menu');
+  await status.locator('[data-action="open-inspector-status-menu"]').click();
+  await status.locator('[data-ticket-status="started"]').hover();
+  const working = status.locator('[data-started-phase="working"]');
+  await expect(working).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-anrxae-linked-phase-menu-wide.png' });
+  await working.click();
+  await expect.poll(() => requests.at(-1)?.body).toMatchObject({ started_phase: 'working' });
+  await expect(status.locator('[data-component="status-badge"]')).toHaveText('Working');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await reader.locator('[data-action="add-ticket-note"]').first().click();
+  await expect(reader.getByRole('textbox', { name: 'New note' })).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-anrxae-linked-composer-narrow.png' });
+  // Cancelling drops only this frame's draft.
+  await reader.getByRole('button', { name: 'Cancel' }).click();
+  await expect(reader.locator('[name="new-note-body"]')).toHaveCount(0);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await reader.getByRole('button', { name: 'Close Ticket Reader' }).click();
+  await expect(reader).toHaveCount(0);
+  expect(requests.every((item) => item.path.includes('/checkouts/target-project/'))).toBe(true);
+  expect(workspaceWrites).toEqual([]);
+  await expect(page.locator('#app-right-rail [data-component="ticket-inspector-header"]')).toHaveAttribute(
+    'data-ticket-slug',
+    'KF-ROOT01',
+  );
+});
+
+test('records the started phase from the workspace reader through the selected ticket (HS2-ANRXAE)', async ({
+  page,
+}) => {
+  const patches: Array<Record<string, unknown>> = [];
+  await mockLayeredProjects(page);
+  await page.route('**/project-api/source-project/**/tickets/git-source%3Asource', async (route) => {
+    if (route.request().method() !== 'PATCH') return route.fallback();
+    const patch = route.request().postDataJSON() as Record<string, unknown>;
+    patches.push(patch);
+    return route.fulfill({
+      json: { store: source.connection_id, ...source, ...patch, blocked_reason: null, notes: [], attachments: [] },
+    });
+  });
+  await openProjects(page);
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
+  const reader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' }),
+    status = reader.locator('.ticket-status-menu');
+  await status.locator('[data-action="open-inspector-status-menu"]').click();
+  await status.locator('[data-ticket-status="started"]').hover();
+  await status.locator('[data-started-phase="planning"]').click();
+  await expect.poll(() => patches.at(-1)).toMatchObject({ started_phase: 'planning' });
+  await expect(status.locator('[data-component="status-badge"]')).toHaveText('Planning');
+});
+
+test('keeps inline feedback replies and choices per linked reader frame (HS2-ANRXAE)', async ({ page }) => {
+  const prompt = {
+      id: 'FB1',
+      kind: 'feedback_needed',
+      created_at: '2026-09-11T00:02:00Z',
+      edited_at: '2026-09-11T00:02:00Z',
+      text: 'FEEDBACK NEEDED\n\nTwo questions\n\n1. Something\n2. Another thing',
+    },
+    choices = {
+      id: 'FB2',
+      kind: 'feedback_needed',
+      created_at: '2026-09-11T00:02:30Z',
+      edited_at: '2026-09-11T00:02:30Z',
+      text: 'Which direction?\n\nCHOICE:\n- Keep it\n- Change it',
+    };
+  // The workspace ticket shows prompts with the same note ids, so shared state would leak between readers.
+  await mockLayeredProjects(page, [], false, {}, { source: [prompt, choices] });
+  const requests = await statefulTargetTicket(page, [prompt, choices]);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openProjects(page);
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
+  const workspaceReader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' });
+  const clickAfter = async (scope: typeof workspaceReader, text: string) => {
+    const block = scope.locator('article[data-note-id="FB1"] .note-card__feedback-block').filter({ hasText: text });
+    await block.scrollIntoViewIfNeeded();
+    const point = await block.evaluate((element, needle) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      let node: Node | null;
+      while ((node = walker.nextNode())) {
+        const index = node.textContent?.indexOf(needle) ?? -1;
+        if (index < 0) continue;
+        const range = document.createRange();
+        range.setStart(node, index + needle.length - 1);
+        range.setEnd(node, index + needle.length);
+        const rect = range.getBoundingClientRect();
+        return { x: rect.right - 0.5, y: rect.y + rect.height / 2 };
+      }
+      throw new Error(`Text not found: ${needle}`);
+    }, text);
+    await page.mouse.click(point.x, point.y);
+  };
+  const choiceItems = (scope: typeof workspaceReader) =>
+    scope
+      .locator('article[data-note-id="FB2"]')
+      .getByRole('grid', { name: 'Feedback Choices' })
+      .locator('[data-component="content-item"]');
+  await clickAfter(workspaceReader, 'Something');
+  await workspaceReader.getByRole('textbox', { name: /Response at character/ }).fill('Workspace inline reply');
+  await choiceItems(workspaceReader).nth(0).click();
+  await expect(choiceItems(workspaceReader).nth(0)).toHaveAttribute('aria-selected', 'true');
+  await workspaceReader.getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
+  const linked = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
+  await expect(linked.getByText('Reader 2 of 2')).toBeVisible();
+  // The linked frame starts with none of the workspace reader's reply state for the same note id.
+  await expect(linked.getByRole('textbox', { name: /Response at character/ })).toHaveCount(0);
+  await clickAfter(linked, 'Another thing');
+  const inline = linked.getByRole('textbox', { name: /Response at character/ });
+  await expect(inline).toBeFocused();
+  await inline.pressSequentially('Linked inline reply', { delay: 10 });
+  await expect(choiceItems(linked).nth(0)).toHaveAttribute('aria-selected', 'false');
+  await choiceItems(linked).nth(1).click();
+  await expect(choiceItems(linked).nth(1)).toHaveAttribute('aria-selected', 'true');
+  await page.screenshot({ path: 'target/visual-captures/hs2-anrxae-linked-feedback-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(inline).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-anrxae-linked-feedback-narrow.png' });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // Respond while the last keys may still be coalescing: the frame's own inline reply is answered.
+  await linked
+    .locator('article[data-note-id="FB1"]')
+    .getByRole('button', { name: 'Respond', exact: true })
+    .evaluate((button) => {
+      (button as HTMLElement).click();
+    });
+  await expect
+    .poll(() => requests.find((item) => item.body?.note_kind === 'regular')?.body?.note)
+    .toBe('> FEEDBACK NEEDED\n>\n> Two questions\n>\n> 1. Something\n> 2. Another thing\n\nLinked inline reply');
+  await linked.getByRole('button', { name: 'Close Ticket Reader' }).click();
+  await expect(linked).toHaveCount(0);
+  // The workspace reader's own inline draft survived the linked frame's answer.
+  await expect(workspaceReader.getByRole('textbox', { name: /Response at character/ })).toHaveValue(
+    'Workspace inline reply',
+  );
+  await expect(choiceItems(workspaceReader).nth(0)).toHaveAttribute('aria-selected', 'true');
+  await expect(choiceItems(workspaceReader).nth(1)).toHaveAttribute('aria-selected', 'false');
+});

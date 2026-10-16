@@ -97,6 +97,7 @@ import {
 } from '../ticket-operations';
 import {
   adoptCommittedReaderDrafts,
+  linkedReaderPatchAllowed,
   reconcileTicketReaderFrame,
   type TicketReaderFrame,
   updateTicketReaderFrame,
@@ -849,7 +850,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   }
   async function updateLinkedReader(frameId: string, patch: Record<string, unknown>) {
     const frame = linkedReaderStack.value.find((item) => item.id === frameId);
-    if (!frame || !frame.capabilities.update) return false;
+    if (!frame || !linkedReaderPatchAllowed(frame.capabilities, patch)) return false;
     const client = new Api(frame.apiPath);
     let base = frame.ticket,
       pending: TicketPatch = patch;

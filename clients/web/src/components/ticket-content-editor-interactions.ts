@@ -14,35 +14,36 @@ const TOGGLE_MARKDOWN_EXPANDED = attr('data-action', 'toggle-markdown-expanded')
  * same edit entry, draft, focus-leave, and submit gestures.
  */
 export interface NoteComposerBindings {
-  readonly open: () => void;
-  readonly setDraft: (value: string) => void;
-  readonly cancel: () => void;
+  /** Each gesture receives the composer element it came from, so a linked reader frame owns its own composer. */
+  readonly open: (target: HTMLElement) => void;
+  readonly setDraft: (value: string, target: HTMLElement) => void;
+  readonly cancel: (target: HTMLElement) => void;
   /** The composer form was submitted; the helper has already prevented navigation. */
-  readonly submit: () => void;
+  readonly submit: (target: HTMLElement) => void;
 }
 
 /** Wire every NoteComposer under `root`. */
 export function wireNoteComposer(root: HTMLElement, bindings: NoteComposerBindings): () => void {
   const lifetime = createScope();
   lifetime.add(
-    delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.addTicketNote.selector, () => {
-      bindings.open();
+    delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.addTicketNote.selector, (_event, target) => {
+      bindings.open(target as HTMLElement);
     }),
   );
   lifetime.add(
     delegate(root, 'input', INSPECTOR_AND_EDITOR_TARGETS.newNoteBodyField.selector, (_event, target) => {
-      bindings.setDraft((target as HTMLTextAreaElement).value);
+      bindings.setDraft((target as HTMLTextAreaElement).value, target as HTMLElement);
     }),
   );
   lifetime.add(
-    delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.cancelNewNote.selector, () => {
-      bindings.cancel();
+    delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.cancelNewNote.selector, (_event, target) => {
+      bindings.cancel(target as HTMLElement);
     }),
   );
   lifetime.add(
-    delegate(root, 'submit', INSPECTOR_AND_EDITOR_ACTIONS.createNoteForm.selector, (event) => {
+    delegate(root, 'submit', INSPECTOR_AND_EDITOR_ACTIONS.createNoteForm.selector, (event, target) => {
       event.preventDefault();
-      bindings.submit();
+      bindings.submit(target as HTMLElement);
     }),
   );
   return () => {

@@ -4,11 +4,14 @@ import type { Capabilities, FullTicket } from './api';
 import {
   activeTicketReaderProject,
   adoptCommittedReaderDrafts,
+  clearFrameFeedbackReply,
   disposeTicketReaderFrames,
   linkedReaderCanUpdate,
+  linkedReaderPatchAllowed,
   popTicketReaderFrame,
   pushTicketReaderFrame,
   reconcileTicketReaderFrame,
+  startedPhasePatch,
   ticketEditTarget,
   ticketReaderEditState,
   type TicketReaderFrame,
@@ -192,5 +195,65 @@ describe('layered ticket reader stack', () => {
     expect(linkedReaderCanUpdate({ ...linked, capabilities: { ...linked.capabilities, update: false } }, true)).toBe(
       false,
     );
+  });
+
+  it('gates linked reader patches by the capability each one needs (HS2-ANRXAE)', () => {
+    const only = (key: keyof Capabilities) =>
+      ({ update: false, notes: false, note_edit: false, note_delete: false, [key]: true }) as unknown as Capabilities;
+    const add = { note: 'New note', note_kind: 'regular' },
+      edit = { note_id: 'N1', note: 'Edited' },
+      prompt = { note_id: 'N1', note: 'Edited', edit_feedback_prompt: true },
+      field = { title: 'Renamed' };
+    expect(linkedReaderPatchAllowed(only('notes'), add)).toBe(true);
+    expect(linkedReaderPatchAllowed(only('update'), add)).toBe(false);
+    expect(linkedReaderPatchAllowed(only('note_edit'), edit)).toBe(true);
+    expect(linkedReaderPatchAllowed(only('note_edit'), prompt)).toBe(true);
+    expect(linkedReaderPatchAllowed(only('notes'), edit)).toBe(false);
+    expect(linkedReaderPatchAllowed(only('update'), field)).toBe(true);
+    expect(linkedReaderPatchAllowed(only('notes'), field)).toBe(false);
+    // A concurrency token never changes which capability a patch needs; a mixed patch needs update.
+    expect(linkedReaderPatchAllowed(only('notes'), { ...add, expected_token: 't' })).toBe(true);
+    expect(linkedReaderPatchAllowed(only('notes'), { ...add, title: 'x' })).toBe(false);
+    expect(linkedReaderPatchAllowed(only('update'), {})).toBe(true);
+  });
+
+  it('records a started phase and moves a not-yet-started ticket to Started (HS2-ANRXAE)', () => {
+    const started = ticket('one', 'HS2-LINK01');
+    expect(startedPhasePatch(started, 'working')).toEqual({ started_phase: 'working' });
+    expect(startedPhasePatch(started, '')).toEqual({ started_phase: null });
+    expect(startedPhasePatch({ ...started, status: 'not_started' }, 'planning')).toEqual({
+      started_phase: 'planning',
+      status: 'started',
+    });
+    expect(startedPhasePatch(null, 'working')).toEqual({ started_phase: 'working', status: 'started' });
+  });
+
+  it('keeps each frame composer and feedback draft through reconcile and clears only the answered note', () => {
+    const linked = frame('one', 'alpha', 'HS2-LINK01'),
+      drafting = {
+        ...linked,
+        edit: {
+          ...linked.edit,
+          composingNote: true,
+          newNoteDraft: 'Half-typed note',
+          inlineFeedbackReplies: { FB1: [{ offset: 3, text: 'inline' }], FB2: [{ offset: 1, text: 'other' }] },
+          feedbackChoiceSelections: { FB1: ['a'], FB2: ['b'] },
+        },
+      };
+    // A fresh frame starts with an empty composer and no reply state.
+    expect(linked.edit).toMatchObject({
+      composingNote: false,
+      newNoteDraft: '',
+      inlineFeedbackReplies: {},
+      feedbackChoiceSelections: {},
+    });
+    // A remote refresh of the ticket keeps the frame's unsent composer and reply drafts.
+    const refreshed = reconcileTicketReaderFrame(drafting, { ...linked.ticket, title: 'Changed remotely' });
+    expect(refreshed.edit).toMatchObject({ composingNote: true, newNoteDraft: 'Half-typed note' });
+    expect(refreshed.edit.inlineFeedbackReplies.FB1).toEqual([{ offset: 3, text: 'inline' }]);
+    const cleared = clearFrameFeedbackReply(refreshed.edit, 'FB1');
+    expect(cleared.inlineFeedbackReplies).toEqual({ FB1: [], FB2: [{ offset: 1, text: 'other' }] });
+    expect(cleared.feedbackChoiceSelections).toEqual({ FB1: [], FB2: ['b'] });
+    expect(cleared.newNoteDraft).toBe('Half-typed note');
   });
 });

@@ -1183,16 +1183,18 @@ export async function startHotSheetWebClient() {
   const canUpdateSelected = () =>
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
     selectedTicket.value ? (providerCapabilities.value[selectedTicket.value.connection_id]?.update ?? true) : false;
+  // Started phases are git-provider workflow state; a ticket's own project decides (HS2-ANRXAE).
+  const canEditStartedPhaseFor = (projectId: string, connectionId: string) =>
+    Boolean(
+      defaultProviders.value[projectId]?.sources.some(
+        (source) => source.connectionId === connectionId && source.provider === 'git',
+      ),
+    );
   const canEditStartedPhaseSelected = () => {
     const ticket = selectedTicket.value;
     const current = project();
     return Boolean(
-      ticket &&
-      current &&
-      canUpdateSelected() &&
-      defaultProviders.value[current.id]?.sources.some(
-        (source) => source.connectionId === ticket.connection_id && source.provider === 'git',
-      ),
+      ticket && current && canUpdateSelected() && canEditStartedPhaseFor(current.id, ticket.connection_id),
     );
   };
   const noteCapabilities = () =>
@@ -3541,6 +3543,8 @@ export async function startHotSheetWebClient() {
     canDeleteNotes,
     canEditAttachments,
     canEditNotes,
+    canEditStartedPhaseFor,
+    canEditStartedPhaseSelected,
     canUpdateSelected,
     canUseAttachments,
     changeEvidenceSurfaceProps,
@@ -4431,6 +4435,7 @@ export async function startHotSheetWebClient() {
     fieldConflict,
     canUpdateSelected,
     canEditStartedPhaseSelected,
+    canEditStartedPhaseFor,
     titleEditingSurface,
     activeTicketSurface,
     titleAutosave,

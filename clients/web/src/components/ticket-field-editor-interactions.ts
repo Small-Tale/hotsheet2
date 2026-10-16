@@ -153,7 +153,8 @@ export interface FeedbackChoiceModifiers {
 }
 
 export interface FeedbackChoicesBindings {
-  readonly toggle: (noteId: string, choiceId: string, modifiers: FeedbackChoiceModifiers) => void;
+  /** `target` is the activated choice, so a linked reader frame keeps its own selections (HS2-ANRXAE). */
+  readonly toggle: (noteId: string, choiceId: string, modifiers: FeedbackChoiceModifiers, target: HTMLElement) => void;
 }
 
 /**
@@ -170,7 +171,7 @@ export function wireFeedbackChoices(root: HTMLElement, bindings: FeedbackChoices
         { noteId, choiceId } = item.dataset;
       if (!noteId || !choiceId || !isContentItemActivation(event, item)) return;
       const mouse = event as MouseEvent;
-      bindings.toggle(noteId, choiceId, { additive: mouse.metaKey || mouse.ctrlKey, range: mouse.shiftKey });
+      bindings.toggle(noteId, choiceId, { additive: mouse.metaKey || mouse.ctrlKey, range: mouse.shiftKey }, item);
     }),
   );
   return () => {
