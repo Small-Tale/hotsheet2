@@ -182,6 +182,7 @@ commands-and-ai	delegate	document.body	'click'	'[data-action="confirm-stop-comma
 commands-and-ai	wireCommandSettingsEditor	document.body
 commands-and-ai	delegate	document.body	'change'	'[data-action="toggle-loading-activity"]'
 commands-and-ai	delegate	document.body	'change'	'[data-action="toggle-global-shell-history"]'
+commands-and-ai	delegate	document.body	'change'	'[data-action="save-terminal-limits"]'
 commands-and-ai	wireTrashSettings	document.body
 commands-and-ai	delegateCapture	document.body	'click'	heldNavigationSelector
 commands-and-ai	delegate	document.body	'click'	'[data-action="set-view-mode"]'

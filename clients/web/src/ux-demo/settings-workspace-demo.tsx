@@ -18,6 +18,7 @@ export const SETTINGS_WORKSPACE_DEMO_CATEGORIES: readonly SettingsCategory[] = [
   'columns',
   'general',
   'accounts',
+  'terminal-memory',
   'keyboard',
 ];
 

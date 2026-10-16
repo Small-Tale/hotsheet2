@@ -5,6 +5,7 @@ import { toElement } from 'kerfjs';
 import { browserRandomId } from './browser-id';
 import { isRecord, parseJson } from './json-value';
 import type { TerminalModifiers } from './terminal-keys';
+import { currentTerminalLimits } from './terminal-limits';
 
 export interface TerminalSizeMessage {
   pty_size: { cols: number; rows: number };
@@ -162,8 +163,6 @@ export const TERMINAL_DASHBOARD_LINE_HEIGHT = 1.085;
 export const TERMINAL_PREVIEW_NATURAL_WIDTH = 1280;
 export const TERMINAL_PREVIEW_NATURAL_HEIGHT = 768;
 export const TERMINAL_PREVIEW_SCROLLBACK = 0;
-export const TERMINAL_MAGNIFIED_SCROLLBACK = 1_000;
-export const TERMINAL_DEDICATED_SCROLLBACK = 5_000;
 
 /** Chromium's WebGL renderer delayed real PTY delivery in the sustained-output profile;
  * Apple WebKit also needs DOM for glyph compatibility. Firefox keeps WebGL.
@@ -196,7 +195,9 @@ export function stripLeadingZshPromptEolMark(value: Uint8Array<ArrayBuffer>): Ui
 }
 export function terminalScrollbackLimit(displayMode: string | undefined, fixedDashboardGrid: boolean): number {
   if (displayMode === 'scaled-preview') return TERMINAL_PREVIEW_SCROLLBACK;
-  return fixedDashboardGrid ? TERMINAL_MAGNIFIED_SCROLLBACK : TERMINAL_DEDICATED_SCROLLBACK;
+  // Configurable, memory-aware history (HS2-Y5DYC0); a magnified card keeps a fifth of it.
+  const limits = currentTerminalLimits();
+  return fixedDashboardGrid ? limits.magnifiedHistoryLines : limits.historyLines;
 }
 export interface TerminalFocusRequest {
   projectId: string;

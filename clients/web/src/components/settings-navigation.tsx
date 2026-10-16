@@ -12,6 +12,7 @@ import {
   Columns3,
   Database,
   Keyboard,
+  MemoryStick,
   ShieldCheck,
   SlidersHorizontal,
   TerminalSquare,
@@ -29,6 +30,7 @@ export type SettingsCategory =
   | 'columns'
   | 'general'
   | 'accounts'
+  | 'terminal-memory'
   | 'keyboard';
 
 /** Project-scoped settings, followed by app-scoped (device-local) settings. */
@@ -46,6 +48,8 @@ const appCategories = [
   { id: 'general', label: 'General', icon: SlidersHorizontal, iconName: 'sliders-horizontal' },
   // Machine-wide provider sign-ins; ticket sources themselves belong to projects (HS2-SM9PM8).
   { id: 'accounts', label: 'Accounts', icon: CircleUserRound, iconName: 'circle-user-round' },
+  // Machine-wide terminal history, replay, and warm-terminal limits (HS2-Y5DYC0).
+  { id: 'terminal-memory', label: 'Terminal memory', icon: MemoryStick, iconName: 'memory-stick' },
   { id: 'keyboard', label: 'Keyboard', icon: Keyboard, iconName: 'keyboard' },
 ] as const;
 
@@ -86,6 +90,7 @@ export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage
   columns: [{ control: 'Hide Verified column', browser: 'hotsheet.project.{project}.hide-verified-column' }],
   general: [{ control: 'Show loading activity', browser: 'hotsheet.show-loading-activity' }],
   accounts: [{ control: 'Sign-ins and sign out', server: '/accounts' }],
+  'terminal-memory': [{ control: 'History, replay buffer, and warm terminals', server: '/terminal-limits' }],
   keyboard: [{ control: 'Keyboard shortcut overrides', browser: 'hotsheet.keyboard-shortcuts' }],
 };
 

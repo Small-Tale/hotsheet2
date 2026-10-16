@@ -249,7 +249,18 @@ async fn attach_replays_scrollback_streams_output_and_forwards_input() {
 async fn bounded_attach_replay_starts_after_a_truncated_ansi_sequence() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
-    let state = AppState::new(store, SECRET.into()).unwrap();
+    // Pin the historical 256 KiB replay; the default now follows the machine's memory.
+    let home = dir.path().join("machine-home");
+    hotsheet_ticketing::Settings::with_global_home(dir.path(), &home)
+        .set(
+            "terminal.replay_bytes",
+            serde_json::json!(hotsheet_terminals::SCROLLBACK_BYTES),
+            hotsheet_ticketing::Scope::Global,
+        )
+        .unwrap();
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_machine_home(&home);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -318,6 +329,97 @@ async fn bounded_attach_replay_starts_after_a_truncated_ansi_sequence() {
         "replay exposed a truncated ANSI parameter prefix: {:?}",
         &replay[..replay.len().min(16)]
     );
+}
+
+/// Read the first (replay) frame of a fresh attach, then disconnect.
+async fn attach_replay(addr: std::net::SocketAddr, id: &str) -> Vec<u8> {
+    let url = format!("ws://{addr}/terminals/{id}/attach?secret={SECRET}");
+    let (mut ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
+    let first = tokio::time::timeout(std::time::Duration::from_secs(5), ws.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let WsMessage::Binary(replay) = first else {
+        panic!("first attach frame was not the binary replay: {first:?}");
+    };
+    let _ = ws.close(None).await;
+    replay.to_vec()
+}
+
+#[tokio::test]
+async fn reconnect_replays_history_sized_from_the_configured_client_limit() {
+    // HS2-Y5DYC0: with only the client history configured, the server replay is sized from it,
+    // so a reconnect restores about what the client would have kept, and keeps doing so.
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_machine_home(dir.path().join("machine-home"));
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app(state)).await.unwrap();
+    });
+    let base = format!("http://{addr}");
+    let history_lines = 1_500u32;
+    let expected = usize::try_from(
+        hotsheet_ticketing::terminal_limits::replay_bytes_for_history(history_lines),
+    )
+    .unwrap();
+
+    let open_base = base.clone();
+    let id = tokio::task::spawn_blocking(move || {
+        let limits = ureq::put(&format!("{open_base}/terminal-limits"))
+            .set("x-hotsheet-secret", SECRET)
+            .set("content-type", "application/json")
+            .send_string(&format!(r#"{{"history_lines":{history_lines}}}"#))
+            .unwrap();
+        let limits: serde_json::Value =
+            serde_json::from_str(&limits.into_string().unwrap()).unwrap();
+        assert_eq!(
+            limits["effective"]["replay_bytes"],
+            serde_json::json!(expected)
+        );
+        // Far more output than the replay holds: numbered ~100-byte lines, then a marker.
+        let script = "i=0; while [ $i -lt 9000 ]; do printf 'line %05d %089d\\n' $i 0; i=$((i+1)); done; printf DONE; sleep 30";
+        let body = serde_json::json!({ "command": "/bin/sh", "args": ["-c", script] }).to_string();
+        let response = ureq::post(&format!("{open_base}/terminals"))
+            .set("x-hotsheet-secret", SECRET)
+            .set("content-type", "application/json")
+            .send_string(&body)
+            .unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&response.into_string().unwrap()).unwrap();
+        value["id"].as_str().unwrap().to_string()
+    })
+    .await
+    .unwrap();
+    wait_for_terminal_text(base.clone(), id.clone(), "DONE").await;
+
+    let first = attach_replay(addr, &id).await;
+    assert!(
+        first.len() <= expected && first.len() + 128 > expected,
+        "replay of {} bytes is not sized from the {history_lines}-line history ({expected} bytes)",
+        first.len()
+    );
+    assert!(
+        first.ends_with(b"DONE"),
+        "the replay lost the newest output"
+    );
+    assert!(
+        first.len() > hotsheet_terminals::SCROLLBACK_BYTES,
+        "the replay is still capped at the historical 256 KiB"
+    );
+    let replayed_lines = String::from_utf8_lossy(&first).matches("line ").count();
+    assert!(
+        replayed_lines >= history_lines as usize,
+        "a reconnect restored only {replayed_lines} of the client's {history_lines} lines"
+    );
+
+    // A second reconnect replays the same window: a viewer does not consume the buffer.
+    let second = attach_replay(addr, &id).await;
+    assert_eq!(second, first);
 }
 
 #[tokio::test]

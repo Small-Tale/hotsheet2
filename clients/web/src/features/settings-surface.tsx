@@ -1,4 +1,4 @@
-import type { ProviderConnection } from '../api';
+import type { ProviderConnection, TerminalLimits } from '../api';
 import type { SettingsCategory } from '../components/settings-navigation';
 import { SettingsWorkspace, type SettingsWorkspaceProps } from '../components/settings-workspace';
 import type { TrashRetentionDraft } from '../components/trash-settings';
@@ -39,6 +39,10 @@ export interface SettingsSurfaceDependencies {
   trashRetentionDraftsByProject: Readable<Record<string, TrashRetentionDraft>>;
   inheritGlobalShellHistory: Readable<boolean>;
   terminalSettingsMessage: Readable<string>;
+  /** Machine-wide terminal limits (HS2-Y5DYC0). */
+  terminalLimits?: Readable<TerminalLimits | undefined>;
+  terminalLimitsMessage?: Readable<string>;
+  terminalLimitDeviceDefaults?: () => NonNullable<Props['terminalMemory']>['deviceDefaults'];
   permissionAutomation: (projectId: string) => Props['permissions']['automation'];
   permissionRules: (projectId: string) => Props['permissions']['rules'];
   permissionRulesMessage: Readable<string>;
@@ -83,6 +87,9 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
     trashRetentionDraftsByProject,
     inheritGlobalShellHistory,
     terminalSettingsMessage,
+    terminalLimits,
+    terminalLimitsMessage,
+    terminalLimitDeviceDefaults,
     permissionAutomation,
     permissionRules,
     permissionRulesMessage,
@@ -155,6 +162,11 @@ export function createSettingsSurface(dependencies: SettingsSurfaceDependencies)
         terminals={{
           inheritGlobalShellHistory: inheritGlobalShellHistory.value,
           message: terminalSettingsMessage.value,
+        }}
+        terminalMemory={{
+          limits: terminalLimits?.value,
+          deviceDefaults: terminalLimitDeviceDefaults?.(),
+          message: terminalLimitsMessage?.value,
         }}
         permissions={{
           automation: permissionAutomation(current.id),

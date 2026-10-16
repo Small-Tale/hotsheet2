@@ -1,4 +1,4 @@
-import type { ProviderAccount } from '../api';
+import type { ProviderAccount, TerminalLimits } from '../api';
 import { createDebouncedAutosave } from '../debounced-autosave';
 import {
   inspectorBlockedReason,
@@ -33,6 +33,21 @@ export const DEMO_PROJECT_SOURCES = [
   },
 ];
 /** Machine-wide sign-ins (HS2-SM9PM8): a shared GitHub account, an unused one, and a Jira token. */
+/** Machine-wide terminal limits on a 32 GB server with nothing set (HS2-Y5DYC0). */
+export const DEMO_TERMINAL_LIMITS: TerminalLimits = {
+  physical_memory_bytes: 32 * 1024 ** 3,
+  defaults: { history_lines: 20_000, replay_bytes: 3_840_000, warm_terminals: 24 },
+  configured: { history_lines: null, replay_bytes: null, warm_terminals: null },
+  effective: { history_lines: 20_000, replay_bytes: 3_840_000, warm_terminals: 24 },
+};
+/** The same server with a CLI-set history outside the presets and a lowered warm cap. */
+export const DEMO_TERMINAL_LIMITS_CONFIGURED: TerminalLimits = {
+  ...DEMO_TERMINAL_LIMITS,
+  defaults: { ...DEMO_TERMINAL_LIMITS.defaults, replay_bytes: 1_536_000 },
+  configured: { history_lines: 8_000, replay_bytes: null, warm_terminals: 4 },
+  effective: { history_lines: 8_000, replay_bytes: 1_536_000, warm_terminals: 4 },
+};
+
 export const DEMO_ACCOUNTS: ProviderAccount[] = [
   {
     id: 'github-app-01demo',

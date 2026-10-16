@@ -20,6 +20,7 @@ import { type ConversationExportDialogState } from '../components/conversation-e
 import { type ManualModelDialogState } from '../components/manual-model-dialog';
 import { type ExternalProviderKind, type GithubAuthState } from '../components/provider-setup-form';
 import { type SettingsCategory } from '../components/settings-navigation';
+import { TERMINAL_LIMIT_FIELDS } from '../components/terminal-memory-settings';
 import { trashDraftIsDirty, type TrashRetentionDraft } from '../components/trash-settings';
 import { wireTrashSettings } from '../components/trash-settings-interactions';
 import { type WorkspaceViewMode } from '../components/workspace-header';
@@ -27,6 +28,7 @@ import { revealContextPopupMenu } from '../context-menu-position';
 import { type ConversationExportDraft } from '../conversation-export';
 import { type ConversationHistoryDirection } from '../conversation-history';
 import { type ConversationSelectionModifiers } from '../conversation-selection';
+import { terminalLimitChoiceValue, type TerminalLimitsSettings } from '../features/terminal-limits-settings';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
@@ -139,6 +141,8 @@ export interface CommandAndAiInteractionsDependencies {
   readonly setSettingsCategory: (_projectId: string, category: SettingsCategory) => void;
   readonly refreshProviderConnections: (current?: Project) => Promise<void>;
   readonly refreshTerminalSettings: (current?: Project) => Promise<void>;
+  /** Machine-wide terminal limits (HS2-Y5DYC0); optional so focused harnesses can omit them. */
+  readonly terminalLimitsSettings?: Pick<TerminalLimitsSettings, 'refresh' | 'save'>;
   readonly refreshTrashSettings: (current?: Project) => Promise<void>;
   readonly capturingShortcutId: Signal<string | undefined>;
   readonly keyboardShortcutOverrides: Signal<Record<string, ShortcutChord>>;
@@ -262,6 +266,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     setSettingsCategory,
     refreshProviderConnections,
     refreshTerminalSettings,
+    terminalLimitsSettings,
     refreshTrashSettings,
     capturingShortcutId,
     keyboardShortcutOverrides,
@@ -762,6 +767,20 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
         });
     }),
   );
+  // App Settings → Terminal memory (HS2-Y5DYC0): each choice saves all three machine-wide limits at once;
+  // "default" clears that limit back to the memory-derived default.
+  lifetime.add(
+    delegate(document.body, 'change', COMMANDS_AND_AI_ACTIONS.saveTerminalLimits.selector, (_event, target) => {
+      if (!terminalLimitsSettings) return;
+      const choice = (name: string) =>
+        terminalLimitChoiceValue(target.querySelector<Control>(`[name="${name}"]`)?.value ?? undefined);
+      void terminalLimitsSettings.save({
+        history_lines: choice(TERMINAL_LIMIT_FIELDS.historyLines),
+        replay_bytes: choice(TERMINAL_LIMIT_FIELDS.replayBytes),
+        warm_terminals: choice(TERMINAL_LIMIT_FIELDS.warmTerminals),
+      });
+    }),
+  );
   // Trash retention (HS2-KPD942, HS2-F55956): edits stay a per-project draft until "Apply now";
   // a debounced server preview says how many Trash tickets the new window would purge, and
   // leaving the page with an unapplied draft is held until the user applies or reverts it.
@@ -922,6 +941,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       if (category === 'sources') void refreshProviderConnections();
       if (category === 'accounts') void refreshProviderAccounts();
       if (category === 'terminals') void refreshTerminalSettings();
+      if (category === 'terminal-memory') void terminalLimitsSettings?.refresh();
       if (category === 'lifecycle') void refreshTrashSettings();
       if (category === 'ai' || category === 'commands') void refreshAiConfiguration(undefined, true);
     }),

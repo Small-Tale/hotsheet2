@@ -6508,6 +6508,80 @@ fn worklist_is_not_written_into_a_ticket_store_backing_a_registered_checkout() {
 }
 
 #[test]
+fn terminal_limits_are_set_headlessly_as_validated_machine_wide_settings() {
+    // HS2-Y5DYC0 headless parity with App Settings → Terminal memory.
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    let home = tempfile::tempdir().unwrap();
+    hs(p).args(["init", "--prefix", "HS"]).assert().success();
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["settings", "set", "terminal.history_lines", "12000"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("global (machine-wide)"));
+    let global: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(home.path().join("settings.json")).unwrap())
+            .unwrap();
+    assert_eq!(global["terminal.history_lines"], 12000);
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args([
+            "settings",
+            "set",
+            "terminal.warm_terminals",
+            "4",
+            "--scope",
+            "global",
+        ])
+        .assert()
+        .success();
+    // A project scope or an out-of-range value is refused without writing anything.
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args([
+            "settings",
+            "set",
+            "terminal.warm_terminals",
+            "8",
+            "--scope",
+            "local",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("machine-wide"));
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["settings", "set", "terminal.replay_bytes", "10"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("65536 to 67108864"));
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args([
+            "settings",
+            "get",
+            "terminal.warm_terminals",
+            "--scope",
+            "global",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("4"));
+    assert!(
+        hs(p)
+            .env("HOTSHEET_HOME", home.path())
+            .args(["settings", "get", "terminal.replay_bytes"])
+            .assert()
+            .failure()
+            .get_output()
+            .status
+            .code()
+            .is_some()
+    );
+}
+
+#[test]
 fn settings_global_scope_is_machine_wide_and_lowest_precedence() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

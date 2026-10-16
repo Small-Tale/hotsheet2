@@ -5300,6 +5300,70 @@
       }
     },
     {
+      "key": "hotsheet-web:terminal-memory-settings",
+      "package": "hotsheet-web",
+      "id": "terminal-memory-settings",
+      "name": "TerminalMemorySettings",
+      "kind": "component",
+      "purpose": "Machine-wide terminal history, server replay buffer, and warm-terminal limits with memory-derived defaults (HS2-Y5DYC0).",
+      "publicExports": [
+        {
+          "name": "TerminalMemorySettings"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/terminal-memory-settings.tsx"
+      ],
+      "source": "src/components/terminal-memory-settings.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/terminal-memory-settings.tsx",
+        "composition": "src/components/terminal-memory-settings.tsx"
+      }
+    },
+    {
       "key": "hotsheet-web:terminal-operations-sidebar",
       "package": "hotsheet-web",
       "id": "terminal-operations-sidebar",

@@ -169,6 +169,7 @@ describe('UX demo catalog', () => {
       'settings-workspace',
       'keyboard-settings',
       'trash-settings',
+      'terminal-memory-settings',
       'permission-rules-settings',
     ]);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');

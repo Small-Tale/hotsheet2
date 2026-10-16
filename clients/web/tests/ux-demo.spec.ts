@@ -507,6 +507,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['accounts-settings', 2],
     ['settings-workspace', 1],
     ['trash-settings', 3],
+    ['terminal-memory-settings', 6],
     ['permission-rules-settings', 3],
     ['project-sidebar', 1],
     ['command-settings-editor', 1],
@@ -3318,6 +3319,7 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
     ['columns', 'Column view'],
     ['general', 'General'],
     ['accounts', 'Accounts'],
+    ['terminal-memory', 'Terminal memory'],
     ['keyboard', 'Keyboard Shortcuts'],
   ] as const;
   for (const width of [1280, 390]) {

@@ -9,6 +9,7 @@ import { PermissionRulesSettings } from '../components/permission-rules-settings
 import { ProviderSetupForm } from '../components/provider-setup-form';
 import { type SettingsCategory } from '../components/settings-navigation';
 import { SettingsWorkspace } from '../components/settings-workspace';
+import { TerminalMemorySettings } from '../components/terminal-memory-settings';
 import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialog';
 import { AccountsSettings, TicketSourcesSettings } from '../components/ticket-sources-settings';
 import { trashDraftIsDirty, type TrashRetentionDraft, TrashSettings } from '../components/trash-settings';
@@ -17,7 +18,7 @@ import { type PermissionAutomationAction } from '../permission-notifications';
 import { type DemoDevice, DeviceSetting } from './components/device-setting';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
-import { DEMO_ACCOUNTS, DEMO_PROJECT_SOURCES } from './fixtures';
+import { DEMO_ACCOUNTS, DEMO_PROJECT_SOURCES, DEMO_TERMINAL_LIMITS, DEMO_TERMINAL_LIMITS_CONFIGURED } from './fixtures';
 import { syncSettingsControls } from './settings-controls';
 import {
   resetSettingsWorkspaceDemo,
@@ -185,6 +186,7 @@ export function SettingsWorkspaceDemo() {
         commands={{ commands: [] }}
         lifecycle={{ days: 30, message: '' }}
         terminals={{ inheritGlobalShellHistory: false, message: '' }}
+        terminalMemory={{ limits: DEMO_TERMINAL_LIMITS }}
         permissions={{
           automation: { action: settingsWorkspaceSettings.permissionAction.value, delayMs: 60_000 },
           delays: [0, 15_000, 60_000, 120_000],
@@ -260,6 +262,39 @@ export function PermissionRulesSettingsDemo() {
           rules={PERMISSION_RULES_DEMO}
           revoking={[JSON.stringify(['/work/demo.hs2', '', 'Bash', 'rm -rf build'])]}
           message="Could not revoke the rule. The server is unavailable."
+        />
+      </CatalogExample>
+    </>
+  );
+}
+
+/** App Settings → Terminal memory (HS2-Y5DYC0): every state the settings page renders. */
+export function TerminalMemorySettingsDemo() {
+  return (
+    <>
+      <CatalogExample label="Memory-Derived Defaults">
+        <TerminalMemorySettings limits={DEMO_TERMINAL_LIMITS} />
+      </CatalogExample>
+      {/* A value set from the CLI outside the presets is still listed and selected. */}
+      <CatalogExample label="Explicit Limits">
+        <TerminalMemorySettings limits={DEMO_TERMINAL_LIMITS_CONFIGURED} />
+      </CatalogExample>
+      <CatalogExample label="Another Device">
+        <TerminalMemorySettings
+          limits={DEMO_TERMINAL_LIMITS}
+          deviceDefaults={{ historyLines: 5_000, warmTerminals: 12 }}
+        />
+      </CatalogExample>
+      <CatalogExample label="Unknown Memory">
+        <TerminalMemorySettings limits={{ ...DEMO_TERMINAL_LIMITS, physical_memory_bytes: null }} />
+      </CatalogExample>
+      <CatalogExample label="Loading">
+        <TerminalMemorySettings />
+      </CatalogExample>
+      <CatalogExample label="Save Failed">
+        <TerminalMemorySettings
+          limits={DEMO_TERMINAL_LIMITS}
+          message="terminal.history_lines must be a whole number from 100 to 100000"
         />
       </CatalogExample>
     </>
@@ -388,6 +423,7 @@ export const demoModule: DemoModule = {
       reset: resetSettingsWorkspaceDemo,
     },
     'trash-settings': { catalogExamples: true, Demo: TrashSettingsDemo, reset: resetTrashSettingsDemo },
+    'terminal-memory-settings': { catalogExamples: true, Demo: TerminalMemorySettingsDemo },
     'permission-rules-settings': { catalogExamples: true, Demo: PermissionRulesSettingsDemo },
   },
   wire: wireSetupSettingsDemo,

@@ -31,6 +31,7 @@ import type {
   RepositoryStatus,
   SourceDetach,
   TerminalInfo,
+  TerminalLimits,
   TerminalName,
   TerminalRead,
   TerminalSettings,
@@ -563,6 +564,21 @@ export const parseTerminalName = shape<TerminalName>('terminal name', { id: isSt
 export const parseTerminalSettings = shape<TerminalSettings>('terminal settings', {
   inherit_global_shell_history: isBoolean,
 });
+
+/** `GET`/`PUT /terminal-limits` (HS2-Y5DYC0). */
+export const parseTerminalLimits: ResponseParser<TerminalLimits> = (value) => {
+  const what = 'terminal limits',
+    body = record(value, what),
+    keys = ['history_lines', 'replay_bytes', 'warm_terminals'] as const;
+  optionalOf(body, 'physical_memory_bytes', what, isNumber, true);
+  for (const group of ['defaults', 'effective', 'configured'] as const) {
+    const values = record(body[group], what);
+    for (const key of keys)
+      if (group === 'configured') optionalOf(values, key, what, isNumber, true);
+      else if (!isNumber(values[key])) invalid(what);
+  }
+  return body as unknown as TerminalLimits;
+};
 
 export const parseTrashSettings = shape<TrashSettings>('trash settings', { trash_cleanup_days: isNumber });
 export const parseTrashPurgePreview = shape<TrashPurgePreview>('trash purge preview', {

@@ -553,8 +553,9 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   pump, a writer, and an input reader joined by a bounded 32-frame queue. Under heavy output
   to a slow viewer, the viewer's keystrokes still reach the PTY at once. While the queue is
   full, the pump coalesces live output into one pending frame instead of letting the
-  fan-out lag. Only past 256 KiB of coalesced output (the scrollback size) does it fall back
-  to a scrollback replacement. The server writes liveness pongs ahead of queued output.
+  fan-out lag. Only past 256 KiB of coalesced output (the default replay size) does it fall
+  back to a scrollback replacement. The replay buffer itself is configurable and sized from the
+  client history (`docs/06` §6.7.8, HS2-Y5DYC0). The server writes liveness pongs ahead of queued output.
 - Survival across server restarts via a **detached PTY broker process** (carried
   from HS1 `src/terminals/broker/`) — terminals aren't killed when the server
   recycles or is explicitly stopped. Detached hosting is the server default; ordinary

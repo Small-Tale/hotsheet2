@@ -10,11 +10,7 @@ import {
   TERMINAL_VIEWPORT_RESUME_EVENT,
   type TerminalFocusRequest,
 } from '../terminal-viewport';
-import {
-  createTerminalViewportsController,
-  MAX_PARKED_TERMINAL_VIEWPORTS,
-  terminalViewportConfiguration,
-} from './terminal-viewports';
+import { createTerminalViewportsController, terminalViewportConfiguration } from './terminal-viewports';
 
 vi.mock('../terminal-viewport', async (original) => ({
   ...(await original<typeof import('../terminal-viewport')>()),
@@ -217,7 +213,7 @@ describe('kept-alive terminal viewports across project switches (HS2-WGTQ6X)', (
     });
     return target;
   }
-  function setup(projectIds = ['a', 'b']) {
+  function setup(projectIds = ['a', 'b'], warmLimit = { value: 12 }) {
     const projects = signal(projectIds.map(project)),
       parked: HTMLElement[] = [],
       restored: Array<[HTMLElement, HTMLElement]> = [],
@@ -241,12 +237,14 @@ describe('kept-alive terminal viewports across project switches (HS2-WGTQ6X)', (
         park: (element) => parked.push(element),
         restore: (placeholder, element) => restored.push([placeholder, element]),
       },
+      warmTerminalLimit: () => warmLimit.value,
     });
     const show = (...next: HTMLElement[]) => {
       elements = next;
       owner.syncTerminalViewportMounts();
     };
     return {
+      owner,
       projects,
       parked,
       restored,
@@ -365,8 +363,9 @@ describe('kept-alive terminal viewports across project switches (HS2-WGTQ6X)', (
   });
 
   it('bounds how many viewports stay warm, evicting the oldest parked first', () => {
-    const ids = Array.from({ length: MAX_PARKED_TERMINAL_VIEWPORTS + 2 }, (_, index) => `p${index}`);
-    const { disposals, show } = setup([...ids, 'last']);
+    const limit = 12,
+      ids = Array.from({ length: limit + 2 }, (_, index) => `p${index}`);
+    const { disposals, show } = setup([...ids, 'last'], { value: limit });
     const first = keepAlive('p0', 'one'),
       second = keepAlive('p1', 'one');
     show(first);
@@ -376,7 +375,28 @@ describe('kept-alive terminal viewports across project switches (HS2-WGTQ6X)', (
     expect(disposals.get(first)).toHaveBeenCalledTimes(1);
     expect(disposals.get(second)).toHaveBeenCalledTimes(1);
     const warm = [...disposals].filter(([, dispose]) => dispose.mock.calls.length === 0);
-    expect(warm).toHaveLength(MAX_PARKED_TERMINAL_VIEWPORTS + 1); // parked plus the visible one
+    expect(warm).toHaveLength(limit + 1); // parked plus the visible one
+  });
+
+  it('follows the configured warm-terminal limit, applying a lowered limit at once (HS2-Y5DYC0)', () => {
+    const warmLimit = { value: 3 },
+      { disposals, show, owner } = setup(['p0', 'p1', 'p2', 'p3', 'p4'], warmLimit);
+    const views = ['p0', 'p1', 'p2', 'p3', 'p4'].map((id) => keepAlive(id, 'one'));
+    for (const view of views) show(view);
+    show();
+    // Five parked against a limit of three: the two oldest were evicted.
+    expect(views.map((view) => disposals.get(view)?.mock.calls.length)).toEqual([1, 1, 0, 0, 0]);
+    warmLimit.value = 1;
+    owner.enforceWarmTerminalLimit();
+    expect(views.map((view) => disposals.get(view)?.mock.calls.length)).toEqual([1, 1, 1, 1, 0]);
+    // A limit of zero keeps nothing warm: the next parked viewport is disposed at once.
+    warmLimit.value = 0;
+    owner.enforceWarmTerminalLimit();
+    expect(disposals.get(views[4])).toHaveBeenCalledTimes(1);
+    const again = keepAlive('p0', 'one');
+    show(again);
+    show();
+    expect(disposals.get(again)).toHaveBeenCalledTimes(1);
   });
 
   it('keeps disposing viewports that are not kept alive', async () => {

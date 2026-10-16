@@ -43,6 +43,7 @@ import {
   parseStoredTicket,
   parseStringList,
   parseTerminalInfo,
+  parseTerminalLimits,
   parseTerminalName,
   parseTerminalRead,
   parseTerminalSettings,
@@ -785,6 +786,19 @@ export interface TerminalName {
 export interface TerminalSettings {
   inherit_global_shell_history: boolean;
 }
+/** Terminal memory limits (`/terminal-limits`, HS2-Y5DYC0). */
+export interface TerminalLimitValues {
+  history_lines: number;
+  replay_bytes: number;
+  warm_terminals: number;
+}
+/** Machine-wide terminal limits: memory-derived defaults, explicit settings (`null` = default), effective values. */
+export interface TerminalLimits {
+  physical_memory_bytes: number | null;
+  defaults: TerminalLimitValues;
+  configured: { history_lines: number | null; replay_bytes: number | null; warm_terminals: number | null };
+  effective: TerminalLimitValues;
+}
 export interface TrashSettings {
   trash_cleanup_days: number;
 }
@@ -1482,6 +1496,9 @@ export class Api {
   terminalSettings = () => this.parsed(parseTerminalSettings, '/terminal-settings');
   saveTerminalSettings = (value: TerminalSettings) =>
     this.parsed(parseTerminalSettings, '/terminal-settings', { method: 'PUT', body: JSON.stringify(value) });
+  terminalLimits = () => this.parsed(parseTerminalLimits, '/terminal-limits');
+  saveTerminalLimits = (value: TerminalLimits['configured']) =>
+    this.parsed(parseTerminalLimits, '/terminal-limits', { method: 'PUT', body: JSON.stringify(value) });
   trashSettings = (checkoutId: string) =>
     this.parsed(parseTrashSettings, `/checkouts/${encodeURIComponent(checkoutId)}/trash-settings`);
   trashPurgePreview = (checkoutId: string, days: number) =>

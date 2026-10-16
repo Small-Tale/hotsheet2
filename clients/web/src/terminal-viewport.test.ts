@@ -10,11 +10,9 @@ import {
   TERMINAL_DASHBOARD_FONT_SIZE,
   TERMINAL_DASHBOARD_LINE_HEIGHT,
   TERMINAL_DASHBOARD_ROWS,
-  TERMINAL_DEDICATED_SCROLLBACK,
   TERMINAL_DRAWER_RESIZE_END_EVENT,
   TERMINAL_FOCUS_RETRY_MS,
   TERMINAL_INPUT_PROBE_TIMEOUT_MS,
-  TERMINAL_MAGNIFIED_SCROLLBACK,
   TERMINAL_PENDING_INPUT_LIMIT,
   TERMINAL_PREVIEW_NATURAL_HEIGHT,
   TERMINAL_PREVIEW_NATURAL_WIDTH,
@@ -150,9 +148,8 @@ describe('terminal viewport protocol', () => {
     expect(terminalInverseScalePercent(Number.NaN)).toBe('100%');
   });
   it('does not duplicate deep scrollback into read-only dashboard previews', () => {
-    expect([TERMINAL_PREVIEW_SCROLLBACK, TERMINAL_MAGNIFIED_SCROLLBACK, TERMINAL_DEDICATED_SCROLLBACK]).toEqual([
-      0, 1_000, 5_000,
-    ]);
+    // Before the server answers, the conservative historical limits apply (HS2-Y5DYC0).
+    expect(TERMINAL_PREVIEW_SCROLLBACK).toBe(0);
     expect(terminalScrollbackLimit('scaled-preview', true)).toBe(0);
     expect(terminalScrollbackLimit('interactive', true)).toBe(1_000);
     expect(terminalScrollbackLimit('interactive', false)).toBe(5_000);

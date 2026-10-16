@@ -2,6 +2,7 @@ import type { Signal } from 'kerfjs';
 
 import type { Project } from '../interactions/types';
 import type { TerminalModifiers } from '../terminal-keys';
+import { currentTerminalLimits } from '../terminal-limits';
 import { ProgressiveTerminalWorkQueue } from '../terminal-progressive-work';
 import {
   mountTerminalViewport,
@@ -30,6 +31,9 @@ export interface TerminalViewportsDependencies {
   terminalModifiers?: { current: () => TerminalModifiers; consume: () => void };
   /** Where kept-alive viewports wait while out of the page; defaults to a hidden body container. */
   parking?: TerminalViewportParking;
+  /** How many kept-alive viewports stay warm out of the page; defaults to the configured, memory-aware
+   * warm-terminal limit (HS2-Y5DYC0). */
+  warmTerminalLimit?: () => number;
 }
 
 /** DOM moves for kept-alive viewports, injectable so the ownership logic is testable. */
@@ -57,9 +61,6 @@ export function terminalViewportConfiguration(element: HTMLElement): string {
   ].join('|');
 }
 
-/** How many kept-alive viewports stay warm out of the page, most recently parked first. */
-export const MAX_PARKED_TERMINAL_VIEWPORTS = 12;
-
 const documentParking: TerminalViewportParking = {
   park(element) {
     let holder = document.querySelector<HTMLElement>('[data-terminal-viewport-parking]');
@@ -85,7 +86,8 @@ function terminalViewportIdentity(element: HTMLElement): string | undefined {
 
 export function createTerminalViewportsController(dependencies: TerminalViewportsDependencies) {
   const { projects } = dependencies,
-    parking = dependencies.parking ?? documentParking;
+    parking = dependencies.parking ?? documentParking,
+    warmTerminalLimit = dependencies.warmTerminalLimit ?? (() => currentTerminalLimits().warmTerminals);
   const terminalViewportMounts = new Map<HTMLElement, () => void>();
   // Kept-alive viewports out of the page, keyed by identity, oldest first (HS2-WGTQ6X).
   const parkedViewports = new Map<string, { element: HTMLElement; dispose: () => void; evict: () => void }>();
@@ -152,8 +154,14 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
     element.dispatchEvent(new CustomEvent(TERMINAL_VIEWPORT_PARK_EVENT));
     element.addEventListener(TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT, evict);
     parkedViewports.set(identity, { element, dispose, evict });
+    enforceWarmTerminalLimit();
+  }
+
+  // Evict the oldest parked viewports beyond the warm-terminal limit; a lowered limit applies at once.
+  function enforceWarmTerminalLimit() {
+    const limit = Math.max(0, warmTerminalLimit());
     for (const [, oldest] of parkedViewports) {
-      if (parkedViewports.size <= MAX_PARKED_TERMINAL_VIEWPORTS) break;
+      if (parkedViewports.size <= limit) break;
       oldest.evict();
     }
   }
@@ -289,5 +297,5 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
     }
   }
 
-  return { syncTerminalViewportMounts, parkProjectViewports };
+  return { syncTerminalViewportMounts, parkProjectViewports, enforceWarmTerminalLimit };
 }

@@ -21,8 +21,15 @@ use crate::env::scrub_env;
 use crate::osc::{OscScanner, TermState};
 use crate::sizing::{Decision, SizeArbiter, SizePolicy, ViewportClaim};
 
-/// How much recent PTY output to retain for a re-attaching viewer.
+/// How much recent PTY output to retain for a re-attaching viewer when no limit is
+/// configured (HS2-Y5DYC0 sizes new terminals from `crate::limits`).
 pub const SCROLLBACK_BYTES: usize = 256 * 1024;
+
+/// Keep a spawn-time replay size within the accepted range.
+fn clamp_replay_bytes(bytes: usize) -> usize {
+    let (min, max) = crate::limits::REPLAY_BYTES_BOUNDS;
+    bytes.clamp(min, max)
+}
 
 /// How many recent output chunks the live fan-out buffers. A viewer that falls this far
 /// behind gets a `Lagged` signal and should re-sync from the scrollback snapshot.
@@ -62,6 +69,9 @@ pub struct TermSpec {
     pub env: Vec<(String, String)>,
     pub rows: u16,
     pub cols: u16,
+    /// How much recent output to retain for a reattaching viewer (HS2-Y5DYC0), clamped to
+    /// [`REPLAY_BYTES_BOUNDS`](crate::limits::REPLAY_BYTES_BOUNDS) at spawn.
+    pub replay_bytes: usize,
 }
 
 impl TermSpec {
@@ -75,6 +85,7 @@ impl TermSpec {
             env: Vec::new(),
             rows: 24,
             cols: 80,
+            replay_bytes: SCROLLBACK_BYTES,
         }
     }
 }
@@ -380,7 +391,10 @@ impl Terminal {
         #[cfg(not(unix))]
         drop(pair.slave); // release the slave in the parent so EOF is seen on child exit
 
-        let output = Arc::new(OutputReplay::new(SCROLLBACK_BYTES, OUTPUT_CHANNEL_CAP));
+        let output = Arc::new(OutputReplay::new(
+            clamp_replay_bytes(spec.replay_bytes),
+            OUTPUT_CHANNEL_CAP,
+        ));
         let busy = Arc::new(Mutex::new(BusyDetector::new()));
         let osc = Arc::new(Mutex::new(OscScanner::with_initial_cwd(initial_cwd)));
         let (out, bz, oc) = (output.clone(), busy.clone(), osc.clone());
@@ -555,6 +569,11 @@ impl Terminal {
     /// A snapshot of the scrollback ring (what a re-attaching viewer replays).
     pub fn scrollback(&self) -> Vec<u8> {
         self.output.snapshot()
+    }
+
+    /// How many bytes of recent output the scrollback ring retains (HS2-Y5DYC0).
+    pub fn replay_capacity(&self) -> usize {
+        self.output.ring.lock_or_recover().cap
     }
 
     /// The inferred busy/idle activity from the output stream.

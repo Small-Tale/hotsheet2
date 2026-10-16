@@ -138,11 +138,11 @@ pub use routes::terminals::{
 pub(crate) use routes::terminals::{
     answer_terminal_question, ask_terminal_question, attach_terminal, clear_terminal_halt,
     connect_terminal_ai, disconnect_terminal_ai, get_checkout_terminal_settings,
-    get_checkout_trash_settings, get_terminal_settings, halt_terminal, kill_terminal,
-    list_permission_rules, list_terminals, open_terminal, poll_terminal_question_answer,
-    put_checkout_terminal_settings, put_checkout_trash_settings, put_terminal_settings,
-    read_terminal, rename_terminal, resolve_permission, resolve_terminal_question,
-    revoke_permission_rule, write_terminal,
+    get_checkout_trash_settings, get_terminal_limits, get_terminal_settings, halt_terminal,
+    kill_terminal, list_permission_rules, list_terminals, open_terminal,
+    poll_terminal_question_answer, put_checkout_terminal_settings, put_checkout_trash_settings,
+    put_terminal_limits, put_terminal_settings, read_terminal, rename_terminal, resolve_permission,
+    resolve_terminal_question, revoke_permission_rule, write_terminal,
 };
 use routes::ticket_writes::{
     add_store, add_ticket_attachment, assign_ticket, batch_update, close_ticket, create_ticket,
@@ -1470,6 +1470,11 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/terminal-settings",
             get(get_terminal_settings).put(put_terminal_settings),
+        )
+        // Machine-wide terminal memory limits with memory-derived defaults (HS2-Y5DYC0).
+        .route(
+            "/terminal-limits",
+            get(get_terminal_limits).put(put_terminal_limits),
         )
         .route("/terminals/{id}", get(read_terminal).delete(kill_terminal))
         .route("/terminals/{id}/input", post(write_terminal))

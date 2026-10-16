@@ -19,6 +19,7 @@ describe('SettingsWorkspace demo settings (HS2-PS9BQV)', () => {
       'columns',
       'general',
       'accounts',
+      'terminal-memory',
       'keyboard',
     ]);
     const markup = String(SettingsWorkspaceSettings());

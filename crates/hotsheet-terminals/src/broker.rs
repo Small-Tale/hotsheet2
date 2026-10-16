@@ -55,6 +55,11 @@ pub enum Request {
         cwd: Option<String>,
         #[serde(default)]
         env: Vec<(String, String)>,
+        /// The replay buffer for a newly spawned terminal, in bytes (HS2-Y5DYC0). Older servers omit
+        /// it and get [`SCROLLBACK_BYTES`](crate::SCROLLBACK_BYTES); a reattach keeps the size the
+        /// terminal was spawned with.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        replay_bytes: Option<u64>,
     },
     /// List all hosted terminals.
     List,
@@ -431,6 +436,7 @@ fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Request) -
             args,
             cwd,
             env,
+            replay_bytes,
         } => {
             let spec = TermSpec {
                 kind,
@@ -440,6 +446,9 @@ fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Request) -
                 env,
                 rows: 24,
                 cols: 80,
+                replay_bytes: replay_bytes.map_or(crate::SCROLLBACK_BYTES, |bytes| {
+                    usize::try_from(bytes).unwrap_or(usize::MAX)
+                }),
             };
             match manager.get_or_spawn(key(&id), spec) {
                 Ok(term) => Response::Terminal {
@@ -675,6 +684,46 @@ mod tests {
     use std::time::{Duration, Instant};
 
     #[test]
+    fn replay_size_is_optional_on_the_wire_and_reaches_the_spawned_terminal() {
+        // HS2-Y5DYC0: an older server omits the size (the broker keeps 256 KiB); a newer one
+        // omits it only when unset, so an older broker never sees an unknown field.
+        let legacy: Request =
+            serde_json::from_str(r#"{"op":"open","id":"t","command":"cat"}"#).unwrap();
+        assert!(matches!(
+            legacy,
+            Request::Open {
+                replay_bytes: None,
+                ..
+            }
+        ));
+        let open = |replay_bytes| Request::Open {
+            id: "sized".into(),
+            kind: TerminalKind::Shell,
+            command: "cat".into(),
+            args: vec![],
+            cwd: None,
+            env: vec![],
+            replay_bytes,
+        };
+        assert!(
+            serde_json::to_value(open(None))
+                .unwrap()
+                .get("replay_bytes")
+                .is_none()
+        );
+        let sized = serde_json::to_value(open(Some(512 * 1024))).unwrap();
+        assert_eq!(sized["replay_bytes"], 512 * 1024);
+        let manager = Arc::new(TerminalManager::new());
+        assert!(matches!(
+            handle_request("proj", &manager, serde_json::from_value(sized).unwrap()),
+            Response::Terminal { .. }
+        ));
+        let term = manager.get(&("proj".into(), "sized".into())).unwrap();
+        assert_eq!(term.replay_capacity(), 512 * 1024);
+        term.kill().unwrap();
+    }
+
+    #[test]
     fn creation_kind_round_trips_and_legacy_broker_messages_default_to_shell() {
         let legacy: Request =
             serde_json::from_str(r#"{"op":"open","id":"legacy","command":"claude"}"#).unwrap();
@@ -740,6 +789,7 @@ mod tests {
                 args: vec![],
                 cwd: None,
                 env: vec![],
+                replay_bytes: None,
             })
             .await
             .unwrap();
@@ -834,6 +884,7 @@ mod tests {
                 args: vec![],
                 cwd: None,
                 env: vec![],
+                replay_bytes: None,
             })
             .await
             .unwrap();
@@ -905,6 +956,7 @@ mod tests {
                 args: vec![],
                 cwd: None,
                 env: vec![],
+                replay_bytes: None,
             })
             .await
             .unwrap();
@@ -966,6 +1018,7 @@ mod tests {
                 args: vec![],
                 cwd: None,
                 env: vec![],
+                replay_bytes: None,
             })
             .await
             .unwrap();
@@ -1086,6 +1139,7 @@ mod tests {
                     args: vec![],
                     cwd: None,
                     env: vec![],
+                    replay_bytes: None,
                 })
                 .await
                 .unwrap();
@@ -1113,6 +1167,7 @@ mod tests {
                 args: vec![],
                 cwd: None,
                 env: vec![],
+                replay_bytes: None,
             })
             .await
             .unwrap();
@@ -1185,6 +1240,7 @@ mod tests {
                 args: vec![],
                 cwd: None,
                 env: vec![],
+                replay_bytes: None,
             })
             .await
             .unwrap();
@@ -1238,6 +1294,7 @@ mod tests {
                 args: vec![],
                 cwd: None,
                 env: vec![],
+                replay_bytes: None,
             })
             .await
             .unwrap();

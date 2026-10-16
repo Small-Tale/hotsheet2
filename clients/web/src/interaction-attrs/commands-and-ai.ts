@@ -52,6 +52,7 @@ export const COMMANDS_AND_AI_ACTIONS = {
   openCommandManualModel: action('open-command-manual-model'),
   toggleLoadingActivity: action('toggle-loading-activity'),
   toggleGlobalShellHistory: action('toggle-global-shell-history'),
+  saveTerminalLimits: action('save-terminal-limits'),
   saveTrashSettings: action('save-trash-settings'),
   revertTrashSettings: action('revert-trash-settings'),
   applyLeavingTrashSettings: action('apply-leaving-trash-settings'),

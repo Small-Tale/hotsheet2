@@ -4,7 +4,7 @@ use crate::api_error::ApiError;
 use crate::routes::permissions::{discovered_ai_tools, now_ms};
 use crate::routes::terminals::{
     OpenTerminalReq, TerminalInfo, broker_err, broker_info, read_terminal_settings, term_info,
-    term_key,
+    term_key, terminal_replay_bytes,
 };
 use crate::{AppState, multistore, now, terminal_broker, terminal_names};
 use axum::Json;
@@ -28,8 +28,12 @@ pub(crate) async fn open_terminal(
     let launch_id = id.clone();
     // Setup and model discovery may launch subprocesses or wait for a shared catalog
     // lock. Keep the entire synchronous preparation off Tokio workers (HS2-Y7W3Z4).
-    let (launch, req) = tokio::task::spawn_blocking(move || {
-        terminal_launch(&launch_state, &req, &launch_id).map(|launch| (launch, req))
+    let (launch, req, replay_bytes) = tokio::task::spawn_blocking(move || {
+        let launch = terminal_launch(&launch_state, &req, &launch_id)?;
+        // New terminals retain the configured replay so a reconnect restores about what the
+        // client keeps (HS2-Y5DYC0); a reattach keeps the size it was spawned with.
+        let replay_bytes = terminal_replay_bytes(&launch_state);
+        Ok::<_, ApiError>((launch, req, replay_bytes))
     })
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
@@ -58,6 +62,7 @@ pub(crate) async fn open_terminal(
                 args: launch.args,
                 cwd: Some(cwd),
                 env: launch.env,
+                replay_bytes: Some(replay_bytes),
             })
             .await
             .map_err(|e| {
@@ -92,6 +97,7 @@ pub(crate) async fn open_terminal(
         env: launch.env,
         rows: 24,
         cols: 80,
+        replay_bytes: usize::try_from(replay_bytes).unwrap_or(usize::MAX),
     };
     let term = state
         .terminals

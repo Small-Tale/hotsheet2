@@ -6471,6 +6471,69 @@
       }
     },
     {
+      "id": "terminal-memory-settings",
+      "name": "TerminalMemorySettings",
+      "kind": "component",
+      "purpose": "Machine-wide terminal history, server replay buffer, and warm-terminal limits with memory-derived defaults (HS2-Y5DYC0).",
+      "source": "src/components/terminal-memory-settings.tsx",
+      "publicExports": [
+        {
+          "name": "TerminalMemorySettings"
+        }
+      ],
+      "sourceLinks": ["src/components/terminal-memory-settings.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/terminal-memory-settings.tsx",
+        "composition": "src/components/terminal-memory-settings.tsx"
+      },
+      "selection": {
+        "useWhen": ["Hot Sheet needs the machine-wide terminal memory limits."],
+        "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TerminalMemorySettings behavior."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "permission-rules-settings",
       "name": "PermissionRulesSettings",
       "kind": "component",

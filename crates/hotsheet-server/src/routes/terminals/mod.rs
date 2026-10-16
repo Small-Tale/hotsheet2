@@ -130,6 +130,133 @@ pub(crate) async fn put_checkout_terminal_settings(
     Ok(Json(value))
 }
 
+// ---- terminal memory limits (HS2-Y5DYC0) ------------------------------------------
+
+/// `GET`/`PUT /terminal-limits`: the machine-wide terminal limits with the physical memory their
+/// defaults were derived from. The client applies `effective` (keeping conservative defaults for
+/// unset limits when it runs on another device or a phone); new terminals take its replay size.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+pub(crate) struct TerminalLimitsView {
+    physical_memory_bytes: Option<u64>,
+    defaults: hotsheet_ticketing::terminal_limits::TerminalLimitValues,
+    configured: hotsheet_ticketing::terminal_limits::ConfiguredTerminalLimits,
+    effective: hotsheet_ticketing::terminal_limits::TerminalLimitValues,
+}
+
+/// The machine's physical memory, read once per process.
+fn physical_memory() -> Option<u64> {
+    static MEMORY: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
+    *MEMORY.get_or_init(hotsheet_terminals::physical_memory_bytes)
+}
+
+fn machine_settings(state: &AppState) -> Settings {
+    Settings::with_global_home(state.store.root(), state.machine_home())
+}
+
+fn settings_error(error: impl std::fmt::Display) -> ApiError {
+    ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
+}
+
+/// The configured limits, defaults, and effective values. A stored value outside its accepted
+/// range is ignored so the derived default applies.
+pub(crate) fn read_terminal_limits(state: &AppState) -> Result<TerminalLimitsView, ApiError> {
+    use hotsheet_ticketing::terminal_limits::{
+        HISTORY_LINES_SETTING, REPLAY_BYTES_SETTING, WARM_TERMINALS_SETTING, stored_limit,
+    };
+    let settings = machine_settings(state);
+    let stored = |key: &str| -> Result<Option<u64>, ApiError> {
+        let value = settings
+            .get(key, hotsheet_ticketing::Scope::Global)
+            .map_err(settings_error)?;
+        Ok(stored_limit(key, value.as_ref()))
+    };
+    let narrow = |value: Option<u64>| value.and_then(|value| u32::try_from(value).ok());
+    let configured = hotsheet_ticketing::terminal_limits::ConfiguredTerminalLimits {
+        history_lines: narrow(stored(HISTORY_LINES_SETTING)?),
+        replay_bytes: stored(REPLAY_BYTES_SETTING)?,
+        warm_terminals: narrow(stored(WARM_TERMINALS_SETTING)?),
+    };
+    let physical_memory_bytes = physical_memory();
+    let defaults =
+        hotsheet_ticketing::terminal_limits::default_terminal_limits(physical_memory_bytes);
+    let effective =
+        hotsheet_ticketing::terminal_limits::effective_terminal_limits(defaults, configured);
+    Ok(TerminalLimitsView {
+        physical_memory_bytes,
+        // Each default is what that limit resolves to while unset; an unset replay follows the
+        // effective history, configured or not.
+        defaults: hotsheet_ticketing::terminal_limits::TerminalLimitValues {
+            replay_bytes: hotsheet_ticketing::terminal_limits::replay_bytes_for_history(
+                effective.history_lines,
+            ),
+            ..defaults
+        },
+        configured,
+        effective,
+    })
+}
+
+/// The replay buffer a newly spawned terminal gets. An unreadable settings file never blocks a
+/// terminal from opening: it gets the memory-derived default instead.
+pub(crate) fn terminal_replay_bytes(state: &AppState) -> u64 {
+    read_terminal_limits(state).map_or_else(
+        |error| {
+            tracing::warn!(error = %error.message, "terminal limits unreadable; using defaults");
+            hotsheet_ticketing::terminal_limits::default_terminal_limits(physical_memory())
+                .replay_bytes
+        },
+        |view| view.effective.replay_bytes,
+    )
+}
+
+pub(crate) async fn get_terminal_limits(
+    State(state): State<AppState>,
+) -> Result<Json<TerminalLimitsView>, ApiError> {
+    let view = tokio::task::spawn_blocking(move || read_terminal_limits(&state))
+        .await
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
+    Ok(Json(view))
+}
+
+/// Replace all three limits: a `null` or missing field clears that limit back to its default.
+pub(crate) async fn put_terminal_limits(
+    State(state): State<AppState>,
+    Json(value): Json<hotsheet_ticketing::terminal_limits::ConfiguredTerminalLimits>,
+) -> Result<Json<TerminalLimitsView>, ApiError> {
+    use hotsheet_ticketing::terminal_limits::{
+        HISTORY_LINES_SETTING, REPLAY_BYTES_SETTING, WARM_TERMINALS_SETTING,
+    };
+    hotsheet_ticketing::terminal_limits::validate_terminal_limits(&value)
+        .map_err(|error| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, error.to_string()))?;
+    let view = tokio::task::spawn_blocking(move || {
+        let settings = machine_settings(&state);
+        for (key, limit) in [
+            (HISTORY_LINES_SETTING, value.history_lines.map(u64::from)),
+            (REPLAY_BYTES_SETTING, value.replay_bytes),
+            (WARM_TERMINALS_SETTING, value.warm_terminals.map(u64::from)),
+        ] {
+            match limit {
+                Some(limit) => settings
+                    .set(
+                        key,
+                        serde_json::Value::from(limit),
+                        hotsheet_ticketing::Scope::Global,
+                    )
+                    .map_err(settings_error)?,
+                None => {
+                    settings
+                        .unset(key, hotsheet_ticketing::Scope::Global)
+                        .map_err(settings_error)?;
+                }
+            }
+        }
+        read_terminal_limits(&state)
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
+    Ok(Json(view))
+}
+
 pub(crate) async fn get_checkout_trash_settings(
     State(state): State<AppState>,
     Path(reference): Path<String>,

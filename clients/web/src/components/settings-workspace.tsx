@@ -22,6 +22,7 @@ import { CommandSettingsEditor } from './command-settings-editor';
 import { KeyboardSettings, type KeyboardSettingsProps } from './keyboard-settings';
 import { PermissionRulesSettings } from './permission-rules-settings';
 import { type SettingsCategory, settingsCategoryTitle } from './settings-navigation';
+import { TerminalMemorySettings, type TerminalMemorySettingsProps } from './terminal-memory-settings';
 import {
   AccountsSettings,
   type AccountsSettingsProps,
@@ -38,6 +39,8 @@ export interface SettingsWorkspaceProps {
   commands: CommandSettingsEditorProps;
   lifecycle: { days: number; message: string; draft?: TrashRetentionDraft };
   terminals: { inheritGlobalShellHistory: boolean; message: string };
+  /** App Settings → Terminal memory (HS2-Y5DYC0). */
+  terminalMemory?: TerminalMemorySettingsProps;
   permissions: {
     automation: PermissionAutomation;
     delays: readonly number[];
@@ -59,6 +62,7 @@ export function SettingsWorkspace({
   commands,
   lifecycle,
   terminals,
+  terminalMemory = {},
   permissions,
   columns,
   general,
@@ -73,6 +77,7 @@ export function SettingsWorkspace({
     >
       {category === 'sources' && <TicketSourcesSettings {...sources} />}
       {category === 'accounts' && <AccountsSettings {...accounts} />}
+      {category === 'terminal-memory' && <TerminalMemorySettings {...terminalMemory} />}
       {category === 'ai' && (
         <AiToolSettings tools={ai.tools} selection={ai.selection} loading={ai.loading} message={ai.message} />
       )}

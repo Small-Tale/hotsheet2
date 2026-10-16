@@ -113,6 +113,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       project-lifecycle.ts    # Project open/restore, HS1 migration, source/provider setup, and lifecycle dialog state
       ticket-workflows.ts     # Ticket mutation/autosave, selection, bulk/clipboard, reader, attachment, creation, close, and Not Working workflows
       ai-configuration.tsx    # Project AI defaults, tool/model/effort and manual-model lifecycle
+      terminal-limits-settings.ts # Loads, applies, and saves the machine-wide terminal limits for App Settings → Terminal memory (HS2-Y5DYC0)
       terminal-viewports.ts   # Observed viewport identity, progressive mount/disposal, pending focus, and early kept-alive parking across project switches (HS2-WGTQ6X, HS2-DM2SK3), and reparenting live grid viewports into re-rendered placeholders (HS2-AMNNBR)
       terminal-presentation.tsx # Live workspace/drawer/conversation props projected during root render
       controllers.test.ts     # Project replacement, delayed response, rollback, reset/refill transition matrix
@@ -167,6 +168,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/terminal-visibility-filter.ts # Controlled native multi-select array binding that preserves its open popup through list rerenders
     src/browser-id.ts       #   Secure/ordinary-LAN browser identities plus time-sortable Jira outbox retry IDs (HS2-QA1VEF)
     src/terminal-viewport.ts #   Lightweight terminal protocol/geometry and guarded lazy runtime loader with visible startup errors
+    src/terminal-limits.ts  #   Client terminal history / warm-cap limits resolved from /terminal-limits; conservative defaults on another device or a phone (HS2-Y5DYC0)
     src/terminal-progressive-work.ts # Bounded visible-preview mounting and detached-runtime teardown queue
     src/terminal-theme.ts    # Light/dark xterm themes resolved from the terminal tokens, followed live on scheme changes (HS2-QNSS9C)
     src/terminal-viewport-runtime.ts # Transactional lazy live/static xterm setup/cleanup, input, leased claims, server-size scaling, and reconnect lifecycle
@@ -206,6 +208,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/keyboard-shortcuts.ts #  Complete keyboard-shortcut registry (editable global/view/panel/tab-cycling chords + fixed system shortcuts), device-local override persistence, and chord match/format/capture/conflict helpers (HS2-QT6PGR, HS2-9SHYWD)
     src/tab-cycle.ts # Pure next/previous wrap-around cycling over an ordered tab-id list, shared by the project-tab and drawer-tab keyboard shortcuts (HS2-9SHYWD)
     src/components/keyboard-settings.tsx # App Settings → Keyboard screen: grouped shortcut reference with per-chord rebinding, reset, and conflict warnings
+    src/components/terminal-memory-settings.tsx # App Settings → Terminal memory: history, server replay buffer, and warm-terminal limit selects with memory-derived defaults (HS2-Y5DYC0)
     src/components/ticket-sources-settings.tsx # Project Settings → Ticket sources (only this project's own sources: default choice, edit, remove-from-this-project) and App Settings → Accounts (machine-wide sign-ins with their sources/projects, Sign out when unused), HS2-3SCH1K/HS2-SM9PM8
     src/tracked-size-observer.ts # ResizeObserver that re-binds to whichever element currently renders a slot and ignores 0x0 hidden/detached reports (drawer + workspace grid bounds, HS2-0PF13V)
     src/trailing-task.ts     # Generic trailing-edge scheduler used to collapse rapid view intent before collection I/O starts
@@ -341,6 +344,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata; explicit schema-1/2 migration to guarded random-suffix schema 3; list_tickets_resilient -> StoreListing{tickets,corrupt:Vec<CorruptTicket>} so one unparseable file never blocks project open (HS2-PRVPCQ); git-diff fast path (head_commit/is_working_tree_clean/changed_ticket_ids_between, HS2-90)
       src/registry.rs        #   StoreRegistry: resolve a ULID across multiple stores, follow moved_to_store tombstones (docs/02 §2.2.1, HS2-4)
       src/settings.rs        #   Settings: global (${HOTSHEET_HOME}) / shared (committed) / local (gitignored) scopes; effective precedence global<shared<local (HS2-34)
+      src/terminal_limits.rs #   Machine-wide terminal limit keys (terminal.history_lines / replay_bytes / warm_terminals), ranges, memory-tier defaults, and replay-from-history sizing (HS2-Y5DYC0)
       src/settings_locks.rs  #   Bounded ${HOTSHEET_HOME}/settings-locks: path-recording locks, identity-checked acquire, hourly prune of vanished targets (HS2-MZ1TMH)
       src/auto_context.rs    #   HS1-compatible category/tag guidance defaults + override/suppression/matching (HS2-BZBVAS)
       src/secrets.rs         #   injected SecretStore + OS keychain adapters + metadata-only provider registry (HS2-M1XMSX)
@@ -425,7 +429,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     hotsheet-sync/           # Shared lock helpers (no deps): LockExt::lock_or_recover / with_lock, RwLockExt — the one recover-on-poison policy for server + terminals (HS2-ZGQJZP)
       src/lib.rs             #   use instead of lock().unwrap(), silent `if let Ok(..) = lock()` skips, or poison→500 mapping
     hotsheet-terminals/      # PTY manager (nearly standalone; dep portable-pty) — docs/05 §5.4, HS2-10
-      src/terminal.rs        #   Terminal: spawn a command in a PTY, scrollback ring, drain thread (slave kept until the child exits and output is drained, HS2-BCE5XG), write/resize/kill; env-scrubbed + parent-env-inherited; subscribe() live output fan-out (tokio broadcast) for the WS attach (HS2-XTTTMV)
+      src/limits.rs          #   Physical memory (sysconf) and the spawn-time replay bounds behind the terminal limits (HS2-Y5DYC0)
+      src/terminal.rs        #   Terminal: spawn a command in a PTY, scrollback ring, sized per spawn by TermSpec.replay_bytes (HS2-Y5DYC0), drain thread (slave kept until the child exits and output is drained, HS2-BCE5XG), write/resize/kill; env-scrubbed + parent-env-inherited; subscribe() live output fan-out (tokio broadcast) for the WS attach (HS2-XTTTMV)
       src/manager.rs         #   TerminalManager: per-(project,terminal) lazy spawn + shared Arc<Terminal> + list/get/kill/reap
       src/busy.rs            #   BusyDetector: streaming OSC-133 busy/idle inference + contains_spinner hint (feeds HS2-107)
       src/osc.rs             #   OscScanner: streaming OSC 7/8/9 parser → TermState{cwd,link,progress,notify}; surfaced on the terminal read/list state (HS2-RCKEJ9)

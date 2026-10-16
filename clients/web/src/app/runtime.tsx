@@ -112,6 +112,7 @@ import {
   createTerminalDrawerGeometryController,
   currentMobileViewportGeometry,
 } from '../features/terminal-drawer-geometry';
+import { createTerminalLimitsSettings } from '../features/terminal-limits-settings';
 import { createTerminalNamesController } from '../features/terminal-names';
 import { createTerminalOperationsSurface } from '../features/terminal-operations-surface';
 import { createTerminalPresentation } from '../features/terminal-presentation';
@@ -155,6 +156,7 @@ import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../ser
 import { interleaveByRank } from '../tab-order';
 import { TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH } from '../terminal-grid-layout';
 import { consumeTerminalModifiers, NO_TERMINAL_MODIFIERS, type TerminalModifiers } from '../terminal-keys';
+import { onTerminalLimitsChange } from '../terminal-limits';
 import { parseTerminalNames } from '../terminal-names';
 import { terminalDrawerActivation } from '../terminal-project-scope';
 import {
@@ -464,26 +466,27 @@ export async function startHotSheetWebClient() {
       refreshTerminalDashboard: () => refreshTerminalDashboard(),
     });
   let terminalPreviewClickTimer: number | undefined;
-  const { syncTerminalViewportMounts, parkProjectViewports } = createTerminalViewportsController({
-    projects,
-    mobileTerminalColumns: () => mobileTerminalColumns.peek(),
-    terminalModifiers: {
-      current: () => terminalModifiers.peek(),
-      consume: () => {
-        terminalModifiers.value = consumeTerminalModifiers(terminalModifiers.peek());
+  const { syncTerminalViewportMounts, parkProjectViewports, enforceWarmTerminalLimit } =
+    createTerminalViewportsController({
+      projects,
+      mobileTerminalColumns: () => mobileTerminalColumns.peek(),
+      terminalModifiers: {
+        current: () => terminalModifiers.peek(),
+        consume: () => {
+          terminalModifiers.value = consumeTerminalModifiers(terminalModifiers.peek());
+        },
       },
-    },
-    get pendingTerminalFocus() {
-      return terminalDrawer.pendingTerminalFocus;
-    },
-    set pendingTerminalFocus(value) {
-      terminalDrawer.pendingTerminalFocus = value;
-    },
-    openTicketReference(element, slug, projectId, preferredProject) {
-      ticketLinkReturnFocus = element;
-      void selectLinkedTicket(slug, projectId, preferredProject);
-    },
-  });
+      get pendingTerminalFocus() {
+        return terminalDrawer.pendingTerminalFocus;
+      },
+      set pendingTerminalFocus(value) {
+        terminalDrawer.pendingTerminalFocus = value;
+      },
+      openTicketReference(element, slug, projectId, preferredProject) {
+        ticketLinkReturnFocus = element;
+        void selectLinkedTicket(slug, projectId, preferredProject);
+      },
+    });
   const selectedCorruptKey = signal<string | undefined>(undefined);
   const selectedTicketSlugs = signal<string[]>([]);
   const ticketContextMenu = signal<{ x: number; y: number; ticketSlug: string; hideUpNext?: boolean } | undefined>(
@@ -1166,6 +1169,25 @@ export async function startHotSheetWebClient() {
     void refreshTicketCollection(view);
   });
   const project = () => projects.value.find((item) => item.id === selectedProjectId.value);
+  // Machine-wide terminal limits (HS2-Y5DYC0): load them from the server the active project talks to,
+  // once per server, so emulators mounted afterward use the configured, memory-aware history.
+  const terminalLimitsSettings = createTerminalLimitsSettings({
+    api: () => {
+      const current = project();
+      return current ? new Api(current.apiPath, '', { trackBusy: false }) : undefined;
+    },
+  });
+  // The runtime lives as long as the page, so this subscription needs no teardown.
+  onTerminalLimitsChange(() => {
+    enforceWarmTerminalLimit();
+  });
+  let terminalLimitsServer: string | undefined;
+  effect(() => {
+    const current = project();
+    if (!current || current.apiPath === terminalLimitsServer) return;
+    terminalLimitsServer = current.apiPath;
+    void terminalLimitsSettings.refresh();
+  });
   // Measure each project's repositories once when it is first shown, so the shell can warn while
   // one is over a GitHub limit (HS2-P1GYWH). One request per project, never repeated on a timer;
   // the statistics view refreshes the same report when it opens.
@@ -3447,6 +3469,9 @@ export async function startHotSheetWebClient() {
     trashRetentionDraftsByProject,
     inheritGlobalShellHistory,
     terminalSettingsMessage,
+    terminalLimits: terminalLimitsSettings.limits,
+    terminalLimitsMessage: terminalLimitsSettings.message,
+    terminalLimitDeviceDefaults: () => terminalLimitsSettings.deviceDefaults(),
     permissionAutomation,
     permissionRules,
     permissionRulesMessage,
@@ -4355,6 +4380,7 @@ export async function startHotSheetWebClient() {
     setSettingsCategory,
     refreshProviderConnections,
     refreshTerminalSettings,
+    terminalLimitsSettings,
     refreshTrashSettings,
     capturingShortcutId,
     saveAiDefaults,

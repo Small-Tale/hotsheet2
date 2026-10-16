@@ -1511,6 +1511,141 @@ async fn terminal_history_opt_out_is_machine_local_and_round_trips() {
 }
 
 #[tokio::test]
+async fn terminal_limits_are_machine_wide_memory_derived_and_explicit_settings_win() {
+    let (dir, state) = state();
+    let home = dir.path().join("machine-home");
+    let router = app(state.with_machine_home(&home));
+    // The terminal crate clamps a spawned replay to the same range the setting accepts.
+    let (min, max) = hotsheet_terminals::REPLAY_BYTES_BOUNDS;
+    assert_eq!(
+        (min as u64, max as u64),
+        hotsheet_ticketing::terminal_limits::REPLAY_BYTES_RANGE
+    );
+    let memory = hotsheet_terminals::physical_memory_bytes();
+    let defaults = hotsheet_ticketing::terminal_limits::default_terminal_limits(memory);
+    let initial = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/terminal-limits", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        initial,
+        serde_json::json!({
+            "physical_memory_bytes": memory,
+            "defaults": defaults,
+            "configured": {"history_lines": null, "replay_bytes": null, "warm_terminals": null},
+            "effective": defaults,
+        })
+    );
+
+    // An explicit history wins and an unset replay follows it.
+    let saved = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            "/terminal-limits",
+            Some(r#"{"history_lines":2000,"warm_terminals":3}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), StatusCode::OK);
+    let saved = body_json(saved).await;
+    assert_eq!(
+        saved["effective"],
+        serde_json::json!({
+            "history_lines": 2000,
+            "replay_bytes": hotsheet_ticketing::terminal_limits::replay_bytes_for_history(2000),
+            "warm_terminals": 3,
+        })
+    );
+    // The replay default names what an unset replay resolves to: the configured history's size.
+    assert_eq!(
+        saved["defaults"]["replay_bytes"],
+        serde_json::json!(hotsheet_ticketing::terminal_limits::replay_bytes_for_history(2000))
+    );
+    assert_eq!(
+        saved["defaults"]["history_lines"],
+        serde_json::json!(defaults.history_lines)
+    );
+    let global = Settings::with_global_home(dir.path(), &home);
+    assert_eq!(
+        global.get("terminal.history_lines", Scope::Global).unwrap(),
+        Some(serde_json::json!(2000))
+    );
+    assert_eq!(
+        global.get("terminal.replay_bytes", Scope::Global).unwrap(),
+        None
+    );
+    // Nothing leaks into the project's own settings.
+    assert_eq!(
+        Settings::new(dir.path())
+            .get("terminal.history_lines", Scope::Local)
+            .unwrap(),
+        None
+    );
+
+    // Out-of-range values are refused and change nothing.
+    let refused = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            "/terminal-limits",
+            Some(r#"{"history_lines":5,"replay_bytes":null,"warm_terminals":null}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        global
+            .get("terminal.warm_terminals", Scope::Global)
+            .unwrap(),
+        Some(serde_json::json!(3))
+    );
+
+    // A hand-edited, out-of-range stored value is ignored in favour of the default.
+    global
+        .set(
+            "terminal.warm_terminals",
+            serde_json::json!(999),
+            Scope::Global,
+        )
+        .unwrap();
+    let read = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/terminal-limits", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        read["configured"]["warm_terminals"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        read["effective"]["warm_terminals"],
+        serde_json::json!(defaults.warm_terminals)
+    );
+
+    // Clearing every limit restores the derived defaults.
+    let cleared = body_json(
+        router
+            .oneshot(authed("PUT", "/terminal-limits", Some("{}")))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(cleared["effective"], serde_json::json!(defaults));
+    assert_eq!(
+        global.get("terminal.history_lines", Scope::Global).unwrap(),
+        None
+    );
+}
+
+#[tokio::test]
 async fn terminal_rename_persists_announces_and_is_forgotten_on_kill() {
     let (dir, state) = state();
     let router = app(state);
@@ -18154,6 +18289,7 @@ async fn broker_terminal_sessions_release_claims_including_after_a_server_restar
             args: vec!["30".into()],
             cwd: None,
             env: vec![("HOTSHEET_WORKER_ID".into(), "claude-ai1".into())],
+            replay_bytes: None,
         })
         .await
         .unwrap();

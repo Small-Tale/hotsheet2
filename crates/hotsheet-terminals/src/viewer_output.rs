@@ -9,7 +9,7 @@
 //!   into a small frame queue. When the queue is full it coalesces further output into one
 //!   pending frame ([`PendingOutput`]) instead of letting the fan-out lag, and falls back to a
 //!   scrollback [`ViewerFrame::Replace`] only once the coalesced bytes exceed
-//!   [`MAX_COALESCED_BYTES`] (the scrollback size, so the replay is never larger);
+//!   [`MAX_COALESCED_BYTES`] (the default replay size);
 //! - a **writer** owns the transport's send half and writes queued frames;
 //! - the attach task itself only **reads input**, so typing reaches the PTY no matter how far
 //!   behind the viewer's output is.
@@ -24,8 +24,9 @@ use tokio::sync::mpsc::{self, error::TrySendError};
 /// a viewer stops keeping up rather than after a long backlog of tiny frames.
 pub const VIEWER_QUEUE_FRAMES: usize = 32;
 
-/// Coalesced output beyond this is replaced by a fresh scrollback snapshot, which holds at
-/// most [`SCROLLBACK_BYTES`] and so is never larger than what it replaces.
+/// Coalesced output beyond this is replaced by a fresh scrollback snapshot. It equals the default
+/// replay size ([`SCROLLBACK_BYTES`]); a terminal spawned with a larger configured replay
+/// (HS2-Y5DYC0) can send a replacement larger than the coalesced bytes, which is still correct.
 pub const MAX_COALESCED_BYTES: usize = SCROLLBACK_BYTES;
 
 /// One frame for an attached viewer, in order.

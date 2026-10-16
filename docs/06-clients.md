@@ -825,18 +825,19 @@ preview/download, server directory browser) are separate design work.
   `settings-storage-scope.test.ts` resolves it through the project bridge, so a setting
   filed under the wrong group fails the build:
 
-  | Group   | Category       | Stored in                                                                                        | Scope                   |
-  | ------- | -------------- | ------------------------------------------------------------------------------------------------ | ----------------------- |
-  | Project | Ticket sources | `/checkouts/{id}/providers`, `/provider-connections`, `/sources/{connection}`, `/default-source` | this project, machine   |
-  | Project | AI tools       | `/checkouts/{id}/ai-settings` (`ai.defaults`, project `settings.local.json`)                     | this project, machine   |
-  | Project | Commands       | `/checkouts/{id}/commands`, `/command-groups` (`Scope::Local`)                                   | this project, machine   |
-  | Project | Lifecycle      | `/checkouts/{id}/trash-settings` (`Scope::Shared`)                                               | this project, committed |
-  | Project | Terminals      | `/checkouts/{id}/terminal-settings` (`Scope::Local`)                                             | this project, machine   |
-  | Project | Permissions    | `localStorage hotsheet.project.{id}.permission-automation`                                       | this project, browser   |
-  | Project | Column view    | `localStorage hotsheet.project.{id}.hide-verified-column`                                        | this project, browser   |
-  | App     | General        | `localStorage hotsheet.show-loading-activity`                                                    | every project, browser  |
-  | App     | Accounts       | `/accounts` (credential names from `providers.json` + `keys.json`)                               | every project, machine  |
-  | App     | Keyboard       | `localStorage hotsheet.keyboard-shortcuts`                                                       | every project, browser  |
+  | Group   | Category        | Stored in                                                                                        | Scope                   |
+  | ------- | --------------- | ------------------------------------------------------------------------------------------------ | ----------------------- |
+  | Project | Ticket sources  | `/checkouts/{id}/providers`, `/provider-connections`, `/sources/{connection}`, `/default-source` | this project, machine   |
+  | Project | AI tools        | `/checkouts/{id}/ai-settings` (`ai.defaults`, project `settings.local.json`)                     | this project, machine   |
+  | Project | Commands        | `/checkouts/{id}/commands`, `/command-groups` (`Scope::Local`)                                   | this project, machine   |
+  | Project | Lifecycle       | `/checkouts/{id}/trash-settings` (`Scope::Shared`)                                               | this project, committed |
+  | Project | Terminals       | `/checkouts/{id}/terminal-settings` (`Scope::Local`)                                             | this project, machine   |
+  | Project | Permissions     | `localStorage hotsheet.project.{id}.permission-automation`                                       | this project, browser   |
+  | Project | Column view     | `localStorage hotsheet.project.{id}.hide-verified-column`                                        | this project, browser   |
+  | App     | General         | `localStorage hotsheet.show-loading-activity`                                                    | every project, browser  |
+  | App     | Accounts        | `/accounts` (credential names from `providers.json` + `keys.json`)                               | every project, machine  |
+  | App     | Terminal memory | `/terminal-limits` (`terminal.*` limits, `Scope::Global`, §6.7.8)                                | every project, machine  |
+  | App     | Keyboard        | `localStorage hotsheet.keyboard-shortcuts`                                                       | every project, browser  |
 
   The settings workspace and ticket-source setup flow are component-owned surfaces:
   `components/settings-workspace.tsx`, `ticket-sources-settings.tsx`,
@@ -3178,8 +3179,9 @@ submits the emulator reset and snapshot as one parser write, then continues from
 (HS2-5W0V9M). The PTY host trims its byte-capped replay only at ANSI-ground and UTF-8 character
 boundaries, so eviction cannot expose a control sequence's parameter tail as ordinary terminal
 text (HS2-BQR774). Read-only grid previews keep no xterm
-history, temporary magnified dashboard viewers keep 1,000 lines, and dedicated interactive
-terminals retain the full 5,000-line client history. Disposing a viewport cancels its frames,
+history, temporary magnified dashboard viewers keep a fifth of the configured history, and dedicated
+interactive terminals retain the full configured history (5,000 lines before the limits load; see
+§6.7.8, HS2-Y5DYC0). Disposing a viewport cancels its frames,
 timers, observers, xterm subscriptions/addons, and socket; repeated magnify/dismiss cycles are
 covered as a stable-resource lifecycle rather than allowing detached viewers to accumulate.
 
@@ -3236,8 +3238,9 @@ the old project cannot hold the destination's first frame during PTY output
 - **Resources:** parking releases a Firefox WebGL context, since browsers cap live contexts
   per page. The first resumed frame paints with the DOM renderer, and Firefox restores
   WebGL on the next frame. Chromium and Apple WebKit already use DOM.
-- **Bounds:** at most `MAX_PARKED_TERMINAL_VIEWPORTS` (12) stay warm, and the oldest is
-  evicted first. Closing a project evicts its parked terminals. A parked socket that closes is
+- **Bounds:** at most the configured warm-terminal limit (§6.7.8; 12 before the limits load)
+  stay warm, and the oldest is evicted first. Lowering the limit evicts the extra parked
+  terminals at once. Closing a project evicts its parked terminals. A parked socket that closes is
   evicted rather than reconnected in the background, and the terminal mounts fresh if shown
   again.
 - **Focus:** a restored terminal takes input focus only when a pending focus request names
@@ -3632,6 +3635,53 @@ separate `HISTFILE` paths under the Hot Sheet home, while fish uses a separate d
 global shell history** opt-out; it affects newly created terminals and persists as
 `terminal.inherit_global_shell_history` in
 `<project-root>/.hotsheet2/settings.local.json` (HS2-A5V801).
+
+### 6.7.8 Terminal memory limits
+
+Three machine-wide limits bound terminal memory (HS2-Y5DYC0). They live in the global settings
+scope (`${HOTSHEET_HOME}/settings.json`), so every project on the machine shares them:
+
+| Setting key               | Controls                                                                                | Accepted range    |
+| ------------------------- | --------------------------------------------------------------------------------------- | ----------------- |
+| `terminal.history_lines`  | xterm scrollback of a dedicated terminal; a magnified card keeps a fifth (at least 200) | 100–100,000 lines |
+| `terminal.replay_bytes`   | the server's per-terminal replay buffer, sent to a reattaching viewer                   | 64 KiB–64 MiB     |
+| `terminal.warm_terminals` | kept-alive terminals that stay warm out of the page (§6.7 parking)                      | 0–64              |
+
+**Editing.** App Settings → **Terminal memory** edits them; a choice saves at once, and
+**Default** clears the explicit value. The page lives under App Settings rather than Project
+Settings → Terminals because the HS2-S1184P storage-scope rule keeps project categories
+per-project. Headless parity is `hotsheet-cli settings set <key> <value>`: these keys default
+to `--scope global`, refuse a project scope, and are range-checked. The server route is
+`GET`/`PUT /terminal-limits`. It reports `physical_memory_bytes`, the memory-derived
+`defaults`, the explicit `configured` values (`null` when unset), and the `effective` values.
+A `PUT` replaces all three limits, and an out-of-range value is refused with 422.
+
+**Memory-aware defaults.** Browsers expose no usable memory signal: Safari has none, and
+Chromium's `navigator.deviceMemory` is rounded and capped at 8 GB. The server therefore
+reads the physical memory itself (`sysconf` on Unix) and derives each unset limit from it:
+
+| Physical memory | History | Warm terminals |
+| --------------- | ------- | -------------- |
+| unknown         | 5,000   | 12             |
+| under 8 GB      | 2,500   | 6              |
+| 8–16 GB         | 5,000   | 12             |
+| 16–32 GB        | 10,000  | 16             |
+| 32 GB or more   | 20,000  | 24             |
+
+An xterm buffer costs about 12 bytes per cell, so 5,000 lines at 120 columns is about 7 MB
+per live emulator. Those defaults describe the server's machine. A client on another device
+(non-loopback origin) or on a phone (larger screen side under 1024 px) instead keeps 5,000
+lines and 12 warm terminals, or 2,500 and 4 on a phone, for any limit not set explicitly.
+An explicit setting always wins on every device. Until the limits load, or on a server
+without the route, clients keep the 5,000-line and 12-terminal values.
+
+**Sized together.** An unset replay buffer is the effective history times 192 bytes per
+line, clamped to 256 KiB–8 MiB. A reconnect therefore restores about what the client keeps,
+where the old fixed 256 KiB restored far fewer lines of a redraw-heavy TUI. A new terminal
+takes the replay size at spawn; the detached broker receives it on `open`, and an older
+peer that omits it keeps 256 KiB. A running terminal keeps the buffer it was spawned with,
+and an emulator keeps the history it mounted with, so changes apply to terminals opened
+afterward. Lowering the warm-terminal limit evicts extra parked terminals immediately.
 
 ## 6.8 Notes, reader mode & editing
 

@@ -783,7 +783,17 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
             }
         }
         SettingsCmd::Set { key, value, scope } => {
-            let scope = parse_scope(&scope)?.unwrap_or(Scope::Shared);
+            // Terminal memory limits are machine-wide (HS2-Y5DYC0): they default to the global
+            // scope, refuse a project scope, and are range-checked like the Settings UI.
+            let terminal_limit = hotsheet_ticketing::terminal_limits::is_terminal_limit_key(&key);
+            let scope = match (parse_scope(&scope)?, terminal_limit) {
+                (Some(Scope::Global) | None, true) => Scope::Global,
+                (Some(_), true) => bail!("{key} is machine-wide; use --scope global"),
+                (scope, false) => scope.unwrap_or(Scope::Shared),
+            };
+            if terminal_limit {
+                hotsheet_ticketing::terminal_limits::parse_terminal_limit(&key, &value)?;
+            }
             // Parse as JSON (numbers/bools/arrays/objects), else store the raw string.
             let parsed = serde_json::from_str(&value).unwrap_or(serde_json::Value::String(value));
             settings.set(&key, parsed, scope)?;

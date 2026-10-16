@@ -1776,6 +1776,27 @@
       "documentation": "../../docs/ux-components.md"
     },
     {
+      "id": "terminal-memory-settings",
+      "name": "TerminalMemorySettings",
+      "kind": "component",
+      "purpose": "Machine-wide terminal history, server replay buffer, and warm-terminal limits with memory-derived defaults (HS2-Y5DYC0).",
+      "useWhen": [
+        "Hot Sheet needs the machine-wide terminal memory limits."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TerminalMemorySettings behavior."
+      ],
+      "publicClasses": [],
+      "publicTokens": [],
+      "source": "src/components/terminal-memory-settings.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
       "id": "terminal-operations-sidebar",
       "name": "TerminalOperationsSidebar",
       "kind": "composition",
