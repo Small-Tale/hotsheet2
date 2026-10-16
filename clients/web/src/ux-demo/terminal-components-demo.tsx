@@ -312,100 +312,129 @@ export function TerminalDrawerDemo() {
 
 export function TerminalDashboardDemo() {
   return (
-    <CatalogExample label="Interactive" viewport={{ width: 'full', height: 'app', frame: 'solid', overflow: 'hidden' }}>
-      <TerminalDashboard
-        groups={[
-          {
-            projectId: 'demo',
-            projectName: 'Demo project',
-            sessions: [
-              {
-                id: 'shell',
-                projectId: 'demo',
-                projectName: 'Demo project',
-                title: 'Development',
-                tool: 'codex',
-                ai_connection: { agent: 'codex', at: '2026-10-05T08:00:00Z' },
-                last_hook_report: {
-                  agent: 'codex',
-                  at: '2026-10-05T08:00:00Z',
-                  source: 'session_start',
+    <>
+      <CatalogExample
+        label="Interactive"
+        viewport={{ width: 'full', height: 'app', frame: 'solid', overflow: 'hidden' }}
+      >
+        <TerminalDashboard
+          groups={[
+            {
+              projectId: 'demo',
+              projectName: 'Demo project',
+              sessions: [
+                {
+                  id: 'shell',
+                  projectId: 'demo',
+                  projectName: 'Demo project',
+                  title: 'Development',
+                  tool: 'codex',
+                  ai_connection: { agent: 'codex', at: '2026-10-05T08:00:00Z' },
+                  last_hook_report: {
+                    agent: 'codex',
+                    at: '2026-10-05T08:00:00Z',
+                    source: 'session_start',
+                  },
+                  mcp_connected: true,
+                  aiConnection: 'connected',
+                  alive: true,
+                  busy: true,
+                  cwd: '/work/demo',
+                  progress: 68,
+                  scrollback: 'npm run dev\nready on http://127.0.0.1',
                 },
-                mcp_connected: true,
-                aiConnection: 'connected',
-                alive: true,
-                busy: true,
-                cwd: '/work/demo',
-                progress: 68,
-                scrollback: 'npm run dev\nready on http://127.0.0.1',
-              },
-              {
-                id: 'tests',
-                projectId: 'demo',
-                projectName: 'Demo project',
-                title: 'Tests',
-                kind: 'ai',
-                tool: 'codex',
-                aiConnection: 'missing',
-                alive: true,
-                busy: false,
-                cwd: '/work/demo',
-                scrollback: '42 tests passed\nwaiting for changes',
-              },
-              {
-                id: 'mcp-missing',
-                projectId: 'demo',
-                projectName: 'Demo project',
-                title: 'Review',
-                kind: 'ai',
-                tool: 'claude',
-                ai_connection: { agent: 'claude', at: '2026-10-05T08:00:00Z' },
-                mcp_connected: false,
-                aiConnection: 'mcp_missing',
-                alive: true,
-                busy: false,
-                cwd: '/work/demo',
-                scrollback: 'Reviewing the diff',
-              },
-              {
-                id: 'halted',
-                projectId: 'demo',
-                projectName: 'Demo project',
-                title: 'Halted AI',
-                tool: 'claude',
-                alive: true,
-                busy: false,
-                aiConnection: 'connected',
-                halt: terminalDashboardHaltCleared.value
-                  ? undefined
-                  : {
-                      error_type: 'overloaded',
-                      message: 'Selected model is at capacity.',
-                      at: '2026-10-05T08:00:00Z',
-                    },
-                scrollback: 'Selected model is at capacity.',
-              },
-            ],
-            chats: [
-              {
-                id: 'chat:review',
-                projectId: 'demo',
-                projectName: 'Demo project',
-                name: 'Review chat',
-                tool: 'Codex',
-                busy: true,
-                summary: 'Reviewing the latest workspace changes and test results.',
-              },
-            ],
-          },
-        ]}
-        width={900}
-        height={560}
-        fitAcross={3}
-        fitHigh={3}
-        contextMenu={terminalDashboardContextMenu.value}
-      />
-    </CatalogExample>
+                {
+                  id: 'tests',
+                  projectId: 'demo',
+                  projectName: 'Demo project',
+                  title: 'Tests',
+                  kind: 'ai',
+                  tool: 'codex',
+                  aiConnection: 'missing',
+                  alive: true,
+                  busy: false,
+                  cwd: '/work/demo',
+                  scrollback: '42 tests passed\nwaiting for changes',
+                },
+                {
+                  id: 'mcp-missing',
+                  projectId: 'demo',
+                  projectName: 'Demo project',
+                  title: 'Review',
+                  kind: 'ai',
+                  tool: 'claude',
+                  ai_connection: { agent: 'claude', at: '2026-10-05T08:00:00Z' },
+                  mcp_connected: false,
+                  aiConnection: 'mcp_missing',
+                  alive: true,
+                  busy: false,
+                  cwd: '/work/demo',
+                  scrollback: 'Reviewing the diff',
+                },
+                {
+                  id: 'halted',
+                  projectId: 'demo',
+                  projectName: 'Demo project',
+                  title: 'Halted AI',
+                  tool: 'claude',
+                  alive: true,
+                  busy: false,
+                  aiConnection: 'connected',
+                  halt: terminalDashboardHaltCleared.value
+                    ? undefined
+                    : {
+                        error_type: 'overloaded',
+                        message: 'Selected model is at capacity.',
+                        at: '2026-10-05T08:00:00Z',
+                      },
+                  scrollback: 'Selected model is at capacity.',
+                },
+              ],
+              chats: [
+                {
+                  id: 'chat:review',
+                  projectId: 'demo',
+                  projectName: 'Demo project',
+                  name: 'Review chat',
+                  tool: 'Codex',
+                  busy: true,
+                  summary: 'Reviewing the latest workspace changes and test results.',
+                },
+              ],
+            },
+          ]}
+          width={900}
+          height={560}
+          fitAcross={3}
+          fitHigh={3}
+          contextMenu={terminalDashboardContextMenu.value}
+        />
+      </CatalogExample>
+      <TerminalDashboardStates />
+    </>
+  );
+}
+
+/** The dashboard's empty, loading, and message states, including a short drawer grid (HS2-1Q6GER). */
+function TerminalDashboardStates() {
+  const state = (props: Partial<Parameters<typeof TerminalDashboard>[0]>, height: number) => (
+    <TerminalDashboard groups={[]} width={640} height={height} fitAcross={3} fitHigh={3} {...props} />
+  );
+  return (
+    <>
+      <CatalogExample label="Empty" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
+        <div style="height: 240px">{state({}, 240)}</div>
+      </CatalogExample>
+      <CatalogExample label="Loading" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
+        <div style="height: 240px">{state({ loading: true }, 240)}</div>
+      </CatalogExample>
+      <CatalogExample label="Message" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
+        <div style="height: 240px">{state({ message: 'Terminals are unavailable on this device.' }, 240)}</div>
+      </CatalogExample>
+      <CatalogExample label="Empty, Short Drawer" viewport={{ width: 'full', frame: 'solid', overflow: 'hidden' }}>
+        <div style="height: 100px">{state({ layoutMode: 'drawer' }, 100)}</div>
+      </CatalogExample>
+    </>
   );
 }
 

@@ -4346,7 +4346,7 @@
       "id": "terminal-dashboard",
       "name": "TerminalDashboard",
       "kind": "composition",
-      "purpose": "Responsive workspace grid for terminals and AI chats, including connected, missing-hook, missing-MCP, and halted session states with manual clearing.",
+      "purpose": "Responsive workspace grid for terminals and AI chats, including connected, missing-hook, missing-MCP, and halted session states with manual clearing, plus centered empty, loading, and message copy.",
       "source": "src/components/terminal-dashboard.tsx",
       "publicExports": [
         {
@@ -4404,7 +4404,7 @@
       },
       "selection": {
         "useWhen": [
-          "Hot Sheet needs responsive workspace grid for terminals and AI chats, including connected, missing-hook, missing-MCP, and halted session states with manual clearing."
+          "Hot Sheet needs responsive workspace grid for terminals and AI chats, including connected, missing-hook, missing-MCP, and halted session states with manual clearing, plus centered empty, loading, and message copy."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TerminalDashboard behavior."],
         "documentation": "../../docs/ux-components.md"

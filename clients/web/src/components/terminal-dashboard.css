@@ -8,12 +8,6 @@
   overflow: hidden;
   flex-direction: column;
 }
-/* App-owned row that hosts the visibility controls beside workspace header actions. */
-.terminal-dashboard-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--wa-space-xs);
-}
 /* App-owned wrapper around the nested Kerf Toolbar: the toolbar keeps its 8px zone gap with no inset of
    its own (Kerf beta.62 `--kui-toolbar-inset`, HS2-3J2PX3) and its 44px control band. The minimum
    accommodates longer group names; its trailing zone keeps spare width before the controls. */
@@ -26,7 +20,8 @@
   align-items: center;
   gap: var(--wa-space-xs);
 }
-/* App-owned hidden-item count dot over the native Eye button (a corner indicator, not a Badge). */
+/* App-owned hidden-item count dot over the native Eye button (a corner indicator, not a Badge;
+   KF-WT2EMZ requests a Kerf corner count). */
 .terminal-dashboard-controls__count {
   position: absolute;
   top: remify(-4px);
@@ -48,7 +43,8 @@
   /* Positions the count dot against the native button. */
   position: relative;
 }
-/* App-owned wrapper that bounds the group Select's width and tunes its public selected-value tokens. */
+/* App-owned wrapper that bounds the group Select's width (until KF-DQANHZ) and tunes its public
+   selected-value tokens. */
 .terminal-dashboard-controls__visibility-select {
   display: flex;
   width: max-content;
@@ -537,21 +533,6 @@
   inset: auto;
   width: 100%;
   aspect-ratio: 5 / 3;
-}
-/* The empty, loading and message states stay compact app copy: a short drawer grid (about 100px) is
-   shorter than Kerf EmptyState's icon-slot geometry, which clipped the title there. */
-.terminal-dashboard__empty {
-  display: grid;
-  height: 100%;
-  color: var(--wa-color-neutral-on-quiet);
-  text-align: center;
-  place-content: center;
-  gap: remify(5.6px);
-}
-/* The empty state's title line. */
-.terminal-dashboard__empty strong {
-  color: var(--wa-color-neutral-on-normal);
-  font-size: var(--wa-font-size-s);
 }
 /* Reduced motion also drops the costly backdrop blur. */
 @media (prefers-reduced-motion: reduce) {

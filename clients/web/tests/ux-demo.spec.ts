@@ -59,6 +59,39 @@ test('clears the halted terminal example from its menu at wide and phone widths 
   }
 });
 
+test('centers the TerminalDashboard empty, loading, and message copy without clipping a short drawer (HS2-1Q6GER)', async ({
+  page,
+}) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=terminal-dashboard');
+    const feedback = page.locator('[data-terminal-dashboard-feedback]');
+    await expect(feedback).toHaveCount(4);
+    await expect(feedback.nth(0)).toContainText('Nothing open yet');
+    await expect(feedback.nth(0)).not.toHaveAttribute('role', 'status');
+    await expect(feedback.nth(1)).toHaveAttribute('role', 'status');
+    await expect(feedback.nth(1)).toHaveText('Loading workspace items…');
+    await expect(feedback.nth(2)).toHaveAttribute('role', 'status');
+    await expect(feedback.nth(2)).toHaveText('Terminals are unavailable on this device.');
+    for (const index of [0, 3]) {
+      const geometry = await feedback.nth(index).evaluate((node) => {
+        const box = node.getBoundingClientRect(),
+          lines = [...node.querySelectorAll('.kui-text')].map((line) => line.getBoundingClientRect()),
+          scroller = node.closest('.terminal-dashboard__content')!.getBoundingClientRect();
+        return {
+          // The title and copy stay together, centered in the grid's content box.
+          gap: lines[1].top - lines[0].bottom,
+          centered: Math.abs((lines[0].top + lines[1].bottom) / 2 - (box.top + box.bottom) / 2),
+          contained: lines[0].top >= scroller.top - 0.5 && lines[1].bottom <= scroller.bottom + 0.5,
+        };
+      });
+      expect(geometry.gap).toBeLessThanOrEqual(5);
+      expect(geometry.centered).toBeLessThanOrEqual(2);
+      expect(geometry.contained).toBe(true);
+    }
+  }
+});
+
 test('switches the search scope demo through its production wiring (HS2-4J6764)', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
@@ -1248,7 +1281,8 @@ test('represents every server-build details state with shared dialog geometry', 
 test('represents the production terminal dashboard and its shared context menu in the UX catalog', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=terminal-dashboard');
-  const dashboard = page.getByRole('region', { name: 'Workspace Grid' });
+  // The first example is the interactive grid; the empty, loading, and message examples follow (HS2-1Q6GER).
+  const dashboard = page.getByRole('region', { name: 'Workspace Grid' }).first();
   await expect(dashboard).toBeVisible();
   await expect(dashboard).toHaveAttribute('data-basis', 'high');
   await expect(dashboard).toHaveAttribute('data-fit', '3');

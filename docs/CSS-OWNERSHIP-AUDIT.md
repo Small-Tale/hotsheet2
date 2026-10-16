@@ -185,3 +185,17 @@ the remaining wrapper markup that only existed because Badge lacked props:
 - Remaining generic chrome is split into its own tickets: attachment rows, row menu button, batch
   header, and regroup target (`HS2-K9HSXZ`); AttachmentGallery controls (`HS2-5B8FMA`). Thumbnails,
   annotation markers, media scaling, and drag/regroup state stay app-owned.
+
+## Terminal chrome update (HS2-1Q6GER)
+
+- `TerminalDashboard` empty, loading, and message copy now composes Kerf `List` and `Text`. The
+  `.terminal-dashboard__empty` rules are gone, and the `/ux-demo` entry exposes all three states plus
+  a short drawer grid. The controls wrapper is a Kerf `Row`, so `.terminal-dashboard-controls` is
+  removed. The inner `List` works around `KF-3ZJ9PF` (`vAlign="middle"` spreads several children).
+- Retained with exact upstream requests: the visibility Select and ticket-rail view-title width
+  bounds (`KF-DQANHZ`), the hidden-item corner count (`KF-WT2EMZ`), and the drawer tab
+  status-icon wrappers that carry a hover title (`KF-2V9XJQ`). `HS2-9J6MYJ` adopts those
+  shipped APIs.
+- Owned contracts that stay: the key bar's sticky Fn group, touch scroller, and safe-area backing;
+  focus-mode placement and backdrop; grid fitting, canvas, previews, magnification, and mobile
+  keyboard geometry. Generic tile identity and footer typography remain in `HS2-9J6MYJ`.

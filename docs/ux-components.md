@@ -1927,7 +1927,13 @@ Styling ownership (HS2-DR549A):
   key bar's Kerf control groups own their buttons, including a disabled zoom button's not-allowed
   cursor, dimming, and absent hover chrome (KF-FTADQT, adopted in HS2-T44PFW).
 - **Visibility Select.** It uses Kerf's `toolbar-borderless` compact presentation, with a
-  group-owned focus ring.
+  group-owned focus ring. A Kerf `Row` hosts the visibility controls beside the workspace header
+  actions (HS2-1Q6GER). The Select's width bound and the hidden-item corner count stay app-owned
+  until Kerf ships `KF-DQANHZ` and `KF-WT2EMZ`.
+- **Empty, loading, and message copy.** A filled, centered Kerf `List` wraps an inner `List` of
+  `Text` (HS2-1Q6GER). It has no icon slot, so a short (about 100px) drawer grid never clips the
+  title. Loading and message copy is a polite status region. The `/ux-demo` entry exposes the
+  empty, loading, message, and short-drawer states. The nesting works around `KF-3ZJ9PF`.
 - **`TerminalSession`.** `TerminalDashboard` renders and styles it; `TerminalDrawer` composes it
   with props only (HS2-YNW0B3). `mobile` (the app's phone layout) clips its scaled xterm, and
   `focus` (drawer focus mode) drops the viewport's `--kui-space-xs` inset so the terminal fills

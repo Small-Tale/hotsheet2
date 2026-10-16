@@ -229,6 +229,9 @@ export const demoCatalog: DemoCategory[] = [
         'floating-toolbar',
         'toolbar-control-group',
         'list-item',
+        'list',
+        'text',
+        'row',
       ]),
       cataloged('terminal-operations-sidebar', ['project-summary', 'list', 'list-header', 'toolbar']),
       cataloged('terminal-ticket-rail', [

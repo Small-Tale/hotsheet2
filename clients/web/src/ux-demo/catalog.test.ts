@@ -222,6 +222,9 @@ describe('UX demo catalog', () => {
       'floating-toolbar',
       'toolbar-control-group',
       'list-item',
+      'list',
+      'text',
+      'row',
     ]);
     expect(findDemo('terminal-visibility-dialog')?.uses).toEqual(['list-item']);
     expect(demosUsing('fixed-aspect-terminal-card').map((entry) => entry.id)).toEqual(['terminal-dashboard']);

@@ -369,6 +369,33 @@ describe('TerminalDashboard', () => {
     expect(drawerCss).not.toContain('terminal-dashboard');
     expect(drawerCss).not.toContain('.app-shell');
   });
+  it('renders empty, loading, and message copy as a centered Kerf List of Text (HS2-1Q6GER)', () => {
+    const render = (props: Partial<Parameters<typeof TerminalDashboard>[0]>) =>
+      String(TerminalDashboard({ groups: [], width: 640, height: 240, fitAcross: 3, fitHigh: 3, ...props }));
+    const empty = render({}),
+      loading = render({ loading: true }),
+      message = render({ message: 'Terminals are unavailable.' });
+    for (const markup of [empty, loading, message]) {
+      expect(markup).toMatch(
+        /data-terminal-dashboard-feedback="true"[^>]*class="kui-list" data-component="list"[^>]*data-fill="true"[^>]*data-h-align="center"[^>]*data-v-align="middle"/u,
+      );
+      expect(markup).not.toContain('terminal-dashboard__empty');
+    }
+    expect(empty).toMatch(/<strong>Nothing open yet<\/strong>/u);
+    expect(empty).toContain('Open a project terminal or AI chat to add it to this grid.');
+    expect(empty).not.toContain('role="status"');
+    expect(loading).toContain('role="status"');
+    expect(loading).toContain('Loading workspace items…');
+    expect(message).toContain('role="status"');
+    expect(message).toContain('Terminals are unavailable.');
+    expect(message).not.toContain('Nothing open yet');
+    expect(css).not.toContain('.terminal-dashboard__empty');
+    // The controls row is a Kerf Row; the app keeps no wrapper rule for it.
+    expect(String(TerminalDashboardControls({}))).toMatch(
+      /^<div data-terminal-dashboard-controls="true" class="kui-row" data-component="row"/u,
+    );
+    expect(css).not.toMatch(/^\.terminal-dashboard-controls \{/mu);
+  });
   it('styles only its own controls, configuring Kerf controls through props (HS2-DR549A)', () => {
     // No blanket button rule reaches into Kerf control groups (the zoom toolbar, the key bar).
     expect(css).not.toMatch(/\.terminal-dashboard button/);

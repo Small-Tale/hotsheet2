@@ -5,10 +5,13 @@ import './terminal-dashboard.css';
 import { Badge } from '@kerfjs/ui/badge';
 import { uiColor } from '@kerfjs/ui/css-values';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
+import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
+import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
+import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import {
@@ -222,14 +225,15 @@ export function TerminalDashboardControls({
   visibilityScope?: string;
 }) {
   return (
-    <div class="terminal-dashboard-controls" data-component="terminal-dashboard-controls">
+    // Kerf Row hosts the visibility controls beside workspace header actions (HS2-1Q6GER).
+    <Row vAlign="middle" gap="xs" rootAttributes={{ 'data-terminal-dashboard-controls': 'true' }}>
       <TerminalVisibilityControls
         hiddenCount={hiddenCount}
         groups={visibilityGroups}
         activeId={activeVisibilityGroupId}
         scope={visibilityScope}
       />
-    </div>
+    </Row>
   );
 }
 
@@ -692,6 +696,43 @@ function Grid({
   );
 }
 
+/**
+ * The dashboard's empty, loading, and message copy (HS2-1Q6GER): a centered Kerf List of Text with no
+ * icon slot, so a short (about 100px) drawer grid never clips the title as EmptyState's geometry did.
+ * Loading and message copy is a polite status region.
+ */
+function DashboardFeedback({
+  title,
+  status = false,
+  children,
+}: {
+  title?: string;
+  status?: boolean;
+  children: string;
+}) {
+  // The filled outer List centers one child: its `middle` alignment distributes several children
+  // (space-around, KF-3ZJ9PF), so the inner List keeps the title and copy together.
+  return (
+    <List
+      fill
+      hAlign="center"
+      vAlign="middle"
+      rootAttributes={{ 'data-terminal-dashboard-feedback': 'true', ...(status ? { role: 'status' as const } : {}) }}
+    >
+      <List gap="2xs" hAlign="center">
+        {title ? (
+          <Text variant="p" align="center" flush>
+            <strong>{title}</strong>
+          </Text>
+        ) : undefined}
+        <Text variant="p" tone="quiet" align="center" flush>
+          {children}
+        </Text>
+      </List>
+    </List>
+  );
+}
+
 export function TerminalDashboard({
   groups,
   width,
@@ -748,18 +789,13 @@ export function TerminalDashboard({
         {/* A refresh keeps the last snapshot's tiles on screen: replacing them with a loading state
             would unmount every live terminal and remount it once the refresh lands (HS2-AMNNBR). */}
         {loading && sessions.length + chats.length === 0 ? (
-          <div class="terminal-dashboard__empty" role="status">
-            Loading workspace items…
-          </div>
+          <DashboardFeedback status>Loading workspace items…</DashboardFeedback>
         ) : message ? (
-          <div class="terminal-dashboard__empty" role="status">
-            {message}
-          </div>
+          <DashboardFeedback status>{message}</DashboardFeedback>
         ) : sessions.length + chats.length === 0 ? (
-          <div class="terminal-dashboard__empty">
-            <strong>Nothing open yet</strong>
-            <span>Open a project terminal or AI chat to add it to this grid.</span>
-          </div>
+          <DashboardFeedback title="Nothing open yet">
+            Open a project terminal or AI chat to add it to this grid.
+          </DashboardFeedback>
         ) : grouping === 'flow' ? (
           <Grid
             sessions={sessions}

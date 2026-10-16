@@ -5027,7 +5027,7 @@
       "id": "terminal-dashboard",
       "name": "TerminalDashboard",
       "kind": "composition",
-      "purpose": "Responsive workspace grid for terminals and AI chats, including connected, missing-hook, missing-MCP, and halted session states with manual clearing.",
+      "purpose": "Responsive workspace grid for terminals and AI chats, including connected, missing-hook, missing-MCP, and halted session states with manual clearing, plus centered empty, loading, and message copy.",
       "publicExports": [
         {
           "name": "TerminalDashboard"
