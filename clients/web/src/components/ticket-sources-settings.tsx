@@ -1,7 +1,8 @@
 import './ticket-sources-settings.css';
 
 import { Badge } from '@kerfjs/ui/badge';
-import { rem, uiColor } from '@kerfjs/ui/css-values';
+import { flex, px, rem, uiColor } from '@kerfjs/ui/css-values';
+import { FramedList, FramedListRow } from '@kerfjs/ui/framed-list';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
 import { ListActionRow } from '@kerfjs/ui/list-action-row';
@@ -315,123 +316,140 @@ export function AccountsSettings({
             when adding a ticket source; each project still chooses its own repository or Jira project.
           </Text>
           {accounts.length ? (
-            <List gap="m">
-              {accounts.map((account) => {
-                const name = accountProviderName(account.provider),
-                  host = account.host,
-                  kind = (
-                    ['github', 'gitlab', 'jira'].includes(account.provider) ? account.provider : 'github'
-                  ) as ProviderIconKind,
-                  busy = signingOut === account.id;
-                return (
-                  <article
-                    class="ticket-provider-settings__connections ticket-provider-settings__account"
-                    data-account-id={account.id}
-                    aria-label={`${name} account ${account.identity ?? (account.host || account.id)}`}
-                  >
-                    <header class="ticket-provider-settings__account-header">
-                      <ProviderIcon kind={kind} size="l" />
-                      <span class="ticket-provider-settings__connection-copy">
-                        <strong>
-                          {name}
-                          {host && <span class="ticket-provider-settings__account-host">{host}</span>}
-                        </strong>
-                        <Detail>
-                          {account.identity ? `${account.identity} · ` : ''}
-                          {account.managed ? 'Signed in with Hot Sheet' : `Keychain credential ${account.id}`}
-                        </Detail>
-                      </span>
-                      {account.sources.length === 0 ? (
-                        <span class="ticket-provider-settings__account-actions">
-                          <wa-button
-                            size="small"
-                            appearance="outlined"
-                            type="button"
-                            {...COMMANDS_AND_AI_ACTIONS.signOutAccount.attrs}
-                            data-item-id={account.id}
-                            disabled={busy}
-                          >
-                            <LucideIcon slot="start" icon={LogOut} name="log-out" />
-                            {busy ? 'Signing out…' : 'Sign out'}
-                          </wa-button>
-                        </span>
-                      ) : null}
-                    </header>
-                    {account.sources.length ? (
-                      account.sources.map((source) => {
-                        const unused = source.projects.length === 0,
-                          confirming = sourceRemovalChoice === source.connection_id,
-                          removing = removingSource === source.connection_id;
-                        return (
-                          <div class="ticket-provider-settings__account-source" data-source-id={source.connection_id}>
-                            <Row vAlign="middle" gap="xs" wrap>
-                              <LucideIcon icon={Cable} name="cable" size="s" color={uiColor('neutral-on-quiet')} />
-                              <span class="ticket-provider-settings__connection-copy">
-                                <strong>
-                                  {source.name}
-                                  {source.disabled ? <DisabledBadge /> : <></>}
-                                </strong>
-                                <Detail>
-                                  {source.locator} · {projectList(source.projects)}
-                                </Detail>
-                                {unused ? <Detail>Connection ID: {source.connection_id}</Detail> : <></>}
-                              </span>
-                              {unused && !confirming && (
-                                <wa-button
-                                  size="small"
-                                  appearance="outlined"
-                                  type="button"
-                                  {...COMMANDS_AND_AI_ACTIONS.requestUnusedAccountSourceRemoval.attrs}
-                                  data-account-id={account.id}
-                                  data-source-id={source.connection_id}
-                                >
-                                  Remove
-                                </wa-button>
-                              )}
-                            </Row>
-                            {unused && confirming && (
-                              <Row hAlign="space-between" vAlign="middle" gap="xs" wrap>
-                                <Text variant="span" tone="quiet" size="compact">
-                                  Remove this unused connection? The sign-in stays available.
-                                </Text>
-                                <Row gap="xs">
-                                  <wa-button
-                                    size="small"
-                                    appearance="plain"
-                                    type="button"
-                                    {...COMMANDS_AND_AI_ACTIONS.cancelUnusedAccountSourceRemoval.attrs}
-                                    disabled={removing}
-                                  >
-                                    Keep
-                                  </wa-button>
-                                  <wa-button
-                                    size="small"
-                                    variant="danger"
-                                    type="button"
-                                    {...COMMANDS_AND_AI_ACTIONS.removeUnusedAccountSource.attrs}
-                                    data-account-id={account.id}
-                                    data-source-id={source.connection_id}
-                                    disabled={removing}
-                                  >
-                                    {removing ? 'Removing…' : 'Remove connection'}
-                                  </wa-button>
-                                </Row>
+            // The cards' frames sit outside the settings text edge so their icons land on it: the
+            // wrapper zeroes FramedList's public inline-margin token (HS2-1JSPX7, HS2-EN1E76).
+            <div class="ticket-provider-settings__accounts">
+              <List gap="m">
+                {accounts.map((account) => {
+                  const name = accountProviderName(account.provider),
+                    host = account.host,
+                    kind = (
+                      ['github', 'gitlab', 'jira'].includes(account.provider) ? account.provider : 'github'
+                    ) as ProviderIconKind,
+                    busy = signingOut === account.id;
+                  return (
+                    // Kerf FramedList owns the account card, its rows, and their dividers (HS2-EN1E76).
+                    <FramedList
+                      surface="base"
+                      label={`${name} account ${account.identity ?? (account.host || account.id)}`}
+                      rootAttributes={{ 'data-account-id': account.id }}
+                    >
+                      <FramedListRow rootAttributes={{ 'data-account-header': '' }}>
+                        <Row vAlign="middle" gap="xs" wrap>
+                          <ProviderIcon kind={kind} size="l" />
+                          <Row flex={flex(1, 1, px(140))}>
+                            <List gap="2xs">
+                              <Row vAlign="baseline" gap="xs" wrap>
+                                <strong>{name}</strong>
+                                {host ? (
+                                  <Text variant="span" tone="quiet" wrap="anywhere">
+                                    {host}
+                                  </Text>
+                                ) : (
+                                  <></>
+                                )}
                               </Row>
-                            )}
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div class="ticket-provider-settings__account-empty">
-                        <Text tone="quiet" size="compact" flush>
-                          No ticket source uses this sign-in. Reuse it when adding a source to a project, or sign out.
-                        </Text>
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
-            </List>
+                              <Detail>
+                                {account.identity ? `${account.identity} · ` : ''}
+                                {account.managed ? 'Signed in with Hot Sheet' : `Keychain credential ${account.id}`}
+                              </Detail>
+                            </List>
+                          </Row>
+                          {account.sources.length === 0 ? (
+                            <wa-button
+                              size="small"
+                              appearance="outlined"
+                              type="button"
+                              {...COMMANDS_AND_AI_ACTIONS.signOutAccount.attrs}
+                              data-item-id={account.id}
+                              disabled={busy}
+                            >
+                              <LucideIcon slot="start" icon={LogOut} name="log-out" />
+                              {busy ? 'Signing out…' : 'Sign out'}
+                            </wa-button>
+                          ) : null}
+                        </Row>
+                      </FramedListRow>
+                      {account.sources.length ? (
+                        account.sources.map((source) => {
+                          const unused = source.projects.length === 0,
+                            confirming = sourceRemovalChoice === source.connection_id,
+                            removing = removingSource === source.connection_id;
+                          return (
+                            <FramedListRow rootAttributes={{ 'data-source-id': source.connection_id }}>
+                              <List gap="xs">
+                                <Row vAlign="middle" gap="xs" wrap>
+                                  <LucideIcon icon={Cable} name="cable" size="s" color={uiColor('neutral-on-quiet')} />
+                                  <Row flex={flex(1, 1, px(208))}>
+                                    <List gap="2xs">
+                                      <Row vAlign="middle" gap="xs" wrap>
+                                        <strong>{source.name}</strong>
+                                        {source.disabled ? <DisabledBadge /> : <></>}
+                                      </Row>
+                                      <Detail>
+                                        {source.locator} · {projectList(source.projects)}
+                                      </Detail>
+                                      {unused ? <Detail>Connection ID: {source.connection_id}</Detail> : <></>}
+                                    </List>
+                                  </Row>
+                                  {unused && !confirming && (
+                                    <wa-button
+                                      size="small"
+                                      appearance="outlined"
+                                      type="button"
+                                      {...COMMANDS_AND_AI_ACTIONS.requestUnusedAccountSourceRemoval.attrs}
+                                      data-account-id={account.id}
+                                      data-source-id={source.connection_id}
+                                    >
+                                      Remove
+                                    </wa-button>
+                                  )}
+                                </Row>
+                                {unused && confirming && (
+                                  <Row hAlign="space-between" vAlign="middle" gap="xs" wrap>
+                                    <Text variant="span" tone="quiet" size="compact">
+                                      Remove this unused connection? The sign-in stays available.
+                                    </Text>
+                                    <Row gap="xs">
+                                      <wa-button
+                                        size="small"
+                                        appearance="plain"
+                                        type="button"
+                                        {...COMMANDS_AND_AI_ACTIONS.cancelUnusedAccountSourceRemoval.attrs}
+                                        disabled={removing}
+                                      >
+                                        Keep
+                                      </wa-button>
+                                      <wa-button
+                                        size="small"
+                                        variant="danger"
+                                        type="button"
+                                        {...COMMANDS_AND_AI_ACTIONS.removeUnusedAccountSource.attrs}
+                                        data-account-id={account.id}
+                                        data-source-id={source.connection_id}
+                                        disabled={removing}
+                                      >
+                                        {removing ? 'Removing…' : 'Remove connection'}
+                                      </wa-button>
+                                    </Row>
+                                  </Row>
+                                )}
+                              </List>
+                            </FramedListRow>
+                          );
+                        })
+                      ) : (
+                        <FramedListRow>
+                          <Text tone="quiet" size="compact" flush>
+                            No ticket source uses this sign-in. Reuse it when adding a source to a project, or sign out.
+                          </Text>
+                        </FramedListRow>
+                      )}
+                    </FramedList>
+                  );
+                })}
+              </List>
+            </div>
           ) : (
             <Text tone="quiet">
               No accounts yet. Signing in while adding a GitHub, GitLab, or Jira ticket source to a project adds one.

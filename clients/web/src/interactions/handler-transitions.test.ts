@@ -55,6 +55,8 @@ vi.mock('@kerfjs/ui/wire-composers', () => ({ wireComposers: () => () => undefin
 // And Kerf's FilePicker wiring, which TicketAttachments routes its Add trigger and drop zone through
 // (HS2-VHY325).
 vi.mock('@kerfjs/ui/wire-file-pickers', () => ({ wireFilePickers: () => () => undefined }));
+// And Kerf's Combobox wiring for provider setup's repository fields (HS2-EN1E76).
+vi.mock('@kerfjs/ui/wire-comboboxes', () => ({ wireComboboxes: () => () => undefined }));
 /** Deliver an event to every still-attached delegate registered for it, as the delegated root would. */
 function dispatchDelegated(event: Event, selector: string, element: Element) {
   for (const registration of registrations)

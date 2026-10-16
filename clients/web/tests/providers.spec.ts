@@ -3452,7 +3452,8 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   const repository = providerForm.locator('input[name="connection-locator"]'),
     access = providerForm.getByRole('region', { name: 'GitHub Repository Access' });
   await expect(repository).toHaveAttribute('placeholder', 'Search your repositories…');
-  await expect(providerForm.locator('#provider-setup-github-repositories option')).toHaveCount(2);
+  // A Kerf Combobox lists them (HS2-EN1E76).
+  await expect(providerForm.locator('#provider-setup-repository-listbox [data-value]')).toHaveCount(2);
   await expect(providerForm.getByText('2 repositories available.')).toBeVisible();
   await expect(access).toContainText('can see only the repositories you chose on westphal');
   await expect(access.getByRole('link', { name: 'Change access for westphal' })).toHaveAttribute(
@@ -3465,9 +3466,15 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   );
   await page.screenshot({ path: 'target/visual-captures/hs2-27t5wt-repository-picker-wide.png', fullPage: true });
   await access.getByRole('button', { name: 'Refresh list' }).click();
-  await expect(providerForm.locator('#provider-setup-github-repositories option')).toHaveCount(3);
+  await expect(providerForm.locator('#provider-setup-repository-listbox [data-value]')).toHaveCount(3);
   await expect(providerForm.getByText('3 repositories available.')).toBeVisible();
-  await repository.fill('small-tale/hotsheet2');
+  // Typing filters the suggestions; clicking one keeps it in the field the form submits.
+  await repository.fill('hotsheet2');
+  const suggestion = providerForm.locator('#provider-setup-repository-listbox [data-value="small-tale/hotsheet2"]');
+  await expect(suggestion).toBeVisible();
+  await suggestion.click();
+  await expect(repository).toHaveValue('small-tale/hotsheet2');
+  await expect(providerForm.locator('#provider-setup-repository-listbox')).toBeHidden();
   const attachmentRepo = providerForm.locator('input[name="attachment-repo"]');
   await expect(providerForm).toContainText('Enter an assets repository and save to configure attachments.');
   await attachmentRepo.fill('small-tale/assets');
@@ -3539,13 +3546,11 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   // Editing a source from its project offers its details, this project's default, Disable, and
   // Remove from this project; there is no machine-wide catalog (HS2-3SCH1K, HS2-SM9PM8).
   await sourcesPanel.getByRole('button', { name: 'Edit GitHub Issues' }).click();
-  await expect(providerForm.locator('#provider-setup-github-repositories option')).toHaveCount(3);
+  await expect(providerForm.locator('#provider-setup-repository-listbox [data-value]')).toHaveCount(3);
   await expect(providerForm.locator('input[name="connection-locator"]')).toHaveValue('small-tale/hotsheet2');
   await expect(providerForm.locator('input[name="attachment-repo"]')).toHaveValue('small-tale/assets');
-  await expect(providerForm.locator('input[name="attachment-repo"]')).toHaveAttribute(
-    'list',
-    'provider-setup-github-repositories',
-  );
+  // The assets field offers the same repositories (HS2-EN1E76).
+  await expect(providerForm.locator('#provider-setup-attachment-repo-listbox [data-value]')).toHaveCount(3);
   // Let the dialog's entrance animation settle before recording visual evidence.
   await page.waitForTimeout(500);
   await page.screenshot({ path: 'target/visual-captures/hs2-y5588d-edit-repositories-wide.png', fullPage: true });
@@ -3701,7 +3706,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await page.screenshot({ path: test.info().outputPath('reuse-account-wide.png'), fullPage: true });
   await reuse.click();
   await expect(providerForm.getByText('Using your GitHub account on GitHub.')).toBeVisible();
-  await expect(providerForm.locator('#provider-setup-github-repositories option')).toHaveCount(3);
+  await expect(providerForm.locator('#provider-setup-repository-listbox [data-value]')).toHaveCount(3);
   await providerForm.locator('input[name="connection-locator"]').fill('small-tale/reused');
   await providerForm.getByLabel('Display Name').fill('GitHub Reused');
   await setup.getByRole('button', { name: 'Connect provider' }).click();
@@ -3886,8 +3891,11 @@ test('removes an orphaned account source while keeping its sign-in (HS2-G0E8ZS)'
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByLabel('Settings View').click();
   await page.locator('#app-left-rail nav[aria-label="Settings categories"] [data-item-id="accounts"]').click();
-  const account = page.locator('[data-component="accounts-settings"] article[data-account-id="github-app-orphan"]'),
-    source = account.locator('.ticket-provider-settings__account-source[data-source-id="github-orphan"]');
+  // Each account is a Kerf FramedList card with one row per source (HS2-EN1E76).
+  const account = page.locator(
+      '[data-component="accounts-settings"] [data-component="framed-list"][data-account-id="github-app-orphan"]',
+    ),
+    source = account.locator('[data-component="framed-list-row"][data-source-id="github-orphan"]');
   await expect(source).toContainText('Connection ID: github-orphan');
   await expect(account.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
   await page.screenshot({ path: test.info().outputPath('orphan-account-source-wide.png') });
@@ -14794,7 +14802,8 @@ test('aligns settings page copy with field labels, group headers, row content, a
   await open('Accounts');
   const accountsCopy = await textLeft('[data-component="accounts-settings"] p.kui-text');
   expect(accountsCopy).toBe(sourcesCopy);
-  expect(await boxLeft('.ticket-provider-settings__account-header > :first-child')).toBe(accountsCopy);
+  // The FramedList card frame sits outside the text edge; the account icon lands on it (HS2-1JSPX7).
+  expect(await boxLeft('[data-account-header] [data-component="row"] > :first-child')).toBe(accountsCopy);
 
   await open('Keyboard');
   const keyboardCopy = await textLeft('.keyboard-settings p.kui-text');

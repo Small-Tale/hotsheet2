@@ -22,34 +22,6 @@
   letter-spacing: 0.08em;
   user-select: all;
 }
-/* Native repository inputs keep a browser datalist, which wa-input lacks (HS2-27T5WT); their label,
-   control, and hint match the adjacent Web Awesome field styling. */
-.provider-setup-form__field {
-  display: grid;
-  min-width: 0;
-  gap: var(--wa-space-2xs);
-  font-size: var(--wa-font-size-xs);
-  font-weight: var(--wa-font-weight-semibold);
-  color: var(--wa-color-neutral-on-quiet);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.provider-setup-form__field-control {
-  width: 100%;
-  min-height: remify(40px);
-  padding: 0 var(--wa-space-s);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-s);
-  color: inherit;
-  background: var(--wa-color-surface-default);
-  letter-spacing: normal;
-  text-transform: none;
-}
-.provider-setup-form__field-hint {
-  font-weight: var(--wa-font-weight-normal);
-  letter-spacing: normal;
-  text-transform: none;
-}
 /* Repository access links and the refresh action read as inline links with a trailing icon. */
 .provider-setup-form__repository-link {
   display: inline-flex;
@@ -93,10 +65,4 @@
 }
 .provider-setup-form__account-copy strong {
   overflow-wrap: anywhere;
-}
-/* iOS zooms into a focused field under 16px (HS2-8JPRRC). */
-@media (pointer: coarse) {
-  .provider-setup-form__field-control {
-    font-size: max(var(--hs-touch-field-min-font-size), 1em);
-  }
 }

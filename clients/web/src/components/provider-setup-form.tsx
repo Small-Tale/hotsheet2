@@ -1,6 +1,7 @@
 import './provider-setup-form.css';
 import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
 
+import { Combobox } from '@kerfjs/ui/combobox';
 import { rem } from '@kerfjs/ui/css-values';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
@@ -9,6 +10,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import { Text } from '@kerfjs/ui/text';
+import { wireComboboxes } from '@kerfjs/ui/wire-comboboxes';
 import type { AttrSpec } from 'kerfjs';
 import { Check, ChevronRight, Copy, ExternalLink, LogIn, RefreshCw } from 'lucide';
 
@@ -103,6 +105,20 @@ function accountUsage(account: ProviderAccount, capitalized = true) {
  * form and the ticket-source setup dialog's other screens (the remote backup form) compose it
  * with their own back action (HS2-WP69TD).
  */
+/**
+ * Wire the repository Comboboxes of every ProviderSetupForm under `root` (HS2-EN1E76): a picked or
+ * typed repository stays in its field, which the form submits by name. Production and the UX demo
+ * share it. Commas never commit; a repository name has none.
+ */
+export function wireProviderSetupComboboxes(root: HTMLElement | Document): () => void {
+  return wireComboboxes(root, {
+    commitKeys: [],
+    onCommit: ({ input, value }) => {
+      input.value = value;
+    },
+  });
+}
+
 export function ProviderSetupBackButton({ action }: { action: AttrSpec<'data-action'> }) {
   // The one chevron back affordance shared by multi-screen setup dialogs (HS2-WJ4JDW).
   return <FlowBackButton action={action.value} label="Ticket source types" />;
@@ -362,28 +378,20 @@ export function ProviderSetupForm({
             <span slot="hint">Leave blank to use “{labels[0]}”.</span>
           </wa-input>
           {choosing ? (
-            <label class="provider-setup-form__wide provider-setup-form__field">
-              Repository
-              {/* Native datalist keeps browser search over every reachable repository (HS2-27T5WT). */}
-              <input
-                class="provider-setup-form__field-control"
+            // Kerf Combobox filters every reachable repository as the person types and still accepts a
+            // typed one (HS2-27T5WT, HS2-EN1E76).
+            <div class="provider-setup-form__wide">
+              <Combobox
+                id="provider-setup-repository"
                 name="connection-locator"
-                required
-                list="provider-setup-github-repositories"
-                autocomplete="off"
+                label="Repository"
                 placeholder="Search your repositories…"
                 value={connection?.locator ?? ''}
+                suggestions={repositories}
+                createLabel="Use “{value}”"
+                hint={`${repositories.length === 1 ? '1 repository' : `${repositories.length} repositories`} available. Type to filter.`}
               />
-              <datalist id="provider-setup-github-repositories">
-                {repositories.map((repository) => (
-                  <option value={repository} />
-                ))}
-              </datalist>
-              <small class="provider-setup-form__field-hint">
-                {repositories.length === 1 ? '1 repository' : `${repositories.length} repositories`} available. Type to
-                filter.
-              </small>
-            </label>
+            </div>
           ) : (
             <wa-input
               class="provider-setup-form__wide"
@@ -464,25 +472,22 @@ export function ProviderSetupForm({
           )}
           {kind === 'github' && (
             <>
-              <label class="provider-setup-form__wide provider-setup-form__field">
-                Attachment assets repository (optional)
-                <input
-                  class="provider-setup-form__field-control"
+              <div class="provider-setup-form__wide">
+                <Combobox
+                  id="provider-setup-attachment-repo"
                   name="attachment-repo"
-                  list={choosing ? 'provider-setup-github-repositories' : undefined}
-                  autocomplete="off"
+                  label="Attachment Assets Repository (Optional)"
                   placeholder="owner/repository"
                   value={attachmentRepo}
+                  suggestions={choosing ? repositories : []}
+                  createLabel="Use “{value}”"
+                  hint={`${
+                    attachmentRepo
+                      ? 'Assets repository configured. Clear this field and save to remove it. '
+                      : 'Enter an assets repository and save to configure attachments. '
+                  }The Hot Sheet GitHub App needs Contents (read and write) permission and access to this repository. Its installation owner must approve new permissions before uploads work. Files are committed here and linked in issues.`}
                 />
-                <small class="provider-setup-form__field-hint">
-                  {attachmentRepo
-                    ? 'Assets repository configured. Clear this field and save to remove it. '
-                    : 'Enter an assets repository and save to configure attachments. '}
-                  The Hot Sheet GitHub App needs Contents (read and write) permission and access to this repository. Its
-                  installation owner must approve new permissions before uploads work. Files are committed here and
-                  linked in issues.
-                </small>
-              </label>
+              </div>
               <wa-input
                 name="attachment-folder"
                 label="Attachment Folder"

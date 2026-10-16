@@ -95,8 +95,9 @@ describe('ticket source surfaces', () => {
       ],
       installUrl: 'https://github.test/apps/hot-sheet/installations/new',
     });
-    expect(limited).toContain('list="provider-setup-github-repositories"');
-    expect(limited).toContain('<option value="acme/one"></option>');
+    // Kerf Combobox filters the reachable repositories (HS2-EN1E76).
+    expect(limited).toMatch(/data-component="combobox" data-combobox-id="provider-setup-repository"/u);
+    expect(limited).toContain('role="option" aria-selected="false" data-value="acme/one">acme/one</li>');
     expect(limited).toContain('2 repositories available.');
     expect(limited).toContain('you chose on <strong>me</strong>');
     expect(limited).not.toContain('<strong>acme</strong>');
@@ -111,7 +112,7 @@ describe('ticket source surfaces', () => {
       /refresh-github-repositories" disabled[\s\S]*?Refreshing…/,
     );
     // Before the list arrives there is nothing to search yet.
-    expect(form({})).not.toContain('provider-setup-github-repositories');
+    expect(form({})).not.toContain('provider-setup-repository');
   });
 
   it('toggles availability while editing and marks disabled connections in settings (HS2-SF6W34)', () => {
@@ -291,10 +292,8 @@ describe('ticket source surfaces', () => {
       }),
     );
     expect(configured).toContain('Assets repository configured.');
-    expect(configured).toContain('Attachment assets repository (optional)');
-    expect(configured).toContain(
-      'name="attachment-repo" autocomplete="off" placeholder="owner/repository" value="acme/assets"',
-    );
+    expect(configured).toContain('Attachment Assets Repository (Optional)');
+    expect(configured).toContain('name="attachment-repo" value="acme/assets" placeholder="owner/repository"');
     const listedEdit = String(
       ProviderSetupForm({
         kind: 'github',
@@ -315,9 +314,8 @@ describe('ticket source surfaces', () => {
         },
       }),
     );
-    expect(listedEdit).toContain('name="connection-locator" required list="provider-setup-github-repositories"');
-    expect(listedEdit).toContain('name="attachment-repo" list="provider-setup-github-repositories"');
-    expect(listedEdit).toContain('<option value="acme/assets"></option>');
+    expect(listedEdit).toContain('name="connection-locator" value="acme/issues"');
+    expect(listedEdit).toMatch(/data-combobox-id="provider-setup-attachment-repo"[\s\S]*?data-value="acme\/assets"/u);
     const failedEdit = String(
       ProviderSetupForm({
         kind: 'github',
@@ -340,7 +338,7 @@ describe('ticket source surfaces', () => {
     );
     expect(failedEdit).toContain('You can enter a repository path manually.');
     expect(failedEdit).toContain('value="acme/issues"');
-    expect(failedEdit).not.toContain('provider-setup-github-repositories');
+    expect(failedEdit).not.toContain('provider-setup-repository');
     expect(configured).toContain('name="attachment-folder" label="Attachment Folder" value="evidence"');
     expect(configured).toContain('name="attachment-branch" label="Attachment Branch" value="media"');
     const remote = String(
@@ -589,6 +587,15 @@ describe('ticket source surfaces', () => {
     // The workspace toolbar titles the page; no in-page heading repeats it (HS2-MF9D1K).
     expect(markup).not.toMatch(/<h2[^>]*>/);
     expect(markup).toContain('data-account-id="github-app-01work"');
+    // Each account is a base-surface Kerf FramedList: a header row, then one row per source (HS2-EN1E76).
+    expect(markup).toMatch(
+      /data-component="framed-list"[^>]*data-surface="base"[^>]*data-account-id="github-app-01work"|data-account-id="github-app-01work"[^>]*data-component="framed-list"/u,
+    );
+    expect(markup).toContain('data-account-header=""');
+    expect(markup).toMatch(
+      /data-component="framed-list-row"[^>]*data-source-id="jira-ops"|data-source-id="jira-ops"[^>]*data-component="framed-list-row"/u,
+    );
+    expect(markup).not.toContain('ticket-provider-settings__account-');
     expect(markup).toContain('acme/repo · Used by procurement, domotion');
     expect(markup).toContain(
       '<span data-state="disabled"><span class="kui-badge" data-component="badge" data-tone="neutral" data-appearance="quiet" data-shape="pill" data-size="compact">Disabled</span></span>',

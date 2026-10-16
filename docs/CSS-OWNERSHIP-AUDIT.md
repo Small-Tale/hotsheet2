@@ -217,6 +217,20 @@ the remaining wrapper markup that only existed because Badge lacked props:
   note textarea and its iOS floor, the selected-note quote, and the counter's tabular width.
   `KF-7288MD` (filename foreground) stays counted.
 
+## Provider and ticket-source settings update (HS2-EN1E76)
+
+- App Settings → Accounts renders each sign-in as a base-surface Kerf `FramedList`, with a header
+  row and one row per source. Its header, source, empty-note, divider, actions, and host rules are
+  gone. One wrapper rule zeroes the public `--kui-layout-inline-margin` token so the icons stay on
+  the settings text edge (HS2-1JSPX7).
+- The GitHub repository and attachment-assets fields are Kerf `Combobox`es instead of styled native
+  datalist inputs, so the `__field`, `__field-control`, `__field-hint`, and iOS-zoom rules are gone.
+- Retained: the project Ticket sources and the reuse-account cards keep their bordered `List` of
+  actionable `ListItem`/`ListActionRow` rows. FramedList is not for navigation rows, and `List
+frame` insets its rows. Also retained are the phrasing-only copy grids inside row labels, the
+  device-code chip, the inline repository-access links, the settings text-link button, and the
+  Grid full-width placement class.
+
 ## Terminal chrome update (HS2-1Q6GER)
 
 - `TerminalDashboard` empty, loading, and message copy now composes Kerf `List` and `Text`. The

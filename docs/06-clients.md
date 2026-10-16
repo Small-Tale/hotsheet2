@@ -1124,7 +1124,9 @@ preview/download, server directory browser) are separate design work.
   The GitHub configuration screen groups sign-in in a Kerf sunken panel, uses shared buttons
   and labeled Web Awesome fields (also used by GitLab and Jira), and places its back action
   inside the dialog content.
-  Repository search retains a native datalist for browser filtering. The default-source
+  Repository search is a Kerf `Combobox` that filters every reachable repository as the person
+  types, keeps a picked suggestion in the field, and still accepts a typed path (HS2-EN1E76;
+  `wireProviderSetupComboboxes` wires it in production and the UX demo). The default-source
   checkbox carries its help text below the label. Removal confirmation puts its explanation
   above the footer actions at narrow and wide widths. The UX demo's selector sits inside
   the open modal and previews source choice, sign-in, authorized, editing, removal, busy,

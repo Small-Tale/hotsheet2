@@ -46,46 +46,9 @@
 .ticket-provider-settings__recovery-badge {
   justify-self: start;
 }
-/* App Settings → Accounts (HS2-SM9PM8): one bordered card per sign-in, its header row, then one
-   row per ticket source signed in through it (app-owned markup, same row geometry as sources). */
-.ticket-provider-settings__account-header {
-  display: flex;
-  flex-wrap: wrap;
-  min-height: remify(64px);
-  box-sizing: border-box;
-  align-items: center;
-  /* 8px inline plus the card border puts the account icon on the settings text edge (HS2-1JSPX7). */
-  padding: var(--wa-space-s) var(--kui-space-xs);
-  gap: var(--wa-space-s);
-  border-bottom: 1px solid var(--wa-color-neutral-border-quiet);
-  background: var(--wa-color-neutral-fill-quiet);
-}
-.ticket-provider-settings__account-header > .ticket-provider-settings__connection-copy {
-  flex: 1 1 remify(140px);
-}
-/* The header actions wrap as a group beside the identity copy. */
-.ticket-provider-settings__account-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--wa-space-s);
-}
-/* The account host trails the provider name in normal weight and may break anywhere. */
-.ticket-provider-settings__account-host {
-  min-width: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  font-weight: var(--wa-font-weight-normal);
-  overflow-wrap: anywhere;
-}
-/* Account source rows and the empty note share the card header's inset; the card zeroes Kerf's
-   inline-margin token for its flush ListItems, so Kerf insets cannot provide it here. */
-.ticket-provider-settings__account-source,
-.ticket-provider-settings__account-empty {
-  padding: var(--wa-space-s) var(--kui-space-xs);
-}
-/* Divider between consecutive account source rows. */
-.ticket-provider-settings__account-source + .ticket-provider-settings__account-source {
-  border-top: 1px solid var(--wa-color-neutral-border-quiet);
-}
-.ticket-provider-settings__account-source .ticket-provider-settings__connection-copy {
-  flex: 1 1 remify(208px);
+/* App Settings → Accounts (HS2-SM9PM8): Kerf FramedList cards (HS2-EN1E76). Zeroing the public
+   inline-margin token puts each card frame outside the settings text edge, so 1px border plus the row
+   inset lands the account and source icons on that edge (HS2-1JSPX7). */
+.ticket-provider-settings__accounts {
+  --kui-layout-inline-margin: 0;
 }

@@ -38,8 +38,9 @@ async function collect(page: Page) {
   await expect(page.locator('wa-input[name="attachment-batch-label"]:not([hidden])').first()).toBeVisible();
   sizes.batchLabel = await fontSizes(page, 'wa-input[name="attachment-batch-label"]');
   await page.goto('/ux-demo?component=provider-setup-form');
-  await expect(page.locator('input.provider-setup-form__field-control[name="connection-locator"]')).toBeVisible();
-  sizes.locator = await fontSizes(page, 'input.provider-setup-form__field-control');
+  // The repository field is a Kerf Combobox, which keeps its own touch-safe size (HS2-EN1E76).
+  await expect(page.locator('input[name="connection-locator"]')).toBeVisible();
+  sizes.locator = await fontSizes(page, 'input[name="connection-locator"]');
   return sizes;
 }
 
