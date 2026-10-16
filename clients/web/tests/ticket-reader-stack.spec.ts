@@ -540,6 +540,8 @@ async function statefulTargetAttachments(page: Page, initial: Attachment[]) {
     }
     const body = request.postDataJSON() as Record<string, unknown> | null;
     writes.push({ method, path, body });
+    if (method === 'POST' && path.endsWith('/action'))
+      return route.fulfill({ json: { path: `/work/target/attachments/${path.split('/').at(-2)}` } });
     if (method === 'PATCH' && path.endsWith('/attachments')) {
       const ids = body?.attachment_ids as string[];
       attachments = attachments.map((item) =>
@@ -551,6 +553,12 @@ async function statefulTargetAttachments(page: Page, initial: Attachment[]) {
               purpose: body?.purpose as Attachment['purpose'],
             }
           : item,
+      );
+    } else if (method === 'PUT') {
+      // Annotations alone save to the attachment; markup with a crop saves to its `/markup`.
+      const markupId = path.match(/\/attachments\/([^/]+)(?:\/markup)?$/)?.[1];
+      attachments = attachments.map((item) =>
+        item.id === markupId ? { ...item, annotations: body?.annotations as Attachment['annotations'] } : item,
       );
     } else if (method === 'PATCH' && id)
       attachments = attachments.map((item) =>
@@ -746,6 +754,92 @@ test('opens media from a stacked linked reader in the gallery for that reader ti
   await expect(gallery).toHaveCount(0);
   await expect(linked).toBeVisible();
   await expect(linked.getByText('Reader 2 of 2')).toBeVisible();
+});
+
+test('saves gallery markup and runs gallery-menu actions from a linked reader against its own project (HS2-KKB9VF)', async ({
+  page,
+}) => {
+  const sourceWrites: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() !== 'GET' && request.url().includes('/project-api/source-project/'))
+      sourceWrites.push(`${request.method()} ${request.url()}`);
+  });
+  const media: Attachment[] = [
+    { id: 'LINKED-IMG', filename: 'linked-proof.png', created_at: '2026-09-11T00:02:00Z' },
+    { id: 'LINKED-IMG2', filename: 'linked-second.png', created_at: '2026-09-11T00:03:00Z' },
+  ];
+  await mockLayeredProjects(page, [], false, { target: media });
+  const writes = await statefulTargetAttachments(page, media);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openProjects(page);
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
+  const workspaceReader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' });
+  await workspaceReader.getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
+  const linked = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
+  await linked.getByRole('tab', { name: /Attachments/ }).click();
+  const gallery = page.locator('[data-component="attachment-gallery"]');
+  const openInGallery = async (filename: string) => {
+    await linked.getByRole('button', { name: `Open ${filename} in media gallery` }).click();
+    await expect(gallery).toBeVisible();
+    await expect(gallery).toContainText(filename);
+  };
+
+  // Draw a rectangle and finish markup: one PUT to the frame's project and qualified ticket id.
+  await openInGallery('linked-proof.png');
+  await gallery.getByRole('button', { name: 'Annotate media' }).click();
+  await gallery.getByRole('button', { name: 'Add rectangle' }).click();
+  const surface = gallery.locator('[data-gallery-annotation-surface="true"]'),
+    box = (await surface.boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6, { steps: 4 });
+  await page.mouse.up();
+  await gallery.getByRole('textbox', { name: 'Annotation note' }).fill('Check this edge');
+  await gallery.getByRole('button', { name: 'Finish markup' }).click();
+  await expect.poll(() => writes.filter((item) => item.method === 'PUT').length).toBe(1);
+  const markup = writes.find((item) => item.method === 'PUT')!;
+  expect(markup.path).toContain('/project-api/target-project/');
+  expect(markup.path).toMatch(/\/tickets\/git-target:target\/attachments\/LINKED-IMG$/);
+  expect((markup.body as { annotations: Array<{ text?: string }> }).annotations).toEqual([
+    expect.objectContaining({ text: 'Check this edge', shape: { type: 'rect' } }),
+  ]);
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(1);
+  await page.screenshot({ path: 'target/visual-captures/hs2-kkb9vf-linked-gallery-markup-1280.png' });
+  await page.keyboard.press('Escape');
+  await expect(gallery).toHaveCount(0);
+  await expect(linked).toBeVisible();
+
+  // Show in Finder from the gallery's own attachment menu: a host action on the frame's ticket.
+  await openInGallery('linked-second.png');
+  await gallery.getByRole('button', { name: 'More image actions' }).click();
+  const menu = page.locator('[data-context-menu="attachment"]');
+  await page.screenshot({ path: 'target/visual-captures/hs2-kkb9vf-linked-gallery-menu-1280.png' });
+  await menu.getByRole('menuitem', { name: 'Show in Finder' }).click();
+  await expect.poll(() => writes.at(-1)).toMatchObject({ method: 'POST', body: { action: 'reveal' } });
+  expect(writes.at(-1)!.path).toMatch(
+    /\/project-api\/target-project\/.*\/tickets\/git-target:target\/attachments\/LINKED-IMG2\/action$/,
+  );
+
+  // Remove from the gallery menu: DELETE against the frame's ticket; the linked reader drops it.
+  if (!(await gallery.isVisible())) await openInGallery('linked-second.png');
+  await gallery.getByRole('button', { name: 'More image actions' }).click();
+  await menu.getByRole('menuitem', { name: 'Remove' }).click();
+  await expect.poll(() => writes.at(-1)?.method).toBe('DELETE');
+  expect(writes.at(-1)!.path).toMatch(
+    /\/project-api\/target-project\/.*\/tickets\/git-target:target\/attachments\/LINKED-IMG2$/,
+  );
+  await expect(linked.getByText('linked-second.png')).toHaveCount(0);
+  if (await gallery.isVisible()) await page.keyboard.press('Escape');
+  await expect(gallery).toHaveCount(0);
+
+  // The workspace selection was never touched.
+  expect(sourceWrites).toEqual([]);
+  await linked.getByRole('button', { name: 'Close Ticket Reader' }).click();
+  await expect(workspaceReader).toBeVisible();
+  await expect(page.locator('#app-right-rail [data-component="ticket-inspector-header"]')).toHaveAttribute(
+    'data-ticket-slug',
+    'KF-ROOT01',
+  );
 });
 
 test('merges a concurrent remote edit into a linked reader draft instead of discarding it (HS2-A4XCXE)', async ({

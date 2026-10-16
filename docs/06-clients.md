@@ -1899,7 +1899,9 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   A linked reader whose provider cannot edit existing attachments (`attachment_edit` false)
   keeps its batches view-only: label and purpose controls are disabled, and no relabel or
   regroup action is exposed (HS2-QZFZA8, HS2-W8VEMP). Media opens from that linked ticket in
-  its own gallery, whose attachment menu and markup act on that ticket too.
+  its own gallery, whose attachment menu and markup act on that ticket too. An action from a
+  layer that has since closed resolves to no ticket rather than the workspace selection
+  (`clients/web/src/attachment-owner.ts`, HS2-KKB9VF).
   References already inside Markdown links, inline/fenced code, or attachment controls
   remain unchanged.
 

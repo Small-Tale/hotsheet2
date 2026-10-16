@@ -11,6 +11,7 @@ import {
   type TicketRow,
 } from '../api';
 import { type AttachmentLabelEditing, createAttachmentLabelEditor } from '../attachment-label-editing';
+import { attachmentOwnerTarget } from '../attachment-owner';
 import { browserRandomId } from '../browser-id';
 import {
   type AttachmentContextMenuRequest,
@@ -217,35 +218,37 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     return id && id !== 'workspace-reader' ? id : undefined;
   };
   function attachmentOwner(frameId?: string): AttachmentOwner | undefined {
-    const frame = frameId ? linkedReaderStack.value.find((item) => item.id === frameId) : undefined;
-    if (frame)
+    const target = attachmentOwnerTarget(frameId, linkedReaderStack.value, {
+      projectId: project()?.id,
+      ticket: selectedTicket.value,
+    });
+    if (!target) return undefined;
+    if (target.kind === 'frame') {
+      const { frame } = target;
       return {
         projectId: frame.projectId,
         ticket: frame.ticket,
         client: new Api(frame.apiPath),
-        canUse: frame.capabilities.attachments,
-        canEdit: frame.capabilities.attachment_edit ?? frame.capabilities.attachments,
+        canUse: target.canUse,
+        canEdit: target.canEdit,
         frameId: frame.id,
         setTicket: (ticket) => {
           replaceLinkedReaderFrame(frame.id, (current) => reconcileTicketReaderFrame(current, ticket));
         },
         refresh: () => Promise.resolve(),
       };
-    const current = project(),
-      ticket = selectedTicket.value;
-    return current && ticket
-      ? {
-          projectId: current.id,
-          ticket,
-          client: api(),
-          canUse: canUseAttachments(),
-          canEdit: dependencies.canEditAttachments?.() ?? true,
-          setTicket: (updated) => {
-            selectedTicket.value = updated;
-          },
-          refresh: () => refreshProject(),
-        }
-      : undefined;
+    }
+    return {
+      projectId: target.projectId,
+      ticket: target.ticket,
+      client: api(),
+      canUse: canUseAttachments(),
+      canEdit: dependencies.canEditAttachments?.() ?? true,
+      setTicket: (updated) => {
+        selectedTicket.value = updated;
+      },
+      refresh: () => refreshProject(),
+    };
   }
   const routedTicketId = (slug: string) =>
     (selectedTicket.value?.slug === slug ? selectedTicket.value.qualified_id : undefined) ??
