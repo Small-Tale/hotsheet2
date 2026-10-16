@@ -1644,7 +1644,7 @@ fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 62 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 63 -->\nnewer instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
@@ -1688,7 +1688,7 @@ fn setup_refresh_preserves_an_equal_version_customized_workflow_bundle() {
         r#"{"enabled_plugins":["codex"]}"#,
     )
     .unwrap();
-    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 61 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
+    let instructions = "User text.\n\n<!-- BEGIN hotsheet:codex -->\n<!-- hotsheet-instructions-version: 62 -->\nproject-formatted equal-version instructions\n<!-- END hotsheet:codex -->\n";
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
@@ -7495,6 +7495,111 @@ fn ai_actor_completion_requires_a_confidence_score() {
         .assert()
         .success()
         .stdout(predicate::str::contains("\"latest_confidence\": 90"));
+}
+
+/// HS2-JS7E61: `phase-report` measures per-phase wall and live-claim time over completed
+/// tickets from their real phase and claim history, filters by completion date, and a
+/// completion that skipped `working`/`initial_testing` gets a reminder.
+#[test]
+fn phase_report_measures_phase_time_from_phase_and_claim_history() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+    hs(p)
+        .arg("phase-report")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "0 completed tickets (all time), 0 with phase history",
+        ));
+    let phase = |slug: &str, phase: &str| {
+        hs(p)
+            .args(["edit", slug, "--started-phase", phase])
+            .assert()
+            .success();
+    };
+    let full = new_ticket(p, "Full phases");
+    hs(p)
+        .args(["claim", &full, "--worker", "w1"])
+        .assert()
+        .success();
+    phase(&full, "working");
+    phase(&full, "initial_testing");
+    hs(p)
+        .args(["release", &full, "--worker", "w1"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["edit", &full, "--status", "completed"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("completed without recording").not());
+
+    let skipped = new_ticket(p, "Skipped phases");
+    hs(p)
+        .args(["claim", &skipped, "--worker", "w2"])
+        .assert()
+        .success();
+    phase(&skipped, "integrating");
+    hs(p)
+        .args(["edit", &skipped, "--status", "completed"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(format!(
+            "note: {skipped} completed without recording working or initial_testing."
+        )));
+    // A ticket that never recorded a phase is not nagged.
+    let plain = new_ticket(p, "No phases");
+    hs(p)
+        .args(["edit", &plain, "--status", "completed"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("completed without recording").not());
+
+    hs(p)
+        .arg("phase-report")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "3 completed tickets (all time), 2 with phase history",
+        ))
+        .stdout(predicate::str::is_match(r"(?m)^Analyzing\s+2\s").unwrap())
+        .stdout(predicate::str::is_match(r"(?m)^Working\s+1\s").unwrap())
+        .stdout(predicate::str::is_match(r"(?m)^Initial testing\s+1\s").unwrap())
+        .stdout(predicate::str::is_match(r"(?m)^Integrating\s+1\s").unwrap())
+        .stdout(predicate::str::is_match(r"(?m)^Planning\s").unwrap().not());
+    let json = hs(p).args(["phase-report", "--json"]).assert().success();
+    let report: serde_json::Value = serde_json::from_slice(&json.get_output().stdout).unwrap();
+    assert_eq!(report["completed_tickets"], 3);
+    let rows = report["tickets"].as_array().unwrap();
+    let row = |slug: &str| rows.iter().find(|row| row["slug"] == slug).unwrap();
+    assert_eq!(
+        row(&full)["phases"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .collect::<Vec<_>>(),
+        ["analyzing", "initial_testing", "working"]
+    );
+    for (_, time) in row(&skipped)["phases"].as_object().unwrap() {
+        assert!(time["active_ms"].as_u64() <= time["wall_ms"].as_u64());
+    }
+    assert!(row(&plain)["phases"].as_object().unwrap().is_empty());
+
+    hs(p)
+        .args(["phase-report", "--since", "2999-01-01"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "0 completed tickets (2999-01-01T00:00:00Z to now)",
+        ));
+    hs(p)
+        .args(["phase-report", "--until", "yesterday"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--until must be YYYY-MM-DD or an RFC 3339 timestamp, got 'yesterday'",
+        ));
 }
 
 /// HS2-RD4M29: `confidence-report` compares reported completion confidence with what

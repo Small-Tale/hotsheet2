@@ -590,6 +590,33 @@ spans; a span still open is never a duration sample.
   past its typical duration, matching claim ETA rows. A local render tick updates the
   countdown; it never issues network requests. Other providers carry no estimate.
 
+#### Phase-duration report (HS2-JS7E61)
+
+`hotsheet-cli phase-report [--since <day|instant>] [--until <day|instant>] [--json]`
+measures how long completed tickets spent in each phase. It is the baseline for the
+testing-cost work. It reads the same phase spans plus each ticket's `claim_history`, with
+no new storage.
+
+- **Tickets:** completed, verified, or archived tickets whose `completed_at` falls in
+  `[since, until)`. A day means midnight UTC. A reopened ticket does not count.
+- **Wall time:** the sum of a ticket's closed spans of a phase. Re-entered phases add up.
+- **Active time:** the part of those spans covered by a live claim. A `claim` opens a
+  claimed interval, and a `renew` moves its deadline. The interval ends at a `release`, at
+  a takeover `claim`, or at the lease deadline, whichever comes first, so a lapsed lease
+  stops counting at its deadline. A renew after expiry starts a new interval. Unclaimed and
+  idle gaps are excluded.
+- **Report:** per phase, the number of tickets that recorded it and the median,
+  nearest-rank p75 and p90, and total of the per-ticket wall and active times. `--json`
+  adds every ticket's per-phase `wall_ms`, `active_ms`, and span count.
+- **Completion nudge:** when `edit --status completed` completes a ticket whose phase
+  history never recorded `working` or `initial_testing`, the CLI prints a reminder on
+  stderr. Tickets with no phase history get no reminder.
+
+Run against this repository's store for 2026-09-15 to 2026-10-16, the report reproduces
+the HS2-JS7E61 baseline (636 analyzing tickets at a 4.1 m median, integrating 330 at
+44.8 m, final testing 164 at 21.4 m). It also shows that integrating's active median is
+about 2 s: that phase is almost entirely unclaimed waiting for integration, not testing.
+
 ## 2.7 Concurrency & automatic conflict resolution
 
 > **Maintainer requirement (2026-08-19): conflict resolution must be "almost

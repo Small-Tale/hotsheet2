@@ -26,6 +26,7 @@ pub mod merge;
 pub mod metrics;
 pub mod ops;
 pub mod overlay;
+pub mod phase_report;
 pub mod phase_timing;
 pub mod ports;
 pub mod pricing;

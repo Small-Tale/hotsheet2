@@ -535,6 +535,19 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+    /// Time per started_phase over completed tickets: per-ticket wall time and active
+    /// (live-claim) time, with medians and percentiles per phase (HS2-JS7E61).
+    PhaseReport {
+        /// Only tickets completed at or after this day (YYYY-MM-DD, UTC) or RFC 3339 instant.
+        #[arg(long)]
+        since: Option<String>,
+        /// Only tickets completed before this day (YYYY-MM-DD, UTC) or RFC 3339 instant.
+        #[arg(long)]
+        until: Option<String>,
+        /// Print the full report, including every ticket's per-phase times, as JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Show the usage/cost metrics rollup for this store (docs/14) — total cost + tokens,
     /// by model, and by day. DB-free: settled rollup files + a live scan of the raw tail.
     Metrics {

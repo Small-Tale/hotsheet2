@@ -11,7 +11,7 @@
 
 <!-- BEGIN hotsheet:agents-md -->
 <!-- hotsheet-shared-section: antigravity, codex, opencode -->
-<!-- hotsheet-instructions-version: 61 -->
+<!-- hotsheet-instructions-version: 62 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -53,7 +53,8 @@ lookups, a single-line fix, or a git commit. When in doubt, create the ticket.
   test suite or other gates, `integrating` before you merge/rebase/push, and `final_testing`
   while waiting on remote CI; move back to `working` when a test failure sends you back to
   code. A ticket left at `working` while its tests run misreports progress. `claim` and
-  `renew` print the current phase as a reminder.
+  `renew` print the current phase as a reminder. Never backfill or skip phases to tidy the
+  record: `hotsheet-cli phase-report` measures time per phase from these transitions.
 - Or the MCP tools: `hotsheet_claim_next` / `hotsheet_renew` / `hotsheet_release` for the lease,
   and `hotsheet_update` (it takes a `note`) / `hotsheet_close`.
 - Create work with `hotsheet-cli new --title "…" --category <bug|feature|task>` or

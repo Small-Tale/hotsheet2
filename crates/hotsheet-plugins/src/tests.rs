@@ -71,6 +71,8 @@ fn every_builtin_carries_the_full_default_guidance() {
             // Targeted reruns after a failure, none after a clean rebase (HS2-AEE51Y).
             "Rerun only what failed",
             "Never rerun a passing suite to double-check",
+            // Honest phase logging feeds the phase-duration report (HS2-JS7E61).
+            "`hotsheet-cli phase-report` measures time per phase",
             "update them **in the same change as the code**",
             "commit per ticket",
             "Pushing is up to this repository",

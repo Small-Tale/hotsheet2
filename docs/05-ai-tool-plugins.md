@@ -764,7 +764,9 @@ pass an ETA when claiming non-trivial work. Claims are also the phase-transition
 each `started_phase` transition as it happens (`initial_testing` before tests or gates,
 `integrating` before merge/push, `final_testing` while CI runs), and the bundled instructions,
 `hotsheet` skill, and generated `worklist.md` carry the same rule so a ticket is not left at
-`working` while its tests run. Claims are git-store coordination, so the ETA
+`working` while its tests run. Instructions v62 add that phases are never backfilled or
+skipped to tidy the record, because `hotsheet-cli phase-report` measures them
+([02](02-ticket-storage.md), HS2-JS7E61). Claims are git-store coordination, so the ETA
 lives only on git-provider tickets. Ticket list and column rows show progress toward the ETA
 and the time left, or `Soon` once it passes, and the inspector and reader headers show who holds
 the live claim with the same estimate (HS2-XQMDQB, HS2-QKNQXC; see

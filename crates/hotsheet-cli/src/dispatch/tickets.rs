@@ -79,6 +79,9 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::People { cmd } => cmd_people(path, cmd),
         Cmd::Read { id } => cmd_read(path, &id),
         Cmd::ConfidenceReport { json } => cmd_confidence_report(path, json),
+        Cmd::PhaseReport { since, until, json } => {
+            cmd_phase_report(path, since.as_deref(), until.as_deref(), json)
+        }
         Cmd::Metrics {
             roll_up,
             prune_before,
@@ -872,8 +875,37 @@ pub(crate) fn cmd_edit(
     }
     if !quiet {
         println!("Updated {}", updated.slug);
+        if let Some(nudge) = completion_phase_nudge(ticket.status, &updated) {
+            eprintln!("{nudge}");
+        }
     }
     Ok(())
+}
+
+/// HS2-JS7E61: completing a ticket whose phase history skipped `working` or
+/// `initial_testing` gets a reminder, since `phase-report` measures those phases. Tickets
+/// that never recorded a phase, and edits that do not complete, stay silent.
+fn completion_phase_nudge(before: Status, updated: &hotsheet_model::Ticket) -> Option<String> {
+    if before == Status::Completed || updated.status != Status::Completed {
+        return None;
+    }
+    if hotsheet_ticketing::phase_timing::phase_spans(updated).is_empty() {
+        return None;
+    }
+    let missing = hotsheet_ticketing::phase_report::unrecorded_core_phases(updated);
+    if missing.is_empty() {
+        return None;
+    }
+    let names: Vec<&str> = missing
+        .iter()
+        .map(|phase| hotsheet_ticketing::phase_report::phase_key(*phase))
+        .collect();
+    Some(format!(
+        "note: {} completed without recording {}. Record each started_phase transition as it \
+         happens; `phase-report` measures time per phase.",
+        updated.slug,
+        names.join(" or ")
+    ))
 }
 
 pub(crate) fn cmd_batch(
@@ -954,6 +986,77 @@ pub(crate) fn cmd_confidence_report(path: &Path, json: bool) -> Result<()> {
     println!(
         "Reopen rate counts resolved completions only (verified or reopened). A well-calibrated \
          rubric reopens less as the band rises."
+    );
+    Ok(())
+}
+
+/// A `--since`/`--until` bound: a `YYYY-MM-DD` day (midnight UTC) or an RFC 3339 instant.
+fn report_bound(flag: &str, raw: &str) -> Result<hotsheet_model::Timestamp> {
+    let text = if raw.len() == 10 {
+        format!("{raw}T00:00:00Z")
+    } else {
+        raw.to_string()
+    };
+    let at = hotsheet_model::Timestamp::new(text);
+    if at.instant().is_none() {
+        bail!("{flag} must be YYYY-MM-DD or an RFC 3339 timestamp, got '{raw}'");
+    }
+    Ok(at)
+}
+
+pub(crate) fn cmd_phase_report(
+    path: &Path,
+    since: Option<&str>,
+    until: Option<&str>,
+    json: bool,
+) -> Result<()> {
+    use hotsheet_ticketing::phase_report::{format_duration, phase_report};
+    let since = since.map(|raw| report_bound("--since", raw)).transpose()?;
+    let until = until.map(|raw| report_bound("--until", raw)).transpose()?;
+    let store = FsStore::open(path)?;
+    let tickets = store.list_tickets_resilient()?.tickets;
+    let report = phase_report(
+        &tickets,
+        since.as_ref(),
+        until.as_ref(),
+        time::OffsetDateTime::now_utc(),
+    );
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        return Ok(());
+    }
+    let range = match (&report.since, &report.until) {
+        (None, None) => "all time".to_string(),
+        (since, until) => format!(
+            "{} to {}",
+            since.as_deref().unwrap_or("the start"),
+            until.as_deref().unwrap_or("now")
+        ),
+    };
+    println!(
+        "Phase durations: {} completed tickets ({range}), {} with phase history",
+        report.completed_tickets, report.tickets_with_phases
+    );
+    println!(
+        "{:<16} {:>7}  {:>8} {:>8} {:>8}  {:>8} {:>8} {:>8}",
+        "phase", "tickets", "median", "p75", "p90", "active", "p75", "p90"
+    );
+    for row in &report.phases {
+        println!(
+            "{:<16} {:>7}  {:>8} {:>8} {:>8}  {:>8} {:>8} {:>8}",
+            row.label,
+            row.tickets,
+            format_duration(row.wall.median_ms),
+            format_duration(row.wall.p75_ms),
+            format_duration(row.wall.p90_ms),
+            format_duration(row.active.median_ms),
+            format_duration(row.active.p75_ms),
+            format_duration(row.active.p90_ms),
+        );
+    }
+    println!(
+        "Per-ticket time in each phase. Wall time spans the phase; active time counts only \
+         live-claim time, excluding unclaimed and idle gaps. --json adds every ticket."
     );
     Ok(())
 }
