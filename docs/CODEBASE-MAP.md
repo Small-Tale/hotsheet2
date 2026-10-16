@@ -58,6 +58,7 @@ The numbered requirements docs (source of truth for behavior; status in
 hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE store (below)
   Cargo.toml                 # Rust workspace (edition 2024, resolver 3)
   scripts/check-test-coverage.mjs # CI validator for docs/TEST-COVERAGE.md evidence
+  scripts/test-quiet.mjs     # Quiet per-tier test wrapper: failure-only reporters, capped excerpts, full log path (HS2-CP63FG; tests: test-quiet.test.mjs + fixtures/test-quiet/)
   .hotsheet2/settings.json   # committed project settings, incl. the Quality AI command group (HS2-11285R)
   .claude/skills/{check-requirements-against-code,check-code-hygiene,analyze-code-quality}/ # quality-check skills run by those commands (Codex mirror: .agents/skills/)
   rust-toolchain.toml        # pinned stable + rustfmt + clippy

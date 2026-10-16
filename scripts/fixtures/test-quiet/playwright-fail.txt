@@ -1,0 +1,27 @@
+
+Running 2 tests using 1 worker
+
+
+
+[1/2] a.spec.mjs:2:1 › passes
+[2/2] a.spec.mjs:3:1 › fails here
+  1) a.spec.mjs:3:1 › fails here ───────────────────────────────────────────────────────────────────
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 2
+    Received: 1
+
+      1 | import { test, expect } from "@playwright/test";
+      2 | test("passes", () => {});
+    > 3 | test("fails here", () => { expect(1).toBe(2); });
+        |                                      ^
+      4 |
+        at <root>/a.spec.mjs:3:38
+
+    Error Context: test-results/a-fails-here/error-context.md
+
+
+  1 failed
+    a.spec.mjs:3:1 › fails here ────────────────────────────────────────────────────────────────────
+  1 passed (328ms)

@@ -11,7 +11,7 @@
 
 <!-- BEGIN hotsheet:agents-md -->
 <!-- hotsheet-shared-section: antigravity, codex, opencode -->
-<!-- hotsheet-instructions-version: 58 -->
+<!-- hotsheet-instructions-version: 59 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -153,6 +153,9 @@ local path only as clearly labeled machine-local diagnostic evidence.
   multi-step sequences that cross boundaries. Deliberately try to break it with out-of-order,
   interleaved, repeated, and empty-then-refill sequences; pin any bug you find as a permanent
   regression test.
+- **Keep test output quiet.** Run suites with failure-only reporters (the project's quiet
+  test wrapper when it has one) and read the summary and failure excerpts, not the full log.
+  A cheaper background agent may run the tests and report only pass/fail and the failures.
 - **Fix lint and type errors before finishing** — as you go, not batched.
 
 ## Requirements & docs

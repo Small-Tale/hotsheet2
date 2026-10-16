@@ -148,6 +148,9 @@ jobs:
       - name: Validate feature double-coverage matrix
         run: node --test scripts/check-test-coverage.test.mjs && node scripts/check-test-coverage.mjs
 
+      - name: Test the quiet test wrapper
+        run: node --test scripts/test-quiet.test.mjs
+
       - name: Build the CLI (the conformance test drives target/debug/hotsheet-cli)
         run: cargo build --bin hotsheet-cli
 

@@ -273,6 +273,9 @@ and other non-action structure are the only ordinary exception.
 - **Coverage:** per-language gates + the feature-layer matrix in
   `docs/TEST-COVERAGE.md` (NOT one merged lcov):
   `cargo llvm-cov` (Rust) · Playwright/istanbul (web) · `vitest` coverage (migrator).
+- **Quiet runs (HS2-CP63FG):** prefer `node scripts/test-quiet.mjs <rust|web-unit|web-e2e|migrator>`
+  (runner args after `--`). It prints one summary line per tier plus capped failure
+  excerpts and writes the full output to the printed `target/test-quiet/` log path.
 - **Commands:** Rust `cargo nextest run` and `cargo lint`; from `clients/web`,
   `npm run lint`, `npm run typecheck`, `npm run test:unit`, `npm run test:e2e`, and
   `npm run build`; from `migrator`, `npm run lint`, `npm test`, and
@@ -385,7 +388,7 @@ References to the _original_ Hot Sheet (the predecessor at
 predecessor links; they do not attribute Hot Sheet 2.
 
 <!-- BEGIN hotsheet:claude -->
-<!-- hotsheet-instructions-version: 58 -->
+<!-- hotsheet-instructions-version: 59 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -527,6 +530,9 @@ local path only as clearly labeled machine-local diagnostic evidence.
   multi-step sequences that cross boundaries. Deliberately try to break it with out-of-order,
   interleaved, repeated, and empty-then-refill sequences; pin any bug you find as a permanent
   regression test.
+- **Keep test output quiet.** Run suites with failure-only reporters (the project's quiet
+  test wrapper when it has one) and read the summary and failure excerpts, not the full log.
+  A cheaper background agent may run the tests and report only pass/fail and the failures.
 - **Fix lint and type errors before finishing** — as you go, not batched.
 
 ## Requirements & docs

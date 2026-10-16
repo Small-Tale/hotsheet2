@@ -64,6 +64,8 @@ fn every_builtin_carries_the_full_default_guidance() {
             "Format AI-authored notes for human scanning",
             "`## Result`, `## Verification`, and `## Follow-ups`",
             "Double coverage",
+            // Failure-only test output keeps agent token use down (HS2-CP63FG).
+            "Keep test output quiet",
             "update them **in the same change as the code**",
             "commit per ticket",
             "Pushing is up to this repository",

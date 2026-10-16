@@ -115,6 +115,11 @@ feature coverage, treated as a floor for transition and interaction tests. Exact
 stacks, coverage paths, validators, and thresholds stay project-specific. Refresh knows
 both earlier testing-section versions and retains their nested specifics while upgrading.
 
+The bundled instruction block's Testing list (instructions v59, HS2-CP63FG) asks agents to
+keep test output quiet: run failure-only reporters, or the project's quiet wrapper when it
+has one, and read the summary and failure excerpts rather than the full log. Hot Sheet 2's
+own wrapper is `scripts/test-quiet.mjs` ([12](12-code-organization-and-testing.md) §12.7.8).
+
 The ticket workflow section (HS2-PDD7XG) includes project-neutral note guidance: use
 activity history for meaningful subtask starts and finishes, preserve conclusions in
 regular Markdown notes, pair AI activity with a short `note_summary`, and send multiline

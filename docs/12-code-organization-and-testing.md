@@ -677,6 +677,32 @@ that makes adding a tool boring instead of painful.
 **Payoff:** adding a tool = write the plugin module + record its real protocol once;
 everything else is inherited and automated.
 
+### 12.7.8 Quiet test runs for agents (HS2-CP63FG)
+
+Verbose runner output costs agent tokens without adding assurance. Agents run tests
+through `node scripts/test-quiet.mjs <tier>[,<tier>...] [-- runner args]`, where the tier
+is `rust` (`cargo nextest run`), `web-unit` (`clients/web` Vitest), `web-e2e` (the
+binary build, then `clients/web` Playwright), or `migrator` (migrator Vitest). Arguments
+after `--` go to the single named runner, so targeted runs keep their filters, for
+example `node scripts/test-quiet.mjs rust -- -p hotsheet-cli -E 'test(claim)'`.
+
+- Each runner uses failure-only reporters: nextest `--status-level fail` with final
+  failure output, Vitest `--reporter=dot`, and Playwright `--reporter=line`.
+- The wrapper prints one line per tier with PASS/FAIL, wall time, the runner's own count
+  lines, and the log path. The complete output goes to
+  `target/test-quiet/<tier>-<timestamp>.log` (`HOTSHEET_TEST_QUIET_LOG_DIR` overrides).
+- On a red run it prints each distinct failure block, capped at `--max-failures` (8)
+  blocks of `--max-lines` (30) lines. A nextest block keeps its first third and its end,
+  where the panic message sits. A failure with no recognizable test block, such as a
+  compile error, prints the last 30 lines instead. Excerpt lines are clipped at 240
+  characters; the log keeps them whole.
+- The exit status is the runner's. A failed build step stops the tier before its tests run.
+
+A primary agent may hand a test run to a cheaper background agent that returns only the
+wrapper's summary. The wrapper's parsing is covered by `scripts/test-quiet.test.mjs`,
+which uses real captured runner output and spawns real processes; CI runs it in the
+`check` job.
+
 ## 12.8 Cross-references
 
 - Core / server / CLI split: [04-core-server-cli.md](04-core-server-cli.md)

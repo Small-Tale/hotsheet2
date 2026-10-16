@@ -1,0 +1,32 @@
+   Compiling tq v0.1.0 (<root>)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.42s
+────────────
+ Nextest run ID 56aa896f-510e-46d6-b4f8-19c863ec0b86 with nextest profile: default
+    Starting 2 tests across 1 binary
+        FAIL [   0.009s] tq t::fails_here
+  Cancelling due to test failure: 
+────────────
+     Summary [   0.010s] 2 tests run: 1 passed, 1 failed, 0 skipped
+        FAIL [   0.009s] tq t::fails_here
+  stdout ───
+
+    running 1 test
+    some stdout
+    test t::fails_here ... FAILED
+
+    failures:
+
+    failures:
+        t::fails_here
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 't::fails_here' (39087752) panicked at src/lib.rs:6:44:
+    assertion `left == right` failed: numbers differ
+      left: 1
+     right: 2
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+error: test run failed
