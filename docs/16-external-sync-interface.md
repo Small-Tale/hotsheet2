@@ -420,6 +420,43 @@ repository remain to be measured in HS2-QB6XJ4.
   `attachments` capability before creating anything, so a destination without attachment
   support refuses the transfer up front instead of leaving a partial copy.
 
+**GitLab attachments through native project uploads (HS2-ENHE8K).** GitLab has a
+token-usable upload API, so a GitLab connection reports `attachments: true` and
+`attachment_crop: true` with no extra setting. `attachment_edit` stays `false`.
+
+- **Upload:** `POST /projects/:id/uploads` (multipart `file`) stores
+  `{attachment-id}-{safe-name}`. The multipart boundary comes from the attachment id, so a
+  retry sends identical bytes. GitLab returns a project-relative `/uploads/<secret>/<name>`
+  link.
+- **Link note:** one issue note renders that link (`![name](…)` for images, `[name](…)`
+  otherwise) and ends with the same hidden `<!-- hotsheet-attachment:<id> {…} -->` marker
+  shape as GitHub. Here the JSON carries `filename`, `secret`, `upload_name`, the upload
+  `id`, and the batch, actor, purpose, crop, and annotation metadata. A retry first looks
+  for the marker, so it returns the existing attachment instead of posting twice.
+  - If the upload succeeds but the note fails, the retry posts one more upload and
+    leaves the first one orphaned. GitLab uploads cannot be addressed by Hot Sheet id.
+- **Projection:** marked non-system notes become the ticket's `attachments` (created at the
+  note's time; revision = SHA-256 of the note body), not notes. A marker whose secret or
+  name is not a plain upload path segment stays an ordinary note.
+- **Reading:** `GET /projects/:id/uploads/:secret/:filename` (GitLab 17.4 or later, any
+  project member), so private projects render without giving the browser a token. On
+  an older GitLab, reads fail as `not_found`, and the error names the 17.4 requirement.
+- **Crop and markup:** a crop uploads a content-addressed rendition
+  (`{id}-crop-<hash>.<ext>`), points the note's visible link at it, and records
+  `rendition_secret`/`rendition_name`. The marker still names the immutable original, and
+  clearing the crop relinks it.
+  - An annotation-only change rewrites the note without uploading.
+  - Writes are checked against the expected revision, and the note is re-read just
+    before `PUT …/notes/:note_id`. A note changed during the rendition upload
+    conflicts instead of being overwritten.
+  - GitLab note edits have no compare-and-swap, so a small window remains between that
+    re-read and the write. GitHub's manifest commit does not have this window.
+- **Tests:** fake-GitLab transport tests cover the multipart shape, projection, idempotent
+  retry, byte reads, crop/annotate/restore/re-crop, and conflicts. The opt-in
+  `gitlab_live_attachment_upload_crop_and_read` test creates, attaches, crops, restores,
+  and closes one issue, and writes only with `HOTSHEET_GITLAB_LIVE_WRITE=1`. It has not
+  run yet because it needs live credentials.
+
 GitHub has only `open`/`closed` plus a `completed`/`not_planned` close reason, so the
 provider carries the rest of Hot Sheet's state on **provider-owned labels** it writes and
 reads itself and never surfaces as tags (HS2-K8R3T8). `state` decides open versus closed and
@@ -512,11 +549,11 @@ they need live credentials:
 | Activity `summary`             | yes                      | no (falls back to the comment body)  | no                                       | no                                             |
 | `latest_confidence` derivation | current completion cycle | since last `reopened` event (detail) | since last reopened state event (detail) | since last changelog exit from `done` (detail) |
 
-| Attachment capability                                   | git              | GitHub Issues                                           | GitLab | Jira |
-| ------------------------------------------------------- | ---------------- | ------------------------------------------------------- | ------ | ---- |
-| `attachments` (add and read)                            | yes, store files | only with `attachment_repo`; assets repo + link comment | no     | no   |
-| `attachment_edit` (rename, delete, labels, annotations) | yes              | no                                                      | no     | no   |
-| `attachment_crop` (reversible image crop)               | yes              | with `attachment_repo`                                  | no     | no   |
+| Attachment capability                                   | git              | GitHub Issues                                           | GitLab                                    | Jira |
+| ------------------------------------------------------- | ---------------- | ------------------------------------------------------- | ----------------------------------------- | ---- |
+| `attachments` (add and read)                            | yes, store files | only with `attachment_repo`; assets repo + link comment | yes, project upload + marked note (17.4+) | no   |
+| `attachment_edit` (rename, delete, labels, annotations) | yes              | no                                                      | no                                        | no   |
+| `attachment_crop` (reversible image crop)               | yes              | with `attachment_repo`                                  | yes, rendition upload + note rewrite      | no   |
 
 In the web dialog a new GitHub connection starts from sign-in (HS2-1JT25R): its other settings
 stay hidden and **Connect** stays disabled until GitHub authorizes. **Sign in with GitHub**

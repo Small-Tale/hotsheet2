@@ -19543,6 +19543,206 @@ async fn github_checkout_attachments_upload_to_the_assets_repository_and_read_ba
     assert!(transport.responses.lock().unwrap().is_empty());
 }
 
+/// A stateful fake of GitLab's issue, notes, and project uploads endpoints (HS2-ENHE8K),
+/// with GitLab's response shapes: `201` upload metadata and raw file bytes on download.
+#[derive(Default)]
+struct FakeGitLabUploads {
+    notes: Mutex<Vec<serde_json::Value>>,
+    uploads: Mutex<HashMap<String, Vec<u8>>>,
+}
+
+impl GitHubTransport for FakeGitLabUploads {
+    fn request(
+        &self,
+        method: &str,
+        url: &str,
+        _: &[(&str, String)],
+        body: Option<&serde_json::Value>,
+    ) -> Result<HttpResponse, String> {
+        let path = url
+            .strip_prefix("https://gitlab.test/api/v4/projects/acme%2Frepo/")
+            .ok_or("unexpected host")?;
+        let mut notes = self.notes.lock().unwrap();
+        let value = if method == "GET" && path == "issues/42" {
+            serde_json::json!({"iid":42,"title":"with evidence","description":"","state":"opened","web_url":"https://gitlab.test/acme/repo/-/issues/42","created_at":"2026-10-01T00:00:00Z","updated_at":"2026-10-01T00:00:00Z","closed_at":null,"labels":[],"assignees":[]})
+        } else if method == "GET" && path.starts_with("issues/42/notes?") {
+            serde_json::Value::Array(notes.clone())
+        } else if method == "POST" && path == "issues/42/notes" {
+            let note = serde_json::json!({"id":notes.len() + 1,"body":body.unwrap()["body"],"created_at":"2026-10-01T00:00:05Z","system":false});
+            notes.push(note.clone());
+            return Ok(github_response(201, note));
+        } else {
+            return Err(format!("unexpected request {method} {url}"));
+        };
+        Ok(github_response(200, value))
+    }
+
+    fn request_raw(
+        &self,
+        method: &str,
+        url: &str,
+        _: &[(&str, String)],
+        body: Option<hotsheet_extsync::github::RawBody<'_>>,
+    ) -> Result<hotsheet_extsync::github::BinaryResponse, String> {
+        let path = url
+            .strip_prefix("https://gitlab.test/api/v4/projects/acme%2Frepo/")
+            .ok_or("unexpected host")?;
+        let respond = |status: u16, body: Vec<u8>| hotsheet_extsync::github::BinaryResponse {
+            status,
+            headers: HashMap::new(),
+            body,
+        };
+        if method == "POST" && path == "uploads" {
+            let body = body.ok_or("upload without body")?;
+            assert!(
+                body.content_type
+                    .starts_with("multipart/form-data; boundary=")
+            );
+            let text = String::from_utf8_lossy(body.bytes).into_owned();
+            let name = text
+                .split("filename=\"")
+                .nth(1)
+                .and_then(|rest| rest.split('"').next())
+                .ok_or("multipart without filename")?
+                .to_owned();
+            let start = text.find("\r\n\r\n").ok_or("multipart without body")? + 4;
+            let end = text.rfind("\r\n--").ok_or("multipart without end")?;
+            let secret = "0123456789abcdef0123456789abcdef";
+            self.uploads
+                .lock()
+                .unwrap()
+                .insert(format!("{secret}/{name}"), body.bytes[start..end].to_vec());
+            let url = format!("/uploads/{secret}/{name}");
+            return Ok(respond(
+                201,
+                serde_json::json!({"id":5,"alt":name,"url":url,"full_path":format!("/-/project/1{url}"),"markdown":format!("![{name}]({url})")})
+                    .to_string()
+                    .into_bytes(),
+            ));
+        }
+        if method == "GET"
+            && let Some(key) = path.strip_prefix("uploads/")
+        {
+            return Ok(match self.uploads.lock().unwrap().get(key) {
+                Some(bytes) => respond(200, bytes.clone()),
+                None => respond(404, br#"{"message":"404 Not found"}"#.to_vec()),
+            });
+        }
+        Err(format!("unexpected raw request {method} {url}"))
+    }
+}
+
+/// HS2-ENHE8K: a GitLab source takes attachments through the same checkout attachment
+/// route the composer uses (native project upload plus a marked note), serves the bytes
+/// back through the uploads API, and refuses store-only edits by name.
+#[tokio::test]
+async fn gitlab_checkout_attachments_upload_natively_and_read_back() {
+    let (_dir, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let transport = Arc::new(FakeGitLabUploads::default());
+    let provider = GitLabProvider::new(
+        GitLabConfig {
+            connection_id: "gitlab-main".into(),
+            project: "acme/repo".into(),
+            api_base: "https://gitlab.test/api/v4".into(),
+            token: "fixture-token".into(),
+            default: false,
+        },
+        transport.clone(),
+    );
+    let app = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(provider)));
+    let connection = serde_json::json!({
+        "id":"gitlab-main","provider":"gitlab","locator":"acme/repo","default":false,
+        "settings":{"credential":{"secret":"fixture-token"},"api_base":"https://gitlab.test/api/v4"}
+    });
+    let created = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/provider-connections",
+            Some(&connection.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let registration = serde_json::json!({
+        "root": checkout.path(),
+        "alias": "external-gitlab",
+        "sources": [{"connection_id":"gitlab-main","provider":"gitlab","locator":"acme/repo"}],
+        "default_source": "gitlab-main"
+    })
+    .to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    let upload = Request::builder()
+        .method("POST")
+        .uri("/checkouts/external-gitlab/tickets/gitlab-main:42/attachments")
+        .header("x-hotsheet-secret", SECRET)
+        .header("x-hotsheet-filename", "proof.png")
+        .header("x-hotsheet-attachment-purpose", "problem_evidence")
+        .body(Body::from("png bytes"))
+        .unwrap();
+    let response = app.clone().oneshot(upload).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let attached = body_json(response).await;
+    assert_eq!(attached["store"], "gitlab-main");
+    assert_eq!(attached["attachments"][0]["filename"], "proof.png");
+    assert_eq!(attached["attachments"][0]["purpose"], "problem_evidence");
+    assert!(attached["notes"].as_array().unwrap().is_empty());
+    let attachment_id = attached["attachments"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    {
+        let notes = transport.notes.lock().unwrap();
+        let body = notes[0]["body"].as_str().unwrap();
+        assert!(
+            body.starts_with(&format!(
+                "![proof.png](/uploads/0123456789abcdef0123456789abcdef/{attachment_id}-proof.png)"
+            )),
+            "{body}"
+        );
+    }
+    let read = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!(
+                "/checkouts/external-gitlab/tickets/gitlab-main:42/attachments/{attachment_id}"
+            ),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(read.status(), StatusCode::OK);
+    assert_eq!(read.headers()[header::CONTENT_TYPE], "image/png");
+    let bytes = read.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(&bytes[..], b"png bytes");
+    let deleted = app
+        .clone()
+        .oneshot(authed(
+            "DELETE",
+            &format!(
+                "/checkouts/external-gitlab/tickets/gitlab-main:42/attachments/{attachment_id}"
+            ),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(deleted.status(), StatusCode::CONFLICT);
+    let message = body_json(deleted).await.to_string();
+    assert!(
+        message.contains("does not support this operation"),
+        "{message}"
+    );
+    assert_eq!(transport.uploads.lock().unwrap().len(), 1);
+}
+
 #[tokio::test]
 async fn github_checkout_detail_batches_manifests_and_uses_the_winning_revision() {
     let (_dir, st) = state();

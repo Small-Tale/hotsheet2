@@ -104,6 +104,24 @@ pub struct HttpResponse {
     pub body: String,
 }
 
+/// A response whose body is kept as raw bytes (provider attachment downloads).
+#[derive(Debug, Clone)]
+pub struct BinaryResponse {
+    pub status: u16,
+    pub headers: HashMap<String, String>,
+    pub body: Vec<u8>,
+}
+
+/// A raw request body with its content type (multipart attachment uploads).
+#[derive(Debug, Clone, Copy)]
+pub struct RawBody<'a> {
+    pub content_type: &'a str,
+    pub bytes: &'a [u8],
+}
+
+/// Largest provider attachment body read back; matches the server's upload limit.
+pub const MAX_PROVIDER_ATTACHMENT_BYTES: usize = 100 * 1024 * 1024;
+
 pub trait GitHubTransport: Send + Sync {
     /// Test transports can opt in after implementing GraphQL response fixtures.
     fn supports_manifest_batching(&self) -> bool {
@@ -117,6 +135,47 @@ pub trait GitHubTransport: Send + Sync {
         headers: &[(&str, String)],
         body: Option<&Value>,
     ) -> Result<HttpResponse, String>;
+
+    /// Send a raw body and keep the response as bytes, for providers whose native attachment
+    /// APIs take multipart uploads and return file content (GitLab uploads, Jira
+    /// attachments; HS2-ENHE8K/HS2-KE18XX). Transports without binary support fail explicitly.
+    fn request_raw(
+        &self,
+        _method: &str,
+        _url: &str,
+        _headers: &[(&str, String)],
+        _body: Option<RawBody<'_>>,
+    ) -> Result<BinaryResponse, String> {
+        Err("this transport does not support binary requests".into())
+    }
+}
+
+/// A `multipart/form-data` body with one file part named `field`. The boundary is
+/// derived from `boundary_seed` (an attachment id) so a retried upload sends identical bytes.
+pub fn multipart_file_body(
+    field: &str,
+    filename: &str,
+    boundary_seed: &str,
+    bytes: &[u8],
+) -> (String, Vec<u8>) {
+    let boundary = format!("----hotsheet-{boundary_seed}");
+    let quoted = filename
+        .chars()
+        .map(|c| match c {
+            '"' | '\\' | '\r' | '\n' => '_',
+            other => other,
+        })
+        .collect::<String>();
+    let mut body = Vec::with_capacity(bytes.len() + 256);
+    body.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"{field}\"; filename=\"{quoted}\"\r\nContent-Type: application/octet-stream\r\n\r\n"
+        )
+        .as_bytes(),
+    );
+    body.extend_from_slice(bytes);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    (format!("multipart/form-data; boundary={boundary}"), body)
 }
 
 /// Normalized invalidation emitted after the host verifies a GitHub webhook signature.
@@ -197,6 +256,54 @@ impl GitHubTransport for UreqGitHubTransport {
             status,
             headers: response_headers,
             body,
+        })
+    }
+
+    fn request_raw(
+        &self,
+        method: &str,
+        url: &str,
+        headers: &[(&str, String)],
+        body: Option<RawBody<'_>>,
+    ) -> Result<BinaryResponse, String> {
+        use std::io::Read;
+        let mut request = ureq::request(method, url).timeout(std::time::Duration::from_secs(300));
+        for (name, value) in headers {
+            request = request.set(name, value);
+        }
+        let result = match body {
+            Some(body) => request
+                .set("Content-Type", body.content_type)
+                .send_bytes(body.bytes),
+            None => request.call(),
+        };
+        let response = match result {
+            Ok(response) => response,
+            Err(ureq::Error::Status(_, response)) => response,
+            Err(error) => return Err(error.to_string()),
+        };
+        let status = response.status();
+        let mut response_headers = HashMap::new();
+        for name in response.headers_names() {
+            if let Some(value) = response.header(&name) {
+                response_headers.insert(name.to_ascii_lowercase(), value.to_string());
+            }
+        }
+        let mut bytes = Vec::new();
+        response
+            .into_reader()
+            .take(MAX_PROVIDER_ATTACHMENT_BYTES as u64 + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|e| e.to_string())?;
+        if bytes.len() > MAX_PROVIDER_ATTACHMENT_BYTES {
+            return Err(format!(
+                "provider response exceeds {MAX_PROVIDER_ATTACHMENT_BYTES} bytes"
+            ));
+        }
+        Ok(BinaryResponse {
+            status,
+            headers: response_headers,
+            body: bytes,
         })
     }
 }

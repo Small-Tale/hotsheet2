@@ -15,6 +15,8 @@ use serde_json::{Value, json};
 
 use crate::note_trailer;
 
+mod attachments;
+
 /// Native page size for value-keyset walks; fixed so resume hints stay positionally valid.
 const NATIVE_KEYSET_PAGE: usize = 100;
 
@@ -96,6 +98,11 @@ impl GitLabProvider {
                 ticket: self.config.connection_id.clone(),
                 message,
             })?;
+        self.checked(url, response)
+    }
+
+    /// Map a GitLab status to a typed provider error (shared by JSON and binary requests).
+    fn checked(&self, url: &str, response: HttpResponse) -> Result<HttpResponse, ProviderError> {
         match response.status {
             200..=299 => Ok(response),
             401 => Err(ProviderError::Authentication {
@@ -295,9 +302,18 @@ impl GitLabProvider {
         };
         let body = issue.description.unwrap_or_default();
         let native_id = issue.iid.to_string();
+        // Upload notes this provider wrote project as attachments, not notes (HS2-ENHE8K).
+        let mut attachments = Vec::new();
         let notes = notes
             .into_iter()
             .filter(|note| !note.system)
+            .filter(|note| match attachments::project(note) {
+                Some(attachment) => {
+                    attachments.push(attachment);
+                    false
+                }
+                None => true,
+            })
             .map(|note| {
                 let (text, confidence) = note_trailer::parse_comment(&note.body);
                 ApiNote {
@@ -375,7 +391,7 @@ impl GitLabProvider {
             schema: 1,
             notes,
             latest_confidence,
-            attachments: vec![],
+            attachments,
             warnings: vec![],
             auto_context: vec![],
         }
@@ -744,6 +760,41 @@ impl TicketProvider for GitLabProvider {
         self.get(native_id)
     }
 
+    fn add_attachment(
+        &self,
+        native_id: &str,
+        attachment: hotsheet_ticketing::wire::ApiAttachment,
+        bytes: Vec<u8>,
+    ) -> Result<ApiTicket, ProviderError> {
+        self.add_upload_attachment(native_id, attachment, bytes)
+    }
+
+    fn attachment_bytes(
+        &self,
+        native_id: &str,
+        attachment_id: &str,
+    ) -> Result<Vec<u8>, ProviderError> {
+        self.upload_bytes(native_id, attachment_id, true)
+    }
+
+    fn attachment_original_bytes(
+        &self,
+        native_id: &str,
+        attachment_id: &str,
+    ) -> Result<Vec<u8>, ProviderError> {
+        self.upload_bytes(native_id, attachment_id, false)
+    }
+
+    fn set_attachment_markup(
+        &self,
+        native_id: &str,
+        attachment_id: &str,
+        expected_revision: Option<&str>,
+        markup: hotsheet_ticketing::store::AttachmentMarkup,
+    ) -> Result<ApiTicket, ProviderError> {
+        self.update_upload_markup(native_id, attachment_id, expected_revision, markup)
+    }
+
     fn close(
         &self,
         native_id: &str,
@@ -842,9 +893,11 @@ fn capabilities() -> ProviderCapabilities {
         notes: true,
         note_edit: false,
         note_delete: false,
-        attachments: false,
+        // Native project uploads linked from marked notes (HS2-ENHE8K). The original upload
+        // is immutable; crop and annotations rewrite only the marker note.
+        attachments: true,
         attachment_edit: false,
-        attachment_crop: false,
+        attachment_crop: true,
         assignment: false,
         review_requests: false,
         dependencies: false,

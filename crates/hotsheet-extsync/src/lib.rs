@@ -2,6 +2,7 @@
 //! translate their native records at the [`hotsheet_ticketing::TicketProvider`]
 //! boundary and never mirror them into the default git store.
 
+mod attachment_crop;
 pub mod github;
 pub mod github_app_config;
 pub mod github_attachments;

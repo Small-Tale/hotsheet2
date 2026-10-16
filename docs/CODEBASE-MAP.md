@@ -288,6 +288,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     hotsheet-extsync/          # Direct authoritative external providers (network deps, no terminals)
       src/github.rs            #   GitHub Issues mapping, pagination/incremental reads, webhook invalidation, errors/auth/concurrency, 25-alias GraphQL crop-manifest detail batches with REST fallback, Contents-SHA CAS and comment repair, fake + opt-in live tests (HS2-JAXS4Z/HS2-X09EJ1/HS2-5MFV7Q)
       src/gitlab.rs            #   GitLab Issues mapping, native IDs/URLs, pagination/incremental reads, typed errors/concurrency, fake + opt-in live drift tests (HS2-0RK4YC)
+      src/gitlab/attachments.rs #  GitLab native attachments: multipart project uploads, marked upload notes (GitHub marker shape), uploads-API reads, rendition crop + note rewrite, stateful fake + opt-in live tests (HS2-ENHE8K)
+      src/attachment_crop.rs   #   crop rendition + marker revision helpers shared by the GitLab/Jira attachment paths
       src/jira.rs              #   Jira Cloud issue/ADF mapping, token pagination/incremental JQL, honest workflow capabilities, fake + opt-in live drift tests (HS2-0RK4YC)
       src/source_connect.rs    #   `connect_source`: the one validated create-or-reconnect-and-link workflow behind `POST /checkouts/{ref}/provider-connections` and `provider-connect` (HS2-65KYVP)
       src/github_attachments.rs #   GitHub assets-repository attachments: HS1 setting keys/defaults, evidence and per-attachment revision-manifest paths, raw link URL, marked link comment write/parse (HS2-HSA64D/HS2-X09EJ1)

@@ -19,6 +19,7 @@
 
 use hotsheet_model::{AttachmentActor, AttachmentPurpose, ImageCrop, MediaAnnotation};
 use hotsheet_ticketing::wire::ApiAttachment;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -266,12 +267,23 @@ pub fn valid_attachment_id(attachment_id: &str) -> bool {
 
 /// The full comment body for an uploaded attachment.
 pub fn compose_comment(attachment_id: &str, url: &str, marker: &AttachmentMarker) -> String {
-    let label = marker
-        .filename
+    compose_marked_comment(attachment_id, &marker.filename, url, marker)
+}
+
+/// The shared marked-comment shape for any provider's marker type (GitHub assets
+/// repository, GitLab uploads — HS2-ENHE8K): a visible Markdown link or image embed, then
+/// the hidden `<!-- hotsheet-attachment:ID {json} -->` marker.
+pub fn compose_marked_comment<M: Serialize>(
+    attachment_id: &str,
+    filename: &str,
+    url: &str,
+    marker: &M,
+) -> String {
+    let label = filename
         .replace('\\', "\\\\")
         .replace('[', "\\[")
         .replace(']', "\\]");
-    let link = if is_image(&marker.filename) {
+    let link = if is_image(filename) {
         format!("![{label}]({url})")
     } else {
         format!("[{label}]({url})")
@@ -285,6 +297,11 @@ pub fn compose_comment(attachment_id: &str, url: &str, marker: &AttachmentMarker
 
 /// Parse a comment written by [`compose_comment`]; any other comment returns `None`.
 pub fn parse_comment(body: &str) -> Option<(String, AttachmentMarker)> {
+    parse_marked_comment(body)
+}
+
+/// Parse a comment written by [`compose_marked_comment`] into a provider's marker type.
+pub fn parse_marked_comment<M: DeserializeOwned>(body: &str) -> Option<(String, M)> {
     let start = body.rfind(MARKER_PREFIX)?;
     let rest = body[start + MARKER_PREFIX.len()..].trim_end();
     let rest = rest.strip_suffix("-->")?.trim_end();
@@ -292,7 +309,7 @@ pub fn parse_comment(body: &str) -> Option<(String, AttachmentMarker)> {
     if !valid_attachment_id(id) {
         return None;
     }
-    let marker = serde_json::from_str::<AttachmentMarker>(json.trim()).ok()?;
+    let marker = serde_json::from_str::<M>(json.trim()).ok()?;
     Some((id.to_owned(), marker))
 }
 

@@ -3,7 +3,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { expect, type Locator, type Page, test } from '@playwright/test';
+import { expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 import WebSocket from 'ws';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
@@ -12425,12 +12425,62 @@ test('keeps staged files but blocks Create on an attachment-less source, then cr
   expect(uploads).toEqual(['proof.txt', 'trace.log']);
 });
 
+/** An append-only attachment source: native add/read, no attachment edit (HS2-HSA64D, HS2-ENHE8K, HS2-KE18XX). */
+interface AppendOnlySource {
+  connection_id: string;
+  provider: 'github' | 'gitlab' | 'jira';
+  display_name: string;
+  locator: string;
+  native_id: string;
+  slug: string;
+  native_url: string;
+  /** The row's compact slug label. */
+  short_slug: string;
+  /** Whether the provider reports reversible crop (`attachment_crop`). */
+  crop: boolean;
+  /** Prefix for durable visual captures under `target/visual-captures/`. */
+  capture: string;
+}
+
 test('uploads staged files to a GitHub source with an assets repository and shows them read-only (HS2-HSA64D)', async ({
   page,
 }, testInfo) => {
+  await uploadsToAppendOnlySource(page, testInfo, {
+    connection_id: 'github-acme',
+    provider: 'github',
+    display_name: 'GitHub issues',
+    locator: 'acme/widgets',
+    native_id: '7',
+    slug: 'acme/widgets#7',
+    native_url: 'https://github.com/acme/widgets/issues/7',
+    short_slug: '#7',
+    crop: false,
+    capture: 'hs2-hsa64d',
+  });
+});
+
+test('uploads staged files to a GitLab source through native project uploads and shows them read-only (HS2-ENHE8K)', async ({
+  page,
+}, testInfo) => {
+  await uploadsToAppendOnlySource(page, testInfo, {
+    connection_id: 'gitlab-acme',
+    provider: 'gitlab',
+    display_name: 'GitLab acme/widgets',
+    locator: 'acme/widgets',
+    native_id: '7',
+    slug: 'acme/widgets#7',
+    native_url: 'https://gitlab.com/acme/widgets/-/issues/7',
+    // Only GitHub rows compact to `#N`; other providers show their native slug.
+    short_slug: 'acme/widgets#7',
+    crop: true,
+    capture: 'hs2-enhe8k',
+  });
+});
+
+async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source: AppendOnlySource): Promise<void> {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
-  const capabilities = (attachments: boolean, attachment_edit: boolean) => ({
+  const capabilities = (attachments: boolean, attachment_edit: boolean, attachment_crop = false) => ({
     create: true,
     update: true,
     close: true,
@@ -12439,6 +12489,7 @@ test('uploads staged files to a GitHub source with an assets repository and show
     note_delete: false,
     attachments,
     attachment_edit,
+    attachment_crop,
     assignment: true,
     review_requests: false,
     dependencies: false,
@@ -12466,26 +12517,28 @@ test('uploads staged files to a GitHub source with an assets repository and show
           capabilities: capabilities(true, true),
         },
         {
-          connection_id: 'github-acme',
-          provider: 'github',
-          display_name: 'GitHub issues',
-          locator: 'acme/widgets',
+          connection_id: source.connection_id,
+          provider: source.provider,
+          display_name: source.display_name,
+          locator: source.locator,
           default: false,
-          capabilities: capabilities(true, false),
+          capabilities: capabilities(true, false, source.crop),
         },
       ],
     }),
   );
-  // The server's wire shape for a GitHub ticket and its projected attachments (crates/hotsheet-extsync).
+  // The server's wire shape for a provider ticket and its projected attachments (crates/hotsheet-extsync).
+  const qualified = `${source.connection_id}:${source.native_id}`,
+    ticketPath = `/tickets/${qualified}`;
   const issue = {
     ...row,
-    connection_id: 'github-acme',
-    native_id: '7',
-    qualified_id: 'github-acme:7',
-    id: '7',
-    slug: 'acme/widgets#7',
-    native_url: 'https://github.com/acme/widgets/issues/7',
-    title: 'Evidence on GitHub',
+    connection_id: source.connection_id,
+    native_id: source.native_id,
+    qualified_id: qualified,
+    id: source.native_id,
+    slug: source.slug,
+    native_url: source.native_url,
+    title: `Evidence on ${source.provider}`,
     category: 'issue',
     status: 'not_started',
     up_next: false,
@@ -12501,10 +12554,10 @@ test('uploads staged files to a GitHub source with an assets repository and show
       url = new URL(request.url()),
       path = decodeURIComponent(url.pathname);
     if (request.method() === 'POST' && path.endsWith('/checkouts/demo-checkout/tickets')) {
-      if (url.searchParams.get('source') !== 'github-acme') return route.fallback();
+      if (url.searchParams.get('source') !== source.connection_id) return route.fallback();
       return route.fulfill({ status: 201, json: { ...issue, details: '', notes: [], attachments: [] } });
     }
-    if (request.method() === 'POST' && path.endsWith('/tickets/github-acme:7/attachments')) {
+    if (request.method() === 'POST' && path.endsWith(`${ticketPath}/attachments`)) {
       const filename = decodeURIComponent(request.headers()['x-hotsheet-filename'] ?? '');
       uploads.push({ path, filename });
       attached.push({
@@ -12515,18 +12568,18 @@ test('uploads staged files to a GitHub source with an assets repository and show
       });
       return route.fulfill({
         status: 201,
-        json: { store: 'github-acme', ...issue, details: '', notes: [], attachments: [...attached] },
+        json: { store: source.connection_id, ...issue, details: '', notes: [], attachments: [...attached] },
       });
     }
-    if (request.method() === 'GET' && path.endsWith('/tickets/github-acme:7'))
+    if (request.method() === 'GET' && path.endsWith(ticketPath))
       return route.fulfill({
-        json: { store: 'github-acme', ...issue, details: '', notes: [], attachments: [...attached] },
+        json: { store: source.connection_id, ...issue, details: '', notes: [], attachments: [...attached] },
       });
-    if (path.includes('/tickets/github-acme:7/attachments/') && path.endsWith('/thumbnail')) {
+    if (path.includes(`${ticketPath}/attachments/`) && path.endsWith('/thumbnail')) {
       posters.push(request.method());
       return route.fulfill({ status: 409, json: { error: 'unsupported' } });
     }
-    if (request.method() === 'GET' && path.includes('/tickets/github-acme:7/attachments/'))
+    if (request.method() === 'GET' && path.includes(`${ticketPath}/attachments/`))
       return route.fulfill({ status: 200, contentType: 'text/plain', body: 'trace contents' });
     return route.fallback();
   });
@@ -12535,31 +12588,34 @@ test('uploads staged files to a GitHub source with an assets repository and show
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const dialog = page.getByRole('dialog', { name: 'Create ticket' }),
     form = dialog.locator('[data-action="create-ticket-form"]'),
-    source = dialog.locator('wa-select[name="new-ticket-source"]'),
+    sourceSelect = dialog.locator('wa-select[name="new-ticket-source"]'),
     create = dialog.locator('wa-button[type="submit"]');
   await page.getByRole('button', { name: 'New ticket…' }).click();
   await form.getByLabel('Browse attachments for new ticket', { exact: true }).setInputFiles([
     { name: 'trace.log', mimeType: 'text/plain', buffer: Buffer.from('trace') },
     { name: 'clip.mp4', mimeType: 'video/mp4', buffer: Buffer.from('not really a video') },
   ]);
-  await source.click();
-  await source.locator('wa-option[value="github-acme"]').click();
-  await expect(source).toHaveJSProperty('value', 'github-acme');
-  // An attachment-capable GitHub source keeps the drop zone and allows Create (HS2-8HHHK3 rule).
+  await sourceSelect.click();
+  await sourceSelect.locator(`wa-option[value="${source.connection_id}"]`).click();
+  await expect(sourceSelect).toHaveJSProperty('value', source.connection_id);
+  // An attachment-capable provider source keeps the drop zone and allows Create (HS2-8HHHK3 rule).
   await expect(form.locator('[data-new-ticket-attachments-stranded="true"]')).toHaveCount(0);
   await expect(form.getByLabel('Drop or browse attachments for new ticket')).toHaveCount(1);
-  await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Evidence on GitHub');
+  await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill(`Evidence on ${source.provider}`);
   await expect(create).toHaveJSProperty('disabled', false);
-  await form.screenshot({ path: 'target/visual-captures/hs2-hsa64d-composer-github-wide.png' });
+  await form.screenshot({ path: `target/visual-captures/${source.capture}-composer-${source.provider}-wide.png` });
   await create.click();
   await expect(dialog).toBeHidden();
-  const githubRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="acme/widgets#7"]');
-  await expect(githubRow.locator('.ticket-list-row__slug')).toHaveText('#7');
-  const githubNumber = page.getByRole('button', { name: 'Copy ticket number acme/widgets#7' });
-  await expect(githubNumber.locator('[data-component="toolbar-text"]')).toHaveText('#7');
-  await githubRow.screenshot({ path: testInfo.outputPath('github-issue-row-wide.png'), animations: 'disabled' });
+  const githubRow = page.locator(`[data-component="ticket-list-row"][data-ticket-slug="${source.slug}"]`);
+  await expect(githubRow.locator('.ticket-list-row__slug')).toHaveText(source.short_slug);
+  const githubNumber = page.getByRole('button', { name: `Copy ticket number ${source.slug}` });
+  await expect(githubNumber.locator('[data-component="toolbar-text"]')).toHaveText(source.short_slug);
+  await githubRow.screenshot({
+    path: testInfo.outputPath(`${source.provider}-issue-row-wide.png`),
+    animations: 'disabled',
+  });
   await expect.poll(() => uploads.map((item) => item.filename)).toEqual(['trace.log', 'clip.mp4']);
-  expect(uploads.every((item) => item.path.endsWith('/tickets/github-acme:7/attachments'))).toBe(true);
+  expect(uploads.every((item) => item.path.endsWith(`${ticketPath}/attachments`))).toBe(true);
   expect(new Set(attached.map((item) => item.batch_id)).size).toBe(1);
   // The inspector shows them read-only: Add stays, but no menus, dragging, relabelling, or posters.
   await page.getByRole('tab', { name: /Attachments/ }).click();
@@ -12573,7 +12629,7 @@ test('uploads staged files to a GitHub source with an assets repository and show
   const link = panel.getByRole('link', { name: 'trace.log' });
   await expect(link).toHaveAttribute(
     'href',
-    /\/checkouts\/demo-checkout\/tickets\/github-acme%3A7\/attachments\/01K6GH0$/,
+    new RegExp(`/checkouts/demo-checkout/tickets/${encodeURIComponent(qualified)}/attachments/01K6GH0$`),
   );
   await expect(link).toHaveCSS('cursor', 'pointer');
   await panel.locator('[data-component="ticket-attachment-item"]').first().click({ button: 'right' });
@@ -12585,7 +12641,7 @@ test('uploads staged files to a GitHub source with an assets repository and show
   expect(posters).toEqual([]);
   await page
     .locator('#app-right-rail')
-    .screenshot({ path: 'target/visual-captures/hs2-hsa64d-inspector-readonly-wide.png' });
+    .screenshot({ path: `target/visual-captures/${source.capture}-inspector-readonly-wide.png` });
   await page.setViewportSize({ width: 390, height: 844 });
   // Crossing to the phone layout closes the inspector (HS2-ZK51WP); capturing while that close
   // still slides out showed it offset and clipped (HS2-D2GC8Q). Reopen it and let it settle.
@@ -12597,11 +12653,14 @@ test('uploads staged files to a GitHub source with an assets repository and show
     await Promise.all(node.getAnimations().map((animation) => animation.finished));
   });
   await expect(panel.getByRole('link', { name: 'trace.log' })).toBeInViewport();
-  await rail.screenshot({ path: 'target/visual-captures/hs2-hsa64d-inspector-readonly-narrow.png' });
+  await rail.screenshot({ path: `target/visual-captures/${source.capture}-inspector-readonly-narrow.png` });
   await page.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
   await expect(githubRow).toBeVisible();
-  await githubRow.screenshot({ path: testInfo.outputPath('github-issue-row-narrow.png'), animations: 'disabled' });
-});
+  await githubRow.screenshot({
+    path: testInfo.outputPath(`${source.provider}-issue-row-narrow.png`),
+    animations: 'disabled',
+  });
+}
 
 test('keeps the plain source label and default routing for a single writable source (HS2-NZMJBJ)', async ({ page }) => {
   await mockProject(page);
