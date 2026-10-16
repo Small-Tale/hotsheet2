@@ -1,0 +1,4 @@
+# HS2-3PX1E4: keep a JUnit report of every run so slow tests are found from data:
+#   node scripts/test-profile.mjs --nextest target/nextest/default/junit.xml
+[profile.default.junit]
+path = "junit.xml"

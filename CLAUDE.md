@@ -276,6 +276,11 @@ and other non-action structure are the only ordinary exception.
 - **Quiet runs (HS2-CP63FG):** prefer `node scripts/test-quiet.mjs <rust|web-unit|web-e2e|migrator>`
   (runner args after `--`). It prints one summary line per tier plus capped failure
   excerpts and writes the full output to the printed `target/test-quiet/` log path.
+- **Fast web unit runs (HS2-3PX1E4):** `npm run test:unit:fast` skips the binary-spawning
+  Vitest suites and their cargo build. Targeted `npx vitest run <file>` builds only when a
+  binary suite is selected and the binaries are stale. Profile slow tests with
+  `node scripts/test-profile.mjs`. Quarantine a known flake per
+  [`docs/test-quarantine.md`](docs/test-quarantine.md) instead of rerunning it.
 - **Commands:** Rust `cargo nextest run` and `cargo lint`; from `clients/web`,
   `npm run lint`, `npm run typecheck`, `npm run test:unit`, `npm run test:e2e`, and
   `npm run build`; from `migrator`, `npm run lint`, `npm test`, and

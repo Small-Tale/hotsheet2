@@ -141,6 +141,7 @@ ordinary known-identity replacement checks are covered by `HS2-BGTDQ1`.
 | ------------------------------------------ | ------------------------------------------------------------------ | ------ |
 | [TEST-COVERAGE.md](TEST-COVERAGE.md)       | CI-validated feature matrix pairing unit, E2E, and manual evidence | Active |
 | [manual-test-plan.md](manual-test-plan.md) | Checks that still require real devices or unbuilt client surfaces  | Active |
+| [test-quarantine.md](test-quarantine.md)   | CI-checked list of quarantined flaky tests and their fix tickets   | Active |
 
 **H · Engineering**
 

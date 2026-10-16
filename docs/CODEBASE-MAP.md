@@ -59,6 +59,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   Cargo.toml                 # Rust workspace (edition 2024, resolver 3)
   scripts/check-test-coverage.mjs # CI validator for docs/TEST-COVERAGE.md evidence
   scripts/test-quiet.mjs     # Quiet per-tier test wrapper: failure-only reporters, capped excerpts, full log path (HS2-CP63FG; tests: test-quiet.test.mjs + fixtures/test-quiet/)
+  scripts/test-profile.mjs   # Slowest tests/files from nextest JUnit, Vitest JSON, and Playwright JSON reports (HS2-3PX1E4; tests: test-profile.test.mjs + fixtures/test-profile/)
+  scripts/check-test-quarantine.mjs # CI check: flaky-test quarantine markers match docs/test-quarantine.md rows (HS2-3PX1E4)
+  .config/nextest.toml       # nextest profile: JUnit report at target/nextest/default/junit.xml for test-profile (HS2-3PX1E4)
   .hotsheet2/settings.json   # committed project settings, incl. the Quality AI command group (HS2-11285R)
   .claude/skills/{check-requirements-against-code,check-code-hygiene,analyze-code-quality}/ # quality-check skills run by those commands (Codex mirror: .agents/skills/)
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
@@ -66,6 +69,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
     scripts/format-sources.mjs # Shared Prettier scope for format/check: required tracked paths plus optional local opencode.json
     scripts/format-sources.test.mjs # Unit scope/error checks and real npm-script clean-checkout formatting regression
+    scripts/vitest-binary-suites.mjs # The binary-launching Vitest files (the `binaries` project) + guard detector (HS2-3PX1E4)
+    src/test-quarantine.ts   #   Vitest `quarantined(slug)` and Playwright `@quarantine` grepInvert helpers (HS2-3PX1E4; docs/test-quarantine.md)
     ai/component-catalog-extension.json # Generated Hot Sheet component/composition purpose, use, public-hook, and geometry-ownership metadata for AI and human consumers
     src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, client-owned AI drive, and terminal discovery/snapshots
     src/project-startup.ts   #   Concurrent remembered-project preparation, active-first presentation, per-arrival background registration, bounded parallel retry
@@ -267,7 +272,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     scripts/production-bundle-policy.mjs # production entry-asset/request budget used by build verification
     kerf.components.json     # Kerf author metadata; `npm run catalog:generate|check` (kerf-component-catalog) generates ai/component-catalog-extension.json and ai/component-composition.generated.json
     scripts/repository-env.mjs # withoutGitRepositoryEnv(env): strips the same repo-locating GIT_* list as hotsheet_ticketing::git for test helpers that spawn Hot Sheet binaries or git (real-ticket-server.ts, scale-stress.mjs; HS2-RRD417); tested by scripts/repository-env.test.mjs
-    scripts/vitest-build-binaries.mjs # vitest globalSetup: builds the real hotsheet-cli/-server/-migrate once before any worker runs, so no test file relinks them mid-suite (HS2-A0M8CM)
+    scripts/vitest-build-binaries.mjs # `binaries`-project vitest globalSetup: builds the real hotsheet-cli/-server/-migrate once before any worker runs, so no test file relinks them mid-suite (HS2-A0M8CM); skipped when no binary suite runs or the binaries are fresh (HS2-3PX1E4)
     scripts/change-stream-worker-profile.mjs # `profile:worker:real`: real local-host + machine-server two-project profile of the change-stream worker vs main thread (delivery lag, click-to-paint, GC heap; HS2-MH5PWD)
     scripts/playwright-workers.mjs # Load-aware local Playwright worker count used by playwright.config.ts (HS2-MHPHZB); tested by scripts/playwright-workers.test.mjs
     scripts/remify-css.mjs   #   PostCSS plugin (wired in vite.config.ts css.postcss) — author spacing in px via remify(8px) → 0.5rem (÷16); keeps CSS on the 8px grid. Tested by scripts/remify-css.test.mjs

@@ -148,8 +148,16 @@ jobs:
       - name: Validate feature double-coverage matrix
         run: node --test scripts/check-test-coverage.test.mjs && node scripts/check-test-coverage.mjs
 
-      - name: Test the quiet test wrapper
-        run: node --test scripts/test-quiet.test.mjs
+      - name: Test the quiet test wrapper and the slow-test profiler
+        run: node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs
+
+      - name: Validate the flaky-test quarantine list
+        run: node --test scripts/check-test-quarantine.test.mjs && node scripts/check-test-quarantine.mjs
+
+      # nextest writes this JUnit report on every run (.config/nextest.toml, HS2-3PX1E4).
+      - name: Slowest Rust tests
+        if: always()
+        run: node scripts/test-profile.mjs --top 15 --nextest target/nextest/default/junit.xml || true
 
       - name: Build the CLI (the conformance test drives target/debug/hotsheet-cli)
         run: cargo build --bin hotsheet-cli
@@ -176,8 +184,13 @@ jobs:
         run: |
           npm run lint
           npm run typecheck
-          npm run test:unit
+          npm run test:unit -- --reporter=default --reporter=json --outputFile.json=target/vitest-report.json
           npm run build
+
+      - name: Slowest web unit tests
+        if: always()
+        working-directory: clients/web
+        run: node ../../scripts/test-profile.mjs --top 15 --vitest target/vitest-report.json || true
 
       - name: Web Chromium smoke flows
         working-directory: clients/web

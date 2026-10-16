@@ -568,9 +568,10 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   six-minute attempts, so a stalled Linux package mirror fails clearly instead of holding
   the whole job indefinitely (HS2-47BAAC). The Vitest suite includes real-browser
   local-host and stable-dev tests, so browser setup is required before `test:unit` as well
-  as before the Playwright smoke group. Vitest's `globalSetup`
+  as before the Playwright smoke group. The `binaries` Vitest project's `globalSetup`
   (`clients/web/scripts/vitest-build-binaries.mjs`) runs
-  `cargo build -p hotsheet-cli -p hotsheet-server --bins` once before any worker starts.
+  `cargo build -p hotsheet-cli -p hotsheet-server --bins` once before any worker starts,
+  unless the binaries are already fresh (§12.7.9).
   Test files never build these binaries themselves: a build inside one file relinked them
   while parallel files were spawning them, causing intermittent `ENOENT`/"not built"
   failures (HS2-A0M8CM). A cargo build run outside the suite against the same `target/`
@@ -702,6 +703,44 @@ A primary agent may hand a test run to a cheaper background agent that returns o
 wrapper's summary. The wrapper's parsing is covered by `scripts/test-quiet.test.mjs`,
 which uses real captured runner output and spawns real processes; CI runs it in the
 `check` job.
+
+### 12.7.9 Test speed: binary builds, profiling, and quarantine (HS2-3PX1E4)
+
+- **Binary builds only when needed.** `clients/web/vitest.config.ts` splits the suite into
+  a `unit` project and a `binaries` project. The `binaries` project holds the files that
+  launch real `target/debug` binaries, listed in `clients/web/scripts/vitest-binary-suites.mjs`.
+  Only `binaries` carries the cargo-build `globalSetup`, and Vitest runs a project's global
+  setup only when that project has files in the run. A targeted run such as
+  `npx vitest run src/foo.test.ts`, or `npm run test:unit:fast` (`--project unit`), never
+  starts cargo. When the setup does run, it skips the build if every binary is newer than
+  every build input: crates, manifests, the toolchain file, and embedded `plugins/` and
+  skill files. `HOTSHEET_VITEST_BUILD=always|skip` overrides that check. The build still
+  happens once, before any worker starts, so HS2-A0M8CM's no-relink-mid-run guarantee
+  holds. A guard test fails when a test file launches a binary but is not in the list.
+- **Measured (2026-10-16, loaded 10-core machine).**
+
+  | Run                                                    | Before               | After  |
+  | ------------------------------------------------------ | -------------------- | ------ |
+  | Full `npm run test:unit`                               | 64.4 s               | 57.3 s |
+  | `test:unit:fast`: 2334 of 2350 tests, no binary suites | —                    | 16.4 s |
+  | One web-only file after a `hotsheet-cli` source edit   | 9.3 s (cargo relink) | 1.9 s  |
+
+  The full-suite gain is the build check, and the binary suites set the floor:
+  `local-host.e2e` takes 47 s and `stable-dev.e2e` 30 s (`HS2-XSP0GJ` tracks splitting them).
+
+- **Slow-test profiles.** `node scripts/test-profile.mjs --top N` lists the slowest tests
+  and files from runner reports. It reads `--nextest target/nextest/default/junit.xml`,
+  which nextest writes on every run per `.config/nextest.toml`; `--vitest <json>`, from
+  `--reporter=json --outputFile.json=<path>`; and `--playwright <json>`, from
+  `--reporter=json`. CI prints the Rust and web-unit profiles after the tests.
+- **Flaky-test quarantine.** A known flake is skipped through a marker that names its fix
+  ticket and is tracked in [test-quarantine.md](test-quarantine.md). CI's
+  `scripts/check-test-quarantine.mjs` keeps markers and rows one-to-one. Nobody silently
+  reruns a known flake, and every quarantined test has an owner.
+- **Shared compilation cache.** Not adopted yet. Locally, rustc is not wrapped by
+  `sccache`, and each worktree has its own `target/`, so a fresh worktree compiles the
+  workspace once. Sharing one target directory across worktrees would race the binaries
+  that HS2-A0M8CM protects. `HS2-HRE9G7` tracks evaluating `RUSTC_WRAPPER=sccache`.
 
 ## 12.8 Cross-references
 

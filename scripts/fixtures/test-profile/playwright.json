@@ -1,0 +1,177 @@
+{
+ "config": {
+  "argv": [
+   "/Users/westphal/.nvm/versions/node/v22.23.2/bin/node",
+   "/root/node_modules/.bin/playwright",
+   "test",
+   "--reporter=json"
+  ],
+  "configFile": "/root/playwright.config.mjs",
+  "rootDir": "/root",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": null,
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/test-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "",
+    "name": "",
+    "testDir": "/root",
+    "testIgnore": [],
+    "testMatch": [
+     "*.spec.mjs"
+    ],
+    "timeout": 30000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "json"
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "missing",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 5,
+  "webServer": null
+ },
+ "suites": [
+  {
+   "title": "a.spec.mjs",
+   "file": "a.spec.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "passes",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 30000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "",
+       "projectName": "",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-16T09:23:18.847Z",
+         "annotations": [],
+         "attachments": []
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f10c3055afda6889ad03-84759525cf88539ec507",
+     "file": "a.spec.mjs",
+     "line": 2,
+     "column": 1
+    },
+    {
+     "title": "fails here",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 30000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "",
+       "projectName": "",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 8,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /root/a.spec.mjs:3:38",
+          "location": {
+           "file": "/root/a.spec.mjs",
+           "column": 38,
+           "line": 3
+          },
+          "snippet": "  1 | import { test, expect } from \"@playwright/test\";\n  2 | test(\"passes\", () => {});\n> 3 | test(\"fails here\", () => { expect(1).toBe(2); });\n    |                                      ^\n  4 |"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/a.spec.mjs",
+            "column": 38,
+            "line": 3
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  1 | import { test, expect } from \"@playwright/test\";\n  2 | test(\"passes\", () => {});\n> 3 | test(\"fails here\", () => { expect(1).toBe(2); });\n    |                                      ^\n  4 |\n    at /root/a.spec.mjs:3:38"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-16T09:23:18.875Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/test-results/a-fails-here/error-context.md"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/a.spec.mjs",
+          "column": 38,
+          "line": 3
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "f10c3055afda6889ad03-a2d3fd6a311979cd3f05",
+     "file": "a.spec.mjs",
+     "line": 3,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-16T09:23:18.478Z",
+  "duration": 429.666,
+  "expected": 1,
+  "skipped": 0,
+  "unexpected": 1,
+  "flaky": 0
+ }
+}

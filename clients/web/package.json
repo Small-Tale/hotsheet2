@@ -20,6 +20,7 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "vitest run",
+    "test:unit:fast": "vitest run --project unit",
     "test:e2e": "cargo build --manifest-path ../../Cargo.toml -p hotsheet-cli -p hotsheet-server --bins && playwright test",
     "test:ci:browser": "playwright test tests/providers.spec.ts --workers=2 --grep @ci-smoke",
     "test:ci:webkit": "playwright test tests/providers.spec.ts --browser=webkit --workers=1 --grep @ci-webkit",

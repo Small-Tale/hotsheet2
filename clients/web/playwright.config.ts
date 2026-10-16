@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { defineConfig } from '@playwright/test';
 
 import { localPlaywrightWorkers, lowerPlaywrightPriority } from './scripts/playwright-workers.mjs';
+import { quarantineGrepInvert } from './src/test-quarantine';
 
 // Before any worker, browser, or web server starts: they inherit the lowered priority (HS2-FVT34A).
 lowerPlaywrightPriority({ getPriority, setPriority }, process.env);
@@ -33,6 +34,9 @@ export default defineConfig({
     override: process.env.HOTSHEET_PLAYWRIGHT_WORKERS,
     ci: Boolean(process.env.CI),
   }),
+  // Known flakes titled `@quarantine <slug>` are skipped unless HOTSHEET_RUN_QUARANTINED=1;
+  // docs/test-quarantine.md tracks each one (HS2-3PX1E4).
+  grepInvert: quarantineGrepInvert(),
   timeout: 60_000,
   expect: { timeout: 10_000 },
   webServer: {
