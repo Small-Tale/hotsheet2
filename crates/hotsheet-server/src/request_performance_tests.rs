@@ -262,3 +262,48 @@ async fn concurrent_cold_backlink_sources_initialize_once_and_keep_updates() {
         .is_empty()
     );
 }
+
+fn routed(uri: &str) -> axum::http::Request<axum::body::Body> {
+    axum::http::Request::builder()
+        .uri(uri)
+        .header("x-hotsheet-secret", "secret")
+        .body(axum::body::Body::empty())
+        .unwrap()
+}
+
+/// Through the real router on a single async worker: a list request blocked synchronously on
+/// the held index lock must not starve an unrelated ticket detail or health check
+/// (HS2-9Z0Q8N). Without the blocking-offload layer the list handler parks the only worker
+/// and both of these time out.
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn a_blocked_store_request_does_not_starve_unrelated_routes() {
+    use tower::ServiceExt;
+    let (_root, state, project, ticket) = project_fixture();
+    let held = HeldResource::new(state.index.clone());
+    let router = app(state);
+    let list = tokio::spawn(router.clone().oneshot(routed("/tickets")));
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    for uri in [
+        "/health".to_string(),
+        format!("/checkouts/{project}/tickets/{}", ticket.id),
+    ] {
+        let response = tokio::time::timeout(
+            Duration::from_secs(2),
+            tokio::spawn(router.clone().oneshot(routed(&uri))),
+        )
+        .await
+        .unwrap_or_else(|_| panic!("{uri} was starved by a blocked store request"))
+        .unwrap()
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{uri}");
+    }
+    assert!(held.active.load(Ordering::SeqCst));
+    assert!(!list.is_finished(), "the list request waits for the index");
+    drop(held);
+    let list = tokio::time::timeout(Duration::from_secs(5), list)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(list.status(), StatusCode::OK);
+}

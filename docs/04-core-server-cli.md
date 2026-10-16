@@ -959,6 +959,15 @@ deadline. The shared
   `elapsed_ms`, and `budget_ms`. Ordinary API requests have a 100 ms budget; attachment,
   provider-attachment, and speech routes 2 s; WebSocket, long-poll, and terminal-attach
   routes are not timed.
+  Request handlers never run blocking store work on the async workers (HS2-9Z0Q8N): the
+  router-wide `blocking_offload` layer runs every non-streaming request (auth plus handler)
+  on tokio's blocking pool, so a handler stuck on a ticket-file `flock`, an index mutex, a
+  slow disk, or SQLite blocks only its own pool thread and never starves unrelated requests.
+  WebSocket, long-poll, and terminal-attach routes stay on the async workers. At most 256
+  requests are offloaded at once (half the default pool cap), so nested `spawn_blocking`
+  calls inside handlers always find a free thread; a panicking handler answers 500. A client
+  disconnect still cancels its handler at the next await point (a dropped permission hook
+  withdraws its pending prompt exactly as before).
   The checkout batch response includes `Server-Timing` measurements for admission,
   ticket writes, Git commit, index refresh, event publication, worklist refresh, and total
   handling time. These timings describe local server work; clients can measure their

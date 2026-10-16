@@ -8,6 +8,7 @@
 mod activity_capture;
 mod ai_tool_discovery;
 mod api_error;
+mod blocking_offload;
 pub mod client_drive;
 pub mod code_review;
 pub mod commands;
@@ -1518,6 +1519,9 @@ pub fn app(state: AppState) -> Router {
         // upgrade can't set headers from a browser), like `/ws/sync`.
         .route("/terminals/{id}/attach", get(attach_terminal))
         .merge(protected)
+        // Run every non-streaming handler on the blocking pool so sync store work (file I/O,
+        // flock and mutex waits, SQLite) never occupies an async worker (HS2-9Z0Q8N).
+        .layer(middleware::from_fn(blocking_offload::offload))
         // Warn on any request over its local latency budget (HS2-0DH8ZS).
         .layer(middleware::from_fn(request_timing::time_request))
         .with_state(state)
