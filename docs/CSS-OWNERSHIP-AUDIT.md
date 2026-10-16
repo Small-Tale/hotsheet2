@@ -231,6 +231,22 @@ frame` insets its rows. Also retained are the phrasing-only copy grids inside ro
   device-code chip, the inline repository-access links, the settings text-link button, and the
   Grid full-width placement class.
 
+## Command, keyboard, icon-picker, calibration, and search-help update (HS2-4GX2YS)
+
+- KeyboardSettings renders each shortcut group as a base-surface Kerf `FramedList`. The recording
+  row is its `highlighted` row, and the list, row, divider, and capturing rules are gone (the old
+  `KF-2HB7RT` gap). A wrapper zeroes the public inline-margin token, so shortcut names stay on the
+  settings text edge.
+- The ticket search form field is a Kerf `List`, so its grid rule is gone. The command editor's
+  status message is Kerf `Text`; its footer keeps only the reserved line height.
+- Retained:
+  - The keycap chord and capture control, which are owned interaction state.
+  - The confidence calibration numeric table and its semantic `ul` of recent completions. Kerf
+    layout roots cannot carry `listitem`.
+  - The command editor's semantic grouped `ul`, drop targets, dialog icon, and fieldset legend.
+  - The search help's inline `code` chips and the date helper's responsive tracks.
+- The icon picker's square 36px toggles wait on `KF-K60RRM`; `HS2-XA11C3` adopts it.
+
 ## Terminal chrome update (HS2-1Q6GER)
 
 - `TerminalDashboard` empty, loading, and message copy now composes Kerf `List` and `Text`. The

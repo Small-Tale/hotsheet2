@@ -850,7 +850,8 @@ test('demos the unapplied Trash retention leave warning through the production w
 test('renders keyboard shortcut rows edge-to-edge without a transparent left gutter (HS2-186WJT)', async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 800 });
   await page.goto('/ux-demo?component=keyboard-settings');
-  const list = page.locator('.keyboard-settings__list').first();
+  // Kerf FramedList owns the framed list and its rows (HS2-4GX2YS).
+  const list = page.locator('.keyboard-settings [data-component="framed-list"]').first();
   const chord = page.locator('.keyboard-settings__chord').first();
   await expect(chord).toBeVisible();
   // Browser/Web Awesome list defaults add inline-start margin to list items. The app-owned row reset
@@ -875,7 +876,8 @@ test('renders keyboard shortcut rows edge-to-edge without a transparent left gut
   expect(geometry.marginLeft).toBe('0px');
   expect(geometry.inset).toBe(1);
   expect(geometry.widthGap).toBe(1);
-  expect(geometry.listBackground).toBe(geometry.rowBackground);
+  // Rows are transparent over the frame's base surface, so no other color shows between them.
+  expect(['rgba(0, 0, 0, 0)', geometry.listBackground]).toContain(geometry.rowBackground);
   // The chord itself also remains free of the native keycap shadow and uneven bottom border.
   const edges = await chord.evaluate((node) => {
     const style = getComputedStyle(node);

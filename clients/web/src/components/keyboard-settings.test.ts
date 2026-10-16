@@ -6,10 +6,16 @@ import { KEYBOARD_SHORTCUTS } from '../keyboard-shortcuts';
 import { KeyboardSettings } from './keyboard-settings';
 
 describe('KeyboardSettings', () => {
-  it('resets inherited list-item margins so every row fills the list surface', () => {
+  it('renders each shortcut group as a base-surface Kerf FramedList with a highlighted recording row (HS2-4GX2YS)', () => {
     const css = readFileSync(new URL('./keyboard-settings.css', import.meta.url), 'utf8');
-    expect(css).toMatch(/\.keyboard-settings__list \{[^}]*background: var\(--wa-color-surface-default\);/);
-    expect(css).toMatch(/\.keyboard-settings__row \{[^}]*margin: 0;/);
+    expect(css).not.toMatch(/\.keyboard-settings__(list|row)\b/u);
+    const markup = String(KeyboardSettings({ overrides: {}, capturingId: 'new-ticket', apple: true }));
+    expect(markup).toMatch(
+      /data-component="framed-list"[^>]*data-surface="base"|data-surface="base"[^>]*data-component="framed-list"/u,
+    );
+    const capturing = markup.match(/<li[^>]*data-shortcut-id="new-ticket"[^>]*>/u)?.[0] ?? '';
+    expect(capturing).toContain('data-highlighted="true"');
+    expect(capturing).toContain('data-capturing="true"');
   });
 
   it('keeps the intro copy on the row text edge through Kerf Text item geometry (HS2-V8YYXA)', () => {

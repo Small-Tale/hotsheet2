@@ -3,6 +3,7 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 
 import { Badge } from '@kerfjs/ui/badge';
 import { flex, px, uiColor } from '@kerfjs/ui/css-values';
+import { FramedList, FramedListRow } from '@kerfjs/ui/framed-list';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -65,115 +66,127 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
           return (
             <List gap="2xs">
               <ListHeader label={group} headingLevel={3} inline />
-              <ul class="keyboard-settings__list">
-                {shortcuts.map((shortcut) => {
-                  const chord = resolveChord(shortcut.id, overrides);
-                  const capturing = capturingId === shortcut.id;
-                  const overridden = shortcut.editable && Boolean(overrides[shortcut.id]);
-                  const conflict =
-                    shortcut.editable && !capturing && chord
-                      ? findChordConflict(shortcut.id, chord, overrides, apple)
-                      : undefined;
-                  return (
-                    <li
-                      class="keyboard-settings__row"
-                      data-shortcut-id={shortcut.id}
-                      data-editable={String(shortcut.editable)}
-                      data-capturing={String(capturing)}
-                      data-overridden={String(overridden)}
-                    >
-                      <Row hAlign="space-between" vAlign="middle" gap="m" wrap>
-                        <List gap="2xs" flex={flex(1, 1, px(240))}>
-                          <Text variant="span">
-                            <strong>{shortcut.label}</strong>
-                          </Text>
-                          <Text variant="span" tone="quiet" size="compact">
-                            {shortcut.description}
-                          </Text>
-                          {conflict ? (
-                            <Text
-                              variant="span"
-                              size="compact"
-                              color={uiColor('warning-on-quiet')}
-                              role="status"
-                              class="keyboard-settings__conflict"
-                            >
-                              <LucideIcon inline size={12.8} icon={TriangleAlert} name="triangle-alert" /> Also used by
-                              “{conflict.label}”
+              {/* Kerf FramedList owns the framed, divided shortcut list; the recording row is its
+                  highlighted row (HS2-4GX2YS). */}
+              <div class="keyboard-settings__shortcuts">
+                <FramedList surface="base">
+                  {shortcuts.map((shortcut) => {
+                    const chord = resolveChord(shortcut.id, overrides);
+                    const capturing = capturingId === shortcut.id;
+                    const overridden = shortcut.editable && Boolean(overrides[shortcut.id]);
+                    const conflict =
+                      shortcut.editable && !capturing && chord
+                        ? findChordConflict(shortcut.id, chord, overrides, apple)
+                        : undefined;
+                    return (
+                      <FramedListRow
+                        className="keyboard-settings__row"
+                        highlighted={capturing}
+                        rootAttributes={{
+                          'data-shortcut-id': shortcut.id,
+                          'data-editable': String(shortcut.editable),
+                          'data-capturing': String(capturing),
+                          'data-overridden': String(overridden),
+                        }}
+                      >
+                        <Row hAlign="space-between" vAlign="middle" gap="m" wrap>
+                          <List gap="2xs" flex={flex(1, 1, px(240))}>
+                            <Text variant="span">
+                              <strong>{shortcut.label}</strong>
                             </Text>
-                          ) : (
-                            <></>
-                          )}
-                        </List>
-                        <Row vAlign="middle" gap="2xs">
-                          {capturing ? (
-                            <button
-                              type="button"
-                              class="keyboard-settings__capture"
-                              data-shortcut-capture={shortcut.id}
-                              aria-label={`Recording new shortcut for ${shortcut.label}. Press a key combination, or Escape to cancel.`}
-                            >
-                              Press Keys…
-                            </button>
-                          ) : (
-                            <kbd class="keyboard-settings__chord">{formatChord(chord, apple)}</kbd>
-                          )}
-                          {shortcut.editable ? (
-                            capturing ? (
-                              <wa-button
-                                appearance="outlined"
-                                size="small"
-                                {...COMMANDS_AND_AI_ACTIONS.cancelShortcutCapture.attrs}
-                                title="Cancel"
+                            <Text variant="span" tone="quiet" size="compact">
+                              {shortcut.description}
+                            </Text>
+                            {conflict ? (
+                              <Text
+                                variant="span"
+                                size="compact"
+                                color={uiColor('warning-on-quiet')}
+                                role="status"
+                                class="keyboard-settings__conflict"
                               >
-                                <LucideIcon size={14.4} icon={X} name="x" label={`Cancel editing ${shortcut.label}`} />
-                              </wa-button>
+                                <LucideIcon inline size={12.8} icon={TriangleAlert} name="triangle-alert" /> Also used
+                                by “{conflict.label}”
+                              </Text>
                             ) : (
-                              <>
+                              <></>
+                            )}
+                          </List>
+                          <Row vAlign="middle" gap="2xs">
+                            {capturing ? (
+                              <button
+                                type="button"
+                                class="keyboard-settings__capture"
+                                data-shortcut-capture={shortcut.id}
+                                aria-label={`Recording new shortcut for ${shortcut.label}. Press a key combination, or Escape to cancel.`}
+                              >
+                                Press Keys…
+                              </button>
+                            ) : (
+                              <kbd class="keyboard-settings__chord">{formatChord(chord, apple)}</kbd>
+                            )}
+                            {shortcut.editable ? (
+                              capturing ? (
                                 <wa-button
                                   appearance="outlined"
                                   size="small"
-                                  {...COMMANDS_AND_AI_ACTIONS.editShortcut.attrs}
-                                  data-shortcut-id={shortcut.id}
-                                  title="Change shortcut"
+                                  {...COMMANDS_AND_AI_ACTIONS.cancelShortcutCapture.attrs}
+                                  title="Cancel"
                                 >
                                   <LucideIcon
                                     size={14.4}
-                                    icon={Pencil}
-                                    name="pencil"
-                                    label={`Change shortcut for ${shortcut.label}`}
+                                    icon={X}
+                                    name="x"
+                                    label={`Cancel editing ${shortcut.label}`}
                                   />
                                 </wa-button>
-                                <wa-button
-                                  appearance="outlined"
-                                  size="small"
-                                  {...COMMANDS_AND_AI_ACTIONS.resetShortcut.attrs}
-                                  data-shortcut-id={shortcut.id}
-                                  disabled={!overridden}
-                                  title="Reset to default"
-                                >
-                                  <LucideIcon
-                                    size={14.4}
-                                    icon={RotateCcw}
-                                    name="rotate-ccw"
-                                    label={`Reset ${shortcut.label} to its default`}
-                                  />
-                                </wa-button>
-                              </>
-                            )
-                          ) : (
-                            <span title="Fixed system shortcut">
-                              <Badge className="keyboard-settings__fixed" tone="neutral" appearance="quiet">
-                                System
-                              </Badge>
-                            </span>
-                          )}
+                              ) : (
+                                <>
+                                  <wa-button
+                                    appearance="outlined"
+                                    size="small"
+                                    {...COMMANDS_AND_AI_ACTIONS.editShortcut.attrs}
+                                    data-shortcut-id={shortcut.id}
+                                    title="Change shortcut"
+                                  >
+                                    <LucideIcon
+                                      size={14.4}
+                                      icon={Pencil}
+                                      name="pencil"
+                                      label={`Change shortcut for ${shortcut.label}`}
+                                    />
+                                  </wa-button>
+                                  <wa-button
+                                    appearance="outlined"
+                                    size="small"
+                                    {...COMMANDS_AND_AI_ACTIONS.resetShortcut.attrs}
+                                    data-shortcut-id={shortcut.id}
+                                    disabled={!overridden}
+                                    title="Reset to default"
+                                  >
+                                    <LucideIcon
+                                      size={14.4}
+                                      icon={RotateCcw}
+                                      name="rotate-ccw"
+                                      label={`Reset ${shortcut.label} to its default`}
+                                    />
+                                  </wa-button>
+                                </>
+                              )
+                            ) : (
+                              <span title="Fixed system shortcut">
+                                <Badge className="keyboard-settings__fixed" tone="neutral" appearance="quiet">
+                                  System
+                                </Badge>
+                              </span>
+                            )}
+                          </Row>
                         </Row>
-                      </Row>
-                    </li>
-                  );
-                })}
-              </ul>
+                      </FramedListRow>
+                    );
+                  })}
+                </FramedList>
+              </div>
             </List>
           );
         })}

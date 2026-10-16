@@ -8,11 +8,6 @@
 .ticket-search-field__query {
   --kui-token-search-token-background: var(--wa-color-brand-fill-quiet);
 }
-.ticket-search-form-field {
-  display: grid;
-  gap: var(--kui-space-2xs);
-  min-width: 0;
-}
 /* Surface content (app-owned markup inside Kerf's anchored surface): a readable width clamped
    to the viewport beside the surface's own inset. */
 .ticket-search-field__date {

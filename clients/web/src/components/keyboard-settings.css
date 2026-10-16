@@ -1,28 +1,8 @@
-/* The framed, divided shortcut list: Kerf has no framed list with row dividers for arbitrary
-   app rows (KF-2HB7RT). */
-.keyboard-settings__list {
-  display: grid;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border: 1px solid var(--wa-color-neutral-border-quiet);
-  border-radius: var(--wa-border-radius-l);
-  overflow: hidden;
-  background: var(--wa-color-surface-default);
-}
-.keyboard-settings__row {
-  min-height: remify(52px);
-  margin: 0;
-  padding: var(--kui-space-xs);
-  border-top: 1px solid var(--wa-color-neutral-border-quiet);
-  background: var(--wa-color-surface-default);
-}
-.keyboard-settings__row:first-child {
-  border-top: 0;
-}
-/* The row that is recording a new chord. */
-.keyboard-settings__row[data-capturing='true'] {
-  background: var(--wa-color-brand-fill-quiet);
+/* Kerf FramedList owns the framed, divided shortcut list (HS2-4GX2YS). Zeroing its public
+   inline-margin token puts the frame outside the settings text edge, so 1px border plus the row inset
+   lands each shortcut name on that edge (HS2-1711Z5). */
+.keyboard-settings__shortcuts {
+  --kui-layout-inline-margin: 0;
 }
 /* Clean, uniform keycap chip matching the adjacent action buttons — the WA native `kbd` keycap
    treatment (a dark bottom box-shadow plus a 2px bottom border) read as a heavy, lopsided edge (HS2-186WJT). */

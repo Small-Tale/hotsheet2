@@ -414,7 +414,9 @@ export function CommandSettingsEditor({
         <EmptyState title="No custom commands yet." detail="Add a command to configure its label and action." />
       )}
       <footer>
-        <span role="status">{message}</span>
+        <Text variant="span" tone="quiet" size="compact" role="status">
+          {message}
+        </Text>
       </footer>
       {/* Kerf's PopoverDialogSurface owns the native popover="auto" chrome, size, and backdrop (HS2-T1MVPV). */}
       <PopoverDialogSurface

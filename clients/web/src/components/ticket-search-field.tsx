@@ -333,7 +333,8 @@ export function TicketSearchFormField({
   clearLabel = 'Clear search',
 }: TicketSearchFormFieldProps) {
   return (
-    <div class="ticket-search-form-field" data-ticket-search-for={id}>
+    // A Kerf List stacks the field and its surface state (HS2-4GX2YS).
+    <List gap="2xs" className="ticket-search-form-field" rootAttributes={{ 'data-ticket-search-for': id }}>
       <TokenSearchField
         presentation="form-field"
         className="ticket-search-field__query"
@@ -351,7 +352,7 @@ export function TicketSearchFormField({
         {...ticketSearchHelpTrailing(help, helpOpen)}
       />
       <TicketSearchSurfaceState id={id} model={model} open={!disabled} helpOpen={help && helpOpen} />
-    </div>
+    </List>
   );
 }
 

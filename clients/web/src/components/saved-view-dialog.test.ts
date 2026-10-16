@@ -20,7 +20,10 @@ describe('SavedViewDialog', () => {
     const markup = String(SavedViewDialog({ open: true, name: 'Needs docs', searchModel: queryModel('tag:docs') }));
     expect(markup).not.toContain('kui-toolbar');
     expect(markup).not.toContain('saved-view-dialog__query-toolbar');
-    expect(markup).toContain('<div class="ticket-search-form-field" data-ticket-search-for="saved-view-query">');
+    // A Kerf List stacks the form field and its surface state (HS2-4GX2YS).
+    const field = markup.match(/<div[^>]*ticket-search-form-field[^>]*>/u)?.[0] ?? '';
+    expect(field).toContain('data-component="list"');
+    expect(field).toContain('data-ticket-search-for="saved-view-query"');
     expect(markup).toContain('data-presentation="form-field"');
     expect(markup).toMatch(
       /<div class="kui-token-search__field-label" id="saved-view-query-label"[^>]*>Search query<span class="kui-token-search__field-required" aria-hidden="true">\*<\/span>/,

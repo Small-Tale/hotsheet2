@@ -50,14 +50,11 @@
 .command-settings-editor__dialog-icon[data-transparent='true'] {
   background: var(--wa-color-neutral-fill-normal);
 }
+/* The status line reserves its height so a message never shifts the editor; Kerf Text styles it. */
 .command-settings-editor > footer {
   display: flex;
   min-height: remify(20px);
   align-items: center;
-}
-.command-settings-editor > footer span {
-  color: var(--wa-color-text-quiet);
-  font-size: var(--wa-font-size-xs);
 }
 
 /* Edit command dialog (native popover); its fields are Web Awesome controls laid out by Kerf
