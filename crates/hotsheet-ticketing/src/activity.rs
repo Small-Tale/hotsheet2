@@ -516,10 +516,56 @@ pub fn claude_activity(hook: &Value, id: &str, ts: &str) -> Option<ActivityEvent
                 other => (ActivityKind::ToolCall, serde_json::json!({ "name": other })),
             }
         }
+        // A Task/Agent sub-agent's narration, projected by the stream channel (HS2-RGMJSP).
+        Some("SubagentMessage") => {
+            let text = hook
+                .get("text")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|text| !text.is_empty())?;
+            (
+                ActivityKind::Note,
+                serde_json::json!({ "text": format!("claude sub-agent: {text}") }),
+            )
+        }
+        // A background task (a backgrounded command or agent) started, progressed, or ended.
+        Some("TaskNotification") => {
+            let status = hook
+                .get("status")
+                .and_then(Value::as_str)
+                .filter(|status| !status.is_empty());
+            let summary = hook
+                .get("summary")
+                .and_then(Value::as_str)
+                .filter(|summary| !summary.is_empty());
+            let lead = match (hook.get("subtype").and_then(Value::as_str), status) {
+                (_, Some(status)) => format!("claude background task {status}"),
+                (Some("task_started"), None) => "claude started a background task".to_string(),
+                _ => "claude background task update".to_string(),
+            };
+            let text = summary.map_or(lead.clone(), |summary| format!("{lead}: {summary}"));
+            (ActivityKind::Note, serde_json::json!({ "text": text }))
+        }
         _ => return None,
     };
     let mut ev = ActivityEvent::new(id, ts, "claude", kind, detail);
     ev.session = session;
+    // A sub-agent's own tool calls are labelled as such, never as the main agent's (HS2-RGMJSP).
+    if let Some(parent) = hook
+        .get("parent_tool_use_id")
+        .and_then(Value::as_str)
+        .filter(|parent| !parent.is_empty())
+    {
+        if event == Some("PreToolUse") {
+            ev.summary = format!("{} (sub-agent)", ev.summary);
+        }
+        if let Some(detail) = ev.detail.as_object_mut() {
+            detail.insert(
+                "parent_tool_use_id".into(),
+                Value::String(parent.to_string()),
+            );
+        }
+    }
     Some(ev)
 }
 
@@ -865,6 +911,53 @@ mod tests {
             last.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(),
             ["01B"]
         );
+    }
+
+    #[test]
+    fn claude_activity_narrates_sub_agents_and_background_tasks() {
+        // HS2-RGMJSP: stream-channel projections of sub-agent and background-task records.
+        let summary = |hook: Value| claude_activity(&hook, "01A", "t").map(|event| event.summary);
+        assert_eq!(
+            summary(json!({"hook_event_name": "SubagentMessage", "text": " Looking "})),
+            Some("claude sub-agent: Looking".into())
+        );
+        assert_eq!(
+            summary(json!({"hook_event_name": "SubagentMessage", "text": "  "})),
+            None
+        );
+        assert_eq!(
+            summary(json!({"hook_event_name": "TaskNotification", "status": "failed"})),
+            Some("claude background task failed".into())
+        );
+        assert_eq!(
+            summary(json!({"hook_event_name": "TaskNotification", "subtype": "task_started"})),
+            Some("claude started a background task".into())
+        );
+        assert_eq!(
+            summary(
+                json!({"hook_event_name": "TaskNotification", "subtype": "task_progress", "summary": "half"})
+            ),
+            Some("claude background task update: half".into())
+        );
+        let nested = claude_activity(
+            &json!({"hook_event_name": "PreToolUse", "tool_name": "Read", "parent_tool_use_id": "toolu_task"}),
+            "01B",
+            "t",
+        )
+        .unwrap();
+        assert_eq!(nested.summary, "claude called Read (sub-agent)");
+        assert_eq!(nested.detail["parent_tool_use_id"], "toolu_task");
+        // A sub-agent's message is attributed in its detail but not relabelled twice.
+        let message = claude_activity(
+            &json!({"hook_event_name": "SubagentMessage", "text": "hi", "parent_tool_use_id": "p"}),
+            "01C",
+            "t",
+        )
+        .unwrap();
+        assert_eq!(message.summary, "claude sub-agent: hi");
+        assert_eq!(message.detail["parent_tool_use_id"], "p");
+        // Tool results finish calls but are not timeline activity.
+        assert!(claude_activity(&json!({"hook_event_name": "PostToolUse"}), "01D", "t").is_none());
     }
 
     #[test]

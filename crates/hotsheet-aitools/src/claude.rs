@@ -271,6 +271,138 @@ struct ClaudeTurn {
 struct AssistantProjection {
     seen_by_id: std::collections::HashSet<(String, String)>,
     last_text: Option<String>,
+    /// Tool names by `tool_use` id, so a `tool_result` names the tool it finished (HS2-RGMJSP).
+    tool_names: std::collections::HashMap<String, String>,
+}
+
+/// Bound for one sub-agent message or background-task summary carried as native activity.
+const MAX_NARRATED_CHARS: usize = 280;
+
+/// The text of a narrated sub-agent message or task summary: trimmed, whitespace-collapsed,
+/// and bounded so a chatty sub-agent cannot flood the activity timeline.
+fn narrated(text: &str) -> Option<String> {
+    let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.is_empty() {
+        return None;
+    }
+    let mut chars = collapsed.chars();
+    let mut bounded = chars.by_ref().take(MAX_NARRATED_CHARS).collect::<String>();
+    if chars.next().is_some() {
+        bounded.pop();
+        bounded.push('…');
+    }
+    Some(bounded)
+}
+
+/// Map a whole recorded stream-json transcript (one record per element) to the turn events a
+/// live channel would emit, for offline protocol-cassette replay (HS2-RGMJSP).
+pub fn claude_stream_events(records: &[Value]) -> Vec<TurnEvent> {
+    let mut projection = AssistantProjection::default();
+    records
+        .iter()
+        .flat_map(|record| map_events(record, &mut projection))
+        .collect()
+}
+
+/// The sub-agent a stream record belongs to: Claude Code tags every record a Task/Agent
+/// sub-agent produces with the parent call's `parent_tool_use_id`; main-agent records carry
+/// `null`.
+fn parent_tool_use_id(v: &Value) -> Option<&str> {
+    v.get("parent_tool_use_id")
+        .and_then(Value::as_str)
+        .filter(|id| !id.is_empty())
+}
+
+fn claude_native(mut payload: Value, v: &Value) -> TurnEvent {
+    if let Some(session) = v.get("session_id").and_then(Value::as_str) {
+        payload["session_id"] = Value::String(session.to_string());
+    }
+    if let Some(parent) = parent_tool_use_id(v) {
+        payload["parent_tool_use_id"] = Value::String(parent.to_string());
+    }
+    TurnEvent::NativeActivity {
+        source: crate::tool_progress::CLAUDE_HOOKS_SOURCE.into(),
+        payload,
+    }
+}
+
+fn content_blocks(v: &Value) -> &[Value] {
+    v.get("message")
+        .and_then(|message| message.get("content"))
+        .and_then(Value::as_array)
+        .map_or(&[], Vec::as_slice)
+}
+
+/// Each `tool_use` block of an assistant record as the verified `PreToolUse` hook contract.
+fn tool_use_events(v: &Value, projection: &mut AssistantProjection) -> Vec<TurnEvent> {
+    content_blocks(v)
+        .iter()
+        .filter(|block| block.get("type").and_then(Value::as_str) == Some("tool_use"))
+        .map(|block| {
+            let name = block.get("name").and_then(Value::as_str).unwrap_or("");
+            let mut payload = json!({
+                "hook_event_name": "PreToolUse",
+                "tool_name": name,
+                "tool_input": block.get("input").cloned().unwrap_or(Value::Null),
+            });
+            // The call id lets the host clear this tool when its result arrives (HS2-XV1VCR).
+            if let Some(id) = block.get("id").and_then(Value::as_str) {
+                payload["tool_use_id"] = Value::String(id.to_string());
+                projection
+                    .tool_names
+                    .insert(id.to_string(), name.to_string());
+            }
+            claude_native(payload, v)
+        })
+        .collect()
+}
+
+/// Each `tool_result` block of a user record as a `PostToolUse` (or, for an error result,
+/// `PostToolUseFailure`) hook-shaped event naming the call it finished (HS2-RGMJSP).
+fn tool_result_events(v: &Value, projection: &AssistantProjection) -> Vec<TurnEvent> {
+    content_blocks(v)
+        .iter()
+        .filter(|block| block.get("type").and_then(Value::as_str) == Some("tool_result"))
+        .map(|block| {
+            let failed = block
+                .get("is_error")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let mut payload = json!({
+                "hook_event_name": if failed { "PostToolUseFailure" } else { "PostToolUse" },
+            });
+            if let Some(id) = block.get("tool_use_id").and_then(Value::as_str) {
+                payload["tool_use_id"] = Value::String(id.to_string());
+                if let Some(name) = projection.tool_names.get(id) {
+                    payload["tool_name"] = Value::String(name.clone());
+                }
+            }
+            claude_native(payload, v)
+        })
+        .collect()
+}
+
+/// A background-task `system` record (`task_started`, `task_progress`, `task_notification`)
+/// as a `TaskNotification` event; other system records (init, compaction, status) are not
+/// activity.
+fn task_notification_event(v: &Value) -> Option<TurnEvent> {
+    let subtype = v.get("subtype").and_then(Value::as_str)?;
+    if !subtype.starts_with("task_") {
+        return None;
+    }
+    let mut payload = json!({ "hook_event_name": "TaskNotification", "subtype": subtype });
+    for key in ["task_id", "status", "task_type"] {
+        if let Some(value) = v.get(key).and_then(Value::as_str) {
+            payload[key] = Value::String(value.to_string());
+        }
+    }
+    if let Some(summary) = ["summary", "description"]
+        .iter()
+        .find_map(|key| v.get(*key).and_then(Value::as_str).and_then(narrated))
+    {
+        payload["summary"] = Value::String(summary);
+    }
+    Some(claude_native(payload, v))
 }
 
 /// Extract token usage from a Claude stream-json `result` event (`docs/14`, the
@@ -337,40 +469,35 @@ fn absorb_usage(total: &mut Option<crate::drive::Usage>, usage: Option<crate::dr
 /// Map one output event to zero or more user-visible/native [`TurnEvent`] values.
 fn map_events(v: &Value, assistant_projection: &mut AssistantProjection) -> Vec<TurnEvent> {
     match v.get("type").and_then(Value::as_str) {
+        // A sub-agent's own text is its narration, never the main reply (HS2-RGMJSP).
+        Some("assistant") if parent_tool_use_id(v).is_some() => {
+            let text = content_blocks(v)
+                .iter()
+                .filter(|block| block.get("type").and_then(Value::as_str) == Some("text"))
+                .filter_map(|block| block.get("text").and_then(Value::as_str))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let mut events = narrated(&text)
+                .map(|text| {
+                    claude_native(
+                        json!({ "hook_event_name": "SubagentMessage", "text": text }),
+                        v,
+                    )
+                })
+                .into_iter()
+                .collect::<Vec<_>>();
+            events.extend(tool_use_events(v, assistant_projection));
+            events
+        }
+        Some("user") => tool_result_events(v, assistant_projection),
+        Some("system") => task_notification_event(v).into_iter().collect(),
         Some("assistant") => {
             let text = assistant_text(v, assistant_projection);
             let mut events = Vec::new();
             if !text.is_empty() {
                 events.push(TurnEvent::Output(text));
             }
-            let session = v.get("session_id").and_then(Value::as_str);
-            if let Some(blocks) = v
-                .get("message")
-                .and_then(|message| message.get("content"))
-                .and_then(Value::as_array)
-            {
-                for block in blocks {
-                    if block.get("type").and_then(Value::as_str) != Some("tool_use") {
-                        continue;
-                    }
-                    let mut payload = json!({
-                        "hook_event_name": "PreToolUse",
-                        "tool_name": block.get("name").and_then(Value::as_str).unwrap_or(""),
-                        "tool_input": block.get("input").cloned().unwrap_or(Value::Null),
-                    });
-                    // The call id lets the host clear this tool when its result arrives (HS2-XV1VCR).
-                    if let Some(id) = block.get("id").and_then(Value::as_str) {
-                        payload["tool_use_id"] = Value::String(id.to_string());
-                    }
-                    if let Some(session) = session {
-                        payload["session_id"] = Value::String(session.to_string());
-                    }
-                    events.push(TurnEvent::NativeActivity {
-                        source: "claude-hooks".into(),
-                        payload,
-                    });
-                }
-            }
+            events.extend(tool_use_events(v, assistant_projection));
             events
         }
         Some("result") => {
@@ -402,7 +529,7 @@ fn map_events(v: &Value, assistant_projection: &mut AssistantProjection) -> Vec<
                 DoneReason::failed(1, message)
             })]
         }
-        _ => Vec::new(), // system/init, rate_limit_event, tool-result user echoes, …
+        _ => Vec::new(), // rate_limit_event, stream_event deltas, …
     }
 }
 
@@ -755,6 +882,8 @@ pub(crate) mod scripted {
         PrematureResult,
         /// Only a tool-use block, then a successful result whose `result` text is the reply.
         ToolOnly,
+        /// Replay the synthetic HS2-RGMJSP sub-agent / background-task stream-json cassette.
+        SubagentStream,
         /// The process exits on the user message without emitting a `result`.
         Crash,
         /// Emit some output, then keep working (no `result`, ignores stdin EOF) until a
@@ -900,6 +1029,17 @@ pub(crate) mod scripted {
                             "usage": { "input_tokens": 0, "output_tokens": 0 } }));
                         self.push(self.tool_use());
                     }
+                    ClaudeMode::SubagentStream => {
+                        let records: Vec<Value> = serde_json::from_str(include_str!(
+                            "../tests/fixtures/claude-stream-subagent-synthetic.json"
+                        ))
+                        .expect("valid cassette");
+                        // The channel already emitted its own `system`/`init` at start.
+                        for record in records.into_iter().skip(1) {
+                            self.push(record);
+                        }
+                        return Ok(());
+                    }
                     ClaudeMode::ToolOnly => {
                         self.push(self.tool_use());
                         self.push(json!({ "type": "result", "subtype": "success",
@@ -936,6 +1076,7 @@ pub(crate) mod scripted {
                     | ClaudeMode::RichSuccess
                     | ClaudeMode::PrematureResult
                     | ClaudeMode::ToolOnly
+                    | ClaudeMode::SubagentStream
                     | ClaudeMode::Crash
                     | ClaudeMode::Hang
                     | ClaudeMode::HangIgnoringTerm => ("success", false, "done"),

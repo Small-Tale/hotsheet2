@@ -19,3 +19,9 @@ the channel projects authoritative assistant `tool_use` blocks into that same co
 Paths, ids, tool inputs, output, and diffs are synthetic or redacted. Credentialed drift
 checks remain the ignored `HOTSHEET_CODEX_LIVE=1` and `HOTSHEET_CLAUDE_LIVE=1` tests;
 ordinary gates never launch a model.
+
+`claude-stream-subagent-synthetic.json` (HS2-RGMJSP) is **synthetic, not a live capture**: it
+is assembled from Claude Code's documented stream-json record shapes to pin the channel's
+mapping of `tool_result` echoes, `parent_tool_use_id` sub-agent records, a
+`run_in_background` Bash call, and background-task `system` notifications. Replace it with a
+sanitized live capture (and note any shape differences) when the creds-gated capture runs.

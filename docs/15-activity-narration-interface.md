@@ -195,6 +195,20 @@ client adapter, never a server dependency; other clients can inject another
   sink. Sanitized version-pinned cassettes replay in ordinary CI; credentialed drift
   checks remain explicitly ignored and environment-gated. Native payload capture does
   not create durable ticket notes or summarize content (HS2-3GRNZW owns that policy).
+- **Shipped (HS2-RGMJSP) — Claude results, sub-agents, and background tasks:** the Claude
+  stream channel maps each `user` `tool_result` block to a `PostToolUse` (or, for
+  `is_error`, `PostToolUseFailure`) payload naming its `tool_use_id` and tool, which finishes
+  the in-flight call ([13](13-drive-transport-interface.md)) and is not itself timeline
+  activity. Records carrying a non-null `parent_tool_use_id` belong to a Task/Agent
+  sub-agent: their text becomes a bounded (280-character) `SubagentMessage` Note
+  ("claude sub-agent: …") instead of main reply text, and their tool calls keep the
+  `parent_tool_use_id`, are summarized with a "(sub-agent)" suffix, and never open their own
+  in-flight call. Background-task `system` records (`task_started`, `task_progress`,
+  `task_notification`) become `TaskNotification` Notes ("claude background task completed:
+  …"); other `system` records (init, compaction) stay silent. These shapes follow Claude
+  Code's documented stream-json output and are pinned by a synthetic cassette
+  (`crates/hotsheet-aitools/tests/fixtures/claude-stream-subagent-synthetic.json`); a
+  creds-gated live capture to confirm them is tracked separately.
 - **Shipped (HS2-3GRNZW) — opt-in durable distillation:** bounded deterministic
   milestone windows, privacy-safe serializable summarizer requests, a pluggable local
   summarizer boundary, deterministic fallback, and provenance-derived idempotent

@@ -974,6 +974,49 @@ fn claude_channel_projects_native_tool_use_as_the_verified_hook_contract() {
 }
 
 #[test]
+fn claude_channel_keeps_sub_agent_text_out_of_the_reply_and_finishes_tools_on_results() {
+    // HS2-RGMJSP through the live channel pump (synthetic cassette, not a live capture).
+    let ch = ClaudeChannel::connect(ScriptedClaude::new(ClaudeMode::SubagentStream));
+    let mut turn = ch.start_turn("research").unwrap();
+    let events = drain_turn(turn.as_mut());
+    let reply = events
+        .iter()
+        .filter_map(|event| match event {
+            TurnEvent::Output(text) => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<String>();
+    assert!(!reply.contains("Searching") && !reply.contains("Found the answer"));
+    assert!(reply.ends_with("Here is the summary."));
+    let hooks = events
+        .iter()
+        .filter_map(|event| match event {
+            TurnEvent::NativeActivity { payload, .. } => payload["hook_event_name"].as_str(),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        hooks.iter().filter(|hook| **hook == "PostToolUse").count(),
+        2
+    );
+    assert_eq!(
+        hooks
+            .iter()
+            .filter(|hook| **hook == "SubagentMessage")
+            .count(),
+        2
+    );
+    assert_eq!(
+        hooks
+            .iter()
+            .filter(|hook| **hook == "TaskNotification")
+            .count(),
+        2
+    );
+    assert_eq!(events.last(), Some(&TurnEvent::Done(DoneReason::Completed)));
+}
+
+#[test]
 fn claude_channel_captures_the_session_id_and_maps_failure() {
     let ch = ClaudeChannel::connect(ScriptedClaude::new(ClaudeMode::Failure));
     let mut turn = ch.start_turn("x").unwrap();

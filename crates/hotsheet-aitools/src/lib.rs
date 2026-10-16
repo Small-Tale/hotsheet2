@@ -32,7 +32,7 @@ pub use acp::{AcpDrive, AcpSession, AcpStdio, usage as acp_usage, validate_openc
 pub use appserver::AppServerDrive;
 pub use claude::{
     ChannelTiming, ClaudeChannel, ClaudeChannelDrive, ClaudeStreamSpawnOptions,
-    ClaudeStreamTransport, claude_result_usage,
+    ClaudeStreamTransport, claude_result_usage, claude_stream_events,
 };
 pub use codex::{
     CodexAppServer, CodexDaemonService, PermissionPolicy, ProxyTransport, StdioTransport,
