@@ -28,6 +28,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
         Cmd::Providers { json } => cmd_providers(path, json),
         Cmd::GithubSignIn { web_base } => cmd_github_sign_in(&web_base),
         Cmd::GithubConnect(args) => cmd_github_connect(path, args),
+        Cmd::ProviderConnect(args) => cmd_provider_connect(path, args),
         Cmd::ProviderAttach {
             connection,
             id,
@@ -1066,6 +1067,183 @@ pub(crate) struct GithubConnectArgs {
     /// Remove the assets repository; the connection then reports no attachment support.
     #[arg(long)]
     no_attachments: bool,
+}
+
+/// A provider `provider-connect` creates (GitHub has `github-connect`, which also owns its
+/// sign-in and assets repository).
+#[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub(crate) enum ConnectProvider {
+    Gitlab,
+    Jira,
+}
+
+impl ConnectProvider {
+    fn id(self) -> &'static str {
+        match self {
+            Self::Gitlab => "gitlab",
+            Self::Jira => "jira",
+        }
+    }
+}
+
+#[derive(Args)]
+pub(crate) struct ProviderConnectArgs {
+    /// The ticket provider.
+    #[arg(value_enum)]
+    provider: ConnectProvider,
+    /// GitLab `namespace/project` path, or the Jira project key.
+    locator: String,
+    /// Credential reference holding the GitLab token or Jira API token (see `key set`).
+    #[arg(long, required_unless_present = "account")]
+    credential: Option<String>,
+    /// Reuse an account from `account list`: fills the credential, the Jira email, and the
+    /// Jira site or GitLab API base. Explicit flags still win.
+    #[arg(long)]
+    account: Option<String>,
+    /// Self-managed GitLab API base (default `https://gitlab.com/api/v4`).
+    #[arg(long, value_name = "URL")]
+    api_base: Option<String>,
+    /// Jira site URL, such as `https://acme.atlassian.net`.
+    #[arg(long, value_name = "URL")]
+    site: Option<String>,
+    /// Jira account email the API token belongs to.
+    #[arg(long)]
+    email: Option<String>,
+    /// Display name (defaults to GitLab Issues or Jira Cloud).
+    #[arg(long)]
+    name: Option<String>,
+    /// Explicit connection id; otherwise reuse the matching source or generate an id.
+    #[arg(long)]
+    id: Option<String>,
+    /// Make this the default source: of the checkout with --checkout, otherwise of the store.
+    #[arg(long)]
+    default: bool,
+    /// Also link the source to this registered checkout (id, alias, or path).
+    #[arg(long)]
+    checkout: Option<String>,
+}
+
+/// `provider-connect`: create or refresh a GitLab or Jira ticket source headlessly through
+/// the same validated workflow as `POST /checkouts/{ref}/provider-connections` (HS2-65KYVP).
+pub(crate) fn cmd_provider_connect(path: &Path, args: ProviderConnectArgs) -> Result<()> {
+    let ProviderConnectArgs {
+        provider,
+        locator,
+        credential,
+        account,
+        api_base,
+        site,
+        email,
+        name,
+        id,
+        default: make_default,
+        checkout,
+    } = args;
+    let store = FsStore::open(path)?;
+    let home = hotsheet_plugins::hotsheet_home();
+    let keys = KeyRegistry::new(&home, OsKeychain);
+    let registry = ProviderConfigRegistry::new(store.root().join("providers.json"));
+    let checkout_registry =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
+    let reused = match &account {
+        Some(account) => Some(reused_account(
+            &registry,
+            &checkout_registry,
+            &keys,
+            account,
+            provider,
+        )?),
+        None => None,
+    };
+    let credential = credential
+        .or_else(|| reused.as_ref().map(|account| account.id.clone()))
+        .context("--credential or --account is required")?;
+    keys.get(&credential)
+        .with_context(|| format!("credential reference '{credential}' was not found"))?;
+    let reused_base = reused.as_ref().and_then(|account| account.base_url.clone());
+    let mut settings = serde_json::json!({"credential":{"secret":credential}});
+    match provider {
+        ConnectProvider::Gitlab => {
+            if site.is_some() || email.is_some() {
+                bail!("--site and --email apply to Jira; GitLab uses --api-base");
+            }
+            if let Some(api_base) = api_base.or(reused_base) {
+                settings["api_base"] = api_base.trim_end_matches('/').into();
+            }
+        }
+        ConnectProvider::Jira => {
+            if api_base.is_some() {
+                bail!("--api-base applies to GitLab; Jira uses --site");
+            }
+            let site = site
+                .or(reused_base)
+                .context("Jira needs --site (or --account with a known site)")?;
+            let email = email
+                .or_else(|| reused.as_ref().and_then(|account| account.identity.clone()))
+                .context("Jira needs --email (or --account with a known email)")?;
+            settings["base_url"] = site.trim_end_matches('/').into();
+            settings["email"] = email.into();
+        }
+    }
+    if let Some(reference) = &checkout {
+        checkout_registry.resolve(reference)?;
+    }
+    let connection = hotsheet_ticketing::ProviderConnection {
+        id: id.unwrap_or_default(),
+        provider: provider.id().into(),
+        locator: locator.clone(),
+        name,
+        default: make_default,
+        settings,
+        disabled: false,
+    };
+    let connection = hotsheet_extsync::connect_source(
+        &registry,
+        connection,
+        checkout
+            .as_deref()
+            .map(|reference| hotsheet_extsync::CheckoutLink {
+                registry: &checkout_registry,
+                reference,
+                make_default,
+            }),
+        hotsheet_extsync::ConnectMode::Reconnect,
+    )?;
+    println!(
+        "Connected {} '{}' as '{}'.",
+        connection.name.as_deref().unwrap_or(provider.id()),
+        connection.locator,
+        connection.id
+    );
+    Ok(())
+}
+
+/// The account `provider-connect --account` reuses, which must belong to `provider`.
+fn reused_account(
+    registry: &ProviderConfigRegistry,
+    checkouts: &hotsheet_ticketing::checkouts::CheckoutRegistry,
+    keys: &KeyRegistry<OsKeychain>,
+    account: &str,
+    provider: ConnectProvider,
+) -> Result<hotsheet_ticketing::accounts::Account> {
+    // keys.json metadata only, like the client's account picker: never reads the keychain.
+    let accounts = hotsheet_ticketing::accounts::list_accounts(
+        &registry.load()?,
+        &checkouts.list()?,
+        &keys.list()?,
+    );
+    let found = accounts
+        .into_iter()
+        .find(|item| item.id == account)
+        .with_context(|| format!("no account named '{account}' (see `account list`)"))?;
+    if found.provider != provider.id() {
+        bail!(
+            "account '{account}' signs in to {}, not {}",
+            found.provider,
+            provider.id()
+        );
+    }
+    Ok(found)
 }
 
 #[derive(Subcommand)]

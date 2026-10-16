@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 
 mod dispatch;
 
-use dispatch::providers::{AccountCmd, FeedbackSynthesisCmd, GithubConnectArgs, KeyCmd};
+use dispatch::providers::{
+    AccountCmd, FeedbackSynthesisCmd, GithubConnectArgs, KeyCmd, ProviderConnectArgs,
+};
 use dispatch::server::{CertCmd, CommandsCmd, LifecycleCmd, NotificationsCmd};
 use dispatch::setup::{AiSettingsCmd, PluginCmd, SettingsCmd, TriggerArgs, WorkArgs};
 use dispatch::store::CheckoutCmd;
@@ -142,6 +144,9 @@ enum Cmd {
     },
     /// Create or update a GitHub Issues connection in this ticket store, safely repeatable.
     GithubConnect(GithubConnectArgs),
+    /// Create or update a GitLab or Jira ticket source, safely repeatable: the same validated
+    /// workflow as the client form, optionally reusing a signed-in `--account`.
+    ProviderConnect(ProviderConnectArgs),
     /// Attach files to a provider-native ticket through its connection (for GitHub, its
     /// configured assets repository). Fails explicitly when the provider cannot.
     ProviderAttach {

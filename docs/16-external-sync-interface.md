@@ -719,6 +719,19 @@ never stored, so there is nothing to migrate:
   reference (`id`), the Jira email (`identity`), and the GitLab API base or Jira site
   (`base_url`). The project enters its own project path or key. Headless, `hotsheet account
 list` prints the same `account:` and `endpoint:` values for each account.
+- **Headless GitLab and Jira sources (HS2-65KYVP).** `hotsheet provider-connect gitlab
+<namespace/project>` (`--api-base` for self-managed GitLab) and `hotsheet provider-connect
+jira <KEY> --site <URL> --email <addr>` take `--credential <ref>` or `--account <id>`. An
+  account fills the credential, the Jira email, and the site or API base; explicit flags
+  win, and an account of another provider is refused. `--checkout <ref>` links the source
+  (`--default` makes it that checkout's default). The command runs the same
+  `hotsheet_extsync::connect_source` workflow as `POST
+/checkouts/{reference}/provider-connections`: the provider descriptor validates the
+  locator and settings before anything is written, and a failed link restores the previous
+  record. It is idempotent. A repeat with the same provider, locator, and host (or the same
+  `--id`) updates that record instead of adding one, and keeps its name, disabled state,
+  and record default unless flags change them. The referenced credential must exist
+  (keychain or `HOTSHEET_API_KEY_*`); no provider API is called while connecting.
 
 **Existing installs.** Nothing is rewritten. Every pre-existing connection is owned by the
 checkouts already linking it, and every credential a connection references becomes an
@@ -728,8 +741,8 @@ project; remove it with `hotsheet provider-remove <id>` or keep it for a later
 `checkout add-source`.
 
 Headless parity: `hotsheet checkout add-source|remove-source|set-default` act on one
-project's sources; `github-connect --checkout` creates and links one; `account list|sign-out`
-manage accounts; `providers`, `provider-disable|provider-enable`, and `provider-remove`
+project's sources; `github-connect --checkout` (GitHub) and `provider-connect gitlab|jira
+--checkout` (GitLab, Jira) create and link one; `account list|sign-out` manage accounts; `providers`, `provider-disable|provider-enable`, and `provider-remove`
 address a connection directly.
 
 ## 16.12 Cross-references

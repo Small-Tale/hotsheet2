@@ -199,23 +199,28 @@ fn save_provider_connections(
     replacing: Option<&str>,
 ) -> Result<(), ApiError> {
     let connections = hotsheet_extsync::updated_connections(connections, connection, replacing)
-        .map_err(|error| match error {
-            hotsheet_ticketing::ProviderError::UnknownConnection(id) => ApiError::not_found(&id),
-            hotsheet_ticketing::ProviderError::Conflict { message, .. }
-                if message == "provider connection id already exists" =>
-            {
-                ApiError::new(StatusCode::CONFLICT, message)
-            }
-            hotsheet_ticketing::ProviderError::Conflict { message, .. }
-                if message == "git connections are managed through the store registry" =>
-            {
-                ApiError::new(StatusCode::BAD_REQUEST, message)
-            }
-            other => provider_transfer_error(other),
-        })?;
+        .map_err(provider_connection_error)?;
     ProviderConfigRegistry::new(state.store.root().join("providers.json"))
         .save(&connections)
         .map_err(provider_transfer_error)
+}
+
+/// The HTTP status of a rejected connection record.
+fn provider_connection_error(error: hotsheet_ticketing::ProviderError) -> ApiError {
+    match error {
+        hotsheet_ticketing::ProviderError::UnknownConnection(id) => ApiError::not_found(&id),
+        hotsheet_ticketing::ProviderError::Conflict { message, .. }
+            if message == "provider connection id already exists" =>
+        {
+            ApiError::new(StatusCode::CONFLICT, message)
+        }
+        hotsheet_ticketing::ProviderError::Conflict { message, .. }
+            if message == "git connections are managed through the store registry" =>
+        {
+            ApiError::new(StatusCode::BAD_REQUEST, message)
+        }
+        other => provider_transfer_error(other),
+    }
 }
 
 pub(crate) fn connection_token(
@@ -358,37 +363,26 @@ pub(crate) async fn create_checkout_provider_connection(
         .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
     let mut connection = body.connection;
     let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
-    let connections = registry.load().map_err(provider_transfer_error)?;
-    if connection.id.trim().is_empty() {
-        connection.id = hotsheet_ticketing::generate_connection_id(
-            &connections,
-            &connection.provider,
-            &connection.locator,
-        );
-    }
-    // A project's default lives on its checkout, never on the shared record.
-    connection.default = false;
     fill_reused_sign_in_endpoint(&state, &mut connection);
-    save_provider_connections(&state, connections, connection.clone(), None)?;
-    let linked = state.checkout_registry.add_registered_source(
+    // The same validated create-and-link workflow `hotsheet provider-connect` runs
+    // (HS2-65KYVP). A project's default lives on its checkout, never on the shared record,
+    // and a failed link removes the new record again.
+    let connection = hotsheet_extsync::connect_source(
         &registry,
-        &checkout.id,
-        hotsheet_ticketing::checkouts::TicketSource {
-            connection_id: connection.id.clone(),
-            provider: connection.provider.clone(),
-            locator: connection.locator.clone(),
-        },
-        body.make_default,
-    );
-    if let Err(error) = linked {
-        if let Ok(mut current) = registry.load() {
-            current.retain(|item| item.id != connection.id);
-            if let Err(error) = registry.save(&current) {
-                tracing::warn!(connection = %connection.id, %error, "rolling back a failed provider link failed");
-            }
+        connection,
+        Some(hotsheet_extsync::CheckoutLink {
+            registry: &state.checkout_registry,
+            reference: &checkout.id,
+            make_default: body.make_default,
+        }),
+        hotsheet_extsync::ConnectMode::Create,
+    )
+    .map_err(|error| match error {
+        hotsheet_extsync::ConnectSourceError::Provider(error) => provider_connection_error(error),
+        hotsheet_extsync::ConnectSourceError::Link(error) => {
+            ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
         }
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, error.to_string()));
-    }
+    })?;
     let (_, checkouts) = account_listing_inputs(&state)?;
     Ok((
         StatusCode::CREATED,

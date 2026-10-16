@@ -7791,3 +7791,288 @@ fn checkout_review_source_records_a_missing_store_identity_only_on_confirmation(
         .failure()
         .stderr(predicate::str::contains("no linked Git source"));
 }
+
+/// A fake provider API that answers every request with `body` and reports each request
+/// on the returned channel (HS2-65KYVP).
+fn fake_provider_api(body: &'static str) -> (String, std::sync::mpsc::Receiver<String>) {
+    use std::io::Write;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { return };
+            let request = read_http_request(&mut stream);
+            let _ = sender.send(request);
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+        }
+    });
+    (origin, receiver)
+}
+
+fn connection_records(store: &std::path::Path) -> Vec<serde_json::Value> {
+    let file: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(store.join("providers.json")).unwrap())
+            .unwrap();
+    file["connections"].as_array().unwrap().clone()
+}
+
+#[test]
+fn provider_connect_creates_a_gitlab_source_idempotently_and_reuses_its_account() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let (origin, requests) = fake_provider_api("[]");
+    let api_base = format!("{origin}/api/v4");
+    let run = |args: &[&str]| {
+        let mut cmd = hs(dir.path());
+        cmd.env("HOTSHEET_HOME", home.path())
+            .env("HOTSHEET_API_KEY_CLI_GITLAB", "fixture-gitlab")
+            .args(args);
+        cmd
+    };
+    run(&["init"]).assert().success();
+    run(&[
+        "checkout",
+        "register",
+        project.path().to_str().unwrap(),
+        "--alias",
+        "linked",
+    ])
+    .assert()
+    .success();
+    let connect = [
+        "provider-connect",
+        "gitlab",
+        "acme/app",
+        "--credential",
+        "cli-gitlab",
+        "--api-base",
+        api_base.as_str(),
+        "--checkout",
+        "linked",
+        "--default",
+    ];
+    for _ in 0..2 {
+        run(&connect)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("as 'gitlab-acme-app'"));
+    }
+    let records = connection_records(dir.path());
+    assert_eq!(records.len(), 1, "{records:?}");
+    assert_eq!(records[0]["provider"], "gitlab");
+    assert_eq!(records[0]["name"], "GitLab Issues");
+    assert_eq!(records[0]["default"], false);
+    assert_eq!(records[0]["settings"]["api_base"], api_base.as_str());
+    assert_eq!(records[0]["settings"]["credential"]["secret"], "cli-gitlab");
+    let checkout: serde_json::Value = serde_json::from_slice(
+        &run(&["checkout", "resolve", "linked"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    )
+    .unwrap();
+    assert_eq!(checkout["sources"].as_array().unwrap().len(), 1);
+    assert_eq!(checkout["default_source"], "gitlab-acme-app");
+    // The created source is usable: it reads the fake GitLab with the stored token.
+    run(&["provider-ls", "gitlab-acme-app"]).assert().success();
+    let request = requests.recv().unwrap();
+    assert!(
+        request.starts_with("GET /api/v4/projects/acme%2Fapp/issues?"),
+        "{request}"
+    );
+    assert!(request.contains("fixture-gitlab"), "{request}");
+    // Another source reuses the signed-in account: its credential and API base.
+    run(&[
+        "provider-connect",
+        "gitlab",
+        "acme/other",
+        "--account",
+        "cli-gitlab",
+    ])
+    .assert()
+    .success();
+    let records = connection_records(dir.path());
+    assert_eq!(records.len(), 2);
+    let other = records
+        .iter()
+        .find(|record| record["locator"] == "acme/other")
+        .unwrap();
+    assert_eq!(other["settings"]["api_base"], api_base.as_str());
+    assert_eq!(other["settings"]["credential"]["secret"], "cli-gitlab");
+    // Explicit failures write nothing.
+    let failures: [(&[&str], &str); 6] = [
+        (
+            &[
+                "provider-connect",
+                "gitlab",
+                "acme/x",
+                "--credential",
+                "cli-gitlab",
+                "--site",
+                "https://a.test",
+            ],
+            "--site and --email apply to Jira",
+        ),
+        (
+            &[
+                "provider-connect",
+                "gitlab",
+                "no-namespace",
+                "--credential",
+                "cli-gitlab",
+            ],
+            "namespace/project",
+        ),
+        (
+            &[
+                "provider-connect",
+                "gitlab",
+                "acme/x",
+                "--credential",
+                "missing-ref",
+            ],
+            "credential reference 'missing-ref' was not found",
+        ),
+        (
+            &["provider-connect", "jira", "OPS", "--account", "cli-gitlab"],
+            "signs in to gitlab, not jira",
+        ),
+        (
+            &[
+                "provider-connect",
+                "gitlab",
+                "acme/x",
+                "--account",
+                "nobody",
+            ],
+            "no account named 'nobody'",
+        ),
+        (
+            &[
+                "provider-connect",
+                "gitlab",
+                "acme/x",
+                "--credential",
+                "cli-gitlab",
+                "--checkout",
+                "unknown",
+            ],
+            "no checkout matches",
+        ),
+    ];
+    for (args, message) in failures {
+        run(args)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(message));
+    }
+    assert_eq!(connection_records(dir.path()).len(), 2);
+    run(&["provider-connect", "gitlab", "acme/x"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--credential"));
+}
+
+#[test]
+fn provider_connect_creates_a_jira_source_and_fills_site_and_email_from_its_account() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let (site, requests) = fake_provider_api(r#"{"issues":[],"isLast":true}"#);
+    let run = |args: &[&str]| {
+        let mut cmd = hs(dir.path());
+        cmd.env("HOTSHEET_HOME", home.path())
+            .env("HOTSHEET_API_KEY_CLI_JIRA", "fixture-jira")
+            .args(args);
+        cmd
+    };
+    run(&["init"]).assert().success();
+    run(&[
+        "checkout",
+        "register",
+        project.path().to_str().unwrap(),
+        "--alias",
+        "linked",
+    ])
+    .assert()
+    .success();
+    run(&[
+        "provider-connect",
+        "jira",
+        "APP",
+        "--credential",
+        "cli-jira",
+    ])
+    .assert()
+    .failure()
+    .stderr(predicate::str::contains("Jira needs --site"));
+    let connect = [
+        "provider-connect",
+        "jira",
+        "APP",
+        "--credential",
+        "cli-jira",
+        "--site",
+        site.as_str(),
+        "--email",
+        "dev@example.com",
+        "--checkout",
+        "linked",
+        "--name",
+        "App tracker",
+    ];
+    for _ in 0..2 {
+        run(&connect)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("as 'jira-app'"));
+    }
+    let records = connection_records(dir.path());
+    assert_eq!(records.len(), 1, "{records:?}");
+    assert_eq!(records[0]["name"], "App tracker");
+    assert_eq!(records[0]["settings"]["base_url"], site.as_str());
+    assert_eq!(records[0]["settings"]["email"], "dev@example.com");
+    run(&["provider-ls", "jira-app"]).assert().success();
+    let request = requests.recv().unwrap();
+    assert!(
+        request.starts_with("POST /rest/api/3/search/jql "),
+        "{request}"
+    );
+    assert!(request.contains("project = APP"), "{request}");
+    // A reconnect without --name keeps the name; another source reuses the account.
+    run(&connect[..connect.len() - 2]).assert().success();
+    assert_eq!(connection_records(dir.path())[0]["name"], "App tracker");
+    run(&["provider-connect", "jira", "OPS", "--account", "cli-jira"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Connected Jira Cloud 'OPS' as 'jira-ops'",
+        ));
+    let records = connection_records(dir.path());
+    let ops = records
+        .iter()
+        .find(|record| record["locator"] == "OPS")
+        .unwrap();
+    assert_eq!(ops["settings"]["base_url"], site.as_str());
+    assert_eq!(ops["settings"]["email"], "dev@example.com");
+    assert_eq!(ops["settings"]["credential"]["secret"], "cli-jira");
+    run(&[
+        "provider-connect",
+        "jira",
+        "OPS",
+        "--account",
+        "cli-jira",
+        "--api-base",
+        "https://x.test",
+    ])
+    .assert()
+    .failure()
+    .stderr(predicate::str::contains("--api-base applies to GitLab"));
+}

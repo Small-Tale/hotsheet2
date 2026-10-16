@@ -11,6 +11,7 @@ pub mod gitlab;
 pub mod jira;
 mod native_id;
 pub mod note_trailer;
+pub mod source_connect;
 
 pub use native_id::unqualified_native_id;
 
@@ -29,6 +30,7 @@ pub use github_device::{
 };
 pub use gitlab::{GitLabConfig, GitLabProvider};
 pub use jira::{JiraConfig, JiraProvider};
+pub use source_connect::{CheckoutLink, ConnectMode, ConnectSourceError, connect_source};
 
 use std::sync::Arc;
 

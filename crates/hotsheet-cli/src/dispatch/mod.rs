@@ -80,6 +80,7 @@ impl Cmd {
             Providers { .. }
             | GithubSignIn { .. }
             | GithubConnect(_)
+            | ProviderConnect(_)
             | ProviderAttach { .. }
             | ProviderLs { .. }
             | ProviderGet { .. }
