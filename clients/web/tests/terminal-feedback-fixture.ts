@@ -67,6 +67,12 @@ export async function installTerminalFixture(
           sockets.push(this);
           setTimeout(() => {
             if (this.readyState === FakeSocket.CLOSED) return;
+            // A test can refuse new attaches, like a server that is still down (HS2-A1R38J).
+            if ((window as unknown as { __terminalFeedbackRefuse?: boolean }).__terminalFeedbackRefuse) {
+              this.readyState = FakeSocket.CLOSED;
+              this.dispatchEvent(new CloseEvent('close'));
+              return;
+            }
             this.readyState = FakeSocket.OPEN;
             this.dispatchEvent(new Event('open'));
             const output = leadingZshMarker ? '\u001b[1m\u001b[7m%\u001b[27m\u001b[1m\u001b[0m\r\nprompt % ' : nano();

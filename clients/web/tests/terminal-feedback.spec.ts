@@ -1438,3 +1438,148 @@ async function assertMagnifiedKeyBar(
   await page.waitForTimeout(400);
   await page.screenshot({ path: test.info().outputPath('hs2-cks78m-magnified-key-bar.png') });
 }
+
+// HS2-A1R38J (runtime fix HS2-KRQRWH): a drawer terminal whose attach socket closed must not read as
+// locked up until a reload. Clicking or typing into it, the page becoming visible again, and the
+// network returning reconnect at once, even while the backoff timer would still be waiting.
+test('recovers a drawer terminal whose socket closed on focus, typing, visibility, and online without a reload (HS2-A1R38J)', async ({
+  page,
+}) => {
+  type FeedbackSocket = { url: string; sent: unknown[]; readyState: number; dispatchEvent: (event: Event) => boolean };
+  type FeedbackWindow = { __terminalFeedbackSockets: FeedbackSocket[]; __terminalFeedbackRefuse?: boolean };
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installTerminalFixture(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
+  const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]'),
+    screenText = () => dedicated.locator('.xterm-rows').innerText();
+  await expect(dedicated).toHaveAttribute('data-connection', 'connected');
+  const resizeDrawer = async (delta: number) => {
+    const handle = page.getByRole('separator', { name: 'Resize Terminal drawer' }),
+      box = (await handle.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + delta, { steps: 8 });
+    await page.mouse.up();
+  };
+  // The review's drawer: about half the window height.
+  const drawerHeight = (await drawer.boundingBox())!.height;
+  await resizeDrawer(drawerHeight - 450);
+  await expect.poll(async () => Math.abs((await drawer.boundingBox())!.height - 450)).toBeLessThan(40);
+  await expect(dedicated).toHaveAttribute('data-connection', 'connected');
+  const attachSockets = () =>
+    page.evaluate(() =>
+      (window as unknown as FeedbackWindow).__terminalFeedbackSockets
+        .filter((socket) => socket.url.includes('/terminals/terminal-new/attach'))
+        .map((socket) => ({
+          readyState: socket.readyState,
+          input: socket.sent.filter((value): value is string => typeof value === 'string' && !value.startsWith('{')),
+          claims: socket.sent
+            .filter((value): value is string => typeof value === 'string' && value.startsWith('{'))
+            .map((value) => (JSON.parse(value) as { resize: { cols: number; rows: number } }).resize),
+        })),
+    );
+  const openSocket = async () => (await attachSockets()).filter((socket) => socket.readyState === 1).at(-1);
+  /**
+   * Close the live attach socket upstream while the server refuses new attaches, until the backoff
+   * has climbed past 2 s, then let the server accept again: only the backoff timer stands between
+   * the terminal and a working socket.
+   */
+  const breakSocket = async () => {
+    const before = (await attachSockets()).length;
+    await page.evaluate(() => {
+      const state = window as unknown as FeedbackWindow;
+      state.__terminalFeedbackRefuse = true;
+      for (const socket of state.__terminalFeedbackSockets)
+        if (socket.url.includes('/terminals/terminal-new/attach') && socket.readyState === 1) {
+          // Output that only the dead session showed; the reconnect replay must replace it.
+          socket.dispatchEvent(
+            new MessageEvent('message', { data: new TextEncoder().encode('\r\nSTALE-OUTPUT-BEFORE-DROP').buffer }),
+          );
+          (socket as unknown as { close: () => void }).close();
+        }
+    });
+    await expect(dedicated).toHaveAttribute('data-connection', 'reconnecting');
+    // Refused attempts back off 250 ms, 500 ms, 1 s, 2 s: the next one waits 4 s.
+    await expect
+      .poll(async () => (await attachSockets()).length, { timeout: 10_000 })
+      .toBeGreaterThanOrEqual(before + 4);
+    await page.evaluate(() => {
+      (window as unknown as FeedbackWindow).__terminalFeedbackRefuse = false;
+    });
+    await expect(dedicated).toHaveAttribute('data-connection', 'reconnecting');
+    await expect(dedicated.locator('.xterm-rows')).toContainText('STALE-OUTPUT-BEFORE-DROP');
+  };
+  /** Reconnected well inside the pending 4 s backoff, with the scrollback replayed over the stale screen. */
+  const expectRecovered = async () => {
+    await expect(dedicated).toHaveAttribute('data-connection', 'connected', { timeout: 1_500 });
+    await expect.poll(screenText).toContain('GNU nano 8.4');
+    await expect.poll(screenText).not.toContain('STALE-OUTPUT-BEFORE-DROP');
+  };
+  /** The rows still track the drawer: a resize claims the new grid on the reconnected socket. */
+  const expectTracksDrawer = async (delta: number) => {
+    const grid = await dedicated.getAttribute('data-grid-size');
+    await resizeDrawer(delta);
+    await expect.poll(() => dedicated.getAttribute('data-grid-size')).not.toBe(grid);
+    const resized = (await dedicated.getAttribute('data-grid-size'))!;
+    await expect
+      .poll(async () => {
+        const claim = (await openSocket())?.claims.at(-1);
+        return claim && `${claim.cols}x${claim.rows}`;
+      })
+      .toBe(resized);
+    await expect(dedicated).toHaveAttribute('data-pty-size', resized);
+  };
+  const typedOnLiveSocket = async () => (await openSocket())?.input.join('') ?? '';
+
+  // 1. Clicking into the terminal reconnects at once; what is then typed reaches the PTY.
+  await breakSocket();
+  await page.screenshot({ path: 'target/visual-captures/hs2-a1r38j-drawer-socket-closed-before.png' });
+  await dedicated.click();
+  await expectRecovered();
+  await page.keyboard.type('echo clicked');
+  await expect.poll(typedOnLiveSocket).toContain('echo clicked');
+  await expectTracksDrawer(-64);
+
+  // 2. Typing into the still-focused terminal reconnects at once, and no keystroke is lost.
+  await breakSocket();
+  await page.keyboard.type('echo typed');
+  await expectRecovered();
+  await expect.poll(typedOnLiveSocket).toContain('echo typed');
+  await expectTracksDrawer(64);
+  await page.screenshot({ path: 'target/visual-captures/hs2-a1r38j-drawer-socket-recovered-after.png' });
+
+  // 3. A hidden page stays put; becoming visible reconnects at once.
+  await page.locator('body').evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
+  await breakSocket();
+  const setVisibility = (state: 'hidden' | 'visible') =>
+    page.evaluate((value) => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => value });
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => value === 'hidden' });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }, state);
+  const socketsWhileHidden = (await attachSockets()).length;
+  await setVisibility('hidden');
+  await page.waitForTimeout(300);
+  await expect(dedicated).toHaveAttribute('data-connection', 'reconnecting');
+  expect((await attachSockets()).length).toBe(socketsWhileHidden);
+  await setVisibility('visible');
+  await expectRecovered();
+  await expectTracksDrawer(-64);
+
+  // 4. The network returning reconnects at once.
+  await breakSocket();
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expectRecovered();
+  await expectTracksDrawer(64);
+  await dedicated.click();
+  await page.keyboard.type('echo online');
+  await expect.poll(typedOnLiveSocket).toContain('echo online');
+});

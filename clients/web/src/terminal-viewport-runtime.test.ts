@@ -26,6 +26,7 @@ const allocated = vi.hoisted(() => ({
     buffer: { active: { baseY: number; cursorY: number; viewportY: number } };
     focus: ReturnType<typeof vi.fn>;
     options: Record<string, unknown>;
+    dataHandler?: (value: string) => void;
   }>,
 }));
 vi.mock('@xterm/xterm', () => ({
@@ -69,7 +70,7 @@ vi.mock('@xterm/xterm', () => ({
     onRender() {
       return { dispose: this.render };
     }
-    dataHandler: ((value: string) => void) | undefined;
+    dataHandler?: (value: string) => void;
     onData(handler: (value: string) => void) {
       this.dataHandler = handler;
       return { dispose: this.input };
@@ -1107,6 +1108,30 @@ describe('a closed socket reconnects on user activity instead of waiting out its
     view.close();
     view.fire('pointerdown');
     expect(sockets).toHaveLength(3);
+    view.dispose();
+  });
+
+  it('keeps keystrokes typed while the socket is closed or reopening and sends them once it opens (HS2-A1R38J)', () => {
+    const view = mountDedicated(),
+      terminal = allocated.terminals.at(-1)!;
+    view.open();
+    view.close();
+    expect(view.viewport.dataset.connection).toBe('reconnecting');
+    // The first keystroke on a closed socket reconnects at once instead of being dropped.
+    terminal.dataHandler!('ec');
+    expect(sockets).toHaveLength(2);
+    expect(view.viewport.dataset.connection).toBe('connecting');
+    // Keys typed while the new socket is still connecting queue behind it.
+    terminal.dataHandler!('ho hi\r');
+    expect(sockets).toHaveLength(2);
+    const reopened = sockets.at(-1)! as unknown as { send: (value: string) => void },
+      sent: string[] = [];
+    reopened.send = (value: string) => sent.push(value);
+    view.open();
+    expect(sent.filter((value) => !value.startsWith('{'))).toEqual(['echo hi\r']);
+    // Once open, input goes straight through and nothing is replayed twice.
+    terminal.dataHandler!('ls');
+    expect(sent.filter((value) => !value.startsWith('{'))).toEqual(['echo hi\r', 'ls']);
     view.dispose();
   });
 

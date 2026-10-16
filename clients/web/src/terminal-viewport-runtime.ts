@@ -34,6 +34,7 @@ import { registerTerminalTicketLinkProvider } from './terminal-ticket-links';
 import { createTerminalLineScroller, createTouchScrollController } from './terminal-touch-scroll';
 import { createTouchSelectionController } from './terminal-touch-selection';
 import {
+  bufferTerminalInput,
   focusYieldsToNewTerminal,
   isTerminalReplacementReplay,
   parseTerminalSizeMessage,
@@ -448,6 +449,9 @@ function initializeTerminalViewport(
     livenessSupported = false,
     lastInboundAt = 0,
     pingSeq = 0,
+    // Keystrokes typed while the socket is closed or still reopening, sent once it opens so a
+    // reconnect never drops what the user typed (HS2-A1R38J). Bounded like a paste.
+    pendingInput = '',
     serverSize: { cols: number; rows: number } | undefined;
   own(() => {
     disposed = true;
@@ -754,6 +758,11 @@ function initializeTerminalViewport(
       attempt = 0;
       element.dataset.connection = 'connected';
       fitAndClaim();
+      if (pendingInput) {
+        current.send(pendingInput);
+        pendingInput = '';
+        signalInteractionThrottled();
+      }
       if (autoFocus) terminal.focus();
       lastInboundAt = Date.now();
       heartbeat = window.setInterval(() => {
@@ -1092,6 +1101,7 @@ function initializeTerminalViewport(
       signalInteractionThrottled();
       return;
     }
+    pendingInput = bufferTerminalInput(pendingInput, value);
     reconnectNow();
   };
   let pasting = false;

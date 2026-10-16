@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  bufferTerminalInput,
   focusYieldsToNewTerminal,
   isTerminalReplacementReplay,
   parseTerminalSizeMessage,
@@ -13,6 +14,7 @@ import {
   TERMINAL_DRAWER_RESIZE_END_EVENT,
   TERMINAL_FOCUS_RETRY_MS,
   TERMINAL_MAGNIFIED_SCROLLBACK,
+  TERMINAL_PENDING_INPUT_LIMIT,
   TERMINAL_PREVIEW_NATURAL_HEIGHT,
   TERMINAL_PREVIEW_NATURAL_WIDTH,
   TERMINAL_PREVIEW_SCROLLBACK,
@@ -71,6 +73,14 @@ describe('terminal viewport protocol', () => {
   });
   it('caps exponential reconnect backoff', () => {
     expect([0, 1, 2, 8].map(terminalReconnectDelay)).toEqual([250, 500, 1000, 8000]);
+  });
+  it('queues input typed while reconnecting, keeping the newest keys within the bound (HS2-A1R38J)', () => {
+    expect(bufferTerminalInput('', 'ec')).toBe('ec');
+    expect(bufferTerminalInput('ec', 'ho')).toBe('echo');
+    expect(bufferTerminalInput('abcd', 'ef', 4)).toBe('cdef');
+    expect(bufferTerminalInput('', 'x'.repeat(TERMINAL_PENDING_INPUT_LIMIT + 3))).toHaveLength(
+      TERMINAL_PENDING_INPUT_LIMIT,
+    );
   });
   it('sends a final resize claim shortly after a drag settles', () => {
     expect(TERMINAL_FOCUS_RETRY_MS).toBe(120);

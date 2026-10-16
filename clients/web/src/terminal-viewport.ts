@@ -92,6 +92,16 @@ export function terminalSocketStale(input: {
 }
 
 export const terminalReconnectDelay = (attempt: number) => Math.min(8_000, 250 * 2 ** Math.max(0, attempt));
+/** Most input a reconnecting terminal holds for its next socket; the oldest keystrokes give way. */
+export const TERMINAL_PENDING_INPUT_LIMIT = 64 * 1024;
+/**
+ * Queue `value` typed while the attach socket is closed or reopening (HS2-A1R38J). It is sent when the
+ * socket opens, so recovering from a dropped connection never loses what the user typed.
+ */
+export function bufferTerminalInput(pending: string, value: string, limit = TERMINAL_PENDING_INPUT_LIMIT): string {
+  const next = pending + value;
+  return next.length > limit ? next.slice(next.length - limit) : next;
+}
 /** Sent to a live viewport its owner moves out of the page to keep it warm (HS2-WGTQ6X). */
 export const TERMINAL_VIEWPORT_PARK_EVENT = 'hs-terminal-viewport-park';
 /** Sent when a parked viewport returns to the page; `detail.focus` requests input focus. */
