@@ -2,14 +2,7 @@ import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { ANNOTATION_INTENT_ORDER, annotationDefaultIntent } from '../annotation-intents';
-import {
-  Api,
-  type AttachmentMetadata,
-  type AttachmentPurpose,
-  type FullTicket,
-  type MediaAnnotation,
-  type TicketRow,
-} from '../api';
+import { Api, type AttachmentMetadata, type FullTicket, type MediaAnnotation, type TicketRow } from '../api';
 import { type AttachmentLabelEditing, createAttachmentLabelEditor } from '../attachment-label-editing';
 import { attachmentOwnerTarget } from '../attachment-owner';
 import { browserRandomId } from '../browser-id';
@@ -35,6 +28,7 @@ import {
   wireAttachmentGalleryControls,
   wireGalleryVolumeSurface,
 } from '../components/attachment-gallery-interactions';
+import { attachmentBatchPurpose } from '../components/ticket-attachments';
 import { wireTicketAttachmentActions } from '../components/ticket-attachments-interactions';
 import { copyText } from '../copy-text';
 import { AUTOSAVE_DELAY_MS } from '../debounced-autosave';
@@ -276,8 +270,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     return {
       batch_id,
       batch_label: batch.querySelector<HTMLInputElement>('[name="attachment-batch-label"]')?.value.trim() || undefined,
-      purpose: (batch.querySelector<HTMLSelectElement>('[name="attachment-batch-purpose"]')?.value || undefined) as
-        AttachmentPurpose | undefined,
+      purpose: attachmentBatchPurpose(batch),
       actor: role
         ? {
             role,
@@ -395,7 +388,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
   );
   lifetime.add(
     delegate(document.body, 'dblclick', ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentRow.selector, (event, target) => {
-      if ((event.target as Element).closest('button, input, a')) return;
+      if ((event.target as Element).closest('button, input, a, wa-button')) return;
       openSelectedAttachment(data(target).attachmentActionId!, frameIdOf(target)).catch((reason: unknown) => {
         error.value = reason instanceof Error ? reason.message : String(reason);
       });

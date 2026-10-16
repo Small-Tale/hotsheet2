@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { TicketAttachments } from './ticket-attachments';
 import { TicketInspector, ticketInspectorPanel } from './ticket-inspector';
 
 const base = {
@@ -502,14 +503,12 @@ describe('TicketInspector', () => {
   });
 
   it('keeps attachment names shrinkable while preserving the compact menu trigger', () => {
-    const css = readFileSync(resolve(import.meta.dirname, 'ticket-attachments.css'), 'utf8');
-    expect(css).toContainSource(
-      '.ticket-attachments__item { display: flex; box-sizing: border-box; width: 100%; min-width: 0;',
+    // Kerf Text truncates the name inside a flexible Row; the menu is a Kerf IconButton (HS2-K9HSXZ).
+    const markup = String(TicketAttachments({ attachments: [{ id: 'one', name: 'a-very-long-name.png' }] }));
+    expect(markup).toMatch(
+      /data-component="row"[^>]*data-flex[\s\S]*?data-wrap="truncate"[^>]*>a-very-long-name\.png/u,
     );
-    expect(css).toContainSource('.ticket-attachments__item > span { min-width: 0; overflow: hidden; flex: 1;');
-    expect(css).toContainSource(
-      '.ticket-attachments__item-menu { display: inline-grid; width: remify(28px); height: remify(28px); margin-left: auto;',
-    );
+    expect(markup).toMatch(/data-component="icon-button"/u);
   });
 
   it('contains metadata and ticket content within narrow inspector bounds', () => {

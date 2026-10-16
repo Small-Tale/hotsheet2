@@ -186,6 +186,22 @@ the remaining wrapper markup that only existed because Badge lacked props:
   header, and regroup target (`HS2-K9HSXZ`); AttachmentGallery controls (`HS2-5B8FMA`). Thumbnails,
   annotation markers, media scaling, and drag/regroup state stay app-owned.
 
+## Attachment rows and batch header update (HS2-K9HSXZ)
+
+- Rows are a neutral Kerf `ContentItem` around a `Row`, a truncating `Text` name, and a plain
+  `IconButton` More Actions trigger. An unstyled app-owned wrapper keeps `draggable` and the
+  `ticket-attachment-item` identity, which Kerf root attributes protect.
+- Batch titles are large Kerf `Text` headings that still wrap long labels, with a plain
+  `IconButton` Edit action; double-clicking the heading stays a shortcut. The label editor is a
+  small `wa-input` (Escape waits for it to render the restored label before blurring). The purpose
+  is a caret-free inline Kerf `Select` with an info `Badge` selection; it is no longer a native
+  select, so its iOS zoom rule is gone. The New group target is an info `ContentItem`.
+- `ticket-attachments.css` keeps app-owned rules only: the wrapper cursor, batch/New group
+  drag-over outlines, and the media grid and annotation marker.
+- Upstream requests: `IconButton` has no hover `title`, so the More Actions tooltip is gone
+  (`KF-8MYB8B`); `Text` has no heading size matching the former 16px semibold title, and
+  `ListHeader` cannot wrap, so titles are 20px (`KF-43XH56`). `HS2-D087X2` adopts both.
+
 ## Terminal chrome update (HS2-1Q6GER)
 
 - `TerminalDashboard` empty, loading, and message copy now composes Kerf `List` and `Text`. The

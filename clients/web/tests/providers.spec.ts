@@ -13044,7 +13044,7 @@ async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source:
   await expect(panel.getByRole('button', { name: /More Actions for/ })).toHaveCount(source.delete ? 2 : 0);
   await expect(panel.locator('[draggable="true"]')).toHaveCount(0);
   await expect(panel.locator('[data-action="edit-attachment-batch-label"]')).toHaveCount(0);
-  await expect(panel.locator('select[name="attachment-batch-purpose"]')).toHaveJSProperty('disabled', true);
+  await expect(panel.locator('wa-select[name="attachment-batch-purpose"]')).toHaveJSProperty('disabled', true);
   const link = panel.getByRole('link', { name: 'trace.log' });
   await expect(link).toHaveAttribute(
     'href',
@@ -21710,8 +21710,9 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   const item = page.locator('[data-attachment-id="A1"]');
   await expect(item).toContainText('proof.png');
   const more = item.getByRole('button', { name: 'More Actions for proof.png' });
-  await expect(more).toHaveAttribute('title', 'More actions for proof.png');
-  await expect(more.locator('[data-lucide="more-horizontal"]')).toBeVisible();
+  // A Kerf IconButton names the trigger; it has no hover title prop yet (HS2-K9HSXZ).
+  await expect(more).toBeVisible();
+  await expect(item.locator('[data-component="icon-button"] [data-lucide="more-horizontal"]')).toBeVisible();
   await expect(item.getByRole('button')).toHaveCount(1);
   await more.click();
   let attachmentMenu = page.locator('[data-context-menu="attachment"]');
@@ -21845,7 +21846,8 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   });
   const inspector = await page.locator('#app-right-rail [data-component="ticket-inspector-body"]').elementHandle();
   const attachmentLayout = await item.evaluate((node, container) => {
-    const filename = node.querySelector<HTMLElement>(':scope > span')!;
+    // Kerf Text truncates the name inside the row's flexible Row (HS2-K9HSXZ).
+    const filename = node.querySelector<HTMLElement>('[data-component="text"][data-wrap="truncate"]')!;
     filename.textContent = 'an-extremely-long-attachment-filename-that-must-ellipsis-before-the-actions.png';
     return {
       contained: node.getBoundingClientRect().right <= container.getBoundingClientRect().right,
@@ -27922,16 +27924,17 @@ test('edits and contains a wrapping attachment group title through the productio
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const batch = page.locator('[data-attachment-group-drop-target]').first(),
-    title = batch.getByRole('button', { name: 'Edit batch label Legacy / Uncategorized' });
+    title = batch.getByRole('button', { name: 'Edit Batch Label Legacy / Uncategorized' });
   await title.dblclick();
-  const editor = batch.getByRole('textbox', { name: 'Batch label for Legacy / Uncategorized' });
+  const editor = batch.getByRole('textbox', { name: 'Batch Label for Legacy / Uncategorized' });
   await expect(editor).toBeFocused();
   await editor.fill(longTitle);
   await editor.press('Enter');
   await expect.poll(() => writes).toHaveLength(1);
   expect(writes[0]).toMatchObject({ attachment_ids: ['A1'], batch_label: longTitle });
-  const wrappedTitle = batch.getByRole('button', { name: `Edit batch label ${longTitle}` });
-  await expect(wrappedTitle).toBeFocused();
+  // Enter returns focus to the batch's Edit action; the Kerf Text heading wraps the long label (HS2-K9HSXZ).
+  await expect(batch.getByRole('button', { name: `Edit Batch Label ${longTitle}` })).toBeFocused();
+  const wrappedTitle = batch.getByRole('heading', { name: longTitle });
   const expectWrappedAndContained = async () => {
     const geometry = await wrappedTitle.evaluate((element) => {
       const rect = element.getBoundingClientRect(),
@@ -28005,8 +28008,8 @@ test('keeps a production attachment label edit open while a live ticket update r
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const batch = page.locator('[data-attachment-group-drop-target]').first();
-  await batch.getByRole('button', { name: 'Edit batch label Legacy / Uncategorized' }).dblclick();
-  const editor = batch.getByRole('textbox', { name: 'Batch label for Legacy / Uncategorized' });
+  await batch.getByRole('button', { name: 'Edit Batch Label Legacy / Uncategorized' }).dblclick();
+  const editor = batch.getByRole('textbox', { name: 'Batch Label for Legacy / Uncategorized' });
   await expect(editor).toBeFocused();
   await editor.fill('Half-typed label');
 
@@ -28031,12 +28034,12 @@ test('keeps a production attachment label edit open while a live ticket update r
 
   // Escape restores the edit-start label from application state and writes nothing.
   await editor.press('Escape');
-  await expect(batch.getByRole('button', { name: 'Edit batch label Legacy / Uncategorized' })).toBeFocused();
+  await expect(batch.getByRole('button', { name: 'Edit Batch Label Legacy / Uncategorized' })).toBeFocused();
   await expect(batch).not.toHaveAttribute('data-editing-label', /.*/);
   expect(writes).toHaveLength(0);
 
   // A second edit commits through Enter.
-  await batch.getByRole('button', { name: 'Edit batch label Legacy / Uncategorized' }).dblclick();
+  await batch.getByRole('button', { name: 'Edit Batch Label Legacy / Uncategorized' }).dblclick();
   await expect(editor).toBeFocused();
   await expect(editor).toHaveValue('');
   await editor.fill('Committed label');
@@ -28051,8 +28054,8 @@ test('keeps a production attachment label edit open while a live ticket update r
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   await reader.getByRole('tab', { name: /Attachments/ }).click();
   const readerBatch = reader.locator('[data-attachment-group-drop-target]').first();
-  await readerBatch.getByRole('button', { name: /^Edit batch label/ }).dblclick();
-  const readerEditor = readerBatch.getByRole('textbox', { name: /^Batch label for/ });
+  await readerBatch.getByRole('button', { name: /^Edit Batch Label/ }).dblclick();
+  const readerEditor = readerBatch.getByRole('textbox', { name: /^Batch Label for/ });
   await expect(readerEditor).toBeVisible();
   await expect(readerEditor).toBeFocused();
   await expect(readerBatch).toHaveAttribute('data-editing-label', 'true');
@@ -28119,8 +28122,8 @@ test('autosaves a production attachment label once on blur, page hide, and Enter
   await openAttachments();
   const inspector = page.locator('#app-right-rail'),
     batch = inspector.locator('[data-attachment-group-drop-target]').first(),
-    editor = batch.getByRole('textbox', { name: /^Batch label for/ }),
-    title = batch.getByRole('button', { name: /^Edit batch label/ });
+    editor = batch.getByRole('textbox', { name: /^Batch Label for/ }),
+    title = batch.getByRole('button', { name: /^Edit Batch Label/ });
 
   // Rapid typing updates only the controlled draft and, after the debounce, the local recovery copy.
   await title.dblclick();
@@ -28166,13 +28169,13 @@ test('autosaves a production attachment label once on blur, page hide, and Enter
   await held.pop()!.fulfill({ json: { store: 'git-local', ...liveFull } });
   expect(writes[0]).toMatchObject({ batch_label: 'Rapid label' });
   await expect(page.locator('[data-editing-label]')).toHaveCount(0);
-  await expect(inspector.getByRole('button', { name: 'Edit batch label Rapid label' })).toBeVisible();
+  await expect(inspector.getByRole('button', { name: 'Edit Batch Label Rapid label' })).toBeVisible();
   await expect.poll(storedDraft).toEqual([]);
 
   // Post-save editing starts from the saved label and commits through Enter with one more write.
   const saved = inspector.locator('[data-attachment-group-drop-target]').first();
-  await saved.getByRole('button', { name: 'Edit batch label Rapid label' }).dblclick();
-  const savedEditor = saved.getByRole('textbox', { name: /^Batch label for/ });
+  await saved.getByRole('button', { name: 'Edit Batch Label Rapid label' }).dblclick();
+  const savedEditor = saved.getByRole('textbox', { name: /^Batch Label for/ });
   await expect(savedEditor).toBeFocused();
   await expect(savedEditor).toHaveValue('Rapid label');
   await savedEditor.evaluate((node) => {
@@ -28186,7 +28189,7 @@ test('autosaves a production attachment label once on blur, page hide, and Enter
   await expect(page.locator('[data-editing-label]')).toHaveCount(0);
 
   // Page hide writes the open draft at once without closing the editor; the later blur writes nothing new.
-  await saved.getByRole('button', { name: 'Edit batch label Rapid label v2' }).dblclick();
+  await saved.getByRole('button', { name: 'Edit Batch Label Rapid label v2' }).dblclick();
   await expect(savedEditor).toBeFocused();
   await savedEditor.fill('Hidden mid-edit');
   await page.evaluate(() => {
@@ -28207,8 +28210,8 @@ test('autosaves a production attachment label once on blur, page hide, and Enter
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   await reader.getByRole('tab', { name: /Attachments/ }).click();
   const readerBatch = reader.locator('[data-attachment-group-drop-target]').first();
-  await readerBatch.getByRole('button', { name: 'Edit batch label Hidden mid-edit' }).dblclick();
-  const readerEditor = readerBatch.getByRole('textbox', { name: /^Batch label for/ });
+  await readerBatch.getByRole('button', { name: 'Edit Batch Label Hidden mid-edit' }).dblclick();
+  const readerEditor = readerBatch.getByRole('textbox', { name: /^Batch Label for/ });
   await expect(readerEditor).toBeFocused();
   await readerEditor.fill('Reader label');
   await expect(page.locator('[data-editing-label]')).toHaveCount(1);
@@ -28217,21 +28220,21 @@ test('autosaves a production attachment label once on blur, page hide, and Enter
   await readerEditor.press('Enter');
   await expect.poll(() => writes.length).toBe(4);
   expect(writes[3]).toMatchObject({ batch_label: 'Reader label' });
-  await expect(readerBatch.getByRole('button', { name: 'Edit batch label Reader label' })).toBeVisible();
+  await expect(readerBatch.getByRole('button', { name: 'Edit Batch Label Reader label' })).toBeVisible();
   await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
 
   // At 390 the inspector overlay edits the same way; Escape restores the label and writes nothing.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').first().click();
   const narrow = page.locator('#app-right-rail').locator('[data-attachment-group-drop-target]').first();
-  await narrow.getByRole('button', { name: 'Edit batch label Reader label' }).dblclick();
-  const narrowEditor = narrow.getByRole('textbox', { name: /^Batch label for/ });
+  await narrow.getByRole('button', { name: 'Edit Batch Label Reader label' }).dblclick();
+  const narrowEditor = narrow.getByRole('textbox', { name: /^Batch Label for/ });
   await expect(narrowEditor).toBeFocused();
   await narrowEditor.fill('Narrow draft');
   await page.screenshot({ path: test.info().outputPath('hs2-0qqhsz-inspector-editing-390.png') });
   await narrowEditor.press('Escape');
   await expect(page.locator('[data-editing-label]')).toHaveCount(0);
-  await expect(narrow.locator('[data-action="edit-attachment-batch-label"]')).toHaveText('Reader label');
+  await expect(narrow.getByRole('heading', { level: 3 })).toHaveText('Reader label');
   await expect.poll(storedDraft).toEqual([]);
   expect(writes).toHaveLength(4);
   // That Escape finished only the edit: the inspector overlay stays open (HS2-Q2T01A).

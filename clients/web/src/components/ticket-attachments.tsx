@@ -1,11 +1,17 @@
 import './ticket-attachments.css';
 
-import { uiColor } from '@kerfjs/ui/css-values';
+import { Badge } from '@kerfjs/ui/badge';
+import { ContentItem } from '@kerfjs/ui/content-item';
+import { flex, px, uiColor } from '@kerfjs/ui/css-values';
 import { FileDropZone, FilePickerTrigger } from '@kerfjs/ui/file-picker';
+import { IconButton } from '@kerfjs/ui/icon-button';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
+import { ListInsetControl } from '@kerfjs/ui/list-inset-control';
+import { ListInsetText } from '@kerfjs/ui/list-inset-text';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
+import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { Text } from '@kerfjs/ui/text';
 import { MoreHorizontal, Paperclip, Pencil, Plus, Upload } from 'lucide';
 
@@ -45,6 +51,25 @@ export const DEFAULT_ATTACHMENTS: readonly TicketAttachmentItem[] = [
   { id: 'wireframe', name: 'wireframe.png' },
   { id: 'requirements', name: 'requirements.md' },
 ];
+
+/**
+ * The purpose Select's value for a batch without a purpose. Web Awesome treats an empty option value
+ * as no selection, so Uncategorized carries this sentinel; `attachmentBatchPurpose` maps it back.
+ */
+export const UNCATEGORIZED_PURPOSE = 'uncategorized';
+type PurposeChoice = AttachmentPurpose | typeof UNCATEGORIZED_PURPOSE;
+const PURPOSE_CHOICES: readonly SelectChoice<PurposeChoice>[] = [
+  { value: UNCATEGORIZED_PURPOSE, label: 'Uncategorized' },
+  { value: 'problem_evidence', label: 'Problem Evidence' },
+  { value: 'correctness_evidence', label: 'Correctness Evidence' },
+  { value: 'reference', label: 'Reference' },
+  { value: 'other', label: 'Other' },
+];
+/** The purpose a batch's purpose Select holds, or `undefined` for Uncategorized (HS2-K9HSXZ). */
+export function attachmentBatchPurpose(batch: Element): AttachmentPurpose | undefined {
+  const value = batch.querySelector<HTMLElement & { value: string }>('[name="attachment-batch-purpose"]')?.value;
+  return value && value !== UNCATEGORIZED_PURPOSE ? (value as AttachmentPurpose) : undefined;
+}
 
 const purposeLabel = (purpose?: AttachmentPurpose) =>
   purpose
@@ -181,7 +206,8 @@ export function TicketAttachments({
             const media = group.items.filter((attachment): attachment is TicketAttachmentItem & { url: string } =>
                 Boolean(attachment.url && isGalleryMediaAttachment(attachment.name)),
               ),
-              shownLabel = group.explicitLabel ?? group.label;
+              shownLabel = group.explicitLabel ?? group.label,
+              editing = manageable && group.key === editingLabelBatch;
             return (
               <section
                 class="ticket-attachments__batch"
@@ -189,148 +215,196 @@ export function TicketAttachments({
                 data-attachment-group-drop-target={manageable ? 'true' : undefined}
                 data-attachment-batch={group.id ?? ''}
                 data-attachment-batch-key={group.key}
-                data-editing-label={manageable && group.key === editingLabelBatch ? 'true' : undefined}
+                data-editing-label={editing ? 'true' : undefined}
                 data-attachment-ids={group.items.map((item) => item.id).join(',')}
                 data-attachment-purpose={group.purpose ?? ''}
                 data-attachment-actor-role={group.actor?.role ?? ''}
                 data-attachment-actor-identity={group.actor?.identity ?? ''}
                 data-attachment-actor-name={group.actor?.display_name ?? ''}
               >
-                <header>
-                  {manageable ? (
-                    <button
-                      class="ticket-attachments__batch-title"
-                      type="button"
-                      {...ATTACHMENTS_AND_GALLERY_ACTIONS.editAttachmentBatchLabel.attrs}
-                      aria-label={`Edit batch label ${shownLabel}`}
-                      title="Double-click to edit batch label"
-                    >
-                      {shownLabel}
-                    </button>
-                  ) : (
-                    <h3 class="ticket-attachments__batch-title">{shownLabel}</h3>
-                  )}
-                  <input
-                    class="ticket-attachments__batch-title-editor"
-                    value={
-                      manageable && group.key === editingLabelBatch && editingLabelDraft !== undefined
-                        ? editingLabelDraft
-                        : (group.explicitLabel ?? '')
-                    }
-                    placeholder={group.label}
-                    aria-label={`Batch label for ${group.label}`}
-                    name="attachment-batch-label"
-                    disabled={!manageable}
-                  />
-                  <select
-                    name="attachment-batch-purpose"
-                    aria-label={`Purpose for ${group.label}`}
-                    disabled={!manageable}
-                  >
-                    <option value="" selected={!group.purpose}>
-                      Uncategorized
-                    </option>
-                    <option value="problem_evidence" selected={group.purpose === 'problem_evidence'}>
-                      Problem evidence
-                    </option>
-                    <option value="correctness_evidence" selected={group.purpose === 'correctness_evidence'}>
-                      Correctness evidence
-                    </option>
-                    <option value="reference" selected={group.purpose === 'reference'}>
-                      Reference
-                    </option>
-                    <option value="other" selected={group.purpose === 'other'}>
-                      Other
-                    </option>
-                  </select>
-                </header>
-                {group.items.map((attachment) => (
-                  <div
-                    class="ticket-attachments__item"
-                    draggable={manageable ? 'true' : undefined}
-                    data-drag-attachment-id={manageable ? attachment.id : undefined}
-                    data-component="ticket-attachment-item"
-                    data-action={manageable ? 'open-attachment-row' : undefined}
-                    data-attachment-id={attachment.id}
-                    data-attachment-action-id={menuable ? attachment.id : undefined}
-                    data-attachment-name={menuable ? attachment.name : undefined}
-                    data-attachment-url={menuable ? attachment.url : undefined}
-                    data-attachment-menu-kind={manageable ? 'item' : menuable ? 'remote' : undefined}
-                  >
-                    <LucideIcon size={14.4} icon={Paperclip} name="paperclip" />
-                    {manageable || !attachment.url ? (
-                      <span title={`${attachment.name} — double-click to open`}>{attachment.name}</span>
-                    ) : (
-                      <a href={attachment.url} target="_blank" rel="noopener" title={`Open ${attachment.name}`}>
-                        {attachment.name}
-                      </a>
-                    )}
-                    {menuable && (
-                      <button
-                        class="ticket-attachments__item-menu"
-                        type="button"
-                        {...ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentMenu.attrs}
-                        aria-label={`More Actions for ${attachment.name}`}
-                        title={`More actions for ${attachment.name}`}
+                <List gap="xs">
+                  {/* Kerf List, Row, Text, IconButton, wa-input, and Select own the header stack, title, label
+                    editor, and purpose pill (HS2-K9HSXZ). The editor stays rendered (hidden) because
+                    regrouping reads its label, and keeps one position so focusing it survives the
+                    rerender that opens it; while it is open it replaces the title. */}
+                  <List gap="2xs">
+                    <ListInsetControl sides="l">
+                      <wa-input
+                        class="wa-visually-hidden-label"
+                        label={`Batch Label for ${group.label}`}
+                        size="small"
+                        value={
+                          editing && editingLabelDraft !== undefined ? editingLabelDraft : (group.explicitLabel ?? '')
+                        }
+                        placeholder={group.label}
+                        name="attachment-batch-label"
+                        disabled={!manageable}
+                        hidden={!editing}
+                      />
+                    </ListInsetControl>
+                    {editing ? undefined : (
+                      // Kerf Text titles the batch and wraps a long label; an editable batch adds a Kerf
+                      // IconButton Edit action, and double-clicking the title is a shortcut (HS2-K9HSXZ).
+                      <Row
+                        hAlign="full"
+                        vAlign="top"
+                        gap="xs"
+                        controlInsets="r"
+                        rootAttributes={manageable ? { 'data-attachment-batch-title': 'true' } : undefined}
                       >
-                        <LucideIcon size={14.4} icon={MoreHorizontal} name="more-horizontal" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                {media.length > 0 && (
-                  <div
-                    class="ticket-attachments__image-grid"
-                    aria-label="Attached media"
-                    data-attachment-batch-label={group.label}
-                  >
-                    {media.map((item) => (
-                      <button
-                        type="button"
-                        draggable={manageable ? 'true' : undefined}
-                        data-drag-attachment-id={manageable ? item.id : undefined}
-                        {...ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentGallery.attrs}
-                        data-gallery-attachment-id={item.id}
-                        data-attachment-url={item.url}
-                        data-attachment-name={item.name}
-                        aria-label={`Open ${item.name} in media gallery${item.annotationCount ? `, ${item.annotationCount} ${item.annotationCount === 1 ? 'annotation' : 'annotations'}` : ''}`}
-                      >
-                        {isVideoAttachment(item.name) ? (
-                          <video
-                            draggable="false"
-                            src={`${item.url}#t=0.1`}
-                            poster={item.thumbnailUrl}
-                            data-video-poster-url={item.manageVideoPoster ? item.thumbnailUrl : undefined}
-                            data-video-source-url={item.manageVideoPoster ? item.url : undefined}
-                            aria-label={item.name}
-                            preload="none"
-                            muted
-                            playsInline
+                        <Row flex={flex(1, 1, px(0))}>
+                          <ListInsetText sides="l">
+                            <Text variant="h3" size="large" flush wrap="anywhere">
+                              {shownLabel}
+                            </Text>
+                          </ListInsetText>
+                        </Row>
+                        {manageable && (
+                          <IconButton
+                            icon={Pencil}
+                            iconName="pencil"
+                            label={`Edit Batch Label ${shownLabel}`}
+                            action={ATTACHMENTS_AND_GALLERY_ACTIONS.editAttachmentBatchLabel.value}
+                            appearance="plain"
+                            size="xs"
                           />
-                        ) : (
-                          <img draggable="false" src={item.url} alt={item.name} />
-                        )}{' '}
-                        {Boolean(item.annotationCount) && (
-                          <span
-                            class="ticket-attachments__annotation-marker"
-                            title={`${item.annotationCount} ${item.annotationCount === 1 ? 'annotation' : 'annotations'}`}
-                            aria-hidden="true"
-                          >
-                            <LucideIcon size="s" icon={Pencil} name="pencil" color={uiColor('brand-on-loud')} />
-                          </span>
                         )}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                      </Row>
+                    )}
+                    <ListInsetText sides="l">
+                      <Select
+                        name="attachment-batch-purpose"
+                        ariaLabel={`Purpose for ${group.label}`}
+                        presentation="inline"
+                        size="compact"
+                        caret={false}
+                        value={group.purpose ?? UNCATEGORIZED_PURPOSE}
+                        choices={PURPOSE_CHOICES}
+                        disabled={!manageable}
+                        renderSelected={(choice) => <Badge tone="info">{choice.label}</Badge>}
+                      />
+                    </ListInsetText>
+                  </List>
+                  {group.items.map((attachment) => (
+                    // The app-owned wrapper carries the drag source and row identity Kerf roots protect
+                    // (`draggable`, `data-component`); Kerf ContentItem, Row, Text, and IconButton own the
+                    // row chrome (HS2-K9HSXZ).
+                    <div
+                      class="ticket-attachments__item"
+                      draggable={manageable ? 'true' : undefined}
+                      data-drag-attachment-id={manageable ? attachment.id : undefined}
+                      data-component="ticket-attachment-item"
+                      data-action={manageable ? 'open-attachment-row' : undefined}
+                      data-attachment-id={attachment.id}
+                      data-attachment-action-id={menuable ? attachment.id : undefined}
+                      data-attachment-name={menuable ? attachment.name : undefined}
+                      data-attachment-url={menuable ? attachment.url : undefined}
+                      data-attachment-menu-kind={manageable ? 'item' : menuable ? 'remote' : undefined}
+                    >
+                      <ContentItem appearance="neutral">
+                        <Row vAlign="middle" gap="xs">
+                          <LucideIcon size={14.4} icon={Paperclip} name="paperclip" />
+                          <Row flex={flex(1, 1, px(0))}>
+                            {manageable || !attachment.url ? (
+                              <Text
+                                variant="span"
+                                size="compact"
+                                wrap="truncate"
+                                title={`${attachment.name} — double-click to open`}
+                              >
+                                {attachment.name}
+                              </Text>
+                            ) : (
+                              <Text variant="span" size="compact" wrap="truncate">
+                                <a
+                                  href={attachment.url}
+                                  target="_blank"
+                                  rel="noopener"
+                                  title={`Open ${attachment.name}`}
+                                >
+                                  {attachment.name}
+                                </a>
+                              </Text>
+                            )}
+                          </Row>
+                          {menuable && (
+                            <IconButton
+                              icon={MoreHorizontal}
+                              iconName="more-horizontal"
+                              label={`More Actions for ${attachment.name}`}
+                              action={ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentMenu.value}
+                              appearance="plain"
+                              size="xs"
+                            />
+                          )}
+                        </Row>
+                      </ContentItem>
+                    </div>
+                  ))}
+                  {media.length > 0 && (
+                    <div
+                      class="ticket-attachments__image-grid"
+                      aria-label="Attached media"
+                      data-attachment-batch-label={group.label}
+                    >
+                      {media.map((item) => (
+                        <button
+                          type="button"
+                          draggable={manageable ? 'true' : undefined}
+                          data-drag-attachment-id={manageable ? item.id : undefined}
+                          {...ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentGallery.attrs}
+                          data-gallery-attachment-id={item.id}
+                          data-attachment-url={item.url}
+                          data-attachment-name={item.name}
+                          aria-label={`Open ${item.name} in media gallery${item.annotationCount ? `, ${item.annotationCount} ${item.annotationCount === 1 ? 'annotation' : 'annotations'}` : ''}`}
+                        >
+                          {isVideoAttachment(item.name) ? (
+                            <video
+                              draggable="false"
+                              src={`${item.url}#t=0.1`}
+                              poster={item.thumbnailUrl}
+                              data-video-poster-url={item.manageVideoPoster ? item.thumbnailUrl : undefined}
+                              data-video-source-url={item.manageVideoPoster ? item.url : undefined}
+                              aria-label={item.name}
+                              preload="none"
+                              muted
+                              playsInline
+                            />
+                          ) : (
+                            <img draggable="false" src={item.url} alt={item.name} />
+                          )}{' '}
+                          {Boolean(item.annotationCount) && (
+                            <span
+                              class="ticket-attachments__annotation-marker"
+                              title={`${item.annotationCount} ${item.annotationCount === 1 ? 'annotation' : 'annotations'}`}
+                              aria-hidden="true"
+                            >
+                              <LucideIcon size="s" icon={Pencil} name="pencil" color={uiColor('brand-on-loud')} />
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </List>
               </section>
             );
           })}
         </List>
         {manageable && attachments.length > 0 && (
+          // The app-owned wrapper shows the regroup target only while an attachment drags and carries its
+          // drag-over outline; Kerf ContentItem, Row, and Text own its chrome (HS2-K9HSXZ).
           <div class="ticket-attachments__new-group" data-attachment-new-group-drop-target="true">
-            <LucideIcon size="s" icon={Plus} name="plus" />
-            <span>New group</span>
+            <ContentItem appearance="info" frame="framed">
+              <Row hAlign="center">
+                <Row vAlign="middle" gap="xs">
+                  <LucideIcon size="s" icon={Plus} name="plus" />
+                  <Text variant="span" size="compact">
+                    New group
+                  </Text>
+                </Row>
+              </Row>
+            </ContentItem>
           </div>
         )}
         {enabled ? (

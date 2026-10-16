@@ -608,8 +608,8 @@ test('manages attachments in a link-opened reader through its owning project (HS
   await linked.getByRole('tab', { name: /Attachments/ }).click();
   const batch = linked.locator('[data-attachment-batch="linked-batch"]');
   // Relabel the batch: the label saves once, on blur, against the frame's own ticket.
-  await linked.getByRole('button', { name: 'Edit batch label Linked evidence' }).dblclick();
-  const label = batch.locator('[name="attachment-batch-label"]');
+  await linked.getByRole('button', { name: 'Edit Batch Label Linked evidence' }).dblclick();
+  const label = batch.getByRole('textbox', { name: /^Batch Label for/ });
   await expect(label).toBeFocused();
   await label.fill('Relabelled from a link');
   await label.blur();
@@ -617,9 +617,12 @@ test('manages attachments in a link-opened reader through its owning project (HS
     .poll(() => writes.map((item) => [item.method, (item.body as { batch_label?: string } | undefined)?.batch_label]))
     .toEqual([['PATCH', 'Relabelled from a link']]);
   const relabelled = linked.locator('[data-attachment-batch="linked-batch"]');
-  await expect(relabelled.getByRole('button', { name: 'Edit batch label Relabelled from a link' })).toBeVisible();
+  await expect(relabelled.getByRole('button', { name: 'Edit Batch Label Relabelled from a link' })).toBeVisible();
   // Change the batch purpose.
-  await relabelled.locator('[name="attachment-batch-purpose"]').selectOption('correctness_evidence');
+  // The purpose pill is a Kerf Select (HS2-K9HSXZ).
+  const purpose = relabelled.locator('wa-select[name="attachment-batch-purpose"]');
+  await purpose.click();
+  await purpose.locator('wa-option[value="correctness_evidence"]').click();
   await expect
     .poll(() => (writes.at(-1)?.body as { purpose?: string } | undefined)?.purpose)
     .toBe('correctness_evidence');
@@ -658,7 +661,7 @@ test('manages attachments in a link-opened reader through its owning project (HS
   ).toBe(true);
   await linked.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await workspaceReader.getByRole('tab', { name: /Attachments/ }).click();
-  await expect(workspaceReader.getByRole('button', { name: 'Edit batch label Workspace evidence' })).toBeVisible();
+  await expect(workspaceReader.getByRole('button', { name: 'Edit Batch Label Workspace evidence' })).toBeVisible();
   expect(sourceWrites).toEqual([]);
 });
 
@@ -699,8 +702,8 @@ test('keeps linked reader attachment batches read-only for a provider without at
   await linked.getByRole('tab', { name: /Attachments/ }).click();
   const batch = linked.locator('[data-attachment-batch="linked-batch"]');
   await expect(batch.getByRole('heading', { name: 'Linked evidence' })).toBeVisible();
-  await expect(batch.locator('[name="attachment-batch-label"]')).toBeDisabled();
-  await expect(batch.locator('[name="attachment-batch-purpose"]')).toBeDisabled();
+  await expect(batch.locator('wa-input[name="attachment-batch-label"]')).toHaveJSProperty('disabled', true);
+  await expect(batch.locator('wa-select[name="attachment-batch-purpose"]')).toHaveJSProperty('disabled', true);
   await expect(linked.locator('[data-action="edit-attachment-batch-label"]')).toHaveCount(0);
   await expect(
     linked.locator(
@@ -708,7 +711,7 @@ test('keeps linked reader attachment batches read-only for a provider without at
     ),
   ).toHaveCount(0);
   await batch.getByRole('heading', { name: 'Linked evidence' }).dblclick();
-  await expect(batch.locator('[name="attachment-batch-label"]')).not.toBeVisible();
+  await expect(batch.locator('wa-input[name="attachment-batch-label"]')).not.toBeVisible();
   await linked.getByRole('button', { name: 'Close Ticket Reader' }).click();
   expect(attachmentWrites).toEqual([]);
   expect(

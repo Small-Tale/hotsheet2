@@ -2303,7 +2303,7 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   `field-sizing` keep the grip (HS2-6PC150). On touch screens every native text field is also
   set at 16 px or larger (`--hs-touch-field-min-font-size`), because iOS zooms the page into a
   focused field below that size: the Details textarea, the details editor source, the tag input,
-  the attachment purpose select (whose pill then grows with its text), and the repository search
+  the attachment batch label editor, and the repository search
   field. A mouse keeps the compact type (HS2-8JPRRC). The not-working note is floored the same
   way, and a touch-phone browser test walks every UX demo to keep every editable text field at
   16 px or larger; read-only fields (the terminal copy view) and Web Awesome's hidden form-value

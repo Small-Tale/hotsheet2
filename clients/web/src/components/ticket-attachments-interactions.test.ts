@@ -123,11 +123,14 @@ describe('wireTicketAttachmentActions (HS2-1KM6MB)', () => {
   });
 
   it('edits a batch label: begin focuses, input drafts, Enter blurs and refocuses after the save settles', async () => {
-    handler('dblclick', 'edit-attachment-batch-label')({}, { open: true });
-    handler('dblclick', 'edit-attachment-batch-label')({}, { open: false });
+    // The heading's Edit action and a double-click on the heading both open the editor (HS2-K9HSXZ).
+    handler('click', 'edit-attachment-batch-label')({}, { open: true });
+    handler('click', 'edit-attachment-batch-label')({}, { open: false });
+    handler('dblclick', 'data-attachment-batch-title')({}, { open: true });
+    handler('dblclick', 'data-attachment-batch-title')({}, { open: false });
     await Promise.resolve();
-    expect(editorInput.focus).toHaveBeenCalledTimes(1);
-    expect(editorInput.select).toHaveBeenCalledTimes(1);
+    expect(editorInput.focus).toHaveBeenCalledTimes(2);
+    expect(editorInput.select).toHaveBeenCalledTimes(2);
     const field = { blur: vi.fn(), closest: () => ({ dataset: { attachmentIds: 'a,b' } }) };
     handler('input', 'attachment-batch-label')({}, field);
     expect(labelEditor.input).toHaveBeenCalledWith(field);
@@ -146,6 +149,22 @@ describe('wireTicketAttachmentActions (HS2-1KM6MB)', () => {
     handler('keydown', 'attachment-batch-label')({ key: 'a' }, field);
     expect(labelEditor.escape).toHaveBeenCalledWith(field);
     expect(field.blur).toHaveBeenCalledTimes(2);
+  });
+
+  it('blurs a Web Awesome editor on Escape only after it renders the restored label (HS2-K9HSXZ)', async () => {
+    let rendered!: () => void;
+    const field = {
+      blur: vi.fn(),
+      closest: () => ({ dataset: { attachmentIds: 'a' } }),
+      updateComplete: new Promise<void>((resolve) => (rendered = resolve)),
+    };
+    labelEditor.escape.mockClear();
+    handler('keydown', 'attachment-batch-label')({ key: 'Escape' }, field);
+    expect(labelEditor.escape).toHaveBeenCalledWith(field);
+    expect(field.blur).not.toHaveBeenCalled();
+    rendered();
+    await field.updateComplete;
+    expect(field.blur).toHaveBeenCalledTimes(1);
   });
 
   it('regroups a dragged attachment into an existing or new group and ignores drops without a drag', () => {

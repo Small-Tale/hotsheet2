@@ -5395,12 +5395,12 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
         .first(),
     ).toBeVisible();
   }
-  await expect(page.getByRole('button', { name: 'Edit batch label Brian · Round 1 · Problem evidence' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Edit batch label Corrected implementation' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit Batch Label Brian · Round 1 · Problem evidence' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit Batch Label Corrected implementation' })).toBeVisible();
   await expect(
-    page.getByRole('button', { name: 'Edit batch label System · Batch 1 · Problem evidence' }),
+    page.getByRole('button', { name: 'Edit Batch Label System · Batch 1 · Problem evidence' }),
   ).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Edit batch label Legacy / Uncategorized' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit Batch Label Legacy / Uncategorized' })).toBeVisible();
   const annotatedCard = page
     .getByRole('region', { name: 'Editable' })
     .getByRole('button', { name: 'Open wide-layout.svg in media gallery, 2 annotations' });
@@ -5433,13 +5433,14 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
     node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() })),
   );
   await expect(editableDemo.locator('[data-attachment-group-drop-target]')).toHaveCount(5);
-  await expect(page.getByRole('button', { name: 'Edit batch label New group' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit Batch Label New group' })).toBeVisible();
   await surface.screenshot({ path: 'target/visual-captures/hs2-c0r4mx-regrouped-final.png' });
   const item = page.locator('[data-attachment-id="demo-video"]'),
     trigger = item.getByRole('button', { name: 'More Actions for choppy.mov' });
   await expect(item.getByRole('button')).toHaveCount(1);
-  await expect(trigger).toHaveAttribute('title', 'More actions for choppy.mov');
-  await expect(trigger.locator('[data-lucide="more-horizontal"]')).toBeVisible();
+  // A Kerf IconButton names the trigger; it has no hover title prop yet (HS2-K9HSXZ).
+  await expect(trigger).toBeVisible();
+  await expect(item.locator('[data-component="icon-button"] [data-lucide="more-horizontal"]')).toBeVisible();
   await trigger.click();
   let menu = page.locator('[data-context-menu="attachment"]');
   await expect(menu.getByRole('menuitem')).toHaveCount(6);
@@ -5462,9 +5463,9 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
   await page.setViewportSize({ width: 390, height: 844 });
   // Kerf 5.0.0-beta.56 collapses the catalog sidebar into a transient overlay on a small screen.
   await expect(page.locator('[data-component="catalog"]')).toHaveAttribute('data-sidebar-collapsed', 'true');
-  const batchHeader = page.locator('.ticket-attachments__batch > header').first(),
-    batchTitle = batchHeader.locator('.ticket-attachments__batch-title'),
-    batchPurpose = batchHeader.locator('select');
+  const batchHeader = page.locator('.ticket-attachments__batch').first(),
+    batchTitle = batchHeader.getByRole('heading', { level: 3 }),
+    batchPurpose = batchHeader.locator('wa-select[name="attachment-batch-purpose"]');
   await expect
     .poll(async () => ((await batchPurpose.boundingBox())?.y ?? 0) - ((await batchTitle.boundingBox())?.y ?? 0))
     .toBeGreaterThan(0);
@@ -5489,22 +5490,23 @@ test('styles and edits attachment group labels while preserving drag regrouping'
     first = groups.first();
   await expect(first).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(surface.locator('[data-lucide="grip-vertical"]')).toHaveCount(0);
-  const title = first.getByRole('button', { name: /Edit batch label/ }),
-    purpose = first.locator('select');
-  await expect(title).toHaveCSS('font-size', '16px');
-  expect((await purpose.boundingBox())!.width).toBeLessThan((await first.locator('header').boundingBox())!.width);
+  const title = first.getByRole('button', { name: /Edit Batch Label/ }),
+    purpose = first.locator('wa-select[name="attachment-batch-purpose"]');
+  // A large Kerf Text heading titles the batch; its Edit IconButton opens the label editor (HS2-K9HSXZ).
+  await expect(first.getByRole('heading', { level: 3 })).toHaveCSS('font-size', '20px');
+  expect((await purpose.boundingBox())!.width).toBeLessThan((await first.boundingBox())!.width);
   await title.dblclick();
-  const editor = first.getByRole('textbox', { name: /Batch label/ });
+  const editor = first.getByRole('textbox', { name: /Batch Label/ });
   await expect(editor).toBeFocused();
   await editor.fill('Discarded label');
   await editor.press('Escape');
   await expect(first.getByRole('button', { name: /Brian · Round 1 · Problem evidence/ })).toBeVisible();
   await expect(first.getByRole('button', { name: /Brian · Round 1 · Problem evidence/ })).toBeFocused();
-  await first.getByRole('button', { name: /Edit batch label/ }).dblclick();
+  await first.getByRole('button', { name: /Edit Batch Label/ }).dblclick();
   await editor.fill('Human review evidence');
   await editor.press('Enter');
-  await expect(first.getByRole('button', { name: 'Edit batch label Human review evidence' })).toBeVisible();
-  await expect(first.getByRole('button', { name: 'Edit batch label Human review evidence' })).toBeFocused();
+  await expect(first.getByRole('button', { name: 'Edit Batch Label Human review evidence' })).toBeVisible();
+  await expect(first.getByRole('button', { name: 'Edit Batch Label Human review evidence' })).toBeFocused();
   await page.locator('h2').first().click();
   await page.evaluate(
     () =>
@@ -5533,8 +5535,8 @@ test('styles and edits attachment group labels while preserving drag regrouping'
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.mouse.move(2, 2);
-  await expect(first.getByRole('button', { name: 'Edit batch label Human review evidence' })).toBeVisible();
-  expect((await purpose.boundingBox())!.width).toBeLessThan((await first.locator('header').boundingBox())!.width);
+  await expect(first.getByRole('button', { name: 'Edit Batch Label Human review evidence' })).toBeVisible();
+  expect((await purpose.boundingBox())!.width).toBeLessThan((await first.boundingBox())!.width);
   await surface.screenshot({ path: 'target/visual-captures/hs2-c0r4mx-feedback-narrow.png' });
 });
 
@@ -5547,8 +5549,8 @@ test('keeps a demo attachment label edit open across a late catalog rerender (HS
       .getByRole('region', { name: 'Editable', exact: true })
       .locator('[data-component="ticket-attachments"]'),
     first = surface.locator('[data-attachment-group-drop-target]').first();
-  await first.getByRole('button', { name: /Edit batch label/ }).dblclick();
-  const editor = first.getByRole('textbox', { name: /Batch label/ });
+  await first.getByRole('button', { name: /Edit Batch Label/ }).dblclick();
+  const editor = first.getByRole('textbox', { name: /Batch Label/ });
   await expect(editor).toBeFocused();
   await editor.fill('Typed before the rerender');
   await page.evaluate(() => {
@@ -5589,7 +5591,7 @@ test('shows append-only and unsupported attachment variants in the TicketAttachm
   await expect(appendOnly.locator('[data-attachment-group-drop-target]')).toHaveCount(0);
   await expect(appendOnly.locator('[data-attachment-new-group-drop-target]')).toHaveCount(0);
   await expect(appendOnly.getByText('New group', { exact: true })).toHaveCount(0);
-  await expect(appendOnly.locator('select[name="attachment-batch-purpose"]')).toHaveJSProperty('disabled', true);
+  await expect(appendOnly.locator('wa-select[name="attachment-batch-purpose"]')).toHaveJSProperty('disabled', true);
   const link = appendOnly.getByRole('link', { name: 'trace.log' });
   await expect(link).toHaveAttribute('target', '_blank');
   await expect(link).toHaveCSS('cursor', 'pointer');
@@ -9757,10 +9759,11 @@ test('aligns TicketAttachments group titles, chips, rows, and thumbnails on one 
       const base = node.getBoundingClientRect().left,
         left = (selector: string) => Math.round(node.querySelector(selector)!.getBoundingClientRect().left - base),
         range = document.createRange();
-      range.selectNodeContents(node.querySelector('.ticket-attachments__batch-title')!);
+      // Kerf ListHeader, the Select pill's Badge, and the ContentItem row icon share the 17px edge (HS2-K9HSXZ).
+      range.selectNodeContents(node.querySelector('.ticket-attachments__batch h3')!);
       return [
         Math.round(range.getClientRects()[0].left - base),
-        left('.ticket-attachments__batch > header select'),
+        left('.ticket-attachments__batch wa-select [data-component="badge"]'),
         left('.ticket-attachments__item svg'),
         left('.ticket-attachments__image-grid button'),
       ];

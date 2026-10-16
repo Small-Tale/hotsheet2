@@ -11,6 +11,8 @@ import { TICKET_ATTACHMENTS_PICKER } from './ticket-attachments';
 
 const ATTACHMENT_DROP_TARGET = ATTACHMENTS_AND_GALLERY_TARGETS.attachmentDropTarget.selector;
 const GROUP_DROP_TARGETS = '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]';
+/** The batch heading Kerf ListHeader renders for an editable batch (HS2-K9HSXZ). */
+const BATCH_TITLE = '[data-attachment-batch-title]';
 const LABEL_FIELD = ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchLabelField.selector;
 /** Kerf's FileDropZone root; its own drops arrive through `wireFilePickers`. */
 const FILE_DROP_ZONE = '[data-component="file-drop-zone"]';
@@ -106,14 +108,24 @@ export function wireTicketAttachmentActions(root: HTMLElement, bindings: TicketA
       labelEditor.input(target as HTMLInputElement);
     }),
   );
+  const beginLabelEdit = (target: Element) => {
+    const input = labelEditor.begin(target);
+    if (!input) return;
+    queueMicrotask(() => {
+      input.focus();
+      input.select();
+    });
+  };
+  // The batch heading's Edit action opens the label editor; double-clicking the heading itself stays a
+  // shortcut (HS2-K9HSXZ). Repeating either gesture keeps the open edit and its draft.
   lifetime.add(
-    delegate(root, 'dblclick', ATTACHMENTS_AND_GALLERY_ACTIONS.editAttachmentBatchLabel.selector, (_event, target) => {
-      const input = labelEditor.begin(target);
-      if (!input) return;
-      queueMicrotask(() => {
-        input.focus();
-        input.select();
-      });
+    delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.editAttachmentBatchLabel.selector, (_event, target) => {
+      beginLabelEdit(target);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'dblclick', BATCH_TITLE, (_event, target) => {
+      beginLabelEdit(target);
     }),
   );
   lifetime.add(
@@ -123,24 +135,35 @@ export function wireTicketAttachmentActions(root: HTMLElement, bindings: TicketA
       if (key !== 'Escape' && key !== 'Enter') return;
       const ids = input.closest<HTMLElement>('[data-attachment-ids]')?.dataset.attachmentIds;
       if (key === 'Escape') labelEditor.escape(input);
-      input.blur();
-      // The title button replaces the editor only once the blur's save settles, which can take longer
-      // than a couple of frames under load; restore focus after that, not on a frame count (HS2-VRBDPV).
-      const settled = labelFinish ?? Promise.resolve(true);
-      const restore = () =>
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            if (ids)
-              root
-                .querySelector<HTMLElement>(
-                  `[data-component="ticket-attachments"] [data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`,
-                )
-                ?.focus();
-          }),
-        );
-      settled.then(restore, restore);
+      // The editor is a Web Awesome input: blurring before it renders the restored value would let
+      // its native change event write the discarded draft back (HS2-K9HSXZ).
+      const rendered =
+        key === 'Escape' ? (input as Partial<{ updateComplete: Promise<unknown> }>).updateComplete : undefined;
+      if (rendered)
+        void rendered.then(() => {
+          finishWithKey(input, ids);
+        });
+      else finishWithKey(input, ids);
     }),
   );
+  function finishWithKey(input: HTMLInputElement, ids: string | undefined) {
+    input.blur();
+    // The title and its Edit action replace the editor only once the blur's save settles, which can take longer
+    // than a couple of frames under load; restore focus after that, not on a frame count (HS2-VRBDPV).
+    const settled = labelFinish ?? Promise.resolve(true);
+    const restore = () =>
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          if (ids)
+            root
+              .querySelector<HTMLElement>(
+                `[data-component="ticket-attachments"] [data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`,
+              )
+              ?.focus();
+        }),
+      );
+    settled.then(restore, restore);
+  }
   lifetime.add(
     delegateCapture(root, 'blur', LABEL_FIELD, (_event, target) => {
       const pending = labelEditor.finish(target);

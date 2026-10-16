@@ -257,7 +257,12 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(css).toMatch(/ticket-attachments__image-grid button \{[^}]*max-width: remify\(220px\)/);
     expect(css).toMatchSource(/ticket-attachments__image-grid :is\(img,video\) \{[^}]*object-fit: contain/);
     expect(css).not.toContain('ticket-attachments__count');
-    expect(attachments).toContain('aria-label="More Actions for one.png" title="More actions for one.png"');
+    // Kerf ContentItem, Text, and IconButton own the row chrome inside the app-owned wrapper (HS2-K9HSXZ).
+    expect(attachments).toMatch(
+      /data-component="ticket-attachment-item"[^>]*>\s*<div[^>]*data-component="content-item"[^>]*data-appearance="neutral"/u,
+    );
+    expect(attachments).toMatch(/data-component="icon-button"[^>]*data-action="open-attachment-menu"/u);
+    expect(attachments).toContain('More Actions for one.png');
     expect(attachments).toContain('title="one.png — double-click to open"');
     expect(attachments).toContain('data-lucide="more-horizontal"');
     const unsupported = String(TicketAttachments({ attachments: [{ id: 'one', name: 'one.png' }], enabled: false }));
@@ -267,7 +272,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(unsupported).not.toContain('data-action="open-attachment-row"');
     expect(unsupported).not.toContain('data-drag-attachment-id');
     expect(unsupported).not.toContain('data-action="edit-attachment-batch-label"');
-    expect(unsupported).toContain('<h3 class="ticket-attachments__batch-title">Legacy / Uncategorized</h3>');
+    expect(unsupported).toMatch(/data-component="list-header"[\s\S]*?<h3[^>]*>[\s\S]*?Legacy \/ Uncategorized/u);
     // An append-only provider (GitHub assets repository, HS2-HSA64D) adds files and opens existing
     // ones by link, but offers no regrouping, relabelling, renaming, deletion, or local open.
     const appendOnly = String(
@@ -291,9 +296,8 @@ describe('ticket metadata controls and inspector panels', () => {
     // No regroup targets: neither group drop targets nor the New group zone (HS2-0RTH3J).
     expect(appendOnly).not.toContain('data-attachment-group-drop-target');
     expect(appendOnly).not.toContain('data-attachment-new-group-drop-target');
-    expect(appendOnly).toContain(
-      'name="attachment-batch-purpose" aria-label="Purpose for Legacy / Uncategorized" disabled',
-    );
+    expect(appendOnly).toMatch(/<wa-select[^>]*name="attachment-batch-purpose"[^>]*disabled/u);
+    expect(appendOnly).toContain('Purpose for Legacy / Uncategorized');
     expect(appendOnly).toContain(
       '<a href="/attachment/two" target="_blank" rel="noopener" title="Open log.txt">log.txt</a>',
     );
@@ -343,15 +347,15 @@ describe('ticket metadata controls and inspector panels', () => {
         message: 'Attachments are view-only in linked ticket readers.',
       }),
     );
-    expect(markup).toContain('<h3 class="ticket-attachments__batch-title">Linked evidence</h3>');
+    expect(markup).toMatch(/<h3[^>]*>[\s\S]*?Linked evidence/u);
     expect(markup).toContain('value="Linked evidence"');
     expect(markup).not.toContain('Unreachable draft');
     expect(markup).not.toContain('data-editing-label');
     expect(markup).not.toContain('data-action="edit-attachment-batch-label"');
     expect(markup).not.toContain('data-attachment-group-drop-target');
     expect(markup).not.toContain('data-drag-attachment-id');
-    expect(markup).toMatch(/name="attachment-batch-label" disabled/);
-    expect(markup).toMatch(/name="attachment-batch-purpose"[^>]* disabled/);
+    expect(markup).toMatch(/<wa-input[^>]*name="attachment-batch-label"[^>]* disabled/u);
+    expect(markup).toMatch(/<wa-select[^>]*name="attachment-batch-purpose"[^>]*disabled/u);
     expect(markup).toContain('Attachments are view-only in linked ticket readers.');
     expect(markup).not.toContain('This provider does not support');
   });
@@ -422,9 +426,12 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(markup).toContain('New group');
     expect(markup).not.toContain('data-lucide="grip-vertical"');
     expect(markup).toContain('data-action="edit-attachment-batch-label"');
-    expect(markup).toContain('Double-click to edit batch label');
-    expect(markup).toContain('ticket-attachments__batch-title-editor');
-    expect(markup).toContain('name="attachment-batch-purpose"');
+    expect(markup).toContain('data-attachment-batch-title="true"');
+    expect(markup).toContain('Edit Batch Label AI · Round 1 · Correctness evidence');
+    expect(markup).toMatch(/<wa-input[^>]*name="attachment-batch-label"[^>]*hidden/u);
+    expect(markup).toMatch(/<wa-select[^>]*name="attachment-batch-purpose"/u);
+    // Uncategorized carries a sentinel value; Web Awesome treats an empty option value as no choice.
+    expect(markup).toContain('value="uncategorized"');
   });
 
   it('coalesces separate upload batches into one round until workflow state changes', () => {
@@ -439,24 +446,16 @@ describe('ticket metadata controls and inspector panels', () => {
     ]);
   });
 
-  it('gives the attachment menu trigger visible hover and keyboard-focus feedback', () => {
+  it('styles only app-owned attachment markup: the row wrapper cursor and drag targets (HS2-K9HSXZ)', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-attachments.css'), 'utf8');
     expect(css).toContainSource('.ticket-attachments__item[data-action="open-attachment-row"] { cursor: pointer; }');
-    expect(css).toContainSource('.ticket-attachments__item-menu:hover, .ticket-attachments__item-menu:focus-visible');
-    expect(css).toContain('outline: var(--wa-focus-ring)');
-  });
-
-  it('presents attachment groups as transparent titled sections with compact purpose tags', () => {
-    const css = readFileSync(resolve(import.meta.dirname, 'ticket-attachments.css'), 'utf8');
-    expect(css).toContain('.ticket-attachments__batch {');
-    expect(css).toContain('background: transparent');
-    expect(css).toContainSource('.ticket-attachments__batch[data-drag-over="true"] { outline: var(--wa-focus-ring)');
-    expect(css).toContain('.ticket-attachments__batch-title {');
-    expect(css).toContain('font-size: var(--wa-font-size-m)');
-    expect(css).toContain('height: auto');
-    expect(css).toContain('overflow-wrap: anywhere');
-    expect(css).toContain('white-space: normal');
-    expect(css).toContainSource('.ticket-attachments__batch > header select { width: auto');
-    expect(css).toContain('field-sizing: content');
+    expect(css).toContainSource(
+      ':is(.ticket-attachments__batch, .ticket-attachments__new-group)[data-drag-over="true"] { outline: var(--wa-focus-ring)',
+    );
+    // Kerf ContentItem, IconButton, ListHeader, wa-input, and Select own the former row, menu, title,
+    // editor, and purpose pill chrome.
+    for (const removed of ['ticket-attachments__item-menu', 'batch-title-editor', 'header select', 'field-sizing'])
+      expect(css).not.toContain(removed);
+    expect(css).not.toMatch(/\.kui-/u);
   });
 });

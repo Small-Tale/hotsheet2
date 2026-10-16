@@ -33,8 +33,10 @@ async function collect(page: Page) {
   await expect(page.locator('[name="ticket-tag-input"]')).toBeVisible();
   sizes.tag = await fontSizes(page, '[name="ticket-tag-input"]');
   await page.goto('/ux-demo?component=ticket-attachments');
-  await expect(page.locator('[name="attachment-batch-purpose"]').first()).toBeVisible();
-  sizes.purpose = await fontSizes(page, '[name="attachment-batch-purpose"]');
+  // The purpose pill is a Kerf Select (no text entry); the batch label editor is the text field (HS2-K9HSXZ).
+  await page.locator('[data-action="edit-attachment-batch-label"]').first().click();
+  await expect(page.locator('wa-input[name="attachment-batch-label"]:not([hidden])').first()).toBeVisible();
+  sizes.batchLabel = await fontSizes(page, 'wa-input[name="attachment-batch-label"]');
   await page.goto('/ux-demo?component=provider-setup-form');
   await expect(page.locator('input.provider-setup-form__field-control[name="connection-locator"]')).toBeVisible();
   sizes.locator = await fontSizes(page, 'input.provider-setup-form__field-control');
