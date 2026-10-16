@@ -1,3 +1,5 @@
+import { writeFile } from 'node:fs/promises';
+
 import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
@@ -522,8 +524,12 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
             body: document.body.innerText.slice(0, 800),
           }))
           .catch((reason: unknown) => ({ evaluateFailed: String(reason) }));
+        // Attach as a file: an inline `body` attachment never reaches disk under the local
+        // line reporter, which lost the 2026-10-16 reproduction's diagnosis.
+        const diagnosis = test.info().outputPath(`hs2-p83x5x-${component}-${width}.json`);
+        await writeFile(diagnosis, JSON.stringify({ component, width, loadedMs, state, events }, null, 2));
         await test.info().attach(`hs2-p83x5x-${component}-${width}.json`, {
-          body: JSON.stringify({ component, width, loadedMs, state, events }, null, 2),
+          path: diagnosis,
           contentType: 'application/json',
         });
         await page.screenshot({ path: `target/visual-captures/hs2-p83x5x-${component}-${width}.png`, fullPage: true });
