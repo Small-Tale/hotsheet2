@@ -240,7 +240,10 @@ duplicate slugs, and lets a corrupt file fail only the lookup of its own recover
 Server `blocked_by` references on create and update (`ops::resolve_blockers_with`) and the
 git provider the server builds for each hosted store (`GitProvider::with_resolver`, given
 `StoreEntry::resolver`) resolve through the same index-backed lookup, so provider routes
-and blocker references never walk a hosted store on a hit (HS2-HEKMKH); the git provider's
+and blocker references never walk a hosted store on a hit (HS2-HEKMKH). Distilled activity
+notes (whose provider is built over the hosted entry) and the note route's cross-ticket
+`attachment:[TICKET-SLUG]` reference checks (`ops::attachment_reference_warnings_with`) use
+the same lookup (HS2-2MJCMV); the git provider's
 own default, used without an index (CLI, MCP), stays the walk. The git provider also
 refuses a self-referencing `blocked_by` on update, as the server route does.
 On a generated 3,000-ticket store (debug build), a slug `GET /tickets/<SLUG>` dropped from

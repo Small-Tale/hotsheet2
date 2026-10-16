@@ -1760,6 +1760,17 @@ fn prose_boundary_after(bytes: &[u8], index: usize) -> bool {
 /// which filename characters are legal. Notes remain valid even when warnings are returned so
 /// callers can attach the referenced payload immediately after creating the note.
 pub fn attachment_reference_warnings(store: &FsStore, owner: &Ticket, text: &str) -> Vec<String> {
+    attachment_reference_warnings_with(owner, text, |needle| resolve(store, needle))
+}
+
+/// [`attachment_reference_warnings`] resolving each `attachment:[TICKET-SLUG]` selector
+/// through `resolve`, so a server with a store index avoids walking the store for every
+/// cross-ticket reference (HS2-2MJCMV).
+pub fn attachment_reference_warnings_with(
+    owner: &Ticket,
+    text: &str,
+    resolve: impl Fn(&str) -> Result<Option<Ticket>, StoreError>,
+) -> Vec<String> {
     let mut warnings = Vec::new();
     let mut seen = HashSet::new();
     for (start, _) in text.match_indices("attachment:") {
@@ -1782,7 +1793,7 @@ pub fn attachment_reference_warnings(store: &FsStore, owner: &Ticket, text: &str
             };
             ticket_label = after_open[..close].trim().to_string();
             tail = &after_open[close + 1..];
-            let Some(resolved) = resolve(store, &ticket_label).ok().flatten() else {
+            let Some(resolved) = resolve(&ticket_label).ok().flatten() else {
                 let warning = format!(
                     "attachment reference targets missing ticket '{ticket_label}'; correct the ticket slug or create the ticket"
                 );
@@ -4365,6 +4376,62 @@ mod tests {
             hotsheet_model::AttachmentActorRole::Ai
         );
         assert_eq!(note.actor.as_ref().unwrap().id.as_deref(), Some("hotsheet"));
+    }
+
+    /// HS2-2MJCMV: cross-ticket selectors resolve through an injected resolver (the
+    /// server's index), and the store-walking wrapper keeps the walk's answer.
+    #[test]
+    fn attachment_reference_selectors_resolve_through_the_injected_resolver() {
+        let (_d, store) = store();
+        let owner = create(
+            &store,
+            Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap(),
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        let target_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap();
+        create(
+            &store,
+            target_id,
+            "HS",
+            ts("2026-08-19T00:00:01Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        let (target, _) = store
+            .write_attachment(
+                &target_id,
+                Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB1").unwrap(),
+                ts("2026-08-19T00:01:00Z"),
+                "proof.png",
+                b"bytes",
+            )
+            .unwrap();
+        let note = format!("see attachment:[{}]proof.png", target.slug);
+        assert!(attachment_reference_warnings(&store, &owner, &note).is_empty());
+
+        // A corrupt decoy declaring the slug fails the walk, so the walking wrapper warns
+        // while an index-backed resolver still finds the real ticket.
+        let decoy = store.ticket_path(&Ulid::new());
+        std::fs::create_dir_all(decoy.parent().unwrap()).unwrap();
+        std::fs::write(&decoy, format!("---\nslug: {}\n---\nbroken", target.slug)).unwrap();
+        assert_eq!(
+            attachment_reference_warnings(&store, &owner, &note).len(),
+            1
+        );
+        let calls = std::cell::Cell::new(0);
+        let indexed = |needle: &str| {
+            calls.set(calls.get() + 1);
+            assert!(needle.eq_ignore_ascii_case(&target.slug));
+            Ok(Some(target.clone()))
+        };
+        assert!(attachment_reference_warnings_with(&owner, &note, indexed).is_empty());
+        assert_eq!(calls.get(), 1);
+        // An injected miss is reported as a missing ticket.
+        let warnings = attachment_reference_warnings_with(&owner, &note, |_| Ok(None));
+        assert!(warnings[0].contains("missing ticket"), "{warnings:?}");
     }
 
     #[test]

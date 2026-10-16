@@ -252,7 +252,9 @@ pub(crate) fn do_update_with_ticket(
     }
     let mut response = api_ticket(entry, &latest)?;
     if let Some(text) = note_text.filter(|text| !text.is_empty()) {
-        response.warnings = ops::attachment_reference_warnings(&entry.store, &latest, &text);
+        // Cross-ticket `attachment:[SLUG]` selectors resolve through the index (HS2-2MJCMV).
+        response.warnings =
+            ops::attachment_reference_warnings_with(&latest, &text, |needle| entry.resolve(needle));
     }
     Ok((response, latest))
 }

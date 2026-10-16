@@ -111,7 +111,19 @@ impl AppState {
         ) else {
             return;
         };
-        let provider = GitProvider::new(store_id, store.clone());
+        // The hosted entry's index-backed resolver answers the note's ticket lookup, so
+        // a distilled note never walks the store (HS2-2MJCMV). A store this server does
+        // not host (or a path replaced since hosting) keeps the walking provider.
+        let hosted = self
+            .host
+            .get(&store_id)
+            .filter(|entry| entry.store.root() == store.root());
+        let provider = match hosted {
+            Some(entry) => {
+                GitProvider::new(store_id, store.clone()).with_resolver(entry.resolver())
+            }
+            None => GitProvider::new(store_id, store.clone()),
+        };
         if let Err(error) = hotsheet_ticketing::write_distilled_note(
             &provider,
             &request.provenance.ticket,
@@ -173,6 +185,54 @@ mod activity_distillation_tests {
         assert_eq!(ticket.notes[0].kind, NoteKind::Activity);
         assert!(ticket.notes[0].text.starts_with("Recorded a decision"));
         assert!(!ticket.notes[0].text.contains("private decision text"));
+    }
+
+    /// HS2-2MJCMV: a distilled note addressed by slug resolves through the hosted entry's
+    /// index, so a corrupt decoy declaring the same slug (which fails the store walk) does
+    /// not block the note.
+    #[test]
+    fn distilled_notes_resolve_their_ticket_through_the_hosted_index() {
+        let root = tempfile::tempdir().unwrap();
+        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
+        let ticket_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
+        let ticket = ops::create(
+            &store,
+            ticket_id,
+            "HS",
+            Timestamp::new("2026-09-02T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        Settings::new(store.root())
+            .set(
+                "activity_distillation",
+                json!({"enabled":true,"adapter":"deterministic"}),
+                Scope::Local,
+            )
+            .unwrap();
+        let state = AppState::new(store.clone(), "secret".into()).unwrap();
+        let decoy = store.ticket_path(&Ulid::new());
+        std::fs::create_dir_all(decoy.parent().unwrap()).unwrap();
+        std::fs::write(&decoy, format!("---\nslug: {}\n---\nbroken", ticket.slug)).unwrap();
+        assert!(
+            ops::resolve(&store, &ticket.slug).is_err(),
+            "the walk fails"
+        );
+
+        let mut event = ActivityEvent::new(
+            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "2026-09-02T01:00:00Z",
+            "codex",
+            ActivityKind::Decision,
+            json!({"text":"decision"}),
+        );
+        event.ticket = Some(ticket.slug.clone());
+        event.session = Some("session-1".into());
+        state.record_activity(&store, event).unwrap();
+
+        let ticket = store.read_ticket(&ticket_id).unwrap();
+        assert_eq!(ticket.notes.len(), 1, "the indexed lookup wrote the note");
+        assert_eq!(ticket.notes[0].kind, NoteKind::Activity);
     }
 
     #[test]
