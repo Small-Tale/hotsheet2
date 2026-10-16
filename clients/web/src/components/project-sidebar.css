@@ -1,11 +1,3 @@
-/* The footer caption is centered; Kerf Text has no alignment prop, and the paragraph keeps its data-component hook. */
-.project-sidebar__work-summary {
-  margin: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  line-height: 1.25;
-  text-align: center;
-}
 /* The row's grid track sizes the DriveControl beside the conversation toggle; the fixed options menu takes no track. */
 .project-sidebar__drive-row {
   display: grid;
@@ -27,8 +19,8 @@
   right: 0;
   pointer-events: none;
 }
-/* App-owned native toggle beside DriveControl: Kerf's ToolbarControlGroup needs a Toolbar parent
-   (KUI-L201) and Kerf has no standalone icon toggle yet (KF-HBWDHE). */
+/* App-owned native toggle beside DriveControl until Kerf IconToggleButton shows the not-allowed
+   cursor while disabled (KF-HJD6XB). */
 .project-sidebar__conversation {
   display: grid;
   width: remify(44px);

@@ -591,9 +591,7 @@
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific DriveControl behavior."
       ],
-      "publicClasses": [
-        "drive-control"
-      ],
+      "publicClasses": [],
       "publicTokens": [],
       "source": "src/components/drive-control.tsx",
       "geometry": {

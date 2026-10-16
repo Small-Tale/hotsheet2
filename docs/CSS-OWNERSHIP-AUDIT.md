@@ -56,7 +56,7 @@ All paths are repository-relative. **Current** means the primary's active scope;
 | `clients/web/src/components/conversation-export-dialog.css`   | Export choices/collisions are domain state; dialog, section, radio choices, error and layout chrome are generic.                                                                                                                                                                | Dialogs                                            |
 | `clients/web/src/components/corrupt-ticket-row.css`           | Recovery selection and shake feedback are owned. Row/header/body/action/prose/code framing are generic.                                                                                                                                                                         | Ticket presentations                               |
 | `clients/web/src/components/cursor-semantics.css`             | Kerf's document baseline owns native and disabled wa-button cursors (HS2-CYSE1W); this keeps only data-action option rows and resize-drag cursors.                                                                                                                              | Retain; inspect controls during migrations         |
-| `clients/web/src/components/drive-control.css`                | HS2-KM90NF: 8 justified rules, no !important; awaits a Kerf split action (KF-KFC7C2). Contrast bug HS2-9G0Y8W.                                                                                                                                                                  | Shell/project                                      |
+| `clients/web/src/components/drive-control.css`                | Removed by HS2-TQDZET (Kerf SplitButton). Was HS2-KM90NF: 8 justified rules, no !important; awaits a Kerf split action (KF-KFC7C2). Contrast bug HS2-9G0Y8W.                                                                                                                    | Shell/project                                      |
 | `clients/web/src/components/drive-options-menu.css`           | Removed (HS2-EG31YP); Kerf's context `PopupMenu` anchor replaced the shared wrapper (HS2-H4JZDQ).                                                                                                                                                                               | Shell/project                                      |
 | `clients/web/src/components/flow-back-button.css`             | Back policy is owned; button and text/icon row geometry are generic.                                                                                                                                                                                                            | Shell/project                                      |
 | `clients/web/src/components/hs1-migration.css`                | Migration state/progress are owned; intro/path/destination/actions/details and flat banner geometry are generic.                                                                                                                                                                | Dialogs/feedback                                   |
@@ -258,6 +258,20 @@ frame` insets its rows. Also retained are the phrasing-only copy grids inside ro
 - The remaining generic chrome is split into its own tickets: NoteCard (`HS2-CDPB73`), AIConversation
   (`HS2-4RXG6W`), and MarkdownEditor, TicketInfoPanel surfaces, and TicketFieldConflict versions
   (`HS2-26E5P7`).
+
+## Shell and project chrome update (HS2-TQDZET)
+
+- `drive-control.css` is removed. DriveControl renders Kerf `SplitButton` (the old `KF-KFC7C2` gap):
+  success fill while idle, neutral fill while running, with its `drive-control` identity on an
+  unstyled wrapper. The `KUI-L004` profile exception for its options half is gone.
+- The project work summary is centered Kerf `Text` (`align="center"`), so its CSS rule is gone.
+  The test hook is now `data-work-summary`.
+- The project sidebar chat toggle stays an app-owned native button: Kerf `IconToggleButton` shows
+  the default cursor while disabled, not this app's not-allowed cursor (`KF-HJD6XB`; `HS2-Q5ZZFF`
+  adopts it).
+- Retained: the ProjectSummary chart tile (bar geometry), the project tab, tab bar, and close or
+  open dialog geometry, the app shell safe areas, and the workspace header rules recorded in their
+  manifest rows. Further shell, tab, and header chrome is tracked in `HS2-9TH4AC`.
 
 ## Terminal chrome update (HS2-1Q6GER)
 

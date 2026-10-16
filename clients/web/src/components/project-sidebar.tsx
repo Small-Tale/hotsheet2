@@ -4,6 +4,7 @@ import './project-sidebar.css';
 import { Badge } from '@kerfjs/ui/badge';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Text } from '@kerfjs/ui/text';
 import { MessageSquare } from 'lucide';
 
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
@@ -70,9 +71,15 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
   // this inner List rather than on the pane footer (HS2-KMDJRH).
   const footer = (
     <List gap="xs" controlInsets="trbl">
-      <p
-        class="project-sidebar__work-summary"
-        data-component="project-work-summary"
+      {/* Kerf Text centers and sizes the work summary caption (HS2-TQDZET). */}
+      <Text
+        variant="p"
+        size="compact"
+        tone="quiet"
+        align="center"
+        lineHeight="tight"
+        flush
+        data-work-summary=""
         title={
           props.countsPartial
             ? `At least ${props.openCount} open, ${props.upNextCount} up next, and ${props.activeCount} active`
@@ -85,7 +92,7 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
         }
       >
         {`${props.openCount} open, ${props.upNextCount} up next, ${props.activeCount} active`}
-      </p>
+      </Text>
       <div class="project-sidebar__drive-row">
         <DriveControl
           running={props.driveRunning}
@@ -106,6 +113,8 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
           />
         )}
         <span class="project-sidebar__conversation-anchor">
+          {/* Stays an app-owned native toggle: Kerf IconToggleButton shows the default cursor while
+              disabled, not this app's not-allowed cursor (KF-HJD6XB, HS2-TQDZET). */}
           <button
             type="button"
             class="project-sidebar__conversation"

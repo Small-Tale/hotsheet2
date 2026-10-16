@@ -6298,11 +6298,13 @@ test('keeps the DriveControl label at WCAG AA contrast in both states and scheme
   for (const colorScheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme });
     await page.goto('/ux-demo?component=drive-control');
-    const drive = page.locator('[data-component="drive-control"]');
+    const drive = page.locator('[data-component="drive-control"]'),
+      // The Kerf SplitButton paints the fill and label color; its primary half takes clicks (HS2-TQDZET).
+      primary = drive.locator('[data-action="toggle-drive"]');
     for (const running of ['false', 'true']) {
-      if ((await drive.getAttribute('data-running')) !== running) await drive.click();
+      if ((await drive.getAttribute('data-running')) !== running) await primary.click();
       await expect(drive).toHaveAttribute('data-running', running);
-      const ratio = await drive.evaluate((element) => {
+      const ratio = await drive.locator('[data-component="split-button"]').evaluate((element) => {
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = 1;
         const context = canvas.getContext('2d', { willReadFrequently: true });
@@ -6452,7 +6454,7 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await page.goto('/ux-demo?component=project-sidebar');
   const sidebar = page.locator('.project-sidebar');
   await expect(sidebar).toBeVisible();
-  await expect(sidebar.locator('[data-component="project-work-summary"]')).toHaveText('17 open, 4 up next, 2 active');
+  await expect(sidebar.locator('[data-work-summary]')).toHaveText('17 open, 4 up next, 2 active');
   for (const component of [
     'project-summary',
     'repository-summary',
@@ -6575,7 +6577,7 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   const assertDrivePinned = async () => {
     const geometry = await sidebar.evaluate((node) => ({
       sidebarBottom: node.getBoundingClientRect().bottom,
-      driveBottom: node.querySelector('.drive-control')!.getBoundingClientRect().bottom,
+      driveBottom: node.querySelector('[data-component="drive-control"]')!.getBoundingClientRect().bottom,
     }));
     expect(geometry.sidebarBottom - geometry.driveBottom).toBeLessThan(16);
   };
@@ -6590,7 +6592,7 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await expect(handle).toHaveAttribute('aria-valuenow', '400');
   const scrollState = await sidebar.evaluate((node) => {
     const content = node.querySelector('.kui-pane__content')!;
-    const drive = node.querySelector('.drive-control')!;
+    const drive = node.querySelector('[data-component="drive-control"]')!;
     return {
       contentClientHeight: content.clientHeight,
       contentScrollHeight: content.scrollHeight,

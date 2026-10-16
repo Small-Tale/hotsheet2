@@ -385,6 +385,9 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   tool and running semantics, preceded by the centered open/Up Next project summary.
   The primary side opens/reuses a dedicated drawer chat and runs `$hotsheet`; the arrow
   side opens `DriveOptionsMenu` for Default or plugin-discovered provider/model/effort.
+  It is a Kerf `SplitButton` on the success fill that switches to the neutral fill while the
+  workflow runs, inside an unstyled `data-component="drive-control"` wrapper, and the project
+  summary caption is centered Kerf `Text` (HS2-TQDZET).
   - primary launch/resume action; duplicate activation is disabled while busy
   - active tool/connection state from the shared long-poll event stream
   - `DriveOptionsMenu` — **production + demo built**: hierarchical session override menu

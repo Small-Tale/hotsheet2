@@ -17905,12 +17905,12 @@ test('shows reactive open and Up Next counts immediately above Drive', async ({ 
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.waitForTimeout(400);
   const sidebar = page.locator('#app-left-rail'),
-    summary = sidebar.locator('[data-component="project-work-summary"]'),
+    summary = sidebar.locator('[data-work-summary]'),
     drive = sidebar.locator('[data-component="drive-control"]');
   await expect(summary).toHaveText('6 open, 1 up next, 0 active');
   const geometry = await sidebar.evaluate((node) => {
     const sidebarBox = node.getBoundingClientRect(),
-      summaryBox = node.querySelector('[data-component="project-work-summary"]')!.getBoundingClientRect(),
+      summaryBox = node.querySelector('[data-work-summary]')!.getBoundingClientRect(),
       driveBox = node.querySelector('[data-component="drive-control"]')!.getBoundingClientRect();
     return {
       centerDelta: Math.abs(summaryBox.left + summaryBox.width / 2 - (sidebarBox.left + sidebarBox.width / 2)),
@@ -24121,11 +24121,8 @@ test('shows local tickets and a partial-data warning when a GitHub source is rat
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   await expect(page.getByText("provider 'github-mixed' is rate limited", { exact: false })).toBeVisible();
-  await expect(page.locator('[data-component="project-work-summary"]')).toContainText('1 open');
-  await expect(page.locator('[data-component="project-work-summary"]')).toHaveAttribute(
-    'aria-label',
-    /^At least 1 open/,
-  );
+  await expect(page.locator('[data-work-summary]')).toContainText('1 open');
+  await expect(page.locator('[data-work-summary]')).toHaveAttribute('aria-label', /^At least 1 open/);
   await expect(page.getByText('No tickets yet')).toHaveCount(0);
   await page.getByLabel('Columns View').click();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
@@ -24147,8 +24144,8 @@ test('shows local tickets and a partial-data warning when a GitHub source is rat
   });
   partial = false;
   await page.reload();
-  await expect(page.locator('[data-component="project-work-summary"]')).toContainText('1 open');
-  await expect(page.locator('[data-component="project-work-summary"]')).not.toHaveAttribute('aria-label', /At least/);
+  await expect(page.locator('[data-work-summary]')).toContainText('1 open');
+  await expect(page.locator('[data-work-summary]')).not.toHaveAttribute('aria-label', /At least/);
   await expect(page.getByText("provider 'github-mixed' is rate limited", { exact: false })).toHaveCount(0);
 });
 
@@ -24237,14 +24234,11 @@ test('marks continuation totals partial while retaining both healthy pages (HS2-
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT08"]')).toBeVisible();
   await expect(page.getByText('provider unavailable on continuation')).toBeVisible();
-  await expect(page.locator('[data-component="project-work-summary"]')).toHaveAttribute(
-    'aria-label',
-    /^At least 2 open/,
-  );
+  await expect(page.locator('[data-work-summary]')).toHaveAttribute('aria-label', /^At least 2 open/);
   partial = false;
   await page.reload();
-  await expect(page.locator('[data-component="project-work-summary"]')).toContainText('2 open');
-  await expect(page.locator('[data-component="project-work-summary"]')).not.toHaveAttribute('aria-label', /At least/);
+  await expect(page.locator('[data-work-summary]')).toContainText('2 open');
+  await expect(page.locator('[data-work-summary]')).not.toHaveAttribute('aria-label', /At least/);
   await expect(page.getByText('provider unavailable on continuation')).toHaveCount(0);
 });
 

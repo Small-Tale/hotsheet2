@@ -364,10 +364,15 @@ describe('ProjectSidebar component slice', () => {
     const idle = String(DriveControl({ running: false, tool: 'Codex', optionsOpen: true }));
     expect(idle).toContain('Drive with Codex');
     expect(idle).toContain('data-action="toggle-drive-options"');
-    expect(idle).toMatch(/data-lucide="triangle"[^>]*fill="currentColor"/);
+    // A Kerf SplitButton on the success fill; the running workflow switches it to neutral (HS2-TQDZET).
+    expect(idle).toMatch(
+      /data-component="split-button"[^>]*data-tone="success"|data-tone="success"[^>]*data-component="split-button"/u,
+    );
     expect(idle).toContain('aria-expanded="true"');
     const running = String(DriveControl({ running: true, tool: 'Codex' }));
     expect(running).toContain('Codex workflow is running');
+    expect(running).toContain('data-tone="neutral"');
+    expect(running).toContain('data-running="true"');
     const disabled = String(
       DriveControl({ running: true, tool: 'Codex', disabled: true, disabledReason: 'Cannot stop here.' }),
     );
@@ -404,8 +409,11 @@ describe('ProjectSidebar component slice', () => {
       'drive-control',
     ])
       expect(markup).toContain(`data-component="${component}"`);
-    expect(markup).toContain('data-component="project-work-summary">7 open, 3 up next, 2 active');
-    expect(markup.indexOf('project-work-summary')).toBeLessThan(markup.indexOf('data-component="drive-control"'));
+    // Kerf Text centers the work summary caption (HS2-TQDZET).
+    const summary = markup.match(/<p[^>]*data-work-summary=""[^>]*>7 open, 3 up next, 2 active/u)?.[0] ?? '';
+    expect(summary).toContain('data-component="text"');
+    expect(summary).toContain('data-align="center"');
+    expect(markup.indexOf('data-work-summary')).toBeLessThan(markup.indexOf('data-component="drive-control"'));
   });
 
   it('builds the sidebar on the unpadded kui-pane so children own their inset', () => {
@@ -446,7 +454,9 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toMatch(/data-control-insets="rl"[^>]*><button type="button" class="project-summary"/);
     expect(css).not.toMatch(/\.(project-summary|drive-control)\b/);
     expect(css).toMatch(/\.project-sidebar__drive-row \{[^}]*grid-template-columns: minmax\(0, 1fr\) auto/);
-    // The conversation toggle stays app-owned native button chrome until Kerf ships a standalone icon toggle (KF-HBWDHE).
+    // Kerf Text owns the work summary (HS2-TQDZET); the conversation toggle stays app-owned until
+    // IconToggleButton's disabled cursor matches the app (KF-HJD6XB).
+    expect(css).not.toContain('.project-sidebar__work-summary');
     expect(css).toContain('.project-sidebar__conversation');
     // Kerf's Toolbar pins its zones to their columns, so the lone collapse control already sits at the
     // gutter; the app adds no rule on the pane header toolbar (HS2-PKPGGZ).

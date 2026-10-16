@@ -1771,13 +1771,9 @@
       },
       "boundaries": {
         "rootClass": null,
-        "publicClasses": [
-          "drive-control"
-        ],
+        "publicClasses": [],
         "publicTokens": [],
-        "placeableClasses": [
-          "drive-control"
-        ]
+        "placeableClasses": []
       },
       "diagnostics": [],
       "provenance": {
