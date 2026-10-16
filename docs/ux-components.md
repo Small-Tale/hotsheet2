@@ -2882,6 +2882,12 @@ an own class or configures the child through its props:
     light text color while `fill` retains long-name truncation (HS2-V5VS0A, KF-7288MD).
   - Its toolbar buttons carry no app class: Kerf's `ToolbarControlGroup` owns their disabled
     cursor, dimming, and absent hover chrome (`KF-FTADQT`, adopted in HS2-0MH5V1).
+  - Pressed toggles (Annotate media, the markup tools) set `aria-pressed` in groups with
+    `selectedChrome="filled"` and `selectedTone="brand"`; the dark chrome maps that fill to the loud
+    brand pair through the public `--kui-color-brand-*-normal` tokens on its own wrappers, so no
+    `!important` pressed class remains. The annotation count is a solid info Kerf `Badge` pinned to
+    the toggle's corner, and the notes-rail prompts, crop hint, and volume label are Kerf `Text`
+    (HS2-5B8FMA).
   - The video carries `attachment-gallery__video`.
   - Media-control icons use LucideIcon `size` instead of a gallery-wide `svg` rule that also
     reached Kerf's toolbars.

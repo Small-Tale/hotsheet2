@@ -202,6 +202,21 @@ the remaining wrapper markup that only existed because Badge lacked props:
   (`KF-8MYB8B`); `Text` has no heading size matching the former 16px semibold title, and
   `ListHeader` cannot wrap, so titles are 20px (`KF-43XH56`). `HS2-D087X2` adopts both.
 
+## Attachment gallery update (HS2-5B8FMA)
+
+- The `!important` `.attachment-gallery__pressed` override is gone. Toggles set `aria-pressed`, and
+  their `ToolbarControlGroup`s use `selectedChrome="filled"` with `selectedTone="brand"`. The app's
+  own toolbar and footer wrappers map the brand fill to the loud pair through public
+  `--kui-color-brand-*-normal` tokens. The matching `KUI-L008` profile exception is removed.
+- The annotation count is a solid info `Badge`; its app span only pins it to the toggle corner.
+- Notes-rail prompts, the crop hint, and the volume label are Kerf `Text`, so the `> p`, crop-hint
+  font, and volume-label rules are gone. The note field label has its own class, so the Closed outline
+  toggle no longer needs `display: flex !important`.
+- Retained as app-owned: the full-screen shell and dark palette, media stage and scaling, the
+  annotation overlay, handles and badges, the timeline track, ticks, and range handles, the native
+  note textarea and its iOS floor, the selected-note quote, and the counter's tabular width.
+  `KF-7288MD` (filename foreground) stays counted.
+
 ## Terminal chrome update (HS2-1Q6GER)
 
 - `TerminalDashboard` empty, loading, and message copy now composes Kerf `List` and `Text`. The

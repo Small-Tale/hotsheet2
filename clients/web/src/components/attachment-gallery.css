@@ -32,6 +32,10 @@
   background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 72%, transparent);
   backdrop-filter: blur(remify(12px));
   --kui-toolbar-trailing-gap: var(--kui-space-m);
+  /* Pressed toggles (markup) use the groups' filled selected chrome; on the dark chrome its brand
+     fill is the loud brand pair (HS2-5B8FMA). */
+  --kui-color-brand-fill-normal: var(--wa-color-brand-fill-loud);
+  --kui-color-brand-on-normal: var(--wa-color-brand-on-loud);
 }
 .attachment-gallery__count {
   display: inline-grid;
@@ -44,22 +48,12 @@
   position: relative;
 }
 .attachment-gallery__annotation-count {
+  /* Pins the Kerf Badge count to the markup toggle's corner (HS2-5B8FMA). */
   position: absolute;
   top: 0;
   right: 0;
-  display: grid;
-  min-width: remify(16px);
-  height: remify(16px);
-  padding-inline: var(--kui-space-2xs);
-  box-sizing: border-box;
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-brand-on-loud);
-  background: var(--wa-color-brand-fill-loud);
-  font-size: var(--wa-font-size-3xs);
-  font-weight: var(--wa-font-weight-semibold);
-  line-height: 1;
+  display: flex;
   transform: translate(28%, -28%);
-  place-items: center;
 }
 /* Media stage beside the annotation-notes rail when markup is on. */
 .attachment-gallery__workspace {
@@ -89,9 +83,6 @@
   background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 90%, transparent);
   align-content: start;
   gap: var(--kui-space-m);
-}
-.attachment-gallery__notes > p {
-  margin: 0;
 }
 /* Annotation note rows are Kerf pressed ListItems (HS2-RSBVSZ). The rail is the gallery's inverse dark
    chrome, so it sets ListItem's public color tokens rather than restyling the rows. */
@@ -159,7 +150,6 @@
 }
 .attachment-gallery__crop-hint {
   color: var(--wa-color-neutral-on-loud);
-  font-size: var(--wa-font-size-xs);
 }
 @media (max-width: 600px) {
   .attachment-gallery__crop-hint {
@@ -358,10 +348,6 @@
 .attachment-gallery__annotation i[data-annotation-handle^='point-'] {
   cursor: move;
 }
-.attachment-gallery__pressed {
-  color: var(--wa-color-brand-on-loud) !important;
-  background: var(--wa-color-brand-fill-loud) !important;
-}
 /* Footer chrome: the selected note, its editor (native textarea with the iOS font floor), intent
    toggles, and the timed-media timeline, playback, range, and volume controls. */
 .attachment-gallery__footer {
@@ -393,7 +379,7 @@
   order: -1;
   gap: var(--kui-space-xs);
 }
-.attachment-gallery__editor > label {
+.attachment-gallery__note-field {
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr);
@@ -426,7 +412,7 @@
   color: white;
 }
 .attachment-gallery__closed-toggle {
-  display: flex !important;
+  display: flex;
   align-items: center;
   gap: var(--kui-space-xs);
 }
@@ -505,9 +491,6 @@
   width: remify(160px);
   gap: var(--kui-space-xs);
 }
-.attachment-gallery__volume-panel > span {
-  font-size: var(--wa-font-size-xs);
-}
 .attachment-gallery__volume-panel input {
   display: block;
   width: 100%;
@@ -517,6 +500,9 @@
    of the zoom group's width and no Kerf root carries an app rule (HS2-VABS08). */
 .attachment-gallery__footer-actions {
   --kui-color-neutral-fill-normal: var(--hs-floating-control-surface);
+  /* The markup group's filled pressed tool reads as the loud brand pair, as in the toolbar. */
+  --kui-color-brand-fill-normal: var(--wa-color-brand-fill-loud);
+  --kui-color-brand-on-normal: var(--wa-color-brand-on-loud);
   position: relative;
   height: remify(40px);
 }

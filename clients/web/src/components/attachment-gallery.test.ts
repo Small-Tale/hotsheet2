@@ -114,7 +114,7 @@ describe('AttachmentGallery', () => {
     for (const selector of [
       '\\.attachment-gallery__notes',
       '\\.attachment-gallery__editor',
-      '\\.attachment-gallery__editor > label',
+      '\\.attachment-gallery__note-field',
     ])
       expect(css).toMatch(new RegExp(`${selector} \\{[^}]*grid-template-columns: minmax\\(0, 1fr\\);`));
     expect(css).toMatch(/\.attachment-gallery__editor textarea \{[^}]*max-width: 100%;/);
@@ -314,6 +314,17 @@ describe('AttachmentGallery', () => {
     expect(markup).toContain('Check **this**');
     expect(markup).toContain('aria-label="Finish markup, 1 annotation"');
     expect(markup).toContain('attachment-gallery__annotation-count');
+    // Kerf owns the count pill and the pressed chrome: a solid info Badge and aria-pressed toggles in
+    // groups with filled selected chrome, not an app pressed class (HS2-5B8FMA).
+    expect(markup).toMatch(
+      /attachment-gallery__annotation-count[^>]*>\s*<span[^>]*data-component="badge"[^>]*data-appearance="solid"/u,
+    );
+    expect(markup).toMatch(/data-action="toggle-gallery-markup"[^>]*aria-pressed="true"/u);
+    expect(markup).not.toContain('attachment-gallery__pressed');
+    expect(markup.match(/data-selected-chrome="filled"/g)?.length).toBeGreaterThanOrEqual(2);
+    const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
+    expect(css).not.toContain('attachment-gallery__pressed');
+    expect(css).not.toMatch(/display: flex !important/u);
   });
   it('draws every shape, colours primary intents, and keeps ticket-wide badges on the media', () => {
     const base: MediaAnnotation = { id: 'mark', x: 1000, y: 2000, width: 3000, height: 4000, text: '' };

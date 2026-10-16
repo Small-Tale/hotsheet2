@@ -21191,7 +21191,7 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
   await page.keyboard.press('Escape'); // cancel the in-progress gesture
   await page.mouse.up();
   await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(0);
-  await expect(gallery.getByRole('button', { name: 'Add rectangle' })).toHaveClass(/attachment-gallery__pressed/);
+  await expect(gallery.getByRole('button', { name: 'Add rectangle' })).toHaveAttribute('aria-pressed', 'true');
   await page.keyboard.press('Escape'); // then return to Select
   const drag = async (tool: 'strike' | 'arrow' | 'freehand', start: [number, number], end: [number, number]) => {
     await gallery.getByRole('button', { name: markupToolLabels[tool as keyof typeof markupToolLabels] }).click();

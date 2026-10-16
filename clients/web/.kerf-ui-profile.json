@@ -254,12 +254,6 @@
       "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: className={`ai-conversation__message ai-conversation__message--${message.role}`}"
     },
     {
-      "id": "state-modifier-classes-attachment-gallery",
-      "rules": ["KUI-L008"],
-      "target": "src/components/attachment-gallery.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={className || undefined}"
-    },
-    {
       "id": "state-modifier-classes-connection-state-banner",
       "rules": ["KUI-L008"],
       "target": "src/components/connection-state-banner.tsx",

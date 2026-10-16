@@ -1,6 +1,7 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import './attachment-gallery.css';
 
+import { Badge } from '@kerfjs/ui/badge';
 import { ChoiceChips } from '@kerfjs/ui/choice-chips';
 import { px } from '@kerfjs/ui/css-values';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
@@ -9,6 +10,7 @@ import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { StateBanner } from '@kerfjs/ui/state-banner';
+import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -191,30 +193,34 @@ function GalleryButton({
   label,
   icon,
   disabled = false,
-  className = '',
+  pressed,
   count = 0,
 }: {
   action: string;
   label: string;
   icon: typeof X;
   disabled?: boolean;
-  className?: string;
+  /** A toggle's state; its ToolbarControlGroup paints the pressed chrome (HS2-5B8FMA). */
+  pressed?: boolean;
   count?: number;
 }) {
   const accessibleLabel = count > 0 ? `${label}, ${count} ${count === 1 ? 'annotation' : 'annotations'}` : label;
   return (
     <button
       type="button"
-      class={className || undefined}
       data-action={action}
+      aria-pressed={pressed === undefined ? undefined : String(pressed)}
       aria-label={accessibleLabel}
       title={accessibleLabel}
       disabled={disabled}
     >
       <LucideIcon icon={icon} name={label.toLowerCase().replaceAll(' ', '-')} />
       {count > 0 && (
+        // The app-owned span pins a Kerf Badge to the button's corner (HS2-5B8FMA).
         <span class="attachment-gallery__annotation-count" aria-hidden="true">
-          {count}
+          <Badge appearance="solid" tone="info" size="compact" ariaHidden>
+            {count}
+          </Badge>
         </span>
       )}
     </button>
@@ -404,7 +410,9 @@ export function GalleryVolumePanel({ volume, muted }: { volume: number; muted: b
   const silent = muted || volume === 0;
   return (
     <div class="attachment-gallery__volume-panel">
-      <span>Volume</span>
+      <Text variant="span" size="compact">
+        Volume
+      </Text>
       <input
         type="range"
         name="gallery-volume"
@@ -533,13 +541,13 @@ export function AttachmentGallery({
                   disabled={images.length < 2}
                 />
               </ToolbarControlGroup>
-              <ToolbarControlGroup label="Media Actions" tone="dark">
+              <ToolbarControlGroup label="Media Actions" tone="dark" selectedChrome="filled" selectedTone="brand">
                 <GalleryButton
                   action="toggle-gallery-markup"
                   label={markup ? 'Finish markup' : 'Annotate media'}
                   icon={Pencil}
                   disabled={!annotationEnabled || saveState === 'saving'}
-                  className={markup ? 'attachment-gallery__pressed' : ''}
+                  pressed={markup}
                   count={annotations.length}
                 />
                 <GalleryButton
@@ -693,7 +701,11 @@ export function AttachmentGallery({
           <aside class="attachment-gallery__notes" aria-label="Annotation Notes">
             <div class="attachment-gallery__notes-list" role="group" aria-label="Annotations">
               <List gap="2xs">
-                {annotations.length === 0 && <p>No annotations yet. Draw a mark to add a note.</p>}
+                {annotations.length === 0 && (
+                  <Text variant="p" flush>
+                    No annotations yet. Draw a mark to add a note.
+                  </Text>
+                )}
                 {annotations.map((annotation, annotationIndex) => (
                   <ListItem
                     action={ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryAnnotation.value}
@@ -706,10 +718,14 @@ export function AttachmentGallery({
                 ))}
               </List>
             </div>
-            {!selectedEditableAnnotation && annotations.length > 0 && <p>Select an annotation to edit its note.</p>}
+            {!selectedEditableAnnotation && annotations.length > 0 && (
+              <Text variant="p" flush>
+                Select an annotation to edit its note.
+              </Text>
+            )}
             {selectedEditableAnnotation && (
               <section class="attachment-gallery__editor" aria-label="Selected Annotation Editor">
-                <label>
+                <label class="attachment-gallery__note-field">
                   Note (Markdown)
                   <textarea
                     {...ATTACHMENTS_AND_GALLERY_ACTIONS.editGalleryNote.attrs}
@@ -898,21 +914,25 @@ export function AttachmentGallery({
                 )}
               </ToolbarControlGroup>
               {cropMode && (
-                <span class="attachment-gallery__crop-hint">Drag on the image to choose the visible area.</span>
+                <span class="attachment-gallery__crop-hint">
+                  <Text variant="span" size="compact">
+                    Drag on the image to choose the visible area.
+                  </Text>
+                </span>
               )}
             </FloatingToolbar>
           )}
           {markup && !cropMode && (
             <span class="attachment-gallery__markup-position">
               <FloatingToolbar label="Media Markup" position="bottom" inset={px(0)}>
-                <ToolbarControlGroup label="Media Markup">
+                <ToolbarControlGroup label="Media Markup" selectedChrome="filled" selectedTone="brand">
                   {(['select', 'rect', 'freehand', 'arrow', 'insertion', 'strike'] as const).map((choice) =>
                     choice === 'rect' ? (
                       <GalleryButton
                         action="toggle-gallery-draw"
                         label="Add rectangle"
                         icon={Square}
-                        className={tool === 'rect' ? 'attachment-gallery__pressed' : ''}
+                        pressed={tool === 'rect'}
                       />
                     ) : (
                       <button
@@ -922,7 +942,6 @@ export function AttachmentGallery({
                         aria-label={annotationToolLabels[choice]}
                         aria-pressed={String(tool === choice)}
                         title={annotationToolLabels[choice]}
-                        class={tool === choice ? 'attachment-gallery__pressed' : undefined}
                       >
                         <LucideIcon icon={annotationToolIcons[choice].icon} name={annotationToolIcons[choice].name} />
                       </button>
