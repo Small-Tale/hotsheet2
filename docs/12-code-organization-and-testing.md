@@ -448,6 +448,13 @@ The bundled testing guidance (`plugins/shared/testing-philosophy.md` v5) carries
 tiers for every project; each project names its own T2 surfaces. A reviewer may raise a tier.
 The completion `## Confidence` verification factor is judged against the tier.
 
+**Targeted reruns (HS2-AEE51Y).** After a failure, agents rerun only the failing tests, for
+example `nextest -E 'test(<name>)'`, `vitest <file> -t '<name>'`, or `playwright -g '<title>'`,
+until they pass. They then run the ticket's affected set once. A rebase onto commits that do
+not touch the ticket's area needs no rerun; an overlapping rebase reruns only the affected
+tests of the overlap. A passing suite is never rerun just to double-check. The bundled
+instructions (v61) carry the same rule.
+
 ### 12.7.1 Tiers
 
 - **Unit** (`cargo test` via **`cargo-nextest`**): pure logic against injected fakes

@@ -130,6 +130,11 @@ instruction block asks the `## Preliminary thoughts` note to declare the tier, o
 note for trivial work. It also asks agents to judge the completion confidence's
 verification factor against that tier. Refresh upgrades the exact v4 testing section.
 
+Instructions v61 (HS2-AEE51Y) add rerun discipline to the Testing list. After a failure,
+agents rerun only the failing tests, then the affected set once. A rebase that does not
+touch the ticket's area needs no rerun, and a passing suite is never rerun just to
+double-check.
+
 The ticket workflow section (HS2-PDD7XG) includes project-neutral note guidance: use
 activity history for meaningful subtask starts and finishes, preserve conclusions in
 regular Markdown notes, pair AI activity with a short `note_summary`, and send multiline

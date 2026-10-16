@@ -68,6 +68,9 @@ fn every_builtin_carries_the_full_default_guidance() {
             "Keep test output quiet",
             // Preliminary thoughts declare a test risk tier (HS2-GC3D2X).
             "its test risk tier (`T0` trivial,",
+            // Targeted reruns after a failure, none after a clean rebase (HS2-AEE51Y).
+            "Rerun only what failed",
+            "Never rerun a passing suite to double-check",
             "update them **in the same change as the code**",
             "commit per ticket",
             "Pushing is up to this repository",

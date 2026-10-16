@@ -261,6 +261,17 @@ claim note for trivial work. A reviewer or the maintainer may raise it.
 Rate the `## Confidence` verification factor against the declared tier. A fully checked
 T0 change can score high.
 
+**Targeted reruns (HS2-AEE51Y).** After a failure, rerun only the failing tests until they
+pass:
+
+- Rust: `node scripts/test-quiet.mjs rust -- -p <crate> -E 'test(<name>)'`
+- web unit: `npx vitest run <file> -t '<name>'`
+- browser: `HOTSHEET_WEB_TEST_PORT=<port> npx playwright test <spec> -g '<title>'`
+
+Then run the ticket's affected set once. A rebase onto commits outside the ticket's area
+needs no rerun; an overlap reruns only the overlap's affected tests. Never rerun a passing
+suite to double-check.
+
 ### This project's test setup
 
 > **Implemented test paths.** Rust unit/integration tests run with `cargo nextest run`;
@@ -419,7 +430,7 @@ References to the _original_ Hot Sheet (the predecessor at
 predecessor links; they do not attribute Hot Sheet 2.
 
 <!-- BEGIN hotsheet:claude -->
-<!-- hotsheet-instructions-version: 60 -->
+<!-- hotsheet-instructions-version: 61 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -568,6 +579,11 @@ local path only as clearly labeled machine-local diagnostic evidence.
 - **Keep test output quiet.** Run suites with failure-only reporters (the project's quiet
   test wrapper when it has one) and read the summary and failure excerpts, not the full log.
   A cheaper background agent may run the tests and report only pass/fail and the failures.
+- **Rerun only what failed.** After a failure, rerun just the failing tests (for example
+  `cargo nextest run -E 'test(<name>)'`, `vitest run <file> -t '<name>'`, or
+  `playwright test -g '<title>'`) until they pass, then run the ticket's affected set once.
+  A rebase onto commits that do not touch the ticket's area needs no rerun; an overlapping
+  one reruns only the overlap's affected tests. Never rerun a passing suite to double-check.
 - **Fix lint and type errors before finishing** — as you go, not batched.
 
 ## Requirements & docs

@@ -11,7 +11,7 @@
 
 <!-- BEGIN hotsheet:agents-md -->
 <!-- hotsheet-shared-section: antigravity, codex, opencode -->
-<!-- hotsheet-instructions-version: 60 -->
+<!-- hotsheet-instructions-version: 61 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -160,6 +160,11 @@ local path only as clearly labeled machine-local diagnostic evidence.
 - **Keep test output quiet.** Run suites with failure-only reporters (the project's quiet
   test wrapper when it has one) and read the summary and failure excerpts, not the full log.
   A cheaper background agent may run the tests and report only pass/fail and the failures.
+- **Rerun only what failed.** After a failure, rerun just the failing tests (for example
+  `cargo nextest run -E 'test(<name>)'`, `vitest run <file> -t '<name>'`, or
+  `playwright test -g '<title>'`) until they pass, then run the ticket's affected set once.
+  A rebase onto commits that do not touch the ticket's area needs no rerun; an overlapping
+  one reruns only the overlap's affected tests. Never rerun a passing suite to double-check.
 - **Fix lint and type errors before finishing** — as you go, not batched.
 
 ## Requirements & docs
