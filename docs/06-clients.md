@@ -3703,7 +3703,9 @@ per-project. Headless parity is `hotsheet-cli settings set <key> <value>`: these
 to `--scope global`, refuse a project scope, and are range-checked. The server route is
 `GET`/`PUT /terminal-limits`. It reports `physical_memory_bytes`, the memory-derived
 `defaults`, the explicit `configured` values (`null` when unset), and the `effective` values.
-A `PUT` replaces all three limits, and an out-of-range value is refused with 422.
+A `PUT` replaces all three limits, and an out-of-range value is refused with 422. The client
+loads the limits once per server origin, not once per project tab, so switching between open
+projects never refetches them ahead of the cached switch's first paint (HS2-8YHY6V).
 
 **Memory-aware defaults.** Browsers expose no usable memory signal: Safari has none, and
 Chromium's `navigator.deviceMemory` is rounded and capped at 8 GB. The server therefore

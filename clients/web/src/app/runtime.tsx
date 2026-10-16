@@ -1192,11 +1192,15 @@ export async function startHotSheetWebClient() {
   onTerminalLimitsChange(() => {
     enforceWarmTerminalLimit();
   });
+  // Every project's `apiPath` is its own checkout route, so key the load by the server origin; keying it
+  // by `apiPath` refetched on each tab switch, ahead of the cached switch's first paint (HS2-8YHY6V).
   let terminalLimitsServer: string | undefined;
   effect(() => {
     const current = project();
-    if (!current || current.apiPath === terminalLimitsServer) return;
-    terminalLimitsServer = current.apiPath;
+    if (!current) return;
+    const server = new URL(current.apiPath, window.location.href).origin;
+    if (server === terminalLimitsServer) return;
+    terminalLimitsServer = server;
     void terminalLimitsSettings.refresh();
   });
   // Measure each project's repositories once when it is first shown, so the shell can warn while

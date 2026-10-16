@@ -26069,6 +26069,11 @@ test('switches already-open projects from cache within one frame and rejects sta
     return route.fulfill({ status: 201, json: project });
   });
   await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
+  // Terminal limits are machine-wide: one load per server, not one per project tab or switch (HS2-8YHY6V).
+  const terminalLimitReads: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.endsWith('/terminal-limits')) terminalLimitReads.push(request.url());
+  });
   let ticketReads = 0;
   await page.route(/\/tickets(?:\?.*)?$/, (route) => {
     if (route.request().method() !== 'GET') return route.fallback();
@@ -26137,18 +26142,19 @@ test('switches already-open projects from cache within one frame and rejects sta
     page.evaluate(() => {
       const state = window as typeof window & {
         __projectSwitchPainted?: boolean;
-        __projectRefreshBeforePaint?: boolean;
+        __projectRefreshBeforePaint?: string[];
         __projectRefreshInstrumented?: boolean;
       };
       state.__projectSwitchPainted = false;
-      state.__projectRefreshBeforePaint = false;
+      state.__projectRefreshBeforePaint = [];
       if (!state.__projectRefreshInstrumented) {
         const nativeFetch = window.fetch.bind(window);
         window.fetch = (...args) => {
           const input = args[0],
             url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+          // Name each early request so a regression says which route jumped the paint (HS2-8YHY6V).
           if (url.includes('/__hotsheet/project-api/') && !state.__projectSwitchPainted)
-            state.__projectRefreshBeforePaint = true;
+            state.__projectRefreshBeforePaint!.push(url);
           return nativeFetch(...args);
         };
         state.__projectRefreshInstrumented = true;
@@ -26165,9 +26171,9 @@ test('switches already-open projects from cache within one frame and rejects sta
   await expect.poll(() => pending.has('demo')).toBe(true);
   expect(
     await page.evaluate(
-      () => (window as typeof window & { __projectRefreshBeforePaint?: boolean }).__projectRefreshBeforePaint,
+      () => (window as typeof window & { __projectRefreshBeforePaint?: string[] }).__projectRefreshBeforePaint,
     ),
-  ).toBe(false);
+  ).toEqual([]);
   await observeRefreshPaintOrder();
   expect(await switchWithinFrame('other')).toBeLessThan(100);
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toBeVisible();
@@ -26175,9 +26181,9 @@ test('switches already-open projects from cache within one frame and rejects sta
   await expect.poll(() => pending.has('other')).toBe(true);
   expect(
     await page.evaluate(
-      () => (window as typeof window & { __projectRefreshBeforePaint?: boolean }).__projectRefreshBeforePaint,
+      () => (window as typeof window & { __projectRefreshBeforePaint?: string[] }).__projectRefreshBeforePaint,
     ),
-  ).toBe(false);
+  ).toEqual([]);
   expect(
     await page.evaluate(
       () => (window as typeof window & { __projectSwitchTicketGhosts?: string[] }).__projectSwitchTicketGhosts,
@@ -26188,6 +26194,7 @@ test('switches already-open projects from cache within one frame and rejects sta
   await release('demo', [{ ...row, title: 'Stale demo response must stay hidden' }]);
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toContainText('Other project refreshed ticket');
   await expect(page.getByText('Stale demo response must stay hidden')).toHaveCount(0);
+  expect(terminalLimitReads).toHaveLength(1);
   await expect(projectTabs.filter({ hasText: 'demo' }).locator('.project-tab__work-count')).not.toContainText('≥');
   await expect(projectTabs.filter({ hasText: 'other' }).locator('.project-tab__work-count')).toHaveText('2');
   await page.screenshot({ path: 'target/visual-captures/hs2-q8n2q4-instant-project-switch-wide.png', fullPage: true });

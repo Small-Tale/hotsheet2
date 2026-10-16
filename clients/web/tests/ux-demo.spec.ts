@@ -6825,7 +6825,11 @@ test('catalogs shared application tabs and terminal-drawer tabs', async ({ page 
     .getByRole('region', { name: 'Project and Terminal Tabs' })
     .screenshot({ path: 'target/visual-captures/hs2-gx51f7-app-tabs-narrow.png' });
   const demoTabStrip = page.getByRole('region', { name: 'Project and Terminal Tabs' }).locator('[data-kui-tab-list]');
-  await expect.poll(() => demoTabStrip.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeGreaterThan(0);
+  // Two short tabs only just overflow 390 px: by 1 px in the macOS UI font and not at all in the CI
+  // runner's Arial-metric Liberation Sans (HS2-8YHY6V). Check the scroll at the 320 px phone floor, where
+  // the strip is 64 px short of its tabs even in the narrower Arial metrics.
+  await page.setViewportSize({ width: 320, height: 844 });
+  await expect.poll(() => demoTabStrip.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeGreaterThan(32);
   await demoTabStrip.evaluate((node) => (node.scrollLeft = node.scrollWidth));
   await expect(page.getByRole('tab', { name: /Terminal tab/ })).toBeInViewport();
   await page.goto('/ux-demo?component=terminal-drawer');
