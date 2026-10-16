@@ -312,6 +312,13 @@ fn base_tools_list() -> Value {
             }, "required": ["reference"] }
         },
         {
+            "name": "hotsheet_repository_size",
+            "description": "Read-only: report git object size (what a push to GitHub carries) for a checkout's code repository and each linked ticket store, plus each store's attachment payload. Each entry has a level: ok, warning (at GitHub's 5 GB soft limit), or critical (over its 10 GB hard limit). Same JSON as `hotsheet-cli checkout repo-size --json` and GET /checkouts/{id}/repository/size.",
+            "inputSchema": { "type": "object", "properties": {
+                "checkout": str_prop("checkout id, id prefix, alias, or path")
+            }, "required": ["checkout"] }
+        },
+        {
             "name": "hotsheet_claim",
             "description": "Claim one exact open, unblocked ticket by slug or ULID. A live same-worker retry is idempotent. Returns the claimed ticket without changing its durable status.",
             "inputSchema": { "type": "object", "properties": {
@@ -742,6 +749,12 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
         "hotsheet_checkouts" => backend.get("/checkouts", &[]).map_err(be_msg),
         "hotsheet_resolve_checkout" => backend
             .get(&format!("/checkouts/{}", arg_str(args, "reference")?), &[])
+            .map_err(be_msg),
+        "hotsheet_repository_size" => backend
+            .get(
+                &format!("/checkouts/{}/repository/size", arg_str(args, "checkout")?),
+                &[],
+            )
             .map_err(be_msg),
         "hotsheet_claim" => {
             let id = arg_str(args, "id")?;
@@ -1285,6 +1298,20 @@ mod core_backend {
                 }
                 return Ok(to_value(&hotsheet_ticketing::calibration::calibration(
                     &tickets,
+                )));
+            }
+            // Repository size (HS2-R0131R): the server endpoint's and `checkout repo-size
+            // --json`'s report, computed locally from git object counts.
+            if let Some(reference) = path
+                .strip_prefix("/checkouts/")
+                .and_then(|rest| rest.strip_suffix("/repository/size"))
+            {
+                let checkout = self
+                    .checkout_registry
+                    .resolve(reference)
+                    .map_err(checkout_err)?;
+                return Ok(to_value(&hotsheet_ticketing::repository_size::report(
+                    &checkout,
                 )));
             }
             if let Some(reference) = path.strip_prefix("/checkouts/") {
@@ -4421,6 +4448,81 @@ mod tests {
             json!({ "connection": "github-main" }),
         );
         assert!(refused["error"].as_str().unwrap().contains("pass checkout"));
+    }
+
+    /// HS2-R0131R: `hotsheet_repository_size` returns the same JSON as
+    /// `checkout repo-size --json` serverless, and routes to the server endpoint over HTTP.
+    #[test]
+    fn repository_size_tool_matches_the_cli_report() {
+        let root = tempfile::tempdir().unwrap();
+        let checkout_root = root.path().join("code");
+        let store_root = root.path().join("store");
+        std::fs::create_dir_all(&checkout_root).unwrap();
+        let store = FsStore::init(&store_root, &StoreMetadata::new("HS")).unwrap();
+        let run = |dir: &std::path::Path, args: &[&str]| {
+            let status = hotsheet_ticketing::git::command()
+                .arg("-C")
+                .arg(dir)
+                .args(["-c", "user.name=Test", "-c", "user.email=test@example.com"])
+                .args(args)
+                .status()
+                .unwrap();
+            assert!(status.success());
+        };
+        run(&checkout_root, &["init", "-q"]);
+        std::fs::write(checkout_root.join("code.txt"), "code\n").unwrap();
+        run(&checkout_root, &["add", "code.txt"]);
+        run(&checkout_root, &["commit", "-qm", "initial"]);
+        run(&store_root, &["init", "-q"]);
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            root.path().join("home/checkouts.json"),
+        );
+        let checkout = registry
+            .register(
+                &checkout_root,
+                Some("sized"),
+                None,
+                vec![store_root.clone()],
+            )
+            .unwrap();
+        let expected = serde_json::to_value(hotsheet_ticketing::repository_size::report(
+            &registry.describe("sized").unwrap(),
+        ))
+        .unwrap();
+        let backend = CoreBackend::new(store).with_checkout_registry(registry);
+        for reference in ["sized", checkout.id.as_str()] {
+            let report = call(
+                &backend,
+                "hotsheet_repository_size",
+                json!({ "checkout": reference }),
+            );
+            assert_eq!(report, expected);
+        }
+        assert_eq!(expected["level"], "ok");
+        assert!(!expected["entries"].as_array().unwrap().is_empty());
+        let missing = call(
+            &backend,
+            "hotsheet_repository_size",
+            json!({ "checkout": "no-such" }),
+        );
+        assert!(
+            missing["error"].as_str().unwrap().contains("error 404"),
+            "{missing}"
+        );
+        let unnamed = call(&backend, "hotsheet_repository_size", json!({}));
+        assert!(unnamed["error"].as_str().unwrap().contains("checkout"));
+        // Over HTTP the tool reads the server endpoint.
+        let fake = FakeBackend::default();
+        call(
+            &fake,
+            "hotsheet_repository_size",
+            json!({ "checkout": "web" }),
+        );
+        assert!(
+            fake.calls.borrow()[0].starts_with("GET /checkouts/web/repository/size"),
+            "{:?}",
+            fake.calls.borrow()
+        );
     }
 
     #[test]

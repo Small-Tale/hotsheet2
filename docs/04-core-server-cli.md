@@ -226,7 +226,9 @@ current ticket-flow aggregates at
 checkout's code repository and every linked ticket source. The CLI twin,
 `hotsheet checkout repo-size [reference] [--json]`, calls the same function in
 `hotsheet-ticketing::repository_size`, prints the same JSON shape, and defaults the
-reference to the current directory.
+reference to the current directory. The read-only MCP tool `hotsheet_repository_size`
+(required `checkout` id, alias, or path) returns that same JSON, serverless or through the
+server endpoint (HS2-R0131R).
 
 - **Git objects:** loose plus packed bytes from `git count-objects -v`. This is what a push
   to GitHub carries.
