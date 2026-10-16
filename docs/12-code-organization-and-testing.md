@@ -581,8 +581,9 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   from repository Actions secrets; a test whose variables are unset skips. The normal `check` job
   runs a bounded Chromium Playwright smoke group covering deep links, gallery save retry,
   image/video freehand strokes, feedback replies, popup anchoring, concurrent autosave,
-  bulk provider projection, and ticket context menus (HS2-28MBS9, HS2-ZHN7XS). The full browser suite
-  remains a local gate for affected changes. **Pending (HS2-FPXSD0):** raise measured coverage
+  bulk provider projection, and ticket context menus (HS2-28MBS9, HS2-ZHN7XS). Locally, agents run
+  only the specs a ticket affects; the full browser suite runs in CI (below, HS2-D95TXJ).
+  **Pending (HS2-FPXSD0):** raise measured coverage
   floors, close remaining web coverage gaps, and add the macOS matrix leg for
   terminal/native-client surfaces.
 - The web gate installs Playwright Chromium and its Linux dependencies after `npm ci`
@@ -604,7 +605,19 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   30-fps H.264 fixture at `clients/web/tests/fixtures/video-scrub.mp4` to check decoded
   frames across paused seeks and held-pointer movement (HS2-DE781D). It waits for the
   final requested frame because a multi-step drag also decodes intermediate positions.
-  Run `npm run test:e2e` for the full browser suite locally.
+  `npm run test:e2e` still runs the full browser suite locally when a change warrants it.
+- **Full browser suite in CI (HS2-D95TXJ).** The `browser-full` job runs all Playwright
+  specs (Chromium plus the WebKit-launching specs) in four parallel shards. Each shard
+  runs `--shard=<i>/4 --fully-parallel --workers=2 --reporter=blob`. Test-level sharding
+  keeps the large `providers.spec.ts` from serializing one shard; the suite has no serial
+  or `beforeAll`-coupled tests. `browser-full-report` merges the shard blobs into one HTML
+  report (artifact `playwright-report-full`) and prints the slowest browser tests via
+  `scripts/test-profile.mjs`. The job verifies the full suite during a ticket's
+  `final_testing` handoff, so the local requirement is the affected specs only. The
+  `@ci-smoke` group stays as the fast early signal. Until the job has run green on main
+  it is `continue-on-error` (HS2-6H4M85 makes it required), so check its result
+  explicitly in `final_testing`. Quarantine flaky specs ([test-quarantine.md](test-quarantine.md))
+  rather than adding silent retries.
   A separate bounded WebKit job runs the inspector popup-anchor regression marked
   `@ci-webkit` (HS2-HASXWP), covering the Safari engine without delaying the main
   Chromium gate.

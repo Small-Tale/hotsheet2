@@ -46,6 +46,8 @@ coverage/
 **/test-results/
 /playwright-report/
 **/playwright-report/
+**/blob-report/
+**/all-blob-reports/
 **/.kerf-cache/
 **/kerf-ui-evidence/
 .nyc_output/

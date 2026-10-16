@@ -278,7 +278,8 @@ suite to double-check.
 > server HTTP/WS tests use temporary stores. `clients/web` runs Vitest unit tests and
 > Playwright browser flows (`npm run test:unit`, `npm run test:e2e`), including real
 > checkout/server compositions. CI runs web lint, typecheck, unit tests, build, Chromium
-> smoke flows, and a WebKit lane (`.github/workflows/ci.yml`). The migrator's Vitest
+> smoke flows, a WebKit lane, and the full Playwright suite in four shards
+> (`.github/workflows/ci.yml`). The migrator's Vitest
 > suite includes cross-language export/import conformance. Rust and migrator coverage
 > gates are separate; `node scripts/check-test-coverage.mjs` validates the feature
 > coverage matrix. A credentials-gated live tier runs separately. See
@@ -393,7 +394,9 @@ For each ticket:
 3. Run the affected unit, integration, browser, and visual tests. Use the full local
    suite for shared/risky changes and always before publishing an accumulated recovery
    batch (per [`docs/12-code-organization-and-testing.md`](docs/12-code-organization-and-testing.md)
-   §12.7).
+   §12.7). The full Playwright suite runs sharded in CI (`browser-full`, HS2-D95TXJ),
+   so locally run only the affected browser specs. During `final_testing`, check that
+   job's result explicitly while it stays non-blocking (HS2-6H4M85).
 4. Mark the ticket completed with its verification note, review the diff, make **one
    commit for that ticket**, and push immediately. Combine tickets in one commit only
    when their implementations overlap so strongly that separating them would be unsafe

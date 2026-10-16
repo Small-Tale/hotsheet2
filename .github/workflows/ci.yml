@@ -288,3 +288,130 @@ jobs:
         # a real regression fails the job without flaking on normal fluctuation. Raise as
         # coverage climbs.
         run: cargo llvm-cov report --summary-only --fail-under-lines 80
+
+  # The full Playwright suite, sharded (HS2-D95TXJ). Locally agents run only the specs a
+  # ticket affects; this job verifies the whole browser suite during the `final_testing`
+  # handoff. `--fully-parallel` balances shards at the test level (the suite has no
+  # serial or beforeAll-coupled tests). Non-blocking until it has run green on main
+  # (HS2-6H4M85 makes it required); its result is still visible on every run.
+  browser-full:
+    name: Full Playwright suite (shard ${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure a git identity (tests create + commit git stores)
+        run: |
+          git config --global user.name "Hot Sheet CI"
+          git config --global user.email "ci@smalltale.invalid"
+
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      - name: Cache cargo + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-browser-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-browser-
+            ${{ runner.os }}-cargo-
+
+      - name: Install the AVIF decoder
+        run: sudo apt-get update && sudo apt-get install -y libdav1d-dev meson ninja-build cmake nasm
+
+      - name: Build the CLI and server that the real-server flows spawn
+        run: cargo build -p hotsheet-cli -p hotsheet-server --bins
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: clients/web/package-lock.json
+
+      - name: Install web client dependencies
+        working-directory: clients/web
+        run: npm ci
+
+      - name: Install Playwright Chromium, WebKit, and Linux dependencies
+        working-directory: clients/web
+        run: |
+          for attempt in 1 2; do
+            if timeout --kill-after=15s 8m npx playwright install --with-deps chromium webkit; then
+              exit 0
+            fi
+            echo "::warning::Playwright dependency install attempt $attempt failed or timed out"
+          done
+          echo "::error::Playwright dependency install failed after two bounded attempts"
+          exit 1
+
+      - name: Run shard ${{ matrix.shard }} of the full suite
+        working-directory: clients/web
+        timeout-minutes: 35
+        env:
+          HOTSHEET_MEDIA_TEST_VIDEO: tests/fixtures/video-scrub.mp4
+        run: npx playwright test --shard=${{ matrix.shard }}/4 --fully-parallel --workers=2 --reporter=blob
+
+      - name: Upload the shard's blob report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-blob-${{ matrix.shard }}
+          path: clients/web/blob-report
+          retention-days: 7
+          if-no-files-found: ignore
+
+  browser-full-report:
+    name: Full Playwright suite (merged report)
+    needs: browser-full
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: clients/web/package-lock.json
+
+      - name: Install web client dependencies
+        working-directory: clients/web
+        run: npm ci
+
+      - name: Download the shard blob reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: playwright-blob-*
+          path: clients/web/all-blob-reports
+          merge-multiple: true
+
+      - name: Merge the shard reports
+        working-directory: clients/web
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: playwright-report.json
+        run: npx playwright merge-reports --reporter=html,json,list ./all-blob-reports
+
+      - name: Slowest browser tests
+        working-directory: clients/web
+        run: node ../../scripts/test-profile.mjs --top 20 --playwright playwright-report.json || true
+
+      - name: Upload the merged HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-full
+          path: clients/web/playwright-report
+          retention-days: 14
+          if-no-files-found: ignore

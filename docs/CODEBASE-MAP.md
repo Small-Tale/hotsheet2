@@ -478,7 +478,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   test-projects/             # full-binary E2E harnesses (not in-process unit tests)
     e2e-headless-claude.sh   #   headless loop: setup + drive hotsheet-mcp (serverless + server) [HS2-99]
   docs/                      # design docs 00–17 (+ this map)
-  .github/workflows/ci.yml   # Rust fmt/lint/nextest/coverage · web lint/unit/build/Chromium smoke/WebKit · migrator lint/coverage
+  .github/workflows/ci.yml   # Rust fmt/lint/nextest/coverage · web lint/unit/build/Chromium smoke/WebKit · full Playwright suite in 4 shards + merged report (HS2-D95TXJ) · migrator lint/coverage
   .github/workflows/live.yml # creds-gated nightly live tier (#[ignore] codex/claude turns, GitHub/GitLab/Jira providers)
   .env                       # gitignored, machine-local live-provider settings as 1Password refs; `op run --env-file=.env -- …` (docs/12 §12.7.6)
 ```
