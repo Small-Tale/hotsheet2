@@ -120,6 +120,16 @@ keep test output quiet: run failure-only reporters, or the project's quiet wrapp
 has one, and read the summary and failure excerpts rather than the full log. Hot Sheet 2's
 own wrapper is `scripts/test-quiet.mjs` ([12](12-code-organization-and-testing.md) §12.7.8).
 
+Risk-tiered testing (HS2-GC3D2X) arrives as testing section v5 and instructions v60. The
+testing section opens with three tiers. **T0 trivial** needs lint, typecheck, and directly
+related tests. **T1 normal** runs the affected tests, adds one regression test per fix, and
+gives new features double coverage. **T2 high-risk** gets the full treatment and the full
+affected suites, and the section names generic T2 surfaces (merge/sync, claims, indexes,
+formats/parsers, shared components, auth, migrations) for projects to extend. The
+instruction block asks the `## Preliminary thoughts` note to declare the tier, or the claim
+note for trivial work. It also asks agents to judge the completion confidence's
+verification factor against that tier. Refresh upgrades the exact v4 testing section.
+
 The ticket workflow section (HS2-PDD7XG) includes project-neutral note guidance: use
 activity history for meaningful subtask starts and finishes, preserve conclusions in
 regular Markdown notes, pair AI activity with a short `note_summary`, and send multiline

@@ -66,6 +66,8 @@ fn every_builtin_carries_the_full_default_guidance() {
             "Double coverage",
             // Failure-only test output keeps agent token use down (HS2-CP63FG).
             "Keep test output quiet",
+            // Preliminary thoughts declare a test risk tier (HS2-GC3D2X).
+            "its test risk tier (`T0` trivial,",
             "update them **in the same change as the code**",
             "commit per ticket",
             "Pushing is up to this repository",

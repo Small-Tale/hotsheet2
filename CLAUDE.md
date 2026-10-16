@@ -235,6 +235,32 @@ and other non-action structure are the only ordinary exception.
 
 <!-- hotsheet:begin specifics=testing-philosophy v=1 -->
 
+### Risk tiers (HS2-GC3D2X)
+
+Scale testing to the ticket's tier. Declare it in `## Preliminary thoughts`, or in the
+claim note for trivial work. A reviewer or the maintainer may raise it.
+
+- **T0 trivial** (copy, docs, constants, one CSS token or config value): lint, typecheck,
+  and directly related tests. Do a visual check only when something visibly changes, and
+  take a screenshot only when the ticket has a before image.
+- **T1 normal** (ordinary feature or bug fix): affected tests only. A fix gets one
+  regression test at the most natural layer. Double coverage (unit + E2E) applies to new
+  features.
+- **T2 high-risk**: the full treatment above (transition matrix, adversarial pass) plus the
+  full affected suites for every ticket. T2 covers:
+  - the merge driver and claims/leases (`hotsheet-ticketing` `merge.rs`, `distclaim.rs`)
+  - the file-format parser (`hotsheet-model`)
+  - index reconcile (`hotsheet-index`)
+  - the sync engine and write-behind (`hotsheet-sync`, `hotsheet-extsync`)
+  - the terminal-sizing arbiter (`hotsheet-terminals`)
+  - auth, credentials, and TLS (`hotsheet-tls`, keychain adapters)
+  - data migration (the migrator, HS1 import)
+  - shared Kerf/Web Awesome-composed components used by several surfaces
+  - the shared guidance templates and setup refresh (`hotsheet-plugins`)
+
+Rate the `## Confidence` verification factor against the declared tier. A fully checked
+T0 change can score high.
+
 ### This project's test setup
 
 > **Implemented test paths.** Rust unit/integration tests run with `cargo nextest run`;
@@ -393,7 +419,7 @@ References to the _original_ Hot Sheet (the predecessor at
 predecessor links; they do not attribute Hot Sheet 2.
 
 <!-- BEGIN hotsheet:claude -->
-<!-- hotsheet-instructions-version: 59 -->
+<!-- hotsheet-instructions-version: 60 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -483,9 +509,11 @@ paths, never a directory-wide `git add`), and check the staged diff for changes 
 **Share preliminary thoughts on non-trivial tickets.** After your initial analysis of a
 ticket that is not trivially simple, and before you implement, add a short `regular` note
 headed `## Preliminary thoughts`: your understanding of the problem (or likely root cause),
-the approach you plan, the main risks or open questions, and how you will verify it. It lets
-people steer early and gives a later reader your starting reasoning. Skip it for trivial
-tickets (a quick, obvious change); never let it replace a `FEEDBACK NEEDED` blocker.
+the approach you plan, the main risks or open questions, its test risk tier (`T0` trivial,
+`T1` normal, or `T2` high-risk, as the project's testing guidance defines them), and how you
+will verify it at that tier. It lets people steer early and gives a later reader your
+starting reasoning. Skip it for trivial tickets (a quick, obvious change; name `T0` in the
+claim note instead); never let it replace a `FEEDBACK NEEDED` blocker.
 
 **Report completion confidence.** When you move a ticket to `completed`, the completing note
 must include a `## Confidence` section: the integer score (0-100), then one short line per
@@ -496,7 +524,9 @@ known gaps deferred to follow-ups. Pass the same integer in that same update as
 `--note-confidence <0-100>` (MCP `note_confidence`) so clients never parse prose. Anchor
 bands: **90-100** fully verified end to end against the real system; **70-89** verified with
 minor assumptions; **40-69** partially verified or an ambiguous ask; **below 40** largely
-unverified — name the gaps. A bare number without the factor lines is non-compliant.
+unverified — name the gaps. A bare number without the factor lines is non-compliant. Judge
+verification against the declared tier: the checks a `T0` change needs can still earn a high
+score when its scope really is trivial.
 Identify yourself as the AI actor: sessions Hot Sheet launches already set
 `HOTSHEET_ACTOR_ROLE=ai`, and generated MCP configs declare it for `hotsheet-mcp`;
 otherwise pass `--actor-role ai --actor-id <your-id>` (MCP `actor_role: "ai"`,

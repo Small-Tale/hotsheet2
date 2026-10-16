@@ -726,6 +726,7 @@ const GUIDANCE_SECTIONS: &[GuidanceSection] = &[
         legacy: &[
             include_str!("../../../plugins/shared/legacy-testing-philosophy.md"),
             include_str!("../../../plugins/shared/legacy-testing-philosophy-v3.md"),
+            include_str!("../../../plugins/shared/legacy-testing-philosophy-v4.md"),
         ],
     },
     GuidanceSection {
@@ -1925,6 +1926,12 @@ args = ["--path", "{{store}}"]
             "every part of a selected presentation",
             "through each shipped parent composition",
             "disable unsupported controls explicitly",
+            // Testing effort scales with a declared risk tier (HS2-GC3D2X).
+            "Scale testing to risk",
+            "**T0 trivial**",
+            "**T1 normal**",
+            "**T2 high-risk**",
+            "merge and sync logic, claims and leases, indexes, file formats and parsers",
         ] {
             assert!(rules.contains(required), "missing shared rule: {required}");
         }

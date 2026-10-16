@@ -600,6 +600,10 @@ fn setup_assets_fingerprint(plugins: &[Plugin]) -> String {
             include_str!("../../../plugins/shared/legacy-testing-philosophy-v3.md"),
         ),
         (
+            "legacy-testing-philosophy-v4.md",
+            include_str!("../../../plugins/shared/legacy-testing-philosophy-v4.md"),
+        ),
+        (
             "legacy-testing-philosophy.md",
             include_str!("../../../plugins/shared/legacy-testing-philosophy.md"),
         ),

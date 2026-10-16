@@ -11,7 +11,7 @@
 
 <!-- BEGIN hotsheet:agents-md -->
 <!-- hotsheet-shared-section: antigravity, codex, opencode -->
-<!-- hotsheet-instructions-version: 59 -->
+<!-- hotsheet-instructions-version: 60 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -101,9 +101,11 @@ paths, never a directory-wide `git add`), and check the staged diff for changes 
 **Share preliminary thoughts on non-trivial tickets.** After your initial analysis of a
 ticket that is not trivially simple, and before you implement, add a short `regular` note
 headed `## Preliminary thoughts`: your understanding of the problem (or likely root cause),
-the approach you plan, the main risks or open questions, and how you will verify it. It lets
-people steer early and gives a later reader your starting reasoning. Skip it for trivial
-tickets (a quick, obvious change); never let it replace a `FEEDBACK NEEDED` blocker.
+the approach you plan, the main risks or open questions, its test risk tier (`T0` trivial,
+`T1` normal, or `T2` high-risk, as the project's testing guidance defines them), and how you
+will verify it at that tier. It lets people steer early and gives a later reader your
+starting reasoning. Skip it for trivial tickets (a quick, obvious change; name `T0` in the
+claim note instead); never let it replace a `FEEDBACK NEEDED` blocker.
 
 **Report completion confidence.** When you move a ticket to `completed`, the completing note
 must include a `## Confidence` section: the integer score (0-100), then one short line per
@@ -114,7 +116,9 @@ known gaps deferred to follow-ups. Pass the same integer in that same update as
 `--note-confidence <0-100>` (MCP `note_confidence`) so clients never parse prose. Anchor
 bands: **90-100** fully verified end to end against the real system; **70-89** verified with
 minor assumptions; **40-69** partially verified or an ambiguous ask; **below 40** largely
-unverified — name the gaps. A bare number without the factor lines is non-compliant.
+unverified — name the gaps. A bare number without the factor lines is non-compliant. Judge
+verification against the declared tier: the checks a `T0` change needs can still earn a high
+score when its scope really is trivial.
 Identify yourself as the AI actor: sessions Hot Sheet launches already set
 `HOTSHEET_ACTOR_ROLE=ai`, and generated MCP configs declare it for `hotsheet-mcp`;
 otherwise pass `--actor-role ai --actor-id <your-id>` (MCP `actor_role: "ai"`,
@@ -207,15 +211,16 @@ Create a Hot Sheet ticket before substantial work described directly by a user, 
 
 <!-- hotsheet:end section=ticket-driven-work -->
 
-<!-- hotsheet:begin section=testing-philosophy v=4 -->
+<!-- hotsheet:begin section=testing-philosophy v=5 -->
 
 ## Testing Philosophy
 
+- Scale testing to risk. Declare a tier in the ticket's preliminary-thoughts note (in the claim note for trivial work); reviewers may raise it. **T0 trivial** (copy, docs, constants, one style token or config value): lint, typecheck, and directly related tests; check visuals only when something visibly changes. **T1 normal** (an ordinary feature or bug fix): the affected tests only; a fix adds one regression test at the most natural layer, and a new feature gets unit and end-to-end coverage. **T2 high-risk** (merge and sync logic, claims and leases, indexes, file formats and parsers, shared components, auth and credentials, data migrations, and any surface the project names as high-risk): everything below, plus the full affected suites.
 - Cover each feature with unit tests of its logic and end-to-end tests through the real shipped flow. Mock external dependencies in unit tests; keep browser fixtures faithful to real server shapes, optional fields, and status codes. Exercise each newly composed API surface against a real server as well as mocked client tests.
 - Aim to cover every documented feature and reach 100% line and branch coverage. Treat those numbers as a floor: executed lines do not prove behavior or sequences. For stateful modules, enumerate states and transitions, then test repeated, interleaved, out-of-order, reset, and empty-then-refill sequences.
 - Test stateful controls in both directions: control to application state and rendered output, and programmatic state changes back to live controls. Verify resets and a further edit. For custom elements, assert live properties and relevant focus/events. Check every part of a selected presentation, including icons, badges, counts, and other derived decoration.
 - Exercise child actions through each shipped parent composition. A demo or isolated preview is insufficient evidence that the real parent wires an enabled control; disable unsupported controls explicitly.
-- Maintain a feature-by-feature record of unit, end-to-end, and manual coverage as behavior changes. Keep a manual test plan for behavior that cannot be reliably automated. Broaden the affected-package test set for shared or high-risk changes.
+- Maintain a feature-by-feature record of unit, end-to-end, and manual coverage as behavior changes. Keep a manual test plan for behavior that cannot be reliably automated.
 - Give every code package a working local lint command and configuration when it is added. Keep lint warning-free, fix lint and type errors before finishing, and document justified suppressions.
 
 <!-- hotsheet:end section=testing-philosophy -->

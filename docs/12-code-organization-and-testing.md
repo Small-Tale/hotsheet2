@@ -433,6 +433,21 @@ stateful modules; adversarial pass; a manual test plan) — adapted to Rust +
 distributed + git. **Coverage is a floor, not a ceiling:** the behavior / property /
 transition-matrix tests are the real assurance.
 
+**Risk tiers (HS2-GC3D2X).** Per-ticket testing effort scales with a tier declared in the
+ticket's `## Preliminary thoughts` note, or in its claim note for trivial work:
+
+- **T0** (trivial): lint, typecheck, and directly related tests.
+- **T1** (normal): affected tests only, plus one regression test per fix and double coverage
+  for new features.
+- **T2** (high-risk): the full treatment in §12.7.2–§12.7.3 and the full affected suites.
+
+The T2 surfaces are the merge driver, claims and leases, index reconcile, the sync engine,
+the file-format parser, the terminal-sizing arbiter, auth/credentials/TLS, data migration,
+shared components, and the shared guidance templates. The list is kept in `CLAUDE.md`.
+The bundled testing guidance (`plugins/shared/testing-philosophy.md` v5) carries the same
+tiers for every project; each project names its own T2 surfaces. A reviewer may raise a tier.
+The completion `## Confidence` verification factor is judged against the tier.
+
 ### 12.7.1 Tiers
 
 - **Unit** (`cargo test` via **`cargo-nextest`**): pure logic against injected fakes
