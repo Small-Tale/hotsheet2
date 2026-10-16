@@ -26346,15 +26346,29 @@ test('reorders project and terminal tabs while preserving project order and comp
   ).resolves.toEqual(['/work/other', '/work/demo']);
   await projectTabs.getByRole('tab', { name: 'demo' }).click();
   await projectTabs.getByRole('tab', { name: 'demo' }).focus();
+  // The strip's 4px scroll padding applies to the focused element, the tab's select button, which sits
+  // inside the tab root's 1px border, and the browser snaps the scroll offset to a whole pixel (up to
+  // 1px short). So the button keeps at least 3px and the root at least 2px. The focus ring (3px at a
+  // -2px offset) overhangs the root by 1px, so it still clears the strip's clip edge. A fixed 3px
+  // floor on the root failed whenever the font's sub-pixel tab width put the snap error above 0.5px
+  // (2.625px under Linux CI's Liberation Sans and locally under Arial; HS2-8YHY6V).
   const focusGeometry = await projectTabs
     .filter({ has: page.getByRole('tab', { name: 'demo' }) })
     .evaluate((element) => {
       const tab = element.getBoundingClientRect(),
+        select = element.querySelector('[role="tab"]')!.getBoundingClientRect(),
         scroller = element.parentElement!.getBoundingClientRect();
-      return { leftInset: tab.left - scroller.left, rightInset: scroller.right - tab.right };
+      return {
+        leftInset: tab.left - scroller.left,
+        rightInset: scroller.right - tab.right,
+        selectLeftInset: select.left - scroller.left,
+        selectRightInset: scroller.right - select.right,
+      };
     });
-  expect(focusGeometry.leftInset).toBeGreaterThanOrEqual(3);
-  expect(focusGeometry.rightInset).toBeGreaterThanOrEqual(3);
+  expect(focusGeometry.selectLeftInset).toBeGreaterThanOrEqual(3);
+  expect(focusGeometry.selectRightInset).toBeGreaterThanOrEqual(3);
+  expect(focusGeometry.leftInset).toBeGreaterThanOrEqual(2);
+  expect(focusGeometry.rightInset).toBeGreaterThanOrEqual(2);
   await page.screenshot({
     path: 'target/visual-captures/hs2-bkgfy7-q6f4f3-project-tab-focus-wide.png',
     fullPage: true,
