@@ -189,6 +189,13 @@ HS2-FXGKBD):
 - Jira: `<KEY>-<number>`, where the key is the source's project key (its locator).
 - Any other provider: probed with the id unchanged.
 
+The check reads the checkout link's locator, so every link must carry its connection's own
+locator. Linking a source (`PUT /checkouts/{reference}/sources/{id}`, `hotsheet checkout
+add-source`, or registering/opening a project with sources) is refused when the link's
+locator differs from the connection record's, compared ASCII case-insensitively
+(HS2-KXEVTG). A connection edit rewrites every link's locator (HS2-RCBKA3), so the two stay
+equal.
+
 A git slug or ULID therefore never makes a synchronous third-party network call inside a
 local request. A source whose shape cannot represent the id simply does not hold it. A source
 that fails to answer (auth, rate limit, network) surfaces its error only when no other source

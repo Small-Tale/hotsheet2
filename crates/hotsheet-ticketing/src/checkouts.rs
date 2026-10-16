@@ -895,12 +895,21 @@ impl CheckoutRegistry {
             .load()
             .map_err(|error| CheckoutError::Invalid(error.to_string()))?;
         for source in sources.iter().filter(|source| source.provider != "git") {
-            if !registered.iter().any(|connection| {
+            let Some(connection) = registered.iter().find(|connection| {
                 connection.id == source.connection_id && connection.provider == source.provider
-            }) {
+            }) else {
                 return Err(CheckoutError::Invalid(format!(
                     "ticket source '{}' is not registered in providers.json",
                     source.connection_id
+                )));
+            };
+            // The link's locator is what routes unqualified ids offline (a Jira project key,
+            // a repository path), so it must name the connection's own project (HS2-KXEVTG).
+            // Locators compare ASCII case-insensitively, like the native-id shape check.
+            if !connection.locator.eq_ignore_ascii_case(&source.locator) {
+                return Err(CheckoutError::Invalid(format!(
+                    "ticket source '{}' locator '{}' does not match its connection's '{}'",
+                    source.connection_id, source.locator, connection.locator
                 )));
             }
         }
@@ -1471,6 +1480,60 @@ mod tests {
             store.metadata().unwrap().instance_id.as_ref()
         );
         registry.resolve_source(&linked.id, &source_id).unwrap();
+    }
+
+    #[test]
+    fn registered_links_must_carry_their_connection_locator() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("project");
+        std::fs::create_dir(&project).unwrap();
+        let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
+        let providers = ProviderConfigRegistry::new(temp.path().join("providers.json"));
+        providers
+            .save(&[ProviderConnection {
+                id: "jira-app".into(),
+                provider: "jira".into(),
+                locator: "APP".into(),
+                name: None,
+                default: false,
+                settings: serde_json::Value::Null,
+                disabled: false,
+            }])
+            .unwrap();
+        registry
+            .register(&project, Some("app"), None, Vec::new())
+            .unwrap();
+        let link = |locator: &str| TicketSource {
+            connection_id: "jira-app".into(),
+            provider: "jira".into(),
+            locator: locator.into(),
+        };
+        // A mismatched project key would silently stop matching unqualified APP-N ids.
+        let error = registry
+            .add_registered_source(&providers, "app", link("OPS"), false)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("locator 'OPS' does not match"),
+            "{error}"
+        );
+        assert!(matches!(
+            registry.register_registered_sources(
+                &providers,
+                &project,
+                None,
+                None,
+                vec![link("OPS")],
+                None
+            ),
+            Err(CheckoutError::Invalid(_))
+        ));
+        assert!(registry.resolve("app").unwrap().sources.is_empty());
+        // Locators compare case-insensitively, like the offline native-id shape check.
+        let linked = registry
+            .add_registered_source(&providers, "app", link("app"), true)
+            .unwrap();
+        assert_eq!(linked.sources.len(), 1);
+        assert_eq!(linked.default_source.as_deref(), Some("jira-app"));
     }
 
     #[test]

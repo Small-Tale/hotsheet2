@@ -14819,6 +14819,23 @@ async fn a_rate_limited_github_source_does_not_hide_local_tickets_and_recovers()
             .status(),
         StatusCode::CREATED
     );
+    // A link must carry its connection's own locator (HS2-KXEVTG).
+    let mismatched = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/checkouts/{checkout_id}/sources/github-mixed"),
+            Some(r#"{"provider":"github","locator":"acme/other","make_default":false}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(mismatched.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        body_json(mismatched).await["error"]
+            .as_str()
+            .unwrap()
+            .contains("does not match its connection's 'acme/repo'")
+    );
     assert_eq!(
         router
             .clone()
