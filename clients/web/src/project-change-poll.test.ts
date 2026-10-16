@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PollResponse } from './api';
 import {
   containsRepositoryChange,
+  containsRepositorySizeChange,
   containsTicketChange,
   startProjectChangePoll,
   startProjectChangeStream,
@@ -57,6 +58,15 @@ describe('project change long polling', () => {
     expect(containsRepositoryChange(changed, 'checkout-one')).toBe(true);
     expect(containsRepositoryChange(changed, 'checkout-two')).toBe(false);
     expect(containsTicketChange(changed)).toBe(false);
+  });
+
+  it('scopes repository size-limit crossings to their checkout (HS2-KKFEY5)', () => {
+    const crossed = response(3, 'repository_size');
+    crossed.events[0].id = 'checkout-one';
+    expect(containsRepositorySizeChange(crossed, 'checkout-one')).toBe(true);
+    expect(containsRepositorySizeChange(crossed, 'checkout-two')).toBe(false);
+    expect(containsRepositoryChange(crossed, 'checkout-one')).toBe(false);
+    expect(containsTicketChange(crossed)).toBe(false);
   });
 
   it('handshakes, coalesces batches, ignores unrelated events, and refreshes overflow', async () => {

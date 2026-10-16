@@ -121,6 +121,7 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
         refreshCustomViews: noop,
         refreshRepositoryStatus: noop,
         loadConfidenceReport: noop,
+        loadRepositorySize: noop,
       });
     owner.syncProjectChangeStreams();
     owner.syncProjectChangeStreams();
@@ -131,6 +132,47 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     projects.value = [project('b')];
     owner.syncProjectChangeStreams();
     expect(streams.started).toEqual(['/api/a', '/api/b', '/api/b']);
+  });
+
+  it('change streams: a repository_size event reloads only that project size report (HS2-KKFEY5)', async () => {
+    const projects = signal([project('a'), project('b')]),
+      noop = vi.fn(async () => undefined),
+      loadRepositorySize = vi.fn(async () => undefined),
+      owner = createProjectChangeStreamsController({
+        projects,
+        project: () => projects.value[0],
+        shellMode: signal('project'),
+        statsProjectId: signal(undefined),
+        localTicketMutationBarrier: createRefreshBarrier(),
+        localTicketChangeAcknowledgements: new LocalTicketChangeAcknowledgements(),
+        projectTabRefresh: { request: noop },
+        turnStreamEvents: () => [],
+        conversationPersistence: { flush: vi.fn() } as never,
+        updateConversation: vi.fn(),
+        conversationForActivity: vi.fn(),
+        refreshDriveConnections: noop,
+        refreshPermissions: noop,
+        serverResolvedPermission: vi.fn(),
+        applyTerminalRenamed: vi.fn(),
+        refreshTerminalDashboard: noop,
+        refreshProviderOutbox: noop,
+        refreshCommands: noop,
+        refreshCustomViews: noop,
+        refreshRepositoryStatus: noop,
+        loadConfidenceReport: noop,
+        loadRepositorySize,
+      });
+    owner.syncProjectChangeStreams();
+    await streams.onEvents.get('/api/a')!({
+      events: [{ kind: 'repository_size', id: 'a', slug: 'warning', message: 'over the soft limit' }],
+    });
+    expect(loadRepositorySize).toHaveBeenCalledTimes(1);
+    expect(loadRepositorySize).toHaveBeenCalledWith(projects.value[0]);
+    // Another checkout's crossing, or an unrelated event, reloads nothing here.
+    await streams.onEvents.get('/api/a')!({ events: [{ kind: 'repository_size', id: 'b' }] });
+    await streams.onEvents.get('/api/a')!({ events: [{ kind: 'repository_changed', id: 'a' }] });
+    expect(loadRepositorySize).toHaveBeenCalledTimes(1);
+    owner.dispose();
   });
 
   it('change streams: dispose stops every stream and pending repository refresh; restart builds a fresh owner (HS2-A9E7QB)', async () => {
@@ -162,6 +204,7 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
           refreshCustomViews: noop,
           refreshRepositoryStatus,
           loadConfidenceReport: noop,
+          loadRepositorySize: noop,
         });
     const owner = build();
     owner.syncProjectChangeStreams();

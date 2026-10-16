@@ -16476,6 +16476,123 @@ async fn background_sync_covers_every_hosted_store() {
     assert!(reports.iter().all(|(_, r)| *r == SyncReport::NoRemote));
 }
 
+/// HS2-KKFEY5: a background sync that pushes a hosted store across a GitHub size limit
+/// publishes one replayable `repository_size` event per linked checkout; a pass that stays
+/// at that level publishes nothing.
+#[tokio::test]
+async fn background_sync_announces_a_repository_size_crossing_to_linked_checkouts() {
+    use hotsheet_server::sync_loop::{SizeLevels, sync_all_with_sizes};
+    use hotsheet_ticketing::repository_size::{GitObjectSize, WARNING_BYTES};
+    use hotsheet_ticketing::sync::SyncReport;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    let dir = tempfile::tempdir().unwrap();
+    let store_root = dir.path().join("tickets");
+    let store = FsStore::init(&store_root, &StoreMetadata::new("HS")).unwrap();
+    let remote = dir.path().join("remote.git");
+    let git = |cwd: &std::path::Path, args: &[&str]| {
+        let status = hotsheet_ticketing::git::command()
+            .args(args)
+            .current_dir(cwd)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?}");
+    };
+    git(
+        dir.path(),
+        &["init", "--quiet", "--bare", remote.to_str().unwrap()],
+    );
+    git(&store_root, &["init", "--quiet"]);
+    git(&store_root, &["config", "user.name", "Size Test"]);
+    git(&store_root, &["config", "user.email", "size@test.invalid"]);
+    git(
+        &store_root,
+        &["remote", "add", "origin", remote.to_str().unwrap()],
+    );
+    let registry_path = dir.path().join("checkouts.json");
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path);
+    let code = dir.path().join("code");
+    std::fs::create_dir_all(&code).unwrap();
+    let checkout = registry
+        .register(&code, None, None, vec![store_root.clone()])
+        .unwrap();
+    let st = AppState::new(store.clone(), SECRET.into())
+        .unwrap()
+        .with_checkout_registry(&registry_path);
+    let mut events = st.subscribe();
+
+    let bytes = AtomicU64::new(1);
+    let measure = |_: &std::path::Path| {
+        Some(GitObjectSize {
+            total_bytes: bytes.load(Ordering::SeqCst),
+            ..GitObjectSize::default()
+        })
+    };
+    let mut levels = SizeLevels::default();
+    let size_events = |events: &mut tokio::sync::broadcast::Receiver<_>| {
+        let mut found: Vec<hotsheet_server::ChangeEvent> = Vec::new();
+        while let Ok(event) = events.try_recv() {
+            let event: hotsheet_server::ChangeEvent = event;
+            if event.kind == "repository_size" {
+                found.push(event);
+            }
+        }
+        found
+    };
+
+    // First pass: seeds the level before the push, then pushes within limits.
+    let reports = sync_all_with_sizes(&st, &mut levels, measure);
+    assert!(matches!(
+        reports[0].1,
+        SyncReport::Synced { pushed: true, .. }
+    ));
+    assert!(size_events(&mut events).is_empty());
+
+    // A new commit pushed while the store grew past the soft limit is announced once.
+    std::fs::write(store_root.join("grow.md"), "a large addition\n").unwrap();
+    git(&store_root, &["add", "grow.md"]);
+    git(&store_root, &["commit", "--quiet", "-m", "grow"]);
+    bytes.store(WARNING_BYTES + 1, Ordering::SeqCst);
+    let reports = sync_all_with_sizes(&st, &mut levels, measure);
+    assert!(
+        matches!(reports[0].1, SyncReport::Synced { pushed: true, .. }),
+        "{reports:?}"
+    );
+    let announced = size_events(&mut events);
+    assert_eq!(announced.len(), 1, "{announced:?}");
+    assert_eq!(announced[0].id, checkout.id);
+    assert_eq!(announced[0].slug, "warning");
+    assert!(announced[0].cursor.is_some(), "replayable over long-poll");
+    assert!(
+        announced[0]
+            .message
+            .as_deref()
+            .unwrap()
+            .contains("soft limit")
+    );
+
+    // Up to date at the same level: nothing new.
+    let reports = sync_all_with_sizes(&st, &mut levels, measure);
+    assert_eq!(reports[0].1, SyncReport::UpToDate);
+    assert!(size_events(&mut events).is_empty());
+
+    // Growth that an autocommit push already published leaves the pass up to date, and
+    // the rise past the hard limit is still announced.
+    std::fs::write(store_root.join("more.md"), "pushed outside the loop\n").unwrap();
+    git(&store_root, &["add", "more.md"]);
+    git(&store_root, &["commit", "--quiet", "-m", "more"]);
+    git(&store_root, &["push", "--quiet"]);
+    bytes.store(
+        hotsheet_ticketing::repository_size::CRITICAL_BYTES,
+        Ordering::SeqCst,
+    );
+    let reports = sync_all_with_sizes(&st, &mut levels, measure);
+    assert_eq!(reports[0].1, SyncReport::UpToDate);
+    let announced = size_events(&mut events);
+    assert_eq!(announced.len(), 1, "{announced:?}");
+    assert_eq!(announced[0].slug, "critical");
+}
+
 #[tokio::test]
 async fn claim_next_release_renew_over_http() {
     let (_d, st) = state();

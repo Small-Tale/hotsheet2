@@ -2917,6 +2917,7 @@ export async function startHotSheetWebClient() {
     refreshCustomViews,
     refreshRepositoryStatus,
     loadConfidenceReport,
+    loadRepositorySize,
   });
   const {
     restoreTicketDraft,

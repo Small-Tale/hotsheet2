@@ -292,6 +292,45 @@ impl AppState {
         self.kick_sync();
     }
 
+    /// Tell clients that a sync raised the ticket store at `store_root` across a GitHub size
+    /// limit (HS2-KKFEY5): one replayable `repository_size` event per checkout that links the
+    /// store (`id` = checkout id, `slug` = the new level, `message` = the warning), so an
+    /// open client reloads that project's size report without polling.
+    pub fn announce_repository_size(
+        &self,
+        store_id: &str,
+        store_root: &FsPath,
+        level: hotsheet_ticketing::repository_size::SizeLevel,
+        message: &str,
+    ) {
+        let level = match level {
+            hotsheet_ticketing::repository_size::SizeLevel::Ok => "ok",
+            hotsheet_ticketing::repository_size::SizeLevel::Warning => "warning",
+            hotsheet_ticketing::repository_size::SizeLevel::Critical => "critical",
+        };
+        let Ok(checkouts) = self.checkout_registry.list() else {
+            return;
+        };
+        for checkout in checkouts.into_iter().filter(|checkout| {
+            checkout
+                .stores
+                .iter()
+                .any(|root| same_path(FsPath::new(root), store_root))
+        }) {
+            self.emit(ChangeEvent {
+                cursor: None,
+                store: store_id.into(),
+                kind: "repository_size".into(),
+                id: checkout.id,
+                slug: level.into(),
+                message: Some(message.into()),
+                activity: None,
+                assignment: None,
+                turn: None,
+            });
+        }
+    }
+
     /// Broadcast an **ephemeral announcement** to live `/ws/sync` subscribers (HS2-HHDNTH):
     /// a store-level message that is **not** persisted — it rides the WS bus only, so it is
     /// NOT recorded in the long-poll ring and never replayed. A client not connected when it

@@ -28695,6 +28695,98 @@ test('warns in the project shell while a repository is over a GitHub size limit 
   await expect(panel).toHaveAttribute('data-level', 'critical');
 });
 
+test('a server size-limit crossing event brings up the repository size banner without polling (HS2-KKFEY5)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await mockProject(page);
+  const git = (total: number) => ({
+    loose_objects: 0,
+    loose_bytes: 0,
+    packed_objects: 9,
+    packs: 1,
+    packed_bytes: total,
+    total_bytes: total,
+  });
+  const sizeReport = (level: 'ok' | 'warning', bytes: number) => ({
+    checkout_id: 'demo-checkout',
+    thresholds: { warning_bytes: 5_000_000_000, critical_bytes: 10_000_000_000 },
+    level,
+    entries: [
+      {
+        kind: 'ticket_store',
+        connection_id: 'abc123',
+        provider: 'git',
+        label: 'demo.hs2',
+        locator: '/work/demo.hs2',
+        status: 'measured',
+        git: git(bytes),
+        attachments: { bytes: 0, files: 0, truncated: false },
+        shared_with_code: false,
+        level,
+      },
+    ],
+  });
+  let current = sizeReport('ok', 4_000_000_000),
+    sizeRequests = 0;
+  const pending: Array<import('@playwright/test').Route> = [];
+  await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/repository/size', (route) => {
+    sizeRequests += 1;
+    return route.fulfill({ json: current });
+  });
+  await page.route('**/ws/poll*', (route) => {
+    const since = new URL(route.request().url()).searchParams.get('since');
+    if (since === null) return route.fulfill({ json: { cursor: 4, events: [], overflow: false } });
+    pending.push(route);
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  const banner = page.locator('[data-component="repository-size-banner"]');
+  await expect.poll(() => sizeRequests).toBe(1);
+  await expect(banner).toHaveCount(0);
+
+  // The server's background sync pushed the store past the soft limit.
+  current = sizeReport('warning', 5_400_000_000);
+  await expect.poll(() => pending.length).toBeGreaterThan(0);
+  await pending.shift()!.fulfill({
+    json: {
+      cursor: 5,
+      events: [
+        {
+          store: 'abc123',
+          kind: 'repository_size',
+          id: 'demo-checkout',
+          slug: 'warning',
+          message: "ticket store /work/demo.hs2 is 5.4 GB of git objects, over GitHub's 5.0 GB soft limit",
+        },
+      ],
+      overflow: false,
+    },
+  });
+  await expect(banner).toBeVisible({ timeout: 15_000 });
+  await expect(banner).toContainText("Ticket store: demo.hs2 is over GitHub's 5 GB soft limit");
+  expect(sizeRequests).toBe(2);
+  await page.screenshot({ path: 'target/visual-captures/claude/hs2-kkfey5-banner-after-event-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(500); // let the responsive shell settle before capturing evidence
+  await expect(banner).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/claude/hs2-kkfey5-banner-after-event-narrow.png' });
+
+  // Another checkout's crossing reloads nothing here.
+  await expect.poll(() => pending.length).toBeGreaterThan(0);
+  await pending.shift()!.fulfill({
+    json: {
+      cursor: 6,
+      events: [{ store: 'other', kind: 'repository_size', id: 'other-checkout', slug: 'critical' }],
+      overflow: false,
+    },
+  });
+  await expect.poll(() => pending.length).toBeGreaterThan(0);
+  expect(sizeRequests).toBe(2);
+});
+
 test('records the web client as the human actor on the real server (HS2-XF81CJ)', async ({ page }) => {
   test.setTimeout(120_000);
   const server = await realTicketServer();

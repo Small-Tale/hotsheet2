@@ -51,6 +51,10 @@ export const containsTicketChange = (response: PollResponse): boolean =>
 export const containsRepositoryChange = (response: PollResponse, checkoutId: string): boolean =>
   response.events.some((event) => event.kind === 'repository_changed' && event.id === checkoutId);
 
+/** A background sync raised one of this checkout's ticket stores across a GitHub size limit (HS2-KKFEY5). */
+export const containsRepositorySizeChange = (response: PollResponse, checkoutId: string): boolean =>
+  response.events.some((event) => event.kind === 'repository_size' && event.id === checkoutId);
+
 const abortableWait = (milliseconds: number, signal: AbortSignal): Promise<void> =>
   new Promise((resolve) => {
     const timeout = globalThis.setTimeout(resolve, milliseconds);

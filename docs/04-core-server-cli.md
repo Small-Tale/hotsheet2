@@ -258,6 +258,14 @@ server endpoint (HS2-R0131R).
     walk) before and after a sync that pulled or pushed. It prints a `warning:` to stderr
     only when the level rose across a threshold, so a repository already over a limit is not
     re-announced on every sync.
+  - The server's background sync loop does the same for every hosted store (HS2-KKFEY5).
+    It records each store's level when it first sees the store, measures again after
+    every pass that reached the remote (`Synced`, or `UpToDate` after the store's own
+    best-effort autocommit push already published the growth), and keeps the last level per store in memory. When the level
+    rises, it logs a warning and publishes one replayable `repository_size` change event
+    per checkout linking the store (`id` = checkout id, `slug` = the new level,
+    `message` = the warning). A drop lowers the remembered level, so a later rise is
+    announced again.
   - The web project shell shows a persistent warning strip while any repository is over a
     limit (see [06](06-clients.md) "Repository size").
 

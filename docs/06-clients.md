@@ -3802,7 +3802,9 @@ completion summary) shows its completion-confidence calibration:
   The banner reuses the server-computed level and the statistics view's per-project report,
   so it adds no timer and no request beyond the one per project.
   Repository size changes with commits, not ticket events, so ticket change-stream events do
-  not reload it.
+  not reload it. The one exception is a `repository_size` change event for this checkout,
+  which the server publishes when its background sync raises a ticket store across a limit
+  (HS2-KKFEY5). It reloads that project's report, so the banner appears without polling.
 
 - **Narrow widths:** value tables stack under their labels.
 - **Load start:** opening the view starts both reports outside the opening effect's

@@ -9,6 +9,7 @@ import type { LocalTicketChangeAcknowledgements } from '../local-ticket-changes'
 import { parsePermissionResolution } from '../permission-notifications';
 import {
   containsRepositoryChange,
+  containsRepositorySizeChange,
   containsTicketChange,
   type ProjectChangeStreamOptions,
   startProjectChangeStream,
@@ -44,6 +45,8 @@ export interface ProjectChangeStreamsDependencies {
   refreshCustomViews: (current?: Project) => Promise<unknown>;
   refreshRepositoryStatus: () => Promise<unknown>;
   loadConfidenceReport: (target: Project) => Promise<unknown>;
+  /** Re-measure a project's repositories after the server announces a size-limit crossing (HS2-KKFEY5). */
+  loadRepositorySize: (target: Project) => Promise<unknown>;
   /**
    * Run every project's transport in the shared change-stream worker (HS2-SH9179). Off by default;
    * defaults to the `hotsheet.change-stream-worker` local setting. The main-thread stream remains
@@ -103,6 +106,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     refreshCustomViews,
     refreshRepositoryStatus,
     loadConfidenceReport,
+    loadRepositorySize,
   } = dependencies;
   const projectChangeStreams = new Map<string, () => void>();
   const useWorker = dependencies.useChangeStreamWorker ?? changeStreamWorkerEnabled();
@@ -229,6 +233,9 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             )
               void refreshTerminalDashboard(true, current);
             if (containsRepositoryChange(response, current.id)) scheduleRepositoryRefresh(current);
+            // The server's background sync pushed a ticket store past a size limit: reload the
+            // report so the shell banner updates without polling (HS2-KKFEY5).
+            if (containsRepositorySizeChange(response, current.id)) void loadRepositorySize(current);
           },
         });
         projectChangeStreams.set(current.id, stop);

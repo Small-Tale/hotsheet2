@@ -8,9 +8,14 @@
 //! functions: [`sync_all`] (one pass over the hosted stores) and [`next_delay`] (the
 //! backoff schedule).
 
+use std::collections::HashMap;
+use std::path::Path;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::Duration;
 
+use hotsheet_ticketing::repository_size::{
+    GitObjectSize, SizeLevel, crossing_message, git_object_size,
+};
 use hotsheet_ticketing::sync::{SyncReport, sync_once};
 
 use crate::AppState;
@@ -28,6 +33,19 @@ pub struct SyncHandle {
 /// Run one sync pass over every hosted store, returning each store's report. A store with
 /// no remote reports `NoRemote` (a local-only project) — harmless.
 pub fn sync_all(state: &AppState) -> Vec<(String, SyncReport)> {
+    sync_all_with_sizes(state, &mut SizeLevels::default(), git_object_size)
+}
+
+/// [`sync_all`], announcing every hosted store whose git object size rose across a GitHub
+/// limit since the previous pass that reached its remote (HS2-KKFEY5). `levels` remembers each store's last level between passes;
+/// a store seen for the first time is measured before its sync, so the first push after a
+/// server start is compared against the size it started from. `measure` is injected so
+/// tests can script sizes.
+pub fn sync_all_with_sizes(
+    state: &AppState,
+    levels: &mut SizeLevels,
+    measure: impl Fn(&Path) -> Option<GitObjectSize>,
+) -> Vec<(String, SyncReport)> {
     let Some(_lifecycle_guard) = state.begin_background_work() else {
         return Vec::new();
     };
@@ -37,8 +55,58 @@ pub fn sync_all(state: &AppState) -> Vec<(String, SyncReport)> {
     state
         .hosted_store_roots()
         .into_iter()
-        .map(|(id, root)| (id, sync_once(std::path::Path::new(&root))))
+        .map(|(id, root)| {
+            let path = Path::new(&root);
+            if !levels.contains(&id) {
+                levels.observe(&id, &root, measure(path));
+            }
+            let report = sync_once(path);
+            // Measure after every pass that reached the remote. `UpToDate` matters too: the
+            // store's best-effort autocommit push can publish growth between passes, leaving
+            // this pass nothing to push.
+            if matches!(report, SyncReport::Synced { .. } | SyncReport::UpToDate)
+                && let Some(crossing) = levels.observe(&id, &root, measure(path))
+            {
+                tracing::warn!(store = %root, "{}", crossing.message);
+                state.announce_repository_size(&id, path, crossing.level, &crossing.message);
+            }
+            (id, report)
+        })
         .collect()
+}
+
+/// A store's git object size rising past a GitHub limit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SizeCrossing {
+    pub level: SizeLevel,
+    pub message: String,
+}
+
+/// The last measured [`SizeLevel`] of each hosted store, kept by the sync loop so a store
+/// is announced once per rise rather than on every pass (HS2-KKFEY5).
+#[derive(Debug, Default)]
+pub struct SizeLevels(HashMap<String, SizeLevel>);
+
+impl SizeLevels {
+    /// Whether `store` has a recorded level.
+    pub fn contains(&self, store: &str) -> bool {
+        self.0.contains_key(store)
+    }
+
+    /// Record `size` for `store` and return the crossing when the level rose past a limit.
+    /// The first measurement only seeds the level; an unmeasurable store keeps its old one.
+    /// A drop lowers the level, so a later rise is announced again.
+    pub fn observe(
+        &mut self,
+        store: &str,
+        label: &str,
+        size: Option<GitObjectSize>,
+    ) -> Option<SizeCrossing> {
+        let size = size?;
+        let level = SizeLevel::for_bytes(size.total_bytes);
+        let before = self.0.insert(store.to_string(), level)?;
+        crossing_message(label, before, size).map(|message| SizeCrossing { level, message })
+    }
 }
 
 /// The delay before the next pass: the base interval when all is well, else an
@@ -92,12 +160,13 @@ pub fn purge_all_trash(state: &AppState) -> Vec<(String, usize)> {
 
 fn run(state: AppState, base: Duration, rx: Receiver<()>) {
     let mut last_trash_purge: Option<std::time::Instant> = None;
+    let mut levels = SizeLevels::default();
     drive(base, &mut ChannelWaker::new(rx), || {
         if last_trash_purge.is_none_or(|at| at.elapsed() >= TRASH_PURGE_INTERVAL) {
             purge_all_trash(&state);
             last_trash_purge = Some(std::time::Instant::now());
         }
-        sync_all(&state)
+        sync_all_with_sizes(&state, &mut levels, git_object_size)
     });
 }
 
@@ -304,6 +373,56 @@ mod tests {
         // A conflict is not transient → no backoff.
         let conflict = vec![("s".into(), SyncReport::Conflict)];
         assert_eq!(next_delay(base, base, &conflict), base);
+    }
+
+    /// HS2-KKFEY5: the loop announces each rise across a limit exactly once, re-announces
+    /// a rise after a drop, and never announces a first (seeding) measurement.
+    #[test]
+    fn size_levels_announce_each_rise_once_across_the_transition_matrix() {
+        use hotsheet_ticketing::repository_size::{CRITICAL_BYTES, WARNING_BYTES};
+        let size = |total_bytes| {
+            Some(GitObjectSize {
+                total_bytes,
+                ..GitObjectSize::default()
+            })
+        };
+        let mut levels = SizeLevels::default();
+        assert!(!levels.contains("s"));
+        // Seeding never announces, even above a limit.
+        assert_eq!(levels.observe("s", "store", size(WARNING_BYTES)), None);
+        assert!(levels.contains("s"));
+        let mut fresh = SizeLevels::default();
+        assert_eq!(fresh.observe("t", "other", size(1)), None);
+
+        let steps = [
+            (WARNING_BYTES + 1, None),                       // warning → warning
+            (CRITICAL_BYTES, Some(SizeLevel::Critical)),     // warning → critical
+            (CRITICAL_BYTES + 1, None),                      // critical → critical
+            (1, None),                                       // drop to ok
+            (WARNING_BYTES, Some(SizeLevel::Warning)),       // ok → warning again
+            (CRITICAL_BYTES * 2, Some(SizeLevel::Critical)), // warning → critical again
+        ];
+        for (bytes, expected) in steps {
+            let crossing = levels.observe("s", "store", size(bytes));
+            assert_eq!(
+                crossing.as_ref().map(|c| c.level),
+                expected,
+                "{bytes} bytes"
+            );
+            if let Some(crossing) = crossing {
+                assert!(crossing.message.contains("store"), "{}", crossing.message);
+            }
+        }
+        // An unmeasurable pass keeps the level, so it neither announces nor resets.
+        assert_eq!(levels.observe("s", "store", None), None);
+        assert_eq!(levels.observe("s", "store", size(CRITICAL_BYTES * 3)), None);
+        // From ok, a jump straight to critical is one announcement.
+        assert_eq!(
+            fresh
+                .observe("t", "other", size(CRITICAL_BYTES))
+                .map(|c| c.level),
+            Some(SizeLevel::Critical)
+        );
     }
 
     #[test]
