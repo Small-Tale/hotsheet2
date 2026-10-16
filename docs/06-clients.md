@@ -866,6 +866,13 @@ preview/download, server directory browser) are separate design work.
   the gallery footer (also as the footer changes height when markup finishes), so the toast never
   covers the zoom or markup toolbars at wide or phone widths; each new toast also reopens the stack
   so it draws above a modal opened since the previous one (HS2-DSW9TY).
+  Toasts stay dismissible over modal surfaces (HS2-M2G31B): a modal `<dialog>` makes everything
+  outside it inert, so while a toast shows the stack lives inside the topmost open modal dialog
+  (in an app-inserted `data-morph-preserve` host, `display: contents`, that Kerf re-renders keep)
+  and its close button can be focused and clicked. A toast already up when a modal opens moves into
+  it and is lifted above the gallery footer at once; when the modal closes or unmounts the stack
+  returns to the page. One mutation watcher runs only while a toast shows or the stack is still
+  inside a modal (`clients/web/src/toast-modal-host.ts`).
   The primary project and terminal layouts follow the same ownership boundary:
   `components/workspace-composition-surfaces.tsx` owns the sidebar, ticket workspace,
   terminal ticket rail, global terminal/statistics workspace, project terminal drawer,

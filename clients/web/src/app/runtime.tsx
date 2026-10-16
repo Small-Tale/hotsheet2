@@ -204,6 +204,7 @@ import {
 } from '../ticket-views';
 import { createBrowserToastClearance } from '../toast-clearance';
 import { createToastLifetime } from '../toast-lifetime';
+import { createBrowserToastModalHost } from '../toast-modal-host';
 import { createToastPresentation } from '../toast-presentation';
 import { createTrackedSizeObserver } from '../tracked-size-observer';
 import { createTrailingTask } from '../trailing-task';
@@ -645,9 +646,19 @@ export async function startHotSheetWebClient() {
   const toastClearance = createBrowserToastClearance(toastHost, () =>
     document.querySelector('[data-component="attachment-gallery"] .attachment-gallery__footer'),
   );
+  // While a toast shows it lives inside the topmost open modal dialog, so it stays clickable over the
+  // gallery, and it moves (and re-measures its clearance) when a modal opens or closes (HS2-M2G31B).
+  const toastModalHost = createBrowserToastModalHost(toastHost, () => {
+    toastClearance.track();
+  });
   const toastLifetime = createToastLifetime((state) => {
-    if (state.message) toastClearance.track();
-    else toastClearance.stop();
+    if (state.message) {
+      toastModalHost.start();
+      toastClearance.track();
+    } else {
+      toastModalHost.stop();
+      toastClearance.stop();
+    }
     if (toastHost.isConnected) void toastPresentation.publish(state);
   });
   function showToast(message: string) {
@@ -4816,6 +4827,7 @@ export async function startHotSheetWebClient() {
       disposeRailToolbarVisibility();
       toastHost.removeEventListener('wa-after-hide', onToastHide);
       toastPresentation.dispose();
+      toastModalHost.dispose();
       toastHost.remove();
       toastLifetime.dispose();
       toastClearance.stop();

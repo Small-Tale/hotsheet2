@@ -20931,6 +20931,88 @@ test('keeps the markup-saved toast clear of the gallery zoom controls at wide an
   }
 });
 
+test('keeps a toast dismissible over the modal media gallery and lifts one already showing when it opens (HS2-M2G31B)', async ({
+  page,
+}) => {
+  // Hold each toast past its 2.5 s lifetime so every step below runs while it is still on screen.
+  await page.addInitScript(() => {
+    const original = window.setTimeout.bind(window);
+    window.setTimeout = ((handler: TimerHandler, delay?: number, ...rest: unknown[]) =>
+      original(handler, delay === 2_500 ? 600_000 : delay, ...rest)) as typeof window.setTimeout;
+  });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ }),
+    toast = page.locator('wa-toast-item:has(.app-toast)'),
+    close = toast.getByRole('button', { name: 'Close' }),
+    footerTop = () =>
+      gallery.locator('.attachment-gallery__footer').evaluate((node) => node.getBoundingClientRect().top),
+    clearsFooter = async () => {
+      const box = (await toast.boundingBox())!;
+      return box.y + box.height <= (await footerTop()) + 0.5;
+    };
+  const saveMarkup = async () => {
+    await gallery.getByRole('button', { name: 'Annotate media' }).click();
+    await gallery.getByRole('button', { name: 'Add rectangle' }).click();
+    const box = (await gallery.locator('[data-gallery-annotation-surface="true"]').boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.4);
+    await page.mouse.up();
+    await gallery.getByRole('button', { name: 'Finish markup' }).click();
+    await expect(toast).toContainText(/saved\./);
+  };
+  const openGallery = async () => {
+    // At phone width the inspector overlay closes with the gallery; reopen it first.
+    const showInspector = page.getByRole('button', { name: 'Show Ticket Inspector' });
+    if ((page.viewportSize()?.width ?? 0) < 940 && (await showInspector.isVisible())) await showInspector.click();
+    await page.getByRole('tab', { name: /Attachments/ }).click();
+    await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
+    await expect(gallery).toBeVisible();
+  };
+  for (const [width, height] of [
+    [1280, 900],
+    [390, 844],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await openGallery();
+    // A toast raised over the open gallery is part of the modal surface: focusable and clickable.
+    await saveMarkup();
+    await expect.poll(clearsFooter).toBe(true);
+    await close.focus();
+    await expect(close).toBeFocused();
+    await expect(page.locator('dialog[data-component="attachment-gallery"] wa-toast')).toHaveCount(1);
+    await page.waitForTimeout(400); // let the show animation settle for the capture
+    await page.screenshot({ path: `target/visual-captures/hs2-m2g31b-toast-over-gallery-${width}.png` });
+    await close.click();
+    await expect(toast).toHaveCount(0);
+    await expect(gallery).toBeVisible();
+
+    // A toast still showing when the gallery closes returns to the page, stays visible, and moves
+    // back in, above the footer and dismissible, when the gallery opens again.
+    await saveMarkup();
+    await gallery.getByRole('button', { name: 'Close image gallery' }).click();
+    await expect(gallery).toHaveCount(0);
+    await expect(toast).toBeVisible();
+    await expect(page.locator('body > wa-toast')).toHaveCount(1);
+    await openGallery();
+    await expect(page.locator('dialog[data-component="attachment-gallery"] wa-toast')).toHaveCount(1);
+    await expect(toast).toBeVisible();
+    await expect.poll(clearsFooter).toBe(true);
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: `target/visual-captures/hs2-m2g31b-toast-lifted-on-open-${width}.png` });
+    await close.click();
+    await expect(toast).toHaveCount(0);
+    await gallery.getByRole('button', { name: 'Close image gallery' }).click();
+    await expect(gallery).toHaveCount(0);
+    // The stack is back on the page for the next toast.
+    await expect(page.locator('body > wa-toast')).toHaveCount(1);
+  }
+});
+
 const markupToolLabels = {
   select: 'Select annotation',
   freehand: 'Draw freehand',
