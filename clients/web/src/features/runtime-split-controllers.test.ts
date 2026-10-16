@@ -161,6 +161,7 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
         refreshRepositoryStatus: noop,
         loadConfidenceReport: noop,
         loadRepositorySize,
+        permissionRulesChanged: vi.fn(),
       });
     owner.syncProjectChangeStreams();
     await streams.onEvents.get('/api/a')!({
