@@ -9,6 +9,7 @@ import {
   browserTerminalAttachTarget,
   installProjectWebSocketBridge,
   installTerminalWebSocketBridge,
+  isProjectWebSocketPath,
 } from './terminal-ws-bridge';
 
 const servers: Array<{ close(callback: () => void): void }> = [];
@@ -97,6 +98,50 @@ describe('terminal WebSocket bridge', () => {
     expect([...(binary as Buffer)]).toEqual([1, 2, 3]);
     client.close();
     await once(client, 'close');
+  });
+
+  it('refuses an unresolvable project socket at once and leaves other upgrade paths alone (HS2-CNWHW3)', async () => {
+    const bridgeHttp = createServer();
+    servers.push(bridgeHttp);
+    installProjectWebSocketBridge(
+      { httpServer: bridgeHttp },
+      () => undefined,
+      () => undefined,
+    );
+    const port = await listen(bridgeHttp);
+    for (const path of [
+      '/__hotsheet/project-api/closed/ws/sync',
+      '/__hotsheet/project-api/closed/terminals/t1/attach',
+    ]) {
+      const started = Date.now(),
+        client = new WebSocket(`ws://127.0.0.1:${port}${path}`);
+      client.on('error', () => undefined);
+      const [, response] = (await once(client, 'unexpected-response')) as [unknown, { statusCode?: number }];
+      expect(response.statusCode).toBe(404);
+      // Well inside the browser transport's 2 s handshake timeout.
+      expect(Date.now() - started).toBeLessThan(2_000);
+      client.terminate();
+    }
+    // A path the bridge does not own is left to its own handler (Vite HMR), untouched.
+    const foreign: Array<{ destroyed: boolean; destroy(): void }> = [];
+    bridgeHttp.on('upgrade', (request: { url?: string }, socket: { destroyed: boolean; destroy(): void }) => {
+      if (request.url === '/vite-hmr') foreign.push(socket);
+    });
+    let settled = false;
+    const other = new WebSocket(`ws://127.0.0.1:${port}/vite-hmr`);
+    other.on('unexpected-response', () => (settled = true));
+    other.on('error', () => (settled = true));
+    await vi.waitFor(() => {
+      expect(foreign).toHaveLength(1);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(settled).toBe(false);
+    expect(foreign[0].destroyed).toBe(false);
+    foreign[0].destroy();
+    other.terminate();
+    expect(isProjectWebSocketPath('/__hotsheet/project-api/p/ws/sync?client=c')).toBe(true);
+    expect(isProjectWebSocketPath('/vite-hmr')).toBe(false);
+    expect(isProjectWebSocketPath(undefined)).toBe(false);
   });
 
   it('forwards live project change frames without exposing the upstream secret', async () => {

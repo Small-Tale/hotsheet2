@@ -42,6 +42,17 @@ export async function browserProjectWebSocketTarget(
   return browserTerminalAttachTarget(requestUrl, resolveTerminal);
 }
 
+/** Whether an upgrade request names a Hot Sheet project WebSocket this bridge serves. */
+export function isProjectWebSocketPath(requestUrl: string | undefined): boolean {
+  if (!requestUrl) return false;
+  const { pathname } = new URL(requestUrl, 'http://localhost');
+  return browserSync.test(pathname) || browserAttach.test(pathname);
+}
+
+function refuseUpgrade(socket: Duplex): void {
+  socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+}
+
 export function installProjectWebSocketBridge(
   server: {
     httpServer?: {
@@ -55,7 +66,14 @@ export function installProjectWebSocketBridge(
   server.httpServer?.on('upgrade', (request, socket, head) => {
     void browserProjectWebSocketTarget(request.url, resolveTerminal, resolveSync)
       .then((target) => {
-        if (!target) return;
+        if (!target) {
+          // Another upgrade handler (Vite's HMR socket) owns every other path. A Hot Sheet path
+          // the bridge cannot resolve (no open session, unreachable server) used to be left
+          // pending forever, so the browser waited out its handshake timeout on each retry;
+          // refuse it at once instead (HS2-CNWHW3).
+          if (isProjectWebSocketPath(request.url)) refuseUpgrade(socket);
+          return;
+        }
         browserServer.handleUpgrade(request, socket, head, (browser) => {
           const upstream = new WebSocket(target),
             pending: Array<{ data: WebSocket.RawData; binary: boolean }> = [];

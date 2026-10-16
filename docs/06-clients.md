@@ -1610,7 +1610,15 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   (HS2-BX4MCH): a page that returns early with events is followed by another long poll
   for the rest of the window, so a later event is delivered at once instead of waiting out
   the backoff. Only an empty early page (a server that ignores the poll timeout) sleeps
-  for the rest of the window. Replay refreshes ticket state only when it carries a ticket
+  for the rest of the window.
+  The backoff delay is also the replay long-poll's timeout, so it
+  resets once a socket has stayed open and caught up for 10 s. Otherwise a quiet project's
+  every reconnect (a server restart or dev rebuild) grew it toward 30 s, and every open
+  project then held a 30 s replay at once, filling the browser's six HTTP/1.1 connections to
+  the origin and stalling ordinary requests. A socket that drops sooner keeps backing off.
+  The bridge refuses a project WebSocket path it cannot resolve (no open session, unreachable
+  server) with an immediate 404 instead of leaving the upgrade pending until the client's
+  2 s handshake timeout (HS2-CNWHW3). Replay refreshes ticket state only when it carries a ticket
   invalidation or overflow; an empty replay after a rejected upgrade does not wake the
   workspace. The existing local-mutation barrier,
   acknowledgement suppression, overflow recovery, and event consumers receive the same

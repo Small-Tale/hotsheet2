@@ -338,6 +338,52 @@ describe('project change WebSocket stream', () => {
     waiting.resolve(undefined);
   });
 
+  it('keeps replay long-polls short after a healthy quiet socket drops, but backs off a flapping one (HS2-CNWHW3)', async () => {
+    // Replay poll timeouts across five reconnects of a project that never receives an event.
+    const replayTimeouts = async (stable: boolean) => {
+      const timeouts: number[] = [],
+        done = deferred<undefined>();
+      let clock = 0,
+        stop = () => {};
+      const pollEvents = vi.fn((since?: number, _signal?: AbortSignal, timeoutMs?: number) => {
+        // The handshake has no cursor and the post-open catch-up waits 0 ms; the rest are replays.
+        if (since !== undefined && timeoutMs !== 0) timeouts.push(timeoutMs ?? -1);
+        if (timeouts.length === 5) {
+          stop();
+          done.resolve(undefined);
+        }
+        return Promise.resolve(response(3));
+      });
+      stop = startProjectChangeStream({
+        client: { pollEvents, changeWebSocketUrl: () => 'ws://localhost/project/ws/sync' },
+        refresh: vi.fn().mockResolvedValue(undefined),
+        wait: vi.fn().mockResolvedValue(undefined),
+        now: () => clock,
+        retryMs: 500,
+        maxRetryMs: 30_000,
+        openWebSocket: () => {
+          const socket = new FakeSocket();
+          queueMicrotask(() => {
+            socket.open();
+            // Let the catch-up poll finish, then the server drops the socket.
+            setTimeout(() => {
+              clock += stable ? 60_000 : 100;
+              socket.close();
+            }, 0);
+          });
+          return socket as unknown as WebSocket;
+        },
+      });
+      await done.promise;
+      return timeouts;
+    };
+    // A socket that served for a minute each time: every replay is a short 500 ms poll, so a
+    // server restart cannot leave every open project holding a 30 s request.
+    expect(await replayTimeouts(true)).toEqual([500, 500, 500, 500, 500]);
+    // One that drops within 100 ms keeps the exponential backoff (no tight reconnect loop).
+    expect(await replayTimeouts(false)).toEqual([500, 1_000, 2_000, 4_000, 8_000]);
+  });
+
   it('caps repeated upgrade retry delays while long-poll remains available', async () => {
     const delays: number[] = [],
       done = deferred<undefined>(),

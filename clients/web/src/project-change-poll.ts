@@ -41,6 +41,8 @@ export interface ProjectChangeStreamOptions extends Omit<ProjectChangePollOption
   client: Pick<Api, 'pollEvents'> & Partial<Pick<Api, 'changeWebSocketUrl'>>;
   openWebSocket?: (url: string) => WebSocket;
   webSocketOpenTimeoutMs?: number;
+  webSocketStableMs?: number;
+  now?: () => number;
 }
 
 export const containsTicketChange = (response: PollResponse): boolean =>
@@ -94,6 +96,17 @@ export interface ProjectChangeTransportOptions {
   wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   openWebSocket?: (url: string) => WebSocket;
   webSocketOpenTimeoutMs?: number;
+  /**
+   * How long a socket must stay open and caught up before its loss counts as a fresh
+   * disconnect rather than another failure (HS2-CNWHW3). Without it the retry delay, which is
+   * also the replay long-poll's timeout, only reset when an event arrived, so a quiet project's
+   * every reconnect (a server restart, a dev rebuild) grew it toward `maxRetryMs`, and all open
+   * projects then held 30 s replay polls at once, enough to fill a browser's six HTTP/1.1
+   * connections to the dev origin. A socket that drops sooner keeps backing off, so a server that
+   * accepts and immediately closes cannot drive a tight reconnect loop.
+   */
+  webSocketStableMs?: number;
+  now?: () => number;
   /**
    * Resume a stream another owner already followed (a restarted worker, or the main-thread
    * fallback taking over): `cursor` replays from the last acknowledged position, and an
@@ -232,7 +245,9 @@ export function runProjectChangeTransport(options: ProjectChangeTransportOptions
     wait = options.wait ?? abortableWait,
     retryMs = options.retryMs ?? 500,
     maxRetryMs = options.maxRetryMs ?? 30_000,
-    openTimeoutMs = options.webSocketOpenTimeoutMs ?? 2_000;
+    openTimeoutMs = options.webSocketOpenTimeoutMs ?? 2_000,
+    stableMs = options.webSocketStableMs ?? 10_000,
+    now = options.now ?? Date.now;
   const openSocket = options.openWebSocket ?? ((url: string) => new WebSocket(url));
 
   void (async () => {
@@ -268,6 +283,7 @@ export function runProjectChangeTransport(options: ProjectChangeTransportOptions
         continue;
       }
 
+      let liveSince: number | undefined;
       const outcome = await new Promise<{ reason?: unknown }>((resolve) => {
         let activeSocket: WebSocket | undefined,
           ready = false,
@@ -333,6 +349,7 @@ export function runProjectChangeTransport(options: ProjectChangeTransportOptions
                 cursor = catchup.cursor;
                 await consume(catchup);
                 ready = true;
+                liveSince = now();
                 for (const raw of queued.splice(0)) await accept(raw);
               })
               .catch(fail);
@@ -361,6 +378,8 @@ export function runProjectChangeTransport(options: ProjectChangeTransportOptions
       if (wasAborted(controller.signal)) return;
       reconnecting = true;
       if (!outcome.reason) options.onError?.(new Error('Project change WebSocket closed.'));
+      // A socket that served live for a while was healthy: replay and reconnect promptly.
+      if (liveSince !== undefined && now() - liveSince >= stableMs) retryDelay = retryMs;
       const fallbackStarted = Date.now();
       try {
         // Long-poll through the whole retry window (HS2-BX4MCH). A page that returns early
