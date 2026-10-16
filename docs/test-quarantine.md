@@ -6,6 +6,20 @@ A test that fails intermittently for reasons unrelated to the change under test 
 Quarantine is a holding state, not a fix. Every entry names an open ticket that owns the
 repair, and fixing the test removes both its marker and its row.
 
+## Tests that needed a retry
+
+Only CI's full browser suite (`browser-full`) retries a failed Playwright test, at most twice
+(HS2-8YHY6V). Local runs and the required `@ci-smoke` and `@ci-webkit` groups never retry.
+A test that passes only on a retry does not fail the job, but it stays visible: the merged
+HTML report marks it flaky, and the `browser-full-report` job summary lists it under
+"Browser tests that needed a retry" (`scripts/playwright-retries.mjs`), with a warning
+annotation for each.
+
+**A test that needs a retry gets a follow-up ticket.** File (or reuse) a bug ticket for its
+root cause, with the CI run and the failed attempt's error as evidence. A retry is a
+reprieve, not a fix. If the test keeps needing retries before its fix lands, quarantine it
+below.
+
 ## Quarantining a test
 
 1. File (or reuse) a bug ticket that describes the flake and its evidence.

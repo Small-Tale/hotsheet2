@@ -14,3 +14,17 @@ export function quarantined(ticket: string, env: Record<string, string | undefin
 export function quarantineGrepInvert(env: Record<string, string | undefined> = process.env): RegExp | undefined {
   return env.HOTSHEET_RUN_QUARANTINED === '1' ? undefined : /@quarantine\b/;
 }
+
+/** The most retries any Playwright run may use; a test that needs more is broken, not flaky. */
+export const MAX_PLAYWRIGHT_RETRIES = 2;
+
+/**
+ * Playwright `retries` (HS2-8YHY6V). Only CI's full browser suite sets HOTSHEET_PLAYWRIGHT_RETRIES; local
+ * runs and the required `@ci-smoke` group leave it unset and get no retries, so a flake fails them.
+ * The value is clamped to 0..MAX_PLAYWRIGHT_RETRIES, and anything unparsable means no retries.
+ */
+export function playwrightRetries(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.HOTSHEET_PLAYWRIGHT_RETRIES?.trim() ?? '';
+  if (!/^\d+$/.test(raw)) return 0;
+  return Math.min(Number(raw), MAX_PLAYWRIGHT_RETRIES);
+}

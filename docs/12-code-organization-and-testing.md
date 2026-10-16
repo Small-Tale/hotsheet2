@@ -639,8 +639,18 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   `final_testing` handoff, so the local requirement is the affected specs only. The
   `@ci-smoke` group stays as the fast early signal. Until the job has run green on main
   it is `continue-on-error` (HS2-6H4M85 makes it required), so check its result
-  explicitly in `final_testing`. Quarantine flaky specs ([test-quarantine.md](test-quarantine.md))
-  rather than adding silent retries.
+  explicitly in `final_testing`.
+- **Bounded, visible retries in `browser-full` only (HS2-8YHY6V).** The shards set
+  `HOTSHEET_PLAYWRIGHT_RETRIES=2`, which `playwright.config.ts` reads through
+  `playwrightRetries()` in `clients/web/src/test-quarantine.ts` (clamped to at most 2; unset or
+  unparsable means none). Local runs and the required `@ci-smoke` and `@ci-webkit` groups never
+  retry, so a flake still fails them. A test that fails and then passes on a retry is
+  reported `flaky`: it does not fail the job, but it is never silent. The merged HTML report
+  marks it flaky, and `browser-full-report` runs `scripts/playwright-retries.mjs`, which writes
+  a "Browser tests that needed a retry" table to the job summary and one warning annotation per
+  test. Every test that needs a retry gets a follow-up bug ticket for its root cause; a test
+  that keeps flaking is quarantined ([test-quarantine.md](test-quarantine.md)). Retries never
+  replace a fix.
   A separate bounded WebKit job runs the inspector popup-anchor regression marked
   `@ci-webkit` (HS2-HASXWP), covering the Safari engine without delaying the main
   Chromium gate.

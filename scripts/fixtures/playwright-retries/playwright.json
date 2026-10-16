@@ -1,0 +1,406 @@
+{
+ "config": {
+  "argv": [
+   "/usr/bin/node",
+   "/root/node_modules/.bin/playwright",
+   "test",
+   "-c",
+   "playwright.config.mjs"
+  ],
+  "configFile": "/root/playwright.config.mjs",
+  "rootDir": "/root",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": null,
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/test-results",
+    "repeatEach": 1,
+    "retries": 2,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "",
+    "name": "",
+    "testDir": "/root",
+    "testIgnore": [],
+    "testMatch": [
+     "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+    ],
+    "timeout": 30000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "json",
+    {
+     "outputFile": "report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "missing",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": null
+ },
+ "suites": [
+  {
+   "title": "a.spec.mjs",
+   "file": "a.spec.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "passes first time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 30000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "",
+       "projectName": "",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 0,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-16T15:48:04.130Z",
+         "annotations": [],
+         "attachments": []
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "f10c3055afda6889ad03-07de007f7fe8cccd3285",
+     "file": "a.spec.mjs",
+     "line": 8,
+     "column": 1
+    },
+    {
+     "title": "always fails",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 30000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "",
+       "projectName": "",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 2,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /root/a.spec.mjs:10:13",
+          "location": {
+           "file": "/root/a.spec.mjs",
+           "column": 13,
+           "line": 10
+          },
+          "snippet": "   8 | test('passes first time', async () => {});\n   9 | test('always fails', async () => {\n> 10 |   expect(1).toBe(2);\n     |             ^\n  11 | });\n  12 | test.skip('skipped', async () => {});\n  13 |"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/a.spec.mjs",
+            "column": 13,
+            "line": 10
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n   8 | test('passes first time', async () => {});\n   9 | test('always fails', async () => {\n> 10 |   expect(1).toBe(2);\n     |             ^\n  11 | });\n  12 | test.skip('skipped', async () => {});\n  13 |\n    at /root/a.spec.mjs:10:13"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-16T15:48:04.136Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/test-results/a-always-fails/error-context.md"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/a.spec.mjs",
+          "column": 13,
+          "line": 10
+         }
+        },
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 4,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /root/a.spec.mjs:10:13",
+          "location": {
+           "file": "/root/a.spec.mjs",
+           "column": 13,
+           "line": 10
+          },
+          "snippet": "   8 | test('passes first time', async () => {});\n   9 | test('always fails', async () => {\n> 10 |   expect(1).toBe(2);\n     |             ^\n  11 | });\n  12 | test.skip('skipped', async () => {});\n  13 |"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/a.spec.mjs",
+            "column": 13,
+            "line": 10
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n   8 | test('passes first time', async () => {});\n   9 | test('always fails', async () => {\n> 10 |   expect(1).toBe(2);\n     |             ^\n  11 | });\n  12 | test.skip('skipped', async () => {});\n  13 |\n    at /root/a.spec.mjs:10:13"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 1,
+         "startTime": "2026-10-16T15:48:04.383Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/test-results/a-always-fails-retry1/error-context.md"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/a.spec.mjs",
+          "column": 13,
+          "line": 10
+         }
+        },
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 4,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /root/a.spec.mjs:10:13",
+          "location": {
+           "file": "/root/a.spec.mjs",
+           "column": 13,
+           "line": 10
+          },
+          "snippet": "   8 | test('passes first time', async () => {});\n   9 | test('always fails', async () => {\n> 10 |   expect(1).toBe(2);\n     |             ^\n  11 | });\n  12 | test.skip('skipped', async () => {});\n  13 |"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/a.spec.mjs",
+            "column": 13,
+            "line": 10
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n   8 | test('passes first time', async () => {});\n   9 | test('always fails', async () => {\n> 10 |   expect(1).toBe(2);\n     |             ^\n  11 | });\n  12 | test.skip('skipped', async () => {});\n  13 |\n    at /root/a.spec.mjs:10:13"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 2,
+         "startTime": "2026-10-16T15:48:04.635Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/test-results/a-always-fails-retry2/error-context.md"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/a.spec.mjs",
+          "column": 13,
+          "line": 10
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "f10c3055afda6889ad03-91c1babaaa513a750aa5",
+     "file": "a.spec.mjs",
+     "line": 9,
+     "column": 1
+    },
+    {
+     "title": "skipped",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 30000,
+       "annotations": [
+        {
+         "type": "skip",
+         "location": {
+          "file": "/root/a.spec.mjs",
+          "line": 12,
+          "column": 6
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "",
+       "projectName": "",
+       "results": [
+        {
+         "workerIndex": -1,
+         "parallelIndex": -1,
+         "status": "skipped",
+         "duration": 0,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-16T15:48:04.663Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "location": {
+            "file": "/root/a.spec.mjs",
+            "line": 12,
+            "column": 6
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "f10c3055afda6889ad03-1d1c7ce9945e7303d364",
+     "file": "a.spec.mjs",
+     "line": 12,
+     "column": 6
+    }
+   ],
+   "suites": [
+    {
+     "title": "tabs",
+     "file": "a.spec.mjs",
+     "line": 3,
+     "column": 6,
+     "specs": [
+      {
+       "title": "passes after one retry",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 30000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "",
+         "projectName": "",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "failed",
+           "duration": 3,
+           "error": {
+            "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0\u001b[39m\nReceived:   \u001b[31m0\u001b[39m",
+            "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0\u001b[39m\nReceived:   \u001b[31m0\u001b[39m\n    at /root/a.spec.mjs:5:24",
+            "location": {
+             "file": "/root/a.spec.mjs",
+             "column": 24,
+             "line": 5
+            },
+            "snippet": "  3 | test.describe('tabs', () => {\n  4 |   test('passes after one retry', async ({}, info) => {\n> 5 |     expect(info.retry).toBeGreaterThan(0);\n    |                        ^\n  6 |   });\n  7 | });\n  8 | test('passes first time', async () => {});"
+           },
+           "errors": [
+            {
+             "location": {
+              "file": "/root/a.spec.mjs",
+              "column": 24,
+              "line": 5
+             },
+             "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0\u001b[39m\nReceived:   \u001b[31m0\u001b[39m\n\n  3 | test.describe('tabs', () => {\n  4 |   test('passes after one retry', async ({}, info) => {\n> 5 |     expect(info.retry).toBeGreaterThan(0);\n    |                        ^\n  6 |   });\n  7 | });\n  8 | test('passes first time', async () => {});\n    at /root/a.spec.mjs:5:24"
+            }
+           ],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-16T15:48:03.863Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "error-context",
+             "contentType": "text/markdown",
+             "path": "/root/test-results/a-tabs-passes-after-one-retry/error-context.md"
+            }
+           ],
+           "errorLocation": {
+            "file": "/root/a.spec.mjs",
+            "column": 24,
+            "line": 5
+           }
+          },
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 3,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 1,
+           "startTime": "2026-10-16T15:48:04.109Z",
+           "annotations": [],
+           "attachments": []
+          }
+         ],
+         "status": "flaky"
+        }
+       ],
+       "id": "f10c3055afda6889ad03-6db65c5d05dc0fbccd13",
+       "file": "a.spec.mjs",
+       "line": 4,
+       "column": 3
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-16T15:48:03.619Z",
+  "duration": 1049.274,
+  "expected": 1,
+  "skipped": 1,
+  "unexpected": 1,
+  "flaky": 1
+ }
+}

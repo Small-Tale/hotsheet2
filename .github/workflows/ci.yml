@@ -148,8 +148,8 @@ jobs:
       - name: Validate feature double-coverage matrix
         run: node --test scripts/check-test-coverage.test.mjs && node scripts/check-test-coverage.mjs
 
-      - name: Test the quiet test wrapper and the slow-test profiler
-        run: node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs
+      - name: Test the quiet test wrapper, the slow-test profiler, and the retried-test summary
+        run: node --test scripts/test-quiet.test.mjs scripts/test-profile.test.mjs scripts/playwright-retries.test.mjs
 
       - name: Validate the flaky-test quarantine list
         run: node --test scripts/check-test-quarantine.test.mjs && node scripts/check-test-quarantine.mjs
@@ -385,6 +385,9 @@ jobs:
         timeout-minutes: 35
         env:
           HOTSHEET_MEDIA_TEST_VIDEO: tests/fixtures/video-scrub.mp4
+          # Bounded retries for this job only (HS2-8YHY6V): the merged report and the job summary list
+          # every test that needed one, and each gets a follow-up ticket (docs/test-quarantine.md).
+          HOTSHEET_PLAYWRIGHT_RETRIES: '2'
         run: npx playwright test --shard=${{ matrix.shard }}/4 --fully-parallel --workers=2 --reporter=blob
 
       - name: Upload the shard's blob report
@@ -428,6 +431,10 @@ jobs:
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: playwright-report.json
         run: npx playwright merge-reports --reporter=html,json,list ./all-blob-reports
+
+      - name: Browser tests that needed a retry
+        working-directory: clients/web
+        run: node ../../scripts/playwright-retries.mjs playwright-report.json --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Slowest browser tests
         working-directory: clients/web
