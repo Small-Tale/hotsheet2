@@ -306,4 +306,35 @@ async fn a_blocked_store_request_does_not_starve_unrelated_routes() {
         .unwrap()
         .unwrap();
     assert_eq!(list.status(), StatusCode::OK);
+    // Its Server-Timing names the mutex wait separately from the handler total (HS2-P867K1).
+    let timing: Vec<_> = list
+        .headers()
+        .get_all("server-timing")
+        .iter()
+        .map(|value| value.to_str().unwrap().to_string())
+        .collect();
+    let wait_ms: f64 = timing
+        .iter()
+        .find_map(|entry| entry.split("index-wait;dur=").nth(1))
+        .and_then(|rest| rest.split(',').next())
+        .and_then(|ms| ms.trim().parse().ok())
+        .unwrap_or_else(|| panic!("no index-wait entry in {timing:?}"));
+    assert!(
+        wait_ms >= 40.0,
+        "the held lock shows as index wait: {timing:?}"
+    );
+    for phase in [
+        "index-query",
+        "index-phases",
+        "settings",
+        "encode",
+        "handler",
+    ] {
+        assert!(
+            timing
+                .iter()
+                .any(|entry| entry.contains(&format!("{phase};dur="))),
+            "{phase} missing from {timing:?}"
+        );
+    }
 }

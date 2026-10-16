@@ -14,6 +14,7 @@ use hotsheet_sync::LockExt;
 use hotsheet_ticketing::{ApiTicket, Settings, auto_context, ops};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::time::{Duration, Instant};
 
 // ---- handlers --------------------------------------------------------------------
 
@@ -257,10 +258,15 @@ pub(crate) fn list_entry_tickets(
     let mut query = params.into_query(entry.store.root())?;
     let bound = ops::StoreReadBound::new(query.limit)?;
     query.limit = Some(bound.fetch_limit());
-    let (mut rows, typical_phases) = {
+    let started = Instant::now();
+    let (mut rows, typical_phases, locked, queried) = {
         let index = entry.index.lock_or_recover();
-        (index.query(&query)?, index.typical_phase_durations()?)
+        let locked = started.elapsed();
+        let rows = index.query(&query)?;
+        let queried = started.elapsed();
+        (rows, index.typical_phase_durations()?, locked, queried)
     };
+    let unlocked = started.elapsed();
     let truncated = bound.finish(&mut rows)?;
     for row in &mut rows {
         row.set_connection(connection_id);
@@ -272,11 +278,26 @@ pub(crate) fn list_entry_tickets(
     }
     let contexts = auto_context::effective(&Settings::new(entry.store.root()))
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let settings_read = started.elapsed();
     for row in &mut rows {
         row.add_auto_context(&contexts);
         hotsheet_ticketing::phase_timing::apply_phase_estimate(row, &typical_phases);
     }
     let mut response = Json(rows_to_json(rows, &fields)).into_response();
+    // Where a slow list spends its time (HS2-P867K1): waiting for the index mutex, the SQLite
+    // query and phase scan under it, the settings read, and JSON encoding after it.
+    let ms = |from: Duration, to: Duration| to.saturating_sub(from).as_secs_f64() * 1000.0;
+    let timing = format!(
+        "index-wait;dur={:.1}, index-query;dur={:.1}, index-phases;dur={:.1}, settings;dur={:.1}, encode;dur={:.1}",
+        ms(Duration::ZERO, locked),
+        ms(locked, queried),
+        ms(queried, unlocked),
+        ms(unlocked, settings_read),
+        ms(settings_read, started.elapsed()),
+    );
+    if let Ok(value) = axum::http::HeaderValue::from_str(&timing) {
+        response.headers_mut().append("server-timing", value);
+    }
     if truncated {
         response.headers_mut().insert(
             TRUNCATED_HEADER,

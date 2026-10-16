@@ -929,6 +929,24 @@ fn fts_matches_attachment_filenames() {
 }
 
 #[test]
+fn content_hashes_lists_every_indexed_hash_in_one_read() {
+    let (_d, store, ix) = seeded();
+    let hashes = ix.content_hashes().unwrap();
+    assert_eq!(hashes.len(), 3);
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    assert_eq!(
+        hashes.get(&id).map(String::as_str),
+        ix.content_hash(&id).unwrap().as_deref()
+    );
+    ix.upsert(&store.read_ticket(&id).unwrap(), "p.md", "newhash")
+        .unwrap();
+    ix.delete(&ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1")).unwrap();
+    let hashes = ix.content_hashes().unwrap();
+    assert_eq!(hashes.len(), 2);
+    assert_eq!(hashes.get(&id).map(String::as_str), Some("newhash"));
+}
+
+#[test]
 fn upsert_updates_the_hash_and_delete_removes() {
     let (_d, store, ix) = seeded();
     let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");

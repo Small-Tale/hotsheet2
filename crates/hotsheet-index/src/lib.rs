@@ -384,6 +384,26 @@ impl Index {
             .optional()?)
     }
 
+    /// Every indexed ticket's content hash in one query, for a caller that compares a whole
+    /// store walk against the index without holding the index lock per file (HS2-P867K1).
+    /// Rows whose id is not a ULID are skipped.
+    pub fn content_hashes(&self) -> Result<std::collections::HashMap<Ulid, String>, IndexError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, content_hash FROM tickets WHERE store_id=?1")?;
+        let rows = stmt.query_map(params![self.store_id], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?;
+        let mut hashes = std::collections::HashMap::new();
+        for row in rows {
+            let (id, hash) = row?;
+            if let Ok(id) = Ulid::from_string(&id) {
+                hashes.insert(id, hash);
+            }
+        }
+        Ok(hashes)
+    }
+
     /// Resolve an exact ULID or case-insensitive slug from the indexed projection.
     /// This is the bounded lookup used before reading one source ticket file.
     pub fn resolve_id(&self, needle: &str) -> Result<Option<Ulid>, IndexError> {

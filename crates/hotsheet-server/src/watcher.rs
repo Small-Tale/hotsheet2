@@ -855,22 +855,32 @@ fn stale_ticket_files(target: &WatchTarget, tickets_dir: &FsPath) -> Vec<std::pa
             }
         }
     }
-    let index = target.entry.index.lock_or_recover();
-    files
+    // Read and hash every file before taking the index mutex (HS2-P867K1). Holding it across
+    // the whole walk blocked every list, detail, and note save for the full read of the store
+    // (about 600 ms for 2,000 tickets on a debug build), on each startup and every lost-event
+    // rescan. A write that lands between the hash and the lookup only makes its file look
+    // stale, and applying a stale path re-reads it, so the split never misses a change.
+    let hashed: Vec<_> = files
         .into_iter()
-        .filter(|path| {
-            let Some(id) = path
+        .filter_map(|path| {
+            let id = path
                 .file_stem()
                 .and_then(|stem| stem.to_str())
-                .and_then(|stem| Ulid::from_string(stem).ok())
-            else {
-                return false;
-            };
-            let Ok(bytes) = std::fs::read(path) else {
-                return false;
-            };
-            index.content_hash(&id).ok().flatten().as_deref() != Some(hash_bytes(&bytes).as_str())
+                .and_then(|stem| Ulid::from_string(stem).ok())?;
+            let bytes = std::fs::read(&path).ok()?;
+            Some((path, id, hash_bytes(&bytes)))
         })
+        .collect();
+    let indexed = target
+        .entry
+        .index
+        .lock_or_recover()
+        .content_hashes()
+        .unwrap_or_default();
+    hashed
+        .into_iter()
+        .filter(|(_, id, hash)| indexed.get(id) != Some(hash))
+        .map(|(path, _, _)| path)
         .collect()
 }
 
@@ -1039,6 +1049,52 @@ mod watcher_tests {
         let mut expected = vec![indexed.id.to_string(), missed.id.to_string()];
         expected.sort();
         assert_eq!(stale, expected);
+    }
+
+    /// A full resync reads every ticket file; the index mutex every list, detail, and note save
+    /// needs must stay free while it does (HS2-P867K1). A FIFO named like a ticket blocks the
+    /// walk's read deterministically until this test writes to it.
+    #[cfg(unix)]
+    #[test]
+    fn a_resync_reads_ticket_files_without_holding_the_index_lock() {
+        use hotsheet_model::Ulid;
+        use hotsheet_ticketing::{FsStore, StoreMetadata};
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        let state = super::AppState::new(store.clone(), "secret".into()).unwrap();
+        let target = super::default_watch_target(&state);
+        let tickets = dir.path().join("tickets");
+        let shard = tickets.join("ZZ");
+        std::fs::create_dir_all(&shard).unwrap();
+        let fifo = shard.join(format!("{}.md", Ulid::new()));
+        let path = std::ffi::CString::new(fifo.to_str().unwrap()).unwrap();
+        // SAFETY: a valid NUL-terminated path; mkfifo only creates the special file.
+        assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0);
+        let index = target.entry.index.clone();
+        let walk = std::thread::spawn({
+            let tickets = tickets.clone();
+            move || super::stale_ticket_files(&target, &tickets).len()
+        });
+        // The walk is now blocked opening the FIFO. The index must be free meanwhile.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut checks = 0;
+        while checks < 20 && Instant::now() < deadline {
+            assert!(
+                index.try_lock().is_ok(),
+                "the resync held the index lock while reading ticket files"
+            );
+            checks += 1;
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&fifo)
+            .unwrap()
+            .write_all(b"not a ticket")
+            .unwrap();
+        // The unindexed "file" is reported stale once the walk finishes.
+        assert_eq!(walk.join().unwrap(), 1);
     }
 
     #[test]
