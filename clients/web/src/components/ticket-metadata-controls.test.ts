@@ -233,6 +233,15 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(attachments).toContain('data-attachment-drop-target="true"');
     expect(attachments).toContain('aria-label="Browse and add attachments"');
     expect(attachments).toContain('aria-label="Drop or browse attachments"');
+    // Kerf FilePickerTrigger and FileDropZone own the Add trigger and drop zone (HS2-VHY325).
+    expect(attachments).toMatch(
+      /data-component="file-picker-trigger"[^>]*data-file-picker-id="ticket-attachments"[\s\S]*?name="ticket-attachments"/u,
+    );
+    expect(attachments).toMatch(
+      /data-component="file-drop-zone"[^>]*data-file-picker-id="ticket-attachments"[\s\S]*?name="ticket-attachments"/u,
+    );
+    expect(attachments).not.toContain('ticket-attachments__browse');
+    expect(attachments).not.toContain('ticket-attachments__drop');
     expect(attachments).toContain('data-action="open-attachment-row"');
     expect(attachments).toContain('data-action="open-attachment-menu"');
     expect(attachments).toContain('data-attachment-menu-kind="item"');

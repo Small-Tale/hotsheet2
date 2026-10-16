@@ -21580,6 +21580,26 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await expect(page.getByRole('alert')).toContainText('floating-capture.png');
   await expect(page.getByRole('alert')).toContainText('Wait for it to appear on the desktop');
   await expect(page.locator('[data-attachment-id="A5"]')).toHaveCount(0);
+  // HS2-VHY325: files dragged over the attachments surface highlight its Kerf FileDropZone, and a drop
+  // on the zone is reported once through wireFilePickers rather than also by the surface handler.
+  const surface = page.locator('#app-right-rail [data-component="ticket-attachments"]'),
+    zone = surface.locator('[data-component="file-drop-zone"]');
+  await surface.evaluate((node) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['hover'], 'hover.txt', { type: 'text/plain' }));
+    node.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  });
+  await expect(zone).toHaveAttribute('data-dragging', 'true');
+  await zone.evaluate((node) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['zone proof'], 'zone-dropped.txt', { type: 'text/plain' }));
+    node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  });
+  await expect(zone).not.toHaveAttribute('data-dragging', 'true');
+  const zoneDropped = surface.locator('[data-component="ticket-attachment-item"]', { hasText: 'zone-dropped.txt' });
+  await expect(zoneDropped).toHaveCount(1);
+  await page.waitForTimeout(500);
+  await expect(zoneDropped).toHaveCount(1);
   await page.getByRole('button', { name: 'More Actions for new-proof.txt' }).click();
   await page.locator('[data-context-menu="attachment"]').getByRole('menuitem', { name: 'Remove' }).click();
   await expect(page.locator('[data-attachment-id="A3"]')).toHaveCount(0);

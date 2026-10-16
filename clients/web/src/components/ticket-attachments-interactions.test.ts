@@ -19,6 +19,15 @@ vi.mock('kerfjs', async (original) => ({
     return () => undefined;
   },
 }));
+const routes = vi.hoisted(
+  () => [] as { id: string; handle: (files: File[], selection: { picker: HTMLElement }) => void }[],
+);
+vi.mock('../file-picker-routes', () => ({
+  routeFilePicker: (_root: unknown, id: string, handle: (typeof routes)[number]['handle']) => {
+    routes.push({ id, handle });
+    return () => undefined;
+  },
+}));
 const handler = (event: string, selector: string) =>
   registrations.find((item) => item.event === event && item.selector.includes(selector))!.handle;
 const cancelable = (extra: Record<string, unknown> = {}) => ({
@@ -59,29 +68,50 @@ describe('wireTicketAttachmentActions (HS2-1KM6MB)', () => {
     vi.unstubAllGlobals();
   });
 
-  it('adds picked files once and clears the input, ignoring an empty pick', () => {
-    const files = { length: 1 } as FileList,
-      input = { files, value: 'a.png' };
-    handler('change', 'ticket-attachments')({}, input);
-    handler('change', 'ticket-attachments')({}, { files: { length: 0 }, value: 'x' });
-    expect(bindings.addFiles.mock.calls).toEqual([[files, input]]);
-    expect(input.value).toBe('');
+  it('adds files the Kerf Add trigger and drop zone report through the shared route (HS2-VHY325)', () => {
+    expect(routes.map((route) => route.id)).toEqual(['ticket-attachments']);
+    expect(registrations.some((item) => item.event === 'change' && item.selector.includes('ticket-attachments'))).toBe(
+      false,
+    );
+    const files = [{ name: 'a.png' }] as unknown as File[],
+      picker = { id: 'zone' } as unknown as HTMLElement;
+    routes[0].handle(files, { picker });
+    expect(bindings.addFiles.mock.calls).toEqual([[files, picker]]);
   });
 
-  it('highlights only the attachment drop target and adds dropped files on either target', () => {
-    const dropzone = { dataset: {} as Record<string, string>, matches: () => true };
-    const rail = { dataset: {} as Record<string, string>, matches: () => false };
+  it('highlights the surface and its Kerf zone, and adds dropped files on either target once', () => {
+    const zone = { dataset: {} as Record<string, string> };
+    const dropzone = { dataset: {} as Record<string, string>, matches: () => true, querySelector: () => zone };
+    const rail = { dataset: {} as Record<string, string>, matches: () => false, querySelector: () => null };
+    const withFiles = cancelable({ dataTransfer: { types: ['Files'] } });
     expect(registrations.find((item) => item.event === 'dragover')!.selector).toContain('#rail');
-    handler('dragover', 'drop-target="true"')(cancelable(), dropzone);
-    handler('dragover', 'drop-target="true"')(cancelable(), rail);
+    // A non-file drag (an attachment being regrouped) flags the surface but not the file zone.
+    handler('dragover', 'drop-target="true"')(cancelable({ dataTransfer: { types: ['text/plain'] } }), dropzone);
     expect(dropzone.dataset.draggingAttachment).toBe('true');
+    expect(zone.dataset.dragging).toBeUndefined();
+    handler('dragover', 'drop-target="true"')(withFiles, dropzone);
+    handler('dragover', 'drop-target="true"')(withFiles, rail);
+    expect(withFiles.preventDefault).toHaveBeenCalledTimes(2);
+    expect(zone.dataset.dragging).toBe('true');
     expect(rail.dataset.draggingAttachment).toBeUndefined();
     handler('dragleave', 'drop-target="true"')({}, dropzone);
     expect(dropzone.dataset.draggingAttachment).toBeUndefined();
-    const files = { length: 2 } as FileList;
+    expect(zone.dataset.dragging).toBeUndefined();
+    const files = { length: 2 } as FileList,
+      outside = { closest: () => null },
+      onZone = { closest: () => zone };
     bindings.addFiles.mockClear();
-    handler('drop', 'drop-target="true"')(cancelable({ dataTransfer: { files } }), rail);
-    handler('drop', 'drop-target="true"')(cancelable({ dataTransfer: { files: { length: 0 } } }), dropzone);
+    handler('drop', 'drop-target="true"')(cancelable({ target: outside, dataTransfer: { files } }), rail);
+    handler('drop', 'drop-target="true"')(
+      cancelable({ target: outside, dataTransfer: { files: { length: 0 } } }),
+      dropzone,
+    );
+    // Kerf reports a drop on its zone through the route; the surface handler must not add it again.
+    zone.dataset.dragging = 'true';
+    const zoneDrop = cancelable({ target: onZone, dataTransfer: { files } });
+    handler('drop', 'drop-target="true"')(zoneDrop, dropzone);
+    expect(zoneDrop.preventDefault).toHaveBeenCalled();
+    expect(zone.dataset.dragging).toBeUndefined();
     expect(bindings.addFiles.mock.calls).toEqual([[files, rail]]);
   });
 

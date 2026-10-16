@@ -2,14 +2,20 @@ import { delegate, delegateCapture } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import type { AttachmentLabelEditor } from '../attachment-label-editing';
+import { routeFilePicker } from '../file-picker-routes';
 import {
   ATTACHMENTS_AND_GALLERY_ACTIONS,
   ATTACHMENTS_AND_GALLERY_TARGETS,
 } from '../interaction-attrs/attachments-and-gallery';
+import { TICKET_ATTACHMENTS_PICKER } from './ticket-attachments';
 
 const ATTACHMENT_DROP_TARGET = ATTACHMENTS_AND_GALLERY_TARGETS.attachmentDropTarget.selector;
 const GROUP_DROP_TARGETS = '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]';
 const LABEL_FIELD = ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchLabelField.selector;
+/** Kerf's FileDropZone root; its own drops arrive through `wireFilePickers`. */
+const FILE_DROP_ZONE = '[data-component="file-drop-zone"]';
+const dropZoneIn = (surface: Element) => surface.querySelector<HTMLElement>(FILE_DROP_ZONE);
+const carriesFiles = (event: DragEvent) => [...(event.dataTransfer?.types ?? [])].includes('Files');
 
 /**
  * Side effects for TicketAttachments' add, drop, batch-label, purpose, and regroup gestures (HS2-1KM6MB).
@@ -18,7 +24,7 @@ const LABEL_FIELD = ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchLabelField.se
  */
 export interface TicketAttachmentActionBindings {
   /** Add picked or dropped files; `origin` is the file input or drop target they arrived on. */
-  readonly addFiles: (files: FileList, origin: HTMLElement) => void;
+  readonly addFiles: (files: FileList | File[], origin: HTMLElement) => void;
   /** Extra selectors that accept a file drop without carrying the drop highlight. */
   readonly extraDropTargets?: string;
   /** The batch-label autosave editor shared by the inspector, reader, and demo. */
@@ -38,22 +44,29 @@ export function wireTicketAttachmentActions(root: HTMLElement, bindings: TicketA
     dropTargets = bindings.extraDropTargets
       ? `${ATTACHMENT_DROP_TARGET}, ${bindings.extraDropTargets}`
       : ATTACHMENT_DROP_TARGET;
+  // Kerf's FilePickerTrigger and FileDropZone report browsed files and zone drops through the shared
+  // `wireFilePickers` route (HS2-VHY325); the surface-wide drop below covers the rest of the panel.
   lifetime.add(
-    delegate(root, 'change', ATTACHMENTS_AND_GALLERY_TARGETS.ticketAttachmentsField.selector, (_event, target) => {
-      const input = target as HTMLInputElement;
-      if (input.files?.length) bindings.addFiles(input.files, input);
-      input.value = '';
+    routeFilePicker(root, TICKET_ATTACHMENTS_PICKER, (files, selection) => {
+      bindings.addFiles(files, selection.picker);
     }),
   );
   lifetime.add(
     delegate(root, 'dragover', dropTargets, (event, target) => {
       event.preventDefault();
-      if (target.matches(ATTACHMENT_DROP_TARGET)) (target as HTMLElement).dataset.draggingAttachment = 'true';
+      if (!target.matches(ATTACHMENT_DROP_TARGET)) return;
+      (target as HTMLElement).dataset.draggingAttachment = 'true';
+      // Files over any part of the surface highlight its drop zone through the zone's documented
+      // `data-dragging` wiring state, as before the Kerf migration (interim until KF-HNRWM9).
+      const zone = dropZoneIn(target);
+      if (zone && carriesFiles(event as DragEvent)) zone.dataset.dragging = 'true';
     }),
   );
   lifetime.add(
     delegate(root, 'dragleave', ATTACHMENT_DROP_TARGET, (_event, target) => {
       delete (target as HTMLElement).dataset.draggingAttachment;
+      const zone = dropZoneIn(target);
+      if (zone) delete zone.dataset.dragging;
     }),
   );
   lifetime.add(
@@ -62,6 +75,10 @@ export function wireTicketAttachmentActions(root: HTMLElement, bindings: TicketA
       const element = target as HTMLElement,
         files = (event as DragEvent).dataTransfer?.files;
       delete element.dataset.draggingAttachment;
+      const zone = dropZoneIn(element);
+      if (zone) delete zone.dataset.dragging;
+      // A drop on the Kerf zone itself is already reported through `routeFilePicker`.
+      if ((event.target as Element).closest(FILE_DROP_ZONE)) return;
       if (files?.length) bindings.addFiles(files, element);
     }),
   );

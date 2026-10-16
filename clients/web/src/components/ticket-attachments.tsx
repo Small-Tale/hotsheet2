@@ -1,6 +1,7 @@
 import './ticket-attachments.css';
 
-import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
+import { uiColor } from '@kerfjs/ui/css-values';
+import { FileDropZone, FilePickerTrigger } from '@kerfjs/ui/file-picker';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -35,6 +36,11 @@ export interface AttachmentBatch {
   purpose?: AttachmentPurpose;
   items: TicketAttachmentItem[];
 }
+/**
+ * `wireFilePickers` id shared by every TicketAttachments Add trigger and drop zone; the surface wiring
+ * routes it through `routeFilePicker` (HS2-VHY325).
+ */
+export const TICKET_ATTACHMENTS_PICKER = 'ticket-attachments';
 export const DEFAULT_ATTACHMENTS: readonly TicketAttachmentItem[] = [
   { id: 'wireframe', name: 'wireframe.png' },
   { id: 'requirements', name: 'requirements.md' },
@@ -160,11 +166,14 @@ export function TicketAttachments({
             countLabel={`${attachments.length} ${attachments.length === 1 ? 'attachment' : 'attachments'}`}
           />
           {enabled && (
-            <label class="ticket-attachments__browse">
-              <LucideIcon size={13.6} icon={Plus} name="plus" />
-              <span>Add</span>
-              <input type="file" name="ticket-attachments" multiple aria-label="Browse and add attachments" />
-            </label>
+            <FilePickerTrigger
+              label="Add"
+              accessibleLabel="Browse and add attachments"
+              icon={<LucideIcon icon={Plus} name="plus" />}
+              multiple
+              name="ticket-attachments"
+              pickerId={TICKET_ATTACHMENTS_PICKER}
+            />
           )}
         </Row>
         <List gap="m">
@@ -325,11 +334,14 @@ export function TicketAttachments({
           </div>
         )}
         {enabled ? (
-          <label class="ticket-attachments__drop">
-            <LucideIcon icon={Upload} name="upload" size="s" color={foregroundColorVar('--wa-color-focus')} />
-            <span>Drop attachments here or browse</span>
-            <input type="file" name="ticket-attachments" multiple aria-label="Drop or browse attachments" />
-          </label>
+          <FileDropZone
+            title="Drop attachments here or browse"
+            accessibleLabel="Drop or browse attachments"
+            icon={<LucideIcon icon={Upload} name="upload" />}
+            multiple
+            name="ticket-attachments"
+            pickerId={TICKET_ATTACHMENTS_PICKER}
+          />
         ) : (
           <Text variant="p" tone="quiet" size="compact" flush>
             {message || 'This provider does not support attachment actions.'}

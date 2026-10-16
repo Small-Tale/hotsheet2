@@ -52,6 +52,9 @@ vi.mock('kerfjs', async (original) => {
 vi.mock('@kerfjs/ui/wire-content-items', () => ({ wireContentItems: () => () => undefined }));
 // Likewise Kerf's Composer wiring (HS2-T5JVY3) binds native listeners on the delegated root.
 vi.mock('@kerfjs/ui/wire-composers', () => ({ wireComposers: () => () => undefined }));
+// And Kerf's FilePicker wiring, which TicketAttachments routes its Add trigger and drop zone through
+// (HS2-VHY325).
+vi.mock('@kerfjs/ui/wire-file-pickers', () => ({ wireFilePickers: () => () => undefined }));
 /** Deliver an event to every still-attached delegate registered for it, as the delegated root would. */
 function dispatchDelegated(event: Event, selector: string, element: Element) {
   for (const registration of registrations)

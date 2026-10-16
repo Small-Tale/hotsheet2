@@ -1379,8 +1379,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     `data-embedded` and owns the 16px gap below its heading, so hosts never style its header
     (HS2-4APEJP).
   - `TicketAttachments` — **demo built**: attachment rows with a subtle count badge beside
-    the aligned section heading, plus native browse and drop entry points; no redundant
-    total line is rendered below the collection.
+    the aligned section heading, plus Kerf `FilePickerTrigger` (Add) and `FileDropZone`
+    entry points routed through the shared `routeFilePicker` (HS2-VHY325); a drop elsewhere on
+    the surface still attaches, and files dragged over the surface highlight the zone. No
+    redundant total line is rendered below the collection.
     Open, download, copy-reference, and remove icon buttons have explicit accessible
     names, hover titles, and visible hover/focus states. Double-clicking the row uses
     the same Open action; action-button double-clicks do not bubble into the row action.

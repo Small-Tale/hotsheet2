@@ -171,3 +171,17 @@ the remaining wrapper markup that only existed because Badge lacked props:
   `Select` cannot express. `status-badge.css` keeps only the native trigger button's UA reset and pill
   focus ring: app-owned native-button CSS, not a Kerf override. `KF-PHGQ6D` requests a public Badge
   menu trigger, and `HS2-M414Z9` removes the stylesheet when it ships.
+
+## Attachment controls update (HS2-VHY325)
+
+- `attachment-context-menu.css` was already removed, and `PendingAttachmentPicker` already used
+  Kerf `FilePickerTrigger`/`FileDropZone` (HS2-RB7KXZ).
+- `TicketAttachments` now renders its Add trigger and drop zone as Kerf `FilePickerTrigger` and
+  `FileDropZone`, routed through the shared `routeFilePicker` under the `ticket-attachments` picker
+  id. The browse/drop label rules and the hidden file-input rule are gone from
+  `ticket-attachments.css`. The surface-wide drop stays app-owned and skips drops the zone already
+  reported. Files dragged over the surface still highlight the zone through its documented
+  `data-dragging` wiring state; `KF-HNRWM9` requests a public drop scope, and `HS2-P413MB` adopts it.
+- Remaining generic chrome is split into its own tickets: attachment rows, row menu button, batch
+  header, and regroup target (`HS2-K9HSXZ`); AttachmentGallery controls (`HS2-5B8FMA`). Thumbnails,
+  annotation markers, media scaling, and drag/regroup state stay app-owned.

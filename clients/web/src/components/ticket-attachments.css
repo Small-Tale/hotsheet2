@@ -1,7 +1,8 @@
 /* TicketAttachments (HS2-MGVE50): Kerf List, ListHeader, Row, and Text own the section stack,
-   heading, count, and copy (HS2-QK4HES). These rules style the app-owned attachment rows, batch
-   headers (inline-editable label and native purpose select), media grid, drop zones, and the file
-   inputs they wrap, which no Kerf component expresses. */
+   heading, count, and copy (HS2-QK4HES); Kerf FilePickerTrigger and FileDropZone own the Add trigger,
+   the drop zone, and their hidden file inputs (HS2-VHY325). These rules style the app-owned
+   attachment rows, batch headers (inline-editable label and native purpose select), media grid, and
+   regroup target. */
 .ticket-attachments__item {
   display: flex;
   box-sizing: border-box;
@@ -152,47 +153,6 @@
 .ticket-attachments__new-group[data-drag-over='true'] {
   color: var(--wa-color-brand-on-loud);
   background: var(--wa-color-brand-fill-loud);
-}
-.ticket-attachments__browse {
-  display: inline-flex;
-  min-height: remify(32px);
-  padding: 0 var(--kui-space-xs);
-  border-radius: remify(6.4px);
-  color: var(--wa-color-text-link);
-  cursor: pointer;
-  align-items: center;
-  gap: var(--kui-space-2xs);
-  font-size: var(--wa-font-size-xs);
-  font-weight: 650;
-}
-.ticket-attachments__browse:hover {
-  background: var(--wa-color-brand-fill-quiet);
-}
-.ticket-attachments__browse input,
-.ticket-attachments__drop input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-}
-.ticket-attachments__drop {
-  display: grid;
-  min-height: remify(80px);
-  padding: var(--kui-space-xs);
-  border: 1px dashed var(--wa-color-neutral-border-loud);
-  border-radius: remify(8.8px);
-  color: var(--wa-color-neutral-on-quiet);
-  cursor: pointer;
-  place-items: center;
-  align-content: center;
-  gap: var(--kui-space-2xs);
-  font-size: var(--wa-font-size-xs);
-}
-.ticket-attachments__drop:hover,
-[data-dragging-attachment='true'] .ticket-attachments__drop {
-  border-color: var(--wa-color-focus);
-  background: var(--wa-color-brand-fill-quiet);
 }
 .ticket-attachments__image-grid {
   display: flex;
