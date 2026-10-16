@@ -97,6 +97,11 @@ export interface ConversationUnreadDependencies {
   readonly conversationStates: { readonly value: Readonly<Record<string, ConversationState>> };
   /** Connection ids whose transcript the person can currently see. Read reactively. */
   readonly visibleConnectionIds: () => Iterable<string>;
+  /**
+   * Whether the page itself is showing (HS2-1ZPD4A). A hidden, minimized, or background-tab page
+   * shows no transcript, so replies settling meanwhile stay unread. Read reactively; omitted means shown.
+   */
+  readonly documentVisible?: () => boolean;
   readonly storage?: StorageLike;
 }
 
@@ -107,7 +112,7 @@ export function createConversationUnreadTracker(dependencies: ConversationUnread
     unreadByConnection = signal<Record<string, number>>({});
   const dispose = effect(() => {
     const states = dependencies.conversationStates.value,
-      visible = new Set(dependencies.visibleConnectionIds()),
+      visible = new Set(dependencies.documentVisible?.() === false ? [] : dependencies.visibleConnectionIds()),
       current = readMarks.peek(),
       marks = reconcileConversationReadMarks(current, states, visible);
     if (marks !== current) {
@@ -127,5 +132,27 @@ export function createConversationUnreadTracker(dependencies: ConversationUnread
     projectUnreadCount: (connectionIds: Iterable<string>) =>
       projectUnreadCount(unreadByConnection.value, connectionIds),
     dispose,
+  };
+}
+
+/** The part of `Document` that page-visibility tracking reads. */
+export interface VisibilityDocument {
+  readonly visibilityState: DocumentVisibilityState;
+  addEventListener(type: 'visibilitychange', listener: () => void): void;
+  removeEventListener(type: 'visibilitychange', listener: () => void): void;
+}
+
+/** A signal that is true while the page is showing, kept current by `visibilitychange` (HS2-1ZPD4A). */
+export function trackDocumentVisibility(document: VisibilityDocument) {
+  const visible = signal(document.visibilityState === 'visible');
+  const update = () => {
+    visible.value = document.visibilityState === 'visible';
+  };
+  document.addEventListener('visibilitychange', update);
+  return {
+    visible,
+    dispose: () => {
+      document.removeEventListener('visibilitychange', update);
+    },
   };
 }

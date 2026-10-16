@@ -1553,7 +1553,9 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   read mark is the number of its settled assistant replies the person has seen. A reply that
   settles while that conversation is not visible is unread. A conversation is visible while its
   dialog is open, or while its drawer tab is selected in a shown drawer on the project shell outside
-  Settings and Notifications. Viewing a conversation reads it, and a conversation seen for the
+  Settings and Notifications, and only while the page itself is visible (`document.visibilityState`
+  tracked through `visibilitychange`): a reply that settles while the window is hidden, minimized,
+  or in a background tab stays unread until the person returns (HS2-1ZPD4A). Viewing a conversation reads it, and a conversation seen for the
   first time starts fully read, so restored history is never new. The badge sums every
   conversation the project owns (project Chat, Drive, and drawer AI chats), counted once each, so
   viewing one chat leaves the others' unread replies on the badge. Read marks persist in

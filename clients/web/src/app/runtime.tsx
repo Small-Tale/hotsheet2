@@ -75,7 +75,7 @@ import {
   type WorkspaceViewMode,
 } from '../components/workspace-header';
 import { withControlledOpen } from '../controlled-open';
-import { createConversationUnreadTracker } from '../conversation-unread';
+import { createConversationUnreadTracker, trackDocumentVisibility } from '../conversation-unread';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { createAiConfigurationController } from '../features/ai-configuration';
@@ -3329,9 +3329,12 @@ export async function startHotSheetWebClient() {
       error.value = reason instanceof Error ? reason.message : String(reason);
     }
   }
-  // Unread AI chat messages per conversation; a chat is read while its dialog or drawer tab shows (HS2-59CXAC).
+  // Unread AI chat messages per conversation; a chat is read while its dialog or drawer tab shows (HS2-59CXAC)
+  // and the page itself is showing, so replies settling in a hidden window stay unread (HS2-1ZPD4A).
+  const pageVisibility = trackDocumentVisibility(document);
   const conversationUnread = createConversationUnreadTracker({
     conversationStates,
+    documentVisible: () => pageVisibility.visible.value,
     visibleConnectionIds: () => {
       const visible: string[] = [];
       if (conversationOpen.value && conversationConnectionId.value) visible.push(conversationConnectionId.value);

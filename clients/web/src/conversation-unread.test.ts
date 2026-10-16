@@ -11,6 +11,7 @@ import {
   projectUnreadCount,
   reconcileConversationReadMarks,
   settledAssistantCount,
+  trackDocumentVisibility,
 } from './conversation-unread';
 
 const user = (id: string): ConversationMessage => ({ id, role: 'user', content: id }),
@@ -77,16 +78,40 @@ describe('unread tracker transitions (HS2-59CXAC)', () => {
   function tracker(initial: Record<string, ConversationState> = {}, storage = memoryStorage()) {
     const states = signal<Record<string, ConversationState>>(initial),
       visible = signal<string[]>([]),
+      pageShown = signal(true),
       unread = createConversationUnreadTracker({
         conversationStates: states,
         visibleConnectionIds: () => visible.value,
+        documentVisible: () => pageShown.value,
         storage,
       });
     const update = (id: string, ...messages: ConversationMessage[]) => {
       states.value = { ...states.value, [id]: chat(...messages) };
     };
-    return { states, visible, unread, update, storage };
+    return { states, visible, pageShown, unread, update, storage };
   }
+
+  it('counts replies that settle in an open chat while the page is hidden, then reads them once shown (HS2-1ZPD4A)', () => {
+    const { unread, visible, pageShown, update } = tracker({ chat: chat(reply('a1')) });
+    visible.value = ['chat'];
+    update('chat', reply('a1'), reply('a2'));
+    expect(unread.projectUnreadCount(['chat'])).toBe(0);
+    // Hidden page: the open chat no longer reads, so new replies count.
+    pageShown.value = false;
+    update('chat', reply('a1'), reply('a2'), reply('a3'));
+    update('chat', reply('a1'), reply('a2'), reply('a3'), reply('a4'));
+    expect(unread.projectUnreadCount(['chat'])).toBe(2);
+    // Hiding and showing again with the chat closed keeps them unread.
+    visible.value = [];
+    pageShown.value = true;
+    expect(unread.projectUnreadCount(['chat'])).toBe(2);
+    // Shown with the chat open reads them; a repeated hidden -> shown with no new reply stays clear.
+    visible.value = ['chat'];
+    expect(unread.projectUnreadCount(['chat'])).toBe(0);
+    pageShown.value = false;
+    pageShown.value = true;
+    expect(unread.projectUnreadCount(['chat'])).toBe(0);
+  });
 
   it('treats restored history as read, then counts replies that settle while hidden', () => {
     const { unread, update } = tracker({ chat: chat(user('u1'), reply('a1')) });
@@ -155,5 +180,34 @@ describe('unread tracker transitions (HS2-59CXAC)', () => {
     expect(() => {
       quiet.update('chat', reply('a1'));
     }).not.toThrow();
+  });
+});
+
+describe('page visibility signal (HS2-1ZPD4A)', () => {
+  it('follows visibilitychange through hidden -> visible -> hidden and stops after dispose', () => {
+    const listeners = new Set<() => void>();
+    const page = {
+      visibilityState: 'hidden' as DocumentVisibilityState,
+      addEventListener: (_type: 'visibilitychange', listener: () => void) => {
+        listeners.add(listener);
+      },
+      removeEventListener: (_type: 'visibilitychange', listener: () => void) => {
+        listeners.delete(listener);
+      },
+    };
+    const change = (state: DocumentVisibilityState) => {
+      page.visibilityState = state;
+      for (const listener of listeners) listener();
+    };
+    const tracked = trackDocumentVisibility(page);
+    expect(tracked.visible.value).toBe(false);
+    change('visible');
+    expect(tracked.visible.value).toBe(true);
+    change('hidden');
+    expect(tracked.visible.value).toBe(false);
+    tracked.dispose();
+    expect(listeners.size).toBe(0);
+    change('visible');
+    expect(tracked.visible.value).toBe(false);
   });
 });

@@ -29927,3 +29927,73 @@ test('badges the sidebar chat button with unread AI chat messages and clears it 
   await expect(badge).toHaveCount(0);
   await expect(chatButton).toHaveAccessibleName('Open Codex Conversation');
 });
+
+test('counts AI chat replies that settle while the page is hidden and reads them once shown (HS2-1ZPD4A)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  let cursor = 0,
+    connectionId: string | undefined;
+  const sockets: import('@playwright/test').WebSocketRoute[] = [];
+  await page.route('**/ws/poll*', (route) => route.fulfill({ json: { cursor, events: [], overflow: false } }));
+  page.on('request', (request) => {
+    const match = new URL(request.url()).pathname.match(/\/drive\/connections\/([^/]+)\/turns$/);
+    if (match && request.method() === 'POST') connectionId = decodeURIComponent(match[1]);
+  });
+  await page.routeWebSocket(/\/ws\/sync(?:\?|$)/, (route) => {
+    sockets.push(route);
+    route.onClose(() => {
+      const index = sockets.indexOf(route);
+      if (index >= 0) sockets.splice(index, 1);
+    });
+  });
+  const finishTurn = (id: string, content: string) => {
+    for (const event of [
+      { type: 'output', content },
+      { type: 'done', reason: 'completed' },
+    ]) {
+      cursor += 1;
+      sockets[0].send(
+        JSON.stringify({
+          cursor,
+          store: '/work/demo.hs2',
+          kind: 'turn_event',
+          id,
+          slug: 'codex',
+          turn: { connection_id: id, event },
+        }),
+      );
+    }
+  };
+  /** Emulate the window being hidden or shown the way a browser reports it. */
+  const setPageVisibility = (state: 'hidden' | 'visible') =>
+    page.evaluate((next) => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => next });
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => next === 'hidden' });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }, state);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await expect.poll(() => sockets.length).toBeGreaterThan(0);
+  const chatButton = page.locator('[data-action="open-conversation"]'),
+    badge = page.locator('.project-sidebar__conversation-badge');
+  await expect(badge).toHaveCount(0);
+  // The dialog stays open throughout; only the page's own visibility changes.
+  await chatButton.click();
+  const host = page.locator('[data-component="ai-conversation"][data-presentation="dialog"]');
+  await expect(host.getByRole('dialog')).toBeVisible();
+  await host.getByLabel('Message Codex').fill('Start sustained output');
+  await host.getByLabel('Message Codex').press('Enter');
+  await expect.poll(() => connectionId).toBeTruthy();
+  await setPageVisibility('hidden');
+  finishTurn(connectionId!, 'The reply arrived while the window was hidden.');
+  await expect(host).toContainText('The reply arrived while the window was hidden.');
+  await expect(badge).toHaveText('1');
+  await expect(chatButton).toHaveAccessibleName('Open Codex Conversation, 1 unread message');
+  // Returning to the window with the chat still open reads it.
+  await setPageVisibility('visible');
+  await expect(badge).toHaveCount(0);
+  await expect(chatButton).toHaveAccessibleName('Open Codex Conversation');
+});
