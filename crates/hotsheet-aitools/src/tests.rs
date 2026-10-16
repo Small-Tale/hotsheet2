@@ -1468,25 +1468,47 @@ interrupt = true
     let mut reg = ConnectionRegistry::new(5_000);
     let mut events = Vec::new();
     let request = control.clone();
+    // Stop only once the process has proven it started and streamed (HS2-44P3C6): a fixed
+    // sleep raced the process start under load, so the Stop sometimes landed before the
+    // `init` line and the turn ended with no session id. The requester still stops from
+    // another thread while the turn is blocked on the now-silent process.
+    let (streamed_tx, streamed_rx) = std::sync::mpsc::channel::<()>();
+    // A start that stalls past the bound still gets its Stop, so the test fails on the
+    // assertion below instead of hanging for the 600 s turn timeout.
     let requester = std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        let streamed = streamed_rx
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .is_ok();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let stop_requested_at = std::time::Instant::now();
         request.request_interrupt();
+        (streamed, stop_requested_at)
     });
-    let started = std::time::Instant::now();
     let done = crate::live::run_trigger_controlled(
         &plugin,
         &live("long job", tmp.path()),
         &mut reg,
         Some(&control),
-        &mut |event| events.push(event.clone()),
+        &mut |event| {
+            if matches!(event, TurnEvent::Output(_)) {
+                let _ = streamed_tx.send(());
+            }
+            events.push(event.clone());
+        },
     )
     .unwrap();
-    requester.join().unwrap();
+    let stopped_at = std::time::Instant::now();
+    let (streamed, stop_requested_at) = requester.join().unwrap();
+    assert!(
+        streamed,
+        "the fake claude never streamed its first output (process start stalled)"
+    );
 
     assert_eq!(done.reason, DoneReason::Interrupted);
     assert_eq!(done.session_id.as_deref(), Some("sess-real"));
+    // Measured from the Stop request: SIGTERM ends the silent process at once.
     assert!(
-        started.elapsed() < std::time::Duration::from_secs(5),
+        stopped_at.duration_since(stop_requested_at) < std::time::Duration::from_secs(5),
         "SIGTERM ended the process without waiting for the kill grace"
     );
     assert_eq!(
