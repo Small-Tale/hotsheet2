@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { closeSync, mkdirSync, openSync, renameSync, statSync } from 'node:fs';
 import { access, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
@@ -1160,6 +1161,31 @@ export class ServerOwnedByPinnedHostError extends Error {
   }
 }
 
+/** Size past which the machine server log is rotated to `server.log.old` at the next launch. */
+export const SERVER_LOG_MAX_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Open the append-only log that receives a bridge-launched server's stderr (HS2-DSYPTN). Its
+ * `request_timing` warnings were sent to `/dev/null`, so a 60 s ticket create left no record of
+ * where the time went. One rotation keeps the file bounded. The log is diagnostic only: a home
+ * that cannot hold it falls back to discarding stderr rather than failing the launch.
+ */
+export function openServerLog(home: string = hotsheetHome(), maxBytes = SERVER_LOG_MAX_BYTES): number | 'ignore' {
+  try {
+    const directory = resolve(home, 'logs'),
+      path = resolve(directory, 'server.log');
+    mkdirSync(directory, { recursive: true });
+    try {
+      if (statSync(path).size > maxBytes) renameSync(path, `${path}.old`);
+    } catch {
+      // No log yet.
+    }
+    return openSync(path, 'a', 0o600);
+  } catch {
+    return 'ignore';
+  }
+}
+
 function serverPlatform(store: string): ServerSupervisorPlatform {
   const repoRoot = developmentRepositoryRoot();
   const binary = process.env.HOTSHEET_SERVER_BIN || resolve(repoRoot, 'target/debug/hotsheet-server');
@@ -1169,18 +1195,24 @@ function serverPlatform(store: string): ServerSupervisorPlatform {
     launch: async () => {
       if (!(await exists(binary)))
         throw new Error(`Hot Sheet server is not built at ${binary}. Run cargo build -p hotsheet-server.`);
-      await new Promise<void>((resolveLaunch, reject) => {
-        const child = spawn(binary, ['-C', store, '--bind', '127.0.0.1:0', '--launcher', serverLauncherLabel()], {
-          cwd: repoRoot,
-          detached: true,
-          stdio: 'ignore',
+      const log = openServerLog();
+      try {
+        await new Promise<void>((resolveLaunch, reject) => {
+          const child = spawn(binary, ['-C', store, '--bind', '127.0.0.1:0', '--launcher', serverLauncherLabel()], {
+            cwd: repoRoot,
+            detached: true,
+            stdio: ['ignore', 'ignore', log],
+          });
+          child.once('error', reject);
+          child.once('spawn', () => {
+            child.unref();
+            resolveLaunch();
+          });
         });
-        child.once('error', reject);
-        child.once('spawn', () => {
-          child.unref();
-          resolveLaunch();
-        });
-      });
+      } finally {
+        // The child holds its own copy of the descriptor.
+        if (typeof log === 'number') closeSync(log);
+      }
     },
     wait: () => new Promise((resolveWait) => setTimeout(resolveWait, 100)),
   };

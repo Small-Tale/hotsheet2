@@ -1,3 +1,4 @@
+import { closeSync, writeSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -26,6 +27,7 @@ import {
   listServerCheckouts,
   localStoreInitArgs,
   mayReplaceServer,
+  openServerLog,
   PINNED_SERVER_LAUNCHER,
   preserveHs1Entry,
   projectBootstrapArgs,
@@ -1351,6 +1353,43 @@ describe('serverLauncherLabel (HS2-GWFEAA)', () => {
     expect(serverLauncherLabel({ HOTSHEET_LOCAL_HOST_SNAPSHOT: '1', HOTSHEET_WEB_STABLE_DEV: '1' })).toBe(
       'local-host-snapshot',
     );
+  });
+});
+
+describe('openServerLog (HS2-DSYPTN)', () => {
+  it('appends server stderr under the machine home and rotates once past the size limit', async () => {
+    const home = await mkdtemp(resolve(tmpdir(), 'hs2-server-log-')),
+      path = resolve(home, 'logs', 'server.log');
+    try {
+      const first = openServerLog(home, 16);
+      expect(typeof first).toBe('number');
+      writeSync(first as number, 'slow API request exceeded its budget\n');
+      closeSync(first as number);
+      // Under the limit: the next launch keeps appending to the same file.
+      const second = openServerLog(home, 1024);
+      writeSync(second as number, 'second launch\n');
+      closeSync(second as number);
+      expect(await readFile(path, 'utf8')).toBe('slow API request exceeded its budget\nsecond launch\n');
+      expect((await stat(path)).mode & 0o777).toBe(0o600);
+      // Over the limit: the old content moves aside and a fresh log starts.
+      const third = openServerLog(home, 16);
+      closeSync(third as number);
+      expect(await readFile(`${path}.old`, 'utf8')).toContain('second launch');
+      expect(await readFile(path, 'utf8')).toBe('');
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  it('discards stderr instead of failing the launch when the home cannot hold a log', async () => {
+    const home = await mkdtemp(resolve(tmpdir(), 'hs2-server-log-')),
+      blocker = resolve(home, 'not-a-directory');
+    try {
+      await writeFile(blocker, '');
+      expect(openServerLog(blocker)).toBe('ignore');
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   });
 });
 

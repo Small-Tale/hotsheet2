@@ -981,6 +981,11 @@ deadline. The shared
   routes are not timed. Every timed response also carries `Server-Timing: handler;dur=<ms>`
   (appended after any route-specific entries) so clients can separate server time from
   queueing (HS2-ZGBQ5Q).
+  A machine server started by the web bridge (`dev`, `stable-dev`, and `local-host-snapshot`
+  launchers) appends its stderr, and so these warnings, to
+  `${HOTSHEET_HOME:-~/.hotsheet2}/logs/server.log`. Each launch rotates a log over 8 MiB to
+  `server.log.old`. A home that cannot hold the log discards stderr rather than failing the
+  launch (HS2-DSYPTN).
   Request handlers never run blocking store work on the async workers (HS2-9Z0Q8N): the
   router-wide `blocking_offload` layer runs every non-streaming request (auth plus handler)
   on tokio's blocking pool, so a handler stuck on a ticket-file `flock`, an index mutex, a
