@@ -1,4 +1,4 @@
-import { type Signal, signal } from 'kerfjs';
+import { effect, type Signal, signal } from 'kerfjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ConversationState } from '../ai-conversation';
@@ -284,6 +284,59 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     owner.permissionInbox.reconcile(projects.value[0], [{ id: 2, connection: 'c', tool: 'Bash', action: 'again' }], []);
     expect(owner.permissionCount('a')).toBe(1);
     expect(owner.permissionCount('b')).toBe(0);
+  });
+
+  it('refetches a shown remembered-rule list once per rules change, only for that project (HS2-KYK1S7)', async () => {
+    const projects = signal([project('a'), project('b')]),
+      owner = createPermissionsController({ projects, selectedProjectId: signal('a') }),
+      rule = (action: string) => ({
+        project: '/work/a',
+        tool: 'Bash',
+        action,
+        decision: 'allow',
+        scope: 'always',
+        created_at: '2026-10-16T00:00:00Z',
+      }),
+      ruleRequests = () => fetchMock.mock.calls.filter(([url]) => url === '/api/a/permissions/rules').length;
+    const flush = async () => {
+      for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+    };
+    // A view showing project a's rules: it re-renders whenever what it read changes.
+    let shown: string[] = [];
+    fetchMock.mockResolvedValueOnce(json([rule('npm test'), rule('npm run lint')]));
+    const stop = effect(() => {
+      shown = owner.permissionRules('a').map((value) => value.action);
+    });
+    await flush();
+    expect(ruleRequests()).toBe(1);
+    expect(shown).toEqual(['npm test', 'npm run lint']);
+    // Fresh: re-reading makes no request.
+    owner.permissionRules('a');
+    await flush();
+    expect(ruleRequests()).toBe(1);
+    // Another client revoked one: exactly one refetch, and the view shows the new list.
+    fetchMock.mockResolvedValueOnce(json([rule('npm test')]));
+    owner.permissionRulesChanged('a');
+    await flush();
+    expect(ruleRequests()).toBe(1 + 1);
+    expect(shown).toEqual(['npm test']);
+    // A change in another project makes no request for a.
+    owner.permissionRulesChanged('b');
+    await flush();
+    expect(ruleRequests()).toBe(2);
+    // A change that lands while a refetch is in flight refetches again after it settles.
+    const slow = deferred<Response>();
+    fetchMock.mockReturnValueOnce(slow.promise);
+    owner.permissionRulesChanged('a');
+    await flush();
+    expect(ruleRequests()).toBe(3);
+    owner.permissionRulesChanged('a');
+    fetchMock.mockResolvedValueOnce(json([]));
+    slow.resolve(json([rule('npm test')]));
+    await flush();
+    expect(ruleRequests()).toBe(4);
+    expect(shown).toEqual([]);
+    stop();
   });
 
   it('disposes the countdown interval and storage listener with its owner and restarts cleanly (HS2-30J7W5)', () => {

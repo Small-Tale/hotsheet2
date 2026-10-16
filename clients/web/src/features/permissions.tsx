@@ -63,14 +63,17 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   const permissionResolutionErrors = signal<Record<string, string>>({});
   // Remembered answers per project for Settings → Permissions (HS2-JNHAYB). Loaded when that view
   // shows a project whose list is missing or stale; any permission resolution marks every project
-  // stale. Never polled.
+  // stale, and a `permission_rules_changed` event from another client marks its project stale
+  // (HS2-KYK1S7). Freshness is reactive, so a shown list refetches once when it goes stale. Never polled.
   const permissionRulesByProject = signal<Record<string, PermissionRule[]>>({}),
     permissionRulesMessage = signal(''),
-    revokingPermissionRules = signal<readonly string[]>([]);
-  const freshPermissionRules = new Set<string>(),
-    loadingPermissionRules = new Set<string>();
-  const markPermissionRulesStale = () => {
-    freshPermissionRules.clear();
+    revokingPermissionRules = signal<readonly string[]>([]),
+    freshPermissionRules = signal<ReadonlySet<string>>(new Set());
+  const loadingPermissionRules = new Set<string>();
+  const markPermissionRulesStale = (projectId?: string) => {
+    const fresh = freshPermissionRules.peek();
+    if (projectId === undefined ? fresh.size > 0 : fresh.has(projectId))
+      freshPermissionRules.value = new Set(projectId === undefined ? [] : [...fresh].filter((id) => id !== projectId));
   };
   // App-wide pause (HS2-QYA9SC): no popup in any project while set, so its countdown also freezes.
   const notificationsPaused = signal(loadNotificationsPaused());
@@ -344,27 +347,36 @@ export function createPermissionsController(dependencies: PermissionsDependencie
 
   function permissionRules(projectId = selectedProjectId.value) {
     const project = projects.value.find((value) => value.id === projectId);
-    if (project && !freshPermissionRules.has(projectId) && !loadingPermissionRules.has(projectId))
+    if (project && !freshPermissionRules.value.has(projectId) && !loadingPermissionRules.has(projectId))
       queueMicrotask(() => void loadPermissionRules(project));
     return permissionRulesByProject.value[projectId] ?? [];
   }
 
+  /** Another client remembered or revoked one of `projectId`'s answers (HS2-KYK1S7). */
+  function permissionRulesChanged(projectId: string) {
+    markPermissionRulesStale(projectId);
+  }
+
   /** Fetch one project's remembered answers once; a failure leaves it stale for the next view. */
   async function loadPermissionRules(project: Project) {
-    if (freshPermissionRules.has(project.id) || loadingPermissionRules.has(project.id)) return;
+    if (freshPermissionRules.peek().has(project.id) || loadingPermissionRules.has(project.id)) return;
     loadingPermissionRules.add(project.id);
-    freshPermissionRules.add(project.id);
+    freshPermissionRules.value = new Set([...freshPermissionRules.peek(), project.id]);
+    // Settle the loading mark before publishing, so a view re-rendered by the result can refetch at
+    // once when a rules change made it stale while this request was in flight (HS2-KYK1S7).
+    let rules: PermissionRule[];
     try {
-      const rules = await new Api(project.apiPath, '', { trackBusy: false }).permissionRules();
-      permissionRulesByProject.value = {
-        ...permissionRulesByProject.value,
-        [project.id]: projectPermissionRules(rules, project),
-      };
+      rules = await new Api(project.apiPath, '', { trackBusy: false }).permissionRules();
     } catch (reason) {
-      permissionRulesMessage.value = `Could not load remembered answers. ${reason instanceof Error ? reason.message : String(reason)}`;
-    } finally {
       loadingPermissionRules.delete(project.id);
+      permissionRulesMessage.value = `Could not load remembered answers. ${reason instanceof Error ? reason.message : String(reason)}`;
+      return;
     }
+    loadingPermissionRules.delete(project.id);
+    permissionRulesByProject.value = {
+      ...permissionRulesByProject.value,
+      [project.id]: projectPermissionRules(rules, project),
+    };
   }
 
   /** Forget one remembered answer from Settings → Permissions (HS2-JNHAYB). */
@@ -401,6 +413,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   return {
     dispose,
     permissionRules,
+    permissionRulesChanged,
     permissionRulesMessage,
     revokingPermissionRules,
     revokePermissionRule,

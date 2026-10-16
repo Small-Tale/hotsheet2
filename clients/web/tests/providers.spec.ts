@@ -14870,6 +14870,91 @@ test('answers identical permission requests for this chat and revokes the rememb
   ]);
 });
 
+test('refreshes another client’s remembered answers when a rule is revoked or remembered elsewhere (HS2-KYK1S7)', async ({
+  browser,
+}) => {
+  const contexts: import('@playwright/test').BrowserContext[] = [];
+  const rule = (action: string) => ({
+    project: '/work/demo.hs2',
+    tool: 'Bash',
+    action,
+    decision: 'allow',
+    scope: 'always',
+  });
+  // One shared server: both clients read the same remembered answers.
+  let rules = [rule('npm test'), rule('npm run lint')],
+    cursor = 0;
+  /** One client (its own browser profile): a mocked project, held long polls, and rule reads. */
+  async function client() {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    contexts.push(context);
+    const page = await context.newPage(),
+      polls: import('@playwright/test').Route[] = [],
+      reads = { count: 0 };
+    await mockProject(page);
+    await page.route('**/permissions', (route) => route.fulfill({ json: [] }));
+    await page.route('**/permissions/rules', (route) => {
+      if (route.request().method() === 'DELETE') {
+        const body = route.request().postDataJSON() as { action: string };
+        rules = rules.filter((value) => value.action !== body.action);
+        return route.fulfill({ status: 204, body: '' });
+      }
+      reads.count += 1;
+      return route.fulfill({ json: rules });
+    });
+    await page.route('**/ws/poll*', (route) => {
+      if (new URL(route.request().url()).searchParams.get('since') === null)
+        return route.fulfill({ json: { cursor, events: [], overflow: false } });
+      polls.push(route);
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByLabel('Settings View').click();
+    await page.getByRole('button', { name: 'Permissions' }).click();
+    const remembered = page.locator('[data-component="permission-rules-settings"]');
+    await expect(remembered.locator('[data-permission-rule-scope="always"]')).toHaveCount(2);
+    await expect.poll(() => polls.length).toBeGreaterThan(0);
+    return { page, polls, reads, remembered };
+  }
+  /** The server publishes `permission_rules_changed` to a client's waiting long poll. */
+  const publishRulesChanged = async (target: Awaited<ReturnType<typeof client>>) => {
+    cursor += 1;
+    await target.polls.shift()!.fulfill({
+      json: {
+        cursor,
+        events: [{ store: '/work/demo.hs2', kind: 'permission_rules_changed', id: '', slug: '' }],
+        overflow: false,
+      },
+    });
+  };
+  const first = await client(),
+    second = await client();
+  const secondReads = second.reads.count;
+
+  // The first client revokes a rule; the second's open list follows the server's event.
+  const lint = first.remembered.locator('[data-permission-rule-scope="always"]').filter({ hasText: 'npm run lint' });
+  await lint.locator('[data-action="revoke-permission-rule"]').click();
+  await expect(first.remembered.locator('[data-permission-rule-scope="always"]')).toHaveCount(1);
+  await expect(second.remembered).toContainText('Bash: npm run lint');
+  await publishRulesChanged(second);
+  await expect(second.remembered.locator('[data-permission-rule-scope="always"]')).toHaveCount(1);
+  await expect(second.remembered).not.toContainText('Bash: npm run lint');
+  // Exactly one refetch, and no polling while nothing changes.
+  expect(second.reads.count).toBe(secondReads + 1);
+  await second.page.waitForTimeout(1_500);
+  expect(second.reads.count).toBe(secondReads + 1);
+
+  // A rule remembered elsewhere appears the same way.
+  rules = [...rules, rule('cargo test')];
+  await expect.poll(() => second.polls.length).toBeGreaterThan(0);
+  await publishRulesChanged(second);
+  await expect(second.remembered).toContainText('Bash: cargo test');
+  expect(second.reads.count).toBe(secondReads + 2);
+  await second.remembered.screenshot({ path: 'target/visual-captures/hs2-kyk1s7-second-client-rules-1280.png' });
+  for (const context of contexts) await context.close();
+});
+
 test('renders exactly once when the long poll announces a permission request', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await mockProject(page);

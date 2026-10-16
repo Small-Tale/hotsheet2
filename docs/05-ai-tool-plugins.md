@@ -811,7 +811,10 @@ connection, tool, and action) into one popup that names the count; a one-time an
 sent for each. `GET /permissions/rules` lists every remembered rule with its scope and
 `DELETE /permissions/rules` `{project, connection?, tool, action}` revokes one (removing a
 durable rule from the store's rule file too); Settings → Permissions lists the project's
-remembered answers with a revoke action.
+remembered answers with a revoke action. Remembering an answer, revoking one, and closing a
+drive connection that held chat rules each publish a replayable `permission_rules_changed`
+change event for the project, so another client's open Settings → Permissions list refetches
+once instead of showing a revoked rule until its next resolution (HS2-KYK1S7).
 
 This is also the seam for **other prompts** the ticket mentions — the bridge is a
 generic "the tool needs a human decision" channel, not just tool-permissions.

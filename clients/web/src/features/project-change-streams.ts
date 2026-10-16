@@ -36,6 +36,7 @@ export interface ProjectChangeStreamsDependencies {
   refreshDriveConnections: DriveConversations['refreshDriveConnections'];
   refreshPermissions: ReturnType<typeof createPermissionsController>['refreshPermissions'];
   serverResolvedPermission: ReturnType<typeof createPermissionsController>['serverResolvedPermission'];
+  permissionRulesChanged: ReturnType<typeof createPermissionsController>['permissionRulesChanged'];
   applyTerminalRenamed: ReturnType<typeof createTerminalNamesController>['applyTerminalRenamed'];
   refreshTerminalDashboard: (quiet?: boolean, targetProject?: Project) => Promise<unknown>;
   refreshProviderOutbox: (current: Project) => Promise<unknown>;
@@ -94,6 +95,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     refreshDriveConnections,
     refreshPermissions,
     serverResolvedPermission,
+    permissionRulesChanged,
     applyTerminalRenamed,
     refreshTerminalDashboard,
     refreshProviderOutbox,
@@ -200,6 +202,9 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               response.events.some((event) => event.kind === 'permission_asked' || event.kind === 'permission_resolved')
             )
               await refreshPermissions();
+            // A remembered answer was added or revoked, possibly by another client (HS2-KYK1S7).
+            if (response.events.some((event) => event.kind === 'permission_rules_changed'))
+              permissionRulesChanged(current.id);
             if (response.events.some((event) => event.kind === 'drive_updated')) await refreshDriveConnections(current);
             if (response.events.some((event) => event.kind === 'command_updated') && project()?.id === current.id)
               await refreshCommands(current);

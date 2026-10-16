@@ -875,6 +875,11 @@ pub(crate) async fn resolve_permission(
         assignment: None,
         turn: None,
     });
+    // A chat, session, or always answer is now a remembered rule: other clients' Settings →
+    // Permissions lists follow it without polling (HS2-KYK1S7).
+    if body.scope != hotsheet_aitools::PermissionScope::Once {
+        emit_permission_rules_changed(&state, &resolved.project);
+    }
     // Identical asks the new rule answered resolve the same way (HS2-JNHAYB); each gets its
     // own nudge so every client records it with the decision instead of as external.
     for cascaded in &resolved.cascaded {
@@ -904,6 +909,23 @@ pub(crate) async fn resolve_permission(
             .map(|cascaded| cascaded.id)
             .collect(),
     }))
+}
+
+/// Publish a replayable `permission_rules_changed` nudge for `project` (HS2-KYK1S7): a rule
+/// was remembered or forgotten, so every client showing that project's remembered answers
+/// refetches them once.
+pub(crate) fn emit_permission_rules_changed(state: &AppState, project: &str) {
+    state.emit(ChangeEvent {
+        cursor: None,
+        store: project.to_string(),
+        kind: "permission_rules_changed".to_string(),
+        id: String::new(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    });
 }
 
 /// `GET /permissions/rules` — every remembered answer (HS2-JNHAYB): chat rules (this server
@@ -967,5 +989,6 @@ pub(crate) async fn revoke_permission_rule(
             .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
         }
     }
+    emit_permission_rules_changed(&state, &body.project);
     Ok(StatusCode::NO_CONTENT)
 }

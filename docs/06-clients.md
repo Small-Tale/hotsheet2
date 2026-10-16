@@ -2509,7 +2509,9 @@ by another client or transport become history entries instead of silently disapp
 empty-action generic requests such as `ToolSearch` follow the same lifecycle. That
 authoritative resolution immediately removes the popup even while this client's Allow or
 Deny HTTP response is still in flight; a delayed response is idempotent and cannot
-resurrect or duplicate the resolved request.
+resurrect or duplicate the resolved request. A `permission_rules_changed` event marks that
+project's remembered answers stale; a shown Settings → Permissions list refetches them once,
+including when the change lands while an earlier fetch is in flight, and nothing polls (HS2-KYK1S7).
 A `permission_asked` event also refreshes terminal connection state; the client derives
 the refreshed snapshot before publishing it and skips an unchanged snapshot, so a prompt
 does not cause extra whole-app render passes (HS2-2RN05B).

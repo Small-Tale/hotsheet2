@@ -14386,6 +14386,120 @@ async fn chat_scoped_answers_cascade_list_and_revoke_through_real_routes() {
     assert!(listed.as_array().unwrap().is_empty());
 }
 
+/// HS2-KYK1S7: remembering or revoking an answer publishes a replayable
+/// `permission_rules_changed` event for the project, so other clients' Settings →
+/// Permissions lists refresh without polling; a one-time answer and a missed revoke do not.
+#[tokio::test]
+async fn remembering_and_revoking_permission_rules_emit_a_replayable_change_event() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let project = dir.path().display().to_string();
+    let st = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_permission_rules(dir.path().join("permissions.json"));
+    let bridge = st.permission_bridge();
+    let app = app(st);
+    let cursor = || {
+        let app = app.clone();
+        async move {
+            body_json(
+                app.oneshot(authed("GET", "/ws/poll?timeout_ms=1", None))
+                    .await
+                    .unwrap(),
+            )
+            .await["cursor"]
+                .as_u64()
+                .unwrap()
+        }
+    };
+    let rule_events = |since: u64| {
+        let app = app.clone();
+        async move {
+            let events = body_json(
+                app.oneshot(authed(
+                    "GET",
+                    &format!("/ws/poll?since={since}&timeout_ms=1"),
+                    None,
+                ))
+                .await
+                .unwrap(),
+            )
+            .await["events"]
+                .as_array()
+                .unwrap()
+                .clone();
+            events
+                .into_iter()
+                .filter(|event| event["kind"] == "permission_rules_changed")
+                .collect::<Vec<_>>()
+        }
+    };
+    let answer = |scope: &'static str| {
+        let app = app.clone();
+        let bridge = bridge.clone();
+        let project = project.clone();
+        async move {
+            let waiter = std::thread::spawn(move || {
+                bridge.request_blocking_for_project(project, "chat-a", "Bash", "npm test")
+            });
+            let id = loop {
+                let list = body_json(
+                    app.clone()
+                        .oneshot(authed("GET", "/permissions", None))
+                        .await
+                        .unwrap(),
+                )
+                .await;
+                if let Some(first) = list.as_array().unwrap().first() {
+                    break first["id"].as_u64().unwrap();
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            };
+            let body = format!(r#"{{"decision":"allow","scope":"{scope}"}}"#);
+            let status = app
+                .oneshot(authed("POST", &format!("/permissions/{id}"), Some(&body)))
+                .await
+                .unwrap()
+                .status();
+            assert_eq!(status, StatusCode::OK);
+            waiter.join().unwrap();
+        }
+    };
+
+    // A one-time answer remembers nothing.
+    let since = cursor().await;
+    answer("once").await;
+    assert!(rule_events(since).await.is_empty());
+
+    // A session answer becomes a rule: one event for the project.
+    let since = cursor().await;
+    answer("session").await;
+    let events = rule_events(since).await;
+    assert_eq!(events.len(), 1, "{events:?}");
+    assert_eq!(events[0]["store"], project);
+
+    // Revoking it publishes again; a revoke that finds nothing does not.
+    let revoke = || {
+        let app = app.clone();
+        let body = serde_json::json!({"project": project, "tool": "Bash", "action": "npm test"})
+            .to_string();
+        async move {
+            app.oneshot(authed("DELETE", "/permissions/rules", Some(&body)))
+                .await
+                .unwrap()
+                .status()
+        }
+    };
+    let since = cursor().await;
+    assert_eq!(revoke().await, StatusCode::NO_CONTENT);
+    let events = rule_events(since).await;
+    assert_eq!(events.len(), 1, "{events:?}");
+    assert_eq!(events[0]["store"], project);
+    let since = cursor().await;
+    assert_eq!(revoke().await, StatusCode::NOT_FOUND);
+    assert!(rule_events(since).await.is_empty());
+}
+
 #[tokio::test]
 async fn permission_rules_are_isolated_and_persisted_per_hosted_project() {
     let primary_dir = tempfile::tempdir().unwrap();

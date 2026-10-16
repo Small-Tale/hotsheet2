@@ -5,8 +5,8 @@ use crate::events::ChangeEvent;
 use crate::routes::checkout_tickets::checkout_source_for_create;
 use crate::routes::project_tools::checkout_settings;
 use crate::routes::terminals::{
-    TerminalAiConnectionReq, TerminalHookSource, connect_terminal_ai, release_session_claims,
-    release_session_claims_blocking,
+    TerminalAiConnectionReq, TerminalHookSource, connect_terminal_ai,
+    emit_permission_rules_changed, release_session_claims, release_session_claims_blocking,
 };
 use crate::{AppState, ai_tool_discovery, client_drive, multistore, now, turn_stream};
 use axum::Json;
@@ -768,7 +768,9 @@ pub(crate) async fn delete_drive_connection(
     if closed != client_drive::DriveClosed::NotFound {
         let permissions = state.permission_bridge();
         // The chat is gone, so are its "Allow for this chat" answers (HS2-JNHAYB).
-        permissions.forget_connection(&id);
+        if permissions.forget_connection(&id) > 0 {
+            emit_permission_rules_changed(&state, &project);
+        }
         for request in permissions
             .pending()
             .into_iter()

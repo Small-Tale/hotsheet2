@@ -113,6 +113,7 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
         refreshDriveConnections: noop,
         refreshPermissions: noop,
         serverResolvedPermission: vi.fn(),
+        permissionRulesChanged: vi.fn(),
         applyTerminalRenamed: vi.fn(),
         refreshTerminalDashboard: noop,
         refreshProviderOutbox: noop,
@@ -136,6 +137,7 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     const projects = signal([project('a'), project('b')]),
       noop = vi.fn(async () => undefined),
       refreshRepositoryStatus = vi.fn(async () => undefined),
+      permissionRulesChanged = vi.fn(),
       build = () =>
         createProjectChangeStreamsController({
           projects,
@@ -152,6 +154,7 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
           refreshDriveConnections: noop,
           refreshPermissions: noop,
           serverResolvedPermission: vi.fn(),
+          permissionRulesChanged,
           applyTerminalRenamed: vi.fn(),
           refreshTerminalDashboard: noop,
           refreshProviderOutbox: noop,
@@ -183,6 +186,9 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     await streams.onEvents.get('/api/a')!({ events: [{ kind: 'repository_changed', id: 'a' }] });
     await vi.advanceTimersByTimeAsync(200);
     expect(refreshRepositoryStatus).toHaveBeenCalledTimes(1);
+    // A remembered answer added or revoked elsewhere marks only that project's rules stale (HS2-KYK1S7).
+    await streams.onEvents.get('/api/b')!({ events: [{ kind: 'permission_rules_changed', id: '' }] });
+    expect(permissionRulesChanged).toHaveBeenCalledExactlyOnceWith('b');
     restarted.dispose();
   });
   it('workspace search: debounces repeated edits into one search and clears when the query empties', async () => {
