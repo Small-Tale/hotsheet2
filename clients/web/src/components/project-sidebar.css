@@ -13,6 +13,20 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--kui-space-xs);
 }
+/* Anchors the unread badge to the chat toggle's top-end corner (HS2-59CXAC). */
+.project-sidebar__conversation-anchor {
+  display: grid;
+  position: relative;
+}
+/* App-owned wrapper that places the Kerf Badge; the badge itself is configured only through props.
+   It overhangs only the top edge: the rail's resize separator covers anything past the button's end. */
+.project-sidebar__conversation-badge {
+  display: flex;
+  position: absolute;
+  top: remify(-8px);
+  right: 0;
+  pointer-events: none;
+}
 /* App-owned native toggle beside DriveControl: Kerf's ToolbarControlGroup needs a Toolbar parent
    (KUI-L201) and Kerf has no standalone icon toggle yet (KF-HBWDHE). */
 .project-sidebar__conversation {

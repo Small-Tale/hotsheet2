@@ -38,6 +38,7 @@ function sidebar(mode: WorkspaceViewMode, overrides: Partial<SidebarSurfaceDepen
     aiDefaults: read({ tool: 'codex' }),
     conversationOpen: read(false),
     conversationConnectionId: read(undefined),
+    projectConversationUnread: (projectId) => (projectId === 'p1' ? 3 : 0),
     project: () => current,
     settingsCategory: () => 'ai',
     projectPermissionHistory: () => [{ resolvedAt: Date.now() }, { resolvedAt: 0 }],
@@ -69,7 +70,13 @@ describe('sidebar surface projection (HS2-BSSWGV)', () => {
   it('projects the project sidebar with repository, views, commands, and Drive', () => {
     const props = sidebar('list');
     if (props.kind !== 'project') throw new Error('expected the project sidebar');
-    expect(props.sidebar).toMatchObject({ branch: 'main', unpushed: 2, uncommitted: 3, driveToolLabel: 'CODEX' });
+    expect(props.sidebar).toMatchObject({
+      branch: 'main',
+      unpushed: 2,
+      uncommitted: 3,
+      driveToolLabel: 'CODEX',
+      conversationUnread: 3,
+    });
     expect(props.sidebar.views.map((view) => view.label)).toEqual(['Queue', 'Backlog', 'Archive', 'Mine']);
     expect(props.sidebar.commands).toEqual([
       expect.objectContaining({ id: 'c1', label: 'Run tests', lastRun: 'failed (exit 2)', running: false }),

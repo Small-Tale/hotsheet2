@@ -1545,6 +1545,18 @@ preview/download, server directory browser) are separate design work.
   `AIConversation` dialog after preparing the default tool without sending a workflow turn.
   Project Chat and Drive use different stable connection ids: Chat is a general project
   conversation, while Drive is the explicit `$hotsheet` automation shortcut in the drawer.
+  The action carries a Kerf `Badge` with the project's unread AI chat message count, shown as
+  `99+` past 99 and folded into its accessible name (`Open Codex Conversation, 3 unread
+messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A conversation's
+  read mark is the number of its settled assistant replies the person has seen. A reply that
+  settles while that conversation is not visible is unread. A conversation is visible while its
+  dialog is open, or while its drawer tab is selected in a shown drawer on the project shell outside
+  Settings and Notifications. Viewing a conversation reads it, and a conversation seen for the
+  first time starts fully read, so restored history is never new. The badge sums every
+  conversation the project owns (project Chat, Drive, and drawer AI chats), counted once each, so
+  viewing one chat leaves the others' unread replies on the badge. Read marks persist in
+  `localStorage` (`hotsheet.ai-conversation-reads.v1`) and are dropped with their conversation
+  (`clients/web/src/conversation-unread.ts`).
   Kerf retains one receipt-ordered transcript and composer draft
   per connection; each submit appends a user message and one assistant message whose Markdown
   content grows in place from attributed `turn_event` output. Each submit names its turn with

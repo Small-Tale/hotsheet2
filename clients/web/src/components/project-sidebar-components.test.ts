@@ -519,5 +519,25 @@ describe('ProjectSidebar component slice', () => {
       }),
     );
     expect(options).toContain('aria-label="Drive Provider, Model, and Effort Options"');
+    // Unread chat messages badge the chat toggle and join its accessible name (HS2-59CXAC).
+    expect(markup).not.toContain('project-sidebar__conversation-badge');
+    for (const [count, shown, label] of [
+      [1, '1', '1 unread message'],
+      [7, '7', '7 unread messages'],
+      [120, '99+', '120 unread messages'],
+    ] as const) {
+      const badged = String(ProjectSidebar({ ...base, conversationUnread: count }));
+      expect(badged).toContain(`aria-label="Open Codex Conversation, ${label}"`);
+      expect(badged).toMatch(
+        new RegExp(
+          `data-unread-count="${count}"[\\s\\S]*data-component="badge"[\\s\\S]*>${shown.replace('+', '\\+')}<`,
+        ),
+      );
+      expect(badged).toMatch(/data-component="badge"[^>]*aria-hidden="true"/);
+    }
+    expect(String(ProjectSidebar({ ...base, conversationUnread: 0 }))).not.toContain('data-unread-count');
+    expect(readFileSync(new URL('./project-sidebar.css', import.meta.url), 'utf8')).toMatch(
+      /\.project-sidebar__conversation-badge \{[^}]*position: absolute;[^}]*pointer-events: none;/,
+    );
   });
 });

@@ -1,5 +1,6 @@
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { ResizableRegion } from '@kerfjs/ui/resizable-region';
+import { Select } from '@kerfjs/ui/select';
 import { delegate, type SafeHtml, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -35,9 +36,12 @@ export const sidebarEvent = signal('Choose a view or run an action.');
 export const projectSidebarSettings = {
   conversationOpen: signal(false),
   conversationDisabled: signal(false),
+  /** Unread AI chat messages badged on the chat toggle (HS2-59CXAC). */
+  conversationUnread: signal<'0' | '3' | '120'>('0'),
 };
 export function syncProjectSidebarSettingsControls(root: ParentNode): void {
   syncSettingsControls(root, 'project-sidebar', {
+    values: { 'conversation-unread': projectSidebarSettings.conversationUnread.value },
     checked: {
       'conversation-open': projectSidebarSettings.conversationOpen.value,
       'conversation-disabled': projectSidebarSettings.conversationDisabled.value,
@@ -47,6 +51,7 @@ export function syncProjectSidebarSettingsControls(root: ParentNode): void {
 export function resetProjectSidebarDemo(controlRoot?: ParentNode): void {
   projectSidebarSettings.conversationOpen.value = false;
   projectSidebarSettings.conversationDisabled.value = false;
+  projectSidebarSettings.conversationUnread.value = '0';
   if (controlRoot) syncProjectSidebarSettingsControls(controlRoot);
 }
 export function ProjectSidebarSettings() {
@@ -58,6 +63,16 @@ export function ProjectSidebarSettings() {
       <wa-checkbox name="conversation-disabled" checked={projectSidebarSettings.conversationDisabled.value}>
         Conversation disabled
       </wa-checkbox>
+      <Select
+        name="conversation-unread"
+        label="Unread chat messages"
+        value={projectSidebarSettings.conversationUnread.value}
+        choices={[
+          { value: '0', label: 'None' },
+          { value: '3', label: '3' },
+          { value: '120', label: '120 (Shown as 99+)' },
+        ]}
+      />
       <wa-button type="button" data-action="reset-settings">
         Reset
       </wa-button>
@@ -371,6 +386,7 @@ export function ProjectSidebarDemo() {
             activeCount={2}
             conversationOpen={projectSidebarSettings.conversationOpen.value}
             conversationDisabled={projectSidebarSettings.conversationDisabled.value}
+            conversationUnread={Number(projectSidebarSettings.conversationUnread.value)}
           />
         </ResizableRegion>
       </CatalogExample>
@@ -504,11 +520,14 @@ function wireProjectSidebarDemo(root: HTMLElement): () => void {
         projectSidebarSettings.conversationOpen.value = control.checked;
       else if (control.getAttribute('name') === 'conversation-disabled')
         projectSidebarSettings.conversationDisabled.value = control.checked;
+      else if (control.getAttribute('name') === 'conversation-unread')
+        projectSidebarSettings.conversationUnread.value = control.value as '0' | '3' | '120';
     }),
   );
   demoListeners.add(
     delegate(root, 'click', `.project-sidebar ${COMMANDS_AND_AI_ACTIONS.openConversation.selector}`, () => {
       projectSidebarSettings.conversationOpen.value = !projectSidebarSettings.conversationOpen.value;
+      if (projectSidebarSettings.conversationOpen.value) projectSidebarSettings.conversationUnread.value = '0';
       syncProjectSidebarSettingsControls(root);
       sidebarEvent.value = projectSidebarSettings.conversationOpen.value
         ? 'Conversation opened.'

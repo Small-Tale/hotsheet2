@@ -6458,6 +6458,35 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await settings.getByRole('button', { name: 'Reset' }).click();
   await expect(conversation).toHaveAttribute('aria-pressed', 'false');
   await expect(conversation).toBeEnabled();
+  // Unread chat messages badge the toggle with a Kerf Badge and join its name (HS2-59CXAC).
+  const unreadBadge = sidebar.locator('.project-sidebar__conversation-badge'),
+    chooseUnread = (value: string) =>
+      settings.locator('[name="conversation-unread"]').evaluate((node: HTMLElement & { value: string }, next) => {
+        node.value = next;
+        node.dispatchEvent(new Event('change', { bubbles: true }));
+      }, value);
+  await expect(unreadBadge).toHaveCount(0);
+  await chooseUnread('3');
+  await expect(unreadBadge).toHaveText('3');
+  await expect(conversation).toHaveAccessibleName('Open Codex Conversation, 3 unread messages');
+  await expect(unreadBadge.locator('[data-component="badge"]')).toHaveAttribute('aria-hidden', 'true');
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const row = (await sidebar.locator('.project-sidebar__drive-row').boundingBox())!;
+    await page.screenshot({
+      path: `target/visual-captures/hs2-59cxac-demo-unread-${width}.png`,
+      clip: { x: Math.max(0, row.x - 16), y: row.y - 48, width: row.width + 32, height: row.height + 64 },
+    });
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await chooseUnread('120');
+  await expect(unreadBadge).toHaveText('99+');
+  await expect(conversation).toHaveAccessibleName('Open Codex Conversation, 120 unread messages');
+  // Opening the conversation reads it, so the badge clears.
+  await conversation.click();
+  await expect(unreadBadge).toHaveCount(0);
+  await settings.getByRole('button', { name: 'Reset' }).click();
+  await expect(conversation).toHaveAttribute('aria-pressed', 'false');
   await page.locator('[data-action="toggle-settings"]').first().click();
   await expect(settings).toBeHidden();
   await sidebar.getByRole('button', { name: /Backlog/ }).click();

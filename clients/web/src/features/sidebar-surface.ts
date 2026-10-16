@@ -51,6 +51,8 @@ export interface SidebarSurfaceDependencies {
   aiDefaults: Readable<AiToolDefaults>;
   conversationOpen: Readable<boolean>;
   conversationConnectionId: Readable<string | undefined>;
+  /** Unread AI chat messages across the project's conversations (HS2-59CXAC). */
+  projectConversationUnread: (projectId: string) => number;
   project: () => Project | undefined;
   settingsCategory: () => SettingsCategory;
   projectPermissionHistory: (projectId: string) => ReadonlyArray<{ resolvedAt: number }>;
@@ -99,6 +101,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
     aiDefaults,
     conversationOpen,
     conversationConnectionId,
+    projectConversationUnread,
     project,
     settingsCategory,
     projectPermissionHistory,
@@ -240,6 +243,7 @@ export function createSidebarSurface(dependencies: SidebarSurfaceDependencies) {
           conversationOpen.value &&
           conversationConnectionId.value === projectChatConnectionId(current.id, aiDefaults.value.tool),
         conversationDisabled: drivePendingByProject.value[current.id],
+        conversationUnread: projectConversationUnread(current.id),
         openCount: counts.open,
         upNextCount: counts.up_next,
         activeCount: counts.active,

@@ -75,6 +75,7 @@ import {
   type WorkspaceViewMode,
 } from '../components/workspace-header';
 import { withControlledOpen } from '../controlled-open';
+import { createConversationUnreadTracker } from '../conversation-unread';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { createAiConfigurationController } from '../features/ai-configuration';
@@ -3318,6 +3319,33 @@ export async function startHotSheetWebClient() {
       error.value = reason instanceof Error ? reason.message : String(reason);
     }
   }
+  // Unread AI chat messages per conversation; a chat is read while its dialog or drawer tab shows (HS2-59CXAC).
+  const conversationUnread = createConversationUnreadTracker({
+    conversationStates,
+    visibleConnectionIds: () => {
+      const visible: string[] = [];
+      if (conversationOpen.value && conversationConnectionId.value) visible.push(conversationConnectionId.value);
+      const current = project();
+      if (
+        current &&
+        shellMode.value === 'project' &&
+        terminalDrawerVisible.value &&
+        !['settings', 'notifications'].includes(viewMode.value)
+      ) {
+        const chat = (terminalDrawerChatsByProject.value[current.id] ?? []).find(
+          (item) => item.id === terminalDrawerSelected.value,
+        );
+        if (chat) visible.push(chat.connectionId);
+      }
+      return visible;
+    },
+    storage: localStorage,
+  });
+  const projectConversationUnread = (projectId: string) =>
+    conversationUnread.projectUnreadCount([
+      ...(driveConnectionsByProject.value[projectId] ?? []).map((connection) => connection.id),
+      ...(terminalDrawerChatsByProject.value[projectId] ?? []).map((chat) => chat.connectionId),
+    ]);
   const { sidebarSurfaceProps } = createSidebarSurface({
     searchScope,
     viewMode,
@@ -3344,6 +3372,7 @@ export async function startHotSheetWebClient() {
     aiDefaults,
     conversationOpen,
     conversationConnectionId,
+    projectConversationUnread,
     project: () => project(),
     settingsCategory: () => settingsCategory(),
     projectPermissionHistory,

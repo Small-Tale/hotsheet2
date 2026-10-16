@@ -1,6 +1,7 @@
 import '@kerfjs/ui/layout.css';
 import './project-sidebar.css';
 
+import { Badge } from '@kerfjs/ui/badge';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { MessageSquare } from 'lucide';
@@ -44,6 +45,8 @@ export interface ProjectSidebarProps {
   driveDefaultSelection?: AiToolSelection;
   conversationOpen?: boolean;
   conversationDisabled?: boolean;
+  /** Unread AI chat messages for this project; a positive count badges the chat button (HS2-59CXAC). */
+  conversationUnread?: number;
   openCount: number;
   upNextCount: number;
   activeCount: number;
@@ -61,6 +64,8 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
     props.driveToolLabel ??
     props.driveTools?.find((tool) => tool.id === props.driveTool)?.display_name ??
     `${props.driveTool.slice(0, 1).toUpperCase()}${props.driveTool.slice(1)}`;
+  const unread = Math.max(0, Math.floor(props.conversationUnread ?? 0)),
+    unreadLabel = unread ? `${unread} unread message${unread === 1 ? '' : 's'}` : '';
   // Kerf's Pane owns its footer's (safe-area) edges since beta.51, so the footer's own inset lives on
   // this inner List rather than on the pane footer (HS2-KMDJRH).
   const footer = (
@@ -100,17 +105,27 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
             y={props.driveOptionsAnchor?.y}
           />
         )}
-        <button
-          type="button"
-          class="project-sidebar__conversation"
-          {...COMMANDS_AND_AI_ACTIONS.openConversation.attrs}
-          aria-label={`Open ${driveToolLabel} Conversation`}
-          title="Open chat without starting the Hot Sheet workflow"
-          aria-pressed={props.conversationOpen ? 'true' : 'false'}
-          disabled={props.conversationDisabled}
-        >
-          <LucideIcon size="s" icon={MessageSquare} name="message-square" />
-        </button>
+        <span class="project-sidebar__conversation-anchor">
+          <button
+            type="button"
+            class="project-sidebar__conversation"
+            {...COMMANDS_AND_AI_ACTIONS.openConversation.attrs}
+            aria-label={`Open ${driveToolLabel} Conversation${unreadLabel ? `, ${unreadLabel}` : ''}`}
+            title="Open chat without starting the Hot Sheet workflow"
+            aria-pressed={props.conversationOpen ? 'true' : 'false'}
+            disabled={props.conversationDisabled}
+          >
+            <LucideIcon size="s" icon={MessageSquare} name="message-square" />
+          </button>
+          {unread > 0 && (
+            // The button's accessible name already announces the count, so the badge is decorative.
+            <span class="project-sidebar__conversation-badge" data-unread-count={String(unread)}>
+              <Badge tone="danger" appearance="solid" shape="pill" size="compact" ariaHidden>
+                {unread > 99 ? '99+' : unread}
+              </Badge>
+            </span>
+          )}
+        </span>
       </div>
     </List>
   );

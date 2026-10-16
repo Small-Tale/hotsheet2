@@ -29406,3 +29406,103 @@ test('opens row, gallery, and reference attachment menus through the shared open
   expect(await insideViewport()).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-1rqa1e-reference-menu-wide.png' });
 });
+
+test('badges the sidebar chat button with unread AI chat messages and clears it on view (HS2-59CXAC)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  let cursor = 0,
+    connectionId: string | undefined;
+  const sockets: import('@playwright/test').WebSocketRoute[] = [];
+  await page.route('**/ws/poll*', (route) => route.fulfill({ json: { cursor, events: [], overflow: false } }));
+  page.on('request', (request) => {
+    const match = new URL(request.url()).pathname.match(/\/drive\/connections\/([^/]+)\/turns$/);
+    if (match && request.method() === 'POST') connectionId = decodeURIComponent(match[1]);
+  });
+  await page.routeWebSocket(/\/ws\/sync(?:\?|$)/, (route) => {
+    sockets.push(route);
+    route.onClose(() => {
+      const index = sockets.indexOf(route);
+      if (index >= 0) sockets.splice(index, 1);
+    });
+  });
+  /** Finish the running turn with one reply while its chat is out of view. */
+  const finishTurn = (id: string, content: string) => {
+    for (const event of [
+      { type: 'output', content },
+      { type: 'done', reason: 'completed' },
+    ]) {
+      cursor += 1;
+      sockets[0].send(
+        JSON.stringify({
+          cursor,
+          store: '/work/demo.hs2',
+          kind: 'turn_event',
+          id,
+          slug: 'codex',
+          turn: { connection_id: id, event },
+        }),
+      );
+    }
+  };
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await expect.poll(() => sockets.length).toBeGreaterThan(0);
+  const chatButton = page.locator('[data-action="open-conversation"]'),
+    badge = page.locator('.project-sidebar__conversation-badge'),
+    footer = page.locator('.project-sidebar__drive-row');
+  await expect(chatButton).toHaveAccessibleName('Open Codex Conversation');
+  await expect(badge).toHaveCount(0);
+  // Drawer chat tab: the reply settles while the drawer is hidden.
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+  await drawer.getByLabel('Message Codex').fill('Start sustained output');
+  await drawer.getByLabel('Message Codex').press('Enter');
+  await expect.poll(() => connectionId).toBeTruthy();
+  const drawerChat = connectionId!;
+  await page.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
+  finishTurn(drawerChat, 'The drawer reply arrived while hidden.');
+  await expect(badge).toHaveText('1');
+  await expect(chatButton).toHaveAccessibleName('Open Codex Conversation, 1 unread message');
+  // The badge sits on the button's top-end corner without covering the Drive control.
+  const [buttonBox, badgeBox, driveBox] = await Promise.all([
+    chatButton.boundingBox(),
+    badge.boundingBox(),
+    page.locator('[data-component="drive-control"]').boundingBox(),
+  ]);
+  expect(badgeBox!.x + badgeBox!.width).toBeCloseTo(buttonBox!.x + buttonBox!.width, 0);
+  expect(badgeBox!.y).toBeLessThan(buttonBox!.y);
+  expect(badgeBox!.x).toBeGreaterThan(driveBox!.x + driveBox!.width);
+  // Capture past the drive row's own box so any clipping of the overhanging badge would show.
+  const rowBox = (await footer.boundingBox())!;
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-59cxac-sidebar-unread-1280.png',
+    clip: { x: rowBox.x - 16, y: rowBox.y - 48, width: rowBox.width + 40, height: rowBox.height + 64 },
+  });
+  // Showing the drawer with that chat selected reads it.
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  await expect(drawer).toContainText('The drawer reply arrived while hidden.');
+  await expect(badge).toHaveCount(0);
+  await expect(chatButton).toHaveAccessibleName('Open Codex Conversation');
+  // The conversation dialog: a reply that settles after closing it badges again; reopening clears.
+  await page.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
+  await chatButton.click();
+  const host = page.locator('[data-component="ai-conversation"][data-presentation="dialog"]');
+  await expect(host.getByRole('dialog')).toBeVisible();
+  await host.getByLabel('Message Codex').fill('Start sustained output');
+  await host.getByLabel('Message Codex').press('Enter');
+  await expect.poll(() => connectionId).not.toBe(drawerChat);
+  const dialogChat = connectionId!;
+  await page.keyboard.press('Escape');
+  await expect(host.getByRole('dialog')).toBeHidden();
+  finishTurn(dialogChat, 'The dialog reply arrived after closing.');
+  await expect(badge).toHaveText('1');
+  await chatButton.click();
+  await expect(host).toContainText('The dialog reply arrived after closing.');
+  await expect(badge).toHaveCount(0);
+  await expect(chatButton).toHaveAccessibleName('Open Codex Conversation');
+});

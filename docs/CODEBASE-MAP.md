@@ -125,6 +125,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/conversation-activity-disclosure.ts # Session UI state for collapsed/expanded AI chat activity groups, collapsed to the latest item by default (HS2-Y3SGH3)
     src/conversation-render-scheduler.ts # Bounds app-root conversation rendering during sustained output, with immediate final/interactive publication (HS2-0PFQ8V)
     src/conversation-scroll.ts # Bottom-aware transcript pinning that preserves intentional scrollback
+    src/conversation-unread.ts # Per-conversation AI chat read marks: settled-reply counting, visibility-driven reconcile, persisted marks, and the project unread total for the sidebar chat badge (HS2-59CXAC)
     src/conversation-history.ts # AI chat composer Up/Down sent-message recall: first/last-line key gating, ignoredups history, draft-preserving cursor steps (HS2-AJQKK0)
     src/conversation-selection.ts # AI chat message selection: plain/Cmd-Ctrl toggle/Shift range picks normalized per platform, displayed-order reads, and skipped-run gaps for copy (HS2-WV88W3)
     src/conversation-export.ts # Portable .hotsheet-chat selected-messages scope, manifest, transcript, summary, selected structured assets, collision-lineage, resume contract, and validated `skippedBefore` gap counts (HS2-BZB93V)
