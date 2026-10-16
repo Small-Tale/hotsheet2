@@ -70,10 +70,10 @@ export function RepositorySetup({
 
   return (
     <div class="repository-setup" data-component="repository-setup" data-step="initialize">
-      <p class="repository-setup__lead">
+      <Text tone="quiet" align="center" flush>
         Initialize Git here to enable branch, change, and commit status. Existing project files will remain untracked;
         Hot Sheet will not stage or commit them.
-      </p>
+      </Text>
       {error && <StateBanner tone="danger" urgency="alert" title={error} />}
       <Row hAlign="center">
         <wa-button appearance="accent" type="button" {...REPOSITORY_ACTIONS.initializeRepository.attrs} disabled={busy}>

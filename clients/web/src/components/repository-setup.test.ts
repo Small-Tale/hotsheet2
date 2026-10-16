@@ -34,6 +34,10 @@ describe('RepositorySetup', () => {
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/\.repository-setup \{[^}]*padding: var\(--kui-space-l\)[^}]*gap: var\(--kui-space-l\)/);
     // Kerf StateBanner, Row, List, and Text own the error, footers, and copy (HS2-AP13JM).
-    expect(css).not.toMatch(/__error|footer|__message|@media/);
+    expect(css).not.toMatch(/__error|footer|__message|__lead|@media/);
+    // The initialize lead is centered quiet Kerf Text (HS2-J7BTAG).
+    expect(String(RepositorySetup({}))).toMatch(
+      /<p class="kui-text" data-component="text" data-tone="quiet"[^>]*data-align="center"/u,
+    );
   });
 });

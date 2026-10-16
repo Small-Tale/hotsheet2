@@ -700,7 +700,8 @@ test('uses Kerf layout primitives across migrated settings and dialog surfaces (
     .locator('[data-demo-trash="default"], [data-demo-trash="unapplied"]')
     .locator('[data-component="trash-settings"]');
   await expect(trash).toHaveCount(2);
-  await expect(trash.first().locator('[data-component="list"]')).toHaveCount(3);
+  // The retention field sits in its own flex-basis List (HS2-J7BTAG).
+  await expect(trash.first().locator('[data-component="list"]')).toHaveCount(4);
   await expect(trash.first().locator('[data-component="row"]')).toHaveCount(1);
   await expect(trash.first().getByRole('button', { name: 'Apply Now' })).toHaveJSProperty('disabled', true);
   await expect(trash.last().getByRole('button', { name: 'Apply Now' })).toHaveJSProperty('disabled', false);

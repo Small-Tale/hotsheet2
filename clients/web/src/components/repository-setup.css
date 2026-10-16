@@ -1,4 +1,5 @@
-/* The bounded setup panel centered in the repository popover's empty state. */
+/* The bounded setup panel centered in the repository popover's empty state (no Kerf page-column
+   width yet: KF-P3069N, HS2-0ZF0KS). */
 .repository-setup {
   display: grid;
   width: min(remify(480px), 100%);
@@ -16,11 +17,4 @@
   border-radius: var(--wa-border-radius-circle);
   background: var(--wa-color-brand-fill-quiet);
   place-items: center;
-}
-/* The initialize step's centered explanation (Kerf Text has no alignment prop). */
-.repository-setup__lead {
-  margin: 0;
-  color: var(--wa-color-text-quiet);
-  line-height: 1.5;
-  text-align: center;
 }

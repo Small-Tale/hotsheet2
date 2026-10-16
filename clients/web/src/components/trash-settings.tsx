@@ -1,8 +1,8 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
-import './trash-settings.css';
 
+import { flex, px } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
@@ -50,7 +50,6 @@ export function TrashSettings({
     hint = dirty ? trashPurgeHint(draft?.purgeCount) : '';
   return (
     <form
-      class="trash-settings"
       data-component="trash-settings"
       data-dirty={dirty ? 'true' : undefined}
       {...COMMANDS_AND_AI_ACTIONS.saveTrashSettings.attrs}
@@ -66,14 +65,17 @@ export function TrashSettings({
         <List gap="xs">
           {/* The button sits on the field's line, bottom-aligned with the control under its label. */}
           <Row vAlign="bottom" gap="xs" wrap>
-            <wa-input
-              class="trash-settings__days"
-              name="trash-cleanup-days"
-              type="number"
-              label="Keep Deleted Tickets for (Days)"
-              value={draft?.value ?? String(days)}
-              required
-            />
+            {/* A Kerf List flex item keeps the field short (320px basis) and lets a narrow screen wrap the
+                action below; the List stretches the input across it (HS2-J7BTAG). */}
+            <List flex={flex(0, 1, px(320))}>
+              <wa-input
+                name="trash-cleanup-days"
+                type="number"
+                label="Keep Deleted Tickets for (Days)"
+                value={draft?.value ?? String(days)}
+                required
+              />
+            </List>
             <wa-button type="submit" variant="brand" disabled={!dirty}>
               Apply Now
             </wa-button>

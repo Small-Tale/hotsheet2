@@ -218,3 +218,18 @@ the remaining wrapper markup that only existed because Badge lacked props:
     default and lowered fills).
   - The phone-sized terminal focus stage.
     None of them restyles a nested production component.
+
+## Settings and forms update (HS2-J7BTAG)
+
+- `ai-tool-settings.css` was already removed.
+- `trash-settings.css` is removed. A Kerf `List` flex item (`flex(0, 1, px(320))`) bounds the
+  retention field and lets a narrow screen wrap the action below it.
+- `RepositorySetup` renders its initialize lead as centered quiet Kerf `Text`, so the
+  `.repository-setup__lead` rule is removed.
+- The page-column bounds stay: the `settings-workspace.css` 864px measure and the
+  `repository-setup.css` 480px panel. `KF-P3069N` requests a public `List` content width, and
+  `HS2-0ZF0KS` adopts it. The ready-icon disc stays, because no Kerf icon presentation draws a
+  filled circle.
+- The remaining generic chrome is split into its own tickets:
+  - Provider setup and ticket-source settings: `HS2-EN1E76`.
+  - Command, keyboard, icon-picker, calibration, and search-help forms: `HS2-4GX2YS`.

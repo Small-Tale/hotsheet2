@@ -15,6 +15,11 @@ describe('TrashSettings', () => {
     expect(markup).toContain('data-component="list"');
     expect(markup).toContain('data-component="row"');
     expect(markup).toContain('data-component="text"');
+    // A Kerf List flex item bounds the field; there is no stylesheet (HS2-J7BTAG).
+    expect(markup).toMatch(
+      /<div class="kui-list" data-component="list"[^>]*style="[^"]*0 1 (?:20rem|320px)[^"]*"[^>]*><wa-input[^>]*name="trash-cleanup-days"/u,
+    );
+    expect(markup).not.toContain('trash-settings__days');
   });
 
   it('puts "Apply Now" beside the field and enables it only for an unapplied value (HS2-KPD942)', () => {

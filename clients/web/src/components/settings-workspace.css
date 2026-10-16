@@ -1,5 +1,5 @@
 /* The settings page column: a centered, readable measure with the page inset. Kerf List has no
-   max-width/centering prop for a page-level content column. */
+   max-width/centering prop for a page-level content column (KF-P3069N, adoption HS2-0ZF0KS). */
 .settings-workspace {
   width: 100%;
   max-width: remify(864px);
