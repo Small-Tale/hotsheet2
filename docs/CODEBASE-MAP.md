@@ -482,6 +482,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
                              #     HooksSpec.event_matchers overrides the shared matcher for named hook events
       src/tests.rs           #   built-in + on-disk loading, first-party-wins-collision
       tests/no_tool_id_branches.rs # HS2-9 plugin-first lint: core must not branch on a tool id (ids derived from the registry)
+      tests/setup_isolation_guard.rs # HS2-SDPD95 source guard: setup tests inject their plugin search path, never the shared test HOTSHEET_HOME
   plugins/                   # first-party AI-tool plugin dirs, bundled into the binary (docs/05 §5.11)
     claude/                  #   manifest.toml + instructions.md (CLAUDE.md) + SKILL.md; claude-json MCP; [drive] claude-channel (async)
     codex/                   #   AGENTS.md instructions + project-local .agents/skills/hotsheet/SKILL.md; codex-toml MCP; [drive] app-server (persistent)
@@ -626,7 +627,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   throwaway `HOTSHEET_HOME`.
 - **Test machine home (HS2-T9VXEP):** `.cargo/config.toml` `[env]` forces
   `HOTSHEET_HOME=target/test-hotsheet-home` for every cargo/nextest-launched process so an
-  inherited real `~/.hotsheet2` never reaches a test; see
+  inherited real `~/.hotsheet2` never reaches a test, and `HOTSHEET_CACHE_DIR=target/test-hotsheet-cache`
+  likewise. Parallel binaries share that home, so setup tests inject their plugin search
+  path, enforced by `crates/hotsheet-plugins/tests/setup_isolation_guard.rs` (HS2-SDPD95); see
   [12 §12.7.6](12-code-organization-and-testing.md#1276-fixtures--ci).
 - **Lint (must pass with zero warnings before push):** `cargo fmt --all --check` +
   `cargo lint`; then `npm run lint` in `clients/web`, `migrator`, and

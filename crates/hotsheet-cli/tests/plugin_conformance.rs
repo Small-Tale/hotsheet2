@@ -43,7 +43,7 @@ fn every_registered_plugin_passes_conformance() {
         check_hooks(p, &id);
         check_drive(p, &id);
         check_target_safety(p, &id);
-        check_headless_setup(p, &id);
+        check_headless_setup(p, &id, &[]);
     }
 }
 
@@ -197,7 +197,7 @@ fn check_hooks(p: &Plugin, id: &str) {
 
 /// The load-bearing check: a full headless `setup` for this plugin against a fresh temp
 /// project writes exactly its declared artifacts, they're valid, and it's idempotent.
-fn check_headless_setup(p: &Plugin, id: &str) {
+fn check_headless_setup(p: &Plugin, id: &str, plugin_dirs: &[std::path::PathBuf]) {
     let dir = tempfile::tempdir().unwrap();
     FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
     std::fs::create_dir_all(dir.path().join(".git/info")).unwrap();
@@ -205,7 +205,7 @@ fn check_headless_setup(p: &Plugin, id: &str) {
 
     // Run setup twice — must be idempotent (managed blocks refreshed, not duplicated).
     for _ in 0..2 {
-        hotsheet_cli::run_setup(dir.path(), dir.path(), Some(id), false)
+        hotsheet_cli::setup::run_setup_in(dir.path(), dir.path(), Some(id), false, plugin_dirs)
             .unwrap_or_else(|e| panic!("[{id}] headless setup failed: {e}"));
     }
 
@@ -288,13 +288,14 @@ fn assert_valid_mcp(id: &str, format: &str, server_name: &str, text: &str) {
 
 /// A brand-new plugin dir, loaded from disk (not bundled), must pass the same battery — the
 /// gate is inherited by *existing*, exactly as a third-party tool would experience it. We
-/// install it on an isolated machine search path so `run_setup` discovers it by id and runs
+/// install it on an injected machine search path so `run_setup_in` discovers it by id and runs
 /// the full headless setup E2E, just like a built-in.
 #[test]
 fn a_new_on_disk_plugin_inherits_the_gate() {
     let home = tempfile::tempdir().unwrap();
-    // SAFETY: nextest runs each test in its own process; setting HOTSHEET_HOME is local.
-    unsafe { std::env::set_var("HOTSHEET_HOME", home.path()) };
+    // The machine search path is injected, never read from the process-wide HOTSHEET_HOME
+    // that other test binaries share (HS2-SDPD95).
+    let plugin_dirs = vec![home.path().join("plugins")];
     let pdir = home.path().join("plugins").join("mytool");
     std::fs::create_dir_all(&pdir).unwrap();
     std::fs::write(
@@ -324,7 +325,8 @@ args = ["--path", "{store}"]
     .unwrap();
 
     // Loads + resolves on the machine search path, exactly like a bundled plugin.
-    let p = hotsheet_plugins::find("mytool").expect("on-disk plugin discovered by id");
+    let p =
+        hotsheet_plugins::find_in("mytool", &plugin_dirs).expect("on-disk plugin discovered by id");
     assert!(!p.is_builtin(), "the on-disk plugin is not a built-in");
     let id = p.id().to_string();
     // The same battery a built-in gets — including the full headless setup E2E.
@@ -335,5 +337,5 @@ args = ["--path", "{store}"]
     check_mcp(&p, &id);
     check_drive(&p, &id);
     check_target_safety(&p, &id);
-    check_headless_setup(&p, &id);
+    check_headless_setup(&p, &id, &plugin_dirs);
 }

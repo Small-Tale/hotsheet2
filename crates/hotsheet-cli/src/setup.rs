@@ -6,7 +6,7 @@
 //! server also reads) so `--detect` honors it.
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
@@ -19,13 +19,33 @@ pub fn run_setup(
     tool: Option<&str>,
     detect: bool,
 ) -> Result<Vec<SetupReport>> {
+    run_setup_in(
+        store_path,
+        project_dir,
+        tool,
+        detect,
+        &hotsheet_plugins::default_dirs(),
+    )
+}
+
+/// [`run_setup`] with an explicit machine plugin search path. Tests pass their own (or no)
+/// directory so they never read the process-wide machine home other test binaries share
+/// (HS2-SDPD95).
+pub fn run_setup_in(
+    store_path: &Path,
+    project_dir: &Path,
+    tool: Option<&str>,
+    detect: bool,
+    plugin_dirs: &[PathBuf],
+) -> Result<Vec<SetupReport>> {
     let enabled = enabled_plugin_ids(project_dir);
-    Ok(hotsheet_plugins::run_setup(
+    Ok(hotsheet_plugins::run_setup_in(
         store_path,
         project_dir,
         tool,
         detect,
         enabled.as_ref(),
+        plugin_dirs,
     )?)
 }
 
@@ -33,6 +53,15 @@ pub fn run_setup(
 /// the same core writers as explicit setup and bootstrap. The report also lists what was
 /// removed from tools the project disabled (HS2-CAM9J5).
 pub fn refresh_setup(store_path: &Path, project_dir: &Path) -> Result<RefreshReport> {
+    refresh_setup_in(store_path, project_dir, &hotsheet_plugins::default_dirs())
+}
+
+/// [`refresh_setup`] with an explicit machine plugin search path (HS2-SDPD95).
+pub fn refresh_setup_in(
+    store_path: &Path,
+    project_dir: &Path,
+    plugin_dirs: &[PathBuf],
+) -> Result<RefreshReport> {
     let settings = hotsheet_ticketing::Settings::with_legacy_stores(project_dir, [store_path]);
     settings.migrate_existing()?;
     let enabled = enabled_plugin_ids(project_dir);
@@ -40,7 +69,7 @@ pub fn refresh_setup(store_path: &Path, project_dir: &Path) -> Result<RefreshRep
         store_path,
         project_dir,
         enabled.as_ref(),
-        &hotsheet_plugins::default_dirs(),
+        plugin_dirs,
     )?)
 }
 
@@ -71,6 +100,17 @@ mod tests {
         dir
     }
 
+    /// Set up against the built-in plugins only. Never the shared machine plugin dir under
+    /// the process-wide `HOTSHEET_HOME`: another test binary may be writing it (HS2-SDPD95).
+    fn setup(
+        store: &Path,
+        project: &Path,
+        tool: Option<&str>,
+        detect: bool,
+    ) -> Result<Vec<SetupReport>> {
+        run_setup_in(store, project, tool, detect, &[])
+    }
+
     fn read(dir: &Path, rel: &str) -> String {
         std::fs::read_to_string(dir.join(rel)).unwrap()
     }
@@ -78,7 +118,7 @@ mod tests {
     #[test]
     fn setup_claude_writes_all_three_artifacts() {
         let d = project();
-        let reports = run_setup(d.path(), d.path(), Some("claude"), false).unwrap();
+        let reports = setup(d.path(), d.path(), Some("claude"), false).unwrap();
         assert_eq!(reports.len(), 1);
         assert_eq!(reports[0].tool, "Claude Code");
 
@@ -141,8 +181,8 @@ mod tests {
         )
         .unwrap();
 
-        run_setup(d.path(), d.path(), Some("claude"), false).unwrap();
-        run_setup(d.path(), d.path(), Some("claude"), false).unwrap(); // twice → no dupes
+        setup(d.path(), d.path(), Some("claude"), false).unwrap();
+        setup(d.path(), d.path(), Some("claude"), false).unwrap(); // twice → no dupes
 
         assert_eq!(
             read(d.path(), ".claude/settings.json"),
@@ -212,7 +252,7 @@ mod tests {
         );
         // Codex declares its own native PermissionRequest hook in its own config.
         let d2 = project();
-        let reports = run_setup(d2.path(), d2.path(), Some("codex"), false).unwrap();
+        let reports = setup(d2.path(), d2.path(), Some("codex"), false).unwrap();
         assert!(reports[0].wrote.iter().any(|w| w == ".codex/hooks.json"));
         let codex: serde_json::Value =
             serde_json::from_str(&read(d2.path(), ".codex/hooks.json")).unwrap();
@@ -239,7 +279,7 @@ mod tests {
         let custom_skill = d.path().join(".agents/skills/custom/SKILL.md");
         std::fs::create_dir_all(custom_skill.parent().unwrap()).unwrap();
         std::fs::write(&custom_skill, "user-authored custom skill\n").unwrap();
-        let reports = run_setup(d.path(), d.path(), Some("codex"), false).unwrap();
+        let reports = setup(d.path(), d.path(), Some("codex"), false).unwrap();
         assert_eq!(reports[0].tool, "Codex CLI");
 
         let agents = read(d.path(), "AGENTS.md");
@@ -308,7 +348,7 @@ mod tests {
             1
         );
 
-        run_setup(d.path(), d.path(), Some("codex"), false).unwrap();
+        setup(d.path(), d.path(), Some("codex"), false).unwrap();
         assert_eq!(read(d.path(), "AGENTS.md"), agents);
         assert_eq!(read(d.path(), ".agents/skills/hotsheet/SKILL.md"), skill);
         assert_eq!(
@@ -331,8 +371,8 @@ mod tests {
         )
         .unwrap();
 
-        run_setup(d.path(), d.path(), Some("claude"), false).unwrap();
-        run_setup(d.path(), d.path(), Some("claude"), false).unwrap(); // twice
+        setup(d.path(), d.path(), Some("claude"), false).unwrap();
+        setup(d.path(), d.path(), Some("claude"), false).unwrap(); // twice
 
         let claude_md = read(d.path(), "CLAUDE.md");
         assert!(claude_md.contains("# My project"), "user content kept");
@@ -388,14 +428,14 @@ mod tests {
     #[test]
     fn unknown_tool_errors() {
         let d = project();
-        let err = run_setup(d.path(), d.path(), Some("nope"), false).unwrap_err();
+        let err = setup(d.path(), d.path(), Some("nope"), false).unwrap_err();
         assert!(err.to_string().contains("unknown tool 'nope'"));
     }
 
     #[test]
     fn no_tool_and_no_detect_errors() {
         let d = project();
-        let err = run_setup(d.path(), d.path(), None, false).unwrap_err();
+        let err = setup(d.path(), d.path(), None, false).unwrap_err();
         assert!(err.to_string().contains("detect"));
     }
 }

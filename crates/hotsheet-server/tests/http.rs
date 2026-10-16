@@ -12830,11 +12830,18 @@ async fn provider_attachment_copy_preserves_bytes_across_hosted_stores() {
     assert_eq!(stored, b"preserved bytes");
 }
 
+/// Setup reads the machine plugin search path. Point it at no machine directory so a
+/// setup test never depends on the process-wide `HOTSHEET_HOME` other test binaries share
+/// (HS2-SDPD95); `crates/hotsheet-plugins/tests/setup_isolation_guard.rs` requires it.
+fn hermetic_setup(state: AppState) -> AppState {
+    state.with_plugin_dirs(Vec::new())
+}
+
 #[tokio::test]
 async fn setup_endpoint_prepares_the_project_like_the_cli() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
-    let st = AppState::new(store, SECRET.into()).unwrap();
+    let st = hermetic_setup(AppState::new(store, SECRET.into()).unwrap());
 
     let resp = app(st.clone())
         .oneshot(authed("POST", "/setup/codex", None))
@@ -12865,6 +12872,7 @@ async fn setup_endpoint_prepares_the_project_like_the_cli() {
 #[tokio::test]
 async fn setup_endpoint_rejects_an_unknown_tool() {
     let (_d, st) = state();
+    let st = hermetic_setup(st);
     let resp = app(st)
         .oneshot(authed("POST", "/setup/nope", None))
         .await
@@ -12881,6 +12889,7 @@ async fn setup_endpoint_rejects_an_unknown_tool() {
 #[tokio::test]
 async fn setup_endpoint_needs_the_secret() {
     let (_d, st) = state();
+    let st = hermetic_setup(st);
     let resp = app(st)
         .oneshot(
             Request::builder()
@@ -12908,7 +12917,7 @@ fn setting_up_a_tool_does_not_stall_other_requests() {
 
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
-    let st = AppState::new(store, SECRET.into()).unwrap();
+    let st = hermetic_setup(AppState::new(store, SECRET.into()).unwrap());
     let agents = dir.path().join("AGENTS.md");
     let c_path = std::ffi::CString::new(agents.as_os_str().as_bytes()).unwrap();
     // SAFETY: `c_path` is a valid NUL-terminated path that outlives the call.

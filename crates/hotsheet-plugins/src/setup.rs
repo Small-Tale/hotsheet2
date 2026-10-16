@@ -3295,7 +3295,7 @@ args = []
     #[test]
     fn detect_with_no_tool_errors() {
         let dir = tempfile::tempdir().unwrap();
-        let err = run_setup(dir.path(), dir.path(), None, false, None).unwrap_err();
+        let err = run_setup_in(dir.path(), dir.path(), None, false, None, &[]).unwrap_err();
         assert!(matches!(err, SetupError::NoToolGiven));
     }
 

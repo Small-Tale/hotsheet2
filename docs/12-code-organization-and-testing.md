@@ -536,7 +536,16 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   for every process cargo or nextest starts (a test needing a fresh home still passes its
   own temp directory), and
   `hotsheet-plugins`'s `test_processes_use_the_repository_test_home_not_the_real_machine_home`
-  fails if that guard is removed. The migrator suite's `globalSetup`
+  fails if that guard is removed. The same config forces
+  `HOTSHEET_CACHE_DIR=<repo>/target/test-hotsheet-cache`, so a server test that keeps the
+  default cache root never writes posters into the real platform cache (HS2-SDPD95). The
+  forced home is **shared by every test binary running in parallel**, so tests that write
+  or depend on machine-home state inject their own: setup tests pass an explicit plugin
+  search path (`run_setup_in` / `refresh_setup_in` / `find_in`, or
+  `AppState::with_plugin_dirs`) instead of the `<HOTSHEET_HOME>/plugins` default, and
+  `crates/hotsheet-plugins/tests/setup_isolation_guard.rs` fails when test code calls a
+  default-path setup wrapper, sets `HOTSHEET_HOME` with `set_var`, or posts `/setup/<tool>`
+  without an injected plugin path (HS2-SDPD95). The migrator suite's `globalSetup`
   (`migrator/test/isolated-home.mjs`) gives its spawned binaries a throwaway home, guarded
   by `migrator/test/isolated-home.test.mjs`; the web real-server fixtures already pass
   temp homes. Manual repros that run `target/debug/hotsheet-cli` or the server must export a

@@ -884,4 +884,12 @@ fn test_processes_use_the_repository_test_home_not_the_real_machine_home() {
     if let Some(user_home) = std::env::var_os("HOME") {
         assert_ne!(home, Path::new(&user_home).join(".hotsheet2"));
     }
+    // HS2-SDPD95: the machine cache (video posters) is forced repository-local too.
+    let cache = std::env::var_os("HOTSHEET_CACHE_DIR").map(std::path::PathBuf::from);
+    assert!(
+        cache
+            .as_deref()
+            .is_some_and(|dir| dir.ends_with("target/test-hotsheet-cache")),
+        "tests must run under the forced repository test cache, got {cache:?}"
+    );
 }

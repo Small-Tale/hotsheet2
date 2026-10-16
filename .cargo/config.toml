@@ -10,3 +10,8 @@ lint = "clippy --config build.target-dir=\"target/clippy\" --workspace --all-tar
 # unaffected.
 [env]
 HOTSHEET_HOME = { value = "target/test-hotsheet-home", force = true, relative = true }
+# HS2-SDPD95: the same protection for the machine cache. Without it, a test whose AppState
+# keeps the default cache root would write video posters into the real platform cache
+# (`~/Library/Caches/hotsheet2` on macOS). Tests that assert cache contents still inject
+# their own temp directory with `AppState::with_cache_dir`.
+HOTSHEET_CACHE_DIR = { value = "target/test-hotsheet-cache", force = true, relative = true }
