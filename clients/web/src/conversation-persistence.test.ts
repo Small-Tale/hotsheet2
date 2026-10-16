@@ -33,6 +33,26 @@ describe('durable AI conversation state (HS2-YHQCS2)', () => {
     expect(values.has(CONVERSATION_STORAGE_KEY)).toBe(true);
   });
 
+  it('keeps valid skipped-message counts and drops only a corrupt map (HS2-BZB93V)', () => {
+    const messages = [
+      { id: 'u1', role: 'user', content: 'First' },
+      { id: 'a2', role: 'assistant', content: 'Later' },
+    ];
+    const storage = {
+      getItem: () =>
+        JSON.stringify({
+          kept: { messages, skippedBefore: { a2: 2 } },
+          zero: { messages, skippedBefore: { a2: 0 } },
+          text: { messages, skippedBefore: { a2: 'two' } },
+          list: { messages, skippedBefore: [2] },
+          nothing: { messages, skippedBefore: null },
+        }),
+    };
+    const loaded = loadConversationStates(storage);
+    expect(loaded.kept).toEqual({ messages, skippedBefore: { a2: 2 } });
+    for (const id of ['zero', 'text', 'list', 'nothing']) expect(loaded[id]).toEqual({ messages });
+  });
+
   it('drops corrupt entries without sacrificing valid conversations', () => {
     const storage = {
       getItem: () =>

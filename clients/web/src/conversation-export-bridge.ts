@@ -10,6 +10,8 @@ import {
   type ConversationExportOpenResult,
   type ConversationExportPayload,
   type ConversationExportWriteResult,
+  conversationSkipCountMap,
+  conversationSkipCountsError,
   conversationSummaryMarkdown,
   conversationTranscriptMarkdown,
 } from './conversation-export';
@@ -103,6 +105,8 @@ function validatePayload(payload: ConversationExportPayload): void {
     throw new Error('The conversation export contains an invalid message.');
   if (messages.map((message) => message.id).join('\0') !== request.selectedMessageIds.join('\0'))
     throw new Error('The selected message IDs do not match the exported transcript.');
+  const skipError = conversationSkipCountsError(request.skippedBefore, request.selectedMessageIds);
+  if (skipError) throw new Error(skipError);
   if (!Array.isArray(activity) || !Array.isArray(assets))
     throw new Error('The conversation export payload is incomplete.');
   let total = 0;
@@ -215,6 +219,9 @@ export function createConversationExportBridge(
         exportedAt: now().toISOString(),
         source: request.source,
         selectedMessageIds: request.selectedMessageIds,
+        ...(request.skippedBefore && Object.keys(request.skippedBefore).length
+          ? { skippedBefore: request.skippedBefore }
+          : {}),
         ...(request.replacesExportId ? { replacesExportId: request.replacesExportId } : {}),
         ...(request.parentRevision === undefined ? {} : { parentRevision: request.parentRevision }),
         bundle: request.bundle,
@@ -222,7 +229,15 @@ export function createConversationExportBridge(
         entries: conversationExportBundleEntries(request.bundle),
         assets: exportedAssets,
       };
-      await atomicText(join(path, 'transcript.md'), conversationTranscriptMarkdown(request.source, messages, activity));
+      await atomicText(
+        join(path, 'transcript.md'),
+        conversationTranscriptMarkdown(
+          request.source,
+          messages,
+          activity,
+          conversationSkipCountMap(request.skippedBefore),
+        ),
+      );
       await atomicText(join(path, 'conversation.json'), `${JSON.stringify({ messages, activity }, null, 2)}\n`);
       if (request.bundle.includeSummary)
         await atomicText(join(path, 'summary.md'), conversationSummaryMarkdown(request.source, messages));
@@ -256,6 +271,7 @@ export function createConversationExportBridge(
           manifestVersion: manifest.manifestVersion,
           source: manifest.source,
           selectedMessageIds: manifest.selectedMessageIds,
+          skippedBefore: manifest.skippedBefore,
           destination: { selectionToken: 'open', kind: 'directory' },
           writeMode: 'create',
           bundle: manifest.bundle,

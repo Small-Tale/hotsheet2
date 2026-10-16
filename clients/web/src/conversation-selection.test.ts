@@ -179,6 +179,27 @@ describe('conversation message selection (HS2-WV88W3)', () => {
       ['m4', 1],
       ['m6', 1],
     ]);
+    // Gaps a reopened saved selection already had count toward the gap each message falls in (HS2-BZB93V).
+    const prior = { m2: 3, m4: 1 };
+    expect([...conversationSelectionGaps(messages, messages, prior)]).toEqual([
+      ['m2', 3],
+      ['m4', 1],
+    ]);
+    expect([
+      ...conversationSelectionGaps(
+        messages,
+        selectedConversationMessagesFor(messages, { messageIds: ['m1', 'm5'] }),
+        prior,
+      ),
+    ]).toEqual([['m5', 7]]);
+    // A prior gap before the first selected message is leading, not interior.
+    expect(
+      conversationSelectionGaps(
+        messages,
+        selectedConversationMessagesFor(messages, { messageIds: ['m2', 'm3'] }),
+        prior,
+      ).size,
+    ).toBe(0);
     // Leading and trailing exclusions are not gaps.
     expect(
       conversationSelectionGaps(messages, selectedConversationMessagesFor(messages, { messageIds: ['m3', 'm4'] })).size,

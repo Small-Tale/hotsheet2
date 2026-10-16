@@ -35,6 +35,8 @@ export interface ConversationState {
   progress?: string;
   error?: string;
   nextSequence?: number;
+  /** Messages a reopened non-contiguous saved selection left out before each message (HS2-BZB93V). */
+  skippedBefore?: Readonly<Record<string, number>>;
 }
 export type ConversationTimelineGroup =
   { kind: 'message'; message: ConversationMessage } | { kind: 'activity'; activity: ConversationActivity[] };

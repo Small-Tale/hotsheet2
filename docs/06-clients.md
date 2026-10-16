@@ -1689,7 +1689,7 @@ preview/download, server directory browser) are separate design work.
 
   Copy writes the selected messages as Markdown and inserts an italic `N messages skipped` line
   wherever a run of unselected messages lies between two selected ones. Leading and trailing
-  exclusions get no marker (saved bundle transcripts do not mark skipped runs yet; HS2-BZB93V). Save reuses that selection instead of asking for it again. With a selection, the compact wizard
+  exclusions get no marker. Save reuses that selection instead of asking for it again. With a selection, the compact wizard
   first offers only Entire conversation or Selected messages (any set, contiguous or not); with no selection it skips that scope
   step because the full transcript is the only possible result. The bundle-contents step presents
   optional contents as one vertical list and opens the host folder picker from Save, without a
@@ -1709,6 +1709,16 @@ preview/download, server directory browser) are separate design work.
   from the terminal-drawer New menu. A selection that ends before the live transcript tail opens
   read-only; a tail-ending selection with a compatible project/session reconnects to that session
   and can continue. Continued turns remain live-only until the user deliberately saves again.
+
+  A non-contiguous selection keeps its gaps through a save (HS2-BZB93V). The request and
+  `manifest.json` carry `skippedBefore`, a map from each selected message after the first to the
+  number of messages left out just before it. The bridge rejects counts that name a message
+  outside the selection, name the first selected message, or are not positive whole numbers, and
+  refuses to reopen a bundle whose manifest counts fail the same check. `transcript.md` gets the
+  same italic `N messages skipped` line Copy writes. Reopening keeps the counts on the conversation
+  state, and the transcript shows a dashed `N messages skipped` divider at each gap. Copying from or
+  re-saving a reopened selection adds those earlier gaps to any newly skipped messages, so a gap is
+  never silently lost. A corrupt persisted count map is dropped without discarding the conversation.
 
   The repository row is also the checkout's compact status chip. It distinguishes clean,
   dirty, ahead, behind, conflicted, and unavailable states from the checkout-scoped status

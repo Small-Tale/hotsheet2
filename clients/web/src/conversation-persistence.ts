@@ -39,12 +39,27 @@ function state(value: unknown): value is ConversationState {
   );
 }
 
+/** Drop a corrupt skipped-message map instead of the whole conversation (HS2-BZB93V). */
+function withValidSkips(value: ConversationState): ConversationState {
+  const skips: unknown = value.skippedBefore;
+  if (skips === undefined) return value;
+  const valid =
+    skips !== null &&
+    typeof skips === 'object' &&
+    !Array.isArray(skips) &&
+    Object.values(skips).every((count) => typeof count === 'number' && Number.isSafeInteger(count) && count > 0);
+  if (valid) return value;
+  const rest = { ...value };
+  delete rest.skippedBefore;
+  return rest;
+}
+
 export function loadConversationStates(storage: Pick<StorageLike, 'getItem'>): Record<string, ConversationState> {
   try {
     const parsed: unknown = JSON.parse(storage.getItem(CONVERSATION_STORAGE_KEY) ?? '{}');
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
     const valid: Record<string, ConversationState> = {};
-    for (const [key, value] of Object.entries(parsed)) if (key && state(value)) valid[key] = value;
+    for (const [key, value] of Object.entries(parsed)) if (key && state(value)) valid[key] = withValidSkips(value);
     return valid;
   } catch {
     return {};

@@ -200,6 +200,8 @@ export function AIConversationDemo() {
     selectionId: 'demo-conversation',
     selectedMessageIds: demoSelectedMessageIds(state.messages),
     messages: state.messages,
+    // The saved transcript reopens a non-contiguous selection that left three messages out (HS2-BZB93V).
+    skippedBefore: aiConversationScenario.value === 'saved' ? { 'answer-1': 3 } : undefined,
     draft: aiConversationDraft.value,
     busy: state.busy,
     progress: state.progress,

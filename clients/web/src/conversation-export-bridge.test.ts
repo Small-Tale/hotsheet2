@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -127,5 +127,81 @@ describe('conversation export bridge', () => {
     });
     await expect(bridge.write({ request, messages, activity: [], assets: [] })).rejects.toThrow('destination expired');
     await expect(bridge.open()).rejects.toThrow('valid .hotsheet-chat bundle');
+  });
+
+  describe('non-contiguous selections (HS2-BZB93V)', () => {
+    const transcript: ConversationMessage[] = [
+      { id: 'm1', role: 'user', content: 'First question.' },
+      { id: 'm2', role: 'assistant', content: 'First answer.' },
+      { id: 'm3', role: 'user', content: 'Second question.' },
+      { id: 'm4', role: 'assistant', content: 'Second answer.' },
+      { id: 'm5', role: 'user', content: 'Third question.' },
+    ];
+    const picked = transcript.filter((message) => ['m1', 'm4', 'm5'].includes(message.id));
+
+    async function bundleBridge() {
+      const parent = await mkdtemp(join(tmpdir(), 'hotsheet-chat-gaps-'));
+      cleanup.push(parent);
+      const bundle = join(parent, 'gaps.hotsheet-chat'),
+        choices = [parent, bundle, bundle];
+      const bridge = createConversationExportBridge(async () => choices.shift());
+      const destination = await bridge.chooseDestination('gaps');
+      const draft = {
+        ...defaultConversationExportDraft(),
+        scope: { kind: 'messages' as const, messageIds: ['m1', 'm4', 'm5'] },
+        destination,
+      };
+      return { bridge, bundle, draft };
+    }
+
+    it('marks skipped runs in transcript.md and records the counts in the manifest for reopen', async () => {
+      const { bridge, bundle, draft } = await bundleBridge();
+      const request = buildConversationExportRequest(source, transcript, draft, new Map([['m4', 2]]));
+      expect(request.skippedBefore).toEqual({ m4: 2 });
+      const written = await bridge.write({ request, messages: picked, activity: [], assets: [] });
+      expect(written.manifest.skippedBefore).toEqual({ m4: 2 });
+      const markdown = await readFile(join(bundle, 'transcript.md'), 'utf8');
+      expect(markdown).toContain('First question.\n\n_2 messages skipped_\n\n## Assistant\n\nSecond answer.');
+      expect(markdown.match(/skipped/g)).toHaveLength(1);
+      const reopened = await bridge.open();
+      expect(reopened?.manifest.skippedBefore).toEqual({ m4: 2 });
+      expect(reopened?.messages.map((message) => message.id)).toEqual(['m1', 'm4', 'm5']);
+    });
+
+    it('omits skip counts for a contiguous selection', async () => {
+      const { bridge, bundle, draft } = await bundleBridge();
+      const request = buildConversationExportRequest(source, messages, { ...draft, scope: { kind: 'all' } });
+      expect(request.skippedBefore).toBeUndefined();
+      const written = await bridge.write({ request, messages, activity: [], assets: [] });
+      expect(written.manifest).not.toHaveProperty('skippedBefore');
+      await expect(readFile(join(bundle, 'transcript.md'), 'utf8')).resolves.not.toContain('skipped');
+    });
+
+    it.each([
+      ['an unselected message', { m2: 1 }, 'outside the selection'],
+      ['the first selected message', { m1: 1 }, 'outside the selection'],
+      ['a zero count', { m4: 0 }, 'positive whole number'],
+      ['a fractional count', { m4: 1.5 }, 'positive whole number'],
+      ['a string count', { m4: '2' }, 'positive whole number'],
+      ['a non-object', [2], 'are invalid'],
+    ])('rejects skip counts naming %s', async (_label, skippedBefore, message) => {
+      const { bridge, draft } = await bundleBridge();
+      const request = { ...buildConversationExportRequest(source, transcript, draft), skippedBefore } as never;
+      await expect(bridge.write({ request, messages: picked, activity: [], assets: [] })).rejects.toThrow(message);
+    });
+
+    it('refuses to reopen a bundle whose manifest skip counts were tampered with', async () => {
+      const { bridge, bundle, draft } = await bundleBridge();
+      await bridge.write({
+        request: buildConversationExportRequest(source, transcript, draft, new Map([['m4', 2]])),
+        messages: picked,
+        activity: [],
+        assets: [],
+      });
+      const manifestPath = join(bundle, 'manifest.json'),
+        manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+      await writeFile(manifestPath, JSON.stringify({ ...manifest, skippedBefore: { m9: 4 } }));
+      await expect(bridge.open()).rejects.toThrow('outside the selection');
+    });
   });
 });

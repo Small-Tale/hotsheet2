@@ -1,15 +1,17 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
+import { expect, type Locator, type Page, type Route, test, type TestInfo } from '@playwright/test';
 import WebSocket from 'ws';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import type { ConversationMessage } from '../src/ai-conversation';
 import type { FullTicket, MediaAnnotation, Note, TicketRow } from '../src/api';
 import type { ConversationExportPayload } from '../src/conversation-export';
+import { createConversationExportBridge } from '../src/conversation-export-bridge';
 import { seedLocalGitTickets } from './real-ticket-fixture';
 import { realTicketServer } from './real-ticket-server';
 import { ticketsJson } from './ticket-page-fixture';
@@ -6935,6 +6937,109 @@ test('shows selection in the main chat and skips export scope after it is cleare
   await expect(activeScreen).not.toContainText('Step 1 of 2');
   await expect(activeScreen.locator('input[name="conversation-export-scope"]')).toHaveCount(0);
   await dialog.getByRole('dialog').screenshot({ path: 'target/visual-captures/hs2-eqhary-save-entire-chat.png' });
+});
+
+test('saves a non-contiguous chat selection with skipped-message markers and shows them on reopen (HS2-BZB93V)', async ({
+  page,
+}) => {
+  // The production bundle bridge writes and reads a real temporary folder; only the native folder
+  // chooser is replaced by the test.
+  const parent = mkdtempSync(join(tmpdir(), 'hotsheet-chat-gaps-e2e-')),
+    choices: string[] = [parent],
+    bridge = createConversationExportBridge(async () => choices.shift());
+  let bundle = '';
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // Registered after mockProject so these routes take precedence over its catch-all.
+  await mockProject(page);
+  const answer = async (route: Route, run: () => Promise<unknown>) => {
+    try {
+      await route.fulfill({ json: await run() });
+    } catch (reason) {
+      await route.fulfill({ status: 400, json: { error: reason instanceof Error ? reason.message : String(reason) } });
+    }
+  };
+  await page.route('**/__hotsheet/conversation-exports/destination', (route) =>
+    answer(route, async () => {
+      const destination = await bridge.chooseDestination(
+        (route.request().postDataJSON() as { suggestedName: string }).suggestedName,
+      );
+      bundle = destination!.displayPath;
+      choices.push(bundle);
+      return { destination };
+    }),
+  );
+  await page.route('**/__hotsheet/conversation-exports/write', (route) =>
+    answer(route, () => bridge.write(route.request().postDataJSON() as ConversationExportPayload)),
+  );
+  await page.route('**/__hotsheet/conversation-exports/open', (route) =>
+    answer(route, async () => ({ conversation: await bridge.open() })),
+  );
+  await page.route('**/conversation-files/proof.png', (route) =>
+    route.fulfill({ body: Buffer.from([0x89, 0x50, 0x4e, 0x47]), headers: { 'content-type': 'image/png' } }),
+  );
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+  const conversation = drawer.locator('[data-component="ai-conversation"]'),
+    composer = conversation.getByLabel('Message Codex');
+  await composer.fill('What time is it in California?');
+  await composer.press('Enter');
+  await expect(conversation.locator('.ai-conversation__message--assistant').last()).toHaveAttribute(
+    'data-status',
+    'completed',
+  );
+  await composer.fill('Export the referenced proof.');
+  await composer.press('Enter');
+  await expect(conversation.getByText('The referenced proof is ready.', { exact: true })).toBeVisible();
+  const messages = conversation.locator('[data-action="pick-conversation-message"]');
+  await expect(messages).toHaveCount(4);
+  // Select the first and last messages, skipping the two between them.
+  await messages.nth(0).click();
+  await messages.nth(3).click({ modifiers: ['ControlOrMeta'] });
+  await expect(conversation).toContainText('2 messages selected');
+  await drawer.getByRole('button', { name: 'Save Conversation' }).click();
+  const dialog = page.locator('[data-component="conversation-export-dialog"]');
+  await expect(dialog).toContainText('2 messages selected in the chat.');
+  await dialog.locator('[data-action="next-conversation-export-step"]').click();
+  await dialog.getByRole('button', { name: 'Save Conversation' }).click();
+  await expect(page.locator('.app-toast')).toContainText('Saved conversation revision 1');
+  const transcript = readFileSync(join(bundle, 'transcript.md'), 'utf8'),
+    manifest = JSON.parse(readFileSync(join(bundle, 'manifest.json'), 'utf8')) as {
+      selectedMessageIds: string[];
+      skippedBefore?: Record<string, number>;
+    };
+  expect(manifest.skippedBefore).toEqual({ [manifest.selectedMessageIds[1]]: 2 });
+  expect(transcript).toMatch(
+    /What time is it in California\?\n\n_2 messages skipped_\n\n## Assistant\n\nThe referenced/,
+  );
+  expect(transcript).not.toContain('Export the referenced proof.');
+  // Reopening the bundle marks the same gap in its transcript. The selection ends at the latest
+  // message, so the saved chat resumes the session and stays continuable.
+  await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('Saved Conversation…').click();
+  await expect(drawer.getByRole('tab', { name: 'Codex saved chat' })).toHaveAttribute('aria-selected', 'true');
+  const saved = drawer
+      .locator('[data-component="ai-conversation"]')
+      .filter({ has: page.locator('.ai-conversation__skipped') }),
+    marker = saved.locator('.ai-conversation__skipped');
+  await expect(marker).toHaveText('2 messages skipped');
+  await expect(marker).toHaveCSS('font-style', 'italic');
+  const order = await saved
+    .locator('.ai-conversation__skipped, [data-message-id]')
+    .evaluateAll((nodes) =>
+      nodes.map((node) =>
+        node.classList.contains('ai-conversation__skipped') ? 'skipped' : node.getAttribute('data-message-id'),
+      ),
+    );
+  expect(order).toEqual([manifest.selectedMessageIds[0], 'skipped', manifest.selectedMessageIds[1]]);
+  await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
+  await marker.scrollIntoViewIfNeeded();
+  await saved.screenshot({ path: 'target/visual-captures/hs2-bzb93v-reopened-skipped-1280.png' });
+  rmSync(parent, { recursive: true, force: true });
 });
 
 /**

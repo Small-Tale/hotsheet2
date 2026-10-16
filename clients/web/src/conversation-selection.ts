@@ -87,20 +87,29 @@ export function selectedConversationMessagesFor(
 }
 
 /**
- * For each selected message after the first, how many unselected messages lie between it and the
- * previous selected one; only gaps inside the selection are counted.
+ * For each selected message after the first, how many conversation messages lie between it and the
+ * previous selected one; only gaps inside the selection are counted. `priorSkipped` carries gaps a
+ * reopened saved selection already had (HS2-BZB93V): each message's own prior gap counts toward the
+ * gap it falls in, so re-saving or copying from a reopened bundle keeps marking what was left out.
  */
 export function conversationSelectionGaps(
   messages: readonly ConversationMessage[],
   selected: readonly ConversationMessage[],
+  priorSkipped: Readonly<Record<string, number>> = {},
 ): Map<string, number> {
   const gaps = new Map<string, number>(),
     ids = new Set(selected.map((message) => message.id));
-  let previous = -1;
-  transcriptOrder(messages).forEach((message, index) => {
-    if (!ids.has(message.id)) return;
-    if (previous >= 0 && index - previous > 1) gaps.set(message.id, index - previous - 1);
-    previous = index;
-  });
+  let started = false,
+    hidden = 0;
+  for (const message of transcriptOrder(messages)) {
+    const prior = Math.max(0, priorSkipped[message.id] ?? 0);
+    if (!ids.has(message.id)) {
+      hidden += prior + 1;
+      continue;
+    }
+    if (started && hidden + prior > 0) gaps.set(message.id, hidden + prior);
+    started = true;
+    hidden = 0;
+  }
   return gaps;
 }

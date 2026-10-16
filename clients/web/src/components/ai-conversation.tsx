@@ -64,6 +64,8 @@ export interface AIConversationProps {
   selectionId?: string;
   selectedMessageIds?: readonly string[];
   messages: ConversationMessage[];
+  /** Messages a reopened non-contiguous saved selection left out before each message (HS2-BZB93V). */
+  skippedBefore?: Readonly<Record<string, number>>;
   draft: string;
   busy: boolean;
   progress?: string;
@@ -443,6 +445,15 @@ export function AIConversationToolbar({
   );
 }
 
+function SkippedMessages({ count }: { count?: number }) {
+  if (!count || count < 1) return <></>;
+  return (
+    <p class="ai-conversation__skipped" data-skipped-count={String(count)}>
+      {`${count} message${count === 1 ? '' : 's'} skipped`}
+    </p>
+  );
+}
+
 export function AIConversation(props: AIConversationProps) {
   const {
     open,
@@ -450,6 +461,7 @@ export function AIConversation(props: AIConversationProps) {
     selectionId,
     selectedMessageIds = [],
     messages,
+    skippedBefore = {},
     draft,
     busy,
     progress,
@@ -543,13 +555,16 @@ export function AIConversation(props: AIConversationProps) {
           )}
           {timeline.map((group, index) =>
             group.kind === 'message' ? (
-              <ConversationMessages
-                tool={tool}
-                messages={[group.message]}
-                feedbackAvailable={feedbackAvailable}
-                selectedIds={selectedIds}
-                selectionAction={selectionEnabled ? 'pick-conversation-message' : undefined}
-              />
+              <>
+                <SkippedMessages count={skippedBefore[group.message.id]} />
+                <ConversationMessages
+                  tool={tool}
+                  messages={[group.message]}
+                  feedbackAvailable={feedbackAvailable}
+                  selectedIds={selectedIds}
+                  selectionAction={selectionEnabled ? 'pick-conversation-message' : undefined}
+                />
+              </>
             ) : (
               <ConversationActivityGroup
                 activity={group.activity}

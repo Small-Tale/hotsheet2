@@ -127,7 +127,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/conversation-scroll.ts # Bottom-aware transcript pinning that preserves intentional scrollback
     src/conversation-history.ts # AI chat composer Up/Down sent-message recall: first/last-line key gating, ignoredups history, draft-preserving cursor steps (HS2-AJQKK0)
     src/conversation-selection.ts # AI chat message selection: plain/Cmd-Ctrl toggle/Shift range picks normalized per platform, displayed-order reads, and skipped-run gaps for copy (HS2-WV88W3)
-    src/conversation-export.ts # Portable .hotsheet-chat selected-messages scope, manifest, transcript, summary, selected structured assets, collision-lineage, and resume contract
+    src/conversation-export.ts # Portable .hotsheet-chat selected-messages scope, manifest, transcript, summary, selected structured assets, collision-lineage, resume contract, and validated `skippedBefore` gap counts (HS2-BZB93V)
     src/conversation-export-bridge.ts # Trusted host folder chooser plus validated bundle filesystem read/write boundary
     src/components/conversation-export-dialog.tsx # Save scope/contents/collision dialog with shared push/pop navigation that reuses live AI-message selection
     src/components/choice-card.tsx       # Shared selectable option card around a native radio/checkbox (title, description, brand/danger/disabled; HS2-V7PCS6)

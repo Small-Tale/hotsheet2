@@ -7811,7 +7811,15 @@ test('previews AIConversation public states at wide and narrow sizes', async ({ 
   await expect(dialog).toBeHidden();
   await page.locator('[data-action="toggle-settings"]').first().click();
   const scenario = page.locator('[data-settings="ai-conversation"] [name="scenario"]');
-  for (const value of ['empty', 'permission', 'completed', 'usage-unpriced', 'failed', 'interrupted'] as const) {
+  for (const value of [
+    'empty',
+    'permission',
+    'completed',
+    'usage-unpriced',
+    'failed',
+    'interrupted',
+    'saved',
+  ] as const) {
     await scenario.evaluate((node: HTMLElement & { value: string }, next) => {
       node.value = next;
       node.dispatchEvent(new Event('change', { bubbles: true }));
@@ -7849,6 +7857,20 @@ test('previews AIConversation public states at wide and narrow sizes', async ({ 
       await dialog.screenshot({ path: 'target/visual-captures/hs2-1kqjbk-ai-conversation-failed-wide.png' });
     }
     if (value === 'interrupted') await expect(conversationHost).toContainText('Stopped before the suite completed.');
+    if (value === 'saved') {
+      // A reopened non-contiguous saved selection marks where messages were left out (HS2-BZB93V).
+      const skipped = conversationHost.locator('.ai-conversation__skipped');
+      await expect(skipped).toHaveText('3 messages skipped');
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        await skipped.scrollIntoViewIfNeeded();
+        const [box, transcriptBox] = await Promise.all([skipped.boundingBox(), transcript.boundingBox()]);
+        expect(box!.x).toBeGreaterThanOrEqual(transcriptBox!.x);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(transcriptBox!.x + transcriptBox!.width);
+        await dialog.screenshot({ path: `target/visual-captures/hs2-bzb93v-saved-skipped-${width}.png` });
+      }
+      await page.setViewportSize({ width: 1280, height: 900 });
+    }
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
   }

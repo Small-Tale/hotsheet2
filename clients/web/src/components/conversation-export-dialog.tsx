@@ -27,6 +27,8 @@ export interface ConversationExportDialogState {
   source: ConversationExportSource;
   messages: readonly ConversationMessage[];
   activity?: readonly ConversationActivity[];
+  /** Gaps a reopened saved selection already had, so a re-save keeps them (HS2-BZB93V). */
+  skippedBefore?: Readonly<Record<string, number>>;
   draft: ConversationExportDraft;
   busy?: boolean;
   error?: string;

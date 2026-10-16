@@ -89,8 +89,8 @@ export function createConversationArchiveController(dependencies: ConversationAr
   }
 
   async function copyConversationSelection(connectionId: string) {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-    const transcript = conversationStates.peek()[connectionId]?.messages ?? [],
+    const conversation = conversationStates.peek()[connectionId] ?? EMPTY_CONVERSATION,
+      transcript = conversation.messages,
       messages = conversationSelectedMessages(connectionId, transcript);
     if (!messages.length) return;
     const tool = aiToolLabel(conversationAiSelection(connectionId).tool);
@@ -101,7 +101,7 @@ export function createConversationArchiveController(dependencies: ConversationAr
           { conversationId: connectionId, tool },
           messages,
           [],
-          conversationSelectionGaps(transcript, messages),
+          conversationSelectionGaps(transcript, messages, conversation.skippedBefore),
         ),
       );
       showToast(`${messages.length} selected message${messages.length === 1 ? '' : 's'} copied to clipboard.`);
@@ -142,6 +142,7 @@ export function createConversationArchiveController(dependencies: ConversationAr
       },
       messages: [...state.messages],
       activity: [...(state.activity ?? [])],
+      ...(state.skippedBefore ? { skippedBefore: state.skippedBefore } : {}),
       draft,
       summaryAvailable: true,
       step: selectedScope ? 1 : 2,
@@ -186,8 +187,14 @@ export function createConversationArchiveController(dependencies: ConversationAr
     const state = conversationExportDialog.value;
     if (!state || state.busy) return;
     try {
-      const request = buildConversationExportRequest(state.source, state.messages, state.draft),
-        messages = [...selectedConversationMessages(state.messages, state.draft.scope)];
+      const messages = [...selectedConversationMessages(state.messages, state.draft.scope)],
+        // Interior runs left out of a non-contiguous selection are marked in the bundle (HS2-BZB93V).
+        request = buildConversationExportRequest(
+          state.source,
+          state.messages,
+          state.draft,
+          conversationSelectionGaps(state.messages, messages, state.skippedBefore),
+        );
       conversationExportDialog.value = { ...state, busy: true, error: '' };
       const assets = await conversationExportAssets(state.messages, state.draft),
         result = await localBridge.writeConversationExport({
@@ -278,7 +285,11 @@ export function createConversationArchiveController(dependencies: ConversationAr
       persistTerminalVisibility(hideNewTerminalInNamedGroups(terminalVisibility.value, `${current.id}:${tab.id}`));
       replaceConversationStates({
         ...conversationStates.peek(),
-        [connectionId]: { messages: saved.messages, activity: saved.activity },
+        [connectionId]: {
+          messages: saved.messages,
+          activity: saved.activity,
+          ...(saved.manifest.skippedBefore ? { skippedBefore: saved.manifest.skippedBefore } : {}),
+        },
       });
       selectDrawerItem(tab.id);
       setTerminalDrawerVisible(true);

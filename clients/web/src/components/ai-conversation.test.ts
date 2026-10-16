@@ -231,6 +231,33 @@ describe('AIConversation', () => {
     expect(css).not.toContain('.ai-content-label');
   });
 
+  it('marks where a reopened saved selection left messages out (HS2-BZB93V)', () => {
+    const render = (skippedBefore?: Record<string, number>) =>
+      String(
+        AIConversation({
+          open: true,
+          presentation: 'embedded',
+          tool: 'Codex',
+          draft: '',
+          busy: false,
+          interruptible: false,
+          readOnly: true,
+          messages: [
+            { id: 'one', role: 'user', content: 'First question.' },
+            { id: 'four', role: 'assistant', content: 'Later answer.', status: 'completed' },
+            { id: 'five', role: 'user', content: 'Last question.' },
+          ],
+          skippedBefore,
+        }),
+      );
+    const marked = render({ four: 2, five: 1 });
+    expect(marked).toMatch(/First question[\s\S]*data-skipped-count="2">2 messages skipped<[\s\S]*Later answer/);
+    expect(marked).toMatch(/Later answer[\s\S]*data-skipped-count="1">1 message skipped<[\s\S]*Last question/);
+    expect(render()).not.toContain('ai-conversation__skipped');
+    expect(render({ four: 0 })).not.toContain('ai-conversation__skipped');
+    expect(css).toMatch(/\.ai-conversation__skipped \{[^}]*color: var\(--wa-color-neutral-on-quiet\)/);
+  });
+
   it('hides stop when interruption is unavailable and exposes terminal failures', () => {
     const markup = String(
       AIConversation({

@@ -48,10 +48,40 @@ export interface ConversationExportDraft {
   bundle: ConversationExportBundleOptions;
 }
 
+/**
+ * For a selected message, how many conversation messages were left out between it and the previous
+ * selected one (HS2-BZB93V). Only interior gaps appear; a contiguous selection has none.
+ */
+export type ConversationSkipCounts = Readonly<Record<string, number>>;
+
+/**
+ * Why `value` is not a valid skip-count map for `messageIds` (in transcript order), or `undefined`
+ * when it is. Each key must name a selected message after the first, and each count must be a
+ * positive integer.
+ */
+export function conversationSkipCountsError(value: unknown, messageIds: readonly string[]): string | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return 'The skipped-message counts are invalid.';
+  const interior = new Set(messageIds.slice(1));
+  for (const [id, count] of Object.entries(value as Record<string, unknown>)) {
+    if (!interior.has(id)) return 'A skipped-message count names a message outside the selection.';
+    if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 1)
+      return 'A skipped-message count must be a positive whole number.';
+  }
+  return undefined;
+}
+
+/** Skip counts as a lookup map, dropping zero or missing entries. */
+export function conversationSkipCountMap(counts: ConversationSkipCounts | undefined): Map<string, number> {
+  return new Map(Object.entries(counts ?? {}).filter(([, count]) => count > 0));
+}
+
 export interface ConversationExportRequest {
   manifestVersion: typeof CONVERSATION_EXPORT_MANIFEST_VERSION;
   source: ConversationExportSource;
   selectedMessageIds: string[];
+  /** Messages left out before each selected message of a non-contiguous selection (HS2-BZB93V). */
+  skippedBefore?: ConversationSkipCounts;
   destination: Pick<ConversationExportDestination, 'selectionToken' | 'kind'>;
   writeMode: ConversationExportWriteMode;
   replacesExportId?: string;
@@ -132,6 +162,7 @@ export interface ConversationExportManifest {
   exportedAt: string;
   source: ConversationExportSource;
   selectedMessageIds: string[];
+  skippedBefore?: ConversationSkipCounts;
   replacesExportId?: string;
   parentRevision?: number;
   bundle: ConversationExportBundleOptions;
@@ -223,21 +254,29 @@ export function conversationExportBundleEntries(
   return entries;
 }
 
+/**
+ * The request to save `draft`. `skippedBefore` carries the selection's interior gaps (see
+ * `conversationSelectionGaps`) so the bundle marks them like Copy does (HS2-BZB93V).
+ */
 export function buildConversationExportRequest(
   source: ConversationExportSource,
   messages: readonly ConversationMessage[],
   draft: ConversationExportDraft,
+  skippedBefore: ReadonlyMap<string, number> = new Map(),
 ): ConversationExportRequest {
   const validation = conversationExportValidation(messages, draft, source);
   if (validation) throw new Error(validation);
   const selected = selectedConversationMessages(messages, draft.scope);
   const destination = draft.destination!;
   const existing = destination.existing;
-  const lastSourceMessageId = messages.at(-1)?.id;
+  const lastSourceMessageId = messages.at(-1)?.id,
+    selectedIds = new Set(selected.slice(1).map((message) => message.id)),
+    gaps = [...skippedBefore].filter(([id, count]) => selectedIds.has(id) && count > 0);
   return {
     manifestVersion: CONVERSATION_EXPORT_MANIFEST_VERSION,
     source: { ...source },
     selectedMessageIds: selected.map((message) => message.id),
+    ...(gaps.length ? { skippedBefore: Object.fromEntries(gaps) } : {}),
     destination: { selectionToken: destination.selectionToken, kind: destination.kind },
     writeMode: draft.writeMode,
     replacesExportId: existing?.exportId,

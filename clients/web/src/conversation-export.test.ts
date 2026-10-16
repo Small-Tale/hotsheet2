@@ -6,6 +6,8 @@ import {
   conversationExportAssets,
   conversationExportBundleEntries,
   conversationExportValidation,
+  conversationSkipCountMap,
+  conversationSkipCountsError,
   conversationSummaryMarkdown,
   conversationTranscriptMarkdown,
   defaultConversationExportDraft,
@@ -30,6 +32,44 @@ describe('conversation export contract', () => {
     ).toEqual(['message-1', 'message-3']);
     expect(selectedConversationMessages(messages, { kind: 'messages', messageIds: ['missing'] })).toEqual([]);
     expect(selectedConversationMessages(messages, { kind: 'all' })).toHaveLength(4);
+  });
+
+  it('carries only interior skip counts and validates them against the selection (HS2-BZB93V)', () => {
+    const draft = {
+      ...defaultConversationExportDraft(),
+      scope: { kind: 'messages' as const, messageIds: ['message-1', 'message-4'] },
+      destination: { selectionToken: 'token', displayPath: '/tmp/chat', kind: 'directory' as const },
+    };
+    const request = buildConversationExportRequest(
+      { conversationId: 'chat', tool: 'Codex' },
+      messages,
+      draft,
+      new Map([
+        ['message-4', 2],
+        ['message-1', 5],
+        ['message-2', 1],
+        ['missing', 1],
+      ]),
+    );
+    expect(request.skippedBefore).toEqual({ 'message-4': 2 });
+    expect(
+      buildConversationExportRequest(
+        { conversationId: 'chat', tool: 'Codex' },
+        messages,
+        draft,
+        new Map([['message-4', 0]]),
+      ),
+    ).not.toHaveProperty('skippedBefore');
+    const ids = ['message-1', 'message-4'];
+    expect(conversationSkipCountsError(undefined, ids)).toBeUndefined();
+    expect(conversationSkipCountsError({}, ids)).toBeUndefined();
+    expect(conversationSkipCountsError({ 'message-4': 2 }, ids)).toBeUndefined();
+    expect(conversationSkipCountsError(null, ids)).toContain('invalid');
+    expect(conversationSkipCountsError({ 'message-1': 1 }, ids)).toContain('outside the selection');
+    expect(conversationSkipCountsError({ 'message-4': -1 }, ids)).toContain('positive whole number');
+    expect(conversationSkipCountsError({ 'message-4': Number.MAX_SAFE_INTEGER + 1 }, ids)).toContain('positive');
+    expect([...conversationSkipCountMap({ a: 2, b: 0 })]).toEqual([['a', 2]]);
+    expect(conversationSkipCountMap(undefined).size).toBe(0);
   });
 
   it('describes a portable bundle without inventing individual attachment paths', () => {

@@ -1237,6 +1237,83 @@ describe('conversation message selection (HS2-WV88W3)', () => {
     archive.pickConversationMessage('chat-a', 'four', { toggle: false, extend: true });
     expect(selected()).toEqual(['two', 'three', 'four']);
   });
+
+  it('saves skip counts for a non-contiguous selection and keeps them through reopen, copy, and re-save (HS2-BZB93V)', async () => {
+    const state = chatOwners(),
+      { archive } = state,
+      writeText = vi.fn(() => Promise.resolve()),
+      writes: Array<{ request: { selectedMessageIds: string[]; skippedBefore?: Record<string, number> } }> = [];
+    vi.stubGlobal('navigator', { userAgent: navigator.userAgent, clipboard: { writeText } });
+    const transcript = ['one', 'two', 'three', 'four', 'five'].map((id, index) => ({
+      id,
+      role: index % 2 ? ('assistant' as const) : ('user' as const),
+      content: `Message ${id}`,
+    }));
+    state.conversationStates.value = { 'chat-a': { messages: transcript } };
+    const manifest = (skippedBefore?: Record<string, number>) => ({
+      format: 'hotsheet-conversation-export',
+      manifestVersion: 1,
+      exportId: 'export-1',
+      revision: 1,
+      exportedAt: '2026-10-16T00:00:00Z',
+      source: { conversationId: 'chat-a', tool: 'codex' },
+      selectedMessageIds: ['one', 'four', 'five'],
+      ...(skippedBefore ? { skippedBefore } : {}),
+      bundle: { includeAttachments: false, includeMedia: false, includeSummary: false },
+      reopen: {
+        conversationId: 'chat-a',
+        tool: 'codex',
+        firstMessageId: 'one',
+        lastMessageId: 'five',
+        resumesOriginalSession: false,
+      },
+      entries: [],
+      assets: [],
+    });
+    fetchMock.mockImplementation(async (url, init) => {
+      const path = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      if (path.endsWith('/destination'))
+        return json({ destination: { selectionToken: 'chosen', displayPath: '/exports/chat', kind: 'directory' } });
+      if (path.endsWith('/write')) {
+        const payload = JSON.parse(init?.body as string) as (typeof writes)[number];
+        writes.push(payload);
+        return json({ displayPath: '/exports/chat', manifest: manifest(payload.request.skippedBefore) });
+      }
+      return json({
+        conversation: {
+          displayPath: '/exports/chat',
+          manifest: manifest({ four: 2 }),
+          messages: transcript.filter((message) => ['one', 'four', 'five'].includes(message.id)),
+          activity: [],
+        },
+      });
+    });
+    archive.pickConversationMessage('chat-a', 'one');
+    archive.pickConversationMessage('chat-a', 'four', { toggle: true, extend: false });
+    archive.pickConversationMessage('chat-a', 'five', { toggle: true, extend: false });
+    archive.openConversationExport();
+    await archive.finishConversationExport();
+    expect(writes[0].request).toMatchObject({
+      selectedMessageIds: ['one', 'four', 'five'],
+      skippedBefore: { four: 2 },
+    });
+    // Reopening keeps the counts on the conversation state, so the transcript can mark the gap.
+    await archive.openSavedConversation();
+    const reopenedId = Object.keys(state.conversationStates.value).find((id) => id !== 'chat-a')!;
+    expect(state.conversationStates.value[reopenedId]).toMatchObject({ skippedBefore: { four: 2 } });
+    // Copying the whole reopened transcript still marks the two messages the bundle left out.
+    archive.pickConversationMessage(reopenedId, 'one');
+    archive.pickConversationMessage(reopenedId, 'five', { toggle: false, extend: true });
+    await archive.copyConversationSelection(reopenedId);
+    expect((writeText.mock.calls[0] as unknown as [string])[0]).toContain('_2 messages skipped_');
+    // Re-saving a sub-selection adds the reopened gap to the newly skipped message.
+    archive.pickConversationMessage(reopenedId, 'one');
+    archive.pickConversationMessage(reopenedId, 'five', { toggle: true, extend: false });
+    state.conversationConnectionId.value = reopenedId;
+    archive.openConversationExport();
+    await archive.finishConversationExport();
+    expect(writes[1].request).toMatchObject({ selectedMessageIds: ['one', 'five'], skippedBefore: { five: 3 } });
+  });
 });
 
 it('projects terminal/chat replacement, project switches and empty/refill without retaining render snapshots', () => {

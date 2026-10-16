@@ -239,6 +239,22 @@
   gap: remify(7.2px);
   font-size: var(--wa-font-size-s);
 }
+/* Where a reopened non-contiguous saved selection left messages out (HS2-BZB93V). */
+.ai-conversation__skipped {
+  display: flex;
+  margin: 0;
+  color: var(--wa-color-neutral-on-quiet);
+  align-items: center;
+  gap: remify(8px);
+  font-size: var(--wa-font-size-xs);
+  font-style: italic;
+}
+.ai-conversation__skipped::before,
+.ai-conversation__skipped::after {
+  flex: 1 1 0;
+  border-top: 1px dashed var(--wa-color-neutral-border-quiet);
+  content: '';
+}
 /* The app's submitting form fills the floating footer row it is slotted into. */
 .ai-conversation__composer {
   flex: 1 1 auto;

@@ -470,7 +470,10 @@ does not introduce polling or another network request.
     destinations receive explicit collision handling; structured per-message file references render
     in both live/export transcripts and selected enabled assets retain bytes, MIME type, filename,
     stable id, and range scoping; `TerminalDrawer` can open a saved bundle
-    read-only or resume its original session when the saved range ends at the conversation tail
+    read-only or resume its original session when the saved range ends at the conversation tail;
+    a reopened non-contiguous selection renders a dashed, italic `N messages skipped` divider at
+    each gap from the bundle's `skippedBefore` counts (`skippedBefore` prop; the demo's Saved
+    scenario shows one; HS2-BZB93V)
   - read-only contexts: the same complete embedded component renders saved exports and live
     project-close previews. Live previews retain the real transcript/activity/usage/error
     projection, label why editing is unavailable, omit Save and composer actions, and use a

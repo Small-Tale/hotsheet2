@@ -179,6 +179,7 @@ function isManifest(value: unknown): value is ConversationExportManifest {
     isRecord(value.source) &&
     isRecord(value.reopen) &&
     Array.isArray(value.selectedMessageIds) &&
+    (value.skippedBefore === undefined || isRecord(value.skippedBefore)) &&
     Array.isArray(value.entries) &&
     Array.isArray(value.assets)
   );
