@@ -26,6 +26,7 @@ pub mod registry;
 pub mod safe_trigger;
 pub mod spawn;
 pub mod system;
+pub mod tool_progress;
 
 pub use acp::{AcpDrive, AcpSession, AcpStdio, usage as acp_usage, validate_opencode_transcript};
 pub use appserver::AppServerDrive;

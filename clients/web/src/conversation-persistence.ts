@@ -54,12 +54,46 @@ function withValidSkips(value: ConversationState): ConversationState {
   return rest;
 }
 
+const optionalFinite = (value: unknown) => value === undefined || (typeof value === 'number' && Number.isFinite(value));
+
+/** Drop corrupt running-turn timing instead of the whole conversation (HS2-XV1VCR). */
+function withValidTurnTiming(value: ConversationState): ConversationState {
+  const timing: unknown = value.turnTiming;
+  if (timing === undefined) return value;
+  const record =
+      timing !== null && typeof timing === 'object' && !Array.isArray(timing)
+        ? (timing as Record<string, unknown>)
+        : undefined,
+    tool: unknown = record?.inFlightTool,
+    fields = tool !== null && typeof tool === 'object' ? (tool as Record<string, unknown>) : undefined,
+    validTool =
+      tool === undefined ||
+      (fields !== undefined &&
+        typeof fields.name === 'string' &&
+        typeof fields.startedAt === 'number' &&
+        Number.isFinite(fields.startedAt) &&
+        typeof fields.count === 'number' &&
+        Number.isFinite(fields.count));
+  if (
+    record &&
+    (record.turnId === undefined || typeof record.turnId === 'string') &&
+    optionalFinite(record.startedAt) &&
+    optionalFinite(record.lastEventAt) &&
+    validTool
+  )
+    return value;
+  const rest = { ...value };
+  delete rest.turnTiming;
+  return rest;
+}
+
 export function loadConversationStates(storage: Pick<StorageLike, 'getItem'>): Record<string, ConversationState> {
   try {
     const parsed: unknown = JSON.parse(storage.getItem(CONVERSATION_STORAGE_KEY) ?? '{}');
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
     const valid: Record<string, ConversationState> = {};
-    for (const [key, value] of Object.entries(parsed)) if (key && state(value)) valid[key] = withValidSkips(value);
+    for (const [key, value] of Object.entries(parsed))
+      if (key && state(value)) valid[key] = withValidTurnTiming(withValidSkips(value));
     return valid;
   } catch {
     return {};

@@ -256,7 +256,19 @@ impl PreparedClientDrive for FakePreparedClientDrive {
                 session_id: Some("thread-1".into()),
             });
         }
-        if request.prompt == "hold" {
+        if request.prompt == "tool-hold" {
+            // HS2-XV1VCR: a tool call that stays open until the turn is stopped.
+            on_event(&hotsheet_aitools::TurnEvent::NativeActivity {
+                source: "claude-hooks".into(),
+                payload: serde_json::json!({
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_use_id": "toolu_1",
+                    "tool_input": {"command": "sleep 600"},
+                }),
+            });
+        }
+        if request.prompt == "hold" || request.prompt == "tool-hold" {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
             while !request.control.interrupt_requested() && std::time::Instant::now() < deadline {
                 std::thread::sleep(std::time::Duration::from_millis(5));
@@ -3025,6 +3037,11 @@ async fn raw_turn_event_is_ticket_attributed_and_carries_its_ws_replay_cursor() 
     let event = live.recv().await.unwrap();
     assert_eq!(event.cursor, Some(1));
     let turn = event.turn.unwrap();
+    assert!(
+        turn.at_ms.is_some_and(|at_ms| at_ms > 0),
+        "every envelope is server-stamped (HS2-XV1VCR)"
+    );
+    assert_eq!(turn.in_flight_tool, None);
     assert_eq!(turn.connection_id, "worker-1");
     assert_eq!(turn.ticket.as_deref(), Some("HS-ABC123"));
     assert_eq!(turn.turn_id.as_deref(), Some("turn-7"));
@@ -21736,4 +21753,137 @@ async fn unqualified_checkout_ids_only_probe_providers_whose_id_shape_they_have(
         "{:?}",
         jira.urls()
     );
+}
+
+#[tokio::test]
+async fn running_turn_reports_elapsed_last_activity_and_in_flight_tool() {
+    // HS2-XV1VCR: a busy connection carries its turn's timing, every stream envelope is
+    // server-stamped with the in-flight tool after it, and an idle connection carries neither.
+    let (_dir, base) = state();
+    let backend = Arc::new(FakeClientDriveBackend {
+        supports_interrupt: true,
+        ..FakeClientDriveBackend::default()
+    });
+    let router = app(base.with_client_drive_backend(backend));
+    let created = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections",
+            Some(r#"{"tool":"fake","connection_id":"timed"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let idle = body_json(created).await;
+    for field in ["turn_started_at_ms", "last_event_at_ms", "in_flight_tool"] {
+        assert!(idle.get(field).is_none(), "idle connection has no {field}");
+    }
+    let cursor = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/ws/poll?timeout_ms=0", None))
+            .await
+            .unwrap(),
+    )
+    .await["cursor"]
+        .as_u64()
+        .unwrap();
+    let before = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    let started = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/drive/connections/timed/turns",
+                Some(r#"{"content":"tool-hold","turn_id":"timed-turn"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let turn_started = started["turn_started_at_ms"].as_u64().unwrap();
+    assert!(turn_started >= before);
+    let busy = loop {
+        let listed = body_json(
+            router
+                .clone()
+                .oneshot(authed("GET", "/connections", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if listed[0].get("in_flight_tool").is_some() {
+            break listed[0].clone();
+        }
+        tokio::task::yield_now().await;
+    };
+    assert!(busy["busy"].as_bool().unwrap());
+    assert_eq!(busy["turn_started_at_ms"].as_u64(), Some(turn_started));
+    assert!(busy["last_event_at_ms"].as_u64().unwrap() >= turn_started);
+    assert_eq!(busy["in_flight_tool"]["name"], "Bash");
+    assert_eq!(busy["in_flight_tool"]["count"], 1);
+    assert!(busy["in_flight_tool"]["started_at_ms"].as_u64().unwrap() >= turn_started);
+
+    let replay = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let envelopes = replay["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|event| event["kind"] == "turn_event")
+        .map(|event| event["turn"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(envelopes.len(), 2, "output then the tool start");
+    assert!(
+        envelopes
+            .iter()
+            .all(|turn| turn["at_ms"].as_u64().unwrap() >= turn_started)
+    );
+    assert!(envelopes[0].get("in_flight_tool").is_none());
+    assert_eq!(envelopes[1]["in_flight_tool"]["name"], "Bash");
+
+    let interrupted = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections/timed/interrupt",
+            Some("{}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(interrupted.status(), StatusCode::ACCEPTED);
+    let finished = loop {
+        let listed = body_json(
+            router
+                .clone()
+                .oneshot(authed("GET", "/connections", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if !listed[0]["busy"].as_bool().unwrap() {
+            break listed[0].clone();
+        }
+        tokio::task::yield_now().await;
+    };
+    for field in ["turn_started_at_ms", "last_event_at_ms", "in_flight_tool"] {
+        assert!(
+            finished.get(field).is_none(),
+            "finished turn clears {field}"
+        );
+    }
 }

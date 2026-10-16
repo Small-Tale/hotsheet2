@@ -6,7 +6,13 @@ import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
-import { type ConversationActivity, type ConversationMessage, conversationUsage } from '../ai-conversation';
+import {
+  type ConversationActivity,
+  type ConversationMessage,
+  type ConversationTurnProgress,
+  conversationTurnProgress,
+  conversationUsage,
+} from '../ai-conversation';
 import { AIConversation, type AIConversationProps, AIConversationToolbar } from '../components/ai-conversation';
 import { wireAiConversation } from '../components/ai-conversation-interactions';
 import {
@@ -30,7 +36,16 @@ import { sidebarEvent } from './project-sidebar-demo';
 import { syncSettingsControls } from './settings-controls';
 
 export type AIConversationScenario =
-  'empty' | 'streaming' | 'permission' | 'completed' | 'usage-unpriced' | 'failed' | 'interrupted' | 'saved';
+  | 'empty'
+  | 'streaming'
+  | 'running-tool'
+  | 'stuck'
+  | 'permission'
+  | 'completed'
+  | 'usage-unpriced'
+  | 'failed'
+  | 'interrupted'
+  | 'saved';
 export const aiConversationScenario = signal<AIConversationScenario>('streaming');
 /** Remote clients disable the host-only export and saved-conversation actions (HS2-NWWF1Z). */
 export const aiConversationDevice = signal<DemoDevice>('host');
@@ -186,7 +201,31 @@ function scenarioState() {
     interruptible: true,
     progress: scenario === 'permission' ? 'Waiting for permission…' : 'Running the focused browser test…',
     permissions: scenario === 'permission' ? [permission] : undefined,
+    turnProgress: demoTurnProgress(scenario),
   };
+}
+
+/**
+ * Deterministic running-turn progress (HS2-XV1VCR) through the production derivation: a fixed
+ * clock stands in for the app's local render clock, and a fixed connection snapshot for the server.
+ */
+const DEMO_TURN_START = Date.UTC(2026, 9, 16, 9, 0, 0);
+function demoTurnProgress(scenario: AIConversationScenario): ConversationTurnProgress | undefined {
+  const tool = scenario === 'running-tool' || scenario === 'stuck',
+    // Streaming: 3m 12s in, active now. Tool: Bash open for 2m 5s, last event 8s ago. Stuck: 6m silent.
+    elapsed = scenario === 'stuck' ? 9 * 60_000 : 192_000,
+    lastEventAt =
+      DEMO_TURN_START + (scenario === 'stuck' ? 3 * 60_000 : scenario === 'running-tool' ? 184_000 : elapsed),
+    connection = {
+      busy: true,
+      turn_id: 'demo-turn',
+      turn_started_at_ms: DEMO_TURN_START,
+      last_event_at_ms: lastEventAt,
+      in_flight_tool: tool ? { name: 'Bash', started_at_ms: DEMO_TURN_START + 67_000, count: 1 } : undefined,
+    };
+  return conversationTurnProgress({ messages: [] }, connection, DEMO_TURN_START + elapsed, {
+    waitingForPermission: scenario === 'permission',
+  });
 }
 
 export function AIConversationDemo() {
@@ -205,6 +244,7 @@ export function AIConversationDemo() {
     draft: aiConversationDraft.value,
     busy: state.busy,
     progress: state.progress,
+    turnProgress: 'turnProgress' in state ? state.turnProgress : undefined,
     interruptible: state.interruptible,
     permissions: state.permissions,
     activity: state.activity,
@@ -305,6 +345,8 @@ export function AIConversationSettings() {
         choices={[
           { value: 'empty', label: 'Empty' },
           { value: 'streaming', label: 'Streaming' },
+          { value: 'running-tool', label: 'Running a Tool' },
+          { value: 'stuck', label: 'May Be Stuck' },
           { value: 'permission', label: 'Permission Requested' },
           { value: 'completed', label: 'Completed with Priced Usage' },
           { value: 'usage-unpriced', label: 'Completed with Unpriced Usage' },

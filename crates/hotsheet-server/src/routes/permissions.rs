@@ -264,6 +264,15 @@ pub(crate) struct ConnectionInfo {
     effort: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     permission_mode: Option<String>,
+    /// A busy client drive's running turn and its timing (HS2-14X4AF, HS2-XV1VCR).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    turn_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    turn_started_at_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_event_at_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    in_flight_tool: Option<client_drive::InFlightTool>,
 }
 
 /// `GET /connections` — what the server's driving loop is currently running (HS2-TCV3BF):
@@ -287,6 +296,10 @@ pub(crate) async fn list_connections(State(state): State<AppState>) -> Json<Vec<
             model: None,
             effort: None,
             permission_mode: None,
+            turn_id: None,
+            turn_started_at_ms: None,
+            last_event_at_ms: None,
+            in_flight_tool: None,
         })
         .collect::<Vec<_>>();
     drop(reg);
@@ -308,6 +321,10 @@ pub(crate) async fn list_connections(State(state): State<AppState>) -> Json<Vec<
             model: client.model,
             effort: client.effort,
             permission_mode: client.permission_mode,
+            turn_id: client.turn_id,
+            turn_started_at_ms: client.turn_started_at_ms,
+            last_event_at_ms: client.last_event_at_ms,
+            in_flight_tool: client.in_flight_tool,
         });
     }
     infos.sort_by(|left, right| left.id.cmp(&right.id));
@@ -945,14 +962,15 @@ pub(crate) async fn send_drive_turn(
                 }
                 _ => event.clone(),
             };
+            let timing = job.observe_event(&projected);
             for event in guard.observe(&projected) {
-                thread_state.emit_turn_event(
+                thread_state.emit_timed_turn_event(
                     &thread_store,
                     &thread_id,
-                    None,
-                    Some(&turn_id),
+                    &turn_id,
                     &tool,
                     event,
+                    &timing,
                 );
             }
         });

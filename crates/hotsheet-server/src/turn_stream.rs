@@ -22,6 +22,13 @@ pub struct TurnStreamEnvelope {
     /// fall back to their single active turn.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub turn_id: Option<String>,
+    /// When the server observed this event, in Unix milliseconds (HS2-XV1VCR). Omitted by
+    /// older servers; a client that sees it treats `in_flight_tool` as authoritative.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub at_ms: Option<u64>,
+    /// The turn's in-flight tool after this event; omitted when no tool call is open.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub in_flight_tool: Option<crate::client_drive::InFlightTool>,
     pub event: ClientTurnEvent,
 }
 

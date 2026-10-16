@@ -31,6 +31,7 @@ import {
   CircleAlert,
   Copy,
   Download,
+  Hourglass,
   Image,
   MessageSquare,
   Paperclip,
@@ -43,6 +44,7 @@ import {
   conversationHeaderSummary,
   type ConversationMessage,
   conversationTimeline,
+  type ConversationTurnProgress,
   type ConversationUsage,
   formatConversationCost,
   formatConversationTokens,
@@ -69,6 +71,8 @@ export interface AIConversationProps {
   draft: string;
   busy: boolean;
   progress?: string;
+  /** The running turn's elapsed time, last activity, and in-flight tool or stuck state (HS2-XV1VCR). */
+  turnProgress?: ConversationTurnProgress;
   interruptible: boolean;
   permissions?: PermissionItem[];
   activity?: ConversationActivity[];
@@ -478,6 +482,55 @@ function TranscriptRow({ grid, children }: { grid: boolean; children: SafeHtml }
   );
 }
 
+/**
+ * The running turn's progress beside the composer (HS2-XV1VCR): a spinner line naming what the
+ * turn is doing and for how long, refreshed by the app's local render clock. After a bounded
+ * silence it becomes a warning banner with the Stop action. The ticking line is not a live
+ * region, so assistive technology is not interrupted every second; the stuck banner is a polite
+ * status whose title changes at most once a minute.
+ */
+export function ConversationTurnProgressLine({
+  progress,
+  tool,
+  interruptible,
+}: {
+  progress: ConversationTurnProgress;
+  tool: string;
+  interruptible: boolean;
+}) {
+  if (progress.state === 'stuck')
+    return (
+      <div class="ai-conversation__turn-progress" data-state="stuck">
+        <StateBanner
+          title={progress.label}
+          detail={progress.detail}
+          tone="warning"
+          urgency="status"
+          copyLayout="stacked"
+          icon={<LucideIcon icon={Hourglass} name="hourglass" />}
+          action={
+            interruptible ? (
+              <button
+                type="button"
+                {...COMMANDS_AND_AI_ACTIONS.stopConversation.attrs}
+                aria-label={`Stop ${tool}`}
+                title={`Stop ${tool}`}
+              >
+                Stop
+              </button>
+            ) : undefined
+          }
+        />
+      </div>
+    );
+  return (
+    <p class="ai-conversation__turn-progress" data-state={progress.state}>
+      <LoadingSpinner size="s" />
+      <span>{progress.label}</span>
+    </p>
+  );
+}
+
 function SkippedMessages({ count }: { count?: number }) {
   if (!count || count < 1) return <></>;
   return (
@@ -498,6 +551,8 @@ export function AIConversation(props: AIConversationProps) {
     draft,
     busy,
     progress,
+    turnProgress,
+    interruptible,
     permissions = [],
     activity = [],
     totalUsage,
@@ -518,7 +573,7 @@ export function AIConversation(props: AIConversationProps) {
       : readOnly
         ? 'Saved read-only transcript'
         : busy
-          ? `${tool} is working`
+          ? (turnProgress?.short ?? `${tool} is working`)
           : messages.length === 0
             ? 'Ready for your first message'
             : // Totals sit inline with the count instead of in a separate header pill (HS2-P415F0).
@@ -631,7 +686,7 @@ export function AIConversation(props: AIConversationProps) {
               <PermissionRequestCard item={item} presentation="list" />
             </div>
           ))}
-          {busy && progress && (
+          {busy && progress && !turnProgress && (
             <p class="ai-conversation__progress" role="status">
               <LucideIcon size="s" icon={Bot} name="bot" />
               {progress}
@@ -674,6 +729,9 @@ export function AIConversation(props: AIConversationProps) {
       class="ai-conversation__composer"
       {...COMMANDS_AND_AI_ACTIONS.sendConversationTurn.attrs}
     >
+      {busy && turnProgress && (
+        <ConversationTurnProgressLine progress={turnProgress} tool={tool} interruptible={interruptible} />
+      )}
       <Composer
         label={`Message ${tool}`}
         name="conversation-draft"

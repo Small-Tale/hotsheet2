@@ -358,6 +358,10 @@ fn map_events(v: &Value, assistant_projection: &mut AssistantProjection) -> Vec<
                         "tool_name": block.get("name").and_then(Value::as_str).unwrap_or(""),
                         "tool_input": block.get("input").cloned().unwrap_or(Value::Null),
                     });
+                    // The call id lets the host clear this tool when its result arrives (HS2-XV1VCR).
+                    if let Some(id) = block.get("id").and_then(Value::as_str) {
+                        payload["tool_use_id"] = Value::String(id.to_string());
+                    }
                     if let Some(session) = session {
                         payload["session_id"] = Value::String(session.to_string());
                     }

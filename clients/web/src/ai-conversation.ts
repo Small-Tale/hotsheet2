@@ -1,4 +1,11 @@
-import type { ActivityEvent, ClientFileReference, ClientTurnEvent } from './api';
+import type {
+  ActivityEvent,
+  ClientFileReference,
+  ClientTurnEvent,
+  InFlightTool,
+  ToolConnection,
+  TurnStreamEnvelope,
+} from './api';
 
 export type ConversationMessageRole = 'user' | 'assistant';
 export type ConversationMessageStatus = 'streaming' | 'completed' | 'failed' | 'interrupted';
@@ -26,6 +33,23 @@ export interface ConversationActivity {
   importance: 'low' | 'normal' | 'high';
   sequence?: number;
 }
+/** The tool call a running turn waits on (HS2-XV1VCR): its oldest open call and the open count. */
+export interface ConversationInFlightTool {
+  name: string;
+  startedAt: number;
+  count: number;
+}
+/**
+ * A running turn's timing (HS2-XV1VCR), in Unix milliseconds. Local turns start it when sent;
+ * stream events advance `lastEventAt` and replace `inFlightTool`; a turn another client started
+ * is tracked from its first event. Cleared when the turn ends.
+ */
+export interface ConversationTurnTiming {
+  turnId?: string;
+  startedAt?: number;
+  lastEventAt?: number;
+  inFlightTool?: ConversationInFlightTool;
+}
 export interface ConversationState {
   messages: ConversationMessage[];
   activity?: ConversationActivity[];
@@ -33,6 +57,8 @@ export interface ConversationState {
   /** Correlation id of the running turn (HS2-14X4AF): stream events naming another turn are stale. */
   activeTurnId?: string;
   progress?: string;
+  /** The running turn's elapsed time, last activity, and in-flight tool (HS2-XV1VCR). */
+  turnTiming?: ConversationTurnTiming;
   error?: string;
   nextSequence?: number;
   /** Messages a reopened non-contiguous saved selection left out before each message (HS2-BZB93V). */
@@ -154,7 +180,12 @@ export function acceptsConversationTurnEvent(state: ConversationState, turnId?: 
 }
 
 /** Begin a local turn. `id` is also the turn's correlation id sent with the request. */
-export function beginConversationTurn(state: ConversationState, id: string, content: string): ConversationState {
+export function beginConversationTurn(
+  state: ConversationState,
+  id: string,
+  content: string,
+  now = Date.now(),
+): ConversationState {
   const ordered = normalizeConversationSequence(state),
     assistantId = `${id}-assistant`,
     sequence = ordered.nextSequence ?? 0;
@@ -169,6 +200,7 @@ export function beginConversationTurn(state: ConversationState, id: string, cont
     activeAssistantId: assistantId,
     activeTurnId: id,
     progress: 'Reviewing the project and planning the next steps…',
+    turnTiming: { turnId: id, startedAt: now, lastEventAt: now },
     error: undefined,
   };
 }
@@ -205,11 +237,67 @@ function nativeProgress(payload: unknown): string | undefined {
     if (typeof value[key] === 'string' && value[key].trim()) return value[key].trim().slice(0, 160);
 }
 
+function inFlightTool(value: unknown): ConversationInFlightTool | undefined {
+  if (!value || typeof value !== 'object') return;
+  const tool = value as Partial<InFlightTool>;
+  if (typeof tool.name !== 'string' || !tool.name.trim() || typeof tool.started_at_ms !== 'number') return;
+  return {
+    name: tool.name.trim(),
+    startedAt: tool.started_at_ms,
+    count: typeof tool.count === 'number' && tool.count > 0 ? tool.count : 1,
+  };
+}
+
+/**
+ * Advance a turn's timing for one stream event (HS2-XV1VCR). A server that stamps `at_ms` also
+ * reports the in-flight tool after the event, so its absence there means no tool is open; an
+ * older server's events only refresh the last-activity time, at their receipt time. Events of a
+ * turn this client never began track that turn from here, so another client's running turn is
+ * timed too, while a late event for an earlier local turn changes nothing.
+ */
+function recordTurnEventTiming(
+  state: ConversationState,
+  event: ClientTurnEvent,
+  turnId: string | undefined,
+  timing: TurnEventTiming | undefined,
+  receivedAt: number,
+): ConversationState {
+  const local = Boolean(state.activeAssistantId);
+  if (local && !acceptsConversationTurnEvent(state, turnId)) return state;
+  // A local turn's user message carries its turn id: a late event of a finished local turn is
+  // not another client's running turn.
+  if (!local && turnId !== undefined && state.messages.some((message) => message.id === turnId)) return state;
+  const current = state.turnTiming,
+    same = Boolean(current) && (turnId === undefined || current?.turnId === undefined || current.turnId === turnId);
+  if (event.type === 'done') {
+    if (local || !same) return state;
+    const rest = { ...state };
+    delete rest.turnTiming;
+    return rest;
+  }
+  const stampedAt = typeof timing?.at_ms === 'number' ? timing.at_ms : undefined,
+    at = stampedAt ?? receivedAt,
+    base: ConversationTurnTiming = same && current ? current : { ...(turnId === undefined ? {} : { turnId }) },
+    next: ConversationTurnTiming = { ...base, lastEventAt: Math.max(base.lastEventAt ?? at, at) };
+  if (stampedAt !== undefined) {
+    const tool = inFlightTool(timing?.in_flight_tool);
+    if (tool) next.inFlightTool = tool;
+    else delete next.inFlightTool;
+  }
+  return { ...state, turnTiming: next };
+}
+
+/** The server's per-event timing carried on a turn stream envelope (HS2-XV1VCR). */
+export type TurnEventTiming = Pick<TurnStreamEnvelope, 'at_ms' | 'in_flight_tool'>;
+
 export function applyConversationEvent(
   state: ConversationState,
   event: ClientTurnEvent,
   turnId?: string,
+  timing?: TurnEventTiming,
+  receivedAt = Date.now(),
 ): ConversationState {
+  state = recordTurnEventTiming(state, event, turnId, timing, receivedAt);
   if (!acceptsConversationTurnEvent(state, turnId)) return state;
   const ordered = normalizeConversationSequence(state),
     active = ordered.activeAssistantId,
@@ -273,7 +361,14 @@ export function applyConversationEvent(
     const message = typeof event.message === 'string' ? event.message.trim() : '';
     const error = reason === 'failed' ? message || 'The tool turn failed.' : undefined;
     if (index < 0)
-      return { ...ordered, activeAssistantId: undefined, activeTurnId: undefined, progress: undefined, error };
+      return {
+        ...ordered,
+        activeAssistantId: undefined,
+        activeTurnId: undefined,
+        progress: undefined,
+        turnTiming: undefined,
+        error,
+      };
     const status: ConversationMessageStatus = reason;
     const sequence = ordered.nextSequence ?? 0,
       messages = ordered.messages.map((message, messageIndex) =>
@@ -297,10 +392,108 @@ export function applyConversationEvent(
       activeAssistantId: undefined,
       activeTurnId: undefined,
       progress: undefined,
+      turnTiming: undefined,
       error,
     };
   }
   return state;
+}
+
+/** A turn with no stream event for this long may be stuck (HS2-XV1VCR). */
+export const TURN_STUCK_AFTER_MS = 120_000;
+/** A silent open tool call (a build or test run) gets longer before the turn may be stuck. */
+export const TOOL_STUCK_AFTER_MS = 300_000;
+
+export type ConversationTurnProgressState = 'working' | 'tool' | 'waiting' | 'stuck';
+export interface ConversationTurnProgress {
+  state: ConversationTurnProgressState;
+  /** The full line, for example `Working · 3m 12s · last activity 8s ago`. */
+  label: string;
+  /** A tab or tile summary, for example `Running Bash · 2m`. */
+  short: string;
+  /** For a stuck turn, what it was doing, for example `Running Bash · 6m 2s`. */
+  detail?: string;
+  /** Milliseconds since the turn's last stream event. */
+  idleMs: number;
+  /** Whether the turn's start time is known; an older server's snapshot may not report it. */
+  timed?: boolean;
+}
+
+/**
+ * A tab or tile summary for a running turn: its short progress when it is timed or may be
+ * stuck, otherwise the caller's more specific progress text.
+ */
+export function conversationTurnSummary(progress: ConversationTurnProgress | undefined): string | undefined {
+  return progress && (progress.timed || progress.state === 'stuck') ? progress.short : undefined;
+}
+
+/** `8s`, `3m 12s`, `1h 4m`; a negative span (clock skew) reads as zero. */
+export function formatTurnDuration(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+/** Whole-unit duration for a tab or tile summary: `8s`, `3m`, `1h 4m`. */
+export function formatTurnDurationShort(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+const finite = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+/**
+ * What a running turn is doing and for how long (HS2-XV1VCR), from the conversation's
+ * event-advanced timing and the connection's server snapshot, which seeds a reload or a turn
+ * another client started. `now` comes from a local render-only clock; nothing here polls.
+ * Returns nothing while the connection is idle.
+ */
+export function conversationTurnProgress(
+  state: ConversationState,
+  connection:
+    Pick<ToolConnection, 'busy' | 'turn_id' | 'turn_started_at_ms' | 'last_event_at_ms' | 'in_flight_tool'> | undefined,
+  now: number,
+  options: { waitingForPermission?: boolean } = {},
+): ConversationTurnProgress | undefined {
+  if (!connection?.busy) return;
+  let timing: ConversationTurnTiming | undefined = state.turnTiming;
+  // Timing kept for another turn (a stale local record) is not this turn's.
+  if (timing?.turnId && connection.turn_id && timing.turnId !== connection.turn_id) timing = undefined;
+  const serverLast = finite(connection.last_event_at_ms),
+    localLast = finite(timing?.lastEventAt),
+    startedAt = finite(connection.turn_started_at_ms) ?? finite(timing?.startedAt),
+    lastEventAt = Math.max(localLast ?? -Infinity, serverLast ?? -Infinity, startedAt ?? -Infinity),
+    // The fresher record names the in-flight tool: events after the connection snapshot win.
+    tool =
+      timing && localLast !== undefined && (serverLast === undefined || localLast >= serverLast)
+        ? timing.inFlightTool
+        : inFlightTool(connection.in_flight_tool);
+  const timed = startedAt !== undefined,
+    elapsed = startedAt === undefined ? undefined : now - startedAt,
+    idleMs = Number.isFinite(lastEventAt) ? Math.max(0, now - lastEventAt) : 0,
+    lastActivity = idleMs < 5_000 ? 'last activity just now' : `last activity ${formatTurnDuration(idleMs)} ago`,
+    toolName = tool ? `Running ${tool.name}${tool.count > 1 ? ` +${tool.count - 1}` : ''}` : undefined,
+    toolElapsed = tool ? now - tool.startedAt : undefined,
+    doing = toolName ?? (options.waitingForPermission ? 'Waiting for permission' : 'Working'),
+    doingFor = toolElapsed ?? elapsed,
+    detail = doingFor === undefined ? doing : `${doing} · ${formatTurnDuration(doingFor)}`,
+    short = doingFor === undefined ? doing : `${doing} · ${formatTurnDurationShort(doingFor)}`;
+  if (options.waitingForPermission && !tool) return { state: 'waiting', label: detail, short, idleMs, timed };
+  if (Number.isFinite(lastEventAt) && idleMs >= (tool ? TOOL_STUCK_AFTER_MS : TURN_STUCK_AFTER_MS))
+    return {
+      state: 'stuck',
+      label: `No activity for ${formatTurnDurationShort(idleMs)} — may be stuck`,
+      short: `May be stuck · no activity for ${formatTurnDurationShort(idleMs)}`,
+      detail,
+      idleMs,
+      timed,
+    };
+  return { state: tool ? 'tool' : 'working', label: `${detail} · ${lastActivity}`, short, idleMs, timed };
 }
 
 export function applyConversationActivity(state: ConversationState, event: ActivityEvent): ConversationState {

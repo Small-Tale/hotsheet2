@@ -184,7 +184,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
               if (event.kind === 'turn_event' && event.turn && acceptedTurns.has(event.turn)) {
                 updateConversation(
                   event.turn.connection_id,
-                  (state) => applyConversationEvent(state, event.turn!.event, event.turn!.turn_id),
+                  (state) => applyConversationEvent(state, event.turn!.event, event.turn!.turn_id, event.turn),
                   event.turn.event.type !== 'done',
                 );
                 if (event.turn.event.type === 'done') conversationPersistence.flush();

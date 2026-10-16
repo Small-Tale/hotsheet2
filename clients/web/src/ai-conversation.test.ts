@@ -180,7 +180,9 @@ describe('AI conversation transcript', () => {
 
   it('retains unknown events and gives interrupted empty turns a useful result', () => {
     const started = beginConversationTurn(EMPTY_CONVERSATION, 'turn-2', 'Stop soon.');
-    expect(applyConversationEvent(started, { type: 'future', value: 1 })).toBe(started);
+    // An unknown event changes nothing but the turn's last-activity time (HS2-XV1VCR).
+    const unknown = applyConversationEvent(started, { type: 'future', value: 1 });
+    expect({ ...unknown, turnTiming: undefined }).toEqual({ ...started, turnTiming: undefined });
     const stopped = applyConversationEvent(started, { type: 'done', reason: 'interrupted' });
     expect(stopped.messages[1]).toMatchObject({
       status: 'interrupted',
@@ -301,7 +303,10 @@ describe('turn correlation (HS2-14X4AF)', () => {
     expect(settled.activeTurnId).toBeUndefined();
     expect(settled.messages.at(-1)?.status).toBe('interrupted');
     // The other turn's stream does not reopen or fill the settled bubble.
-    expect(applyConversationEvent(settled, output('foreign'), 'other')).toBe(settled);
+    const foreign = applyConversationEvent(settled, output('foreign'), 'other');
+    expect(foreign.messages).toBe(settled.messages);
+    // It is still timed as the connection's running turn (HS2-XV1VCR).
+    expect(foreign.turnTiming?.turnId).toBe('other');
   });
 });
 
@@ -355,7 +360,7 @@ describe('turns without written output (HS2-M5GN19)', () => {
     const started = state;
     state = applyConversationEvent(state, { type: 'usage', tokens_in: 0, tokens_out: 0, cost_usd: 0 });
     state = applyConversationEvent(state, { type: 'usage', tokens_in: 0, tokens_out: 0 });
-    expect(state).toBe(started);
+    expect(state.messages).toBe(started.messages);
     state = applyConversationEvent(state, { type: 'usage', tokens_in: 800, tokens_out: 150 });
     state = applyConversationEvent(state, { type: 'usage', tokens_in: 0, tokens_out: 0, cost_usd: 0 });
     state = applyConversationEvent(state, { type: 'output', content: 'Done.', truncated: false });

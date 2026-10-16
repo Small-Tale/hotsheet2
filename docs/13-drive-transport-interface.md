@@ -345,7 +345,16 @@ worker turns always get a server ULID. A busy connection reports the running tur
 `turn_id` and an idle one omits it. Clients apply a correlated event only to the matching
 turn, so a delayed or repeated event from an earlier turn on the same connection cannot
 finish or fill a newer one; events from older servers omit `turn_id` and fall back to the
-client's single active turn. It rides the existing WS and genuine-long-poll replay ring; each replayable WS event carries
+client's single active turn. **Turn timing (HS2-XV1VCR):** every envelope carries the server's
+`at_ms` (Unix milliseconds) and, when a tool call of the turn is open after the event,
+`in_flight_tool` `{name, started_at_ms, count}` (the oldest open call and how many are open); an
+envelope with `at_ms` and no `in_flight_tool` means no call is open. A busy connection also
+reports `turn_started_at_ms`, `last_event_at_ms`, and `in_flight_tool`, so a reload or a second
+client seeds the same state; an idle one omits all three. Tool lifecycle edges are read
+provider-neutrally by `hotsheet_aitools::tool_progress::tool_transition`: a Claude
+`PreToolUse` record (with its `tool_use_id`) opens a call and `PostToolUse` /
+`PostToolUseFailure` closes it; sub-agent records (`parent_tool_use_id`) never open their own
+call, and `Done` closes every call. Older servers omit these fields. It rides the existing WS and genuine-long-poll replay ring; each replayable WS event carries
 the same monotonic cursor a reconnecting client supplies to `/ws/poll`. Output,
 permission requests, usage, native activity, a coalescing notice, and terminal done are
 additive event variants. Clients retain unknown variants without failing their live loop.

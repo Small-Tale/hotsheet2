@@ -502,6 +502,9 @@ export const parseToolConnection = shape<ToolConnection>(
     model: isString,
     effort: isString,
     permission_mode: isString,
+    turn_started_at_ms: isNumber,
+    last_event_at_ms: isNumber,
+    in_flight_tool: isObject,
   },
 );
 

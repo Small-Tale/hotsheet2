@@ -53,6 +53,28 @@ describe('durable AI conversation state (HS2-YHQCS2)', () => {
     for (const id of ['zero', 'text', 'list', 'nothing']) expect(loaded[id]).toEqual({ messages });
   });
 
+  it('keeps valid running-turn timing and drops only a corrupt record (HS2-XV1VCR)', () => {
+    const messages = [{ id: 'u', role: 'user', content: 'hello' }],
+      timing = { turnId: 't', startedAt: 1, lastEventAt: 2, inFlightTool: { name: 'Bash', startedAt: 1, count: 1 } };
+    const storage = {
+      getItem: () =>
+        JSON.stringify({
+          kept: { messages, turnTiming: timing },
+          bare: { messages, turnTiming: {} },
+          array: { messages, turnTiming: [] },
+          id: { messages, turnTiming: { turnId: 3 } },
+          time: { messages, turnTiming: { lastEventAt: 'soon' } },
+          tool: { messages, turnTiming: { inFlightTool: { name: 'Bash' } } },
+          nullTool: { messages, turnTiming: { inFlightTool: null } },
+          nothing: { messages, turnTiming: null },
+        }),
+    };
+    const loaded = loadConversationStates(storage);
+    expect(loaded.kept).toEqual({ messages, turnTiming: timing });
+    expect(loaded.bare).toEqual({ messages, turnTiming: {} });
+    for (const id of ['array', 'id', 'time', 'tool', 'nullTool', 'nothing']) expect(loaded[id]).toEqual({ messages });
+  });
+
   it('drops corrupt entries without sacrificing valid conversations', () => {
     const storage = {
       getItem: () =>

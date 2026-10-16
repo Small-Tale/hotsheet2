@@ -4,6 +4,8 @@ import {
   conversationError,
   type ConversationMessage,
   type ConversationState,
+  conversationTurnProgress,
+  conversationTurnSummary,
   conversationUsage,
   EMPTY_CONVERSATION,
 } from '../ai-conversation';
@@ -123,6 +125,23 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
   const { aiToolLabel, conversationAiSelection, aiToolOptions, aiTools, effectiveDriveSelection } = dependencies.ai;
   const { pendingPermissions, permissionPopupSurface } = dependencies.permissions;
 
+  /**
+   * A chat's running-turn progress (HS2-XV1VCR) at the local render clock's `now`; an open
+   * permission request means the turn waits on a person, not that it is stuck.
+   */
+  function chatTurnProgress(
+    projectId: string,
+    connectionId: string,
+    state: ConversationState,
+    connection: ToolConnection | undefined,
+  ) {
+    return conversationTurnProgress(state, connection, Date.now(), {
+      waitingForPermission: pendingPermissions().some(
+        (item) => item.projectId === projectId && item.connection === connectionId,
+      ),
+    });
+  }
+
   function workspaceTerminalGroups(): TerminalDashboardGroup[] {
     const conversations = conversationStates.peek();
     return terminalGroups.value.map((group) => {
@@ -138,7 +157,11 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
             tool: aiToolLabel(chat.tool),
             busy: connection?.busy ?? false,
             error: conversationError(state, connection),
-            summary: state.progress ?? state.messages.at(-1)?.content ?? state.activity?.at(-1)?.summary,
+            summary:
+              conversationTurnSummary(chatTurnProgress(group.projectId, chat.connectionId, state, connection)) ??
+              state.progress ??
+              state.messages.at(-1)?.content ??
+              state.activity?.at(-1)?.summary,
           };
         });
       return { ...group, chats, itemOrder: drawerTabOrder(group.projectId) };
@@ -193,6 +216,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           selectedMessageIds = conversationSelectedMessages(chat.connectionId, state.messages).map(
             (message) => message.id,
           ),
+          turnProgress = chatTurnProgress(current.id, chat.connectionId, state, connection),
           conversation: AIConversationProps = {
             open: true,
             presentation: 'embedded',
@@ -205,6 +229,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
             draft: conversationDrafts.value[chat.connectionId] ?? '',
             busy: connection?.busy ?? false,
             progress: state.progress,
+            turnProgress,
             interruptible: Boolean(connection?.actions?.includes('interrupt')),
             permissions: pendingPermissions().filter(
               (item) => item.projectId === current.id && item.connection === chat.connectionId,
@@ -233,7 +258,11 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           tool,
           busy: connection?.busy ?? false,
           error: conversationError(state, connection),
-          summary: state.progress ?? state.messages.at(-1)?.content ?? state.activity?.at(-1)?.summary,
+          summary:
+            conversationTurnSummary(turnProgress) ??
+            state.progress ??
+            state.messages.at(-1)?.content ??
+            state.activity?.at(-1)?.summary,
           permissionMode: activePermissionMode(selection.permissionModes, selection.permissionMode),
           content: <AIConversation {...conversation} />,
           toolbar: <AIConversationToolbar {...conversation} />,
@@ -294,6 +323,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           draft: conversationDrafts.value[connectionId] ?? '',
           busy: connection.busy,
           progress: state.progress,
+          turnProgress: chatTurnProgress(current.id, connectionId, state, connection),
           interruptible: Boolean(connection.actions?.includes('interrupt')),
           permissions: pendingPermissions().filter(
             (item) => item.projectId === current.id && item.connection === connectionId,

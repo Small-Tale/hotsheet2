@@ -1,5 +1,5 @@
 import type { Signal } from 'kerfjs';
-import { signal } from 'kerfjs';
+import { effect, signal } from 'kerfjs';
 
 import {
   applyConversationEvent,
@@ -35,6 +35,7 @@ import {
   SIDEBAR_DRIVE_PROMPT,
   sidebarDriveConnectionId,
 } from '../project-drive';
+import { createTurnClock } from '../turn-clock';
 import type { createAiConfigurationController } from './ai-configuration';
 
 type AiConfiguration = Pick<
@@ -100,6 +101,17 @@ export function createDriveConversationsController(dependencies: DriveConversati
   const conversationHistoryCursors = new Map<string, ConversationHistoryCursor>();
   const conversationRenderScheduler = createConversationRenderScheduler(() => {
     conversationRenderRevision.value += 1;
+  });
+  // Running turns re-render their elapsed and last-activity times once a second (HS2-XV1VCR).
+  const turnClock = createTurnClock(
+    () => Object.values(driveConnectionsByProject.peek()).some((list) => list.some((item) => item.busy)),
+    () => {
+      conversationRenderScheduler.schedule();
+    },
+  );
+  effect(() => {
+    void driveConnectionsByProject.value;
+    turnClock.sync();
   });
   const conversationPersistence = createConversationPersistence(() => {
     try {

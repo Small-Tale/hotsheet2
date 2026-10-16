@@ -325,6 +325,8 @@ impl AppState {
         });
     }
 
+    /// Emit one turn event stamped with the current server time (HS2-XV1VCR) and no tool
+    /// tracking, as for dist-loop worker turns.
     pub fn emit_turn_event(
         &self,
         store: &FsStore,
@@ -334,21 +336,60 @@ impl AppState {
         tool: &str,
         event: turn_stream::ClientTurnEvent,
     ) {
+        self.emit_turn_envelope(
+            store,
+            tool,
+            turn_stream::TurnStreamEnvelope {
+                connection_id: connection_id.into(),
+                ticket,
+                turn_id: turn_id.map(str::to_owned),
+                at_ms: Some(client_drive::now_ms()),
+                in_flight_tool: None,
+                event,
+            },
+        );
+    }
+
+    /// Emit one client-drive turn event with the timing its job observed (HS2-XV1VCR).
+    pub fn emit_timed_turn_event(
+        &self,
+        store: &FsStore,
+        connection_id: &str,
+        turn_id: &str,
+        tool: &str,
+        event: turn_stream::ClientTurnEvent,
+        timing: &client_drive::TurnEventTiming,
+    ) {
+        self.emit_turn_envelope(
+            store,
+            tool,
+            turn_stream::TurnStreamEnvelope {
+                connection_id: connection_id.into(),
+                ticket: None,
+                turn_id: Some(turn_id.to_owned()),
+                at_ms: Some(timing.at_ms),
+                in_flight_tool: timing.in_flight_tool.clone(),
+                event,
+            },
+        );
+    }
+
+    fn emit_turn_envelope(
+        &self,
+        store: &FsStore,
+        tool: &str,
+        envelope: turn_stream::TurnStreamEnvelope,
+    ) {
         self.emit(ChangeEvent {
             cursor: None,
             store: multistore::store_url_id(store),
             kind: "turn_event".into(),
-            id: connection_id.into(),
+            id: envelope.connection_id.clone(),
             slug: tool.into(),
             message: None,
             activity: None,
             assignment: None,
-            turn: Some(turn_stream::TurnStreamEnvelope {
-                connection_id: connection_id.into(),
-                ticket,
-                turn_id: turn_id.map(str::to_owned),
-                event,
-            }),
+            turn: Some(envelope),
         });
     }
 }

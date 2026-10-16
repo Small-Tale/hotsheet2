@@ -7,6 +7,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use hotsheet_aitools::tool_progress::ToolTransition;
 use hotsheet_aitools::{
     ConnectionRegistry, SafeTrigger, SharedPermissionBridge, TriggerOptions, TurnControl, TurnDone,
     TurnEvent, TurnRequest, prepare_trigger_with_home,
@@ -148,11 +149,119 @@ pub struct ClientConnectionInfo {
     /// `turn_event` of that turn carries.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub turn_id: Option<String>,
+    /// When the running turn began, in Unix milliseconds, while `busy` (HS2-XV1VCR).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub turn_started_at_ms: Option<u64>,
+    /// When the running turn last produced a stream event (its start until the first one),
+    /// while `busy`. A client derives "last activity" and its stuck state from this.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_event_at_ms: Option<u64>,
+    /// The longest-running tool call still open in the running turn, while `busy`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub in_flight_tool: Option<InFlightTool>,
+}
+
+/// The tool call a running turn is waiting on (HS2-XV1VCR): the oldest still-open call, and
+/// how many calls are open in all (parallel tool use or sub-agents).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct InFlightTool {
+    pub name: String,
+    pub started_at_ms: u64,
+    pub count: usize,
+}
+
+/// One open tool call of a running turn.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct OpenTool {
+    id: Option<String>,
+    name: String,
+    started_at_ms: u64,
+}
+
+/// A long or misbehaving turn cannot grow the open-call list without bound; the oldest calls
+/// are what the indicator shows, so the newest are the ones dropped past this cap.
+const MAX_OPEN_TOOLS: usize = 64;
+
+/// Timing of a running turn (HS2-XV1VCR), updated from every stream event it produces.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct TurnTiming {
+    started_at_ms: u64,
+    last_event_at_ms: u64,
+    open_tools: Vec<OpenTool>,
+}
+
+impl TurnTiming {
+    fn started(at_ms: u64) -> Self {
+        Self {
+            started_at_ms: at_ms,
+            last_event_at_ms: at_ms,
+            open_tools: Vec::new(),
+        }
+    }
+
+    /// Record one stream event observed at `at_ms`.
+    fn observe(&mut self, event: &TurnEvent, at_ms: u64) {
+        self.last_event_at_ms = self.last_event_at_ms.max(at_ms);
+        match hotsheet_aitools::tool_progress::tool_transition(event) {
+            Some(ToolTransition::Started { id, name }) => {
+                let duplicate = id.is_some()
+                    && self
+                        .open_tools
+                        .iter()
+                        .any(|open| open.id.as_ref() == id.as_ref());
+                if !duplicate && self.open_tools.len() < MAX_OPEN_TOOLS {
+                    self.open_tools.push(OpenTool {
+                        id,
+                        name,
+                        started_at_ms: at_ms,
+                    });
+                }
+            }
+            Some(ToolTransition::Finished { id, name }) => {
+                // Prefer the exact call. A finish whose id matches nothing (or that has none)
+                // closes the oldest open call of that name; one naming neither closes nothing.
+                let by_id = id.as_ref().and_then(|id| {
+                    self.open_tools
+                        .iter()
+                        .position(|open| open.id.as_ref() == Some(id))
+                });
+                let position = by_id.or_else(|| {
+                    let name = name.as_ref()?;
+                    self.open_tools.iter().position(|open| &open.name == name)
+                });
+                if let Some(position) = position {
+                    self.open_tools.remove(position);
+                }
+            }
+            None => {}
+        }
+        if matches!(event, TurnEvent::Done(_)) {
+            self.open_tools.clear();
+        }
+    }
+
+    fn in_flight_tool(&self) -> Option<InFlightTool> {
+        let oldest = self.open_tools.first()?;
+        Some(InFlightTool {
+            name: oldest.name.clone(),
+            started_at_ms: oldest.started_at_ms,
+            count: self.open_tools.len(),
+        })
+    }
+}
+
+/// What one observed event changed in its turn's timing, stamped on its stream envelope.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TurnEventTiming {
+    pub at_ms: u64,
+    pub in_flight_tool: Option<InFlightTool>,
 }
 
 struct ConnectionState {
     busy: bool,
     turn_id: Option<String>,
+    /// The running turn's timing while `busy` (HS2-XV1VCR).
+    timing: Option<TurnTiming>,
     closing: bool,
     session_id: Option<String>,
     control: Option<TurnControl>,
@@ -354,6 +463,7 @@ impl ClientDriveManager {
             effort,
             state: Mutex::new(ConnectionState {
                 turn_id: None,
+                timing: None,
                 busy: false,
                 closing: false,
                 session_id: session_id.clone(),
@@ -476,6 +586,7 @@ impl ClientDriveManager {
         let permission_mode = state.permission_mode.clone();
         state.busy = true;
         state.turn_id = Some(turn_id.clone());
+        state.timing = Some(TurnTiming::started(now_ms()));
         state.last_error = None;
         state.control = Some(control.clone());
         state.active_session_key = Some(active_key);
@@ -507,6 +618,7 @@ impl ClientDriveManager {
         }
         state.busy = false;
         state.turn_id = None;
+        state.timing = None;
         state.control = None;
         if let Some(key) = state.active_session_key.take() {
             active_sessions.remove(&key);
@@ -715,7 +827,7 @@ fn connection_home_id(connection_id: &str) -> String {
     hotsheet_index::hash_bytes(connection_id.as_bytes())[..16].to_owned()
 }
 
-fn now_ms() -> u64 {
+pub(crate) fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |duration| duration.as_millis() as u64)
@@ -753,6 +865,30 @@ impl ClientTurnJob {
         &self.turn_id
     }
 
+    /// Record one of this turn's stream events now and return the timing its envelope
+    /// carries (HS2-XV1VCR).
+    pub fn observe_event(&self, event: &TurnEvent) -> TurnEventTiming {
+        self.observe_event_at(event, now_ms())
+    }
+
+    fn observe_event_at(&self, event: &TurnEvent, at_ms: u64) -> TurnEventTiming {
+        let mut state = self.connection.state.lock_or_recover();
+        // A stale job (its turn already finished) never touches a newer turn's timing.
+        let current = state.turn_id.as_deref() == Some(self.turn_id.as_str());
+        let in_flight_tool = state
+            .timing
+            .as_mut()
+            .filter(|_| current)
+            .and_then(|timing| {
+                timing.observe(event, at_ms);
+                timing.in_flight_tool()
+            });
+        TurnEventTiming {
+            at_ms,
+            in_flight_tool,
+        }
+    }
+
     pub fn run(
         &self,
         prompt: &str,
@@ -775,6 +911,7 @@ impl ClientTurnJob {
 
 fn connection_info(connection: &ClientConnection) -> ClientConnectionInfo {
     let state = connection.state.lock_or_recover();
+    let busy_timing = state.timing.as_ref().filter(|_| state.busy);
     let mut actions = vec!["send_turn".into()];
     if connection.drive.supports_interrupt() {
         actions.push("interrupt".into());
@@ -794,6 +931,9 @@ fn connection_info(connection: &ClientConnection) -> ClientConnectionInfo {
         effort: connection.effort.clone(),
         permission_mode: state.permission_mode.clone(),
         turn_id: state.turn_id.clone(),
+        turn_started_at_ms: busy_timing.map(|timing| timing.started_at_ms),
+        last_event_at_ms: busy_timing.map(|timing| timing.last_event_at_ms),
+        in_flight_tool: busy_timing.and_then(TurnTiming::in_flight_tool),
     }
 }
 
@@ -899,6 +1039,169 @@ mod tests {
             effort: None,
             permission_mode: None,
         }
+    }
+
+    fn tool_start(name: &str, id: Option<&str>) -> TurnEvent {
+        let mut payload = serde_json::json!({"hook_event_name": "PreToolUse", "tool_name": name});
+        if let Some(id) = id {
+            payload["tool_use_id"] = id.into();
+        }
+        TurnEvent::NativeActivity {
+            source: "claude-hooks".into(),
+            payload,
+        }
+    }
+
+    fn tool_finish(name: Option<&str>, id: Option<&str>) -> TurnEvent {
+        let mut payload = serde_json::json!({"hook_event_name": "PostToolUse"});
+        if let Some(name) = name {
+            payload["tool_name"] = name.into();
+        }
+        if let Some(id) = id {
+            payload["tool_use_id"] = id.into();
+        }
+        TurnEvent::NativeActivity {
+            source: "claude-hooks".into(),
+            payload,
+        }
+    }
+
+    fn in_flight(timing: &TurnTiming) -> Option<(String, u64, usize)> {
+        timing
+            .in_flight_tool()
+            .map(|tool| (tool.name, tool.started_at_ms, tool.count))
+    }
+
+    /// HS2-XV1VCR transition matrix for one turn's timing: idle → started → tool open →
+    /// parallel tools → out-of-order, repeated, unknown and nameless finishes → refill → done.
+    #[test]
+    fn turn_timing_tracks_open_tools_through_interleaved_sequences() {
+        let mut timing = TurnTiming::started(1_000);
+        assert_eq!(
+            (timing.started_at_ms, timing.last_event_at_ms),
+            (1_000, 1_000)
+        );
+        assert_eq!(in_flight(&timing), None);
+
+        timing.observe(&TurnEvent::Output("thinking".into()), 1_500);
+        assert_eq!(timing.last_event_at_ms, 1_500);
+        assert_eq!(in_flight(&timing), None, "text is not a tool");
+
+        timing.observe(&tool_start("Task", Some("a")), 2_000);
+        timing.observe(&tool_start("Bash", Some("b")), 2_100);
+        timing.observe(&tool_start("Task", Some("a")), 2_200);
+        assert_eq!(
+            in_flight(&timing),
+            Some(("Task".into(), 2_000, 2)),
+            "the oldest open call is shown; a repeated start is not a second call"
+        );
+
+        // A late event never moves last activity backwards.
+        timing.observe(&TurnEvent::Output("late".into()), 1_200);
+        assert_eq!(timing.last_event_at_ms, 2_200);
+
+        timing.observe(&tool_finish(None, Some("unknown")), 2_300);
+        assert_eq!(
+            in_flight(&timing).map(|tool| tool.2),
+            Some(2),
+            "unknown id closes nothing"
+        );
+        timing.observe(&tool_finish(None, None), 2_350);
+        assert_eq!(
+            in_flight(&timing).map(|tool| tool.2),
+            Some(2),
+            "nameless, idless closes nothing"
+        );
+
+        timing.observe(&tool_finish(None, Some("a")), 2_400);
+        assert_eq!(in_flight(&timing), Some(("Bash".into(), 2_100, 1)));
+        timing.observe(&tool_finish(None, Some("a")), 2_450);
+        assert_eq!(
+            in_flight(&timing),
+            Some(("Bash".into(), 2_100, 1)),
+            "repeated finish"
+        );
+
+        // Without ids a finish closes the oldest call of the same name.
+        timing.observe(&tool_start("Read", None), 2_500);
+        timing.observe(&tool_finish(Some("Read"), Some("other")), 2_600);
+        assert_eq!(in_flight(&timing), Some(("Bash".into(), 2_100, 1)));
+
+        timing.observe(&tool_finish(Some("Bash"), Some("b")), 2_700);
+        assert_eq!(in_flight(&timing), None, "empty");
+        timing.observe(&tool_start("Grep", Some("c")), 2_800);
+        assert_eq!(
+            in_flight(&timing),
+            Some(("Grep".into(), 2_800, 1)),
+            "refill"
+        );
+
+        timing.observe(
+            &TurnEvent::Done(hotsheet_aitools::DoneReason::Completed),
+            2_900,
+        );
+        assert_eq!(in_flight(&timing), None, "done closes every open call");
+        assert_eq!(timing.last_event_at_ms, 2_900);
+    }
+
+    #[test]
+    fn turn_timing_bounds_its_open_tool_list() {
+        let mut timing = TurnTiming::started(0);
+        for index in 0..(MAX_OPEN_TOOLS + 10) {
+            timing.observe(&tool_start("Bash", Some(&index.to_string())), index as u64);
+        }
+        assert_eq!(in_flight(&timing), Some(("Bash".into(), 0, MAX_OPEN_TOOLS)));
+    }
+
+    /// The manager exposes timing only while its turn runs, and a stale job from a finished
+    /// turn cannot touch the next turn's timing (a reconnect mid-turn reads the same fields).
+    #[test]
+    fn connection_info_reports_turn_timing_only_while_busy() {
+        let manager = manager(false);
+        manager
+            .create_or_attach(prepare("/project"), Some("timed".into()), None)
+            .unwrap();
+        let idle = manager.get("timed").unwrap();
+        assert_eq!(
+            (
+                idle.turn_started_at_ms,
+                idle.last_event_at_ms,
+                idle.in_flight_tool
+            ),
+            (None, None, None)
+        );
+
+        let first = manager.begin_turn("timed", None, None, None).unwrap();
+        let started = manager.get("timed").unwrap();
+        let started_at = started.turn_started_at_ms.unwrap();
+        assert_eq!(started.last_event_at_ms, Some(started_at));
+        let stamped = first.observe_event_at(&tool_start("Bash", Some("b")), started_at + 5);
+        assert_eq!(stamped.at_ms, started_at + 5);
+        assert_eq!(stamped.in_flight_tool.as_ref().unwrap().name, "Bash");
+        let busy = manager.get("timed").unwrap();
+        assert_eq!(busy.last_event_at_ms, Some(started_at + 5));
+        assert_eq!(busy.in_flight_tool, stamped.in_flight_tool);
+        // Each read (a reload or a second client) sees the same in-flight state.
+        assert_eq!(manager.list()[0].in_flight_tool, busy.in_flight_tool);
+
+        manager.finish_turn(&first, &done(hotsheet_aitools::DoneReason::Completed));
+        let finished = manager.get("timed").unwrap();
+        assert_eq!(
+            (
+                finished.turn_started_at_ms,
+                finished.last_event_at_ms,
+                finished.in_flight_tool
+            ),
+            (None, None, None)
+        );
+
+        let second = manager.begin_turn("timed", None, None, None).unwrap();
+        let late = first.observe_event_at(&tool_start("Old", Some("x")), u64::MAX);
+        assert_eq!(late.in_flight_tool, None, "a stale job reports nothing");
+        let fresh = manager.get("timed").unwrap();
+        assert_eq!(fresh.in_flight_tool, None);
+        assert!(fresh.last_event_at_ms < Some(u64::MAX));
+        manager.finish_turn(&second, &done(hotsheet_aitools::DoneReason::Completed));
     }
 
     /// HS2-NHRDMW transition matrix: launch mode (requested | drive default) → per-chat

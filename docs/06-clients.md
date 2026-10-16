@@ -1570,7 +1570,21 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   legacy saved conversations normalize to their previous messages-then-activity presentation
   before a new turn is appended. Until a turn streams its first text, its assistant bubble shows
   a labeled Kerf `LoadingSpinner` ("Awaiting response") rather than an empty bubble, in the
-  drawer chat and the conversation dialog (HS2-77KJKR). Native activity and permission
+  drawer chat and the conversation dialog (HS2-77KJKR). While a turn runs, a progress pill sits
+  above the composer in the drawer and the dialog (HS2-XV1VCR): a Kerf `LoadingSpinner` beside
+  "Working · 3m 12s · last activity 8s ago", or "Running Bash · 2m 5s · …" while a tool call is
+  open, or "Waiting for permission · …" while a permission request for the chat is pending. The
+  timing comes from the server (`turn_started_at_ms`, `last_event_at_ms`, `in_flight_tool` on the
+  connection and `at_ms` / `in_flight_tool` on each stream envelope; see
+  [13](13-drive-transport-interface.md)); a local render-only clock re-renders it once a second
+  while any connection is busy and issues no network request (`clients/web/src/turn-clock.ts`).
+  After 120 s without a stream event (300 s while a tool call is open) the pill becomes a warning
+  `StateBanner`, "No activity for 2m — may be stuck", naming what the turn was doing, with the
+  same Stop action as the toolbar when the drive can be interrupted. The pill is not a live
+  region; the stuck banner is a polite status whose title changes at most once a minute. The
+  dialog header, the drawer tab summary, and the terminal-grid chat tile show the short form
+  ("Running Bash · 2m", "May be stuck · no activity for 2m"). A turn another client started is
+  timed from the connection snapshot and its own events. Native activity and permission
   events provide specific progress text, and connection-matched permission requests reuse the
   standard decision card inline. Completed, failed, and interrupted outcomes remain on their
   turn. A turn that ends without text but recorded tool activity after its prompt says what

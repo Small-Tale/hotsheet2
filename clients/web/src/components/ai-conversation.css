@@ -257,8 +257,35 @@
 }
 /* The app's submitting form fills the floating footer row it is slotted into. */
 .ai-conversation__composer {
+  display: flex;
   flex: 1 1 auto;
   min-width: 0;
+  flex-direction: column;
+  gap: remify(8px);
+}
+/* The running turn's progress floats as a pill above the composer frame (HS2-XV1VCR); its own
+   surface keeps it readable over transcript text that scrolls beneath the floating footer. */
+p.ai-conversation__turn-progress {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: remify(32px);
+  margin: 0;
+  padding-inline: remify(16px);
+  border: 1px solid var(--wa-color-neutral-border-quiet);
+  border-radius: var(--wa-border-radius-pill);
+  background: var(--wa-color-surface-default);
+  color: var(--wa-color-neutral-on-quiet);
+  align-items: center;
+  align-self: flex-start;
+  gap: remify(8px);
+  font-size: var(--wa-font-size-s);
+  font-variant-numeric: tabular-nums;
+}
+p.ai-conversation__turn-progress > span {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* The embedded drawer positions the app's composer form over its transcript; Kerf Composer owns the
    frame inside it (KF-S5EG5K). */

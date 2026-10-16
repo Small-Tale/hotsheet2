@@ -936,3 +936,75 @@ describe('AIConversationToolbar permission modes (HS2-NHRDMW)', () => {
     expect(only).toContain('select-conversation-permission-mode');
   });
 });
+
+describe('running turn progress beside the composer (HS2-XV1VCR)', () => {
+  const base = (overrides: Partial<AIConversationProps> = {}): AIConversationProps => ({
+    open: true,
+    tool: 'Claude',
+    draft: '',
+    busy: true,
+    interruptible: true,
+    progress: 'Responding…',
+    messages: [
+      { id: 'q', role: 'user', content: 'Run the tests' },
+      { id: 'a', role: 'assistant', content: '', status: 'streaming' },
+    ],
+    ...overrides,
+  });
+  it.each(['dialog', 'embedded'] as const)('renders the %s working line inside the composer form', (presentation) => {
+    const markup = String(
+      AIConversation(
+        base({
+          presentation,
+          turnProgress: {
+            state: 'tool',
+            label: 'Running Bash · 2m 5s · last activity 8s ago',
+            short: 'Running Bash · 2m',
+            idleMs: 8_000,
+          },
+        }),
+      ),
+    );
+    expect(markup).toMatch(
+      /class="ai-conversation__composer"[\s\S]*class="ai-conversation__turn-progress" data-state="tool"[\s\S]*kui-loading-spinner[\s\S]*Running Bash · 2m 5s · last activity 8s ago[\s\S]*kui-composer/,
+    );
+    // The ticking line replaces the static transcript progress and is not a live region.
+    expect(markup).not.toContain('ai-conversation__progress');
+    expect(markup).not.toMatch(/ai-conversation__turn-progress"[^>]*role=/);
+    if (presentation === 'dialog') expect(markup).toContain('Running Bash · 2m');
+  });
+  it('turns a silent turn into a warning banner with Stop only when the drive can stop', () => {
+    const stuck = (interruptible: boolean) =>
+      String(
+        AIConversation(
+          base({
+            interruptible,
+            turnProgress: {
+              state: 'stuck',
+              label: 'No activity for 2m — may be stuck',
+              short: 'May be stuck · no activity for 2m',
+              detail: 'Working · 2m 4s',
+              idleMs: 120_000,
+            },
+          }),
+        ),
+      );
+    const stoppable = stuck(true);
+    expect(stoppable).toMatch(/ai-conversation__turn-progress" data-state="stuck"[\s\S]*kui-state-banner/);
+    expect(stoppable).toContain('No activity for 2m — may be stuck');
+    expect(stoppable).toContain('Working · 2m 4s');
+    expect(stoppable).toMatch(/kui-state-banner[\s\S]*data-action="stop-conversation"[^>]*>\s*Stop\s*</);
+    expect(stuck(false)).not.toMatch(/kui-state-banner[\s\S]*data-action="stop-conversation"/);
+  });
+  it('renders no progress line while idle or read-only', () => {
+    const progress = { state: 'working' as const, label: 'Working · 1s', short: 'Working · 1s', idleMs: 0 };
+    expect(String(AIConversation(base({ busy: false, turnProgress: progress })))).not.toContain(
+      'ai-conversation__turn-progress',
+    );
+    expect(String(AIConversation(base({ readOnly: true, turnProgress: progress })))).not.toContain(
+      'ai-conversation__turn-progress',
+    );
+    // Without timing (an older server) the static progress line remains.
+    expect(String(AIConversation(base()))).toContain('ai-conversation__progress');
+  });
+});

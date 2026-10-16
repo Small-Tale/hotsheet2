@@ -697,6 +697,18 @@ export interface ToolConnection {
   permission_mode?: string;
   /** The running turn's correlation id while busy (HS2-14X4AF). */
   turn_id?: string;
+  /** When the running turn began, in Unix milliseconds, while busy (HS2-XV1VCR). */
+  turn_started_at_ms?: number;
+  /** When the running turn last produced a stream event, while busy. */
+  last_event_at_ms?: number;
+  /** The longest-running open tool call of the running turn, while busy. */
+  in_flight_tool?: InFlightTool;
+}
+/** A running turn's oldest open tool call and the number of open calls (HS2-XV1VCR). */
+export interface InFlightTool {
+  name: string;
+  started_at_ms: number;
+  count: number;
 }
 export interface ToolSession {
   connection_id: string;
@@ -843,6 +855,10 @@ export interface TurnStreamEnvelope {
   ticket?: string;
   /** The originating turn (HS2-14X4AF); absent from older servers. */
   turn_id?: string;
+  /** When the server observed the event (HS2-XV1VCR); absent from older servers. */
+  at_ms?: number;
+  /** The in-flight tool after this event; with `at_ms` present, absence means none is open. */
+  in_flight_tool?: InFlightTool;
   event: ClientTurnEvent;
 }
 export interface ChangeEvent {

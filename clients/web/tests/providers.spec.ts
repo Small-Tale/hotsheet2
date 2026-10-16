@@ -1008,6 +1008,9 @@ async function captureInspectorStatus(surface: Locator, path: string) {
   await surface.page().screenshot({ path, clip });
 }
 
+/** The fixed start of the HS2-XV1VCR running-turn flow's page clock. */
+const XV1VCR_T0 = Date.UTC(2026, 9, 16, 9, 0, 0);
+
 async function mockProject(
   page: import('@playwright/test').Page,
   canUpdate = true,
@@ -1108,6 +1111,10 @@ async function mockProject(
     model?: string;
     effort?: string;
     permission_mode?: string;
+    turn_id?: string;
+    turn_started_at_ms?: number;
+    last_event_at_ms?: number;
+    in_flight_tool?: { name: string; started_at_ms: number; count: number };
   };
   type MockDriveEvent = {
     cursor: number;
@@ -1149,12 +1156,17 @@ async function mockProject(
   const driveEvent = (connection: MockToolConnection) => {
     pushDriveEvent({ kind: 'drive_updated', id: connection.id, slug: connection.tool });
   };
-  const turnEvent = (connection: MockToolConnection, event: Record<string, unknown>, turnId?: string) => {
+  const turnEvent = (
+    connection: MockToolConnection,
+    event: Record<string, unknown>,
+    turnId?: string,
+    timing: Record<string, unknown> = {},
+  ) => {
     pushDriveEvent({
       kind: 'turn_event',
       id: connection.id,
       slug: connection.tool,
-      turn: { connection_id: connection.id, ...(turnId ? { turn_id: turnId } : {}), event },
+      turn: { connection_id: connection.id, ...(turnId ? { turn_id: turnId } : {}), ...timing, event },
     });
   };
   let createdTerminal = false;
@@ -1710,6 +1722,28 @@ async function mockProject(
         return route.fulfill({ status: 202, json: running });
       }
       if (body.content === 'Start sustained output') return route.fulfill({ status: 202, json: running });
+      // HS2-XV1VCR: a server-timed turn whose Bash call stays open and silent.
+      if (body.content === 'Run the long test suite.') {
+        // The mock server stamps from the page clock, as the real server stamps from its own.
+        const startedAt = await page.evaluate(() => Date.now());
+        const tool = { name: 'Bash', started_at_ms: startedAt, count: 1 },
+          timed = {
+            ...running,
+            turn_id: body.turn_id,
+            turn_started_at_ms: startedAt,
+            last_event_at_ms: startedAt,
+            in_flight_tool: tool,
+          };
+        toolConnections = toolConnections.map((item) => (item.id === id ? timed : item));
+        driveEvent(timed);
+        turnEvent(
+          timed,
+          { type: 'native_activity', source: 'claude-hooks', payload: { hook_event_name: 'PreToolUse' } },
+          body.turn_id,
+          { at_ms: startedAt, in_flight_tool: tool },
+        );
+        return route.fulfill({ status: 202, json: timed });
+      }
       // Streams tool activity in steps for the collapsible activity group (HS2-Y3SGH3).
       const stepActivity = (id: string, summary: string) => {
         pushDriveEvent({
@@ -1838,11 +1872,19 @@ async function mockProject(
       const id = decodeURIComponent(driveInterrupt[1]),
         current = toolConnections.find((item) => item.id === id)!,
         accepted = { ...current, busy: true },
-        idle = { ...current, busy: false, session_id: 'thread-1' };
+        idle: MockToolConnection = { ...current, busy: false, session_id: 'thread-1' };
+      // An idle connection carries no running turn or its timing (HS2-XV1VCR).
+      delete idle.turn_id;
+      delete idle.turn_started_at_ms;
+      delete idle.last_event_at_ms;
+      delete idle.in_flight_tool;
       toolConnections = toolConnections.map((item) => (item.id === id ? idle : item));
+      // Like the server, the turn ends after the interrupt is accepted, so a stale busy response
+      // never overwrites the idle refresh (HS2-XV1VCR).
+      await route.fulfill({ status: 202, json: accepted });
       turnEvent(idle, { type: 'done', reason: 'interrupted' });
       driveEvent(idle);
-      return route.fulfill({ status: 202, json: accepted });
+      return;
     }
     const driveDelete = path.match(/\/checkouts\/[^/]+\/drive\/connections\/([^/]+)$/);
     if (driveDelete && request.method() === 'DELETE') {
@@ -18424,6 +18466,82 @@ test('shows a spinner instead of an empty assistant bubble while a turn is think
   await page.setViewportSize({ width: 390, height: 844 });
   await expectThinking(host);
   await dialog.screenshot({ path: 'target/visual-captures/hs2-77kjkr-dialog-thinking-390.png' });
+});
+
+/**
+ * HS2-XV1VCR: a server-timed turn whose tool call stays open and silent. The line names the tool
+ * and its elapsed time, the local render clock advances it, and after the tool bound the turn may
+ * be stuck: a warning banner whose Stop is the toolbar's delegated action.
+ */
+async function runLongTurnUntilStuck(
+  page: import('@playwright/test').Page,
+  host: Locator,
+  shot: string,
+  widths: readonly number[],
+) {
+  await host.getByLabel('Message Codex').fill('Run the long test suite.');
+  await host.getByLabel('Message Codex').press('Enter');
+  const line = host.locator('.ai-conversation__composer .ai-conversation__turn-progress');
+  await expect(line).toHaveAttribute('data-state', 'tool');
+  await expect(line).toContainText(/Running Bash · \d+s · last activity/);
+  await expect(line.locator('.kui-loading-spinner')).toBeVisible();
+  // The local render clock advances the line without any network request.
+  await page.clock.runFor(125_000);
+  await expect(line).toContainText(/Running Bash · 2m \d+s · last activity 2m \d+s ago/);
+  await expect(line).toHaveAttribute('data-state', 'tool');
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: width < 640 ? 844 : 800 });
+    await expect(line).toBeInViewport({ ratio: 1 });
+    await page.screenshot({ path: `target/visual-captures/hs2-xv1vcr-${shot}-running-${width}.png` });
+  }
+  // A silent open tool call becomes "may be stuck" after its longer bound.
+  await page.clock.runFor(180_000);
+  await expect(line).toHaveAttribute('data-state', 'stuck');
+  await expect(line).toContainText('may be stuck');
+  await expect(line).toContainText(/Running Bash · 5m \d+s/);
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: width < 640 ? 844 : 800 });
+    await expect(line.getByRole('button', { name: 'Stop Codex' })).toBeInViewport({ ratio: 1 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: `target/visual-captures/hs2-xv1vcr-${shot}-stuck-${width}.png` });
+  }
+  page.once('dialog', (dialog) => void dialog.accept());
+  await line.getByRole('button', { name: 'Stop Codex' }).click();
+  await expect(line).toHaveCount(0);
+  await expect(host.locator('.ai-conversation__message--assistant').last()).toHaveAttribute(
+    'data-status',
+    'interrupted',
+  );
+}
+
+for (const width of [1280, 390] as const)
+  test(`shows a drawer chat turn working, then may-be-stuck with Stop at ${width}px (HS2-XV1VCR)`, async ({ page }) => {
+    await page.clock.install({ time: XV1VCR_T0 });
+    await page.setViewportSize({ width, height: width < 640 ? 844 : 800 });
+    await mockProject(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]');
+    if (width >= 640) await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
+    await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+    await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+    await runLongTurnUntilStuck(page, drawer.locator('[data-component="ai-conversation"]'), 'drawer', [width]);
+  });
+
+test('shows a conversation dialog turn working, then may-be-stuck with Stop (HS2-XV1VCR)', async ({ page }) => {
+  await page.clock.install({ time: XV1VCR_T0 });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
+  const host = page.locator('[data-component="ai-conversation"][data-presentation="dialog"]');
+  await expect(host.getByRole('dialog')).toBeVisible();
+  await runLongTurnUntilStuck(page, host, 'dialog', [1280, 390]);
 });
 
 test('cycles each chat composer through its own sent messages with Up and Down (HS2-AJQKK0)', async ({ page }) => {

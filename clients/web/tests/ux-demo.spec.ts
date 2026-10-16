@@ -2118,7 +2118,8 @@ test('resets the TicketInspector, AIConversation, QuickTicketComposer, and Conte
     await expect(presentation).toHaveJSProperty('value', 'dialog');
     await expect(scenario).toHaveJSProperty('value', 'streaming');
     await expect(host.getByRole('dialog')).toBeVisible();
-    await expect(host.first()).toContainText('Running the focused browser test');
+    // The running turn's timed progress replaces the static progress text (HS2-XV1VCR).
+    await expect(host.first()).toContainText('Working · 3m 12s · last activity just now');
     await setValue(scenario, 'empty');
     await expect(host.first()).toContainText('Start a Conversation');
     await page.keyboard.press('Escape');
@@ -7831,7 +7832,10 @@ test('previews AIConversation public states at wide and narrow sizes', async ({ 
     dialog = conversationHost.getByRole('dialog'),
     transcript = conversationHost.locator('.ai-conversation__transcript');
   await expect(dialog).toBeVisible();
-  await expect(conversationHost).toContainText('Running the focused browser test');
+  // The running turn's timed progress sits above the composer (HS2-XV1VCR).
+  await expect(conversationHost.locator('.ai-conversation__composer .ai-conversation__turn-progress')).toHaveText(
+    'Working · 3m 12s · last activity just now',
+  );
   await expect(conversationHost.getByRole('button', { name: 'Stop Codex' })).toBeVisible();
   await expect(conversationHost.locator('.ai-conversation__message--user .markdown-preview').first()).toHaveCSS(
     'color',
@@ -7849,6 +7853,8 @@ test('previews AIConversation public states at wide and narrow sizes', async ({ 
   const scenario = page.locator('[data-settings="ai-conversation"] [name="scenario"]');
   for (const value of [
     'empty',
+    'running-tool',
+    'stuck',
     'permission',
     'completed',
     'usage-unpriced',
@@ -7862,6 +7868,24 @@ test('previews AIConversation public states at wide and narrow sizes', async ({ 
     }, value);
     await expect(dialog).toBeVisible();
     if (value === 'empty') await expect(conversationHost).toContainText('Start a Conversation');
+    const turnProgress = conversationHost.locator('.ai-conversation__composer .ai-conversation__turn-progress');
+    if (value === 'running-tool') {
+      await expect(turnProgress).toHaveAttribute('data-state', 'tool');
+      await expect(turnProgress).toHaveText('Running Bash · 2m 5s · last activity 8s ago');
+      await expect(conversationHost.locator('.kui-toolbar-text__description')).toHaveText('Running Bash · 2m');
+    }
+    if (value === 'stuck') {
+      await expect(turnProgress).toHaveAttribute('data-state', 'stuck');
+      await expect(turnProgress).toContainText('No activity for 6m — may be stuck');
+      await expect(turnProgress).toContainText('Running Bash · 7m 53s');
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        await expect(turnProgress.getByRole('button', { name: 'Stop Codex' })).toBeInViewport({ ratio: 1 });
+        await dialog.screenshot({ path: `target/visual-captures/hs2-xv1vcr-demo-stuck-${width}.png` });
+      }
+      await page.setViewportSize({ width: 1280, height: 900 });
+    }
+    if (value === 'permission') await expect(turnProgress).toHaveText('Waiting for permission · 3m 12s');
     if (value === 'permission')
       await expect(conversationHost.locator('[data-component="permission-request-card"]')).toBeVisible();
     if (value === 'completed') {
