@@ -85,6 +85,7 @@ impl AppState {
                 event_log: self.event_log.clone(),
                 checkout_registry: self.checkout_registry.clone(),
                 index_repairs: self.index_repairs.clone(),
+                worklist_refresher: self.worklist_refresher.clone(),
             },
             registered_watcher_backend(),
         ) {

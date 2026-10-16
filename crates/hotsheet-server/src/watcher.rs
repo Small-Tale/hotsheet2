@@ -5,7 +5,6 @@ use crate::events::{
     next_index_repair_delay,
 };
 use crate::multistore::{StoreEntry, StoreHost};
-use crate::routes::checkouts::regenerate_checkout_worklist_indexed;
 use crate::{AppState, LocalWriteHashes, multistore};
 use hotsheet_index::hash_bytes;
 use hotsheet_model::{Ulid, parse_file};
@@ -89,6 +88,7 @@ pub(crate) struct WatchTarget {
     pub(crate) event_log: Arc<Mutex<EventLog>>,
     pub(crate) checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry,
     pub(crate) index_repairs: IndexRepairs,
+    pub(crate) worklist_refresher: crate::worklist_refresh::WorklistRefresher,
 }
 
 /// Watch the **default** store (back-compat entry point used by the server binary).
@@ -106,6 +106,7 @@ pub(crate) fn default_watch_target(state: &AppState) -> WatchTarget {
         event_log: state.event_log.clone(),
         checkout_registry: state.checkout_registry.clone(),
         index_repairs: state.index_repairs.clone(),
+        worklist_refresher: state.worklist_refresher.clone(),
     }
 }
 
@@ -800,21 +801,18 @@ impl WatchBatch {
 }
 
 /// Refresh each checkout-local projection that consumes this store. The store is
-/// syncable authority; worklists remain local per checkout and may aggregate stores.
+/// syncable authority; worklists remain local per checkout and may aggregate stores. The
+/// refresh runs on the shared refresher so it never overlaps a write-triggered one
+/// (HS2-Z99TJN).
 fn regenerate_target_worklists(target: &WatchTarget) {
-    if let Ok(checkouts) = target.checkout_registry.list() {
-        for checkout in checkouts {
-            if checkout
-                .stores
-                .iter()
-                .any(|root| same_path(FsPath::new(root), target.entry.store.root()))
-            {
-                if let Err(e) = regenerate_checkout_worklist_indexed(&target.host, &checkout) {
-                    tracing::warn!(checkout_root = %checkout.root, error = %e, "worklist regenerate failed");
-                }
-            }
-        }
-    }
+    let registry = target.checkout_registry.clone();
+    let host = target.host.clone();
+    let store_root = target.entry.store.root().to_path_buf();
+    target
+        .worklist_refresher
+        .request(store_root.clone(), move || {
+            crate::events::regenerate_store_worklists(&registry, &host, &store_root);
+        });
 }
 
 /// The ticket files one watcher event concerns; a startup resync yields the store's ticket

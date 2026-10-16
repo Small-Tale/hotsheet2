@@ -40,6 +40,7 @@ pub mod tls;
 pub mod tts;
 pub mod turn_stream;
 mod watcher;
+mod worklist_refresh;
 
 use hotsheet_sync::LockExt;
 use std::path::Path as FsPath;
@@ -249,6 +250,9 @@ pub struct AppState {
     /// each store watcher, which retries them on a bounded backoff (HS2-5BAEX9); the
     /// store's next server write also retries them first.
     index_repairs: events::IndexRepairs,
+    /// Coalesces the checkout worklist regeneration a write triggers onto one background
+    /// worker, off the request path (HS2-Z99TJN).
+    worklist_refresher: worklist_refresh::WorklistRefresher,
     /// The live permission bridge (HS2-9R9YZW): a driven tool blocks on it; a client answers
     /// over `GET/POST /permissions`. A `permission_asked` nudge rides the event bus so
     /// clients know to fetch + answer. Empty (headless auto-nothing) until seeded.
@@ -492,6 +496,7 @@ impl AppState {
             sync_kick: Arc::new(Mutex::new(None)),
             local_write_hashes: Default::default(),
             index_repairs: Default::default(),
+            worklist_refresher: Default::default(),
             permissions,
             permission_rule_paths: Arc::new(Mutex::new(std::collections::HashMap::new())),
             // A generous busy window: a driven turn heartbeats via the local registry, but

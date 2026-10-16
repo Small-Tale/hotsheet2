@@ -155,22 +155,15 @@ fn schedule_worklist_regeneration(
 ) {
     let checkout = checkout.clone();
     let host = state.host.clone();
+    let refresher = state.worklist_refresher.clone();
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-        let root = checkout.root.clone();
-        match tokio::task::spawn_blocking(move || {
-            regenerate_checkout_worklist_indexed(&host, &checkout)
-        })
-        .await
-        {
-            Ok(Ok(_)) => {}
-            Ok(Err(error)) => {
-                tracing::warn!(checkout_root = %root, %error, "worklist regenerate failed")
+        // Run on the shared refresher so it never overlaps a write's refresh (HS2-Z99TJN).
+        refresher.request(std::path::PathBuf::from(&checkout.root), move || {
+            if let Err(error) = regenerate_checkout_worklist_indexed(&host, &checkout) {
+                tracing::warn!(checkout_root = %checkout.root, %error, "worklist regenerate failed");
             }
-            Err(error) => {
-                tracing::warn!(checkout_root = %root, %error, "worklist regenerate task failed")
-            }
-        }
+        });
     });
 }
 

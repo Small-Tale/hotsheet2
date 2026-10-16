@@ -444,6 +444,8 @@ async fn main() -> Result<()> {
     hotsheet_aitools::probe::stop_probes();
     // Land every queued background autocommit before releasing the store (HS2-0DH8ZS).
     hotsheet_ticketing::flush_background_commits();
+    // A write's worklist refresh runs after its response (HS2-Z99TJN); land the last one.
+    state.wait_for_worklists(std::time::Duration::from_secs(2));
     state.release_instances();
     drop(writer_lock);
     match outcome {

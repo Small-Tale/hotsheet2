@@ -6248,6 +6248,91 @@ async fn opening_project_regenerates_its_worklist_after_responding() {
     panic!("project open did not regenerate worklist.md within 1s");
 }
 
+/// HS2-Z99TJN: a write refreshes its checkout worklist on the background refresher, and a
+/// burst of writes ends with the worklist showing the last write.
+#[tokio::test]
+async fn a_write_burst_refreshes_the_worklist_off_the_request_to_the_last_state() {
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, ops};
+
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    let store = FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let ticket = ops::create(
+        &store,
+        Ulid::new(),
+        "APP",
+        Timestamp::new("2026-10-16T00:00:00Z"),
+        NewTicket {
+            title: "Worklist title 0".into(),
+            category: "task".into(),
+            up_next: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let st = st.with_checkout_registry(registry.path().join("checkouts.json"));
+    let application = app(st.clone());
+    let opened = application
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root":checkout,"stores":[ticket_store]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    let opened = body_json(opened).await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap().to_string();
+    let source = opened["checkout"]["sources"][0]["connection_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let worklist = checkout.join(hotsheet_ticketing::worklist::CHECKOUT_WORKLIST);
+    let save = |title: String| {
+        let application = application.clone();
+        let (checkout_id, source) = (checkout_id.clone(), source.clone());
+        async move {
+            let saved = application
+                .oneshot(authed(
+                    "POST",
+                    &format!("/checkouts/{checkout_id}/batch"),
+                    Some(
+                        &serde_json::json!({"updates":[{
+                            "id": format!("{source}:{}", ticket.id),
+                            "title": title,
+                        }]})
+                        .to_string(),
+                    ),
+                ))
+                .await
+                .unwrap();
+            assert_eq!(saved.status(), StatusCode::OK);
+        }
+    };
+
+    for n in 1..=8 {
+        save(format!("Worklist title {n}")).await;
+    }
+    // The open's own deferred refresh is a tokio task; let it land, then drain.
+    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    assert!(st.wait_for_worklists(std::time::Duration::from_secs(5)));
+    let body = std::fs::read_to_string(&worklist).unwrap();
+    assert!(body.contains("Worklist title 8"), "{body}");
+    assert!(!body.contains("Worklist title 7"), "{body}");
+
+    // Idle again, then one more write: the drained refresher starts a fresh pass.
+    save("Worklist title after idle".into()).await;
+    assert!(st.wait_for_worklists(std::time::Duration::from_secs(5)));
+    let body = std::fs::read_to_string(&worklist).unwrap();
+    assert!(body.contains("Worklist title after idle"), "{body}");
+}
+
 #[cfg(target_os = "macos")]
 #[tokio::test]
 async fn opening_project_does_not_wait_for_ignored_checkout_traversal() {

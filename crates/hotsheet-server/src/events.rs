@@ -135,6 +135,27 @@ impl IndexRepairs {
     }
 }
 
+/// Regenerate every checkout worklist that links `store_root`, logging failures.
+pub(crate) fn regenerate_store_worklists(
+    registry: &hotsheet_ticketing::checkouts::CheckoutRegistry,
+    host: &multistore::StoreHost,
+    store_root: &FsPath,
+) {
+    let Ok(checkouts) = registry.list() else {
+        return;
+    };
+    for checkout in checkouts.into_iter().filter(|checkout| {
+        checkout
+            .stores
+            .iter()
+            .any(|root| same_path(FsPath::new(root), store_root))
+    }) {
+        if let Err(error) = regenerate_checkout_worklist_indexed(host, &checkout) {
+            tracing::warn!(checkout_root = %checkout.root, %error, "worklist regenerate failed");
+        }
+    }
+}
+
 /// Bounded backoff for the watcher's background index-repair retry (HS2-5BAEX9).
 pub(crate) const INDEX_REPAIR_RETRY_MIN: Duration = Duration::from_secs(1);
 const INDEX_REPAIR_RETRY_MAX: Duration = Duration::from_secs(60);
@@ -233,18 +254,7 @@ impl AppState {
             event_time += event_started.elapsed();
         }
         let worklist_started = Instant::now();
-        if let Ok(checkouts) = self.checkout_registry.list() {
-            for checkout in checkouts.into_iter().filter(|checkout| {
-                checkout
-                    .stores
-                    .iter()
-                    .any(|root| same_path(FsPath::new(root), entry.store.root()))
-            }) {
-                if let Err(error) = regenerate_checkout_worklist_indexed(&self.host, &checkout) {
-                    tracing::warn!(checkout_root = %checkout.root, %error, "worklist regenerate failed");
-                }
-            }
-        }
+        self.schedule_store_worklists(entry);
         let worklist_time = worklist_started.elapsed();
         // A write is worth pushing promptly — wake the background sync loop (HS2-731C2X).
         self.kick_sync();
@@ -277,19 +287,27 @@ impl AppState {
             assignment: None,
             turn: None,
         });
-        if let Ok(checkouts) = self.checkout_registry.list() {
-            for checkout in checkouts.into_iter().filter(|checkout| {
-                checkout
-                    .stores
-                    .iter()
-                    .any(|root| same_path(FsPath::new(root), entry.store.root()))
-            }) {
-                if let Err(error) = regenerate_checkout_worklist_indexed(&self.host, &checkout) {
-                    tracing::warn!(checkout_root = %checkout.root, %error, "worklist regenerate failed");
-                }
-            }
-        }
+        self.schedule_store_worklists(entry);
         self.kick_sync();
+    }
+
+    /// Queue a refresh of every checkout worklist that consumes `entry`'s store. The
+    /// refresher runs it on its background worker after a short debounce, coalescing a
+    /// burst of writes into one regeneration per store (HS2-Z99TJN); the write request
+    /// never waits for it.
+    fn schedule_store_worklists(&self, entry: &StoreEntry) {
+        let registry = self.checkout_registry.clone();
+        let host = self.host.clone();
+        let store_root = entry.store.root().to_path_buf();
+        self.worklist_refresher
+            .request(store_root.clone(), move || {
+                regenerate_store_worklists(&registry, &host, &store_root);
+            });
+    }
+
+    /// Wait for queued worklist refreshes to finish (tests and orderly shutdown).
+    pub fn wait_for_worklists(&self, timeout: Duration) -> bool {
+        self.worklist_refresher.wait_idle(timeout)
     }
 
     /// Tell clients that a sync raised the ticket store at `store_root` across a GitHub size

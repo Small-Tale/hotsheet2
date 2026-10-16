@@ -187,10 +187,17 @@ source before the server receives `/projects/open`.
 The response path does not regenerate the checkout's local worklist. That projection runs
 shortly afterward as best-effort blocking work over the already indexed active Up Next
 rows, giving the client's initial ticket-index requests priority without rescanning every
-ticket file. Server-owned writes update the same bounded projection synchronously; exact
-short-lived write hashes suppress their watcher echoes. Unmarked external filesystem changes
-are parsed into the index from their exact changed paths before regenerating the same bounded
-projection.
+ticket file. Server-owned writes queue the same bounded projection on one coalescing
+background refresher instead of regenerating it inside the request (HS2-Z99TJN, about 19 ms
+per write on the HS2 store in a debug build). After a 50 ms debounce the refresher
+regenerates each affected store's checkouts once; a burst of writes shares one pass. A
+write that arrives while a pass runs gets one more pass afterwards, so the worklist ends
+on the last write's state. Every regeneration (writes, watcher batches, and the
+project-open refresh) runs on that one worker, so two never overlap and an older
+regeneration cannot overwrite a newer one. A graceful shutdown waits up to 2 s for the
+queue to drain. Exact short-lived write hashes suppress the writes' watcher echoes.
+Unmarked external filesystem changes are parsed into the index from their exact changed
+paths before regenerating the same bounded projection.
 
 **Hosting follows open projects (HS2-ARJ9J1).** Stores hosted because a project opened them
 stay hosted only while they are in use. The primary store, stores listed in `stores.json`,
@@ -973,8 +980,8 @@ deadline. The shared
   `HOTSHEET_NO_AUTOCOMMIT` disables it for batch work.
   A checkout-scoped multi-ticket update validates every concurrency token before writing,
   then writes the affected ticket files and commits their paths once per Git store. It
-  refreshes the live index and regenerates each affected checkout worklist once after the
-  commit, while publishing an update event for each ticket. A later update error still
+  refreshes the live index and queues one background regeneration of each affected checkout
+  worklist after the commit (its `worklist` Server-Timing split is only the queueing cost), while publishing an update event for each ticket. A later update error still
   commits and publishes the earlier successful items, matching the existing partial-write
   behavior. Other staged or untracked files are not included in the batch commit.
   Server-owned stores also commit in the background (HS2-0DH8ZS): an API mutation returns
