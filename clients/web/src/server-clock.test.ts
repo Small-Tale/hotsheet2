@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { conversationTurnProgress } from './ai-conversation';
-import { type ClockSource, createServerClocks, SERVER_CLOCK_DEAD_ZONE_MS } from './server-clock';
+import { Api } from './api';
+import { type ClockSource, createServerClocks, responseDateMs, SERVER_CLOCK_DEAD_ZONE_MS } from './server-clock';
 
 /** A browser whose wall clock is `skew` ms off the server's, with an independent monotonic clock. */
 function device(serverStart = 1_800_000_000_000, skew = 0) {
@@ -132,5 +133,62 @@ describe('server clock estimate (HS2-GA5ASE)', () => {
     const aheadClocks = createServerClocks(ahead.source);
     aheadClocks.observe('p', ahead.server());
     expect(conversationTurnProgress({ messages: [] }, connection, aheadClocks.now('p'))?.state).toBe('working');
+  });
+});
+
+describe('server clock sample from a response Date header (HS2-FMZSNY)', () => {
+  const dated = (date?: string) => new Response('[]', { headers: date === undefined ? {} : { date } });
+
+  it('reads an HTTP date and yields no sample when the header is missing or unparseable', () => {
+    expect(responseDateMs(dated('Thu, 15 Jan 2027 08:00:00 GMT'))).toBe(Date.UTC(2027, 0, 15, 8));
+    expect(responseDateMs(dated())).toBeUndefined();
+    expect(responseDateMs(dated(''))).toBeUndefined();
+    expect(responseDateMs(dated('not a date'))).toBeUndefined();
+  });
+
+  it('times a silent turn on a skewed device from the snapshot alone, before any turn event', () => {
+    // This device runs three minutes ahead of the server, whose Date header drops the milliseconds.
+    const d = device(1_800_000_000_400, -180_000);
+    const clocks = createServerClocks(d.source);
+    const startedAt = d.server() - 90_000;
+    clocks.observe('p', responseDateMs(dated(new Date(d.server()).toUTCString())));
+    // Short by the sub-second truncation only: far inside the dead zone, in the safe direction.
+    expect(clocks.offset('p')).toBeLessThanOrEqual(-180_000);
+    expect(clocks.offset('p')).toBeGreaterThan(-181_000);
+    const connection = {
+      busy: true,
+      turn_started_at_ms: startedAt,
+      last_event_at_ms: startedAt,
+      in_flight_tool: { name: 'Bash', started_at_ms: startedAt, count: 1 },
+    };
+    const progress = conversationTurnProgress({ messages: [] }, connection, clocks.now('p'));
+    expect(progress?.state).toBe('tool');
+    expect(progress?.label).toMatch(/^Running Bash · 1m (29|30)s/u);
+    // The device clock alone would have overstated it by the three-minute skew.
+    expect(conversationTurnProgress({ messages: [] }, connection, d.source.wallNow())?.label).toMatch(
+      /^Running Bash · 4m 30s/u,
+    );
+    // A later, more precise turn stamp still wins, and an older header never pulls it back.
+    clocks.observe('p', d.server());
+    expect(clocks.offset('p')).toBe(-180_000);
+    clocks.observe('p', responseDateMs(dated(new Date(d.server() - 5_000).toUTCString())));
+    expect(clocks.offset('p')).toBe(-180_000);
+  });
+
+  it('passes the connections response to the caller before its body is parsed', async () => {
+    const date = 'Thu, 15 Jan 2027 08:00:00 GMT';
+    const fetchMock = vi.fn(async () => new Response('[]', { headers: { date, 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const seen: (number | undefined)[] = [];
+      await expect(
+        new Api('/api', 'secret').activeToolConnections((response) => seen.push(responseDateMs(response))),
+      ).resolves.toEqual([]);
+      expect(seen).toEqual([Date.UTC(2027, 0, 15, 8)]);
+      // Callers that do not sample keep working.
+      await expect(new Api('/api', 'secret').activeToolConnections()).resolves.toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

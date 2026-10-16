@@ -1594,6 +1594,11 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   correctly while same-machine and NTP-synced clients keep their own clock. A replayed or delayed
   event can only make the estimate earlier (later "may be stuck", never earlier), and a local
   turn's send time yields to the first server stamp (`clients/web/src/server-clock.ts`).
+  The HTTP `Date` header of each `GET /connections` snapshot is a sample too (HS2-FMZSNY), so
+  a reload or a second client during a silent turn is timed on the server's clock before any
+  turn event arrives. `Date` has one-second resolution and is stamped before delivery, so it
+  errs low like any other sample; a response without a usable `Date` yields no sample, so no
+  server version needs a new field.
   After 120 s without a stream event (300 s while a tool call is open) the pill becomes a warning
   `StateBanner`, "No activity for 2m — may be stuck", naming what the turn was doing, with the
   same Stop action as the toolbar when the drive can be interrupted. The pill is not a live

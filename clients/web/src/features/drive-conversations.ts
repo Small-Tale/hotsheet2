@@ -35,7 +35,7 @@ import {
   SIDEBAR_DRIVE_PROMPT,
   sidebarDriveConnectionId,
 } from '../project-drive';
-import { type ServerClocks, serverClocks } from '../server-clock';
+import { responseDateMs, type ServerClocks, serverClocks } from '../server-clock';
 import { createTurnClock } from '../turn-clock';
 import type { createAiConfigurationController } from './ai-configuration';
 
@@ -63,8 +63,11 @@ export interface DriveConversationsDependencies {
   setTerminalDrawerVisible: (visible: boolean) => void;
   /** Resolved lazily: the AI configuration owner is created after this one and reads its state. */
   aiConfiguration: () => AiConfiguration;
-  /** Server-clock estimate a local turn starts on (HS2-GA5ASE); defaults to the shared one. */
-  serverClocks?: Pick<ServerClocks, 'now'>;
+  /**
+   * Server-clock estimate a local turn starts on (HS2-GA5ASE), sampled from each connections
+   * snapshot's `Date` header (HS2-FMZSNY); defaults to the shared one.
+   */
+  serverClocks?: Pick<ServerClocks, 'now' | 'observe'>;
 }
 
 /**
@@ -132,7 +135,14 @@ export function createDriveConversationsController(dependencies: DriveConversati
       const startGeneration = conversationStartGeneration,
         pendingAtRequest = new Set(pendingConversationStarts),
         client = new Api(current.apiPath, '', { trackBusy: !quiet }),
-        [active, sessions] = await Promise.all([client.activeToolConnections(), client.toolSessions().catch(() => [])]),
+        // The snapshot's own response samples the server clock, so a turn that stays silent after a
+        // reload is timed on the server's clock rather than a skewed device's (HS2-FMZSNY).
+        [active, sessions] = await Promise.all([
+          client.activeToolConnections((response) => {
+            (dependencies.serverClocks ?? serverClocks).observe(current.id, responseDateMs(response));
+          }),
+          client.toolSessions().catch(() => []),
+        ]),
         own = projectConnections(active, current),
         activeIds = new Set(own.map((connection) => connection.id)),
         connections = await recoverProjectConnections(client, own, sessions, current.id, current.root);

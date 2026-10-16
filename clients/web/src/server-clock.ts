@@ -20,7 +20,11 @@
  *   delivery latency seen, which a slow link, a reconnect backoff, or a loaded host can stretch to
  *   seconds; 30 s keeps that noise out while still correcting the minutes-scale skew that misstates
  *   durations and the 2- and 5-minute "may be stuck" bounds.
- * - No request is made for it: samples ride the change stream the client already receives.
+ * - No request is made for it: samples ride the change stream the client already receives, plus the
+ *   HTTP `Date` header of the `/connections` snapshot the client loads anyway (HS2-FMZSNY). That
+ *   covers a reload or a second client during a silent turn, before any turn event arrives. `Date`
+ *   has one-second resolution and is stamped before delivery, so it too errs low; every server and
+ *   proxy sends it, so an older server needs no new field.
  */
 export const SERVER_CLOCK_DEAD_ZONE_MS = 30_000;
 
@@ -66,6 +70,17 @@ export function createServerClocks(
     now: (projectId) => source.wallNow() + offset(projectId),
     offset,
   };
+}
+
+/**
+ * The server time an HTTP response's `Date` header states, for `ServerClocks.observe`. `undefined`
+ * when the header is missing or unparseable (a test double, an unusual proxy), which yields no sample.
+ */
+export function responseDateMs(response: Pick<Response, 'headers'>): number | undefined {
+  const value = response.headers.get('date');
+  if (!value) return undefined;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : undefined;
 }
 
 /** The application's shared estimate: the change stream observes, turn progress reads. */

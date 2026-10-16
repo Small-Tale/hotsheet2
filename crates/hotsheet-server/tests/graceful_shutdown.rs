@@ -590,3 +590,19 @@ fn a_hanging_tool_probe_is_killed_at_its_deadline_so_discovery_never_queues_behi
     server.assert_registration_released();
     assert_processes_gone(&server.slow_tool_pids(), &server);
 }
+
+/// The web client samples a remote server's clock from the `Date` header of the
+/// `/connections` snapshot (HS2-FMZSNY), so the real binary's responses must carry one.
+#[test]
+fn real_server_responses_carry_a_date_header_for_client_clock_sampling() {
+    let mut server = Server::start(1_000);
+    let info = server.ready();
+    let response = ureq::get(&format!("{}/connections", info.url))
+        .set("x-hotsheet-secret", &info.secret)
+        .call()
+        .unwrap();
+    let date = response.header("date").expect("a Date header");
+    assert!(date.ends_with(" GMT"), "an HTTP date: {date}");
+    server.sigterm();
+    assert!(server.exits_within(Duration::from_secs(5)).success());
+}

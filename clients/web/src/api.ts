@@ -1454,7 +1454,9 @@ export class Api {
       },
     );
   permissions = () => this.parsed(parsePermissionRequest.list, '/permissions');
-  activeToolConnections = () => this.parsed(parseToolConnection.list, '/connections');
+  /** `onResponse` sees the response before its body is parsed (its `Date` samples the server clock). */
+  activeToolConnections = (onResponse?: (response: Response) => void) =>
+    this.parsed(parseToolConnection.list, '/connections', {}, true, onResponse);
   aiTools = (refresh = false) => this.parsed(parseAiToolDescriptor.list, `/ai-tools${refresh ? '?refresh=true' : ''}`);
   aiSettings = () => this.parsed(parseAiToolDefaults, '/ai-settings');
   saveAiSettings = (value: AiToolDefaults) =>

@@ -1136,6 +1136,9 @@ async function mockProject(
     turn?: { connection_id: string; turn_id?: string; event: Record<string, unknown> };
   };
   let correlatedTurnId: string | undefined;
+  // HS2-FMZSNY: once a test runs the mock server on a skewed clock, its connections snapshot carries
+  // that clock in the HTTP Date header, as every real server's response does.
+  let mockServerSkewMs: number | undefined;
   let toolConnections: MockToolConnection[] = [],
     driveCursor = 0,
     driveEvents: MockDriveEvent[] = [],
@@ -1620,7 +1623,11 @@ async function mockProject(
         },
       });
     }
-    if (path.endsWith('/connections') && request.method() === 'GET') return route.fulfill({ json: toolConnections });
+    if (path.endsWith('/connections') && request.method() === 'GET') {
+      if (mockServerSkewMs === undefined) return route.fulfill({ json: toolConnections });
+      const serverNow = (await page.evaluate(() => Date.now())) + mockServerSkewMs;
+      return route.fulfill({ json: toolConnections, headers: { date: new Date(serverNow).toUTCString() } });
+    }
     if (path.endsWith('/drive/sessions') && request.method() === 'GET') return route.fulfill({ json: [] });
     if (path.endsWith('/drive/connections') && request.method() === 'POST') {
       const body = request.postDataJSON(),
@@ -1734,6 +1741,7 @@ async function mockProject(
         'Run the long suite on a server behind.': -180_000,
       };
       if (body.content in longSuiteSkew) {
+        mockServerSkewMs = longSuiteSkew[body.content];
         // The mock server stamps from the page clock, as the real server stamps from its own.
         const startedAt = (await page.evaluate(() => Date.now())) + longSuiteSkew[body.content];
         const tool = { name: 'Bash', started_at_ms: startedAt, count: 1 },
@@ -18846,6 +18854,49 @@ for (const [server, content] of [
     page.once('dialog', (dialog) => void dialog.accept());
     await line.getByRole('button', { name: 'Stop Codex' }).click();
     await expect(line).toHaveCount(0);
+  });
+
+for (const [server, content] of [
+  ['ahead of', 'Run the long suite on a server ahead.'],
+  ['behind', 'Run the long suite on a server behind.'],
+] as const)
+  test(`times a silent turn after a reload from the snapshot alone when the server runs three minutes ${server} this device (HS2-FMZSNY)`, async ({
+    page,
+  }) => {
+    await page.clock.install({ time: XV1VCR_T0 });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await mockProject(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    let drawer = page.locator('[data-component="terminal-drawer"]');
+    await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
+    await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
+    let host = drawer.locator('[data-component="ai-conversation"]');
+    await host.getByLabel('Message Codex').fill(content);
+    await host.getByLabel('Message Codex').press('Enter');
+    await expect(host.locator('.ai-conversation__composer .ai-conversation__turn-progress')).toHaveAttribute(
+      'data-state',
+      'tool',
+    );
+    await page.clock.runFor(60_000);
+    // A reload during the silent tool call: no turn event arrives afterwards, so the only server-clock
+    // sample is the connections snapshot's Date header. By the device clock alone the turn would read
+    // 0s (server ahead) or 4m and nearly stuck (server behind).
+    await page.reload();
+    drawer = page.locator('[data-component="terminal-drawer"]');
+    await drawer.getByRole('tab', { name: 'Codex chat' }).click();
+    host = drawer.locator('[data-component="ai-conversation"]');
+    const line = host.locator('.ai-conversation__composer .ai-conversation__turn-progress');
+    await expect(line).toHaveAttribute('data-state', 'tool');
+    await expect(line).toContainText(/Running Bash · 1m \d+s · last activity 1m \d+s ago/);
+    await page.clock.runFor(180_000);
+    await expect(line).toHaveAttribute('data-state', 'tool');
+    await expect(line).toContainText(/Running Bash · 4m \d+s/);
+    await page.clock.runFor(65_000);
+    await expect(line).toHaveAttribute('data-state', 'stuck');
+    await expect(line).toContainText(/Running Bash · 5m \d+s/);
   });
 
 test('shows a conversation dialog turn working, then may-be-stuck with Stop (HS2-XV1VCR)', async ({ page }) => {
