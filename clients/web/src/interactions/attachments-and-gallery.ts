@@ -71,6 +71,12 @@ export interface AttachmentAndGalleryInteractionsDependencies {
    * append-only provider keeps the browser's own context menu instead (HS2-HSA64D).
    */
   readonly canEditAttachments?: () => boolean;
+  /**
+   * Whether the selected ticket's provider can delete existing attachments (`attachment_delete`).
+   * A delete-only provider (Jira) opens the reduced row menu: Download, Copy reference, Remove
+   * (HS2-51ADSG). Defaults to `canEditAttachments`.
+   */
+  readonly canRemoveAttachments?: () => boolean;
   readonly tickets: Signal<TicketRow[]>;
   readonly addAttachments: (slug: string, files: FileList | File[], frameId?: string) => Promise<void>;
   /** Stacked reader frames; a frame's attachment actions target its own ticket and project (HS2-W8VEMP). */
@@ -207,6 +213,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     readonly client: Api;
     readonly canUse: boolean;
     readonly canEdit: boolean;
+    readonly canRemove: boolean;
     readonly frameId?: string;
     readonly setTicket: (ticket: FullTicket) => void;
     readonly refresh: () => Promise<void>;
@@ -231,6 +238,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         client: new Api(frame.apiPath),
         canUse: target.canUse,
         canEdit: target.canEdit,
+        canRemove: target.canRemove,
         frameId: frame.id,
         setTicket: (ticket) => {
           replaceLinkedReaderFrame(frame.id, (current) => reconcileTicketReaderFrame(current, ticket));
@@ -244,6 +252,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       client: api(),
       canUse: canUseAttachments(),
       canEdit: dependencies.canEditAttachments?.() ?? true,
+      canRemove: dependencies.canRemoveAttachments?.() ?? dependencies.canEditAttachments?.() ?? true,
       setTicket: (updated) => {
         selectedTicket.value = updated;
       },
@@ -414,10 +423,12 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
   // Row, gallery, and reference menus open and position through the wiring the UX demo shares (HS2-1RQA1E).
   lifetime.add(
     wireAttachmentContextMenuOpeners(document.body, {
-      canOpenFromPointer: (target) =>
-        attachmentOwner(frameIdOf(target) ?? galleryFrameId(target))?.canEdit ??
-        dependencies.canEditAttachments?.() ??
-        true,
+      canOpenFromPointer: (target) => {
+        const owner = attachmentOwner(frameIdOf(target) ?? galleryFrameId(target));
+        // A delete-only provider's row opens its reduced menu; its media keeps the browser menu.
+        if (owner && !owner.canEdit) return owner.canRemove && target.dataset.attachmentMenuKind === 'remote';
+        return owner?.canEdit ?? dependencies.canEditAttachments?.() ?? true;
+      },
       open: openAttachmentContextMenu,
     }),
   );
@@ -1400,7 +1411,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
   );
   async function removeSelectedAttachment(id?: string, frameId?: string) {
     const owner = attachmentOwner(frameId);
-    if (!owner || !id || !owner.canUse) return;
+    if (!owner || !id || !owner.canUse || !owner.canRemove) return;
     attachmentMessage.value = '';
     try {
       const result = await owner.client.deleteCheckoutAttachment(owner.projectId, owner.ticket.qualified_id, id);

@@ -384,6 +384,11 @@ const appendOnlyAttachmentDemoItems: TicketAttachmentItem[] = [
   // An append-only provider projects no annotations (HS2-HSA64D).
   { ...demoImages[0], id: 'gh-shot', annotationCount: 0, batch_id: 'gh', batch_label: 'Repro' },
 ];
+/** A delete-only provider's rows (Jira, HS2-51ADSG): read-only links whose menu offers only Remove-class actions. */
+const deleteOnlyAttachmentDemoItems: TicketAttachmentItem[] = [
+  { id: 'jira-log', name: 'server.log', url: 'data:text/plain,server', batch_id: 'jira', batch_label: 'Evidence' },
+  { ...demoImages[0], id: 'jira-shot', annotationCount: 0, batch_id: 'jira', batch_label: 'Evidence' },
+];
 /** Distinct items for the remote-device specimen, so its rows never collide with the editable example (HS2-NWWF1Z). */
 const remoteAttachmentDemoItems: TicketAttachmentItem[] = [
   { id: 'remote-notes', name: 'notes.txt', url: 'data:text/plain,notes', batch_id: 'remote', batch_label: 'Evidence' },
@@ -426,6 +431,14 @@ export function TicketAttachmentsDemo() {
         viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
       >
         <TicketAttachments attachments={appendOnlyAttachmentDemoItems} editable={false} />
+      </CatalogExample>
+      <CatalogExample
+        label="Delete-Only Provider (Jira)"
+        note="Existing files open by link and cannot be regrouped, relabelled, or renamed; the row menu offers Download, Copy reference, and Remove."
+        viewport={{ width: 'compact', frame: 'solid', surface: 'default', overflow: 'hidden', shadow: true }}
+        rootAttributes={{ 'data-attachment-delete-only-demo': '' }}
+      >
+        <TicketAttachments attachments={deleteOnlyAttachmentDemoItems} editable={false} removable />
       </CatalogExample>
       <CatalogExample
         label="Provider Without Attachments"

@@ -460,11 +460,22 @@ token-usable upload API, so a GitLab connection reports `attachments: true` and
 **Jira attachments through the native attachment API (HS2-KE18XX).** Jira stores files
 itself, so a Jira connection reports `attachments: true` and `attachment_crop: true` with no
 extra setting. Jira can delete an attachment but not rename it. `attachment_edit` covers
-rename, delete, labels, and annotations together, so it stays `false` until a finer-grained
-delete capability exists.
+rename, delete, labels, and annotations together, so it stays `false`. Jira reports the
+finer-grained `attachment_delete: true` instead (HS2-51ADSG).
 
 - **Upload:** `POST /rest/api/3/issue/{key}/attachments` (multipart `file`,
   `X-Atlassian-Token: no-check`). Jira returns the created attachment.
+- **Delete (HS2-51ADSG):** `TicketProvider::delete_attachment`, reached through the checkout
+  attachment `DELETE` route for any provider that declares `attachment_delete`. The steps:
+  1. `DELETE /rest/api/3/attachment/{id}` removes the file.
+  2. A best-effort delete removes the attachment's crop rendition.
+  3. `DELETE /rest/api/3/issue/{key}/properties/hotsheet.attachment.{id}` removes its
+     metadata property.
+
+  A rendition id and an unknown id are `not_found`. A retry after an interrupted delete
+  (file gone, property left) removes the leftovers and succeeds. Providers without the
+  capability keep the named refusal, and renaming stays refused.
+
 - **Identity:** each Jira attachment projects as one Hot Sheet attachment whose `id` is the
   Jira attachment id, so files people attach in Jira itself appear too (without Hot Sheet
   metadata). `created_at` is Jira's `created`, normalized to an RFC 3339 offset.
@@ -597,6 +608,7 @@ they need live credentials:
 | ------------------------------------------------------- | ---------------- | ------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------- |
 | `attachments` (add and read)                            | yes, store files | only with `attachment_repo`; assets repo + link comment | yes, project upload + marked note (17.4+) | yes, native attachments + metadata property     |
 | `attachment_edit` (rename, delete, labels, annotations) | yes              | no                                                      | no                                        | no (Jira can delete, not rename)                |
+| `attachment_delete` (delete only, HS2-51ADSG)           | yes              | no                                                      | no                                        | yes, file + rendition + metadata property       |
 | `attachment_crop` (reversible image crop)               | yes              | with `attachment_repo`                                  | yes, rendition upload + note rewrite      | yes, hidden rendition upload + property rewrite |
 
 In the web dialog a new GitHub connection starts from sign-in (HS2-1JT25R): its other settings

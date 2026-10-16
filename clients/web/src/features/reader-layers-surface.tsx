@@ -48,6 +48,8 @@ export interface ReaderLayersSurfaceDependencies {
   canEditStartedPhaseFor: (projectId: string, connectionId: string) => boolean;
   canEditStartedPhaseSelected: () => boolean;
   canEditAttachments: () => boolean;
+  /** The selected ticket's provider can delete attachments (`attachment_delete`, HS2-51ADSG). */
+  canRemoveAttachments: () => boolean;
   canEditNotes: () => boolean;
   canUpdateSelected: () => boolean;
   canUseAttachments: () => boolean;
@@ -129,6 +131,7 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
     canEditStartedPhaseFor,
     canEditStartedPhaseSelected,
     canEditAttachments,
+    canRemoveAttachments,
     canEditNotes,
     canUpdateSelected,
     canUseAttachments,
@@ -271,6 +274,11 @@ export function createReaderLayersSurface(dependencies: ReaderLayersSurfaceDepen
           frame
             ? active && (capabilities!.attachment_edit ?? capabilities!.attachments)
             : editable && canEditAttachments()
+        }
+        attachmentsRemovable={
+          frame
+            ? active && (capabilities!.attachment_delete ?? capabilities!.attachment_edit ?? capabilities!.attachments)
+            : editable && canRemoveAttachments()
         }
         attachmentMessage={editable || (frame && active) ? attachmentMessage.value : ''}
         attachmentLabelEditing={attachmentLabelEditingKey(attachmentLabelEditing.value, readerScope)}

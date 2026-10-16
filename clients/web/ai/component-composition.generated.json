@@ -5670,7 +5670,7 @@
       "id": "ticket-attachments",
       "name": "TicketAttachments",
       "kind": "component",
-      "purpose": "Ticket attachment inspector section, including editable, append-only, unsupported, and linked-reader states.",
+      "purpose": "Ticket attachment inspector section, including editable, append-only, delete-only, unsupported, and linked-reader states.",
       "publicExports": [
         {
           "name": "TicketAttachments"

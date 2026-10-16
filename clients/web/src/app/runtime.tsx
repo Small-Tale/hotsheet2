@@ -1224,6 +1224,14 @@ export async function startHotSheetWebClient() {
   };
   const canEditAttachments = () =>
     canUseAttachments() && Boolean(selectedTicket.value && attachmentsEditableFor(selectedTicket.value.connection_id));
+  // A delete-only provider (Jira) removes attachments it cannot rename (HS2-51ADSG); servers that
+  // predate the capability delete exactly what they can edit.
+  const attachmentsRemovableFor = (connectionId: string) => {
+    const capabilities = providerCapabilities.value[connectionId] as Capabilities | undefined;
+    return capabilities?.attachment_delete ?? attachmentsEditableFor(connectionId);
+  };
+  const canRemoveAttachments = () =>
+    canUseAttachments() && Boolean(selectedTicket.value && attachmentsRemovableFor(selectedTicket.value.connection_id));
   const capabilitiesFor = (connectionId: string) => providerCapabilities.value[connectionId];
   const defaultProvider = () => defaultProviders.value[selectedProjectId.value];
   const newTicketSource = () =>
@@ -3514,6 +3522,7 @@ export async function startHotSheetWebClient() {
       canAddNotes,
       canDeleteNotes,
       canEditAttachments,
+      canRemoveAttachments,
       canEditNotes,
       canEditStartedPhaseSelected,
       canUpdateSelected,
@@ -3559,6 +3568,7 @@ export async function startHotSheetWebClient() {
     canAddNotes,
     canDeleteNotes,
     canEditAttachments,
+    canRemoveAttachments,
     canEditNotes,
     canEditStartedPhaseFor,
     canEditStartedPhaseSelected,
@@ -4443,6 +4453,7 @@ export async function startHotSheetWebClient() {
     attachmentGalleryVolume,
     canUseAttachments,
     canEditAttachments,
+    canRemoveAttachments,
     updateSelectedTracked,
     readerOpen,
     readerDetailsDraft,

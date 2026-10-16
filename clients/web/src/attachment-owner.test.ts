@@ -5,7 +5,10 @@ import { attachmentOwnerTarget } from './attachment-owner';
 import type { TicketReaderFrame } from './ticket-reader-stack';
 
 const ticket = (qualified_id: string) => ({ qualified_id, slug: qualified_id }) as unknown as FullTicket;
-const frame = (id: string, capabilities: { attachments: boolean; attachment_edit?: boolean }) =>
+const frame = (
+  id: string,
+  capabilities: { attachments: boolean; attachment_edit?: boolean; attachment_delete?: boolean },
+) =>
   ({
     id,
     projectId: `${id}-project`,
@@ -19,8 +22,9 @@ describe('attachment action ticket selection (HS2-KKB9VF)', () => {
   const linked = frame('linked', { attachments: true, attachment_edit: true }),
     appendOnly = frame('append-only', { attachments: true, attachment_edit: false }),
     legacy = frame('legacy', { attachments: true }),
-    readOnly = frame('read-only', { attachments: false });
-  const frames = [linked, appendOnly, legacy, readOnly];
+    readOnly = frame('read-only', { attachments: false }),
+    deleteOnly = frame('delete-only', { attachments: true, attachment_edit: false, attachment_delete: true });
+  const frames = [linked, appendOnly, legacy, readOnly, deleteOnly];
 
   it('routes a linked frame action to that frame, never the workspace selection', () => {
     expect(attachmentOwnerTarget('linked', frames, workspace)).toEqual({
@@ -28,6 +32,7 @@ describe('attachment action ticket selection (HS2-KKB9VF)', () => {
       frame: linked,
       canUse: true,
       canEdit: true,
+      canRemove: true,
     });
     // The frame's own ticket and project, even though a workspace ticket is selected.
     const target = attachmentOwnerTarget('append-only', frames, workspace);
@@ -41,6 +46,16 @@ describe('attachment action ticket selection (HS2-KKB9VF)', () => {
     expect(attachmentOwnerTarget('append-only', frames, workspace)).toMatchObject({ canUse: true, canEdit: false });
     expect(attachmentOwnerTarget('legacy', frames, workspace)).toMatchObject({ canUse: true, canEdit: true });
     expect(attachmentOwnerTarget('read-only', frames, workspace)).toMatchObject({ canUse: false, canEdit: false });
+  });
+
+  it('lets a delete-only provider remove without other edits (HS2-51ADSG)', () => {
+    expect(attachmentOwnerTarget('delete-only', frames, workspace)).toMatchObject({
+      canUse: true,
+      canEdit: false,
+      canRemove: true,
+    });
+    expect(attachmentOwnerTarget('append-only', frames, workspace)).toMatchObject({ canRemove: false });
+    expect(attachmentOwnerTarget('legacy', frames, workspace)).toMatchObject({ canRemove: true });
   });
 
   it('routes an action outside any linked frame to the workspace selection', () => {

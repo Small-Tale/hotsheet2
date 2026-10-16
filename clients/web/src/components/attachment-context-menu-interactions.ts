@@ -45,7 +45,8 @@ export function attachmentContextMenuPointerTarget(target: HTMLElement): {
   kind: AttachmentContextMenuKind;
   origin: AttachmentContextMenuOrigin;
 } {
-  if (target.dataset.attachmentMenuKind === 'item') return { kind: 'item', origin: 'row' };
+  const kind = target.dataset.attachmentMenuKind;
+  if (kind === 'item' || kind === 'remote') return { kind, origin: 'row' };
   return {
     kind: 'host',
     origin: target.closest(ATTACHMENTS_AND_GALLERY_TARGETS.attachmentGallery.selector) ? 'gallery' : 'reference',
@@ -80,7 +81,9 @@ export function wireAttachmentContextMenuOpeners(
   lifetime.add(
     delegate(root, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentMenu.selector, (event, target) => {
       event.stopPropagation();
-      fromTrigger(target, 'item', 'row');
+      // A delete-only provider's row declares the reduced `remote` menu (HS2-51ADSG).
+      const row = target.closest<HTMLElement>('[data-attachment-menu-kind]');
+      fromTrigger(target, row?.dataset.attachmentMenuKind === 'remote' ? 'remote' : 'item', 'row');
     }),
   );
   lifetime.add(

@@ -897,6 +897,7 @@ fn capabilities() -> ProviderCapabilities {
         // is immutable; crop and annotations rewrite only the marker note.
         attachments: true,
         attachment_edit: false,
+        attachment_delete: false,
         attachment_crop: true,
         assignment: false,
         review_requests: false,

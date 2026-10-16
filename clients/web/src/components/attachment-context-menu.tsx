@@ -5,7 +5,12 @@ import { Clipboard, Copy, Download, ExternalLink, FolderOpen, Pencil, Trash2 } f
 import { contextMenuAnchor } from '../context-menu-position';
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 
-export type AttachmentContextMenuKind = 'item' | 'host';
+/**
+ * `item`: an editable attachment row. `host`: gallery media or a Markdown reference (local file
+ * actions). `remote`: a row of a provider that can delete but not edit (Jira, HS2-51ADSG), with
+ * only Download, Copy reference, and Remove.
+ */
+export type AttachmentContextMenuKind = 'item' | 'host' | 'remote';
 
 export const ATTACHMENT_CONTEXT_MENU_HEIGHT = 274;
 
@@ -48,30 +53,39 @@ export function AttachmentContextMenu({
       anchor={contextMenuAnchor(x, y)}
       label="Attachment Actions"
       rootAttributes={{ 'data-context-menu': 'attachment', 'data-kind': kind }}
-      items={[
-        item(
-          'open',
-          'Open',
-          ExternalLink,
-          'external-link',
-          'default',
-          hostOnlyDisabledReason('open-file', hostActionsAvailable),
-        ),
-        item('download', 'Download', Download, 'download'),
-        item('copy-reference', 'Copy reference', Clipboard, 'clipboard'),
-        ...(kind === 'item' ? [item('rename', 'Rename', Pencil, 'pencil')] : []),
-        ...(kind === 'host' ? [item('copy-path', 'Copy path', Copy, 'copy')] : []),
-        { kind: 'divider' },
-        item(
-          'reveal',
-          revealLabel,
-          FolderOpen,
-          'folder-open',
-          'default',
-          hostOnlyDisabledReason('reveal-file', hostActionsAvailable),
-        ),
-        item('remove', 'Remove', Trash2, 'trash-2', 'danger'),
-      ]}
+      items={
+        kind === 'remote'
+          ? [
+              item('download', 'Download', Download, 'download'),
+              item('copy-reference', 'Copy reference', Clipboard, 'clipboard'),
+              { kind: 'divider' },
+              item('remove', 'Remove', Trash2, 'trash-2', 'danger'),
+            ]
+          : [
+              item(
+                'open',
+                'Open',
+                ExternalLink,
+                'external-link',
+                'default',
+                hostOnlyDisabledReason('open-file', hostActionsAvailable),
+              ),
+              item('download', 'Download', Download, 'download'),
+              item('copy-reference', 'Copy reference', Clipboard, 'clipboard'),
+              ...(kind === 'item' ? [item('rename', 'Rename', Pencil, 'pencil')] : []),
+              ...(kind === 'host' ? [item('copy-path', 'Copy path', Copy, 'copy')] : []),
+              { kind: 'divider' },
+              item(
+                'reveal',
+                revealLabel,
+                FolderOpen,
+                'folder-open',
+                'default',
+                hostOnlyDisabledReason('reveal-file', hostActionsAvailable),
+              ),
+              item('remove', 'Remove', Trash2, 'trash-2', 'danger'),
+            ]
+      }
     />
   );
 }

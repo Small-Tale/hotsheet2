@@ -285,6 +285,11 @@ pub struct ProviderCapabilities {
     /// repository) reports `attachments` without this.
     #[serde(default)]
     pub attachment_edit: bool,
+    /// Existing attachments can be deleted ([`TicketProvider::delete_attachment`],
+    /// HS2-51ADSG). Finer-grained than `attachment_edit`: Jira deletes natively but cannot
+    /// rename. A provider with `attachment_edit` also reports this.
+    #[serde(default)]
+    pub attachment_delete: bool,
     /// Existing image attachments support reversible crop metadata and renditions.
     #[serde(default)]
     pub attachment_crop: bool,
@@ -343,6 +348,7 @@ impl ProviderCapabilities {
             note_delete: true,
             attachments: true,
             attachment_edit: true,
+            attachment_delete: true,
             attachment_crop: true,
             assignment: true,
             review_requests: true,
@@ -1122,6 +1128,19 @@ pub trait TicketProvider: Send + Sync {
             capability: "attachments",
         })
     }
+    /// Delete one existing attachment and any provider-side metadata or renditions it owns
+    /// (HS2-51ADSG). Providers without `attachment_delete` refuse by capability name.
+    fn delete_attachment(
+        &self,
+        _native_id: &str,
+        _attachment_id: &str,
+        _now: Timestamp,
+    ) -> Result<ApiTicket, ProviderError> {
+        Err(ProviderError::Unsupported {
+            connection_id: self.descriptor().connection_id,
+            capability: "attachment_delete",
+        })
+    }
     fn close(
         &self,
         native_id: &str,
@@ -1735,6 +1754,38 @@ impl TicketProvider for GitProvider {
                 .join(&attachment.filename),
         )
         .map_err(StoreError::Io)?)
+    }
+
+    fn delete_attachment(
+        &self,
+        native_id: &str,
+        attachment_id: &str,
+        now: Timestamp,
+    ) -> Result<ApiTicket, ProviderError> {
+        let ticket = self.ticket(native_id)?;
+        let parsed =
+            Ulid::from_string(attachment_id).map_err(|_| ProviderError::InvalidNativeId {
+                provider: "git",
+                id: attachment_id.into(),
+            })?;
+        let updated = self
+            .store
+            .remove_attachment(&ticket.id, &parsed, now)
+            .map_err(|error| {
+                if error.is_io_kind(std::io::ErrorKind::NotFound) {
+                    ProviderError::NotFound {
+                        connection_id: self.connection_id.clone(),
+                        native_id: attachment_id.into(),
+                    }
+                } else {
+                    error.into()
+                }
+            })?;
+        Ok(ApiTicket::from_provider(
+            &updated,
+            &self.connection_id,
+            None,
+        ))
     }
 
     fn add_attachment(
@@ -2681,6 +2732,64 @@ mod tests {
         );
     }
 
+    /// HS2-51ADSG: the git provider deletes attachments through the provider surface, and
+    /// a provider that does not override `delete_attachment` refuses by capability name.
+    #[test]
+    fn git_provider_deletes_attachments_and_the_default_refuses_by_capability() {
+        let (_dir, provider) = git_provider();
+        assert!(provider.descriptor().capabilities.attachment_delete);
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        provider
+            .create(
+                ctx(id, "2026-08-26T00:00:00Z"),
+                ProviderDraft {
+                    title: "with evidence".into(),
+                    category: "task".into(),
+                    priority: Priority::Default,
+                    status: Status::NotStarted,
+                    details: String::new(),
+                    tags: vec![],
+                    up_next: false,
+                    blocked_by: vec![],
+                    transfer: None,
+                },
+            )
+            .unwrap();
+        let attachment = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB1").unwrap();
+        let attached = provider
+            .add_attachment(
+                &id.to_string(),
+                ApiAttachment {
+                    id: attachment.to_string(),
+                    filename: "proof.txt".into(),
+                    created_at: "2026-08-26T00:01:00Z".into(),
+                    batch_id: None,
+                    batch_label: None,
+                    actor: None,
+                    purpose: None,
+                    annotations: vec![],
+                    crop: None,
+                    revision: None,
+                },
+                b"proof".to_vec(),
+            )
+            .unwrap();
+        assert_eq!(attached.attachments.len(), 1);
+        let now = || Timestamp::new("2026-08-26T00:02:00Z");
+        let deleted = provider
+            .delete_attachment(&id.to_string(), &attachment.to_string(), now())
+            .unwrap();
+        assert!(deleted.attachments.is_empty());
+        assert!(matches!(
+            provider.delete_attachment(&id.to_string(), &attachment.to_string(), now()),
+            Err(ProviderError::NotFound { .. })
+        ));
+        assert!(matches!(
+            provider.delete_attachment(&id.to_string(), "10001", now()),
+            Err(ProviderError::InvalidNativeId { .. })
+        ));
+    }
+
     #[test]
     fn git_provider_preserves_initial_backlog_status() {
         let (_dir, provider) = git_provider();
@@ -2810,6 +2919,14 @@ mod tests {
                 unreachable!()
             }
         }
+        // HS2-51ADSG: a provider without its own delete refuses by capability name.
+        assert!(matches!(
+            Failing.delete_attachment("1", "2", Timestamp::new("2026-08-26T00:00:00Z")),
+            Err(ProviderError::Unsupported {
+                capability: "attachment_delete",
+                ..
+            })
+        ));
 
         let (_dir, git) = git_provider();
         let registry = ProviderRegistry::default();

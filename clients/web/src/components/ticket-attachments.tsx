@@ -104,6 +104,7 @@ export function TicketAttachments({
   attachments = DEFAULT_ATTACHMENTS,
   enabled = true,
   editable = enabled,
+  removable = editable,
   message = '',
   presentation = 'sidebar',
   editingLabelBatch,
@@ -118,6 +119,12 @@ export function TicketAttachments({
    * repository (HS2-HSA64D) adds files but shows existing ones read-only, opened by link.
    */
   editable?: boolean;
+  /**
+   * Existing attachments can be deleted (the provider reports `attachment_delete`, HS2-51ADSG).
+   * Defaults to `editable`. A delete-only provider (Jira) keeps rows read-only and opened by link,
+   * and its row menu offers only Download, Copy reference, and Remove.
+   */
+  removable?: boolean;
   /** Operation status, or the reason attachment actions are disabled on this surface. */
   message?: string;
   presentation?: TicketInspectorPanelPresentation;
@@ -133,6 +140,8 @@ export function TicketAttachments({
   editingLabelDraft?: string;
 }) {
   const manageable = enabled && editable;
+  /** Rows carry the attachment menu: every editable row, and a delete-only provider's rows. */
+  const menuable = manageable || (enabled && removable);
   const groups = groupAttachments(attachments);
   return (
     <TicketInspectorPanel
@@ -234,10 +243,10 @@ export function TicketAttachments({
                     data-component="ticket-attachment-item"
                     data-action={manageable ? 'open-attachment-row' : undefined}
                     data-attachment-id={attachment.id}
-                    data-attachment-action-id={manageable ? attachment.id : undefined}
-                    data-attachment-name={manageable ? attachment.name : undefined}
-                    data-attachment-url={manageable ? attachment.url : undefined}
-                    data-attachment-menu-kind={manageable ? 'item' : undefined}
+                    data-attachment-action-id={menuable ? attachment.id : undefined}
+                    data-attachment-name={menuable ? attachment.name : undefined}
+                    data-attachment-url={menuable ? attachment.url : undefined}
+                    data-attachment-menu-kind={manageable ? 'item' : menuable ? 'remote' : undefined}
                   >
                     <LucideIcon size={14.4} icon={Paperclip} name="paperclip" />
                     {manageable || !attachment.url ? (
@@ -247,7 +256,7 @@ export function TicketAttachments({
                         {attachment.name}
                       </a>
                     )}
-                    {manageable && (
+                    {menuable && (
                       <button
                         class="ticket-attachments__item-menu"
                         type="button"

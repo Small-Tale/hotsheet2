@@ -438,6 +438,64 @@ impl JiraProvider {
         }
         self.get(key)
     }
+
+    /// Delete a visible attachment natively (`DELETE /attachment/{id}`), then its crop
+    /// rendition and its `hotsheet.attachment.<id>` property (HS2-51ADSG). A crop rendition
+    /// is not itself deletable through this path. A retry after an interrupted delete (file
+    /// gone, property left behind) removes the leftovers and succeeds; an id with neither a
+    /// file nor a property is `NotFound`.
+    pub(super) fn delete_native_attachment(
+        &self,
+        key: &str,
+        attachment_id: &str,
+    ) -> Result<ApiTicket, ProviderError> {
+        validate_key(key)?;
+        if !valid_jira_attachment_id(attachment_id) {
+            return Err(ProviderError::InvalidNativeId {
+                provider: "jira",
+                id: attachment_id.into(),
+            });
+        }
+        let snapshot = self.snapshot(key)?;
+        let record = snapshot.records.get(attachment_id).cloned();
+        let present = snapshot.files.iter().any(|file| file.id == attachment_id);
+        if present {
+            // NotFound for a crop rendition: only the attachment that owns it may go.
+            self.visible_file(&snapshot, attachment_id)?;
+            self.raw(
+                "DELETE",
+                &self.endpoint(&format!("attachment/{attachment_id}")),
+                None,
+            )?;
+        } else if record.is_none() {
+            return Err(ProviderError::NotFound {
+                connection_id: self.config.connection_id.clone(),
+                native_id: attachment_id.into(),
+            });
+        }
+        if let Some(rendition) = record
+            .as_ref()
+            .and_then(|record| record.rendition_id.as_deref())
+            && snapshot.files.iter().any(|file| file.id == rendition)
+        {
+            // Best effort: an undeleted rendition stays hidden by its name.
+            let _ = self.raw(
+                "DELETE",
+                &self.endpoint(&format!("attachment/{rendition}")),
+                None,
+            );
+        }
+        if record.is_some() {
+            self.raw(
+                "DELETE",
+                &self.endpoint(&format!(
+                    "issue/{key}/properties/{PROPERTY_PREFIX}{attachment_id}"
+                )),
+                None,
+            )?;
+        }
+        self.get(key)
+    }
 }
 
 #[cfg(test)]
@@ -470,6 +528,7 @@ mod tests {
         edit_property_during_upload: Option<String>,
         uploads: u64,
         deletes: Vec<String>,
+        deleted_properties: Vec<String>,
         xsrf_headers: Vec<String>,
         json_requests: Vec<String>,
     }
@@ -613,6 +672,13 @@ mod tests {
                 });
             }
             if method == "DELETE"
+                && let Some(property) = path.strip_prefix("issue/ENG-7/properties/")
+            {
+                state.deleted_properties.push(property.into());
+                let removed = state.properties.remove(property).is_some();
+                return Ok(respond(if removed { 204 } else { 404 }, vec![]));
+            }
+            if method == "DELETE"
                 && let Some(id) = path.strip_prefix("attachment/")
             {
                 state.deletes.push(id.into());
@@ -675,6 +741,10 @@ mod tests {
         let capabilities = provider(Arc::default()).descriptor().capabilities;
         assert!(capabilities.attachments);
         assert!(!capabilities.attachment_edit);
+        assert!(
+            capabilities.attachment_delete,
+            "Jira deletes natively (HS2-51ADSG)"
+        );
         assert!(capabilities.attachment_crop);
     }
 
@@ -808,6 +878,118 @@ mod tests {
                 .all(|request| !request.contains("properties")),
             "{requests:?}"
         );
+    }
+
+    /// HS2-51ADSG: deleting a cropped attachment removes the file, its rendition, and its
+    /// metadata property; a rendition id and an unknown id are not deletable; a retry after
+    /// an interrupted delete (file gone, property left) cleans up and succeeds.
+    #[test]
+    fn delete_removes_the_file_its_rendition_and_its_property() {
+        let fake = Arc::new(FakeJira::default());
+        let provider = provider(fake.clone());
+        let first = provider
+            .add_attachment("ENG-7", evidence(HOTSHEET_ID, "shot.png"), png())
+            .unwrap();
+        provider
+            .add_attachment(
+                "ENG-7",
+                evidence("01K6JIRA000000000000000001", "kept.txt"),
+                b"kept".to_vec(),
+            )
+            .unwrap();
+        let crop = ImageCrop {
+            x: 3,
+            y: 2,
+            width: 12,
+            height: 10,
+        };
+        provider
+            .set_attachment_markup(
+                "ENG-7",
+                "10001",
+                first.attachments[0].revision.as_deref(),
+                AttachmentMarkup {
+                    annotations: vec![],
+                    crop: Some(crop),
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            fake.state.lock_or_recover().files.len(),
+            3,
+            "file, kept, rendition"
+        );
+
+        // A rendition is not an attachment of its own; an unknown id is not found.
+        for id in ["10003", "10099"] {
+            assert!(matches!(
+                provider.delete_attachment(
+                    "ENG-7",
+                    id,
+                    hotsheet_model::Timestamp::new("2026-10-16T00:00:00Z")
+                ),
+                Err(ProviderError::NotFound { .. })
+            ));
+        }
+        assert!(matches!(
+            provider.delete_attachment(
+                "ENG-7",
+                "../10001",
+                hotsheet_model::Timestamp::new("2026-10-16T00:00:00Z")
+            ),
+            Err(ProviderError::InvalidNativeId { .. })
+        ));
+
+        let after = provider
+            .delete_attachment(
+                "ENG-7",
+                "10001",
+                hotsheet_model::Timestamp::new("2026-10-16T00:00:00Z"),
+            )
+            .unwrap();
+        assert_eq!(
+            after
+                .attachments
+                .iter()
+                .map(|a| a.filename.as_str())
+                .collect::<Vec<_>>(),
+            ["kept.txt"]
+        );
+        {
+            let state = fake.state.lock_or_recover();
+            assert_eq!(
+                state.deletes,
+                ["10001", "10003"],
+                "file, then its rendition"
+            );
+            assert_eq!(state.deleted_properties, ["hotsheet.attachment.10001"]);
+            assert!(!state.properties.contains_key("hotsheet.attachment.10001"));
+            assert!(state.properties.contains_key("hotsheet.attachment.10002"));
+        }
+
+        // Interrupted delete: the file went but the property stayed. A retry cleans up.
+        fake.state
+            .lock_or_recover()
+            .files
+            .retain(|file| file.0 != "10002");
+        let retried = provider
+            .delete_attachment(
+                "ENG-7",
+                "10002",
+                hotsheet_model::Timestamp::new("2026-10-16T00:00:00Z"),
+            )
+            .unwrap();
+        assert!(retried.attachments.is_empty());
+        assert!(fake.state.lock_or_recover().properties.is_empty());
+        // Fully gone: a further delete is not found.
+        assert!(matches!(
+            provider.delete_attachment(
+                "ENG-7",
+                "10002",
+                hotsheet_model::Timestamp::new("2026-10-16T00:00:00Z")
+            ),
+            Err(ProviderError::NotFound { .. })
+        ));
     }
 
     #[test]

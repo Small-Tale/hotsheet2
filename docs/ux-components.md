@@ -1387,7 +1387,11 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     The inspector and TicketRow are also attachment drop targets. `editable={false}` is the
     append-only variant for providers without `attachment_edit` (HS2-HSA64D): browse/drop stay,
     names become links, and the menus, dragging, and batch label/purpose editing are omitted;
-    `enabled={false}` shows the unsupported notice. The demo shows all three variants.
+    `removable` (default `editable`) with `editable={false}` is the delete-only variant for a
+    provider reporting `attachment_delete` (Jira, HS2-51ADSG): the same read-only links, plus a
+    row menu of kind `remote` (`AttachmentContextMenu` offers only Download, Copy reference,
+    and Remove); `enabled={false}` shows the unsupported notice. The demo shows all four
+    variants.
     `editingLabelBatch` names the batch (`AttachmentBatch.key`) whose label editor is open; the
     caller owns that state through `attachment-label-editing.ts`, so a rerender never closes the
     editor (HS2-SG0AZY). `TicketInspector` forwards it as `attachmentLabelEditing`.

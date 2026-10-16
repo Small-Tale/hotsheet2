@@ -5570,6 +5570,32 @@ test('shows append-only and unsupported attachment variants in the TicketAttachm
   await appendOnly.screenshot({ path: 'target/visual-captures/hs2-hsa64d-demo-append-only-narrow.png' });
 });
 
+test('shows the delete-only attachment variant with its reduced row menu (HS2-51ADSG)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=ticket-attachments');
+  const deleteOnly = page.getByRole('region', { name: 'Delete-Only Provider (Jira)', exact: true }),
+    menu = page.locator('[data-context-menu="attachment"]');
+  await expect(deleteOnly.getByRole('button', { name: /More Actions for/ })).toHaveCount(2);
+  await expect(deleteOnly.locator('[draggable="true"]')).toHaveCount(0);
+  await expect(deleteOnly.locator('[data-attachment-group-drop-target]')).toHaveCount(0);
+  await expect(deleteOnly.getByRole('link', { name: 'server.log' })).toHaveAttribute('target', '_blank');
+  await deleteOnly.getByRole('button', { name: 'More Actions for server.log' }).click();
+  await expect(menu).toHaveAttribute('data-kind', 'remote');
+  await expect(menu.locator('[data-item-id]')).toHaveCount(3);
+  await expect(menu.locator('[data-item-id="rename"]')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  // A right-click on the row opens the same reduced menu at the pointer.
+  await deleteOnly.locator('[data-component="ticket-attachment-item"]').first().click({ button: 'right' });
+  await expect(menu).toHaveAttribute('data-kind', 'remote');
+  await page.keyboard.press('Escape');
+  await deleteOnly.scrollIntoViewIfNeeded();
+  await deleteOnly.screenshot({ path: 'target/visual-captures/claude/hs2-51adsg-demo-delete-only-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await deleteOnly.scrollIntoViewIfNeeded();
+  await deleteOnly.screenshot({ path: 'target/visual-captures/claude/hs2-51adsg-demo-delete-only-narrow.png' });
+});
+
 for (const theme of ['light', 'dark'] as const) {
   test(`keeps the gallery filename legible with Kerf dark tone in ${theme} (HS2-V5VS0A)`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: theme });

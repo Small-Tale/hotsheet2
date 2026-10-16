@@ -2111,7 +2111,11 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   drop zone, while existing attachments are read-only: each name is a link that opens the file
   through the server's attachment route in a new tab, media still opens in the gallery, and the
   row menu, right-click menu, dragging between groups, batch relabelling and purpose, and
-  generated video posters are not offered (HS2-HSA64D). A GitHub assets source advertises
+  generated video posters are not offered (HS2-HSA64D). A provider that also reports
+  `attachment_delete` without `attachment_edit` (Jira, HS2-51ADSG) keeps those read-only links but
+  gives each row a reduced menu (ellipsis or right-click) of Download, Copy reference, and
+  Remove. Remove deletes through the checkout attachment route. Rename, local open, and reveal
+  stay unavailable, and gallery media keeps the browser's own menu. A GitHub assets source advertises
   `attachment_crop` separately: its gallery can crop supported still images and save
   original-space annotations, using a comment revision to surface stale edits. The original
   remains available for re-crop and restore (HS2-KGC823). Editing a GitHub

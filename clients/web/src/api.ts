@@ -84,6 +84,8 @@ export type Capabilities = Record<
   query_fields: string[];
   /** Existing attachments can be renamed, deleted, regrouped, and annotated (HS2-HSA64D). Older servers omit it. */
   attachment_edit?: boolean;
+  /** Existing attachments can be deleted even when they cannot be renamed (Jira, HS2-51ADSG). */
+  attachment_delete?: boolean;
   attachment_crop?: boolean;
   /** Host may expose an opt-in durable provisional field-edit endpoint. */
   write_behind?: boolean;

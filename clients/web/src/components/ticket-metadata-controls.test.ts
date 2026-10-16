@@ -289,6 +289,30 @@ describe('ticket metadata controls and inspector panels', () => {
       '<a href="/attachment/two" target="_blank" rel="noopener" title="Open log.txt">log.txt</a>',
     );
     expect(appendOnly).toContain('data-action="open-attachment-gallery"');
+    // A delete-only provider (Jira, HS2-51ADSG) keeps rows read-only links but gives each the
+    // reduced `remote` row menu; nothing becomes draggable, relabelable, or locally openable.
+    const deleteOnly = String(
+      TicketAttachments({
+        attachments: [{ id: '10001', name: 'log.txt', url: '/attachment/10001' }],
+        enabled: true,
+        editable: false,
+        removable: true,
+      }),
+    );
+    expect(deleteOnly).toContain('data-attachment-menu-kind="remote"');
+    expect(deleteOnly).toContain('data-attachment-action-id="10001"');
+    expect(deleteOnly).toContain('data-action="open-attachment-menu"');
+    expect(deleteOnly).not.toContain('data-action="open-attachment-row"');
+    expect(deleteOnly).not.toContain('data-drag-attachment-id');
+    expect(deleteOnly).not.toContain('data-action="edit-attachment-batch-label"');
+    expect(deleteOnly).toContain(
+      '<a href="/attachment/10001" target="_blank" rel="noopener" title="Open log.txt">log.txt</a>',
+    );
+    // A disabled surface never offers the menu, even when the provider could delete.
+    const disabled = String(
+      TicketAttachments({ attachments: [{ id: '10001', name: 'log.txt' }], enabled: false, removable: true }),
+    );
+    expect(disabled).not.toContain('data-action="open-attachment-menu"');
   });
 
   it('keeps labelled batches immutable on a disabled reader despite provider edit support (HS2-QZFZA8)', () => {

@@ -12785,6 +12785,8 @@ interface AppendOnlySource {
   short_slug: string;
   /** Whether the provider reports reversible crop (`attachment_crop`). */
   crop: boolean;
+  /** Whether the provider deletes natively without renaming (`attachment_delete`, Jira HS2-51ADSG). */
+  delete?: boolean;
   /** Prefix for durable visual captures under `target/visual-captures/`. */
   capture: string;
 }
@@ -12837,6 +12839,7 @@ test('uploads staged files to a Jira source as native issue attachments and show
     native_url: 'https://acme.atlassian.net/browse/ENG-7',
     short_slug: 'ENG-7',
     crop: true,
+    delete: true,
     capture: 'hs2-ke18xx',
   });
 });
@@ -12844,7 +12847,12 @@ test('uploads staged files to a Jira source as native issue attachments and show
 async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source: AppendOnlySource): Promise<void> {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
-  const capabilities = (attachments: boolean, attachment_edit: boolean, attachment_crop = false) => ({
+  const capabilities = (
+    attachments: boolean,
+    attachment_edit: boolean,
+    attachment_crop = false,
+    attachment_delete = attachment_edit,
+  ) => ({
     create: true,
     update: true,
     close: true,
@@ -12853,6 +12861,7 @@ async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source:
     note_delete: false,
     attachments,
     attachment_edit,
+    attachment_delete,
     attachment_crop,
     assignment: true,
     review_requests: false,
@@ -12886,7 +12895,7 @@ async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source:
           display_name: source.display_name,
           locator: source.locator,
           default: false,
-          capabilities: capabilities(true, false, source.crop),
+          capabilities: capabilities(true, false, source.crop, source.delete ?? false),
         },
       ],
     }),
@@ -12912,7 +12921,8 @@ async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source:
   };
   const attached: { id: string; filename: string; created_at: string; batch_id?: string }[] = [],
     uploads: { path: string; filename: string }[] = [],
-    posters: string[] = [];
+    posters: string[] = [],
+    deletes: string[] = [];
   await page.route('**/checkouts/demo-checkout/tickets**', async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
@@ -12939,6 +12949,17 @@ async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source:
       return route.fulfill({
         json: { store: source.connection_id, ...issue, details: '', notes: [], attachments: [...attached] },
       });
+    if (request.method() === 'DELETE' && path.includes(`${ticketPath}/attachments/`)) {
+      const id = path.split('/').at(-1)!;
+      deletes.push(id);
+      attached.splice(
+        attached.findIndex((item) => item.id === id),
+        1,
+      );
+      return route.fulfill({
+        json: { store: source.connection_id, ...issue, details: '', notes: [], attachments: [...attached] },
+      });
+    }
     if (path.includes(`${ticketPath}/attachments/`) && path.endsWith('/thumbnail')) {
       posters.push(request.method());
       return route.fulfill({ status: 409, json: { error: 'unsupported' } });
@@ -12986,7 +13007,8 @@ async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source:
   const panel = page.locator('[data-component="ticket-attachments"]');
   await expect(panel.locator('[data-component="ticket-attachment-item"]')).toHaveCount(2);
   await expect(panel.getByLabel('Browse and add attachments')).toHaveCount(1);
-  await expect(panel.getByRole('button', { name: /More Actions for/ })).toHaveCount(0);
+  // A delete-only provider (Jira, HS2-51ADSG) gives each row the reduced menu; others offer none.
+  await expect(panel.getByRole('button', { name: /More Actions for/ })).toHaveCount(source.delete ? 2 : 0);
   await expect(panel.locator('[draggable="true"]')).toHaveCount(0);
   await expect(panel.locator('[data-action="edit-attachment-batch-label"]')).toHaveCount(0);
   await expect(panel.locator('select[name="attachment-batch-purpose"]')).toHaveJSProperty('disabled', true);
@@ -12997,7 +13019,18 @@ async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source:
   );
   await expect(link).toHaveCSS('cursor', 'pointer');
   await panel.locator('[data-component="ticket-attachment-item"]').first().click({ button: 'right' });
-  await expect(page.locator('[data-context-menu="attachment"]')).toHaveCount(0);
+  const attachmentMenu = page.locator('[data-context-menu="attachment"]');
+  if (source.delete) {
+    await expect(attachmentMenu).toHaveAttribute('data-kind', 'remote');
+    await expect(attachmentMenu.locator('[data-item-id]')).toHaveCount(3);
+    for (const id of ['download', 'copy-reference', 'remove'])
+      await expect(attachmentMenu.locator(`[data-item-id="${id}"]`)).toHaveCount(1);
+    await expect(attachmentMenu.locator('[data-item-id="rename"]')).toHaveCount(0);
+    await page.waitForTimeout(400); // let the menu's open transition finish before capturing evidence
+    await page.screenshot({ path: 'target/visual-captures/claude/hs2-51adsg-delete-only-menu-wide.png' });
+    await page.keyboard.press('Escape');
+  }
+  await expect(attachmentMenu).toHaveCount(0);
   // Media keeps its gallery link, but store-only menu actions (open, reveal, remove) are not offered.
   await panel.locator('[data-action="open-attachment-gallery"]').click({ button: 'right' });
   await expect(page.locator('[data-context-menu="attachment"]')).toHaveCount(0);
@@ -13024,6 +13057,22 @@ async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source:
     path: testInfo.outputPath(`${source.provider}-issue-row-narrow.png`),
     animations: 'disabled',
   });
+  if (source.delete) {
+    // Remove through the row ellipsis deletes natively through the checkout route.
+    await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
+    await expect(rail).toHaveAttribute('data-collapsed', 'false');
+    await rail.locator('> .kui-workbench__panel-content').evaluate(async (node) => {
+      await Promise.all(node.getAnimations().map((animation) => animation.finished));
+    });
+    await panel.getByRole('button', { name: 'More Actions for trace.log' }).click();
+    await expect(attachmentMenu).toHaveAttribute('data-kind', 'remote');
+    await page.waitForTimeout(400); // let the menu's open transition finish before capturing evidence
+    await page.screenshot({ path: 'target/visual-captures/claude/hs2-51adsg-delete-only-menu-narrow.png' });
+    await attachmentMenu.locator('[data-item-id="remove"]').click();
+    await expect(panel.locator('[data-component="ticket-attachment-item"]')).toHaveCount(1);
+    await expect(panel.getByRole('link', { name: 'trace.log' })).toHaveCount(0);
+    expect(deletes).toEqual(['01K6GH0']);
+  }
 }
 
 test('keeps the plain source label and default routing for a single writable source (HS2-NZMJBJ)', async ({ page }) => {

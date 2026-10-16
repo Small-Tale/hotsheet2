@@ -1967,6 +1967,7 @@ fn github_capabilities(attachments: bool) -> ProviderCapabilities {
         // The original asset stays immutable while markup updates the marked comment.
         attachments,
         attachment_edit: false,
+        attachment_delete: false,
         attachment_crop: attachments,
         assignment: true,
         review_requests: false,

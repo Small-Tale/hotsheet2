@@ -109,6 +109,8 @@ export interface TicketInspectorProps {
   attachmentsEnabled?: boolean;
   /** Existing attachments can be edited (the provider reports `attachment_edit`, HS2-HSA64D). */
   attachmentsEditable?: boolean;
+  /** Existing attachments can be deleted (`attachment_delete`, HS2-51ADSG); defaults to `attachmentsEditable`. */
+  attachmentsRemovable?: boolean;
   attachmentMessage?: string;
   /** The attachment batch key whose label editor is open (HS2-SG0AZY). */
   attachmentLabelEditing?: string;
@@ -195,6 +197,7 @@ export function ticketInspectorPanel({
   expandedCodeReviewCommits,
   attachmentsEnabled = true,
   attachmentsEditable = attachmentsEnabled,
+  attachmentsRemovable = attachmentsEditable,
   attachmentMessage = '',
   attachmentLabelEditing,
   attachmentLabelDraft,
@@ -554,6 +557,7 @@ export function ticketInspectorPanel({
           attachments={attachments}
           enabled={attachmentsEnabled}
           editable={attachmentsEditable}
+          removable={attachmentsRemovable}
           message={attachmentMessage}
           editingLabelBatch={attachmentLabelEditing}
           editingLabelDraft={attachmentLabelDraft}

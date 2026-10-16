@@ -794,6 +794,15 @@ impl TicketProvider for JiraProvider {
         self.update_native_markup(native_id, attachment_id, expected_revision, markup)
     }
 
+    fn delete_attachment(
+        &self,
+        native_id: &str,
+        attachment_id: &str,
+        _now: Timestamp,
+    ) -> Result<ApiTicket, ProviderError> {
+        self.delete_native_attachment(native_id, attachment_id)
+    }
+
     fn close(
         &self,
         _: &str,
@@ -999,10 +1008,11 @@ fn capabilities() -> ProviderCapabilities {
         note_edit: false,
         note_delete: false,
         // Native issue attachments plus per-attachment Hot Sheet metadata properties
-        // (HS2-KE18XX). Jira can delete but not rename, and `attachment_edit` is
-        // all-or-nothing, so existing attachments stay read-only.
+        // (HS2-KE18XX). Jira can delete but not rename, so it reports
+        // `attachment_delete` without the all-or-nothing `attachment_edit` (HS2-51ADSG).
         attachments: true,
         attachment_edit: false,
+        attachment_delete: true,
         attachment_crop: true,
         assignment: true,
         review_requests: false,

@@ -101,6 +101,19 @@ describe('attachment context-menu open and positioning (HS2-1RQA1E)', () => {
       ['host', 'gallery'],
       ['host', 'reference'],
     ]);
+    // A delete-only provider's row declares the reduced `remote` menu from its ellipsis and a
+    // right-click alike (HS2-51ADSG).
+    const remoteRow = element(
+      {},
+      { right: 300, bottom: 40 },
+      {
+        '[data-attachment-menu-kind]': { dataset: { attachmentMenuKind: 'remote' } },
+      },
+    );
+    handler('click', '[data-action="open-attachment-menu"]')({ stopPropagation: stop }, remoteRow);
+    expect(opened.at(-1)).toMatchObject({ kind: 'remote', origin: 'row' });
+    contextmenu(pointerEvent(60, 70), element({ attachmentMenuKind: 'remote' }));
+    expect(opened.at(-1)).toMatchObject({ kind: 'remote', origin: 'row', x: 60, y: 70 });
     // Read-only: a right-click keeps the native menu and opens nothing; triggers still open.
     editable = false;
     const count = opened.length,

@@ -44,6 +44,8 @@ export interface InspectorSurfaceDependencies {
   canAddNotes: () => boolean;
   canDeleteNotes: () => boolean;
   canEditAttachments: () => boolean;
+  /** The selected ticket's provider can delete attachments (`attachment_delete`, HS2-51ADSG). */
+  canRemoveAttachments: () => boolean;
   canEditNotes: () => boolean;
   canEditStartedPhaseSelected: () => boolean;
   canUpdateSelected: () => boolean;
@@ -121,6 +123,7 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
     canAddNotes,
     canDeleteNotes,
     canEditAttachments,
+    canRemoveAttachments,
     canEditNotes,
     canEditStartedPhaseSelected,
     canUpdateSelected,
@@ -265,6 +268,7 @@ export function createInspectorSurface(dependencies: InspectorSurfaceDependencie
       expandedCodeReviewCommits: expandedCodeReviewCommits.value,
       attachmentsEnabled: canUseAttachments(),
       attachmentsEditable: canEditAttachments(),
+      attachmentsRemovable: canRemoveAttachments(),
       attachmentMessage: attachmentMessage.value,
       attachmentLabelEditing: attachmentLabelEditingKey(attachmentLabelEditing.value, INSPECTOR_ATTACHMENT_LABEL_SCOPE),
       attachmentLabelDraft: attachmentLabelEditingDraft(attachmentLabelEditing.value, INSPECTOR_ATTACHMENT_LABEL_SCOPE),

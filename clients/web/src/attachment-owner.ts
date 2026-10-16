@@ -13,6 +13,8 @@ export type AttachmentOwnerTarget =
       readonly canUse: boolean;
       /** Existing attachments are editable; a provider that omits `attachment_edit` edits what it can add. */
       readonly canEdit: boolean;
+      /** Attachments can be removed; a provider may support delete without other edits (HS2-51ADSG). */
+      readonly canRemove: boolean;
     }
   | { readonly kind: 'workspace'; readonly projectId: string; readonly ticket: FullTicket };
 
@@ -34,6 +36,10 @@ export function attachmentOwnerTarget(
           frame,
           canUse: frame.capabilities.attachments,
           canEdit: frame.capabilities.attachment_edit ?? frame.capabilities.attachments,
+          canRemove:
+            frame.capabilities.attachment_delete ??
+            frame.capabilities.attachment_edit ??
+            frame.capabilities.attachments,
         }
       : undefined;
   }

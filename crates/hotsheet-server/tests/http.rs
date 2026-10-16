@@ -20572,13 +20572,32 @@ impl GitHubTransport for FakeJiraAttachments {
                 },
             );
         }
+        // Jira answers both deletes with `204` (HS2-51ADSG).
+        if method == "DELETE"
+            && let Some(key) = path.strip_prefix("issue/ENG-7/properties/")
+        {
+            let removed = self.properties.lock().unwrap().remove(key).is_some();
+            return Ok(respond(if removed { 204 } else { 404 }, vec![]));
+        }
+        if method == "DELETE"
+            && let Some(id) = path.strip_prefix("attachment/")
+        {
+            let mut files = self.files.lock().unwrap();
+            let before = files.len();
+            files.retain(|file| file.0 != id);
+            return Ok(respond(
+                if files.len() < before { 204 } else { 404 },
+                vec![],
+            ));
+        }
         Err(format!("unexpected raw request {method} {url}"))
     }
 }
 
 /// HS2-KE18XX: a Jira source takes attachments through the checkout attachment route
-/// (native Jira attachment plus a Hot Sheet metadata property), serves the bytes back
-/// through the attachment content API, and refuses store-only edits by name.
+/// (native Jira attachment plus a Hot Sheet metadata property) and serves the bytes back
+/// through the attachment content API. HS2-51ADSG: the checkout DELETE routes to Jira's
+/// native delete (file and metadata property), while renaming stays refused by name.
 #[tokio::test]
 async fn jira_checkout_attachments_upload_natively_and_read_back() {
     let (_dir, st) = state();
@@ -20596,9 +20615,10 @@ async fn jira_checkout_attachments_upload_natively_and_read_back() {
         },
         transport.clone(),
     );
-    let app = app(st
+    let st_events = st
         .with_checkout_registry(registry.path().join("checkouts.json"))
-        .with_ticket_provider(Arc::new(provider)));
+        .with_ticket_provider(Arc::new(provider));
+    let app = app(st_events.clone());
     let connection = serde_json::json!({
         "id":"jira-eng","provider":"jira","locator":"ENG","default":false,
         "settings":{"credential":{"secret":"fixture-token"},"base_url":"https://jira.test","email":"dev@example.com"}
@@ -20656,6 +20676,22 @@ async fn jira_checkout_attachments_upload_natively_and_read_back() {
     assert_eq!(read.headers()[header::CONTENT_TYPE], "image/png");
     let bytes = read.into_body().collect().await.unwrap().to_bytes();
     assert_eq!(&bytes[..], b"png bytes");
+    let renamed = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            "/checkouts/external-jira/tickets/jira-eng:ENG-7/attachments/10001",
+            Some(r#"{"filename":"renamed.png"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(renamed.status(), StatusCode::CONFLICT);
+    let message = body_json(renamed).await.to_string();
+    assert!(
+        message.contains("does not support this operation"),
+        "{message}"
+    );
+    let mut events = st_events.subscribe();
     let deleted = app
         .clone()
         .oneshot(authed(
@@ -20665,13 +20701,28 @@ async fn jira_checkout_attachments_upload_natively_and_read_back() {
         ))
         .await
         .unwrap();
-    assert_eq!(deleted.status(), StatusCode::CONFLICT);
-    let message = body_json(deleted).await.to_string();
-    assert!(
-        message.contains("does not support this operation"),
-        "{message}"
+    assert_eq!(deleted.status(), StatusCode::OK);
+    let after = body_json(deleted).await;
+    assert_eq!(after["store"], "jira-eng");
+    assert_eq!(after["attachments"], serde_json::json!([]));
+    assert!(transport.files.lock().unwrap().is_empty());
+    assert!(transport.properties.lock().unwrap().is_empty());
+    let event = events.try_recv().unwrap();
+    assert_eq!(
+        (event.kind.as_str(), event.id.as_str()),
+        ("attachment_removed", "ENG-7")
     );
-    assert_eq!(transport.files.lock().unwrap().len(), 1);
+    // A second delete of the same attachment is not found.
+    let again = app
+        .clone()
+        .oneshot(authed(
+            "DELETE",
+            "/checkouts/external-jira/tickets/jira-eng:ENG-7/attachments/10001",
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(again.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

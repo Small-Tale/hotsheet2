@@ -499,6 +499,40 @@ pub(crate) async fn delete_checkout_ticket_attachment(
     Path((reference, id, attachment_id)): Path<(String, String, String)>,
 ) -> Result<Json<ResolvedTicket>, ApiError> {
     let (_, settings) = checkout_settings(&state, &reference)?;
+    let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
+    if source.provider != "git" {
+        let provider = provider_for(&state, &source.connection_id)?;
+        // Route a delete to a provider that declares it (Jira, HS2-51ADSG); any other
+        // provider keeps the named store-only refusal below.
+        if provider.descriptor().capabilities.attachment_delete {
+            let updated = provider
+                .delete_attachment(&native_id, &attachment_id, now())
+                .map_err(|error| match error {
+                    hotsheet_ticketing::ProviderError::NotFound { .. } => {
+                        ApiError::not_found(&attachment_id)
+                    }
+                    hotsheet_ticketing::ProviderError::InvalidNativeId { .. } => {
+                        ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
+                    }
+                    error => provider_transfer_error(error),
+                })?;
+            state.emit(ChangeEvent {
+                cursor: None,
+                store: source.connection_id.clone(),
+                kind: "attachment_removed".into(),
+                id: native_id,
+                slug: updated.slug.clone(),
+                message: None,
+                activity: None,
+                assignment: None,
+                turn: None,
+            });
+            return Ok(Json(ResolvedTicket {
+                store: source.connection_id,
+                ticket: contextualize_api_ticket(updated, &settings)?,
+            }));
+        }
+    }
     let (entry, ticket) = checkout_git_ticket(&state, &reference, &id)?;
     let attachment_id =
         Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
