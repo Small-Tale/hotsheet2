@@ -237,6 +237,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/new-ticket-attachments.ts # Post-create staged attachment upload with partial-failure accounting
     src/attachment-owner.ts # Which ticket an attachment action acts on: a linked reader frame (its project and attachment capabilities) or the workspace selection; a closed frame resolves to none (HS2-W8VEMP, HS2-KKB9VF)
     src/attachment-label-editing.ts # Per-surface open attachment batch label editor state (begin/restore/end) and its autosave controller (controlled draft, recovery copy, one merged write on blur/page hide), shared by the app and the UX demo (HS2-SG0AZY, HS2-0QQHSZ)
+    src/toast-clearance.ts # Lifts the root toast stack above the media gallery footer while a toast shows (HS2-DSW9TY)
     src/toast-lifetime.ts # Root toast's 2.5-second replacement and dismissal state machine (HS2-KEHG7H)
     src/toast-presentation.ts # Generation-aware asynchronous public Toast.create handoff and disposal (HS2-QHH1ZP)
     src/github-attachment-settings.ts # HS1-compatible GitHub assets-repository setting keys carried through a connection-dialog edit (HS2-HSA64D)

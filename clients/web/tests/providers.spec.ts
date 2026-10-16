@@ -20623,6 +20623,79 @@ test('keeps failed gallery markup visible until retry succeeds (HS2-VXCSMZ) @ci-
   expect(attempts).toBe(2);
 });
 
+test('keeps the markup-saved toast clear of the gallery zoom controls at wide and phone widths (HS2-DSW9TY)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ }),
+    toast = page.locator('wa-toast-item:has(.app-toast)'),
+    zoom = gallery.getByRole('toolbar', { name: 'Media Zoom' });
+  for (const [width, height] of [
+    [1280, 900],
+    [390, 844],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    if (width < 940) await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
+    await page.getByRole('tab', { name: /Attachments/ }).click();
+    await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
+    await gallery.getByRole('button', { name: 'Annotate media' }).click();
+    await gallery.getByRole('button', { name: 'Add rectangle' }).click();
+    const box = (await gallery.locator('[data-gallery-annotation-surface="true"]').boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.4);
+    await page.mouse.up();
+    await page.evaluate(() => {
+      const record = window as unknown as { __toastToggles?: string[] };
+      if (!record.__toastToggles)
+        document
+          .querySelector('wa-toast')!
+          .addEventListener('toggle', (event) => record.__toastToggles!.push(event.newState));
+      record.__toastToggles = [];
+    });
+    await gallery.getByRole('button', { name: 'Finish markup' }).click();
+    await expect(toast).toContainText(/saved\./);
+    await expect(gallery.getByRole('button', { name: 'Annotate media' })).toBeVisible();
+    // The toast sits above the whole footer strip, so the zoom group stays visible and clickable.
+    const footerTop = () =>
+      gallery.locator('.attachment-gallery__footer').evaluate((node) => node.getBoundingClientRect().top);
+    await expect
+      .poll(
+        async () => (await toast.boundingBox())!.y + (await toast.boundingBox())!.height <= (await footerTop()) + 0.5,
+      )
+      .toBe(true);
+    const zoomBox = (await zoom.boundingBox())!,
+      toastBox = (await toast.boundingBox())!;
+    expect(toastBox.y + toastBox.height).toBeLessThanOrEqual(zoomBox.y);
+    expect(toastBox.x + toastBox.width).toBeLessThanOrEqual(width);
+    expect(toastBox.y).toBeGreaterThanOrEqual(0);
+    // The toast re-entered the top layer after the modal gallery opened, so it draws above the gallery
+    // rather than behind its translucent surface (a stack left open from an earlier toast would not).
+    expect(await page.evaluate(() => (window as unknown as { __toastToggles: string[] }).__toastToggles.at(-1))).toBe(
+      'open',
+    );
+    await expect(gallery.getByRole('button', { name: 'Zoom In' })).toBeEnabled();
+    await gallery.getByRole('button', { name: 'Zoom In' }).click({ trial: true });
+    // Let the Web Awesome show animation (inside the item's shadow root) settle for the capture.
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `target/visual-captures/hs2-dsw9ty-markup-saved-toast-${width}.png` });
+    await gallery.getByRole('button', { name: 'Close image gallery' }).click();
+    await expect(gallery).toHaveCount(0);
+    // With the gallery gone the stack returns to the viewport edge for the next toast.
+    await expect
+      .poll(() =>
+        page
+          .locator('wa-toast')
+          .evaluate((node) => (node as HTMLElement).style.getPropertyValue('--app-toast-clearance')),
+      )
+      .toBe('');
+  }
+});
+
 const markupToolLabels = {
   select: 'Select annotation',
   freehand: 'Draw freehand',

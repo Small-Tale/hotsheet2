@@ -1,0 +1,8 @@
+/* The application toast stack is a raw Web Awesome <wa-toast> (bottom-end). While a bottom control
+   strip such as the media gallery footer is on screen, toast-clearance.ts sets the measured strip
+   height here so toasts rise above the strip instead of covering its zoom controls (HS2-DSW9TY). */
+.app-toast-stack {
+  inset-block-end: var(--app-toast-clearance, 0px);
+  height: calc(100dvh - var(--app-toast-clearance, 0px));
+  max-height: calc(100dvh - var(--app-toast-clearance, 0px));
+}

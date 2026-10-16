@@ -861,6 +861,10 @@ preview/download, server directory browser) are separate design work.
   (HS2-KEHG7H). The root uses the public asynchronous `Toast.create()` factory so a
   first bottom-end toast enters at its placement rather than crossing the workspace;
   pending factory results are guarded against replacement, expiration and disposal (HS2-QHH1ZP).
+  While a toast shows over the media gallery, the stack's bottom edge follows the measured top of
+  the gallery footer (also as the footer changes height when markup finishes), so the toast never
+  covers the zoom or markup toolbars at wide or phone widths; each new toast also reopens the stack
+  so it draws above a modal opened since the previous one (HS2-DSW9TY).
   The primary project and terminal layouts follow the same ownership boundary:
   `components/workspace-composition-surfaces.tsx` owns the sidebar, ticket workspace,
   terminal ticket rail, global terminal/statistics workspace, project terminal drawer,

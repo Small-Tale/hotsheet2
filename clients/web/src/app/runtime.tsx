@@ -200,6 +200,7 @@ import {
   type TicketView,
   ticketViewQuery,
 } from '../ticket-views';
+import { createBrowserToastClearance } from '../toast-clearance';
 import { createToastLifetime } from '../toast-lifetime';
 import { createToastPresentation } from '../toast-presentation';
 import { createTrackedSizeObserver } from '../tracked-size-observer';
@@ -625,6 +626,9 @@ export async function startHotSheetWebClient() {
     create: (message) => toastHost.create(message, { duration: 0, variant: 'neutral' }),
     clear: () => {
       toastHost.replaceChildren();
+      // Close the emptied stack so the next toast re-enters the top layer above any modal opened
+      // since the last one, such as the media gallery (HS2-DSW9TY).
+      if (toastHost.matches(':popover-open')) toastHost.hidePopover();
     },
     prepare: (item, generation) => {
       item.dataset.toastGeneration = String(generation);
@@ -634,7 +638,13 @@ export async function startHotSheetWebClient() {
       item.replaceChildren(text);
     },
   });
+  // While a toast shows it rises above the media gallery's footer controls (HS2-DSW9TY).
+  const toastClearance = createBrowserToastClearance(toastHost, () =>
+    document.querySelector('[data-component="attachment-gallery"] .attachment-gallery__footer'),
+  );
   const toastLifetime = createToastLifetime((state) => {
+    if (state.message) toastClearance.track();
+    else toastClearance.stop();
     if (toastHost.isConnected) void toastPresentation.publish(state);
   });
   function showToast(message: string) {
@@ -4782,6 +4792,7 @@ export async function startHotSheetWebClient() {
       toastPresentation.dispose();
       toastHost.remove();
       toastLifetime.dispose();
+      toastClearance.stop();
       disposeInteractions();
       haltedSessionsController.dispose();
       permissionsController.dispose();
