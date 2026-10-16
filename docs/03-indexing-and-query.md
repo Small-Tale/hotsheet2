@@ -240,6 +240,21 @@ duplicate slugs, and lets a corrupt file fail only the lookup of its own recover
 On a generated 3,000-ticket store (debug build), a slug `GET /tickets/<SLUG>` dropped from
 about 1.7 s to about 3 ms; a miss, which still walks, dropped to about 130 ms.
 
+**Index-authoritative misses (HS2-3R0C6G).** While the store's watcher reports the index
+in sync, an index miss is the answer and the walk is skipped
+(`hotsheet_index::IndexFreshness`, carried by each `StoreEntry`). In sync means the watcher
+is live (its stream is running and the resync covering writes made while it started has
+been applied), no watcher event is queued or mid-debounce, and no failed index write is
+waiting for repair. Any of those — and a store nobody watches, a watcher error or rescan
+request (until the full re-check it triggers is applied), or a stopped watcher — sends a
+miss back to the walk. Freshness is sampled before and after the candidate query, so an
+event queued meanwhile also walks. A stale candidate still walks. The one blind spot is
+the few milliseconds between an external write and the stream delivering its event; a
+lookup racing an external create can miss it, as one sent a moment earlier would. A slug
+held only by a file that was never parseable while indexed resolves as a miss rather than
+as that file's parse error. Measured on a 3,000-ticket store (debug build, in-memory
+index): a miss took about 89 ms through the walk and about 1.6 ms in sync.
+
 ## 3.5 The query surface
 
 One query API, consumed by the server (REST/WS) and the CLI:

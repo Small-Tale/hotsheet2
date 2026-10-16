@@ -183,6 +183,8 @@ pub struct AppState {
     /// The primary store's stat-validated corrupt-ticket cache (HS2-KYSBT2), shared with
     /// its hosted entry so the unprefixed and checkout routes see one cache.
     corrupt: Arc<Mutex<hotsheet_ticketing::CorruptTicketCache>>,
+    /// The primary store's index freshness (HS2-3R0C6G), shared with its host entry.
+    freshness: Arc<hotsheet_index::IndexFreshness>,
     /// A bounded, sequenced log of recent [`ChangeEvent`]s backing the **long-poll**
     /// fallback (`GET /ws/poll`) for clients that can't hold a WebSocket (HS2-P3P3CC). The
     /// live push over `/ws/sync` is the primary transport; this replays "everything since
@@ -381,6 +383,7 @@ impl AppState {
         let (events, _) = broadcast::channel(256);
         let index = Arc::new(Mutex::new(index));
         let corrupt = Arc::default();
+        let freshness: Arc<hotsheet_index::IndexFreshness> = Arc::default();
         let host = StoreHost::new();
         // The primary store is the default hosted entry (shares the same index Arc, so
         // the unprefixed routes and /stores/{default}/… see one index).
@@ -389,6 +392,7 @@ impl AppState {
             store: store.clone(),
             index: index.clone(),
             corrupt: Arc::clone(&corrupt),
+            freshness: Arc::clone(&freshness),
         };
         host.register(primary.clone());
         prewarm_corrupt_tickets(primary);
@@ -465,6 +469,7 @@ impl AppState {
             events,
             index,
             corrupt,
+            freshness,
             event_log,
             host,
             injected_providers: ProviderRegistry::default(),
@@ -1025,6 +1030,7 @@ impl AppState {
             store: self.store.clone(),
             index: self.index.clone(),
             corrupt: self.corrupt.clone(),
+            freshness: self.freshness.clone(),
         }
     }
 

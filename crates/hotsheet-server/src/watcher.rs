@@ -130,6 +130,9 @@ pub(crate) fn registered_watcher_backend() -> WatcherBackend {
 /// Marks the synthetic event that asks a store's watch loop to re-check its tickets once
 /// the native stream is live, covering writes made while the stream was starting.
 const STARTUP_RESYNC: &str = "hotsheet-startup-resync";
+/// Marks the resync after which the watcher is live: once it is applied, every write made
+/// before the stream started is in the index, so a slug miss can trust it (HS2-3R0C6G).
+const LIVE_RESYNC: &str = "hotsheet-live-resync";
 /// When the startup resync runs; a native stream is live well within this (HS2-P3SSGR).
 const STARTUP_RESYNC_DELAY: Duration = Duration::from_millis(1500);
 
@@ -160,7 +163,13 @@ pub(crate) fn spawn_watcher_for(
     let tickets_dir = target.entry.store.root().join("tickets");
     std::fs::create_dir_all(&tickets_dir)?;
 
-    let (tx, rx) = std::sync::mpsc::channel();
+    let freshness = target.entry.freshness.clone();
+    let (raw_tx, rx) = std::sync::mpsc::channel();
+    // Every queued event counts as a pending reconcile until the loop applies it.
+    let tx = QueuedSender {
+        tx: raw_tx,
+        freshness,
+    };
     std::thread::spawn(move || watch_loop(rx, target));
     let watcher = match backend {
         WatcherBackend::Recommended => {
@@ -174,15 +183,13 @@ pub(crate) fn spawn_watcher_for(
             let started = slot.clone();
             std::thread::spawn(move || {
                 let resync = tx.clone();
-                let request_resync = |dir: &FsPath| {
-                    let _ = resync.send(Ok(notify::Event::new(notify::EventKind::Other)
-                        .add_path(dir.to_path_buf())
-                        .set_info(STARTUP_RESYNC)));
+                let request_resync = |dir: &FsPath, info: &str| {
+                    resync.send(Ok(resync_event(dir, info)));
                 };
                 let bridge_tx = tx.clone();
                 let bridge = notify::PollWatcher::new(
                     move |res| {
-                        let _ = bridge_tx.send(res);
+                        bridge_tx.send(res);
                     },
                     startup_bridge_config(),
                 )
@@ -197,9 +204,9 @@ pub(crate) fn spawn_watcher_for(
                     }
                     slot.bridge = bridge.ok();
                 }
-                request_resync(&tickets_dir);
+                request_resync(&tickets_dir, STARTUP_RESYNC);
                 let mut watcher = match notify::recommended_watcher(move |res| {
-                    let _ = tx.send(res);
+                    tx.send(res);
                 }) {
                     Ok(watcher) => watcher,
                     Err(error) => {
@@ -231,24 +238,52 @@ pub(crate) fn spawn_watcher_for(
                 // The native stream is live: retire the bridge and re-check once more.
                 let bridge = started.with_lock(|slot| slot.bridge.take());
                 drop(bridge);
-                request_resync(&tickets_dir);
+                request_resync(&tickets_dir, LIVE_RESYNC);
             });
             HeldWatcher::Native {
                 _hold: NativeWatcherHold(slot),
             }
         }
         WatcherBackend::Poll => {
+            let resync = tx.clone();
             let mut watcher = notify::PollWatcher::new(
                 move |res| {
-                    let _ = tx.send(res);
+                    tx.send(res);
                 },
                 notify::Config::default().with_poll_interval(Duration::from_millis(250)),
             )?;
             watcher.watch(&tickets_dir, RecursiveMode::Recursive)?;
+            // The poller is scanning: re-check writes made before it started, then go live.
+            resync.send(Ok(resync_event(&tickets_dir, LIVE_RESYNC)));
             HeldWatcher::Poll { _watcher: watcher }
         }
     };
     Ok(WatchHandle { _watcher: watcher })
+}
+
+/// A watcher-event sender that counts each queued event as a pending reconcile on the
+/// store's [`hotsheet_index::IndexFreshness`] until the watch loop applies it.
+#[derive(Clone)]
+pub(crate) struct QueuedSender {
+    pub(crate) tx: std::sync::mpsc::Sender<notify::Result<notify::Event>>,
+    pub(crate) freshness: Arc<hotsheet_index::IndexFreshness>,
+}
+
+impl QueuedSender {
+    pub(crate) fn send(&self, event: notify::Result<notify::Event>) {
+        self.freshness.event_queued();
+        if self.tx.send(event).is_err() {
+            // The loop is gone; nothing will apply it.
+            self.freshness.events_applied(1);
+        }
+    }
+}
+
+/// The synthetic event asking the watch loop to re-check every ticket file under `dir`.
+fn resync_event(dir: &FsPath, info: &str) -> notify::Event {
+    notify::Event::new(notify::EventKind::Other)
+        .add_path(dir.to_path_buf())
+        .set_info(info)
 }
 
 pub(crate) fn repository_change_event(checkout_id: &str) -> ChangeEvent {
@@ -673,6 +708,7 @@ pub(crate) fn watch_loop(
 
     use std::sync::mpsc::RecvTimeoutError;
 
+    let freshness = target.entry.freshness.clone();
     let mut retry_delay = INDEX_REPAIR_RETRY_MIN;
     loop {
         // Retry queued index repairs on a bounded backoff so a store with no further
@@ -692,26 +728,74 @@ pub(crate) fn watch_loop(
                 }
                 continue;
             }
-            Err(RecvTimeoutError::Disconnected) => return,
+            Err(RecvTimeoutError::Disconnected) => {
+                // No stream feeds the index any more: a miss must walk again.
+                freshness.set_live(false);
+                return;
+            }
         };
-        let mut paths = watch_event_paths(&target, first);
+        let mut batch = WatchBatch::default();
+        batch.add(&target, first);
         // Debounce a burst (editor save, git checkout touching many files).
         while let Ok(next) = rx.recv_timeout(Duration::from_millis(150)) {
-            paths.extend(watch_event_paths(&target, next));
+            batch.add(&target, next);
         }
+        let WatchBatch {
+            mut paths,
+            events,
+            goes_live,
+        } = batch;
         paths.sort();
         paths.dedup();
-        if paths.is_empty() {
-            continue;
-        }
         let mut index_changed = false;
         for path in &paths {
             index_changed |= handle_path_change(&target, path);
         }
+        // Every event in the batch is now in the index (HS2-3R0C6G).
+        if goes_live {
+            freshness.set_live(true);
+        }
+        freshness.events_applied(events);
         if !index_changed {
             continue;
         }
         regenerate_target_worklists(&target);
+    }
+}
+
+/// One debounced burst of watcher events: the ticket files to apply, how many queued
+/// events it consumed, and whether applying it makes the watcher live.
+#[derive(Default)]
+struct WatchBatch {
+    paths: Vec<std::path::PathBuf>,
+    events: usize,
+    goes_live: bool,
+}
+
+impl WatchBatch {
+    fn add(&mut self, target: &WatchTarget, res: notify::Result<notify::Event>) {
+        self.events += 1;
+        let lost_events = match &res {
+            Ok(event) => event.need_rescan(),
+            Err(_) => true,
+        };
+        if lost_events {
+            // The stream may have dropped events: stop trusting misses, re-check every
+            // ticket file against the index, and trust them again once that is applied.
+            target.entry.freshness.set_live(false);
+            self.paths.extend(stale_ticket_files(
+                target,
+                &target.entry.store.root().join("tickets"),
+            ));
+            self.goes_live = true;
+            return;
+        }
+        if let Ok(event) = &res
+            && event.info() == Some(LIVE_RESYNC)
+        {
+            self.goes_live = true;
+        }
+        self.paths.extend(watch_event_paths(target, res));
     }
 }
 
@@ -740,7 +824,7 @@ fn watch_event_paths(
     res: notify::Result<notify::Event>,
 ) -> Vec<std::path::PathBuf> {
     if let Ok(event) = &res
-        && event.info() == Some(STARTUP_RESYNC)
+        && matches!(event.info(), Some(STARTUP_RESYNC | LIVE_RESYNC))
     {
         return event
             .paths
@@ -1185,5 +1269,179 @@ mod watcher_tests {
         assert_eq!(event.store, "checkout-42");
         assert_eq!(event.id, "checkout-42");
         assert!(event.slug.is_empty());
+    }
+}
+
+/// HS2-3R0C6G: the watcher keeps the store entry's index freshness current, so a slug
+/// miss is final only while every queued event and repair has been applied.
+#[cfg(test)]
+mod freshness_tests {
+    use super::{LIVE_RESYNC, QueuedSender, WatcherBackend, resync_event, watch_loop};
+    use hotsheet_index::IndexError;
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{FsStore, NewTicket, StoreMetadata, ops};
+    use std::time::{Duration, Instant};
+
+    fn store() -> (tempfile::TempDir, FsStore) {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        (dir, store)
+    }
+
+    fn create(store: &FsStore, title: &str) -> hotsheet_model::Ticket {
+        ops::create(
+            store,
+            Ulid::new(),
+            "HS",
+            Timestamp::new("2026-10-16T00:00:00Z"),
+            NewTicket {
+                title: title.into(),
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    }
+
+    fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !done() {
+            assert!(Instant::now() < deadline, "timed out waiting for {what}");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// Drives the real watch loop with hand-fed events, walking the freshness states:
+    /// starting → live → event queued → applied → events lost → rescanned → stopped.
+    #[test]
+    fn the_watch_loop_walks_every_freshness_transition() {
+        let (dir, store) = store();
+        let state = crate::AppState::new(store.clone(), "secret".into()).unwrap();
+        let target = super::default_watch_target(&state);
+        let entry = target.entry.clone();
+        let freshness = entry.freshness.clone();
+        let (raw, rx) = std::sync::mpsc::channel();
+        let tx = QueuedSender {
+            tx: raw,
+            freshness: freshness.clone(),
+        };
+        let looping = std::thread::spawn(move || watch_loop(rx, target));
+        let tickets = dir.path().join("tickets");
+
+        // Starting: a write made before the stream is live still resolves (walk).
+        let early = create(&store, "written while the watcher started");
+        assert!(!freshness.in_sync());
+        assert_eq!(entry.resolve(&early.slug).unwrap().unwrap().id, early.id);
+
+        // Live once the live resync is applied; it indexed the early write.
+        tx.send(Ok(resync_event(&tickets, LIVE_RESYNC)));
+        assert!(
+            !freshness.in_sync(),
+            "a queued resync is a pending reconcile"
+        );
+        wait_for("the live resync", || freshness.in_sync());
+        assert_eq!(entry.resolve(&early.slug).unwrap().unwrap().id, early.id);
+        assert!(entry.resolve("HS-NOSUCH").unwrap().is_none());
+
+        // An external write whose event is queued: out of sync until it is applied, and
+        // the miss walks in the meantime.
+        let external = create(&store, "external write");
+        let path = store.ticket_path(&external.id);
+        tx.send(Ok(notify::Event::new(notify::EventKind::Any).add_path(path)));
+        assert!(!freshness.in_sync());
+        assert_eq!(
+            entry.resolve(&external.slug).unwrap().unwrap().id,
+            external.id
+        );
+        wait_for("the external write", || freshness.in_sync());
+        assert_eq!(
+            entry.resolve(&external.slug).unwrap().unwrap().id,
+            external.id
+        );
+
+        // A write whose event never arrives is the documented blind spot: in sync, its
+        // slug misses. A watcher error (possible lost events) rescans and finds it.
+        let unseen = create(&store, "event never delivered");
+        assert!(entry.resolve(&unseen.slug).unwrap().is_none());
+        tx.send(Err(notify::Error::generic("simulated overflow")));
+        assert!(!freshness.in_sync());
+        wait_for("the rescan", || freshness.in_sync());
+        assert_eq!(entry.resolve(&unseen.slug).unwrap().unwrap().id, unseen.id);
+
+        // A rescan request behaves the same way.
+        let rescanned = create(&store, "found by a rescan request");
+        tx.send(Ok(
+            notify::Event::new(notify::EventKind::Other).set_flag(notify::event::Flag::Rescan)
+        ));
+        wait_for("the rescan request", || freshness.in_sync());
+        assert_eq!(
+            entry.resolve(&rescanned.slug).unwrap().unwrap().id,
+            rescanned.id
+        );
+
+        // Stopping the stream ends the loop and drops back to walking misses.
+        drop(tx);
+        looping.join().unwrap();
+        assert!(!freshness.in_sync());
+        let after_stop = create(&store, "written after the watcher stopped");
+        assert_eq!(
+            entry.resolve(&after_stop.slug).unwrap().unwrap().id,
+            after_stop.id
+        );
+    }
+
+    #[test]
+    fn a_failed_index_write_keeps_misses_walking_until_its_repair_lands() {
+        let (_dir, store) = store();
+        let state = crate::AppState::new(store.clone(), "secret".into()).unwrap();
+        let target = super::default_watch_target(&state);
+        let entry = target.entry.clone();
+        entry.freshness.set_live(true);
+        assert!(entry.freshness.in_sync());
+
+        let ticket = create(&store, "index write fails");
+        assert!(!target.index_repairs.write_or_schedule(
+            &entry,
+            &target.store_id,
+            ticket.id,
+            |_| Err(IndexError::Store("injected".into())),
+        ));
+        assert!(!entry.freshness.in_sync());
+        assert_eq!(entry.resolve(&ticket.slug).unwrap().unwrap().id, ticket.id);
+
+        assert!(!target.index_repairs.repair(&entry, &target.store_id));
+        assert!(entry.freshness.in_sync());
+        assert_eq!(entry.resolve(&ticket.slug).unwrap().unwrap().id, ticket.id);
+    }
+
+    /// The deterministic polling backend goes live on its own, and a genuine miss then
+    /// skips the walk while an external write still lands through the stream.
+    #[test]
+    fn a_running_watcher_goes_live_and_still_sees_external_writes() {
+        let (_dir, store) = store();
+        let state = crate::AppState::new(store.clone(), "secret".into()).unwrap();
+        let target = super::default_watch_target(&state);
+        let entry = target.entry.clone();
+        let handle = super::spawn_watcher_for(target, WatcherBackend::Poll).unwrap();
+        wait_for("the watcher to go live", || entry.freshness.in_sync());
+        assert!(entry.resolve("HS-NOSUCH").unwrap().is_none());
+
+        let external = create(&store, "written by another process");
+        wait_for("the external write to be indexed", || {
+            entry
+                .index
+                .lock()
+                .unwrap()
+                .slug_candidates(&external.slug)
+                .unwrap()
+                == vec![external.id]
+        });
+        wait_for("the watcher to settle", || entry.freshness.in_sync());
+        assert_eq!(
+            entry.resolve(&external.slug).unwrap().unwrap().id,
+            external.id
+        );
+        drop(handle);
+        wait_for("the watcher to stop", || !entry.freshness.in_sync());
     }
 }

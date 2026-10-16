@@ -52,6 +52,7 @@ impl AppState {
             store: store.clone(),
             index: Arc::new(Mutex::new(index)),
             corrupt: Arc::default(),
+            freshness: Arc::default(),
         };
         self.host.register(entry.clone());
         prewarm_corrupt_tickets(entry.clone());

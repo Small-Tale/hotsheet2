@@ -28,16 +28,24 @@ pub struct StoreEntry {
     pub index: Arc<Mutex<Index>>,
     /// Stat-validated memo of the store's corrupt ticket files (HS2-KYSBT2).
     pub corrupt: Arc<Mutex<hotsheet_ticketing::CorruptTicketCache>>,
+    /// Whether the index reflects every ticket file right now, maintained by the store's
+    /// watcher and index-repair queue; while it does, a slug miss skips the store walk
+    /// (HS2-3R0C6G). Shared by every clone of this entry.
+    pub freshness: Arc<hotsheet_index::IndexFreshness>,
 }
 
 impl StoreEntry {
     /// Resolve a ULID or slug in this store through its index, verifying the candidate
     /// file and falling back to the store walk on a miss or stale entry (HS2-ZXFNE6).
     /// The index lock is held only for the candidate query, never across file reads.
+    /// A miss is final while the watcher reports the index in sync (HS2-3R0C6G).
     pub fn resolve(&self, needle: &str) -> Result<Option<Ticket>, StoreError> {
-        hotsheet_index::resolve_ticket(&self.store, needle, |slug| {
-            self.index.lock_or_recover().slug_candidates(slug)
-        })
+        hotsheet_index::resolve_ticket_with_freshness(
+            &self.store,
+            needle,
+            |slug| self.index.lock_or_recover().slug_candidates(slug),
+            &self.freshness,
+        )
     }
 }
 
@@ -342,6 +350,7 @@ mod tests {
             store,
             index: Arc::new(Mutex::new(index)),
             corrupt: Arc::default(),
+            freshness: Arc::default(),
         }
     }
 

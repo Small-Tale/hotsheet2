@@ -67,6 +67,9 @@ impl IndexRepairs {
             Ok(()) => true,
             Err(error) => {
                 self.schedule(store_id, id, &error);
+                // The index no longer reflects this ticket: a slug miss must walk until
+                // the repair lands (HS2-3R0C6G).
+                entry.freshness.set_repairs_pending(true);
                 false
             }
         }
@@ -126,7 +129,9 @@ impl IndexRepairs {
                 self.schedule(store_id, id, &error);
             }
         }
-        self.has_pending(store_id)
+        let still = self.has_pending(store_id);
+        entry.freshness.set_repairs_pending(still);
+        still
     }
 }
 
