@@ -851,3 +851,20 @@ fn permission_modes_validate_per_tool_and_fall_back_to_the_plugin_default() {
     let error = prepare_ai_defaults_for_save(&tools, &wrong_provider, None).unwrap_err();
     assert!(error.contains("provider 'codex'"), "{error}");
 }
+
+/// HS2-T9VXEP: test processes must never resolve the maintainer's real machine home, even
+/// when the launching shell exported `HOTSHEET_HOME=~/.hotsheet2` (Hot Sheet-launched agent
+/// sessions do). `.cargo/config.toml` forces a repository-local test home for every process
+/// cargo or nextest starts; removing that guard fails this test.
+#[test]
+fn test_processes_use_the_repository_test_home_not_the_real_machine_home() {
+    let home = hotsheet_home();
+    assert!(
+        home.ends_with("target/test-hotsheet-home"),
+        "tests must run under the forced repository test home, got {}",
+        home.display()
+    );
+    if let Some(user_home) = std::env::var_os("HOME") {
+        assert_ne!(home, Path::new(&user_home).join(".hotsheet2"));
+    }
+}

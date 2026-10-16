@@ -1,2 +1,12 @@
 [alias]
 lint = "clippy --config build.target-dir=\"target/clippy\" --workspace --all-targets --all-features -- -D warnings -D clippy::dbg_macro -D clippy::todo -D clippy::unimplemented"
+
+# HS2-T9VXEP: every process cargo or cargo-nextest launches (test binaries, build
+# scripts, `cargo run`) gets a repository-local machine home. Hot Sheet-launched agent
+# sessions export HOTSHEET_HOME as the maintainer's real `~/.hotsheet2`; without `force`
+# that inherited value would let any test that forgets its own temp home write the real
+# checkouts.json, settings.json, or settings-locks. Tests that need a fresh home still
+# pass their own temp directory explicitly. Binaries run directly from target/ are
+# unaffected.
+[env]
+HOTSHEET_HOME = { value = "target/test-hotsheet-home", force = true, relative = true }

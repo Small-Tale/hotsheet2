@@ -6,6 +6,8 @@ import { defineConfig } from 'vitest/config';
 // the number down with untested dev tooling.
 export default defineConfig({
   test: {
+    // HS2-T9VXEP: spawned HS2 binaries must never see the real machine home.
+    globalSetup: ['./test/isolated-home.mjs'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],

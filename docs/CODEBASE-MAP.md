@@ -595,7 +595,13 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   §12.6.1). It works with lint, nextest, and llvm-cov without making the tool a
   repository-wide prerequisite.
 - **Migrator tests:** `cd migrator && npm install && npx vitest run` (the conformance
-  test needs `target/debug/hotsheet-cli` built first; it skips otherwise)
+  test needs `target/debug/hotsheet-cli` built first; it skips otherwise).
+  `migrator/test/isolated-home.mjs` (Vitest `globalSetup`) gives spawned binaries a
+  throwaway `HOTSHEET_HOME`.
+- **Test machine home (HS2-T9VXEP):** `.cargo/config.toml` `[env]` forces
+  `HOTSHEET_HOME=target/test-hotsheet-home` for every cargo/nextest-launched process so an
+  inherited real `~/.hotsheet2` never reaches a test; see
+  [12 §12.7.6](12-code-organization-and-testing.md#1276-fixtures--ci).
 - **Lint (must pass with zero warnings before push):** `cargo fmt --all --check` +
   `cargo lint`; then `npm run lint` in `clients/web`, `migrator`, and
   `spikes/kerf-webawesome`. `.cargo/config.toml` owns the pinned workspace Clippy

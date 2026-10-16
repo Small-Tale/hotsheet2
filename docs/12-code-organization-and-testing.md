@@ -507,6 +507,19 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
 - **Shared fixtures ("helpers to always use"):** a `TempStore` builder (temp git repo
   - seeded tickets), a `TestServer` harness (real server + temp store on an ephemeral
     port), and an in-memory adapter set for pure unit tests.
+- **Machine-home isolation (HS2-T9VXEP):** tests and repros must never write the real
+  `~/.hotsheet2` (`checkouts.json`, `settings.json`, `settings-locks`). Hot Sheet-launched
+  agent shells export `HOTSHEET_HOME` as that real home, so inheriting the environment is
+  not isolation. `.cargo/config.toml` forces `HOTSHEET_HOME=<repo>/target/test-hotsheet-home`
+  for every process cargo or nextest starts (a test needing a fresh home still passes its
+  own temp directory), and
+  `hotsheet-plugins`'s `test_processes_use_the_repository_test_home_not_the_real_machine_home`
+  fails if that guard is removed. The migrator suite's `globalSetup`
+  (`migrator/test/isolated-home.mjs`) gives its spawned binaries a throwaway home, guarded
+  by `migrator/test/isolated-home.test.mjs`; the web real-server fixtures already pass
+  temp homes. Manual repros that run `target/debug/hotsheet-cli` or the server must export a
+  temporary `HOTSHEET_HOME` first; running from a temp directory alone still registers the
+  checkout in the real registry.
 - **CI (GitHub Actions) — built:** the `check` job runs `fmt --check`, `cargo lint`,
   `nextest`, web client lint/typecheck/unit/build, spike lint/typecheck/build, the plugin
   **conformance test** (HS2-64), the CLI
