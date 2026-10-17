@@ -20,9 +20,9 @@ describe('StatusBadge', () => {
     expect(String(BlockedBadge({}))).toMatch(
       /^<span data-blocked-badge="true" class="kui-badge" data-component="badge"[^>]*>Blocked<\/span>$/u,
     );
-    const trigger = String(StatusBadge({ status: 'started', interactive: true, actionLabel: 'Change Status' }));
-    expect(trigger).toMatch(/^<button type="button" class="status-badge"/u);
-    expect(trigger).toContain('data-interactive="true"');
+    const badge = String(StatusBadge({ status: 'started' }));
+    expect(badge).toMatch(/^<span class="status-badge"/u);
+    expect(badge).not.toContain('data-interactive');
   });
 
   it('maps every supported status to stable readable presentation', () => {

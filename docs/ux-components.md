@@ -1430,19 +1430,19 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     both selected-value and popup-option presentations
   - `TicketPrioritySelect` — **demo built**: semantic priority icons in both
     selected-value and popup-option presentations
-  - `TicketStatusMenu` — **demo built**: an interactive app-owned `StatusBadge` trigger opens a Kerf `PopupMenu`. The Started item contains six phase
+  - `TicketStatusMenu` — **demo built**: Kerf `PopupMenu` owns the button, focus ring, and pointer cursor around an app-owned `StatusBadge` trigger presentation. The Started item contains six phase
     actions plus No phase for git-backed tickets; other providers omit that submenu.
     The menu keeps the canonical order: Not started, Started, Completed, Verified,
     then a separator before Backlog and Archive. Each status action has its semantic
     Lucide icon. The phone anchor leaves space above the status list for the Started
-    submenu; the native badge owns its focus ring without overriding Kerf parts.
+    submenu.
   - `StatusPicker`
   - `StatusBadge` — **built**: readable status text on a Kerf `Badge` whose semantic tone
     follows the status (HS2-3FMK0T), optional reinforcing Lucide icon, filled/plain appearances,
     and regular/compact sizing; every public variant is exposed with unit and bidirectional `/ux-demo` coverage.
     `BlockedBadge` renders Kerf's solid `Badge` directly, identified by `data-blocked-badge`
-    (HS2-PQHN1J). The interactive trigger's native-button reset stays app-owned until Kerf offers
-    a Badge menu trigger (`KF-PHGQ6D`)
+    (HS2-PQHN1J). Menu interaction is composed by `TicketStatusMenu` through Kerf's
+    `triggerContent` API (`KF-PHGQ6D`).
   - `ConfidenceCalibration` — **built** (`components/confidence-calibration.tsx`,
     HS2-Q1WCCY): a project's per-band calibration table, with a reopen-rate bar and
     recent completions. Its `/ux-demo` entry exposes the report, empty, loading, and error

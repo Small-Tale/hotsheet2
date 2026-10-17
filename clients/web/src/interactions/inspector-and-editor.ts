@@ -34,6 +34,7 @@ import { HostOnlyActionError } from '../host-only-actions';
 import { inlineEditorEscape } from '../inline-editor-escape';
 import { ATTACHMENTS_AND_GALLERY_TARGETS } from '../interaction-attrs/attachments-and-gallery';
 import { INSPECTOR_AND_EDITOR_ACTIONS, INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
+import { isPopupMenuOpen } from '../popup-menu-state';
 import { manuallyResizedTicketEditorHeight, saveTicketEditorSize, ticketEditorKind } from '../ticket-editor-size';
 import { noteEditPatch, type TicketFieldConflict } from '../ticket-field-reconciliation';
 import { type TicketPatch } from '../ticket-operations';
@@ -280,30 +281,31 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     ),
   );
   lifetime.add(
-    delegate(
-      document.body,
-      'click',
-      INSPECTOR_AND_EDITOR_ACTIONS.openInspectorStatusMenu.selector,
-      (_event, target) => {
-        const root = target.closest('#app-right-rail, [data-component="ticket-reader"]');
-        if (!root?.querySelector('[data-inspector-status-menu]')) return;
-        const rect = target.getBoundingClientRect();
-        const ticketId = selectedTicket.peek()?.id;
-        stopStatusMenuAnchor?.();
-        stopStatusMenuAnchor = maintainContextPopupMenuAnchor(
-          '[data-inspector-status-menu]',
-          { x: rect.left, y: statusMenuAnchorY(rect.bottom, window.innerWidth, window.innerHeight) },
-          () => root.isConnected && selectedTicket.peek()?.id === ticketId,
-          root,
-        );
-      },
-    ),
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.openInspectorStatusMenu.selector, (event, target) => {
+      if (!(event.target instanceof Element) || !event.target.closest('[data-inspector-status-menu] > button')) return;
+      const root = target.closest('#app-right-rail, [data-component="ticket-reader"]');
+      const menu = root?.querySelector('[data-inspector-status-menu]');
+      if (!root || !menu || !isPopupMenuOpen(menu)) return;
+      const rect = (target.querySelector('[data-inspector-status-menu] > button') ?? target).getBoundingClientRect();
+      const ticketId = selectedTicket.peek()?.id;
+      stopStatusMenuAnchor?.();
+      stopStatusMenuAnchor = maintainContextPopupMenuAnchor(
+        '[data-inspector-status-menu]',
+        { x: rect.left, y: statusMenuAnchorY(rect.bottom, window.innerWidth, window.innerHeight) },
+        () => root.isConnected && selectedTicket.peek()?.id === ticketId,
+        root,
+      );
+    }),
   );
   lifetime.add(
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.setInspectorStatus.selector, (_event, target) => {
       if (!canUpdateEditTicket()) return;
       const status = (target as HTMLElement).dataset.ticketStatus;
-      if (status) void updateSelectedTracked({ status });
+      if (status) {
+        stopStatusMenuAnchor?.();
+        stopStatusMenuAnchor = undefined;
+        void updateSelectedTracked({ status });
+      }
     }),
   );
   lifetime.add(
@@ -322,6 +324,8 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
           return;
         const phase = (target as HTMLElement).dataset.startedPhase;
         if (phase === undefined) return;
+        stopStatusMenuAnchor?.();
+        stopStatusMenuAnchor = undefined;
         void updateSelectedTracked(startedPhasePatch(frame?.ticket ?? selectedTicket.value, phase));
       },
     ),

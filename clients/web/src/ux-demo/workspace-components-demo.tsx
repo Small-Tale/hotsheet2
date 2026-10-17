@@ -50,6 +50,7 @@ import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { insertSearchSyntax, wireTicketSearchFields } from '../interactions/ticket-search-field';
 import { type PermissionDecision, PermissionInbox, type PermissionScope } from '../permission-notifications';
+import { isPopupMenuOpen } from '../popup-menu-state';
 import { keepSearchOpenForShadowTarget } from '../search-collapse';
 import { createTicketSearchModel, inlineSearchTokens } from '../ticket-search-model';
 import { compareWorkspaceTickets } from '../workspace-ticket-sort';
@@ -1034,12 +1035,13 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
     }),
   );
   demoListeners.add(
-    delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.openInspectorStatusMenu.selector, (_event, target) => {
+    delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.openInspectorStatusMenu.selector, (event, target) => {
+      if (!(event.target instanceof Element) || !event.target.closest('[data-inspector-status-menu] > button')) return;
       const menu = target
         .closest('.ticket-status-menu')
         ?.querySelector<PopupMenuElement>('[data-inspector-status-menu]');
-      if (!menu) return;
-      const rect = target.getBoundingClientRect();
+      if (!menu || !isPopupMenuOpen(menu)) return;
+      const rect = (menu.querySelector('button[aria-haspopup="menu"]') ?? menu).getBoundingClientRect();
       openPopupMenuAt(menu, rect.left, statusMenuAnchorY(rect.bottom, window.innerWidth, window.innerHeight));
     }),
   );

@@ -132,7 +132,7 @@ describe('ticket metadata controls and inspector panels', () => {
     const status = String(TicketStatusMenu({ value: 'completed' }));
     expect(status).toContain('aria-label="Change Status, Completed"');
     // The app-owned wrapper carries the placement class; the Kerf Select root keeps only its own classes.
-    expect(status).toContain('<span class="ticket-status-menu">');
+    expect(status).toContain('<span class="ticket-status-menu"');
     expect(status).toContain('class="status-badge" data-component="status-badge" data-status="completed"');
     expect(status).toContain('data-inspector-status-menu="true"');
     expect(status).toContain('data-ticket-status="verified"');
@@ -141,10 +141,12 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(status).toContain('data-lucide="badge-check"');
     // One icon per status (and the badge); Kerf adds its own check marks to the checkable items.
     expect(status.match(/data-lucide="(?!check")/g)).toHaveLength(7);
-    // The app-owned badge is the trigger; Kerf PopupMenu provides the nested actions.
+    // Kerf owns the trigger button and wraps the app-owned status badge.
     expect(status).toContain('data-action="open-inspector-status-menu"');
     expect(status).toContain('aria-haspopup="menu"');
-    expect(status).toContain('data-interactive="true"');
+    expect(status).toContain('class="kui-popup-menu__trigger-content"');
+    expect(status).not.toContain('data-interactive');
+    expect(existsSync(new URL('./status-badge.css', import.meta.url))).toBe(false);
     // Kerf beta.96 owns the submenu safe-triangle fix (KF-YAHAZK), so the menu ships no CSS (HS2-80E3X0).
     expect(existsSync(new URL('./ticket-status-menu.css', import.meta.url))).toBe(false);
   });

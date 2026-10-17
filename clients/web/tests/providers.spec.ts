@@ -12391,7 +12391,7 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
   await page.getByLabel('Columns View').click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const select = page.locator('[data-inspector-status-menu]');
-  const trigger = page.locator('[data-action="open-inspector-status-menu"]');
+  const trigger = page.locator('[data-inspector-status-menu] > button');
   await trigger.click();
   await expect
     .poll(() =>
@@ -13539,7 +13539,7 @@ test('animates ticket moves, arrivals, and departures in sequence', async ({ pag
   expect(sourceBox).not.toBeNull();
   await moving.click();
   const status = page.locator('.ticket-status-menu');
-  await status.locator('[data-action="open-inspector-status-menu"]').click();
+  await status.locator('[data-inspector-status-menu] > button').click();
   await status.locator('[data-ticket-status="completed"]').click();
   const moved = page.locator('[data-column-id="completed"] [data-ticket-slug="HS2-DEMO01"]'),
     moveGhost = page.locator('[data-ticket-motion-ghost="move"][data-ticket-motion-slug="HS2-DEMO01"]');
@@ -16241,12 +16241,9 @@ test('moves tickets to Backlog and Archive from every shipped status menu', asyn
   const inspector = page.locator('#app-right-rail'),
     status = inspector.locator('.ticket-status-menu');
   await expect(status.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'archive');
-  await expect(status.locator('[data-action="open-inspector-status-menu"]')).toHaveAttribute(
-    'aria-label',
-    'Change Status, Archive',
-  );
+  await expect(status.locator('[data-inspector-status-menu] > button')).toHaveAccessibleName('Change Status, Archive');
   await expect(status.locator('[data-component="status-badge"] [data-lucide="archive"]')).toBeVisible();
-  await status.locator('[data-action="open-inspector-status-menu"]').click();
+  await status.locator('[data-inspector-status-menu] > button').click();
   await expect(status.locator('[data-ticket-status]')).toHaveCount(6);
   await expect(status.locator('.kui-popup-menu__divider')).toHaveCount(1);
   await status.locator('[data-ticket-status="backlog"]').click();
@@ -16472,7 +16469,7 @@ test('keeps primary 138-ticket interactions within the painted UI budget @quaran
   samples.push(
     await timing('ticket-status-change', () =>
       page
-        .locator('.ticket-status-menu [data-action="open-inspector-status-menu"]')
+        .locator('.ticket-status-menu [data-inspector-status-menu] > button')
         .click()
         .then(() => page.locator('[data-inspector-status-menu] [data-ticket-status="completed"]').click()),
     ),
@@ -17102,15 +17099,14 @@ test('aligns Status controls without duplicating badge insets and preserves sele
     ['completed', 'Completed', 'circle-check', 'success'],
     ['started', 'Started', 'clock', 'warning'],
   ] as const) {
-    await status.locator('[data-action="open-inspector-status-menu"]').click();
+    await status.locator('[data-inspector-status-menu] > button').click();
     if (value === 'started') {
       await status.locator('[data-ticket-status="started"]').hover();
       await status.locator('[data-started-phase=""]').click();
     } else await status.locator(`[data-ticket-status="${value}"]`).click();
     await expect.poll(() => patches.some((patch) => patch.status === value)).toBe(true);
     await expect(badge).toHaveAttribute('data-status', value);
-    await expect(status.locator('[data-action="open-inspector-status-menu"]')).toHaveAttribute(
-      'aria-label',
+    await expect(status.locator('[data-inspector-status-menu] > button')).toHaveAccessibleName(
       `Change Status, ${label}`,
     );
     await expect(badge).toHaveAttribute('data-status', value);
@@ -17747,7 +17743,7 @@ test('keeps an open inspector status popup at its trigger after its anchor is mo
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   const status = page.locator('#app-right-rail .ticket-status-menu'),
-    trigger = status.locator('[data-action="open-inspector-status-menu"]'),
+    trigger = status.locator('[data-inspector-status-menu] > button'),
     menu = status.locator('[data-inspector-status-menu]');
   await trigger.click();
   await expect(menuOpener(menu)).toHaveAttribute('aria-expanded', 'true');
@@ -17784,7 +17780,7 @@ test('edits and clears the Started phase without changing lifecycle status', asy
   const status = inspector.locator('.ticket-status-menu');
   const phase = status.locator('[data-component="status-badge"]');
   await expect(phase).toHaveText('Started');
-  await status.locator('[data-action="open-inspector-status-menu"]').click();
+  await status.locator('[data-inspector-status-menu] > button').click();
   await status.locator('[data-ticket-status="started"]').hover();
   await page.waitForTimeout(300);
   for (const startedPhase of [
@@ -17832,7 +17828,7 @@ test('edits and clears the Started phase without changing lifecycle status', asy
   await inspector
     .locator('.ticket-info-panel__metadata')
     .screenshot({ path: 'target/visual-captures/hs2-hhkjsc-phase-narrow.png' });
-  await status.locator('[data-action="open-inspector-status-menu"]').click();
+  await status.locator('[data-inspector-status-menu] > button').click();
   await status.locator('[data-ticket-status="started"]').hover();
   await page.waitForTimeout(300);
   await page.screenshot({ path: 'target/visual-captures/hs2-hhkjsc-menu-narrow.png' });
@@ -17840,10 +17836,10 @@ test('edits and clears the Started phase without changing lifecycle status', asy
   await expect.poll(() => patches.at(-1)?.started_phase).toBeNull();
   await expect(phase).toHaveText('Started');
   expect(patches.every((patch) => !('status' in patch))).toBe(true);
-  await status.locator('[data-action="open-inspector-status-menu"]').click();
+  await status.locator('[data-inspector-status-menu] > button').click();
   await status.locator('[data-ticket-status="completed"]').click();
   await expect(phase).toHaveText('Completed');
-  await status.locator('[data-action="open-inspector-status-menu"]').click();
+  await status.locator('[data-inspector-status-menu] > button').click();
   await status.locator('[data-ticket-status="started"]').hover();
   await status.locator('[data-started-phase="planning"]').click();
   await expect.poll(() => patches.at(-1)).toMatchObject({ status: 'started', started_phase: 'planning' });
@@ -17871,7 +17867,7 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await expect(activityNote).toHaveAttribute('data-kind', 'activity');
   await expect(activityNote).toContainText('Loaded checkout-scoped tickets.');
   await page.screenshot({ path: 'target/visual-captures/hs2-a32eak-activity-note-wide.png', fullPage: true });
-  await page.locator('[data-action="open-inspector-status-menu"]').click();
+  await page.locator('[data-inspector-status-menu] > button').click();
   await page.locator('[data-inspector-status-menu] [data-ticket-status="completed"]').click();
   await expect(page.locator('#app-right-rail [data-component="status-badge"]')).toContainText('Completed');
   await page.getByRole('tab', { name: 'Timeline' }).click();
@@ -17900,7 +17896,7 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await expect(timeline.getByText('Completed', { exact: true })).toBeVisible();
   await expect(timeline).not.toContainText('Status changed from Started to Completed');
   await page.getByRole('tab', { name: 'Info' }).click();
-  await page.locator('[data-action="open-inspector-status-menu"]').click();
+  await page.locator('[data-inspector-status-menu] > button').click();
   await page.locator('[data-inspector-status-menu] [data-ticket-status="backlog"]').click();
   await page.getByRole('tab', { name: 'Timeline' }).click();
   await expect(timeline.getByText('Moved to backlog', { exact: true })).toBeVisible();
@@ -18007,7 +18003,7 @@ test('shows reactive open and Up Next counts immediately above Drive', async ({ 
   await page.screenshot({ path: 'target/visual-captures/hs2-a94d3h-project-work-summary-wide.png', fullPage: true });
   await page.locator('[data-ticket-slug="HS2-NEXT01"]').click();
   const statusSelect = page.locator('.ticket-status-menu');
-  await statusSelect.locator('[data-action="open-inspector-status-menu"]').click();
+  await statusSelect.locator('[data-inspector-status-menu] > button').click();
   await statusSelect.locator('[data-ticket-status="completed"]').click();
   await expect(summary).toHaveText('5 open, 1 up next, 0 active');
   await page.keyboard.press('Escape');
@@ -25958,7 +25954,7 @@ test('undoes, redoes, copies, pastes, and drags ticket mutations through the rea
         response.request().method() === 'PATCH' &&
         decodeURIComponent(new URL(response.url()).pathname).endsWith('/tickets/git-local:01'),
     );
-  await page.locator('[data-action="open-inspector-status-menu"]').click();
+  await page.locator('[data-inspector-status-menu] > button').click();
   let response = nextPatch();
   await page.locator('[data-inspector-status-menu] [data-ticket-status="completed"]').click();
   await response;
@@ -28629,7 +28625,7 @@ test('shows the decorative server-busy bars while a server request is in flight 
   const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await row.click();
   const statusSelect = page.locator('.ticket-status-menu');
-  await statusSelect.locator('[data-action="open-inspector-status-menu"]').click();
+  await statusSelect.locator('[data-inspector-status-menu] > button').click();
   await statusSelect.locator('[data-ticket-status="completed"]').click();
   await expect(bars).toHaveAttribute('data-visible', 'true');
   await page.screenshot({ path: 'target/visual-captures/hs2-mw1v3m-busy-bars-wide.png' });
@@ -29032,14 +29028,14 @@ test('shows recorded completion confidence through the real server (HS2-DWTJ43)'
     await inspector.locator('[data-inspector-tab="info"]').click();
     // Reopen through the real status control: the derived score disappears, the history stays.
     const status = inspector.locator('.ticket-status-menu');
-    await status.locator('[data-action="open-inspector-status-menu"]').click();
+    await status.locator('[data-inspector-status-menu] > button').click();
     await status.locator('[data-ticket-status="started"]').hover();
     await status.locator('[data-started-phase=""]').click();
     await expect.poll(async () => (await server.request<FullTicket>(`/tickets/${created.id}`)).status).toBe('started');
     await expect(header).toHaveCount(0);
     await expect(noteBadge(second.id)).toHaveAttribute('data-confidence', '86');
     // Re-completing without a new score must not resurrect the old one.
-    await status.locator('[data-action="open-inspector-status-menu"]').click();
+    await status.locator('[data-inspector-status-menu] > button').click();
     await status.locator('[data-ticket-status="completed"]').click();
     await expect
       .poll(async () => (await server.request<FullTicket>(`/tickets/${created.id}`)).status)
@@ -29652,7 +29648,7 @@ test('records the web client as the human actor on the real server (HS2-XF81CJ)'
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
     const inspector = page.locator('#app-right-rail');
     const status = inspector.locator('.ticket-status-menu');
-    await status.locator('[data-action="open-inspector-status-menu"]').click();
+    await status.locator('[data-inspector-status-menu] > button').click();
     await status.locator('[data-ticket-status="completed"]').click();
     // A person completes without a score: humans are never held to the AI rule.
     await expect

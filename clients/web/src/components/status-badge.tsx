@@ -1,5 +1,3 @@
-import './status-badge.css';
-
 import { Badge } from '@kerfjs/ui/badge';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
@@ -25,10 +23,6 @@ export interface StatusBadgeProps {
   showIcon?: boolean;
   appearance?: StatusBadgeAppearance;
   compact?: boolean;
-  interactive?: boolean;
-  actionLabel?: string;
-  action?: string;
-  hasPopup?: 'menu';
   slot?: string;
 }
 
@@ -60,7 +54,7 @@ export const STATUS_BADGE_TONES = {
 /**
  * A ticket's lifecycle status (and Started phase) as text plus a reinforcing Lucide icon. Kerf's
  * `Badge` owns the filled pill, its status tone, and the compact size; `plain` is the bare icon and
- * quiet label (HS2-3FMK0T). The interactive form is the TicketStatusMenu trigger button.
+ * quiet label (HS2-3FMK0T). TicketStatusMenu supplies Kerf's interactive trigger.
  */
 export function StatusBadge({
   status,
@@ -68,10 +62,6 @@ export function StatusBadge({
   showIcon = true,
   appearance = 'filled',
   compact = false,
-  interactive = false,
-  actionLabel,
-  action,
-  hasPopup,
   slot,
 }: StatusBadgeProps) {
   const value = statusPresentation(status);
@@ -103,20 +93,7 @@ export function StatusBadge({
     'data-appearance': appearance,
     'data-compact': compact ? 'true' : undefined,
   };
-  return interactive ? (
-    <button
-      type="button"
-      slot={slot}
-      class="status-badge"
-      {...identity}
-      data-interactive="true"
-      aria-label={actionLabel}
-      data-action={action}
-      aria-haspopup={hasPopup}
-    >
-      {content}
-    </button>
-  ) : (
+  return (
     <span slot={slot} class="status-badge" {...identity}>
       {content}
     </span>

@@ -5170,12 +5170,12 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   const star = inspector.getByRole('button', { name: 'Remove from Up Next' });
   await star.click();
   await expect(inspector.getByRole('button', { name: 'Add to Up Next' })).toBeVisible();
-  const statusTrigger = inspector.locator('[data-action="open-inspector-status-menu"]');
   const statusMenu = inspector.locator('[data-inspector-status-menu]');
-  await expect(statusTrigger).toHaveAttribute('aria-label', 'Change Status, Planning');
-  await expect(statusTrigger).toHaveAttribute('data-status', 'started');
+  const statusTrigger = statusMenu.locator(':scope > button');
+  await expect(statusTrigger).toHaveAccessibleName('Change Status, Planning');
+  await expect(statusTrigger.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'started');
   await expect(statusTrigger.locator('[data-component="badge"]')).toHaveAttribute('data-tone', 'warning');
-  // The native badge trigger keeps a visible keyboard focus ring.
+  // Kerf's badge-content trigger keeps a visible keyboard focus ring.
   await statusTrigger.evaluate((node: HTMLElement) => {
     node.focus({ focusVisible: true } as FocusOptions);
   });
@@ -5192,6 +5192,20 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   });
   await statusTrigger.click();
   await expect(statusMenu.locator('[data-ticket-status] .kui-popup-menu__icon [data-lucide]')).toHaveCount(6);
+  await statusTrigger.click();
+  await expect(statusTrigger).toHaveAttribute('aria-expanded', 'false');
+  await statusTrigger.click();
+  await expect(statusTrigger).toHaveAttribute('aria-expanded', 'true');
+  await statusMenu.locator('[data-ticket-status="started"]').click();
+  await expect(statusMenu.locator('[data-started-phase="planning"]')).toBeVisible();
+  await expect(
+    statusMenu.locator('[data-started-phase="planning"]').locator('xpath=ancestor::*[@role="menu"][1]'),
+  ).toHaveCSS('opacity', '1');
+  await page.screenshot({ path: 'target/visual-captures/hs2-m414z9-status-menu-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await statusTrigger.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'target/visual-captures/hs2-m414z9-status-menu-phone.png' });
+  await page.setViewportSize({ width: 1280, height: 720 });
   await expect(statusMenu.locator('.kui-popup-menu__divider')).toHaveCount(1);
   expect(
     await statusMenu
@@ -5200,8 +5214,8 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   ).toEqual(['not_started', 'started', 'completed', 'verified', 'backlog', 'archive']);
   await statusMenu.locator('[data-ticket-status="completed"]').click();
   await expect(inspector.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
-  await expect(statusTrigger).toHaveAttribute('aria-label', 'Change Status, Completed');
-  await expect(statusTrigger).toHaveAttribute('data-status', 'completed');
+  await expect(statusTrigger).toHaveAccessibleName('Change Status, Completed');
+  await expect(statusTrigger.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
   await expect(inspector.locator('[data-component="ticket-info-panel"]')).toBeVisible();
   const sectionRhythm = await inspector.locator('[data-component="ticket-info-panel"]').evaluate((node) =>
     [...node.querySelectorAll<HTMLElement>('.ticket-info-panel__section')].map((section) => ({

@@ -264,10 +264,9 @@ test('uses native modality for focus, nested Escape, backdrop policy, and respon
     await page.keyboard.press(key);
     expect(await reader.evaluate((host) => host.contains(document.activeElement))).toBe(true);
   }
-  const status = reader.locator('[data-action="open-inspector-status-menu"]');
-  // A Kerf context PopupMenu keeps its open state on its anchor's aria-expanded.
-  const statusMenu = reader.locator('[data-inspector-status-menu] > .kui-popup-menu__context-anchor');
-  await status.click();
+  // Kerf keeps the PopupMenu's open state on its badge-content trigger.
+  const statusMenu = reader.locator('[data-inspector-status-menu] > button');
+  await statusMenu.click();
   await expect(statusMenu).toHaveAttribute('aria-expanded', 'true');
   await page.keyboard.press('Escape');
   await expect(statusMenu).toHaveAttribute('aria-expanded', 'false');
@@ -1044,7 +1043,7 @@ test('adds and deletes notes and records the started phase in a link-opened read
   });
   // Record a started phase from the reader's status menu, routed to the owning project.
   const status = reader.locator('.ticket-status-menu');
-  await status.locator('[data-action="open-inspector-status-menu"]').click();
+  await status.locator('[data-inspector-status-menu] > button').click();
   await status.locator('[data-ticket-status="started"]').hover();
   const working = status.locator('[data-started-phase="working"]');
   await expect(working).toBeVisible();
@@ -1087,7 +1086,7 @@ test('records the started phase from the workspace reader through the selected t
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
   const reader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' }),
     status = reader.locator('.ticket-status-menu');
-  await status.locator('[data-action="open-inspector-status-menu"]').click();
+  await status.locator('[data-inspector-status-menu] > button').click();
   await status.locator('[data-ticket-status="started"]').hover();
   await status.locator('[data-started-phase="planning"]').click();
   await expect.poll(() => patches.at(-1)).toMatchObject({ started_phase: 'planning' });
