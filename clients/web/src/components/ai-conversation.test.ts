@@ -553,7 +553,9 @@ describe('AIConversation', () => {
       // Messages are selectable rows; activity and the skipped divider are plain rows; each has one cell.
       expect(grid.match(/role="row"[^>]*aria-selected="true"/g)).toHaveLength(1);
       expect(grid.match(/role="row"[^>]*aria-selected="false"/g)).toHaveLength(1);
-      expect(grid.match(/<div role="row" class="ai-conversation__row">/g)).toHaveLength(2);
+      expect(grid.match(/data-component="content-item"[^>]*data-grid-row="true"[^>]*role="row"/g)).toHaveLength(2);
+      expect(grid.match(/data-grid-row="true"[^>]*role="row"[^>]*><div role="gridcell">/g)).toHaveLength(2);
+      expect(grid).not.toMatch(/data-grid-row="true"[^>]*tabindex=/u);
       expect(grid.match(/role="row"/g)).toHaveLength(4);
       expect(grid.match(/role="gridcell"/g)).toHaveLength(4);
       expect(grid).not.toContain('role="option"');

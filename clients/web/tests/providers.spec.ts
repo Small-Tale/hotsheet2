@@ -7357,14 +7357,23 @@ async function exerciseConversationSelection(
   await expect(grid.getByRole('row', { selected: true })).toHaveCount(2);
   await expect(grid.getByRole('row')).toHaveCount(4);
   await expect(grid.getByRole('gridcell')).toHaveCount(4);
+  await expect
+    .poll(() => messages.evaluateAll((nodes) => nodes.filter((node) => node.getAttribute('tabindex') === '0').length))
+    .toBe(1);
   await expect(conversation.getByRole('option')).toHaveCount(0);
   const tree = await grid.ariaSnapshot();
   expect(tree).toMatch(/^- grid "Conversation Messages":/);
   expect(tree.match(/^ {2}- row "[^"\n]*" \[selected\]/gm)).toHaveLength(2);
   // Up/Down move focus between message rows (Kerf wireContentItems grid navigation).
   await messages.nth(0).focus();
+  await expect
+    .poll(() => messages.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('tabindex'))))
+    .toEqual(['0', '-1', '-1', '-1']);
   await page.keyboard.press('ArrowDown');
   await expect(messages.nth(1)).toBeFocused();
+  await expect
+    .poll(() => messages.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('tabindex'))))
+    .toEqual(['-1', '0', '-1', '-1']);
   await page.keyboard.press('End');
   await expect(messages.nth(3)).toBeFocused();
   await page.keyboard.press('Home');

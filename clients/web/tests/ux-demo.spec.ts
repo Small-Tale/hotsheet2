@@ -8338,6 +8338,25 @@ test('keeps AI chat activity borderless until the selected range spans it (HS2-7
       node.dispatchEvent(new Event('change', { bubbles: true }));
     });
   await expect(dialog).toBeVisible();
+  const grid = host.getByRole('grid', { name: 'Conversation Messages' }),
+    messageRows = grid.locator('[data-selection-mode="multiple"]'),
+    staticRow = grid.locator('[data-grid-row="true"]');
+  await expect(messageRows).toHaveCount(2);
+  await expect(staticRow).toHaveCount(1);
+  await expect(grid.getByRole('row')).toHaveCount(3);
+  await expect(grid.getByRole('gridcell')).toHaveCount(3);
+  await expect(staticRow.getByRole('gridcell')).toHaveCount(1);
+  await expect(staticRow).not.toHaveAttribute('aria-selected', /./);
+  await expect(staticRow).not.toHaveAttribute('tabindex', /./);
+  await messageRows.first().focus();
+  await expect
+    .poll(() => messageRows.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('tabindex'))))
+    .toEqual(['0', '-1']);
+  await page.keyboard.press('ArrowDown');
+  await expect(messageRows.last()).toBeFocused();
+  await expect
+    .poll(() => messageRows.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('tabindex'))))
+    .toEqual(['-1', '0']);
   const activity = host.locator('.ai-conversation__activity'),
     frame = () =>
       activity.evaluate((node) => {

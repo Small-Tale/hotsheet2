@@ -219,7 +219,7 @@
       "id": "ai-conversation",
       "name": "AIConversation",
       "kind": "component",
-      "purpose": "Dialog and embedded AI conversation with inline permissions and interruption; AIConversationToolbar renders its model selector and native Save/Stop controls in the dialog header or the drawer tab toolbar.",
+      "purpose": "Dialog and embedded AI conversation with inline permissions, interruption, and a single-Tab-stop selectable transcript; AIConversationToolbar renders its model selector and native Save/Stop controls in the dialog header or the drawer tab toolbar.",
       "publicExports": [
         {
           "name": "AIConversation"
@@ -252,7 +252,8 @@
           "wireMessageComposers"
         ],
         "obligations": [
-          "The submitOnEnter MessageComposer needs wireMessageComposers on the conversation root for Enter-to-send."
+          "The submitOnEnter MessageComposer needs wireMessageComposers on the conversation root for Enter-to-send.",
+          "Selectable transcript message rows need wireContentItems on the containing root for roving Tab focus and arrow navigation; activity and skipped dividers are non-selectable ContentItem grid rows."
         ]
       },
       "responsive": {
@@ -270,7 +271,9 @@
         }
       },
       "accessibility": {
-        "obligations": []
+        "obligations": [
+          "The labeled multi-select transcript grid exposes one roving Tab stop among selectable messages; non-selectable activity and skipped rows retain row and gridcell semantics."
+        ]
       },
       "boundaries": {
         "rootClass": null,

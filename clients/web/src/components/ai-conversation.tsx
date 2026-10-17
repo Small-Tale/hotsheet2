@@ -223,12 +223,14 @@ function ConversationActivityGroup({
   feedbackAvailable,
   selected = false,
   connectionId,
+  gridRow = false,
 }: {
   activity: readonly ConversationActivity[];
   feedbackAvailable: boolean;
   /** Between two selected messages: the only state that outlines the group (HS2-72GEX0). */
   selected?: boolean;
   connectionId?: string;
+  gridRow?: boolean;
 }) {
   // Collapsed by default to the latest item; the group keeps its first activity id while items
   // append, so a new item arriving while collapsed replaces the visible line (HS2-Y3SGH3).
@@ -243,6 +245,7 @@ function ConversationActivityGroup({
     <ContentItem
       appearance="transparent"
       frame={selected ? 'framed' : 'none'}
+      gridRow={gridRow}
       className="ai-conversation__activity"
       ariaLabel="AI-generated activity summaries; may contain errors"
       rootAttributes={{
@@ -478,20 +481,6 @@ export function AIConversationToolbar({
 }
 
 /**
- * Non-message content between messages (activity groups, skipped-message dividers). Inside the
- * multi-select grid every child must be a row, so it becomes a non-selectable row with one cell;
- * outside the grid it renders as is (HS2-S9W63Q). Kerf has no non-selectable row yet (KF-RAEXQ7).
- */
-function TranscriptRow({ grid, children }: { grid: boolean; children: SafeHtml }) {
-  if (!grid) return children;
-  return (
-    <div role="row" class="ai-conversation__row">
-      <div role="gridcell">{children}</div>
-    </div>
-  );
-}
-
-/**
  * Below this chat height the chat is compact: the stuck banner takes its one-line form, the
  * selection hint row steps aside while a turn's progress shows, and the draft grows to 3 rows.
  */
@@ -666,11 +655,14 @@ export function AIConversation(props: AIConversationProps) {
         {timeline.map((group, index) =>
           group.kind === 'message' ? (
             <>
-              {Boolean(skippedBefore[group.message.id]) && (
-                <TranscriptRow grid={selectionEnabled}>
+              {Boolean(skippedBefore[group.message.id]) &&
+                (selectionEnabled ? (
+                  <ContentItem gridRow flush>
+                    <SkippedMessages count={skippedBefore[group.message.id]} />
+                  </ContentItem>
+                ) : (
                   <SkippedMessages count={skippedBefore[group.message.id]} />
-                </TranscriptRow>
-              )}
+                ))}
               <ConversationMessages
                 tool={tool}
                 messages={[group.message]}
@@ -680,14 +672,13 @@ export function AIConversation(props: AIConversationProps) {
               />
             </>
           ) : (
-            <TranscriptRow grid={selectionEnabled}>
-              <ConversationActivityGroup
-                activity={group.activity}
-                feedbackAvailable={feedbackAvailable}
-                selected={selectedActivity.has(index)}
-                connectionId={selectionId}
-              />
-            </TranscriptRow>
+            <ConversationActivityGroup
+              activity={group.activity}
+              feedbackAvailable={feedbackAvailable}
+              selected={selectedActivity.has(index)}
+              connectionId={selectionId}
+              gridRow={selectionEnabled}
+            />
           ),
         )}
       </>

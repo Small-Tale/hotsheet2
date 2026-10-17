@@ -475,8 +475,9 @@ covers anything past the button's end. The demo's Unread chat messages setting s
     keyboard. Selections may be non-contiguous; Copy marks each skipped interior run
     (`clients/web/src/conversation-selection.ts`, HS2-WV88W3). The selectable timeline is a labeled
     Kerf `List selectionMode="multiple"` grid of `ContentItem selectionMode="multiple"` message rows.
-    Interleaved activity and skipped dividers are app-owned non-selectable `row` > `gridcell`
-    wrappers pending KF-RAEXQ7 (HS2-S9W63Q)
+    Interleaved activity and skipped dividers use non-selectable Kerf `ContentItem gridRow`
+    rows. Kerf's roving tabindex gives message rows one Tab stop, and arrows skip the
+    interleaved content (HS2-S9W63Q, KF-RAEXQ7).
   - save/reopen: the header Save action reuses the live transcript selection. If messages are selected,
     a compact `ConversationExportDialog` offers Entire conversation or the already-selected messages
     without presenting another picker; if nothing is selected it skips directly to the vertically
