@@ -804,8 +804,9 @@ fn launch_worktree_files(
     if paths.is_empty() || !paths.iter().all(|path| changed.contains(path.as_str())) {
         return Err(CodeReviewError::InvalidTarget);
     }
+    let tool = configured_difftool(root)?;
     let mut command = hotsheet_ticketing::git::command();
-    command.arg("-C").arg(root).args(difftool_args(&[]));
+    command.arg("-C").arg(root).args(difftool_args(&tool, &[]));
     if area == WorktreeArea::Staged {
         command.arg("--cached");
     }
@@ -816,10 +817,27 @@ fn launch_worktree_files(
 /// `git difftool --no-prompt -- <paths…>` invocation so the configured tool receives
 /// each file as an ordinary per-file diff against the real working tree, never a
 /// `--dir-diff` temporary copy (HS2-J7HQ5E, HS2-TRJ9P7).
-fn difftool_args<'a>(revisions: &[&'a str]) -> Vec<&'a str> {
-    let mut args = vec!["difftool", "--no-prompt"];
-    args.extend_from_slice(revisions);
+/// `git difftool` arguments that name the configured tool explicitly (`--tool=<name>`).
+/// Without it, a helper that can no longer read the repository's `diff.tool` (the repository
+/// moved or was deleted mid-launch) falls back to git's platform default, which on macOS is
+/// `opendiff`/FileMerge, opening a tool the user never configured (HS2-YA1N0S).
+fn difftool_args(tool: &str, revisions: &[&str]) -> Vec<String> {
+    let mut args = vec![
+        "difftool".to_owned(),
+        "--no-prompt".to_owned(),
+        format!("--tool={tool}"),
+    ];
+    args.extend(revisions.iter().map(|revision| (*revision).to_owned()));
     args
+}
+
+/// The repository's configured `diff.tool`, required before any launch.
+fn configured_difftool(root: &Path) -> Result<String, CodeReviewError> {
+    git_output(root, &["config", "--get", "diff.tool"])
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+        .ok_or(CodeReviewError::DifftoolNotConfigured)
 }
 
 fn spawn_detached(command: &mut Command) -> Result<(), CodeReviewError> {
@@ -852,16 +870,13 @@ fn commit_parent_or_empty_tree(root: &Path, commit: &str) -> Result<String, Code
 }
 
 fn spawn_difftool(root: &Path, (old, new): (String, String)) -> Result<(), CodeReviewError> {
-    hotsheet_ticketing::git::command()
+    let tool = configured_difftool(root)?;
+    let mut command = hotsheet_ticketing::git::command();
+    command
         .arg("-C")
         .arg(root)
-        .args(["difftool", "--no-prompt", &old, &new])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| CodeReviewError::Launch(error.to_string()))
+        .args(difftool_args(&tool, &[&old, &new]));
+    spawn_detached(&mut command)
 }
 
 fn spawn_difftool_files(
@@ -869,11 +884,12 @@ fn spawn_difftool_files(
     (old, new): (&str, &str),
     paths: &[String],
 ) -> Result<(), CodeReviewError> {
+    let tool = configured_difftool(root)?;
     let mut command = hotsheet_ticketing::git::command();
     command
         .arg("-C")
         .arg(root)
-        .args(difftool_args(&[old, new]))
+        .args(difftool_args(&tool, &[old, new]))
         .arg("--")
         .args(paths);
     spawn_detached(&mut command)
@@ -1563,10 +1579,13 @@ mod tests {
     #[test]
     fn several_files_share_one_plain_difftool_invocation() {
         // HS2-TRJ9P7: no `--dir-diff`; the pathspec alone selects the files.
-        assert_eq!(difftool_args(&[]), ["difftool", "--no-prompt"]);
         assert_eq!(
-            difftool_args(&["old", "new"]),
-            ["difftool", "--no-prompt", "old", "new"]
+            difftool_args("ks", &[]),
+            ["difftool", "--no-prompt", "--tool=ks"]
+        );
+        assert_eq!(
+            difftool_args("ks", &["old", "new"]),
+            ["difftool", "--no-prompt", "--tool=ks", "old", "new"]
         );
     }
 }
