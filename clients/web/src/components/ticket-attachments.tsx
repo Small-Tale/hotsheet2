@@ -254,7 +254,7 @@ export function TicketAttachments({
                       >
                         <Row flex={flex(1, 1, px(0))}>
                           <ListInsetText sides="l">
-                            <Text variant="h3" size="large" flush wrap="anywhere">
+                            <Text variant="h3" size="medium" flush wrap="anywhere">
                               {shownLabel}
                             </Text>
                           </ListInsetText>
@@ -330,6 +330,7 @@ export function TicketAttachments({
                             <Button
                               icon={<LucideIcon icon={MoreHorizontal} name="more-horizontal" />}
                               ariaLabel={`More Actions for ${attachment.name}`}
+                              title={`More actions for ${attachment.name}`}
                               action={ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentMenu.value}
                               emphasis="plain"
                               size="compact"

@@ -2018,7 +2018,7 @@
       "id": "ticket-attachments",
       "name": "TicketAttachments",
       "kind": "component",
-      "purpose": "Ticket attachment inspector section, including editable, append-only, delete-only, unsupported, and linked-reader states.",
+      "purpose": "Ticket attachment inspector section with wrapping 16px batch titles and file-specific row menu tooltips, including editable, append-only, delete-only, unsupported, and linked-reader states.",
       "source": "src/components/ticket-attachments.tsx",
       "publicExports": [
         {
@@ -2073,7 +2073,7 @@
       },
       "selection": {
         "useWhen": [
-          "Hot Sheet needs ticket attachment inspector section, including editable, append-only, delete-only, unsupported, and linked-reader states."
+          "Hot Sheet needs ticket attachment inspector section with wrapping batch titles and file-specific row menu tooltips, including editable, append-only, delete-only, unsupported, and linked-reader states."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TicketAttachments behavior."],
         "documentation": "../../docs/ux-components.md"

@@ -1400,13 +1400,14 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     Each row is a neutral Kerf `ContentItem` holding a Kerf `Row`, a truncating `Text` name,
     and a plain Kerf `IconButton` More Actions trigger, inside an unstyled app-owned wrapper that
     carries the drag source and row identity Kerf roots protect (HS2-K9HSXZ). Each batch is
-    titled by a large wrapping Kerf `Text` heading with a plain `IconButton` Edit action
+    titled by a 16px semibold wrapping Kerf `Text` heading with a plain `IconButton` Edit action
     (double-clicking the heading is a shortcut); the label editor is a small `wa-input`, and the
     purpose is a caret-free inline Kerf `Select` whose selected value renders as an info `Badge`
     (Uncategorized carries the `uncategorized` sentinel value). The transient New group target is
     an info `ContentItem`. The stylesheet keeps only app-owned rules: the row wrapper cursor,
     batch and New group drag-over outlines, and the media grid.
-    Open, download, copy-reference, and remove icon buttons have explicit accessible
+    The More Actions row button has a file-specific hover tooltip. Open, download,
+    copy-reference, and remove icon buttons have explicit accessible
     names and visible hover/focus states. Double-clicking the row uses
     the same Open action; action-button double-clicks do not bubble into the row action.
     The inspector and TicketRow are also attachment drop targets. `editable={false}` is the

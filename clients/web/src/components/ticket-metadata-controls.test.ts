@@ -272,6 +272,7 @@ describe('ticket metadata controls and inspector panels', () => {
       /data-component="button"[^>]*data-icon-only=""[^>]*data-action="open-attachment-menu"/u,
     );
     expect(attachments).toContain('More Actions for one.png');
+    expect(attachments).toContain('title="More actions for one.png"');
     expect(attachments).toContain('title="one.png — double-click to open"');
     expect(attachments).toContain('data-lucide="more-horizontal"');
     const unsupported = String(TicketAttachments({ attachments: [{ id: 'one', name: 'one.png' }], enabled: false }));
@@ -436,6 +437,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(markup).not.toContain('data-lucide="grip-vertical"');
     expect(markup).toContain('data-action="edit-attachment-batch-label"');
     expect(markup).toContain('data-attachment-batch-title="true"');
+    expect(markup).toMatch(/<h3[^>]*data-component="text"[^>]*data-size="medium"[^>]*>/u);
     expect(markup).toContain('Edit Batch Label AI · Round 1 · Correctness evidence');
     expect(markup).toMatch(/<wa-input[^>]*name="attachment-batch-label"[^>]*hidden/u);
     expect(markup).toMatch(/<kui-select[^>]*name="attachment-batch-purpose"/u);

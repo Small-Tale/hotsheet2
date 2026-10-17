@@ -198,9 +198,9 @@ the remaining wrapper markup that only existed because Badge lacked props:
   select, so its iOS zoom rule is gone. The New group target is an info `ContentItem`.
 - `ticket-attachments.css` keeps app-owned rules only: the wrapper cursor, batch/New group
   drag-over outlines, and the media grid and annotation marker.
-- Upstream requests: `IconButton` has no hover `title`, so the More Actions tooltip is gone
-  (`KF-8MYB8B`); `Text` has no heading size matching the former 16px semibold title, and
-  `ListHeader` cannot wrap, so titles are 20px (`KF-43XH56`). `HS2-D087X2` adopts both.
+- Kerf beta.106 exposes `Button.title` for the row's More Actions hover tooltip
+  (`KF-8MYB8B`) and `Text size="medium"` for the wrapping 16px semibold batch title
+  (`KF-43XH56`); `HS2-D087X2` adopts both without application CSS overrides.
 
 ## Attachment gallery update (HS2-5B8FMA)
 

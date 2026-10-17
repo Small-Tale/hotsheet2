@@ -28235,6 +28235,8 @@ test('edits and contains a wrapping attachment group title through the productio
   // Enter returns focus to the batch's Edit action; the Kerf Text heading wraps the long label (HS2-K9HSXZ).
   await expect(batch.getByRole('button', { name: `Edit Batch Label ${longTitle}` })).toBeFocused();
   const wrappedTitle = batch.getByRole('heading', { name: longTitle });
+  await expect(wrappedTitle).toHaveCSS('font-size', '16px');
+  await expect(wrappedTitle).toHaveCSS('font-weight', '600');
   const expectWrappedAndContained = async () => {
     const geometry = await wrappedTitle.evaluate((element) => {
       const rect = element.getBoundingClientRect(),

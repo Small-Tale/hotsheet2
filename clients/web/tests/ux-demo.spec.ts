@@ -5523,8 +5523,13 @@ test('styles and edits attachment group labels while preserving drag regrouping'
   await expect(surface.locator('[data-lucide="grip-vertical"]')).toHaveCount(0);
   const title = first.getByRole('button', { name: /Edit Batch Label/ }),
     purpose = first.locator('kui-select[name="attachment-batch-purpose"]');
-  // A large Kerf Text heading titles the batch; its Edit Button opens the label editor (HS2-K9HSXZ).
-  await expect(first.getByRole('heading', { level: 3 })).toHaveCSS('font-size', '20px');
+  // The medium Kerf Text heading restores the 16px batch title while retaining label wrapping.
+  await expect(first.getByRole('heading', { level: 3 })).toHaveCSS('font-size', '16px');
+  await expect(first.getByRole('heading', { level: 3 })).toHaveCSS('font-weight', '600');
+  await expect(surface.getByRole('button', { name: 'More Actions for choppy.mov' })).toHaveAttribute(
+    'title',
+    'More actions for choppy.mov',
+  );
   expect((await purpose.boundingBox())!.width).toBeLessThan((await first.boundingBox())!.width);
   await title.dblclick();
   const editor = first.getByRole('textbox', { name: /Batch Label/ });
