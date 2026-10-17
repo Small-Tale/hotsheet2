@@ -3698,6 +3698,7 @@ export async function startHotSheetWebClient() {
   });
   const { terminalRailSurfaceProps } = createTerminalRailSurface({
     activeWorkspaceSort,
+    allTicketsSearchAvailable,
     capabilitiesFor,
     customViewsFor,
     hideVerifiedColumn,
@@ -3710,6 +3711,7 @@ export async function startHotSheetWebClient() {
     searchHelpOpen,
     searchMatchKeys,
     searchOpen,
+    searchScope,
     searchQuery,
     searchTokens,
     previewInspectorProps,

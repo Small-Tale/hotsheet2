@@ -1,5 +1,10 @@
 # Feature Coverage Matrix
 
+HS2-5WXA6W covers the terminal rail's shared All Tickets search scope. The rail
+component unit test checks view and All Tickets states; `clients/web/tests/search-scope.spec.ts`
+checks list matches, paged columns, return to view, notifications, and wide/narrow
+captures through the shipped workspace grid.
+
 HS2-M6WXE3 covers immediate context-menu reopening after Escape. The
 `clients/web/src/components/context-menu-dismissal.test.ts` regression checks that a
 deferred close cannot clear a newer open request; the pointer anchoring and board

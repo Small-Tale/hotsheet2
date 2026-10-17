@@ -9,6 +9,7 @@ import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
+import { SearchScopeToolbar } from './search-scope-toolbar';
 import {
   inspectorToggle,
   type NavigationPanelParts,
@@ -29,6 +30,8 @@ export interface TerminalTicketRailProps {
   selectedViewId?: string;
   controls: SafeHtml;
   content: SafeHtml;
+  /** The active search may widen from the selected view to every non-trashed ticket. */
+  searchScope?: { allTickets: boolean; viewLabel: string };
   /**
    * The pushed ticket detail, when one is open: a stable view key and the detail surface's panel
    * parts (its toolbar `center`/`leading` and `trailing` zones, fixed `header`, and `content`).
@@ -68,11 +71,14 @@ export function terminalTicketRailPanel({
   selectedViewId = 'all',
   controls,
   content,
+  searchScope,
   detail,
   title = 'Queue',
   action,
 }: TerminalTicketRailProps): NavigationPanelParts {
-  const heading = views.length ? (
+  const heading = searchScope?.allTickets ? (
+    <ToolbarText text="All Tickets" size="xlarge-fixed" />
+  ) : views.length ? (
     <div class="terminal-ticket-rail__view">
       {/* Kerf's view-title Select: a 36px trigger flush with the list below, its caret beside the
           label, and an inset focus ring the rail's clipping ancestors never crop (HS2-HEYASQ,
@@ -144,6 +150,7 @@ export function terminalTicketRailPanel({
         aria-label="Project Tickets"
       >
         {content}
+        {searchScope && <SearchScopeToolbar {...searchScope} />}
       </section>
     ),
   };

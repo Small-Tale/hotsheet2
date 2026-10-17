@@ -1237,6 +1237,10 @@ preview/download, server directory browser) are separate design work.
   view in the toolbar returns to it. The mode lasts only while the search does: clearing the
   search, choosing a sidebar view, or switching projects turns it off, and it is never persisted.
   On phones the page header shows the All Tickets title instead of the view picker.
+  The workspace-grid terminal ticket rail shares this search scope. Its list and paged
+  columns show All Tickets matches, its title names the scope, and its own scope toolbar
+  switches back to the selected view. Notifications do not show the scope toolbar
+  (HS2-5WXA6W).
   Pending searchable-view counts use a compact spinner;
   settled search-derived counts put a small magnifying-glass marker beside the number inside
   the same badge and remain inside the

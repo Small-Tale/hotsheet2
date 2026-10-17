@@ -2125,6 +2125,9 @@ notifications view asks `NotificationCenter` for `inset="flush"`. The view title
 `Select presentation="title"` with `focusRingInset`: a 36px, flush-start trigger with its caret
 beside the label and a focus ring inset so the rail's clipping ancestors never crop it
 (HS2-HEYASQ, HS2-DAMHD1). The rail stylesheet styles no other component (HS2-8FS5BJ).
+During a search that can widen to All Tickets, the rail shows the shared scope toolbar
+over its root list or columns. In All Tickets scope, its heading replaces the view selector
+with the scope title while the toolbar still offers a return to the selected view (HS2-5WXA6W).
 Its inspector route is one toolbar row: Kerf's back control, the ticket number, the ticket actions,
 and the rail toggle; the catalog demo pushes a ticket on a plain row click and pops on Back.
 The rail remains independently resizable and hideable beside the terminal grid and is represented

@@ -711,3 +711,7 @@ manifest-declared changed-byte notice; CLI `setup --json` returns the shared ref
 `clients/web/src/ticket-title-disclosure.ts` retains independent phone title expansion state
 for the inspector and reader (HS2-11F5F7); the rendered title and mobile cap are in
 `clients/web/src/components/ticket-inspector.{tsx,css}`.
+
+`clients/web/src/features/terminal-rail-surface.tsx` applies the workspace search scope to
+the terminal rail's list and paged board. `components/terminal-ticket-rail.tsx` renders the
+shared scope toolbar within the rail's root navigation view (HS2-5WXA6W).

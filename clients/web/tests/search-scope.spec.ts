@@ -212,6 +212,56 @@ const columnNames = (board: Locator) =>
     .locator('[data-component="ticket-board-column"]')
     .evaluateAll((columns) => columns.map((column) => column.getAttribute('aria-label')));
 
+for (const width of [1440, 1024]) {
+  test(`terminal ticket rail searches All Tickets and returns to its view at ${width}px (HS2-5WXA6W)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 820 });
+    const searches = await mockSearchProject(page);
+    await page.getByRole('button', { name: 'Workspace Grid' }).click();
+    const rail = page.locator('#app-right-rail'),
+      toolbar = rail.getByRole('toolbar', { name: 'Search Scope' });
+    await expect(toolbar).toHaveCount(0);
+    await rail.getByRole('button', { name: 'Search tickets' }).click();
+    await rail.getByRole('searchbox', { name: 'Search tickets' }).fill('badge');
+    await expect(rail.locator('[data-ticket-slug="HS2-QUEUE1"]')).toBeVisible();
+    await expect(rail.locator('[data-ticket-slug="HS2-BACK01"]')).toHaveCount(0);
+    await expect(toolbar.getByRole('button', { name: 'Queue' })).toHaveAttribute('aria-pressed', 'true');
+    await toolbar.getByRole('button', { name: 'All Tickets' }).click();
+    await expect(toolbar.getByRole('button', { name: 'All Tickets' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(rail.locator('.terminal-ticket-rail__heading')).toContainText('All Tickets');
+    for (const slug of ['HS2-QUEUE1', 'HS2-DONE01', 'HS2-BACK01', 'HS2-ARCH01'])
+      await expect(rail.locator(`[data-ticket-slug="${slug}"]`)).toBeVisible();
+    await expect(rail.locator('[data-ticket-slug="HS2-TRASH1"]')).toHaveCount(0);
+    expect(searches).toContain('all');
+    await expect(page.getByRole('toolbar', { name: 'Search Scope' })).toHaveCount(1);
+    await rail.screenshot({ path: test.info().outputPath(`hs2-5wxa6w-rail-all-list-${width}.png`) });
+    await page.screenshot({ path: test.info().outputPath(`hs2-5wxa6w-grid-all-list-${width}.png`) });
+    await rail.getByRole('button', { name: /Columns View/ }).click();
+    const board = rail.locator('[data-component="ticket-board"]');
+    await expect
+      .poll(() => columnNames(board))
+      .toEqual([
+        'Backlog Column',
+        'Not Started Column',
+        'Started Column',
+        'Completed Column',
+        'Verified Column',
+        'Archive Column',
+      ]);
+    await expect(board.locator('[data-ticket-slug="HS2-BACK01"]')).toBeVisible();
+    await rail.screenshot({ path: test.info().outputPath(`hs2-5wxa6w-rail-all-columns-${width}.png`) });
+    await toolbar.getByRole('button', { name: 'Queue' }).click();
+    await expect(rail.locator('.terminal-ticket-rail__heading')).toContainText('Queue');
+    await expect(rail.locator('[data-ticket-slug="HS2-BACK01"]')).toHaveCount(0);
+    await expect
+      .poll(() => columnNames(board))
+      .toEqual(['Not Started Column', 'Started Column', 'Completed Column', 'Verified Column']);
+    await rail.getByRole('button', { name: /Notifications View/ }).click();
+    await expect(toolbar).toHaveCount(0);
+  });
+}
+
 for (const width of [1280, 390]) {
   test(`switches a search into All Tickets and back from the floating toolbar at ${width}px (HS2-4J6764)`, async ({
     page,

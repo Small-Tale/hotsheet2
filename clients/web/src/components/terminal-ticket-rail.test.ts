@@ -71,6 +71,17 @@ describe('TerminalTicketRail', () => {
     expect(String(root.content)).toContain('Tickets');
     expect(String(root.content)).not.toContain('name="terminal-rail-project"');
   });
+  it('shows the search scope control in the rail and names All Tickets while expanded (HS2-5WXA6W)', () => {
+    const view = terminalTicketRailPanel({ ...props, searchScope: { allTickets: false, viewLabel: 'Queue' } });
+    expect(String(view.navStack.views[0].header)).toContain('name="terminal-rail-view"');
+    expect(String(view.navStack.views[0].content)).toContain('aria-label="Search Scope"');
+    expect(String(view.navStack.views[0].content)).toContain('aria-pressed="false"');
+
+    const all = terminalTicketRailPanel({ ...props, searchScope: { allTickets: true, viewLabel: 'Queue' } });
+    expect(String(all.navStack.views[0].header)).toContain('All Tickets');
+    expect(String(all.navStack.views[0].header)).not.toContain('name="terminal-rail-view"');
+    expect(String(all.navStack.views[0].content)).toContain('aria-pressed="true"');
+  });
   it('pushes the ticket detail as one toolbar row with its pinned header and scrolling body (HS2-FY06N4)', () => {
     const parts = terminalTicketRailPanel({ ...props, detail });
     expect(parts.navStack.views.map((view) => view.key)).toEqual(['root', 'ticket:HS2-TEST']);

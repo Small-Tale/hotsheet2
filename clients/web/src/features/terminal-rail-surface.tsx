@@ -28,6 +28,7 @@ import type { PermissionHistoryItem, PermissionItem } from '../permission-notifi
 import { ticketBoardGroups } from '../ticket-board-layout';
 import { canBulkUpdate } from '../ticket-bulk-operations';
 import {
+  ALL_TICKETS_SCOPE,
   canCreateTicketInView,
   customTicketViewId,
   type TicketScope,
@@ -41,6 +42,7 @@ import type { createInspectorSurface } from './inspector-surface';
 /** Live application bindings createTerminalRailSurface reads (HS2-K0VC2C). */
 export interface TerminalRailSurfaceDependencies {
   activeWorkspaceSort: () => WorkspaceSortPreference;
+  allTicketsSearchAvailable: () => boolean;
   capabilitiesFor: (connectionId: string) => Capabilities;
   customViewsFor: (projectId?: string) => CustomView[];
   hideVerifiedColumn: () => boolean;
@@ -53,6 +55,7 @@ export interface TerminalRailSurfaceDependencies {
   searchHelpOpen: Signal<boolean>;
   searchMatchKeys: Signal<Set<string> | undefined>;
   searchOpen: Signal<boolean>;
+  searchScope: () => TicketScope;
   searchQuery: Signal<string>;
   searchTokens: Signal<InlineSearchToken[]>;
   selectedInspectorProps: ReturnType<typeof createInspectorSurface>['selectedInspectorProps'];
@@ -101,6 +104,7 @@ export function railDetailSource(
 export function createTerminalRailSurface(dependencies: TerminalRailSurfaceDependencies) {
   const {
     activeWorkspaceSort,
+    allTicketsSearchAvailable,
     capabilitiesFor,
     customViewsFor,
     hideVerifiedColumn,
@@ -113,6 +117,7 @@ export function createTerminalRailSurface(dependencies: TerminalRailSurfaceDepen
     searchHelpOpen,
     searchMatchKeys,
     searchOpen,
+    searchScope,
     searchQuery,
     searchTokens,
     selectedInspectorProps,
@@ -147,11 +152,12 @@ export function createTerminalRailSurface(dependencies: TerminalRailSurfaceDepen
         }
       })(),
       railView = selectedView.value === 'errors' ? 'all' : selectedView.value,
+      scope = selectedView.value === 'errors' ? 'all' : searchScope(),
       selection = selectedRows(),
       canCreate = canCreateTicketInView(railView),
       effective = effectiveSearch(searchQuery.value, searchTokens.value),
       matches = searchMatchKeys.value;
-    let shown = ticketsForView(tickets.value, railView);
+    let shown = ticketsForView(tickets.value, scope);
     if (effective.text || effective.tokens.length)
       shown = matches ? shown.filter((ticket) => matches.has(ticketSearchKey(ticket))) : [];
     const activeSort = activeWorkspaceSort();
@@ -167,7 +173,7 @@ export function createTerminalRailSurface(dependencies: TerminalRailSurfaceDepen
         case 'board':
           return (
             <TicketBoard
-              columns={ticketBoardGroups(shown, railView, hideVerifiedColumn()).map((group) => ({
+              columns={ticketBoardGroups(shown, scope, hideVerifiedColumn()).map((group) => ({
                 ...group,
                 totalCount: group.tickets.length,
                 tickets: group.tickets.map(row),
@@ -211,6 +217,10 @@ export function createTerminalRailSurface(dependencies: TerminalRailSurfaceDepen
           ...customViewsFor(current?.id).map((view) => ({ id: customTicketViewId(view.id), label: view.name })),
         ],
         selectedViewId: railView,
+        searchScope:
+          mode !== 'notifications' && allTicketsSearchAvailable()
+            ? { allTickets: scope === ALL_TICKETS_SCOPE, viewLabel: ticketViewTitle(railView) }
+            : undefined,
         controls: (
           <WorkspaceControls
             mode={mode}
@@ -234,7 +244,7 @@ export function createTerminalRailSurface(dependencies: TerminalRailSurfaceDepen
         detail: railInspectorProps
           ? { key: `ticket:${railInspectorProps.slug}`, parts: ticketInspectorPanel(railInspectorProps) }
           : undefined,
-        title: mode === 'notifications' ? 'Notifications' : ticketViewTitle(railView),
+        title: mode === 'notifications' ? 'Notifications' : ticketViewTitle(scope),
         action: mode === 'notifications' ? undefined : ticketViewActionSpec(railView, canCreate, 'Ticket…', 'compact'),
       },
     };
