@@ -76,7 +76,10 @@ const target = (dataset: Record<string, string>) => ({ dataset }) as unknown as 
 
 beforeEach(() => {
   registrations.length = 0;
-  vi.stubGlobal('document', { body: {}, addEventListener: vi.fn() });
+  vi.stubGlobal('document', {
+    body: { addEventListener: vi.fn(), removeEventListener: vi.fn() },
+    addEventListener: vi.fn(),
+  });
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -163,7 +166,11 @@ describe('extracted handlers retain live application bindings', () => {
         other: [{ id: 'other-check', title: 'Other checks' }],
       };
     let current: { id: string } | undefined = { id: 'demo' };
-    vi.stubGlobal('document', { body: {}, addEventListener: vi.fn(), querySelector: () => ({ showPopover }) });
+    vi.stubGlobal('document', {
+      body: { addEventListener: vi.fn(), removeEventListener: vi.fn() },
+      addEventListener: vi.fn(),
+      querySelector: () => ({ showPopover }),
+    });
     wireCommandAndAiInteractions({
       project: () => current,
       commandSettingsDefinitions: (projectId?: string) => byProject[projectId ?? ''] ?? [],

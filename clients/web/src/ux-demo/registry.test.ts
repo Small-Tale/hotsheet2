@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { flattenCatalog } from './catalog';
 import { demoEntry, demoModules, registeredDemoIds, wireDemoModules } from './registry';
+
+// This registry test isolates demo module lifetimes; the Combobox's DOM wiring has its own unit tests.
+vi.mock('../components/app-combobox-wiring', () => ({ wireAppComboboxes: () => () => undefined }));
 
 describe('UX demo registry (HS2-HMVBZW)', () => {
   it('registers a demo for every catalog entry and nothing outside the catalog', () => {
@@ -24,6 +27,7 @@ describe('UX demo registry (HS2-HMVBZW)', () => {
   it('wires every module once and disposes all of their listeners together', () => {
     const disposed: string[] = [];
     const root = {} as HTMLElement;
+    vi.stubGlobal('document', { body: root });
     const wired = demoModules.filter((module) => module.wire);
     const original = wired.map((module) => module.wire!);
     try {
@@ -42,6 +46,7 @@ describe('UX demo registry (HS2-HMVBZW)', () => {
       wired.forEach((module, index) => {
         Object.assign(module, { wire: original[index] });
       });
+      vi.unstubAllGlobals();
     }
   });
 });
