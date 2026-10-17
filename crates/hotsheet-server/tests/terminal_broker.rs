@@ -148,7 +148,13 @@ async fn terminal_creation_kind_is_stable_across_http_reattach_and_osc_output() 
             broker_mode.then_some(socket.as_path()),
         )
         .await;
+        // The default program is the user's login shell. Check its classification, then
+        // remove it so its lifetime cannot affect the deterministic PTY assertions below.
         assert_eq!(server.open(json!({"id":"default"})).await["kind"], "shell");
+        assert_eq!(
+            server.request("DELETE", "/terminals/default", None).await.0,
+            204
+        );
         assert_eq!(
             server
                 .open(json!({"id":"shell","command":"/bin/cat"}))
@@ -177,7 +183,7 @@ async fn terminal_creation_kind_is_stable_across_http_reattach_and_osc_output() 
         let listed = server.list().await;
         assert_eq!(
             listed.as_array().unwrap().len(),
-            4,
+            3,
             "broker_mode={broker_mode} {listed}"
         );
 
@@ -213,7 +219,6 @@ async fn terminal_creation_kind_is_stable_across_http_reattach_and_osc_output() 
         // AI terminals also report the tool they launched, so clients can name their tabs after
         // it; shells report none (HS2-HZK0NK).
         for (id, kind, tool) in [
-            ("default", "shell", None),
             ("shell", "shell", None),
             ("ai", "ai", Some("kind-agent")),
             // An explicit command that also connects a tool keeps the generic shell-session worker.
@@ -238,6 +243,73 @@ async fn terminal_creation_kind_is_stable_across_http_reattach_and_osc_output() 
                 204
             );
         }
+        if let Some(broker) = broker {
+            broker.abort();
+        }
+    }
+}
+
+#[tokio::test]
+async fn exited_pty_reopens_with_the_new_creation_kind() {
+    for broker_mode in [false, true] {
+        let (store, plugins) = fixture();
+        let sockets = tempfile::tempdir().unwrap();
+        let socket = sockets.path().join("broker.sock");
+        let broker = broker_mode.then(|| {
+            let listener = UnixListener::bind(&socket).unwrap();
+            tokio::spawn(hotsheet_terminals::serve_broker(
+                listener,
+                "kind-project".into(),
+                Arc::new(TerminalManager::new()),
+            ))
+        });
+        let server = TestServer::start(
+            store.path(),
+            plugins.path(),
+            broker_mode.then_some(socket.as_path()),
+        )
+        .await;
+
+        let first = server
+            .open(json!({"id":"reused","command":"/usr/bin/true"}))
+            .await;
+        assert_eq!(first["kind"], "shell", "broker_mode={broker_mode} {first}");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let (status, info) = server.request("GET", "/terminals/reused", None).await;
+            assert_eq!(status, 200, "broker_mode={broker_mode} {info}");
+            if info["alive"] == false {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "PTY did not exit: broker_mode={broker_mode} {info}"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+
+        let replacement = server
+            .open(json!({"id":"reused","command":"/bin/cat","connect":"kind-agent"}))
+            .await;
+        assert_eq!(
+            replacement["kind"], "ai",
+            "broker_mode={broker_mode} {replacement}"
+        );
+        assert_eq!(
+            replacement["alive"], true,
+            "broker_mode={broker_mode} {replacement}"
+        );
+        let reattached = server
+            .open(json!({"id":"reused","command":"/bin/cat"}))
+            .await;
+        assert_eq!(
+            reattached["kind"], "ai",
+            "broker_mode={broker_mode} {reattached}"
+        );
+        assert_eq!(
+            server.request("DELETE", "/terminals/reused", None).await.0,
+            204
+        );
         if let Some(broker) = broker {
             broker.abort();
         }
