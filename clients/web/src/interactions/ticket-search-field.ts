@@ -210,6 +210,19 @@ export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearch
       },
     ),
   );
+  // WebKit can leave the editor unfocused when a clicked suggestion disappears after
+  // Kerf commits it. Keep focus in the editor through mouse activation; Kerf still
+  // handles the click and keyboard selection (HS2-1Z6V01).
+  lifetime.add(
+    delegate(
+      root,
+      'mousedown',
+      '.ticket-search-field [data-search-field-suggestion], .ticket-search-form-field [data-search-field-suggestion]',
+      (event) => {
+        event.preventDefault();
+      },
+    ),
+  );
   lifetime.add(
     delegate(root, 'click', TICKET_SEARCH_ACTIONS.removeToken.selector, (_event, target) => {
       const raw = data(target).tokenValue;

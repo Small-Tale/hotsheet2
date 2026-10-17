@@ -522,6 +522,7 @@ test('offers tag completion, the date helper, and syntax help inside the saved-v
   await expect(chips).toHaveCount(1);
   await expect(chips.first()).toHaveAttribute('data-token-value', 'tag:docs');
   await expect(suggestions).toHaveCount(0);
+  // Pointer selection keeps the editor focused inside WebKit's native dialog (HS2-1Z6V01).
   await expect(query).toBeFocused();
   await expect(dialog.locator('input[name="saved-view-query"]')).toHaveValue('tag:docs');
   // Syntax help opens over the dialog and closes again from the same button.

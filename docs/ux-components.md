@@ -1038,6 +1038,8 @@ the anchored suggestion popover rows (in flow before beta.63; beta.64 adopted) (
 edit/remove, clear, Enter, and the keyboard; the app projects `model.state` into its
 `searchQuery`/`searchTokens` signals (`inlineSearchTokens`) and reseeds the editor through
 `model.replace` (`replaceTicketSearch` for a restored session or a seeded saved-view query). The
+app keeps pointer selection of a tag suggestion from moving focus off the editor while the
+clicked button disappears, including inside a WebKit native dialog (HS2-1Z6V01). The
 workspace toolbar, the workspace-grid ticket rail, and the saved-view dialog's non-collapsible
 query field all render this one component with their own model, so the helpers cannot drift
 apart or be forgotten on a new surface. Its rendered group carries the root class
