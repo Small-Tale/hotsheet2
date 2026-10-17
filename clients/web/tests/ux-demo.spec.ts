@@ -529,8 +529,13 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
     ['connection-state-banner', 5],
     ['app-shell', 1],
   ];
-  // HS2-P83X5X: under the full mixed suite this matrix has intermittently found an empty catalog page.
-  // Record what the page saw, so a failure carries its own diagnosis instead of a bare count mismatch.
+  // HS2-P83X5X: repeatedly loading the large Vite module graph under full-suite load
+  // sometimes left a blank page. Load once per width, then use the real catalog selection handler.
+  let documentRequests = 0;
+  page.on('request', (request) => {
+    if (request.resourceType() === 'document') documentRequests += 1;
+  });
+  // Keep the failure diagnosis if either of the two initial document loads is blank.
   const events: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error' || message.type() === 'warning')
@@ -546,10 +551,19 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
   });
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const [component, count] of examples) {
+    await page.goto(`/ux-demo?component=${examples[0][0]}`);
+    for (const [index, [component, count]] of examples.entries()) {
       events.length = 0;
       const started = Date.now();
-      await page.goto(`/ux-demo?component=${component}`);
+      if (index > 0) {
+        await page
+          .locator(`[data-item-id="${component}"]`)
+          .first()
+          .evaluate((node) => {
+            (node as HTMLElement).click();
+          });
+      }
+      await expect(page).toHaveURL(new RegExp(`[?&]component=${component}(?:&|$)`));
       const loadedMs = Date.now() - started;
       try {
         await expect(page.locator('[data-catalog-example-label]'), component).toHaveCount(count);
@@ -581,6 +595,7 @@ test('labels converted demo specimens through Kerf CatalogExample, not app-owned
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     }
   }
+  expect(documentRequests).toBe(2);
 });
 
 test('styles demo captions through demo-owned classes, not the demoed components (HS2-TV78E1)', async ({ page }) => {
