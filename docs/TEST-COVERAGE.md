@@ -1,5 +1,10 @@
 # Feature Coverage Matrix
 
+HS2-M6WXE3 covers immediate context-menu reopening after Escape. The
+`clients/web/src/components/context-menu-dismissal.test.ts` regression checks that a
+deferred close cannot clear a newer open request; the pointer anchoring and board
+transition run through `clients/web/tests/providers.spec.ts` under `@ci-smoke`.
+
 HS2-R49G01 covers exit-then-reopen AI terminal registration. The terminal manager and
 connection registry unit tests assert atomic replacement detection and stale-monitor
 cleanup; real HTTP tests open, exit, and reopen the same AI terminal id in both in-process

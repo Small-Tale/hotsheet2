@@ -8,6 +8,8 @@ export interface DismissibleContextMenu {
   /** The menu's `data-context-menu` surface. */
   readonly surface: string;
   readonly isOpen: () => boolean;
+  /** Identity of the current open request; a later request must survive an older close event. */
+  readonly stateToken?: () => unknown;
   readonly close: () => void;
   /** Extra targets, such as the menu's own trigger, whose press does not dismiss it. */
   readonly ignore?: string;
@@ -53,10 +55,12 @@ export function wireContextMenuDismissal(root: HTMLElement, menus: readonly Dism
     const closed = (event: Event) => {
       const surface = closedPopupMenuRoot(event)?.dataset.contextMenu;
       const menu = surface && hiding.find((candidate) => candidate.surface === surface);
-      if (menu)
+      if (menu) {
+        const closingState = menu.stateToken?.();
         setTimeout(() => {
-          if (menu.isOpen()) menu.close();
+          if (menu.isOpen() && (!menu.stateToken || menu.stateToken() === closingState)) menu.close();
         }, 0);
+      }
     };
     root.addEventListener('toggle', closed, { capture: true });
     lifetime.add(() => {

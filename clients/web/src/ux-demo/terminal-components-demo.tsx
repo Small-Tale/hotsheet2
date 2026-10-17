@@ -563,6 +563,7 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
       {
         surface: 'terminal',
         isOpen: () => Boolean(terminalDashboardContextMenu.value),
+        stateToken: () => terminalDashboardContextMenu.value,
         close: () => {
           terminalDashboardContextMenu.value = undefined;
         },
@@ -572,6 +573,7 @@ function wireTerminalComponentsDemo(root: HTMLElement): () => void {
       {
         surface: 'terminal-edit',
         isOpen: () => Boolean(editMenuDemo.value),
+        stateToken: () => editMenuDemo.value,
         close: () => {
           editMenuDemo.value = undefined;
         },

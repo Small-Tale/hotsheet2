@@ -657,6 +657,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   ): DismissibleContextMenu => ({
     surface,
     isOpen: () => Boolean((menu as typeof menu | undefined)?.value),
+    stateToken: () => (menu as typeof menu | undefined)?.value,
     close: () => {
       menu.value = undefined;
     },

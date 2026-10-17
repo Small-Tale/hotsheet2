@@ -627,6 +627,7 @@ function wireTicketMetadataDemo(root: HTMLElement): () => void {
       {
         surface: 'attachment',
         isOpen: () => Boolean(attachmentDemoMenu.value),
+        stateToken: () => attachmentDemoMenu.value,
         close: closeAttachmentDemoMenu,
         ignore: '[data-action="open-attachment-menu"], [data-action="open-gallery-attachment-menu"]',
         hide: true,

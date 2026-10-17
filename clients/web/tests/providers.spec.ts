@@ -27522,7 +27522,7 @@ test('live project visual review', async ({ page }) => {
   await page.screenshot({ path: 'target/visual-captures/hotsheet-real-app-narrow.png', fullPage: true });
 });
 
-test('anchors ticket context menus to the pointer while preserving scroller positions (HS2-H4MWDB, HS2-SWC9E4) @ci-smoke', async ({
+test('anchors ticket context menus to the pointer while preserving scroller positions (HS2-H4MWDB, HS2-SWC9E4, HS2-M6WXE3) @ci-smoke', async ({
   page,
 }) => {
   const base = {
@@ -27770,6 +27770,29 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
     // Kerf's viewport gutter can hold a flipped menu's bottom a couple of pixels above the pointer.
   ).toBeLessThanOrEqual(3);
   await page.screenshot({ path: test.info().outputPath('hs2-swc9e4-bottom-edge-context-menu.png'), fullPage: true });
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await page.setViewportSize({ width: 390, height: 820 });
+  await page.evaluate(() => {
+    document
+      .querySelector<HTMLElement>('[data-ticket-slug="HS2-ROW39"]')!
+      .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 380, clientY: 812 }));
+  });
+  await expect(menu.getByRole('menu').first()).toBeVisible();
+  await expect
+    .poll(() =>
+      menu.evaluate(
+        (node) =>
+          (node.querySelector(':scope > .kui-popup-menu__menu') as HTMLElement)
+            .getAnimations()
+            .filter((animation) => animation.playState === 'running').length,
+      ),
+    )
+    .toBe(0);
+  await page.screenshot({
+    path: test.info().outputPath('hs2-m6wxe3-narrow-reopened-context-menu.png'),
+    fullPage: true,
+  });
 });
 
 test('remembers scroll per project, mode and view through delayed loading and shrinking contents (HS2-PDYXYJ)', async ({

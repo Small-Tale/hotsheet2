@@ -140,6 +140,45 @@ describe('wireContextMenuDismissal (HS2-AFCWNG)', () => {
     }
   });
 
+  it('keeps a newly opened context menu when an older close timer runs', () => {
+    class FakeElement {
+      constructor(
+        readonly className: string,
+        readonly parentElement: FakeElement | null = null,
+        readonly dataset: Record<string, string> = {},
+      ) {}
+      matches(selector: string) {
+        return selector === `.${this.className}`;
+      }
+    }
+    const root = fakeRoot(),
+      oldState = { ticketSlug: 'OLD' },
+      newState = { ticketSlug: 'NEW' };
+    let current: typeof oldState | undefined = oldState;
+    const close = vi.fn(() => {
+      current = undefined;
+    });
+    wireContextMenuDismissal(root as unknown as HTMLElement, [
+      {
+        surface: 'ticket',
+        isOpen: () => Boolean(current),
+        close,
+        hide: true,
+        stateToken: () => current,
+      },
+    ]);
+    const host = new FakeElement('kui-popup-menu', null, { contextMenu: 'ticket' });
+    root.dispatch('toggle', {
+      type: 'toggle',
+      newState: 'closed',
+      target: new FakeElement('kui-popup-menu__menu', host),
+    });
+    current = newState;
+    vi.runAllTimers();
+    expect(close).not.toHaveBeenCalled();
+    expect(current).toBe(newState);
+  });
+
   it('registers no close listener without opted-in menus and removes every listener on dispose', () => {
     const root = fakeRoot(),
       ticket = menu('ticket');

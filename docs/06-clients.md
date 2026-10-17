@@ -82,6 +82,8 @@ safe triangle from overlaying rows; it no longer ships its own override (HS2-0VX
 HS2-80E3X0).
 Pointer-positioned context menus and the inspector/reader status popup retain their opening
 anchor through view morphs, including a replaced popup host or cleared inline position.
+Reopening a context menu immediately after Escape keeps the new menu open even if the
+previous popup's close event finishes afterward.
 Dismissal ends the status popup's anchor tracking so later renders do not reopen it.
 In the inspector and reader, Add tag is a distinct button that opens its own anchored,
 viewport-contained popover with a Kerf Combobox. It snapshots unused tag suggestions when
