@@ -252,6 +252,15 @@ opencode_live_acp_turn -- --ignored --nocapture` with a configured OpenCode prov
 This verifies initialization, session creation, a streamed prompt, and completion against
 the installed executable. Last verified successfully on 2026-08-25 with OpenCode 1.17.18.
 
+### OpenCode session push in a real TUI (HS2-PEJ962)
+
+Open an OpenCode AI terminal from Hot Sheet (Connect, or `POST /terminals {"connect":"opencode"}`),
+then send `POST /connections/<terminal-id>/message` with `{"text":"…","banner":"…"}` and with
+`{"command":"agent_cycle"}`. Confirm in the attached TUI that the banner toast appears, the prompt
+appears in the session and a turn starts, and the agent indicator switches (Build → Plan).
+Automated tests replay the protocol but cannot see the rendered TUI. Last verified on
+2026-10-17 with opencode 1.17.18 (spike PTY capture plus a live Hot Sheet launch).
+
 ### Codex interactive permission-hook compatibility
 
 Run `HOTSHEET_CODEX_LIVE=1 cargo test -p hotsheet-cli

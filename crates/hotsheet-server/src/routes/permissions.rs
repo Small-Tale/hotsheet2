@@ -207,15 +207,24 @@ pub(crate) async fn list_connections(State(state): State<AppState>) -> Json<Vec<
     let infos = reg
         .list()
         .into_iter()
-        .map(|c| ConnectionInfo {
+        .map(|c| {
+            // A live terminal session with a session-push adapter accepts messages
+            // (HS2-PEJ962); its tool-native session id is reported once known.
+            let push = crate::routes::session_messages::adapter(&state, &c.id);
+            (c, push)
+        })
+        .map(|(c, push)| ConnectionInfo {
             id: c.id.clone(),
             tool: c.tool.clone(),
             project: c.project.clone(),
             source: None,
             role: format!("{:?}", c.role).to_lowercase(),
             busy: reg.is_busy(&c.id, now),
-            actions: Vec::new(),
-            session_id: None,
+            actions: push
+                .as_ref()
+                .map(|_| vec![crate::routes::session_messages::MESSAGE_ACTION.to_string()])
+                .unwrap_or_default(),
+            session_id: push.as_ref().and_then(|push| push.session_id()),
             last_error: None,
             model: None,
             effort: None,

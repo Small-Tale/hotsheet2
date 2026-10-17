@@ -1,0 +1,37 @@
+{
+  "tool": "opencode 1.17.18",
+  "captured": "2026-10-17 (HS2-PEJ962 spike: TUI under a PTY, opencode --port <port> with OPENCODE_SERVER_PASSWORD)",
+  "sanitized": "directory is a placeholder; session/message ids and timestamps are the spike's opaque values; password, usernames, and machine paths removed; Session objects trimmed to the fields the adapter reads plus landmarks",
+  "auth": { "scheme": "Basic", "user": "opencode", "wrong_password": { "status": 401, "body": "", "www-authenticate": "Basic realm=\"Secure Area\"" } },
+  "directory": "/hotsheet-fixture/proj",
+  "launched_at_ms": 1792196050000,
+  "scenarios": {
+    "fresh_tui_create_select_toast_prompt": [
+      { "method": "GET", "path": "/session", "query": { "roots": "true" }, "status": 200, "response": [] },
+      { "method": "POST", "path": "/session", "request": { "title": "Hot Sheet" }, "status": 200,
+        "response": { "id": "ses_eb8ca5a4fffevXILESlkgFxalb", "slug": "neon-cabin", "projectID": "global", "directory": "/hotsheet-fixture/proj", "title": "Hot Sheet", "version": "1.17.18", "time": { "created": 1792196060592, "updated": 1792196060592 } } },
+      { "method": "POST", "path": "/tui/select-session", "request": { "sessionID": "ses_eb8ca5a4fffevXILESlkgFxalb" }, "status": 200, "response": true },
+      { "method": "POST", "path": "/tui/show-toast", "request": { "title": "Hot Sheet", "message": "New note on HS2-TEST", "variant": "info" }, "status": 200, "response": true },
+      { "method": "POST", "path": "/session/ses_eb8ca5a4fffevXILESlkgFxalb/prompt_async", "request": { "parts": [{ "type": "text", "text": "reply with only the word pong" }] }, "status": 204, "response": null }
+    ],
+    "user_started_session_is_listed_newest_first": [
+      { "method": "GET", "path": "/session", "query": { "roots": "true" }, "status": 200,
+        "response": [
+          { "id": "ses_eb8c91f4affedx0zSRB1L1Nht3", "slug": "user-session", "projectID": "global", "directory": "/hotsheet-fixture/proj", "title": "New session - 2026-10-17T00:15:41.237Z", "version": "1.17.18", "time": { "created": 1792196141237, "updated": 1792196141300 } },
+          { "id": "ses_eb8ca5a4fffevXILESlkgFxalb", "slug": "neon-cabin", "projectID": "global", "directory": "/hotsheet-fixture/proj", "title": "Hot Sheet", "version": "1.17.18", "time": { "created": 1792196060592, "updated": 1792196094947 } }
+        ] },
+      { "method": "POST", "path": "/session/ses_eb8c91f4affedx0zSRB1L1Nht3/prompt_async", "request": { "parts": [{ "type": "text", "text": "reply with only the word zebrafish" }], "model": { "providerID": "opencode", "modelID": "deepseek-v4.1-flash-free" } }, "status": 204, "response": null }
+    ],
+    "tui_command_is_unconfirmed": [
+      { "method": "POST", "path": "/tui/execute-command", "request": { "command": "agent_cycle" }, "status": 200, "response": true, "observed": "the TUI agent switched Build -> Plan; an unknown command (nonsense_cmd) also answered true" }
+    ],
+    "unknown_session": [
+      { "method": "POST", "path": "/session/ses_doesnotexist000/prompt_async", "request": { "parts": [{ "type": "text", "text": "x" }] }, "status": 404, "response": { "name": "NotFoundError", "data": { "message": "Session not found: ses_doesnotexist000" } } }
+    ]
+  },
+  "observations": [
+    "The prompt text and the toast both rendered in the attached TUI (PTY scrollback).",
+    "prompt_async created the user message and an assistant message (a turn started); without `model` it used the config default model, not the TUI's --model.",
+    "Assistant output was not observable locally (expired provider token; the free tier required opencode >= 1.18), which does not affect delivery."
+  ]
+}

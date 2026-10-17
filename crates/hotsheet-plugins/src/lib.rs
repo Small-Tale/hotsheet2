@@ -103,6 +103,28 @@ pub struct Manifest {
     /// the native `source` so the host picks the right activity mapper.
     #[serde(default)]
     pub activity: Option<ActivitySpec>,
+    /// Optional: how the host **pushes a message into a running interactive session** the
+    /// tool's `[launch]` started (HS2-PEJ962, `docs/13` §13.12). Absent = the tool's live
+    /// sessions cannot be messaged, and the host reports that capability as unsupported.
+    #[serde(default)]
+    pub session_push: Option<SessionPushSpec>,
+}
+
+/// A tool's session-push declaration (`docs/13` §13.12). Declarative — the behavioral host
+/// (`hotsheet-aitools::session_push`) maps `mechanism` to its adapter and applies the launch
+/// wiring below to the interactive `[launch]` so the adapter can reach the session.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SessionPushSpec {
+    /// The adapter that delivers messages: `opencode-http` | ….
+    pub mechanism: String,
+    /// Arguments appended to the interactive launch; `{port}` is replaced with a free
+    /// loopback port the host allocated for this session.
+    #[serde(default)]
+    pub port_args: Vec<String>,
+    /// Environment variable that carries a per-session random password the host generates,
+    /// so only the host (and the tool itself) can call the session's local API.
+    #[serde(default)]
+    pub password_env: Option<String>,
 }
 
 /// How to start the tool for a human-facing interactive terminal.

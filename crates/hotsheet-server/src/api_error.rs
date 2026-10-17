@@ -26,6 +26,11 @@ impl ApiError {
             code: None,
         }
     }
+    /// Attach a stable machine-readable `code` an automated caller can branch on.
+    pub(crate) fn with_code(mut self, code: &'static str) -> Self {
+        self.code = Some(code);
+        self
+    }
     pub(crate) fn not_found(id: &str) -> Self {
         Self::new(StatusCode::NOT_FOUND, format!("no ticket matching '{id}'"))
     }

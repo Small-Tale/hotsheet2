@@ -646,6 +646,14 @@ use to name AI tabs after the provider (HS2-HZK0NK). This is exactly
 the ticket's "initializing AI tools in terminals including setting up MCP and
 similar connections."
 
+A plugin may also declare **`[session_push]`** (`mechanism`, `port_args`, `password_env`) so the
+host can message the interactive session its `[launch]` started (HS2-PEJ962). The launch then
+appends the port wiring and exports a per-session random password; the connection advertises the
+`message` action and `POST /connections/{id}/message` delivers a prompt (with an optional banner)
+or a tool UI command through that mechanism's adapter. OpenCode declares `opencode-http`; a tool
+with no section (Antigravity) reports the capability as unsupported. Details and the OpenCode
+protocol are in [13](13-drive-transport-interface.md) §13.12.
+
 ## 5.5 Drive / trigger (send a command to a target connection)
 
 > **Status: first slices built (HS2-106/107/108/110).** `crates/hotsheet-aitools` — the

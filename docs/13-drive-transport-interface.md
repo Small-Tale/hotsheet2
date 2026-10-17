@@ -412,3 +412,74 @@ one unavailable provider cannot hide another resumable conversation (HS2-YHQCS2)
 - Connection registry + busy: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.6
 - Permission bridge: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.7
 - Testability + the fake agent: [12-code-organization-and-testing.md](12-code-organization-and-testing.md) §12.7.7
+- Messaging a live interactive session: §13.12 below
+
+## 13.12 Messaging a live interactive session (session push, HS2-PEJ962)
+
+**Status: Partial** — the operation and the OpenCode adapter are shipped; the Claude inbox
+socket (HS2-M15CHN) and `codex queue` (HS2-FKM97G) adapters are separate tickets.
+
+Hot Sheet can push a message into an _interactive_ AI session that one of its terminals
+launched (Connect / `POST /terminals {connect}`), so an attached agent hears about a new note or
+an answered question without a human typing it. Each tool reaches its live session differently,
+so the host keeps one small trait, `hotsheet_aitools::session_push::SessionPush`, with one
+adapter per **mechanism**. The plugin manifest selects it; core code never branches on a tool id.
+
+```toml
+[session_push]
+mechanism = "opencode-http"          # the adapter
+port_args = ["--port", "{port}"]     # appended to [launch]; {port} = a free loopback port
+password_env = "OPENCODE_SERVER_PASSWORD"  # carries a per-session random password
+```
+
+A tool **without** `[session_push]` (or with a mechanism this host has no adapter for) is
+reported as unsupported. Antigravity declares none: a user-started `agy` TUI has no attach
+point, and only Hot Sheet-owned `stream-json` processes could be messaged.
+
+### Operation
+
+- `POST /connections/{id}/message` with exactly one of `{"text": "…", "banner"?: "…"}` (a prompt;
+  `banner` also shows a short visible notice when the mechanism has one) or
+  `{"command": "…"}` (a tool UI command). The connection id is the terminal id.
+- `200 {"delivered": true, "mechanism", "session_id"?, "confirmed"}`. `confirmed: false` means the
+  tool accepted the request but cannot confirm it acted (OpenCode answers `true` to every TUI
+  command, including unknown ones).
+- Errors carry a stable `code`: `404 connection_not_found`, `422 session_push_unsupported`
+  (named with the tool's display name), `400` for a malformed or empty message,
+  `502 session_unreachable` (nothing listening), `502 session_rejected` (an error status).
+- `GET /connections` lists `"message"` in a push-capable connection's `actions` and reports the
+  tool-native `session_id` once it is known.
+- The adapter lives while its terminal does; the terminal's exit drops it with the connection.
+
+### OpenCode (`opencode-http`)
+
+Pinned against opencode 1.17.18 by a spike (TUI under a PTY) and a live Hot Sheet run; the
+sanitized capture is `crates/hotsheet-aitools/tests/fixtures/opencode-1.17.18-session-push.json`.
+
+- The TUI is a client of its own HTTP server. Launched with `--port <p>` and
+  `OPENCODE_SERVER_PASSWORD`, it serves `127.0.0.1:<p>` behind HTTP Basic auth (user
+  `opencode`); a wrong password answers `401`. Every request carries `directory=<cwd>`.
+- **Session id.** The TUI creates no session until the first prompt. On the first message the
+  adapter picks the newest root session in the launch directory created since the launch
+  (`GET /session?roots=true`), else creates one titled "Hot Sheet" (`POST /session`) and shows it
+  (`POST /tui/select-session`). It then remembers the id; a `404` (session deleted) re-resolves
+  once. A user who later switches the TUI to another session keeps receiving pushes in the
+  remembered one; the banner is visible either way.
+- **Prompt.** Optional `POST /tui/show-toast` (best effort), then
+  `POST /session/:id/prompt_async` → `204`. The prompt renders in the attached TUI and a turn
+  starts. Without `model`, `prompt_async` runs on the config default model rather than the TUI's
+  `--model`, so the adapter passes the launch model (`provider/model`); the OpenCode `[launch]`
+  now also applies a chosen model with `--model`.
+- **Command.** `POST /tui/execute-command {"command"}` (verified: `agent_cycle` switched Build to
+  Plan). Unconfirmed, as above.
+- The port is allocated by binding `127.0.0.1:0` and releasing it before launch; if another
+  process takes it first the tool fails to bind and the push reports `session_unreachable`
+  (the per-session password keeps it from reaching another process's API).
+
+### Merge point with the other adapters
+
+The Claude (HS2-M15CHN) and Codex (HS2-FKM97G) tickets implement the same operation. They add
+an adapter behind `SessionPush`, a mechanism name in `session_push::is_supported` /
+`adapter_for` / `launch_wiring`, and the `[session_push]` section in their manifest; the route,
+error codes, and connection action are shared. Mechanisms whose address is learned after launch
+(a hook-reported socket or thread id) need a registration path into the same per-terminal map.

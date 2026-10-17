@@ -24,6 +24,7 @@ pub mod probe;
 mod procio;
 pub mod registry;
 pub mod safe_trigger;
+pub mod session_push;
 pub mod spawn;
 pub mod system;
 pub mod tool_progress;

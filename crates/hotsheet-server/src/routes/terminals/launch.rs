@@ -2,6 +2,7 @@
 
 use crate::api_error::ApiError;
 use crate::routes::permissions::{discovered_ai_tools, now_ms};
+use crate::routes::session_messages;
 use crate::routes::terminals::{
     OpenTerminalReq, TerminalInfo, broker_err, broker_info, read_terminal_settings, term_info,
     term_key, terminal_replay_bytes,
@@ -37,6 +38,9 @@ pub(crate) async fn open_terminal(
     })
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
+    // Only a freshly spawned AI terminal registers its session-push adapter (HS2-PEJ962); a
+    // reattach keeps the adapter (and port) its original launch registered.
+    let push = launch.push;
     let kind = if req.connect.is_some() {
         hotsheet_terminals::TerminalKind::Ai
     } else {
@@ -76,7 +80,12 @@ pub(crate) async fn open_terminal(
         // broker-hosted terminal's inference (polled over the socket), once per fresh terminal.
         if newly_spawned {
             match &req.connect {
-                Some(tool) => register_broker_terminal_connection(&state, &id, tool, tb.clone()),
+                Some(tool) => {
+                    if let Some(push) = push {
+                        session_messages::register(&state, &id, push);
+                    }
+                    register_broker_terminal_connection(&state, &id, tool, tb.clone())
+                }
                 None => watch_broker_terminal_session_exit(
                     &state,
                     &id,
@@ -108,7 +117,12 @@ pub(crate) async fn open_terminal(
     // terminal's inference, once per fresh terminal (not on a reattach).
     if newly_spawned {
         match &req.connect {
-            Some(tool) => register_terminal_connection(&state, &id, tool, term.clone()),
+            Some(tool) => {
+                if let Some(push) = push {
+                    session_messages::register(&state, &id, push);
+                }
+                register_terminal_connection(&state, &id, tool, term.clone())
+            }
             None => {
                 watch_terminal_session_exit(&state, term.clone(), terminal_session_worker_id(&id))
             }
@@ -125,6 +139,8 @@ struct PreparedTerminalLaunch {
     command: String,
     args: Vec<String>,
     env: Vec<(String, String)>,
+    /// The session-push adapter for a push-capable AI launch (HS2-PEJ962).
+    push: Option<std::sync::Arc<dyn hotsheet_aitools::session_push::SessionPush>>,
 }
 
 fn terminal_launch(
@@ -144,6 +160,7 @@ fn terminal_launch(
             args: shell_command_args(shell_command, &command),
             env: terminal_session_env(state, req, terminal_id, &command)?,
             command,
+            push: None,
         });
     }
     if let Some(command) = &req.command {
@@ -151,6 +168,7 @@ fn terminal_launch(
             command: command.clone(),
             args: req.args.clone(),
             env: terminal_session_env(state, req, terminal_id, command)?,
+            push: None,
         });
     }
     let Some(tool) = req.connect.as_deref() else {
@@ -159,6 +177,7 @@ fn terminal_launch(
             env: terminal_session_env(state, req, terminal_id, &command)?,
             command,
             args: req.args.clone(),
+            push: None,
         });
     };
     let root = state.store.root();
@@ -198,13 +217,25 @@ fn terminal_launch(
             .map(|(key, value)| (key.to_string(), value)),
     );
     env.push((hotsheet_aitools::WORKER_ID_ENV.to_string(), worker_id));
-    let args = plugin
+    let mut args = plugin
         .launch_args(req.model.as_deref(), req.effort.as_deref())
         .unwrap_or_default();
+    // A push-capable tool is launched reachable: its declared port/password wiring is
+    // appended so `POST /connections/{id}/message` can deliver into it (HS2-PEJ962).
+    let directory = req
+        .cwd
+        .clone()
+        .unwrap_or_else(|| root.to_string_lossy().into_owned());
+    let push = session_messages::prepare_session_push(&plugin, &directory, req.model.as_deref())?;
+    if let Some(prepared) = &push {
+        args.extend(prepared.args.iter().cloned());
+        env.extend(prepared.env.iter().cloned());
+    }
     Ok(PreparedTerminalLaunch {
         command: program.to_string_lossy().into_owned(),
         args,
         env,
+        push: push.map(|prepared| prepared.adapter),
     })
 }
 
@@ -480,6 +511,7 @@ fn register_terminal_connection(
     }
     let conn_id = id.to_string();
     let host = state.host.clone();
+    let pushes = state.session_pushes.clone();
     let worker = hotsheet_aitools::session_worker_id(tool, id);
     tokio::spawn(async move {
         loop {
@@ -490,6 +522,7 @@ fn register_terminal_connection(
                     let mut r = registry.lock_or_recover();
                     r.unregister(&conn_id);
                 }
+                session_messages::unregister(&pushes, &conn_id);
                 release_session_claims(host, worker).await;
                 break;
             }
@@ -531,6 +564,7 @@ fn register_broker_terminal_connection(
     }
     let conn_id = id.to_string();
     let host = state.host.clone();
+    let pushes = state.session_pushes.clone();
     let worker = hotsheet_aitools::session_worker_id(tool, id);
     tokio::spawn(async move {
         loop {
@@ -550,6 +584,7 @@ fn register_broker_terminal_connection(
                         let mut r = registry.lock_or_recover();
                         r.unregister(&conn_id);
                     }
+                    session_messages::unregister(&pushes, &conn_id);
                     release_session_claims(host, worker).await;
                     break;
                 }

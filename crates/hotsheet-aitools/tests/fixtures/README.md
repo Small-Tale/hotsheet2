@@ -20,6 +20,13 @@ Paths, ids, tool inputs, output, and diffs are synthetic or redacted. Credential
 checks remain the ignored `HOTSHEET_CODEX_LIVE=1` and `HOTSHEET_CLAUDE_LIVE=1` tests;
 ordinary gates never launch a model.
 
+`opencode-1.17.18-session-push.json` (HS2-PEJ962) is a sanitized capture of OpenCode's own
+HTTP server behind a TUI launched with `--port` and `OPENCODE_SERVER_PASSWORD`: session list /
+create / TUI select, toast, `prompt_async`, TUI `execute-command`, the unknown-session `404`, and
+the wrong-password `401`. `tests/opencode_session_push.rs` replays it through the production
+session-push adapter and `ureq` port against a loopback fake server. The directory is a
+placeholder; the password and machine paths are removed.
+
 `claude-stream-subagent-synthetic.json` (HS2-RGMJSP) is **synthetic, not a live capture**: it
 is assembled from Claude Code's documented stream-json record shapes to pin the channel's
 mapping of `tool_result` echoes, `parent_tool_use_id` sub-agent records, a

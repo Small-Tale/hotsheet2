@@ -11,6 +11,7 @@ pub(crate) mod mcp_presence;
 pub(crate) mod permissions;
 pub(crate) mod project_tools;
 pub(crate) mod providers;
+pub(crate) mod session_messages;
 pub(crate) mod store_scoped;
 pub(crate) mod terminals;
 pub(crate) mod ticket_writes;

@@ -264,6 +264,11 @@ pub struct AppState {
     /// server is driving registers here for its turn, so `GET /connections` shows what's
     /// live and (once driving is concurrent) the in-flight bound can consult busy state.
     drive_registry: Arc<Mutex<hotsheet_aitools::ConnectionRegistry>>,
+    /// Session-push adapters for live AI terminals, keyed by terminal (= connection) id
+    /// (HS2-PEJ962): `POST /connections/{id}/message` delivers through them. An entry exists
+    /// only while its terminal lives and only for tools whose manifest declares a supported
+    /// `[session_push]` mechanism.
+    session_pushes: routes::session_messages::SessionPushes,
     /// The in-process PTY manager (HS2-10) exposed over HTTP (HS2-A6R5QV): open/list/input/
     /// read/kill terminals. Lazy — a terminal spawns on first `POST /terminals`. Used unless
     /// the detached broker is enabled.
@@ -504,6 +509,7 @@ impl AppState {
             drive_registry: Arc::new(Mutex::new(hotsheet_aitools::ConnectionRegistry::new(
                 60_000,
             ))),
+            session_pushes: Arc::default(),
             terminals: Arc::new(hotsheet_terminals::TerminalManager::new()),
             terminal_broker: None,
             plugin_dirs: Arc::new(hotsheet_plugins::default_dirs()),
@@ -1441,6 +1447,11 @@ pub fn app(state: AppState) -> Router {
         )
         // What the server is currently driving (HS2-TCV3BF).
         .route("/connections", get(list_connections))
+        // Push a message into a live AI terminal session (HS2-PEJ962, docs/13 §13.12).
+        .route(
+            "/connections/{id}/message",
+            post(routes::session_messages::message_connection),
+        )
         .route("/ai-tools", get(list_ai_tools))
         .route("/ai-settings", get(get_ai_settings).put(put_ai_settings))
         .route("/drive/connections", post(create_drive_connection))

@@ -31,6 +31,16 @@ session_options = ["model"]
 [launch]
 program = "opencode"
 args = []
+model_args = ["--model", "{model}"]
+
+[session_push]
+# The TUI is a client of its own HTTP server (docs/13 §13.12, HS2-PEJ962): the host gives
+# each launched TUI a loopback port and a random Basic-auth password, then queues prompts
+# with POST /session/:id/prompt_async, shows banners with /tui/show-toast, and runs TUI
+# commands with /tui/execute-command.
+mechanism = "opencode-http"
+port_args = ["--port", "{port}"]
+password_env = "OPENCODE_SERVER_PASSWORD"
 
 [metrics]
 # ACP exposes aggregate prompt/session usage counters only; the host must not invent

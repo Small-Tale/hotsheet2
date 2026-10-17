@@ -1041,6 +1041,7 @@ name = "hotsheet-aitools"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "base64",
  "futures-util",
  "hotsheet-plugins",
  "hotsheet-sync",
@@ -1053,6 +1054,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "toml 0.8.23",
+ "ureq",
 ]
 
 [[package]]
