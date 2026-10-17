@@ -361,6 +361,12 @@ enum Cmd {
         /// Migrate settings and refresh every detected or previously managed tool.
         #[arg(long, conflicts_with = "tool")]
         refresh: bool,
+        /// Explain setup and connection problems without changing any files.
+        #[arg(long, conflicts_with_all = ["refresh", "detect", "tool"])]
+        diagnose: bool,
+        /// Limit --diagnose to one plugin id (for example, codex).
+        #[arg(long = "tool", requires = "diagnose")]
+        diagnose_tool: Option<String>,
         /// Project directory to write the tool config into (defaults to the store path).
         #[arg(long)]
         project: Option<PathBuf>,

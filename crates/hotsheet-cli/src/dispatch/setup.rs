@@ -15,6 +15,9 @@ use crate::{
 
 use super::{Ctx, misrouted};
 
+#[path = "setup_diagnose.rs"]
+mod diagnose;
+
 pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
     let path = &ctx.path;
     let cwd = &ctx.cwd;
@@ -23,9 +26,22 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
             tool,
             detect,
             refresh,
+            diagnose: diagnostic,
+            diagnose_tool,
             project,
             json,
-        } => cmd_setup(path, tool, detect, refresh, project, json),
+        } => {
+            if diagnostic {
+                diagnose::run(
+                    path,
+                    project.as_deref().unwrap_or(path),
+                    diagnose_tool.as_deref(),
+                    json,
+                )
+            } else {
+                cmd_setup(path, tool, detect, refresh, project, json)
+            }
+        }
         Cmd::Plugin { cmd } => cmd_plugin(cmd),
         Cmd::AiTools { json } => cmd_ai_tools(json),
         Cmd::AiSettings { cmd } => cmd_ai_settings(path, cwd, cmd),

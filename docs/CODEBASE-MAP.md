@@ -385,7 +385,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free); re-exports hotsheet_aitools::launch_safety
       src/workloop.rs        #   `work` loop pure helpers: Up Next queue signature + thrash-guard Stall counter
       # (launch_safety + SafeTrigger/prepare_trigger moved to hotsheet-aitools so the server reuses them — HS2-1TY7GC)
-      src/setup.rs           #   `hotsheet-cli setup <tool>`: thin wrapper over hotsheet_plugins::run_setup (adds the enabled-plugin filter from Settings)
+      src/setup.rs           #   `hotsheet-cli setup <tool>` and read-only diagnosis planner: thin wrappers over hotsheet_plugins setup (adds the enabled-plugin filter from Settings)
+      src/dispatch/setup_diagnose.rs # read-only CLI diagnosis: plugin plan, settings/worklist/registry path preview, MCP availability, and live terminal reports
       src/plugin.rs          #   `hotsheet-cli plugin list|info|install|verify|remove`: manage + trust-gate external plugins
       src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent)
       src/import_recovery.rs #   Read-only legacy attachment diagnostics, explicit selected restoration, and source-bound omission evidence

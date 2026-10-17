@@ -57,7 +57,22 @@ invoke the core merge-safe writers. They migrate only settings files that alread
 and refresh detected or previously managed enabled plugins, which repairs stale or
 partial setup without opting a clean project into an absent tool. Identical output is a
 byte-level no-op, and managed instruction markers remain the boundary around content
-Hot Sheet may replace. Claude's `.claude/skills/hotsheet/SKILL.md` and Codex's
+Hot Sheet may replace.
+
+**Read-only diagnosis (HS2-9N8KVR).** `hotsheet-cli setup --diagnose
+[--tool <plugin-id>] [--project <directory>] [--json]` computes the same refresh
+plan without applying it or migrating settings. It reports each plugin's enabled,
+detected, and previously managed state; current, missing, outdated, preserved, or
+disabled instruction, skill, MCP, and hook artifacts; the MCP command and expected
+arguments; the checkout registry link; and the exact paths refresh would change.
+Human output gives a cause and suggested fix per tool. JSON includes these findings
+and a `would_change` array with write/remove actions. The local server and terminal
+connection are reported when discoverable. Offline diagnosis cannot prove a tool's
+MCP handshake or Codex hook trust; after changed hooks, use the tool's trust review
+and restart its session. A malformed registry is reported without invoking its
+repairing read path.
+
+Claude's `.claude/skills/hotsheet/SKILL.md` and Codex's
 `.agents/skills/hotsheet/SKILL.md` are fully managed plugin artifacts kept synchronized
 with their canonical shared workflows; refresh replaces a stale Hot Sheet adapter while
 preserving unrelated user-authored skills and instruction content. The worklist skill and the

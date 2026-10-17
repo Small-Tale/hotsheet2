@@ -9,8 +9,8 @@
 //! **in** by the caller, so this crate needs no ticketing/settings dependency and stays the
 //! lean, mostly-declarative plugin core.
 
-use std::collections::HashSet;
-use std::path::Path;
+use std::collections::{BTreeMap, HashSet};
+use std::path::{Path, PathBuf};
 
 use crate::{Plugin, all_plugins, default_dirs};
 
@@ -49,6 +49,166 @@ pub struct RefreshReport {
     /// Disabled tools whose managed artifacts the refresh removed; only tools with at
     /// least one change are listed.
     pub removed: Vec<RemovalReport>,
+}
+
+/// A read-only preview of the same setup work that refresh will apply.
+pub struct SetupPlan {
+    pub report: RefreshReport,
+    pub changes: Vec<PlannedChange>,
+    pub tools: Vec<ToolSetupFindings>,
+    operations: Vec<PlannedOperation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct PlannedChange {
+    /// Project-relative, except a machine-local Git exclude file outside the project.
+    pub path: String,
+    pub action: PlannedAction,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlannedAction {
+    Write,
+    Remove,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ToolSetupFindings {
+    pub tool: String,
+    pub enabled: bool,
+    pub detected: bool,
+    pub previously_managed: bool,
+    pub artifacts: Vec<ArtifactFinding>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ArtifactFinding {
+    pub kind: ArtifactKind,
+    pub path: String,
+    pub status: ArtifactStatus,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArtifactKind {
+    Instructions,
+    Skill,
+    Mcp,
+    Hooks,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArtifactStatus {
+    Current,
+    Missing,
+    Outdated,
+    Preserved,
+    Disabled,
+}
+
+enum PlannedOperation {
+    Write(PathBuf, Vec<u8>),
+    Remove(PathBuf, PathBuf),
+}
+
+#[derive(Default)]
+struct PlanFs {
+    original: BTreeMap<PathBuf, Option<Vec<u8>>>,
+    current: BTreeMap<PathBuf, Option<Vec<u8>>>,
+}
+
+impl PlanFs {
+    fn read(&self, path: &Path) -> std::io::Result<Vec<u8>> {
+        match self.current.get(path) {
+            Some(Some(bytes)) => Ok(bytes.clone()),
+            Some(None) => Err(std::io::Error::from(std::io::ErrorKind::NotFound)),
+            None => std::fs::read(path),
+        }
+    }
+
+    fn read_to_string(&self, path: &Path) -> std::io::Result<String> {
+        String::from_utf8(self.read(path)?)
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
+    }
+
+    fn is_file(&self, path: &Path) -> bool {
+        self.current
+            .get(path)
+            .map_or_else(|| path.is_file(), Option::is_some)
+    }
+
+    fn exists(&self, path: &Path) -> bool {
+        self.current
+            .get(path)
+            .map_or_else(|| path.exists(), Option::is_some)
+    }
+
+    fn remember(&mut self, path: &Path) {
+        self.original
+            .entry(path.to_path_buf())
+            .or_insert_with(|| std::fs::read(path).ok());
+    }
+
+    fn write(&mut self, path: &Path, contents: &[u8]) {
+        self.remember(path);
+        if self.read(path).ok().as_deref() == Some(contents) {
+            return;
+        }
+        self.current
+            .insert(path.to_path_buf(), Some(contents.to_vec()));
+    }
+
+    fn remove(&mut self, _project: &Path, path: &Path) -> bool {
+        if !self.is_file(path) {
+            return false;
+        }
+        self.remember(path);
+        self.current.insert(path.to_path_buf(), None);
+        true
+    }
+
+    fn final_operations(&self, project: &Path) -> Vec<PlannedOperation> {
+        self.current
+            .iter()
+            .filter_map(|(path, current)| {
+                if self.original.get(path) == Some(current) {
+                    return None;
+                }
+                Some(match current {
+                    Some(contents) => PlannedOperation::Write(path.clone(), contents.clone()),
+                    None => PlannedOperation::Remove(project.to_path_buf(), path.clone()),
+                })
+            })
+            .collect()
+    }
+
+    fn changes(&self, project: &Path) -> Vec<PlannedChange> {
+        self.current
+            .iter()
+            .filter_map(|(path, current)| {
+                let original = self.original.get(path)?;
+                if original == current {
+                    return None;
+                }
+                let label = path
+                    .strip_prefix(project)
+                    .unwrap_or(path)
+                    .to_string_lossy()
+                    .into_owned();
+                Some(PlannedChange {
+                    path: label,
+                    action: if current.is_some() {
+                        PlannedAction::Write
+                    } else {
+                        PlannedAction::Remove
+                    },
+                })
+            })
+            .collect()
+    }
 }
 
 impl RefreshReport {
@@ -234,6 +394,22 @@ pub fn refresh_setup_in(
     enabled: Option<&HashSet<String>>,
     plugin_dirs: &[std::path::PathBuf],
 ) -> Result<RefreshReport, SetupError> {
+    apply_setup_plan(plan_refresh_setup_in(
+        store_path,
+        project_dir,
+        enabled,
+        plugin_dirs,
+    )?)
+}
+
+/// Compute refresh's exact file changes without modifying the checkout or Git metadata.
+pub fn plan_refresh_setup_in(
+    store_path: &Path,
+    project_dir: &Path,
+    enabled: Option<&HashSet<String>>,
+    plugin_dirs: &[PathBuf],
+) -> Result<SetupPlan, SetupError> {
+    let mut fs = PlanFs::default();
     let all = all_plugins(plugin_dirs);
     let mut reconcile_targets: Vec<String> = Vec::new();
     for plugin in &all {
@@ -256,12 +432,12 @@ pub fn refresh_setup_in(
         .collect();
     let plugins = plugins
         .into_iter()
-        .filter(|plugin| is_detected(plugin) || has_managed_setup(project_dir, plugin))
+        .filter(|plugin| is_detected(plugin) || has_managed_setup(&fs, project_dir, plugin))
         .collect::<Vec<_>>();
     // Shared-section membership before this run, so a disabled sharer dropped from (or
     // taken out with) a shared section is reported as an edit of that file (HS2-CAM9J5).
-    let shared_members = |target: &str| {
-        std::fs::read_to_string(project_dir.join(target))
+    let shared_members = |fs: &PlanFs, target: &str| {
+        fs.read_to_string(&project_dir.join(target))
             .ok()
             .and_then(|contents| parse_shared_section(&contents, &shared_section_key(target)))
             .map(|shared| shared.tools)
@@ -269,33 +445,39 @@ pub fn refresh_setup_in(
     };
     let members_before: Vec<(String, Vec<String>)> = reconcile_targets
         .iter()
-        .map(|target| (target.clone(), shared_members(target)))
+        .map(|target| (target.clone(), shared_members(&fs, target)))
         .collect();
     let set_up = if plugins.is_empty() {
         // Nothing to set up, but a shared section whose sharers were all disabled is removed.
         let run_ids = HashSet::new();
         for target in &reconcile_targets {
-            write_instruction_target(project_dir, target, &[], Some(&run_ids))?;
-            write_guidance_target(project_dir, target, false)?;
+            write_instruction_target(&mut fs, project_dir, target, &[], Some(&run_ids))?;
+            write_guidance_target(&mut fs, project_dir, target, false)?;
         }
         Vec::new()
     } else {
-        setup_plugins(store_path, project_dir, plugins, Some(&reconcile_targets))?
+        setup_plugins_with_fs(
+            &mut fs,
+            store_path,
+            project_dir,
+            plugins,
+            Some(&reconcile_targets),
+        )?
     };
     let mut removed = Vec::new();
     for plugin in &excluded {
-        let mut report = remove_disabled_tool_artifacts(project_dir, plugin, &claimed)
+        let mut report = remove_disabled_tool_artifacts(&mut fs, project_dir, plugin, &claimed)
             .map_err(|error| error.with_notices(&set_up))?;
         let target = &plugin.manifest.instructions.target;
         let was_member = members_before
             .iter()
             .any(|(t, tools)| t == target && tools.iter().any(|tool| tool == plugin.id()));
         if was_member
-            && !shared_members(target)
+            && !shared_members(&fs, target)
                 .iter()
                 .any(|tool| tool == plugin.id())
         {
-            let change = if project_dir.join(target).exists() {
+            let change = if fs.exists(&project_dir.join(target)) {
                 Change::Edited
             } else {
                 Change::Removed
@@ -306,7 +488,180 @@ pub fn refresh_setup_in(
             removed.push(report);
         }
     }
-    Ok(RefreshReport { set_up, removed })
+    let report = RefreshReport { set_up, removed };
+    let changes = fs.changes(project_dir);
+    let tools = collect_findings(store_path, project_dir, enabled, plugin_dirs, &fs);
+    let operations = fs.final_operations(project_dir);
+    Ok(SetupPlan {
+        report,
+        changes,
+        tools,
+        operations,
+    })
+}
+
+/// Apply exactly the operations produced by [`plan_refresh_setup_in`].
+pub fn apply_setup_plan(plan: SetupPlan) -> Result<RefreshReport, SetupError> {
+    apply_operations(plan.operations).map_err(|error| error.with_notices(&plan.report.set_up))?;
+    Ok(plan.report)
+}
+
+fn apply_operations(operations: Vec<PlannedOperation>) -> Result<(), SetupError> {
+    for operation in operations {
+        match operation {
+            PlannedOperation::Write(path, contents) => {
+                write_file(&path, &String::from_utf8_lossy(&contents))?
+            }
+            PlannedOperation::Remove(project, path) => {
+                if path.is_file() {
+                    std::fs::remove_file(&path).map_err(|source| SetupError::Io {
+                        path: path.display().to_string(),
+                        source,
+                    })?;
+                    prune_empty_parent_dirs(&project, &path);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn prune_empty_parent_dirs(project: &Path, path: &Path) {
+    let mut dir = path.parent();
+    while let Some(current) = dir {
+        if current == project || !current.starts_with(project) {
+            break;
+        }
+        if std::fs::remove_dir(current).is_err() {
+            break;
+        }
+        dir = current.parent();
+    }
+}
+
+fn collect_findings(
+    store_path: &Path,
+    project: &Path,
+    enabled: Option<&HashSet<String>>,
+    plugin_dirs: &[PathBuf],
+    fs: &PlanFs,
+) -> Vec<ToolSetupFindings> {
+    let original = PlanFs::default();
+    all_plugins(plugin_dirs).into_iter().map(|plugin| {
+        let enabled_tool = enabled.is_none_or(|set| set.contains(plugin.id()));
+        let previously_managed = has_managed_setup(&original, project, &plugin);
+        let detected = is_detected(&plugin);
+        let installed_mcp = installed_mcp_command_args(
+            &original, &project.join(&plugin.manifest.mcp.target), &plugin,
+        );
+        let preserved = installed_workflow_requires_preservation(&original, project, &plugin);
+        let mut artifacts = Vec::new();
+        {
+        let mut add = |kind, rel: &str, preserved: bool| {
+            let path = project.join(rel);
+            let before = original.read(&path).ok();
+            let after = fs.read(&path).ok();
+            let installed = match kind {
+                ArtifactKind::Instructions => has_tool_instructions(&original, project, &plugin),
+                ArtifactKind::Hooks => has_hotsheet_hooks(&original, &path),
+                _ => before.is_some(),
+            };
+            let status = if !enabled_tool { ArtifactStatus::Disabled }
+                else if !installed { ArtifactStatus::Missing }
+                else if preserved { ArtifactStatus::Preserved }
+                else if before == after { ArtifactStatus::Current }
+                else { ArtifactStatus::Outdated };
+            let detail = match status {
+                ArtifactStatus::Current => "matches the installed setup".to_string(),
+                ArtifactStatus::Missing => "artifact is missing".to_string(),
+                ArtifactStatus::Outdated => "artifact differs from the setup refresh output".to_string(),
+                ArtifactStatus::Preserved => "newer or user-modified workflow is preserved".to_string(),
+                ArtifactStatus::Disabled => "tool is excluded by enabled_plugins".to_string(),
+            };
+            artifacts.push(ArtifactFinding { kind, path: rel.to_string(), status, detail });
+        };
+        add(ArtifactKind::Instructions, &plugin.manifest.instructions.target, preserved);
+        if let Some((path, _)) = plugin.skill() { add(ArtifactKind::Skill, path, preserved); }
+        add(ArtifactKind::Mcp, &plugin.manifest.mcp.target, false);
+        if let Some(hooks) = &plugin.manifest.hooks { add(ArtifactKind::Hooks, &hooks.target, false); }
+        }
+        if enabled_tool {
+            if let Some(finding) = artifacts.iter_mut().find(|finding| finding.kind == ArtifactKind::Mcp) {
+                let expected_command = mcp_command(&plugin.manifest.mcp.command);
+                let store_abs = store_path.canonicalize().unwrap_or_else(|_| store_path.to_path_buf());
+                let expected_args = plugin.mcp_args(&store_abs.to_string_lossy());
+                match installed_mcp.as_ref() {
+                    None if original.is_file(&project.join(&plugin.manifest.mcp.target)) => {
+                        finding.status = ArtifactStatus::Missing;
+                        finding.detail = "Hot Sheet MCP entry is missing from the config".into();
+                    }
+                    Some((command, args)) if command != &expected_command || args != &expected_args => {
+                        finding.status = ArtifactStatus::Outdated;
+                        finding.detail = if command != &expected_command {
+                            format!("MCP command differs: installed `{command}`, expected `{expected_command}`")
+                        } else {
+                            format!("MCP args differ: installed `{}`, expected `{}`", args.join(" "), expected_args.join(" "))
+                        };
+                    }
+                    _ => {}
+                }
+            }
+        }
+        ToolSetupFindings {
+            tool: plugin.id().to_string(), enabled: enabled_tool,
+            detected,
+            previously_managed,
+            artifacts,
+        }
+    }).collect()
+}
+
+fn installed_mcp_command_args(
+    fs: &PlanFs,
+    path: &Path,
+    plugin: &Plugin,
+) -> Option<(String, Vec<String>)> {
+    let contents = fs.read_to_string(path).ok()?;
+    let spec = &plugin.manifest.mcp;
+    match spec.format.as_str() {
+        "claude-json" => {
+            let root: serde_json::Value = serde_json::from_str(&contents).ok()?;
+            let entry = &root["mcpServers"][&spec.server_name];
+            Some((
+                entry["command"].as_str()?.to_string(),
+                entry["args"]
+                    .as_array()?
+                    .iter()
+                    .map(|arg| arg.as_str().map(str::to_string))
+                    .collect::<Option<Vec<_>>>()?,
+            ))
+        }
+        "opencode-json" => {
+            let root: serde_json::Value = serde_json::from_str(&contents).ok()?;
+            let command = root["mcp"][&spec.server_name]["command"].as_array()?;
+            let (first, rest) = command.split_first()?;
+            Some((
+                first.as_str()?.to_string(),
+                rest.iter()
+                    .map(|arg| arg.as_str().map(str::to_string))
+                    .collect::<Option<Vec<_>>>()?,
+            ))
+        }
+        "codex-toml" => {
+            let root: toml::Table = toml::from_str(&contents).ok()?;
+            let entry = root.get("mcp_servers")?.get(&spec.server_name)?;
+            Some((
+                entry.get("command")?.as_str()?.to_string(),
+                entry
+                    .get("args")?
+                    .as_array()?
+                    .iter()
+                    .map(|arg| arg.as_str().map(str::to_string))
+                    .collect::<Option<Vec<_>>>()?,
+            ))
+        }
+        _ => None,
+    }
 }
 
 /// Remove the wholly Hot Sheet-owned setup artifacts of a tool the project disabled
@@ -322,6 +677,7 @@ pub fn refresh_setup_in(
 ///   A config left holding nothing is deleted with its local git exclude.
 /// * A path an enabled tool also declares is never touched.
 fn remove_disabled_tool_artifacts(
+    fs: &mut PlanFs,
     project: &Path,
     plugin: &Plugin,
     claimed: &HashSet<String>,
@@ -332,26 +688,29 @@ fn remove_disabled_tool_artifacts(
     };
     let rel = &plugin.manifest.instructions.target;
     let instructions = crate::is_safe_rel_path(rel)
-        .then(|| std::fs::read_to_string(project.join(rel)).ok())
+        .then(|| fs.read_to_string(&project.join(rel)).ok())
         .flatten();
     let workflow_preserved =
         per_tool_section_requires_preservation(plugin, instructions.as_deref())
-            || skill_requires_preservation(project, plugin);
+            || skill_requires_preservation(fs, project, plugin);
     if !workflow_preserved {
-        report.record(rel, remove_disabled_tool_section(project, plugin)?);
+        report.record(rel, remove_disabled_tool_section(fs, project, plugin)?);
         if let Some((rel, _)) = plugin.skill() {
             if crate::is_safe_rel_path(rel) && !claimed.contains(rel) {
-                report.record(rel, remove_managed_file(project, rel, false)?);
+                report.record(rel, remove_managed_file(fs, project, rel, false)?);
             }
         }
     }
     let mcp = &plugin.manifest.mcp.target;
     if crate::is_safe_rel_path(mcp) && !claimed.contains(mcp) {
-        report.record(mcp, remove_mcp_entry(project, plugin)?);
+        report.record(mcp, remove_mcp_entry(fs, project, plugin)?);
     }
     if let Some(spec) = &plugin.manifest.hooks {
         if crate::is_safe_rel_path(&spec.target) && !claimed.contains(&spec.target) {
-            report.record(&spec.target, remove_hotsheet_hooks(project, &spec.target)?);
+            report.record(
+                &spec.target,
+                remove_hotsheet_hooks(fs, project, &spec.target)?,
+            );
         }
     }
     Ok(report)
@@ -364,6 +723,7 @@ fn remove_disabled_tool_artifacts(
 /// untouched. A file left holding nothing but whitespace (setup created it for that section)
 /// is deleted, like a config that held only Hot Sheet's entry (HS2-G9CD1W).
 fn remove_disabled_tool_section(
+    fs: &mut PlanFs,
     project: &Path,
     plugin: &Plugin,
 ) -> Result<Option<Change>, SetupError> {
@@ -372,7 +732,7 @@ fn remove_disabled_tool_section(
         return Ok(None);
     }
     let path = project.join(rel);
-    let Ok(existing) = std::fs::read_to_string(&path) else {
+    let Ok(existing) = fs.read_to_string(&path) else {
         return Ok(None);
     };
     let (begin, end) = (begin_marker(plugin.id()), end_marker(plugin.id()));
@@ -395,9 +755,9 @@ fn remove_disabled_tool_section(
         return Ok(None);
     }
     if out.trim().is_empty() {
-        return remove_managed_file(project, rel, false);
+        return remove_managed_file(fs, project, rel, false);
     }
-    write_file(&path, &out)?;
+    fs.write(&path, out.as_bytes());
     Ok(Some(Change::Edited))
 }
 
@@ -405,30 +765,18 @@ fn remove_disabled_tool_section(
 /// project itself). `excluded` also drops the file's local git exclude, which setup added
 /// only for a wholly Hot Sheet-owned config.
 fn remove_managed_file(
+    fs: &mut PlanFs,
     project: &Path,
     rel: &str,
     excluded: bool,
 ) -> Result<Option<Change>, SetupError> {
     let path = project.join(rel);
-    if !path.is_file() {
+    if !fs.is_file(&path) {
         return Ok(None);
     }
-    std::fs::remove_file(&path).map_err(|source| SetupError::Io {
-        path: path.display().to_string(),
-        source,
-    })?;
-    let mut dir = path.parent();
-    while let Some(current) = dir {
-        if current == project || !current.starts_with(project) {
-            break;
-        }
-        if std::fs::remove_dir(current).is_err() {
-            break; // not empty (or not ours to remove): stop pruning
-        }
-        dir = current.parent();
-    }
+    fs.remove(project, &path);
     if excluded {
-        remove_local_git_exclude(project, rel)?;
+        remove_local_git_exclude(fs, project, rel)?;
     }
     Ok(Some(Change::Removed))
 }
@@ -447,10 +795,14 @@ fn is_hotsheet_mcp_command(installed: &str, bundled: &str) -> bool {
 /// Remove a disabled tool's Hot Sheet MCP server entry (HS2-ZTGX6P): the entry named by
 /// the manifest whose command is Hot Sheet's MCP binary. Unrelated servers and settings in
 /// a shared config are kept; a config that held only Hot Sheet's entry is deleted.
-fn remove_mcp_entry(project: &Path, plugin: &Plugin) -> Result<Option<Change>, SetupError> {
+fn remove_mcp_entry(
+    fs: &mut PlanFs,
+    project: &Path,
+    plugin: &Plugin,
+) -> Result<Option<Change>, SetupError> {
     let spec = &plugin.manifest.mcp;
     let target = project.join(&spec.target);
-    let Ok(contents) = std::fs::read_to_string(&target) else {
+    let Ok(contents) = fs.read_to_string(&target) else {
         return Ok(None);
     };
     let name = spec.server_name.as_str();
@@ -527,17 +879,25 @@ fn remove_mcp_entry(project: &Path, plugin: &Plugin) -> Result<Option<Change>, S
         _ => return Ok(None),
     };
     match rendered {
-        Some(rendered) => write_file(&target, &rendered).map(|()| Some(Change::Edited)),
-        None => remove_managed_file(project, &spec.target, true),
+        Some(rendered) => {
+            fs.write(&target, rendered.as_bytes());
+            Ok(Some(Change::Edited))
+        }
+        None => remove_managed_file(fs, project, &spec.target, true),
     }
 }
 
 /// Remove every Hot Sheet permission hook from a disabled tool's hook config
 /// (HS2-ZTGX6P). The user's own hooks and other settings stay; an event list emptied by
 /// the removal is dropped, and a config left empty is deleted with its local git exclude.
-fn remove_hotsheet_hooks(project: &Path, rel: &str) -> Result<Option<Change>, SetupError> {
+fn remove_hotsheet_hooks(
+    fs: &mut PlanFs,
+    project: &Path,
+    rel: &str,
+) -> Result<Option<Change>, SetupError> {
     let target = project.join(rel);
-    let Some(mut root) = std::fs::read_to_string(&target)
+    let Some(mut root) = fs
+        .read_to_string(&target)
         .ok()
         .and_then(|contents| serde_json::from_str::<serde_json::Value>(&contents).ok())
     else {
@@ -572,26 +932,46 @@ fn remove_hotsheet_hooks(project: &Path, rel: &str) -> Result<Option<Change>, Se
         object.remove("hooks");
     }
     if object.is_empty() {
-        remove_managed_file(project, rel, true)
+        remove_managed_file(fs, project, rel, true)
     } else {
-        write_file(
+        fs.write(
             &target,
-            &(serde_json::to_string_pretty(&root).unwrap() + "\n"),
-        )
-        .map(|()| Some(Change::Edited))
+            (serde_json::to_string_pretty(&root).unwrap() + "\n").as_bytes(),
+        );
+        Ok(Some(Change::Edited))
     }
 }
 
-fn has_managed_setup(project_dir: &Path, plugin: &Plugin) -> bool {
+fn has_managed_setup(fs: &PlanFs, project_dir: &Path, plugin: &Plugin) -> bool {
+    has_tool_instructions(fs, project_dir, plugin)
+        || plugin
+            .skill()
+            .is_some_and(|(target, _)| fs.is_file(&project_dir.join(target)))
+}
+
+fn has_tool_instructions(fs: &PlanFs, project_dir: &Path, plugin: &Plugin) -> bool {
     let marker = format!("<!-- BEGIN hotsheet:{} -->", plugin.id());
     let target = &plugin.manifest.instructions.target;
-    std::fs::read_to_string(project_dir.join(target)).is_ok_and(|contents| {
-        contents.contains(&marker)
-            || parse_shared_section(&contents, &shared_section_key(target))
-                .is_some_and(|shared| shared.tools.iter().any(|tool| tool == plugin.id()))
-    }) || plugin
-        .skill()
-        .is_some_and(|(target, _)| project_dir.join(target).is_file())
+    fs.read_to_string(&project_dir.join(target))
+        .is_ok_and(|contents| {
+            contents.contains(&marker)
+                || parse_shared_section(&contents, &shared_section_key(target))
+                    .is_some_and(|shared| shared.tools.iter().any(|tool| tool == plugin.id()))
+        })
+}
+
+fn has_hotsheet_hooks(fs: &PlanFs, path: &Path) -> bool {
+    fs.read_to_string(path)
+        .ok()
+        .and_then(|contents| serde_json::from_str::<serde_json::Value>(&contents).ok())
+        .and_then(|root| root.get("hooks")?.as_object().cloned())
+        .is_some_and(|hooks| {
+            hooks.values().any(|entries| {
+                entries
+                    .as_array()
+                    .is_some_and(|entries| entries.iter().any(is_hotsheet_hook))
+            })
+        })
 }
 
 /// Write every plugin's artifacts. `refresh_targets` is `Some` on the refresh path: it names
@@ -599,6 +979,21 @@ fn has_managed_setup(project_dir: &Path, plugin: &Plugin) -> bool {
 /// authoritative for shared-section membership. Explicit setup (`None`) only ever adds
 /// tools to an existing shared section.
 fn setup_plugins(
+    store_path: &Path,
+    project_dir: &Path,
+    plugins: Vec<Plugin>,
+    refresh_targets: Option<&[String]>,
+) -> Result<Vec<SetupReport>, SetupError> {
+    let mut fs = PlanFs::default();
+    let result = setup_plugins_with_fs(&mut fs, store_path, project_dir, plugins, refresh_targets);
+    // Explicit setup historically leaves earlier tools' successful writes in place if a
+    // later tool fails. Refresh/diagnose use the pure plan, but retain this direct path.
+    apply_operations(fs.final_operations(project_dir))?;
+    result
+}
+
+fn setup_plugins_with_fs(
+    fs: &mut PlanFs,
     store_path: &Path,
     project_dir: &Path,
     plugins: Vec<Plugin>,
@@ -621,7 +1016,7 @@ fn setup_plugins(
 
     let preserved: Vec<bool> = plugins
         .iter()
-        .map(|p| installed_workflow_requires_preservation(project_dir, p))
+        .map(|p| installed_workflow_requires_preservation(fs, project_dir, p))
         .collect();
     let run_ids: HashSet<String> = plugins.iter().map(|p| p.id().to_string()).collect();
     let membership = refresh_targets.map(|_| &run_ids);
@@ -642,7 +1037,7 @@ fn setup_plugins(
             .filter(|(p, preserve)| !**preserve && p.manifest.instructions.target == *target)
             .map(|(p, _)| p)
             .collect();
-        write_instruction_target(project_dir, target, &writers, membership)?;
+        write_instruction_target(fs, project_dir, target, &writers, membership)?;
     }
     // These independently versioned, project-neutral sections are shared by opted-in
     // tools that read an instruction target. They are not copies of this
@@ -653,14 +1048,14 @@ fn setup_plugins(
         .map(|plugin| plugin.manifest.instructions.target.as_str())
         .collect();
     for target in &guidance_targets {
-        write_guidance_target(project_dir, target, true)?;
+        write_guidance_target(fs, project_dir, target, true)?;
     }
     for target in refresh_targets.unwrap_or_default() {
         if !targets.contains(&target.as_str()) {
-            write_instruction_target(project_dir, target, &[], membership)?;
+            write_instruction_target(fs, project_dir, target, &[], membership)?;
         }
         if !guidance_targets.contains(target.as_str()) {
-            write_guidance_target(project_dir, target, false)?;
+            write_guidance_target(fs, project_dir, target, false)?;
         }
     }
 
@@ -670,13 +1065,13 @@ fn setup_plugins(
             let mut wrote = Vec::new();
             if !preserve_installed_workflow {
                 wrote.push(p.manifest.instructions.target.clone());
-                if let Some(skill) = write_skill(project_dir, p)? {
+                if let Some(skill) = write_skill(fs, project_dir, p)? {
                     wrote.push(skill); // absent for tools with no skills concept (e.g. Antigravity)
                 }
             }
-            wrote.push(write_mcp(project_dir, &store_abs, p)?);
+            wrote.push(write_mcp(fs, project_dir, &store_abs, p)?);
             let mut notices = Vec::new();
-            if let Some((hook, changed)) = write_hooks(project_dir, p)? {
+            if let Some((hook, changed)) = write_hooks(fs, project_dir, p)? {
                 if changed
                     && matches!(
                         p.manifest
@@ -814,9 +1209,14 @@ fn render_guidance_sections(existing: &str, active: bool) -> String {
     rendered
 }
 
-fn write_guidance_target(project: &Path, rel: &str, active: bool) -> Result<(), SetupError> {
+fn write_guidance_target(
+    fs: &mut PlanFs,
+    project: &Path,
+    rel: &str,
+    active: bool,
+) -> Result<(), SetupError> {
     let path = project.join(rel);
-    let existing = std::fs::read_to_string(&path).unwrap_or_default();
+    let existing = fs.read_to_string(&path).unwrap_or_default();
     if !active && existing.is_empty() {
         return Ok(());
     }
@@ -825,9 +1225,10 @@ fn write_guidance_target(project: &Path, rel: &str, active: bool) -> Result<(), 
         return Ok(());
     }
     if rendered.trim().is_empty() {
-        return remove_managed_file(project, rel, false).map(|_| ());
+        return remove_managed_file(fs, project, rel, false).map(|_| ());
     }
-    write_file(&path, &rendered)
+    fs.write(&path, rendered.as_bytes());
+    Ok(())
 }
 
 fn marked_version(contents: &str, prefix: &str) -> Option<u64> {
@@ -864,10 +1265,10 @@ fn per_tool_section_requires_preservation(plugin: &Plugin, instructions: Option<
 
 /// Whether the installed worklist skill is newer than, or an equal-version variant of,
 /// the bundled skill.
-fn skill_requires_preservation(project: &Path, plugin: &Plugin) -> bool {
+fn skill_requires_preservation(fs: &PlanFs, project: &Path, plugin: &Plugin) -> bool {
     plugin.skill().is_some_and(|(target, bundled)| {
         let bundled_version = marked_version(bundled, SKILL_VERSION_PREFIX).unwrap_or(0);
-        std::fs::read_to_string(project.join(target))
+        fs.read_to_string(&project.join(target))
             .ok()
             .is_some_and(|installed| {
                 marked_artifact_requires_preservation(
@@ -880,11 +1281,12 @@ fn skill_requires_preservation(project: &Path, plugin: &Plugin) -> bool {
     })
 }
 
-fn installed_workflow_requires_preservation(project: &Path, plugin: &Plugin) -> bool {
+fn installed_workflow_requires_preservation(fs: &PlanFs, project: &Path, plugin: &Plugin) -> bool {
     let bundled_instruction_version =
         marked_version(plugin.instructions_body(), INSTRUCTIONS_VERSION_PREFIX).unwrap_or(0);
-    let instructions =
-        std::fs::read_to_string(project.join(&plugin.manifest.instructions.target)).ok();
+    let instructions = fs
+        .read_to_string(&project.join(&plugin.manifest.instructions.target))
+        .ok();
     if per_tool_section_requires_preservation(plugin, instructions.as_deref()) {
         return true;
     }
@@ -906,7 +1308,7 @@ fn installed_workflow_requires_preservation(project: &Path, plugin: &Plugin) -> 
     {
         return true;
     }
-    skill_requires_preservation(project, plugin)
+    skill_requires_preservation(fs, project, plugin)
 }
 
 /// A strictly newer marker belongs to a newer writer. An equal marker with different
@@ -1001,13 +1403,14 @@ fn executable_extensions() -> Vec<String> {
 /// Write one instruction file's Hot Sheet sections for `writers` (the non-preserved tools
 /// in this run that target it), merge-safe. See [`render_instruction_target`].
 fn write_instruction_target(
+    fs: &mut PlanFs,
     project: &Path,
     rel: &str,
     writers: &[&Plugin],
     refresh_members: Option<&HashSet<String>>,
 ) -> Result<(), SetupError> {
     let target = project.join(rel);
-    let existing = std::fs::read_to_string(&target).ok();
+    let existing = fs.read_to_string(&target).ok();
     if writers.is_empty() && existing.is_none() {
         return Ok(()); // never create a file just to reconcile it
     }
@@ -1023,9 +1426,10 @@ fn write_instruction_target(
     // Retiring the last managed section of a file setup created leaves nothing of the
     // user's, so the file goes rather than lingering empty (HS2-G9CD1W).
     if rendered.trim().is_empty() {
-        return remove_managed_file(project, rel, false).map(|_| ());
+        return remove_managed_file(fs, project, rel, false).map(|_| ());
     }
-    write_file(&target, &rendered)
+    fs.write(&target, rendered.as_bytes());
+    Ok(())
 }
 
 /// The Hot Sheet managed sections of one instruction file (HS2-329EED), as a pure function
@@ -1215,10 +1619,10 @@ fn remove_range(contents: &str, (start, end): (usize, usize)) -> String {
 
 /// Write the worklist skill (a fully managed file), or nothing if the tool has no skills
 /// concept. Returns the written path when present.
-fn write_skill(project: &Path, p: &Plugin) -> Result<Option<String>, SetupError> {
+fn write_skill(fs: &mut PlanFs, project: &Path, p: &Plugin) -> Result<Option<String>, SetupError> {
     match p.skill() {
         Some((target, body)) => {
-            write_file(&project.join(target), body)?;
+            fs.write(&project.join(target), body.as_bytes());
             Ok(Some(target.to_string()))
         }
         None => Ok(None),
@@ -1228,19 +1632,24 @@ fn write_skill(project: &Path, p: &Plugin) -> Result<Option<String>, SetupError>
 /// Register the `hotsheet-mcp` server in the tool's MCP config, merge-safe. The writer is
 /// chosen by the manifest's `format` (a host helper keyed on the format, not the tool id —
 /// docs/05 §5.3), so a new tool with a known format needs no code.
-fn write_mcp(project: &Path, store_abs: &Path, p: &Plugin) -> Result<String, SetupError> {
+fn write_mcp(
+    fs: &mut PlanFs,
+    project: &Path,
+    store_abs: &Path,
+    p: &Plugin,
+) -> Result<String, SetupError> {
     let rel = &p.manifest.mcp.target;
     let target = project.join(rel);
     let name = &p.manifest.mcp.server_name;
     let command = mcp_command(&p.manifest.mcp.command);
     let args = p.mcp_args(&store_abs.to_string_lossy());
-    let locally_owned =
-        !target.exists() || is_hotsheet_only_mcp_config(&target, &p.manifest.mcp.format, name);
+    let locally_owned = !fs.exists(&target)
+        || is_hotsheet_only_mcp_config(fs, &target, &p.manifest.mcp.format, name);
 
     match p.manifest.mcp.format.as_str() {
-        "claude-json" => write_mcp_json(&target, name, &command, &args)?,
-        "codex-toml" => write_mcp_toml(&target, name, &command, &args)?,
-        "opencode-json" => write_mcp_opencode_json(&target, name, &command, &args)?,
+        "claude-json" => write_mcp_json(fs, &target, name, &command, &args)?,
+        "codex-toml" => write_mcp_toml(fs, &target, name, &command, &args)?,
+        "opencode-json" => write_mcp_opencode_json(fs, &target, name, &command, &args)?,
         other => {
             return Err(SetupError::UnknownMcpFormat {
                 id: p.id().to_string(),
@@ -1249,13 +1658,13 @@ fn write_mcp(project: &Path, store_abs: &Path, p: &Plugin) -> Result<String, Set
         }
     }
     if locally_owned {
-        ensure_local_git_exclude(project, rel)?;
+        ensure_local_git_exclude(fs, project, rel)?;
     }
     Ok(rel.clone())
 }
 
-fn is_hotsheet_only_mcp_config(target: &Path, format: &str, name: &str) -> bool {
-    let Ok(contents) = std::fs::read_to_string(target) else {
+fn is_hotsheet_only_mcp_config(fs: &PlanFs, target: &Path, format: &str, name: &str) -> bool {
+    let Ok(contents) = fs.read_to_string(target) else {
         return false;
     };
     match format {
@@ -1320,12 +1729,12 @@ fn project_exclude_file(project: &Path) -> Option<std::path::PathBuf> {
 
 /// Keep a wholly Hot Sheet-owned machine config out of this checkout without changing its
 /// shared `.gitignore`. Existing mixed/user-owned configs remain visible to git.
-fn ensure_local_git_exclude(project: &Path, rel: &str) -> Result<(), SetupError> {
+fn ensure_local_git_exclude(fs: &mut PlanFs, project: &Path, rel: &str) -> Result<(), SetupError> {
     let Some(target) = project_exclude_file(project) else {
         return Ok(());
     };
     let entry = format!("/{}", rel.replace('\\', "/"));
-    let existing = std::fs::read_to_string(&target).unwrap_or_default();
+    let existing = fs.read_to_string(&target).unwrap_or_default();
     if existing.lines().any(|line| line == entry) {
         return Ok(());
     }
@@ -1334,16 +1743,20 @@ fn ensure_local_git_exclude(project: &Path, rel: &str) -> Result<(), SetupError>
     } else {
         "\n"
     };
-    write_file(&target, &format!("{existing}{separator}{entry}\n"))
+    fs.write(
+        &target,
+        format!("{existing}{separator}{entry}\n").as_bytes(),
+    );
+    Ok(())
 }
 
 /// Drop the `/<rel>` line setup added to this checkout's `.git/info/exclude` for a wholly
 /// Hot Sheet-owned config that has now been deleted.
-fn remove_local_git_exclude(project: &Path, rel: &str) -> Result<(), SetupError> {
+fn remove_local_git_exclude(fs: &mut PlanFs, project: &Path, rel: &str) -> Result<(), SetupError> {
     let Some(target) = project_exclude_file(project) else {
         return Ok(());
     };
-    let Ok(existing) = std::fs::read_to_string(&target) else {
+    let Ok(existing) = fs.read_to_string(&target) else {
         return Ok(());
     };
     let entry = format!("/{}", rel.replace('\\', "/"));
@@ -1355,7 +1768,8 @@ fn remove_local_git_exclude(project: &Path, rel: &str) -> Result<(), SetupError>
         .filter(|line| *line != entry)
         .map(|line| format!("{line}\n"))
         .collect();
-    write_file(&target, &kept)
+    fs.write(&target, kept.as_bytes());
+    Ok(())
 }
 
 /// Register the tool's permission hook (`docs/05` §5.7) in its config, if it declares one.
@@ -1363,12 +1777,16 @@ fn remove_local_git_exclude(project: &Path, rel: &str) -> Result<(), SetupError>
 /// `{ "hooks": { "<event>": [ { "matcher": "*", "hooks": [ { "type": "command", "command": … } ] } ] } }`.
 /// Merge-safe + idempotent: an existing Hot Sheet hook (same resolved command) is not
 /// duplicated. Returns the written path when a hook was registered.
-fn write_hooks(project: &Path, p: &Plugin) -> Result<Option<(String, bool)>, SetupError> {
+fn write_hooks(
+    fs: &mut PlanFs,
+    project: &Path,
+    p: &Plugin,
+) -> Result<Option<(String, bool)>, SetupError> {
     let Some(spec) = &p.manifest.hooks else {
         return Ok(None);
     };
     let target = project.join(&spec.target);
-    let locally_owned = spec.machine_local || !target.exists();
+    let locally_owned = spec.machine_local || !fs.exists(&target);
     let command = resolve_hook_command(&spec.command);
 
     if spec.format != "lifecycle-json" {
@@ -1378,7 +1796,8 @@ fn write_hooks(project: &Path, p: &Plugin) -> Result<Option<(String, bool)>, Set
         });
     }
 
-    let mut root: serde_json::Value = std::fs::read_to_string(&target)
+    let mut root: serde_json::Value = fs
+        .read_to_string(&target)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .filter(serde_json::Value::is_object)
@@ -1424,11 +1843,13 @@ fn write_hooks(project: &Path, p: &Plugin) -> Result<Option<(String, bool)>, Set
     }
 
     let rendered = serde_json::to_string_pretty(&root).unwrap() + "\n";
-    let changed = !std::fs::read(&target).is_ok_and(|existing| existing == rendered.as_bytes());
+    let changed = !fs
+        .read(&target)
+        .is_ok_and(|existing| existing == rendered.as_bytes());
     if locally_owned {
-        ensure_local_git_exclude(project, &spec.target)?;
+        ensure_local_git_exclude(fs, project, &spec.target)?;
     }
-    write_file(&target, &rendered)?;
+    fs.write(&target, rendered.as_bytes());
     Ok(Some((spec.target.clone(), changed)))
 }
 
@@ -1485,12 +1906,14 @@ fn mcp_env_json() -> serde_json::Value {
 
 /// Claude-style `.mcp.json`: `{ "mcpServers": { "<name>": { command, args, env } } }`.
 fn write_mcp_json(
+    fs: &mut PlanFs,
     target: &Path,
     name: &str,
     command: &str,
     args: &[String],
 ) -> Result<(), SetupError> {
-    let mut root: serde_json::Value = std::fs::read_to_string(target)
+    let mut root: serde_json::Value = fs
+        .read_to_string(target)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .filter(serde_json::Value::is_object)
@@ -1508,21 +1931,24 @@ fn write_mcp_json(
         name.to_string(),
         serde_json::json!({ "command": command, "args": args, "env": mcp_env_json() }),
     );
-    write_file(
+    fs.write(
         target,
-        &(serde_json::to_string_pretty(&root).unwrap() + "\n"),
-    )
+        (serde_json::to_string_pretty(&root).unwrap() + "\n").as_bytes(),
+    );
+    Ok(())
 }
 
 /// OpenCode project config:
 /// `{ "mcp": { "<name>": { type: "local", command: [...], environment } } }`.
 fn write_mcp_opencode_json(
+    fs: &mut PlanFs,
     target: &Path,
     name: &str,
     command: &str,
     args: &[String],
 ) -> Result<(), SetupError> {
-    let mut root: serde_json::Value = std::fs::read_to_string(target)
+    let mut root: serde_json::Value = fs
+        .read_to_string(target)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .filter(serde_json::Value::is_object)
@@ -1541,20 +1967,23 @@ fn write_mcp_opencode_json(
         name.to_string(),
         serde_json::json!({ "type": "local", "command": command_line, "environment": mcp_env_json() }),
     );
-    write_file(
+    fs.write(
         target,
-        &(serde_json::to_string_pretty(&root).unwrap() + "\n"),
-    )
+        (serde_json::to_string_pretty(&root).unwrap() + "\n").as_bytes(),
+    );
+    Ok(())
 }
 
 /// Codex-style TOML: `[mcp_servers.<name>]` with `command`, `args`, and `env`.
 fn write_mcp_toml(
+    fs: &mut PlanFs,
     target: &Path,
     name: &str,
     command: &str,
     args: &[String],
 ) -> Result<(), SetupError> {
-    let mut root: toml::Table = std::fs::read_to_string(target)
+    let mut root: toml::Table = fs
+        .read_to_string(target)
         .ok()
         .and_then(|s| toml::from_str(&s).ok())
         .unwrap_or_default();
@@ -1590,7 +2019,8 @@ fn write_mcp_toml(
         .unwrap()
         .insert(name.to_string(), toml::Value::Table(entry));
 
-    write_file(target, &toml::to_string_pretty(&root).unwrap())
+    fs.write(target, toml::to_string_pretty(&root).unwrap().as_bytes());
+    Ok(())
 }
 
 fn write_file(path: &Path, contents: &str) -> Result<(), SetupError> {
@@ -2635,6 +3065,223 @@ section = "instructions.md"
         }
     }
 
+    fn snapshot_files(root: &Path) -> BTreeMap<String, Vec<u8>> {
+        fn visit(root: &Path, dir: &Path, files: &mut BTreeMap<String, Vec<u8>>) {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let entry = entry.unwrap();
+                let path = entry.path();
+                if entry.file_type().unwrap().is_dir() {
+                    visit(root, &path, files);
+                } else {
+                    files.insert(
+                        path.strip_prefix(root)
+                            .unwrap()
+                            .to_string_lossy()
+                            .into_owned(),
+                        std::fs::read(path).unwrap(),
+                    );
+                }
+            }
+        }
+        let mut files = BTreeMap::new();
+        visit(root, root, &mut files);
+        files
+    }
+
+    #[test]
+    fn refresh_plan_is_read_only_and_predicts_exact_changed_paths() {
+        let fixture = Sharing::new();
+        std::fs::create_dir_all(fixture.path(".git/info")).unwrap();
+        custom_tool(
+            fixture.plugins.path(),
+            "echo",
+            true,
+            r#"[skills]
+target = ".echo/skills/hotsheet/SKILL.md"
+source = "SKILL.md"
+[mcp]
+target = ".echo/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+"#,
+        );
+        fixture.write("AGENTS.md", "Local preface.\n");
+        let enabled = HashSet::from(["echo".to_string(), "alpha".to_string()]);
+        let dirs = [fixture.plugins.path().to_path_buf()];
+        let before = snapshot_files(fixture.project.path());
+        let plan = plan_refresh_setup_in(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&enabled),
+            &dirs,
+        )
+        .unwrap();
+        assert_eq!(snapshot_files(fixture.project.path()), before);
+        let echo = plan.tools.iter().find(|tool| tool.tool == "echo").unwrap();
+        assert!(echo.detected && echo.enabled && !echo.previously_managed);
+        assert!(
+            echo.artifacts
+                .iter()
+                .all(|artifact| artifact.status == ArtifactStatus::Missing)
+        );
+        let predicted: std::collections::BTreeSet<_> = plan
+            .changes
+            .iter()
+            .map(|change| change.path.clone())
+            .collect();
+        refresh_setup_in(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&enabled),
+            &dirs,
+        )
+        .unwrap();
+        let after = snapshot_files(fixture.project.path());
+        let actual: std::collections::BTreeSet<_> = before
+            .keys()
+            .chain(after.keys())
+            .filter(|path| before.get(*path) != after.get(*path))
+            .cloned()
+            .collect();
+        assert_eq!(predicted, actual);
+        assert!(
+            after
+                .get("AGENTS.md")
+                .unwrap()
+                .starts_with(b"Local preface.")
+        );
+        let clean = plan_refresh_setup_in(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&enabled),
+            &dirs,
+        )
+        .unwrap();
+        assert!(clean.changes.is_empty());
+        assert!(
+            clean
+                .tools
+                .iter()
+                .find(|tool| tool.tool == "echo")
+                .unwrap()
+                .artifacts
+                .iter()
+                .all(|artifact| artifact.status == ArtifactStatus::Current)
+        );
+        let alpha = clean
+            .tools
+            .iter()
+            .find(|tool| tool.tool == "alpha")
+            .unwrap();
+        assert!(!alpha.detected && !alpha.previously_managed);
+        assert!(
+            alpha
+                .artifacts
+                .iter()
+                .find(|artifact| artifact.kind == ArtifactKind::Instructions)
+                .is_some_and(|artifact| artifact.status == ArtifactStatus::Missing)
+        );
+    }
+
+    #[test]
+    fn refresh_plan_reports_mcp_drift_and_disabled_removal_without_writing() {
+        let fixture = Sharing::new();
+        custom_tool(
+            fixture.plugins.path(),
+            "echo",
+            true,
+            r#"[skills]
+target = ".echo/skills/hotsheet/SKILL.md"
+source = "SKILL.md"
+[mcp]
+target = ".echo/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+"#,
+        );
+        let enabled = HashSet::from(["echo".to_string()]);
+        let dirs = [fixture.plugins.path().to_path_buf()];
+        fixture.refresh(&["echo"]);
+        let mcp_path = fixture.path(".echo/mcp.json");
+        let mut mcp: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&mcp_path).unwrap()).unwrap();
+        mcp["mcpServers"]["hotsheet"]["args"] = serde_json::json!(["--path", "/old/store"]);
+        std::fs::write(&mcp_path, serde_json::to_vec_pretty(&mcp).unwrap()).unwrap();
+        let before = snapshot_files(fixture.project.path());
+        let drift = plan_refresh_setup_in(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&enabled),
+            &dirs,
+        )
+        .unwrap();
+        let echo = drift.tools.iter().find(|tool| tool.tool == "echo").unwrap();
+        let mcp = echo
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.kind == ArtifactKind::Mcp)
+            .unwrap();
+        assert_eq!(mcp.status, ArtifactStatus::Outdated);
+        assert!(mcp.detail.contains("args differ"));
+        assert_eq!(snapshot_files(fixture.project.path()), before);
+
+        let disabled = HashSet::new();
+        let removal = plan_refresh_setup_in(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&disabled),
+            &dirs,
+        )
+        .unwrap();
+        assert!(
+            removal
+                .tools
+                .iter()
+                .find(|tool| tool.tool == "echo")
+                .unwrap()
+                .artifacts
+                .iter()
+                .all(|artifact| artifact.status == ArtifactStatus::Disabled)
+        );
+        assert!(removal.changes.iter().any(
+            |change| change.path == ".echo/mcp.json" && change.action == PlannedAction::Remove
+        ));
+        assert_eq!(snapshot_files(fixture.project.path()), before);
+
+        fixture.write(
+            ".echo/skills/hotsheet/SKILL.md",
+            "<!-- hotsheet-skill-version: 8 -->\nproject-customized skill\n",
+        );
+        let preserved = plan_refresh_setup_in(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&enabled),
+            &dirs,
+        )
+        .unwrap();
+        let echo = preserved
+            .tools
+            .iter()
+            .find(|tool| tool.tool == "echo")
+            .unwrap();
+        assert!(
+            echo.artifacts
+                .iter()
+                .any(|artifact| artifact.kind == ArtifactKind::Skill
+                    && artifact.status == ArtifactStatus::Preserved)
+        );
+        assert!(
+            !preserved
+                .changes
+                .iter()
+                .any(|change| change.path == ".echo/skills/hotsheet/SKILL.md")
+        );
+    }
+
     /// HS2-ZTGX6P: the full disable → refresh → refresh → re-enable → refresh walk for a
     /// detected tool. Every wholly Hot Sheet-owned artifact leaves, the tool stops counting
     /// as previously managed, and re-enabling restores the identical layout.
@@ -2711,7 +3358,11 @@ command = "hotsheet-cli permission-hook"
                 fixture.exclude()
             );
             assert!(
-                !has_managed_setup(fixture.project.path(), &fixture.plugin("echo")),
+                !has_managed_setup(
+                    &PlanFs::default(),
+                    fixture.project.path(),
+                    &fixture.plugin("echo")
+                ),
                 "a disabled tool is no longer previously managed"
             );
         }
@@ -2806,6 +3457,7 @@ args = ["--path", "{store}"]
             );
             for id in ["echo", "alpha", "beta"] {
                 assert!(!has_managed_setup(
+                    &PlanFs::default(),
                     fixture.project.path(),
                     &fixture.plugin(id)
                 ));
@@ -2864,6 +3516,7 @@ args = ["--path", "{store}"]
                     "MCP maintenance continues for a preserved workflow"
                 );
                 assert!(has_managed_setup(
+                    &PlanFs::default(),
                     fixture.project.path(),
                     &fixture.plugin("delta")
                 ));
@@ -3513,7 +4166,9 @@ args = []
         std::fs::create_dir_all(git_dir.join("info")).unwrap();
         std::fs::write(project.join(".git"), "gitdir: ../worktree-git\n").unwrap();
 
-        ensure_local_git_exclude(&project, ".codex/config.toml").unwrap();
+        let mut fs = PlanFs::default();
+        ensure_local_git_exclude(&mut fs, &project, ".codex/config.toml").unwrap();
+        apply_operations(fs.final_operations(&project)).unwrap();
 
         assert_eq!(
             std::fs::read_to_string(git_dir.join("info/exclude")).unwrap(),
@@ -3557,10 +4212,14 @@ args = []
         git(&main, &["worktree", "add", "-q", linked.to_str().unwrap()]);
         std::fs::write(linked.join("opencode.json"), "{}").unwrap();
 
-        ensure_local_git_exclude(&linked, "opencode.json").unwrap();
+        let mut fs = PlanFs::default();
+        ensure_local_git_exclude(&mut fs, &linked, "opencode.json").unwrap();
+        apply_operations(fs.final_operations(&linked)).unwrap();
 
         assert_eq!(git(&linked, &["status", "--porcelain"]), "");
-        remove_local_git_exclude(&linked, "opencode.json").unwrap();
+        let mut fs = PlanFs::default();
+        remove_local_git_exclude(&mut fs, &linked, "opencode.json").unwrap();
+        apply_operations(fs.final_operations(&linked)).unwrap();
         assert_eq!(
             git(&linked, &["status", "--porcelain"]),
             "?? opencode.json\n"

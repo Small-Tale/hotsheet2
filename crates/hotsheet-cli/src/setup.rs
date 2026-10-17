@@ -12,6 +12,20 @@ use anyhow::Result;
 
 pub use hotsheet_plugins::{RefreshReport, RemovalReport, SetupReport};
 
+/// Compute the refresh result without migrating settings or writing setup artifacts.
+pub fn plan_refresh_setup(
+    store_path: &Path,
+    project_dir: &Path,
+) -> Result<hotsheet_plugins::setup::SetupPlan> {
+    let enabled = enabled_plugin_ids(project_dir);
+    Ok(hotsheet_plugins::setup::plan_refresh_setup_in(
+        store_path,
+        project_dir,
+        enabled.as_ref(),
+        &hotsheet_plugins::default_dirs(),
+    )?)
+}
+
 /// Set up one named `tool`, or every detected (and enabled) tool when `detect` is set.
 pub fn run_setup(
     store_path: &Path,

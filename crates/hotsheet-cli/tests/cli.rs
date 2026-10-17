@@ -8,6 +8,264 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 #[test]
+fn setup_diagnose_is_read_only_and_predicts_refresh_paths() {
+    fn files(root: &Path) -> std::collections::BTreeMap<std::path::PathBuf, Vec<u8>> {
+        fn walk(
+            root: &Path,
+            path: &Path,
+            out: &mut std::collections::BTreeMap<std::path::PathBuf, Vec<u8>>,
+        ) {
+            for entry in std::fs::read_dir(path).unwrap() {
+                let entry = entry.unwrap();
+                let path = entry.path();
+                if path.is_dir() {
+                    out.insert(path.strip_prefix(root).unwrap().to_path_buf(), Vec::new());
+                    walk(root, &path, out);
+                } else {
+                    out.insert(
+                        path.strip_prefix(root).unwrap().to_path_buf(),
+                        std::fs::read(&path).unwrap(),
+                    );
+                }
+            }
+        }
+        let mut out = std::collections::BTreeMap::new();
+        walk(root, root, &mut out);
+        out
+    }
+
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("store");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    let bin = root.path().join("bin");
+    for path in [&store, &project, &home, &bin] {
+        std::fs::create_dir(path).unwrap();
+    }
+    std::fs::create_dir_all(project.join(".git/info")).unwrap();
+    std::fs::write(project.join(".git/info/exclude"), "existing-rule\n").unwrap();
+    std::fs::write(bin.join("codex"), "fake executable for detection").unwrap();
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    std::fs::write(
+        project.join("hotsheet-settings.json"),
+        r#"{"enabled_plugins":["codex"]}"#,
+    )
+    .unwrap();
+    let path = std::env::join_paths(std::iter::once(bin.clone()).chain(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    )))
+    .unwrap();
+    let command = || {
+        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        command
+            .env("HOTSHEET_HOME", &home)
+            .env("PATH", &path)
+            .env_remove("HOTSHEET_PROJECT")
+            .env_remove("HOTSHEET_SERVER")
+            .env_remove("HOTSHEET_SECRET")
+            .env_remove("HOTSHEET_TERMINAL_ID")
+            .arg("-C")
+            .arg(&store)
+            .arg("setup")
+            .arg("--project")
+            .arg(&project);
+        command
+    };
+    let before = files(root.path());
+    let output = command()
+        .args(["--diagnose", "--tool", "codex", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let diagnosis: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(diagnosis["tools"].as_array().unwrap().len(), 1);
+    assert_eq!(diagnosis["tools"][0]["tool"], "codex");
+    assert_eq!(diagnosis["registry"]["status"], "missing");
+    assert_eq!(diagnosis["tools"][0]["verdict"], "setup_incomplete");
+    assert_eq!(
+        files(root.path()),
+        before,
+        "diagnose modified the project, store, or machine home"
+    );
+
+    command().arg("--refresh").assert().success();
+    let after = files(root.path());
+    let changed_files = after
+        .iter()
+        .filter(|(path, bytes)| {
+            before.get(*path) != Some(*bytes)
+                && !root.path().join(path).is_dir()
+                && (path.starts_with("project")
+                    || path.as_path() == Path::new("home/checkouts.json"))
+        })
+        .map(|(path, _)| path.clone())
+        .collect::<std::collections::BTreeSet<_>>();
+    let predicted = diagnosis["would_change"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|change| change["path"].as_str())
+        .map(|path| {
+            if Path::new(path).is_absolute() {
+                Path::new(path)
+                    .strip_prefix(root.path())
+                    .unwrap_or_else(|_| panic!("unexpected external change path: {path}"))
+                    .to_path_buf()
+            } else {
+                Path::new("project").join(path)
+            }
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(predicted, changed_files);
+    let after_refresh = files(root.path());
+    let current: serde_json::Value = serde_json::from_slice(
+        &command()
+            .args(["--diagnose", "--tool", "codex", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    )
+    .unwrap();
+    assert!(current["would_change"].as_array().unwrap().is_empty());
+    assert_eq!(files(root.path()), after_refresh);
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let response = serde_json::json!([{
+        "id": "terminal-1", "tool": "codex", "cwd": project,
+        "mcp_connected": false, "ai_connection": {"source": "session_start"},
+        "last_hook_report": {"source": "session_start", "at": "2026-10-17T00:00:00Z"}
+    }])
+    .to_string();
+    let server = std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        let mut request = [0_u8; 2048];
+        let count = stream.read(&mut request).unwrap();
+        assert!(String::from_utf8_lossy(&request[..count]).starts_with("GET /terminals HTTP/1.1"));
+        write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", response.len(), response).unwrap();
+    });
+    let live: serde_json::Value = serde_json::from_slice(
+        &command()
+            .env("HOTSHEET_SERVER", format!("http://{address}"))
+            .env("HOTSHEET_SECRET", "diagnose-test-secret")
+            .args(["--diagnose", "--tool", "codex", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    )
+    .unwrap();
+    server.join().unwrap();
+    assert_eq!(live["tools"][0]["verdict"], "mcp_not_connected");
+    assert_eq!(live["tools"][0]["live_terminal"]["hooks_active"], true);
+    assert_eq!(live["tools"][0]["live_terminal"]["mcp_connected"], false);
+    assert_eq!(
+        live["tools"][0]["live_terminal"]["last_hook_report"]["source"],
+        "session_start"
+    );
+    assert_eq!(files(root.path()), after_refresh);
+
+    let project_two = root.path().join("project-two");
+    std::fs::create_dir(&project_two).unwrap();
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", &home)
+        .env("PATH", &path)
+        .arg("-C")
+        .arg(&store)
+        .arg("setup")
+        .arg("codex")
+        .arg("--project")
+        .arg(&project_two)
+        .assert()
+        .success();
+    let other_worklist = project_two.join(".hotsheet2/worklist.md");
+    std::fs::remove_file(&other_worklist).unwrap();
+    let before_linked = files(root.path());
+    let linked: serde_json::Value = serde_json::from_slice(
+        &command()
+            .args(["--diagnose", "--tool", "codex", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    )
+    .unwrap();
+    let canonical_other_worklist = project_two
+        .canonicalize()
+        .unwrap()
+        .join(".hotsheet2/worklist.md");
+    assert!(
+        linked["would_change"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|change| {
+                change["path"] == canonical_other_worklist.to_string_lossy().as_ref()
+                    && change["action"] == "write"
+            }),
+        "linked checkout worklist missing from plan: {}",
+        linked["would_change"]
+    );
+    assert_eq!(files(root.path()), before_linked);
+    command().arg("--refresh").assert().success();
+    assert!(other_worklist.is_file());
+
+    std::fs::write(
+        project.join(".hotsheet2/settings.json"),
+        "{\n  \"$hotsheetSchema\": 1,\n  \"enabled_plugins\": []\n}\n",
+    )
+    .unwrap();
+    let before_disabled = files(root.path());
+    let disabled: serde_json::Value = serde_json::from_slice(
+        &command()
+            .args(["--diagnose", "--tool", "codex", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    )
+    .unwrap();
+    assert_eq!(disabled["tools"][0]["verdict"], "disabled");
+    assert!(
+        disabled["would_change"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|change| {
+                change["path"] == ".codex/config.toml" && change["action"] == "remove"
+            })
+    );
+    assert_eq!(files(root.path()), before_disabled);
+    command().arg("--refresh").assert().success();
+    assert!(!project.join(".codex/config.toml").exists());
+
+    // CheckoutRegistry::list repairs one known corruption shape, so diagnosis must
+    // inspect its bytes directly and leave even a malformed registry untouched.
+    std::fs::write(home.join("checkouts.json"), "{invalid registry").unwrap();
+    let before_invalid = files(root.path());
+    let invalid: serde_json::Value = serde_json::from_slice(
+        &command()
+            .args(["--diagnose", "--tool", "codex", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    )
+    .unwrap();
+    assert_eq!(invalid["registry"]["status"], "invalid");
+    assert_eq!(files(root.path()), before_invalid);
+}
+
+#[test]
 fn saved_commands_cli_uses_checkout_scoped_authenticated_server_routes() {
     use std::io::{BufRead, BufReader, Write};
     use std::net::TcpListener;

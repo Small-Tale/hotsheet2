@@ -1071,6 +1071,7 @@ hotsheet merge-driver  # git-invoked semantic 3-way merge for ticket files (02-t
 hotsheet setup claude          # write CLAUDE.md/skills/MCP config for a tool   [built: HS2-98]
 hotsheet setup --detect        # set up every AI tool detected on this machine   [built: HS2-98]
 hotsheet setup --refresh --json --project <code-repo> # structured paths/notices [HS2-4AR09Z]
+hotsheet setup --diagnose --tool codex --project <code-repo> --json # read-only plan and connection findings [HS2-9N8KVR]
 hotsheet plugin list           # installed + detected AI-tool plugins            [HS2-92]
 hotsheet plugin install <path|url>   # add an external plugin (trust-gated)      [HS2-93]
 hotsheet plugin verify <id>    # run the conformance suite against a plugin      [HS2-93]

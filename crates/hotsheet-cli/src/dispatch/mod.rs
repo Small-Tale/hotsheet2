@@ -151,6 +151,7 @@ impl Cmd {
                 | Cmd::Notifications { .. }
                 | Cmd::Launch { .. }
                 | Cmd::HookDiagnose { .. }
+                | Cmd::Setup { diagnose: true, .. }
                 | Cmd::Serve { .. }
                 | Cmd::Ls { .. }
                 | Cmd::Show { .. }
