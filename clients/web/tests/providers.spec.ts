@@ -7314,16 +7314,14 @@ test('saves a non-contiguous chat selection with skipped-message markers and sho
   await expect(drawer.getByRole('tab', { name: 'Codex saved chat' })).toHaveAttribute('aria-selected', 'true');
   const saved = drawer
       .locator('[data-component="ai-conversation"]')
-      .filter({ has: page.locator('.ai-conversation__skipped') }),
-    marker = saved.locator('.ai-conversation__skipped');
+      .filter({ has: page.locator('[data-skipped-count]') }),
+    marker = saved.locator('[data-skipped-count]');
   await expect(marker).toHaveText('2 messages skipped');
-  await expect(marker).toHaveCSS('font-style', 'italic');
+  await expect(marker.locator('em')).toHaveCSS('font-style', 'italic');
   const order = await saved
-    .locator('.ai-conversation__skipped, [data-message-id]')
+    .locator('[data-skipped-count], [data-message-id]')
     .evaluateAll((nodes) =>
-      nodes.map((node) =>
-        node.classList.contains('ai-conversation__skipped') ? 'skipped' : node.getAttribute('data-message-id'),
-      ),
+      nodes.map((node) => (node.hasAttribute('data-skipped-count') ? 'skipped' : node.getAttribute('data-message-id'))),
     );
   expect(order).toEqual([manifest.selectedMessageIds[0], 'skipped', manifest.selectedMessageIds[1]]);
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
@@ -8592,8 +8590,13 @@ test('restores a kept-running AI chat tab and its live server session when the p
   conversation = drawer.locator('[data-component="ai-conversation"]');
   await expect(conversation.locator('[data-message-id]')).toHaveCount(2);
   await expect(conversation.getByText('The event stream remains authoritative.')).toBeVisible();
-  await expect(drawer.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'gpt-6-astra');
-  await expect(drawer.locator('.ai-conversation__model-effort')).toHaveText('medium');
+  await expect(drawer.locator('[data-component="conversation-model-control"] [data-component="text"]')).toHaveAttribute(
+    'title',
+    'gpt-6-astra',
+  );
+  await expect(drawer.locator('[data-component="conversation-model-control"] [data-component="badge"]')).toHaveText(
+    'medium',
+  );
   await page.screenshot({ path: 'target/visual-captures/hs2-d34c2v-restored-chat-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 640 });
   await expect(restoredTab).toBeVisible();
@@ -18269,8 +18272,12 @@ test('opens a Codex chat without implicitly starting Drive through the productio
       },
     ]);
   await expect(conversationHost.locator('[data-component="conversation-model-control"]')).toBeVisible();
-  await expect(conversationHost.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'gpt-6-astra');
-  await expect(conversationHost.locator('.ai-conversation__model-effort')).toHaveText('medium');
+  await expect(
+    conversationHost.locator('[data-component="conversation-model-control"] [data-component="text"]'),
+  ).toHaveAttribute('title', 'gpt-6-astra');
+  await expect(
+    conversationHost.locator('[data-component="conversation-model-control"] [data-component="badge"]'),
+  ).toHaveText('medium');
   await dialog.screenshot({ path: 'target/visual-captures/hs2-ndda7p-empty-codex-chat-wide.png' });
   const composer = conversationHost.getByRole('textbox', { name: 'Message Codex' });
   await composer.fill('Explain the client event boundary.');
@@ -18747,7 +18754,7 @@ test('presents a legible, aligned AI chat without exposing its session id', asyn
   await page.setViewportSize({ width: 1280, height: 800 });
   const modelControl = host.locator('[data-component="conversation-model-control"]');
   await expect(modelControl).toBeVisible();
-  await expect(modelControl.locator('.ai-conversation__model-effort')).toBeVisible();
+  await expect(modelControl.locator('[data-component="badge"]')).toBeVisible();
   await host.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger').click();
   const modelSubmenu = host
     .locator(
@@ -18759,7 +18766,7 @@ test('presents a legible, aligned AI chat without exposing its session id', asyn
     .locator('xpath=..')
     .locator('[data-action="select-conversation-model"][data-value="gpt-5.6-sol"]')
     .click();
-  await expect(modelControl.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'gpt-5.6-sol');
+  await expect(modelControl.locator('[data-component="text"]')).toHaveAttribute('title', 'gpt-5.6-sol');
   await expect(dialog).toBeVisible();
   await dialog.screenshot({ path: 'target/visual-captures/hs2-jvwhq8-model-selection-open-wide.png' });
   await page.setViewportSize({ width: 760, height: 640 });
@@ -19328,7 +19335,7 @@ test('moves the chat model selector and export into the drawer and dialog toolba
     .locator('xpath=..')
     .locator('[data-action="select-conversation-model"][data-value="gpt-5.6-sol"]')
     .click();
-  await expect(railModel.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'gpt-5.6-sol');
+  await expect(railModel.locator('[data-component="text"]')).toHaveAttribute('title', 'gpt-5.6-sol');
   // The drawer stays maximized: a dropdown press is not a rail double-click.
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
   await embedded.getByRole('textbox', { name: 'Message Codex' }).fill('What time is it in California?');
@@ -19507,7 +19514,7 @@ test('collapses streamed chat activity to its latest item and toggles it on clic
   await host.getByRole('textbox', { name: 'Message Codex' }).fill('Research with tools.');
   await host.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   const group = host.locator('.ai-conversation__activity'),
-    toggle = group.locator('.ai-conversation__activity-toggle'),
+    toggle = group.locator('button[data-action="toggle-conversation-activity"]'),
     rows = group.locator('[data-activity-id]');
   // Collapsed by default: only the latest item shows.
   await expect(group).toHaveAttribute('data-expanded', 'false');
@@ -19578,7 +19585,9 @@ test('omits effort after selecting a model that does not support it', async ({ p
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const host = drawer.locator('[data-component="ai-conversation"]');
   await expect(host).toBeVisible();
-  await expect(drawer.locator('.ai-conversation__model-effort')).toHaveText('medium');
+  await expect(drawer.locator('[data-component="conversation-model-control"] [data-component="badge"]')).toHaveText(
+    'medium',
+  );
   await expect(host).not.toContainText('Enter to send');
   await expect(host.getByRole('textbox', { name: 'Message Claude' })).toHaveAttribute('aria-keyshortcuts', 'Enter');
   await page.screenshot({ path: 'target/visual-captures/hs2-3vqszd-drawer-composer-1280.png' });
@@ -19593,8 +19602,11 @@ test('omits effort after selecting a model that does not support it', async ({ p
     .locator('xpath=..')
     .locator('[data-action="select-conversation-model"][data-value="haiku"]')
     .click();
-  await expect(drawer.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'haiku');
-  await expect(drawer.locator('.ai-conversation__model-effort')).toHaveCount(0);
+  await expect(drawer.locator('[data-component="conversation-model-control"] [data-component="text"]')).toHaveAttribute(
+    'title',
+    'haiku',
+  );
+  await expect(drawer.locator('[data-component="conversation-model-control"] [data-component="badge"]')).toHaveCount(0);
   await host.getByRole('textbox', { name: 'Message Claude' }).fill('What time is it in California?');
   await host.getByRole('textbox', { name: 'Message Claude' }).press('Enter');
   await expect
@@ -19610,7 +19622,7 @@ test('omits effort after selecting a model that does not support it', async ({ p
   await page.screenshot({ path: 'target/visual-captures/hs2-3vqszd-drawer-composer-390.png' });
   await page.setViewportSize({ width: 760, height: 800 });
   await expect(host).toBeVisible();
-  await expect(drawer.locator('.ai-conversation__model-effort')).toHaveCount(0);
+  await expect(drawer.locator('[data-component="conversation-model-control"] [data-component="badge"]')).toHaveCount(0);
   await host.locator('.ai-conversation__transcript').evaluate((element) => {
     element.scrollTop = 0;
   });
@@ -19840,7 +19852,10 @@ test('sends a manually entered live-conversation model literally', async ({ page
   await expect(manualDialog).toBeVisible();
   await page.getByRole('textbox', { name: /Model Identifier/ }).fill(custom);
   await manualDialog.getByRole('button', { name: 'Use Model' }).click();
-  await expect(chat.locator('.ai-conversation__model-name')).toHaveAttribute('title', custom);
+  await expect(chat.locator('[data-component="conversation-model-control"] [data-component="text"]')).toHaveAttribute(
+    'title',
+    custom,
+  );
   await expect(manualDialog).toBeHidden();
   await expect(menuOpener(chat.locator('[data-conversation-model-menu]'))).toHaveAttribute('aria-expanded', 'false');
   const composer = chat.getByRole('textbox', { name: 'Message Codex' });

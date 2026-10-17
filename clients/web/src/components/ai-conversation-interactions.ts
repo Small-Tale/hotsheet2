@@ -98,13 +98,15 @@ export function wireAiConversation(root: HTMLElement, bindings: AiConversationBi
   );
   // A click anywhere in an activity group toggles it collapsed/expanded, except on its nested
   // feedback controls or links, or while the person is selecting its text (HS2-Y3SGH3). The header
-  // toggle is a native button, so Enter and Space reach this handler as a click.
+  // toggle is a Kerf ListHeader button, so Enter and Space reach this handler as a click.
   lifetime.add(
     delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.toggleConversationActivity.selector, (event, target) => {
       const control = (event.target as Element).closest('a,button,wa-button,input,select,textarea');
-      if (control && !control.matches('.ai-conversation__activity-toggle')) return;
+      if (control && !control.matches(COMMANDS_AND_AI_ACTIONS.toggleConversationActivity.selector)) return;
       if (!control && window.getSelection()?.toString()) return;
-      const groupId = (target as HTMLElement).dataset.activityGroup;
+      const groupId =
+        (target as HTMLElement).dataset.activityGroup ??
+        target.closest<HTMLElement>('[data-activity-group]')?.dataset.activityGroup;
       if (groupId)
         toggleActivityGroup(target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId, groupId);
     }),

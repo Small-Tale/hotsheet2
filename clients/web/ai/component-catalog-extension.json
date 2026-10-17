@@ -75,7 +75,7 @@
       "id": "ai-conversation",
       "name": "AIConversation",
       "kind": "component",
-      "purpose": "Dialog and embedded AI conversation with inline permissions, interruption, and a single-Tab-stop selectable transcript; AIConversationToolbar renders its model selector and native Save/Stop controls in the dialog header or the drawer tab toolbar.",
+      "purpose": "Dialog and embedded AI conversation with inline permissions, interruption, and a single-Tab-stop selectable transcript; Kerf ListHeader, Row, Text, and Badge own its model, activity, metadata, and progress chrome, while AIConversationToolbar places native Save/Stop controls in the host toolbar.",
       "useWhen": [
         "Hot Sheet needs dialog and embedded AI conversation with inline permissions and interruption, plus its model selector and native Save/Stop controls placed in a host toolbar."
       ],

@@ -24,20 +24,8 @@
 /* The current-model label before its popup trigger group in the dialog header or the drawer tab
    toolbar (HS2-R5F7A5, HS2-59F7WK). */
 .ai-conversation__model {
-  display: inline-flex;
   min-width: 0;
-  align-items: center;
-  gap: var(--wa-space-2xs);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-}
-.ai-conversation__model-name {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--wa-color-neutral-on-normal);
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  max-width: remify(240px);
 }
 /* The foreground covers the dialog panel (its positioned `dialog` part), not the viewport, so its
    padding alone insets a foreground popup symmetrically inside the dialog, below the heading
@@ -106,9 +94,7 @@
 /* Messages are Kerf ContentItem chat bubbles (KF-M3HJK8, HS2-P16J04), which own the frame, tone,
    bubble width, and selected/focus states; these rules style only the app's own markup inside. */
 .ai-conversation__message-author {
-  display: block;
   margin-bottom: remify(4px);
-  font-size: var(--wa-font-size-xs);
 }
 /* The thinking turn's spinner sits on one text line inside the bubble (HS2-77KJKR). */
 .ai-conversation__awaiting {
@@ -123,34 +109,12 @@
 .ai-conversation__message-meta {
   margin-top: remify(7.2px);
 }
-.ai-conversation__message-meta .ai-conversation__usage {
-  margin: 0;
-}
 .ai-conversation__files {
-  display: grid;
-  padding: 0;
   margin: var(--wa-space-xs) 0 0;
-  list-style: none;
-  gap: var(--wa-space-3xs);
 }
-/* The app's list items drop the bubble's prose list indent and let a truncating link Chip shrink. */
-.ai-conversation__files > li {
+/* The app's file identity cell lets a truncating link Chip shrink. */
+.ai-conversation__file {
   min-width: 0;
-  margin: 0;
-}
-/* Usage is quiet relative to the surrounding foreground, so it reads on both the neutral and the
-   brand-loud bubble without targeting the Kerf item. */
-.ai-conversation__usage {
-  display: flex;
-  margin: remify(7.2px) 0 0;
-  color: color-mix(in srgb, currentcolor 72%, transparent);
-  align-items: center;
-  gap: remify(5.6px);
-  font-size: var(--wa-font-size-xs);
-}
-.ai-conversation__usage > span + span::before {
-  margin-right: remify(5.6px);
-  content: '·';
 }
 /* The activity card's frame is a Kerf ContentItem; this lays out the app's own header and list. */
 .ai-conversation__activity-body {
@@ -158,46 +122,9 @@
   min-width: 0;
   gap: var(--kui-space-xs);
 }
-.ai-conversation__activity-body > header,
-.ai-conversation__activity-body > header > span {
-  display: flex;
-  align-items: center;
-}
-.ai-conversation__activity-body > header {
-  justify-content: space-between;
-  gap: remify(8px);
-}
-.ai-conversation__activity-disclosure {
-  min-width: 0;
-}
 /* The whole group toggles collapsed/expanded on click (HS2-Y3SGH3). */
 .ai-conversation__activity-body {
   cursor: pointer;
-}
-/* The group's disclosure control: an app-owned native button that reads as the group heading. */
-.ai-conversation__activity-toggle {
-  display: inline-flex;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  border-radius: var(--wa-border-radius-s);
-  color: inherit;
-  background: none;
-  align-items: center;
-  gap: var(--kui-space-2xs);
-  font: inherit;
-  cursor: pointer;
-}
-.ai-conversation__activity-toggle:focus-visible {
-  outline: var(--wa-focus-ring);
-  outline-offset: 2px;
-}
-.ai-conversation__activity-count {
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-}
-.ai-conversation__activity-body > header > span {
-  gap: var(--kui-space-2xs);
 }
 .ai-conversation__activity-list {
   display: grid;
@@ -209,42 +136,18 @@
   gap: remify(7.2px);
 }
 .ai-conversation__activity-item {
-  display: grid;
   min-width: 0;
   max-width: 100%;
   padding-top: remify(7.2px);
   border-top: 1px solid var(--wa-color-neutral-border-quiet);
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: remify(7.2px);
 }
-.ai-conversation__activity-feedback {
-  display: flex;
-  margin-top: remify(-3.2px);
-}
-.ai-conversation__progress {
-  display: flex;
-  margin: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  align-items: center;
-  gap: remify(7.2px);
-  font-size: var(--wa-font-size-s);
+.ai-conversation__activity-summary {
+  min-width: 0;
 }
 /* Where a reopened non-contiguous saved selection left messages out (HS2-BZB93V). */
-.ai-conversation__skipped {
-  display: flex;
-  margin: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  align-items: center;
-  gap: remify(8px);
-  font-size: var(--wa-font-size-xs);
-  font-style: italic;
-}
-.ai-conversation__skipped::before,
-.ai-conversation__skipped::after {
+.ai-conversation__skipped-rule {
   flex: 1 1 0;
   border-top: 1px dashed var(--wa-color-neutral-border-quiet);
-  content: '';
 }
 /* The app's submitting form fills the floating footer row it is slotted into. */
 .ai-conversation__composer {
@@ -256,27 +159,9 @@
 }
 /* The running turn's progress floats as a pill above the composer frame (HS2-XV1VCR); its own
    surface keeps it readable over transcript text that scrolls beneath the floating footer. */
-p.ai-conversation__turn-progress {
-  display: inline-flex;
+.ai-conversation__turn-progress {
   max-width: 100%;
-  min-height: remify(32px);
-  margin: 0;
-  padding-inline: remify(16px);
-  border: 1px solid var(--wa-color-neutral-border-quiet);
-  border-radius: var(--wa-border-radius-pill);
-  background: var(--wa-color-surface-default);
-  color: var(--wa-color-neutral-on-quiet);
-  align-items: center;
   align-self: flex-start;
-  gap: remify(8px);
-  font-size: var(--wa-font-size-s);
-  font-variant-numeric: tabular-nums;
-}
-p.ai-conversation__turn-progress > span {
-  overflow: hidden;
-  min-width: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 /* The embedded drawer positions the app's composer form over its transcript; Kerf MessageComposer owns the
    frame inside it (KF-S5EG5K). */
@@ -298,9 +183,5 @@ p.ai-conversation__turn-progress > span {
   }
   .ai-conversation__foreground {
     padding-inline: remify(16px);
-  }
-  .ai-conversation__activity-body > header {
-    align-items: flex-start;
-    flex-direction: column;
   }
 }

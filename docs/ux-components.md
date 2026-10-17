@@ -430,6 +430,7 @@ covers anything past the button's end. The demo's Unread chat messages setting s
     capabilities and apply to subsequent turns; popup hide events stay scoped to
     the nested select and never dismiss the conversation surface; selecting a model revalidates effort and
     removes both the control and request field when that model declares no supported effort levels
+    The model line composes Kerf `Row`, truncating `Text`, and `Badge` instead of styling its own label.
   - provider change (HS2-PRBGRB): when more than one provider is configured and the chat is writable, the
     same popup adds a Provider submenu listing the configured tools. Selecting a different provider opens a
     fresh session for it (providers keep separate opaque sessions) and re-seeds it with the prior transcript
@@ -445,7 +446,8 @@ covers anything past the button's end. The demo's Unread chat messages setting s
     `Waiting for permission…`, or a bounded native-activity description), never a generic
     spinner without explanation. Until a thinking turn streams its first text, its assistant
     bubble holds a Kerf `LoadingSpinner` labeled "Awaiting response" instead of rendering as an
-    empty pill, in both presentations (HS2-77KJKR)
+    empty pill, in both presentations (HS2-77KJKR). Kerf `Row`/`Text` render static progress;
+    a `Badge` with the live spinner renders timed progress above the composer
   - activity: adjacent activity groups into one transparent, unframed Kerf `ContentItem`
     (matching the sidebar's activity notes) that switches to `frame="framed"` only while it lies
     between the first and last selected messages (`data-selected-range`; HS2-72GEX0). Each group
@@ -453,7 +455,8 @@ covers anything past the button's end. The demo's Unread chat messages setting s
     native header disclosure button with `aria-expanded`, a count, and a chevron, toggles it.
     The state lives in `conversation-activity-disclosure.ts`, keyed by connection and the
     group's first activity id, so a new item while collapsed replaces the visible line
-    (HS2-Y3SGH3). The demo's
+    (HS2-Y3SGH3). Kerf `ListHeader` owns the accessible toggle and item count, and Kerf `Row`
+    aligns each summary with its feedback action; the ordered list keeps timeline semantics. The demo's
     Completed state orders the activity between its question and answer and keeps a real range
     selection so the outline can be exercised
   - permission requests: the existing `PermissionRequestCard` list presentation appears in
@@ -469,7 +472,8 @@ covers anything past the button's end. The demo's Unread chat messages setting s
     draft (`clients/web/src/conversation-history.ts`, HS2-AJQKK0).
     The dialog floats it as a Kerf `DialogSurface` floating footer over a `fill-last` body
     (KF-913AT2, 8 px offset on handsets), so no `::part()` rules remain. Referenced files render
-    as Kerf link `Chip`s (`href`, `download`, `tone="inherit"`, truncating; KF-H658D6) (HS2-94T958)
+    as Kerf link `Chip`s in a labeled Kerf `List` (`href`, `download`, `tone="inherit"`, truncating;
+    KF-H658D6) (HS2-94T958). Message usage and skipped-run labels compose Kerf `Row`/`Text`
   - selection: plain click selects one message, Cmd/Ctrl-click (Cmd on Apple platforms) toggles one,
     Shift-click extends from the anchor, and Shift or Cmd/Ctrl with Enter/Space do the same from the
     keyboard. Selections may be non-contiguous; Copy marks each skipped interior run

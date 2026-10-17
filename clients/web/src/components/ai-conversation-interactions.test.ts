@@ -227,7 +227,7 @@ describe('wireAiConversation (HS2-RWY78R)', () => {
     // Plain body click expands; the header toggle button collapses again.
     clickOn(null);
     expect(activityGroupExpanded('c1', 'a1')).toBe(true);
-    clickOn({ matches: (selector) => selector === '.ai-conversation__activity-toggle' });
+    clickOn({ matches: (selector) => selector === '[data-action="toggle-conversation-activity"]' });
     expect(activityGroupExpanded('c1', 'a1')).toBe(false);
     // A feedback button or link inside the group does not toggle it.
     clickOn({ matches: () => false });

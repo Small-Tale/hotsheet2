@@ -8,6 +8,7 @@ import { flex, px, rem, remify, uiColor } from '@kerfjs/ui/css-values';
 import { deviceClass } from '@kerfjs/ui/device-class';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
+import { ListHeader } from '@kerfjs/ui/list-header';
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { MessageComposer } from '@kerfjs/ui/message-composer';
@@ -15,18 +16,17 @@ import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
+import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { computed, type ReadonlySignal } from 'kerfjs';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import {
-  Activity,
   ArrowUp,
   Bot,
   Brain,
   ChevronDown,
-  ChevronRight,
   CircleAlert,
   Copy,
   Download,
@@ -113,14 +113,26 @@ export function isConversationSurfaceLifecycleEvent(event: Pick<Event, 'target'>
 function UsageLine({ usage }: { usage: ConversationUsage }) {
   const total = usage.tokensIn + usage.tokensOut;
   return (
-    <p
-      class="ai-conversation__usage"
-      aria-label={`Turn usage: ${usage.tokensIn} input tokens, ${usage.tokensOut} output tokens, ${formatConversationCost(usage.costUsd)}`}
+    <Row
+      gap="2xs"
+      wrap
+      rootAttributes={{
+        'aria-label': `Turn usage: ${usage.tokensIn} input tokens, ${usage.tokensOut} output tokens, ${formatConversationCost(usage.costUsd)}`,
+        'data-conversation-usage': 'true',
+      }}
     >
-      <span>{formatConversationTokens(total)} tokens</span>
-      <span>{formatConversationCost(usage.costUsd)}</span>
-      {usage.model && <span title={usage.model}>{usage.model}</span>}
-    </p>
+      <Text variant="span" size="compact">
+        {formatConversationTokens(total)} tokens
+      </Text>
+      <Text variant="span" size="compact">
+        · {formatConversationCost(usage.costUsd)}
+      </Text>
+      {usage.model ? (
+        <Text variant="span" size="compact" wrap="truncate" title={usage.model}>
+          · {usage.model}
+        </Text>
+      ) : null}
+    </Row>
   );
 }
 
@@ -159,7 +171,13 @@ export function ConversationMessages({
               }
             : { rootAttributes: { 'data-message-id': message.id, 'data-status': message.status } })}
         >
-          {message.role === 'user' && <strong class="ai-conversation__message-author">You</strong>}
+          {message.role === 'user' && (
+            <div class="ai-conversation__message-author">
+              <Text variant="span" size="compact">
+                <strong>You</strong>
+              </Text>
+            </div>
+          )}
           {message.content ? (
             <MarkdownPreview
               source={message.content}
@@ -177,28 +195,30 @@ export function ConversationMessages({
             </p>
           )}
           {message.files && message.files.length > 0 && (
-            <ul class="ai-conversation__files" aria-label="Referenced files">
-              {message.files.map((file) => (
-                <li>
-                  {/* Kerf link Chip (KF-H658D6) inherits the bubble foreground on both tones (HS2-94T958). */}
-                  <Chip
-                    href={file.url}
-                    download={file.filename}
-                    tone="inherit"
-                    size="compact"
-                    truncate
-                    icon={
-                      <LucideIcon
-                        icon={file.kind === 'media' ? Image : Paperclip}
-                        name={file.kind === 'media' ? 'image' : 'paperclip'}
-                      />
-                    }
-                  >
-                    {file.filename}
-                  </Chip>
-                </li>
-              ))}
-            </ul>
+            <div class="ai-conversation__files">
+              <List gap="2xs" rootAttributes={{ role: 'list', 'aria-label': 'Referenced files' }}>
+                {message.files.map((file) => (
+                  <div class="ai-conversation__file" role="listitem">
+                    {/* Kerf link Chip (KF-H658D6) inherits the bubble foreground on both tones (HS2-94T958). */}
+                    <Chip
+                      href={file.url}
+                      download={file.filename}
+                      tone="inherit"
+                      size="compact"
+                      truncate
+                      icon={
+                        <LucideIcon
+                          icon={file.kind === 'media' ? Image : Paperclip}
+                          name={file.kind === 'media' ? 'image' : 'paperclip'}
+                        />
+                      }
+                    >
+                      {file.filename}
+                    </Chip>
+                  </div>
+                ))}
+              </List>
+            </div>
           )}
           {(message.usage || (message.role === 'assistant' && feedbackAvailable && message.status === 'completed')) && (
             // A Kerf Row spreads the usage line and the feedback actions; the footer keeps only its
@@ -261,40 +281,29 @@ function ConversationActivityGroup({
         {...COMMANDS_AND_AI_ACTIONS.toggleConversationActivity.attrs}
         data-activity-group={groupId}
       >
-        <header>
-          <button
-            type="button"
-            class="ai-conversation__activity-toggle"
-            aria-expanded={String(expanded)}
-            aria-controls={listId}
-            aria-label={
-              expanded
-                ? `Collapse activity to the latest of ${count} item${count === 1 ? '' : 's'}`
-                : `Show all ${count} activity item${count === 1 ? '' : 's'}`
-            }
-          >
-            <LucideIcon icon={Activity} name="activity" size={14.4} />
-            <strong>Activity</strong>
-            {count > 1 && <span class="ai-conversation__activity-count">{count}</span>}
-            <LucideIcon
-              icon={expanded ? ChevronDown : ChevronRight}
-              name={expanded ? 'chevron-down' : 'chevron-right'}
-              size={14.4}
-            />
-          </button>
-          <span class="ai-conversation__activity-disclosure">
-            <AIContentLabel mayContainErrors />
-          </span>
-        </header>
+        <Row hAlign="space-between" vAlign="middle" gap="2xs" wrap>
+          <ListHeader
+            label="Activity"
+            inline
+            density="compact"
+            toggle
+            action="toggle-conversation-activity"
+            expanded={expanded}
+            count={count}
+            countLabel={`${count} activity item${count === 1 ? '' : 's'}`}
+            triggerAttributes={{ 'aria-controls': listId }}
+          />
+          <AIContentLabel mayContainErrors />
+        </Row>
         <ol class="ai-conversation__activity-list" id={listId}>
           {visible.map((item) => (
             <li class="ai-conversation__activity-item" data-activity-id={item.id} data-importance={item.importance}>
-              <MarkdownPreview source={item.summary} density="flush" />
-              {feedbackAvailable && (
-                <span class="ai-conversation__activity-feedback">
-                  <AIContentFeedback tool={item.tool} feedbackTarget={`activity:${item.id}`} />
-                </span>
-              )}
+              <Row hAlign="space-between" vAlign="top" gap="xs">
+                <div class="ai-conversation__activity-summary">
+                  <MarkdownPreview source={item.summary} density="flush" />
+                </div>
+                {feedbackAvailable && <AIContentFeedback tool={item.tool} feedbackTarget={`activity:${item.id}`} />}
+              </Row>
             </li>
           ))}
         </ol>
@@ -414,24 +423,21 @@ export function AIConversationToolbar({
       <>
         {/* The current-model label and its popup trigger group are siblings in the host toolbar zone,
             so the Kerf group keeps its cataloged Toolbar parent. */}
-        <span class="ai-conversation__model" data-component="conversation-model-control">
-          <LucideIcon icon={Brain} name="brain" color={uiColor('neutral-on-quiet')} />
-          {canChangeModel && currentModelLabel && (
-            <span class="ai-conversation__model-name" title={model}>
-              {currentModelLabel}
-            </span>
-          )}
-          {canChangeEffort && currentEffort && (
-            <Badge
-              className="ai-conversation__model-effort"
-              tone="neutral"
-              size="compact"
-              label={`Effort ${currentEffort}`}
-            >
-              {currentEffort}
-            </Badge>
-          )}
-        </span>
+        <div class="ai-conversation__model" data-component="conversation-model-control">
+          <Row vAlign="middle" gap="2xs">
+            <LucideIcon icon={Brain} name="brain" color={uiColor('neutral-on-quiet')} />
+            {canChangeModel && currentModelLabel ? (
+              <Text variant="span" size="compact" wrap="truncate" title={model}>
+                {currentModelLabel}
+              </Text>
+            ) : null}
+            {canChangeEffort && currentEffort ? (
+              <Badge tone="neutral" size="compact" label={`Effort ${currentEffort}`}>
+                {currentEffort}
+              </Badge>
+            ) : null}
+          </Row>
+        </div>
         <ToolbarControlGroup single nestedDropdown {...groupStyle}>
           <PopupMenu
             label={
@@ -551,19 +557,24 @@ export function ConversationTurnProgressLine({
       </div>
     );
   return (
-    <p class="ai-conversation__turn-progress" data-state={progress.state}>
-      <LoadingSpinner size="s" />
-      <span>{progress.label}</span>
-    </p>
+    <div class="ai-conversation__turn-progress" data-state={progress.state}>
+      <Badge tone="neutral" appearance="outline" shape="pill" maxWidth={rem(20)} icon={<LoadingSpinner size="s" />}>
+        {progress.label}
+      </Badge>
+    </div>
   );
 }
 
 function SkippedMessages({ count }: { count?: number }) {
   if (!count || count < 1) return <></>;
   return (
-    <p class="ai-conversation__skipped" data-skipped-count={String(count)}>
-      {`${count} message${count === 1 ? '' : 's'} skipped`}
-    </p>
+    <Row hAlign="full" vAlign="middle" gap="xs" rootAttributes={{ 'data-skipped-count': String(count) }}>
+      <span class="ai-conversation__skipped-rule" aria-hidden="true" />
+      <Text variant="span" tone="quiet" size="compact">
+        <em>{`${count} message${count === 1 ? '' : 's'} skipped`}</em>
+      </Text>
+      <span class="ai-conversation__skipped-rule" aria-hidden="true" />
+    </Row>
   );
 }
 
@@ -721,10 +732,12 @@ export function AIConversation(props: AIConversationProps) {
             </div>
           ))}
           {busy && progress && !turnProgress && (
-            <p class="ai-conversation__progress" role="status">
+            <Row gap="xs" vAlign="middle" rootAttributes={{ role: 'status', 'data-conversation-progress': 'true' }}>
               <LucideIcon size="s" icon={Bot} name="bot" />
-              {progress}
-            </p>
+              <Text variant="span" tone="quiet">
+                {progress}
+              </Text>
+            </Row>
           )}
           {error && (
             <StateBanner

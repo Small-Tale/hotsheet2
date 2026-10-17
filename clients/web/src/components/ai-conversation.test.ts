@@ -216,18 +216,18 @@ describe('AIConversation', () => {
     expect(markup).toContain(
       '<code>zsh -ic &#39;npm run test -- --project chromium --grep a-deliberately-long-filter&#39;</code>',
     );
-    // A Kerf ContentItem frames the activity card; the app grid only lays out its own body (HS2-ADM62E).
+    // Kerf owns the activity heading and each row; the app keeps the ordered timeline separators.
     // The activity group is a borderless, transparent Kerf ContentItem region (HS2-72GEX0).
     expect(markup).toMatch(/data-component="content-item" data-appearance="transparent"[^>]*role="region"/);
     expect(css).toMatch(/\.ai-conversation__activity-body \{[^}]*display: grid;[^}]*min-width: 0/);
     expect(css).not.toMatch(/\.ai-conversation__activity \{/);
-    expect(css).toMatchSource(
-      /\.ai-conversation__activity-item \{[^}]*min-width: 0[^}]*max-width: 100%[^}]*grid-template-columns:minmax\(0,1fr\) auto/,
-    );
+    expect(markup).toContain('data-component="list-header"');
+    expect(markup).toMatch(/data-activity-id="command"[\s\S]*data-component="row"/);
+    expect(css).toMatchSource(/\.ai-conversation__activity-summary \{[^}]*min-width:0/);
     // Activity summaries choose the flush MarkdownPreview density; long commands wrap through the
     // preview's own inherited overflow-wrap rather than a conversation-owned override (HS2-7RY5GK).
     expect(markup).toMatch(/class="markdown-preview" data-component="markdown-preview" data-density="flush"/);
-    expect(markup).toContain('<span class="ai-conversation__activity-feedback">');
+    expect(markup).not.toContain('ai-conversation__activity-feedback');
     expect(previewCss).toMatchSource(/\.markdown-preview \{[^}]*overflow-wrap:anywhere/);
     expect(css).not.toContain('.markdown-preview');
     expect(css).not.toContain('.ai-content-label');
@@ -253,11 +253,11 @@ describe('AIConversation', () => {
         }),
       );
     const marked = render({ four: 2, five: 1 });
-    expect(marked).toMatch(/First question[\s\S]*data-skipped-count="2">2 messages skipped<[\s\S]*Later answer/);
-    expect(marked).toMatch(/Later answer[\s\S]*data-skipped-count="1">1 message skipped<[\s\S]*Last question/);
-    expect(render()).not.toContain('ai-conversation__skipped');
-    expect(render({ four: 0 })).not.toContain('ai-conversation__skipped');
-    expect(css).toMatch(/\.ai-conversation__skipped \{[^}]*color: var\(--wa-color-neutral-on-quiet\)/);
+    expect(marked).toMatch(/First question[\s\S]*data-skipped-count="2"[\s\S]*2 messages skipped[\s\S]*Later answer/);
+    expect(marked).toMatch(/Later answer[\s\S]*data-skipped-count="1"[\s\S]*1 message skipped[\s\S]*Last question/);
+    expect(render()).not.toContain('data-skipped-count');
+    expect(render({ four: 0 })).not.toContain('data-skipped-count');
+    expect(marked).toMatch(/data-skipped-count="2"[^>]*data-component="row"/);
   });
 
   it('hides stop when interruption is unavailable and exposes terminal failures', () => {
@@ -624,10 +624,9 @@ describe('AIConversation', () => {
     });
     expect(markup).toContain('data-component="conversation-model-control"');
     // Current model + effort shown as a compact label.
-    expect(markup).toContain('class="ai-conversation__model-name" title="legacy model">legacy model');
-    expect(markup).toMatch(
-      /ai-conversation__model-effort" data-component="badge" data-tone="neutral"[^>]*aria-label="Effort high">high</,
-    );
+    expect(markup).toContain('title="legacy model"');
+    expect(markup).toMatch(/data-component="text"[^>]*data-wrap="truncate">legacy model/);
+    expect(markup).toMatch(/data-component="badge" data-tone="neutral"[^>]*aria-label="Effort high">high</);
     // Popup lets you pick a listed model, the current custom model, Other…, and an effort.
     expect(markup).toMatch(/data-value="gpt"[^>]*data-action="select-conversation-model" value="gpt"/);
     expect(markup).toMatch(
@@ -842,8 +841,8 @@ describe('AIConversation', () => {
       const collapsed = render(two);
       expect(items(collapsed)).toEqual(['a2']);
       expect(collapsed).toContain('data-expanded="false"');
-      expect(collapsed).toMatch(/class="ai-conversation__activity-toggle" aria-expanded="false"/);
-      expect(collapsed).toContain('aria-label="Show all 2 activity items"');
+      expect(collapsed).toMatch(/class="kui-list-header__title kui-list-header__toggle"[^>]*aria-expanded="false"/);
+      expect(collapsed).toContain('aria-label="Activity, 2 activity items"');
       expect(collapsed).toContain('data-action="toggle-conversation-activity" data-activity-group="a1"');
       // A new item while collapsed replaces the visible line; the group keeps its identity.
       const grown = render([...two, item('a3', 'claude called Agent', 3)]);
@@ -854,7 +853,7 @@ describe('AIConversation', () => {
       const expanded = render([...two, item('a3', 'claude called Agent', 3)]);
       expect(items(expanded)).toEqual(['a1', 'a2', 'a3']);
       expect(expanded).toMatch(/aria-expanded="true"/);
-      expect(expanded).toContain('aria-label="Collapse activity to the latest of 3 items"');
+      expect(expanded).toContain('aria-label="Activity, 3 activity items"');
       expect(new Set(expanded.match(/data-ai-feedback-target="activity:[^"]+"/g)).size).toBe(3);
       // A new item while expanded joins the open list.
       expect(items(render([...two, item('a3', 'x', 3), item('a4', 'y', 4)]))).toEqual(['a1', 'a2', 'a3', 'a4']);
@@ -904,7 +903,8 @@ describe('AIConversation', () => {
     expect(previewCss).toMatchSource(
       /\.markdown-preview\[data-tone='inverse'\] a \{[^}]*color:inherit[^}]*text-decoration-color:currentcolor/,
     );
-    expect(css).toMatch(/\.ai-conversation__usage \{[^}]*color: color-mix\(in srgb, currentcolor/);
+    expect(markup).toContain('data-component="text"');
+    expect(css).not.toContain('.ai-conversation__usage');
   });
 });
 
@@ -1072,6 +1072,6 @@ describe('running turn progress beside the composer (HS2-XV1VCR)', () => {
       'ai-conversation__turn-progress',
     );
     // Without timing (an older server) the static progress line remains.
-    expect(String(AIConversation(base()))).toContain('ai-conversation__progress');
+    expect(String(AIConversation(base()))).toContain('data-conversation-progress="true"');
   });
 });

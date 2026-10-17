@@ -209,7 +209,7 @@ export const demoCatalog: DemoCategory[] = [
     id: 'ai',
     name: 'AI and attention',
     demos: [
-      cataloged('ai-conversation', ['permission-request', 'drive-control']),
+      cataloged('ai-conversation', ['permission-request', 'drive-control', 'list-header', 'row', 'text', 'badge']),
       cataloged('ai-content-label'),
       cataloged('ai-feedback-dialog'),
       cataloged('ai-tool-settings', ['select']),

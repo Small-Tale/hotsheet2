@@ -8070,7 +8070,7 @@ test('previews AIConversation public states at wide and narrow sizes', async ({ 
     if (value === 'interrupted') await expect(conversationHost).toContainText('Stopped before the suite completed.');
     if (value === 'saved') {
       // A reopened non-contiguous saved selection marks where messages were left out (HS2-BZB93V).
-      const skipped = conversationHost.locator('.ai-conversation__skipped');
+      const skipped = conversationHost.locator('[data-skipped-count]');
       await expect(skipped).toHaveText('3 messages skipped');
       for (const width of [1280, 390]) {
         await page.setViewportSize({ width, height: 900 });
@@ -8436,7 +8436,7 @@ test('collapses AI chat activity to its latest item and toggles it at wide and n
     await expect(group).toHaveAttribute('data-expanded', 'false');
     await expect(rows).toHaveCount(1);
     await expect(rows.first()).toHaveAttribute('data-activity-id', 'activity-2');
-    await expect(toggle).toHaveAccessibleName('Show all 2 activity items');
+    await expect(toggle).toHaveAccessibleName('Activity, 2 activity items');
     await expect(toggle).toHaveCSS('cursor', 'pointer');
     await group.screenshot({ path: `target/visual-captures/hs2-y3sgh3-activity-collapsed-${width}.png` });
     await toggle.click();
@@ -8461,8 +8461,8 @@ test('shows the chat model/effort as a label with a popup to change them', async
   await page.goto('/ux-demo?component=ai-conversation');
   const control = page.locator('[data-component="conversation-model-control"]').first();
   await expect(control).toBeVisible();
-  await expect(control.locator('.ai-conversation__model-name')).toContainText('GPT-5.6');
-  await expect(control.locator('.ai-conversation__model-effort')).toContainText('high');
+  await expect(control.locator('[data-component="text"][data-wrap="truncate"]')).toContainText('GPT-5.6');
+  await expect(control.locator('[data-component="badge"]')).toContainText('high');
   await page.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger').first().click();
   await expect(page.getByRole('menuitem', { name: /Provider/ })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: /Model/ })).toBeVisible();
