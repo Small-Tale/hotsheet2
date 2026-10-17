@@ -79,13 +79,14 @@ describe('wireTicketAttachmentActions (HS2-1KM6MB)', () => {
     expect(bindings.addFiles.mock.calls).toEqual([[files, picker]]);
   });
 
-  it('leaves surface and zone drops to Kerf while accepting rail drops outside the surface once', () => {
+  it('leaves surface and zone drops to Kerf while accepting reader and rail drops outside the surface once', () => {
     const files = { length: 2 } as FileList,
       rail = {} as HTMLElement,
+      reader = {} as HTMLElement,
       outside = { closest: () => null },
       inside = { closest: () => ({ id: 'surface' }) };
     expect(registrations.filter((item) => item.event === 'dragleave' && item.selector === '#rail')).toHaveLength(0);
-    expect(registrations.find((item) => item.event === 'dragover' && item.selector === '#rail')).toBeDefined();
+    expect(registrations.find((item) => item.event === 'dragover' && item.selector.includes('#rail'))).toBeDefined();
     const railHover = cancelable({ target: outside });
     handler('dragover', '#rail')(railHover, rail);
     expect(railHover.preventDefault).toHaveBeenCalledOnce();
@@ -102,8 +103,15 @@ describe('wireTicketAttachmentActions (HS2-1KM6MB)', () => {
     handler('drop', '#rail')(railDrop, rail);
     expect(railDrop.preventDefault).toHaveBeenCalledOnce();
     expect(bindings.addFiles.mock.calls).toEqual([[files, rail]]);
+    const readerDrop = cancelable({ target: outside, dataTransfer: { files } });
+    handler('drop', 'data-attachment-drop-target')(readerDrop, reader);
+    expect(readerDrop.preventDefault).toHaveBeenCalledOnce();
+    expect(bindings.addFiles.mock.calls).toEqual([
+      [files, rail],
+      [files, reader],
+    ]);
     handler('drop', '#rail')(cancelable({ target: outside, dataTransfer: { files: { length: 0 } } }), rail);
-    expect(bindings.addFiles).toHaveBeenCalledTimes(1);
+    expect(bindings.addFiles).toHaveBeenCalledTimes(2);
   });
 
   it('reports purpose changes for a batch with ids only', () => {

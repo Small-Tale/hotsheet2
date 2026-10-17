@@ -45,24 +45,24 @@ export function wireTicketAttachmentActions(root: HTMLElement, bindings: TicketA
       bindings.addFiles(files, selection.picker);
     }),
   );
-  if (bindings.extraDropTargets) {
-    // The inspector rail also accepts drops outside the attachments panel. A drop inside the panel
-    // bubbles through the rail, but Kerf has already reported it through the scoped zone.
-    const railDrop = bindings.extraDropTargets;
-    lifetime.add(
-      delegate(root, 'dragover', railDrop, (event) => {
-        if (!(event.target as Element).closest(ATTACHMENT_DROP_TARGET)) event.preventDefault();
-      }),
-    );
-    lifetime.add(
-      delegate(root, 'drop', railDrop, (event, target) => {
-        if ((event.target as Element).closest(ATTACHMENT_DROP_TARGET)) return;
-        event.preventDefault();
-        const files = (event as DragEvent).dataTransfer?.files;
-        if (files?.length) bindings.addFiles(files, target as HTMLElement);
-      }),
-    );
-  }
+  // Inspector panels in the reader and the shell rail accept drops outside the attachments surface.
+  // A drop inside that surface bubbles through these targets after Kerf has already reported it.
+  const fallbackDropTargets = bindings.extraDropTargets
+    ? `${ATTACHMENT_DROP_TARGET}, ${bindings.extraDropTargets}`
+    : ATTACHMENT_DROP_TARGET;
+  lifetime.add(
+    delegate(root, 'dragover', fallbackDropTargets, (event) => {
+      if (!(event.target as Element).closest('[data-component="ticket-attachments"]')) event.preventDefault();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'drop', fallbackDropTargets, (event, target) => {
+      if ((event.target as Element).closest('[data-component="ticket-attachments"]')) return;
+      event.preventDefault();
+      const files = (event as DragEvent).dataTransfer?.files;
+      if (files?.length) bindings.addFiles(files, target as HTMLElement);
+    }),
+  );
   if (bindings.changePurpose) {
     const changePurpose = bindings.changePurpose;
     lifetime.add(

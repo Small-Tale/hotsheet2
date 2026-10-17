@@ -1396,7 +1396,7 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     entry points routed through the shared `routeFilePicker` (HS2-VHY325). The zone's Kerf
     `dropScope` covers the full attachments surface: file drags highlight it and a drop anywhere
     there attaches once; attachment regroup drags leave it unhighlighted (HS2-P413MB). The app
-    handles inspector rail drops outside that surface. No
+    handles reader inspector and shell rail drops outside that surface. No
     redundant total line is rendered below the collection.
     Each row is a neutral Kerf `ContentItem` holding a Kerf `Row`, a truncating `Text` name,
     and a plain Kerf `IconButton` More Actions trigger, inside an unstyled app-owned wrapper that
