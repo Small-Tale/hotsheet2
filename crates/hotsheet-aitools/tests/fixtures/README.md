@@ -32,3 +32,7 @@ is assembled from Claude Code's documented stream-json record shapes to pin the 
 mapping of `tool_result` echoes, `parent_tool_use_id` sub-agent records, a
 `run_in_background` Bash call, and background-task `system` notifications. Replace it with a
 sanitized live capture (and note any shape differences) when the creds-gated capture runs.
+
+HS2-MN865E adds `codex-0.162.1-thread-rejoin-failure.json`: what a read-only `thread/resume` rejoin of a
+Codex TUI thread received when the TUI turn failed on an invalid model (`turn/started`, `error
+{willRetry: false}`, `turn/completed` failed). Ids and paths are synthetic; the resume response is truncated.

@@ -324,8 +324,21 @@ pub(crate) async fn halt_terminal(
     {
         return Err(ApiError::new(StatusCode::NOT_FOUND, "no such terminal"));
     }
-    if forget_terminal_question(&state, &id, None) {
-        emit_terminal_question(&state, &id);
+    record_terminal_halt(&state, &id, body.error_type, body.message, body.agent);
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Record and announce a halt for terminal `id`: the hook route above, and the Codex thread
+/// watcher that sees a failed turn on the shared daemon (HS2-MN865E).
+pub(crate) fn record_terminal_halt(
+    state: &AppState,
+    id: &str,
+    error_type: Option<String>,
+    message: Option<String>,
+    agent: Option<String>,
+) {
+    if forget_terminal_question(state, id, None) {
+        emit_terminal_question(state, id);
     }
     let clean = |value: Option<String>, fallback: &str| {
         let value = value.unwrap_or_default();
@@ -334,10 +347,9 @@ pub(crate) async fn halt_terminal(
         value.chars().take(500).collect::<String>()
     };
     let halt = TerminalHalt {
-        error_type: clean(body.error_type, "unknown"),
-        message: clean(body.message, "The AI session stopped on an error."),
-        agent: body
-            .agent
+        error_type: clean(error_type, "unknown"),
+        message: clean(message, "The AI session stopped on an error."),
+        agent: agent
             .map(|agent| agent.trim().to_owned())
             .filter(|agent| !agent.is_empty()),
         at: OffsetDateTime::now_utc()
@@ -346,19 +358,25 @@ pub(crate) async fn halt_terminal(
     };
     let changed = {
         let mut halts = state.terminal_halts.lock_or_recover();
-        let same = halts.get(&id).is_some_and(|current| {
+        let same = halts.get(id).is_some_and(|current| {
             current.error_type == halt.error_type && current.message == halt.message
         });
         // Identical reports belong to the same active episode. Clients dedupe prompts by `at`.
         if !same {
-            halts.insert(id.clone(), halt.clone());
+            halts.insert(id.to_owned(), halt.clone());
         }
         !same
     };
     if changed {
-        emit_terminal_halted(&state, &id, Some(halt.message));
+        emit_terminal_halted(state, id, Some(halt.message));
     }
-    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Clear terminal `id`'s halt because its session started a new turn (HS2-MN865E).
+pub(crate) fn clear_terminal_halt_on_resume(state: &AppState, id: &str) {
+    if forget_terminal_halt(state, id) {
+        emit_terminal_halted(state, id, None);
+    }
 }
 
 #[derive(Default, Deserialize)]
@@ -403,6 +421,9 @@ pub(crate) struct TerminalAiConnectionReq {
     pub(crate) agent: Option<String>,
     #[serde(default)]
     pub(crate) session_id: Option<String>,
+    /// The Codex session's `CODEX_HOME`, when set (HS2-FKM97G).
+    #[serde(default)]
+    pub(crate) codex_home: Option<String>,
     #[serde(default)]
     pub(crate) source: TerminalHookSource,
 }
@@ -434,12 +455,27 @@ pub(crate) async fn connect_terminal_ai(
         .agent
         .map(|agent| agent.trim().chars().take(64).collect::<String>())
         .filter(|agent| !agent.is_empty());
+    let session_id = body.session_id.filter(|id| !id.is_empty());
+    // A permission ask does not carry the home; keep the one the same session's SessionStart
+    // reported, so messaging and halt detection still reach it (HS2-FKM97G, HS2-MN865E).
+    let codex_home = body
+        .codex_home
+        .filter(|home| !home.trim().is_empty())
+        .or_else(|| {
+            state
+                .terminal_ai_connections
+                .lock_or_recover()
+                .get(&id)
+                .filter(|previous| session_id.is_some() && previous.session_id == session_id)
+                .and_then(|previous| previous.codex_home.clone())
+        });
     let connection = TerminalAiConnection {
         agent: agent.clone(),
         at: OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .unwrap_or_default(),
-        session_id: body.session_id.filter(|id| !id.is_empty()),
+        session_id,
+        codex_home,
         source: body.source,
     };
     let started_from_shell = terminal_foreground_command(&state, &id).await == Some(true);
@@ -448,11 +484,21 @@ pub(crate) async fn connect_terminal_ai(
         .terminal_ai_last_reports
         .lock_or_recover()
         .insert(id.clone(), connection.clone());
+    let (watch_session, watch_home) =
+        (connection.session_id.clone(), connection.codex_home.clone());
     let changed = state
         .terminal_ai_connections
         .lock_or_recover()
         .insert(id.clone(), connection)
         .is_none_or(|previous| previous.agent != agent);
+    // Rejoin a Codex TUI's thread on the shared daemon to see failed turns (HS2-MN865E).
+    super::codex_watch::sync_codex_thread_watch(
+        &state,
+        &id,
+        agent.as_deref(),
+        watch_session.as_deref(),
+        watch_home.as_deref(),
+    );
     state.emit(ChangeEvent {
         cursor: None,
         store: String::new(),
@@ -521,6 +567,7 @@ fn watch_shell_ai_session_exit(state: &AppState, id: String, reported_at: String
                 matches && connections.remove(&id).is_some()
             };
             if removed {
+                super::codex_watch::stop_codex_thread_watch(&state, &id);
                 if forget_terminal_halt(&state, &id) {
                     emit_terminal_halted(&state, &id, None);
                 }
@@ -581,7 +628,10 @@ fn forget_terminal_ai_connection_if(
     }) {
         return None;
     }
-    Some(connections.remove(id).is_some())
+    let removed = connections.remove(id).is_some();
+    drop(connections);
+    super::codex_watch::stop_codex_thread_watch(state, id);
+    Some(removed)
 }
 
 fn emit_terminal_ai_connection(state: &AppState, id: &str, message: Option<String>) {

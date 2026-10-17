@@ -1150,7 +1150,16 @@ pub(crate) fn report_terminal_session(
         SessionHookEvent::Resumed => delete("halt", None),
         SessionHookEvent::Connected => post(
             "ai-connection",
-            serde_json::json!({ "agent": agent, "session_id": session_id }),
+            // Codex queues messages per `CODEX_HOME`, so the server can message this session
+            // only through the home it runs under (HS2-FKM97G). Unset means the default home.
+            serde_json::json!({
+                "agent": agent,
+                "session_id": session_id,
+                "codex_home": (agent == Some("codex"))
+                    .then(|| std::env::var("CODEX_HOME").ok())
+                    .flatten()
+                    .filter(|home| !home.trim().is_empty()),
+            }),
         ),
         SessionHookEvent::Disconnected => delete("ai-connection", session_id),
     }

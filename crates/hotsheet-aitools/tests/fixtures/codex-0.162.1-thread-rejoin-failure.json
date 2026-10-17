@@ -1,0 +1,149 @@
+{
+  "captured": "HS2-MN865E live spike: codex-cli 0.162.1 TUI on the shared daemon (self-updated to 0.163.0), 2026-10-17. A second connection sent initialize then thread/resume {threadId}; it never sent turn/start. The TUI's model was invalid, so its next typed turn failed.",
+  "requests": [
+    {
+      "id": 1,
+      "method": "initialize",
+      "params": {
+        "clientInfo": {
+          "name": "hotsheet",
+          "title": "Hot Sheet",
+          "version": "0"
+        },
+        "capabilities": null
+      }
+    },
+    {
+      "method": "initialized"
+    },
+    {
+      "id": 2,
+      "method": "thread/resume",
+      "params": {
+        "threadId": "00000000-0000-7000-8000-000000000001"
+      }
+    }
+  ],
+  "resume_response": {
+    "id": 2,
+    "result": {
+      "thread": {
+        "id": "00000000-0000-7000-8000-000000000001",
+        "sessionId": "00000000-0000-7000-8000-000000000001",
+        "model": "hs2-no-such-model",
+        "historyMode": "paginated"
+      }
+    },
+    "note": "truncated: the full response also carries the thread's turns and settings"
+  },
+  "notifications": [
+    {
+      "method": "thread/status/changed",
+      "params": {
+        "threadId": "00000000-0000-7000-8000-000000000001",
+        "status": {
+          "type": "active",
+          "activeFlags": []
+        }
+      }
+    },
+    {
+      "method": "turn/started",
+      "params": {
+        "threadId": "00000000-0000-7000-8000-000000000001",
+        "turn": {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "rootTurnId": "00000000-0000-7000-8000-000000000002",
+          "items": [],
+          "itemsView": "notLoaded",
+          "status": "inProgress",
+          "error": null,
+          "startedAt": 1792198603,
+          "completedAt": null,
+          "durationMs": null
+        }
+      }
+    },
+    {
+      "method": "hook/started",
+      "params": {
+        "threadId": "00000000-0000-7000-8000-000000000001"
+      }
+    },
+    {
+      "method": "hook/started",
+      "params": {
+        "threadId": "00000000-0000-7000-8000-000000000001"
+      }
+    },
+    {
+      "method": "hook/completed",
+      "params": {
+        "threadId": "00000000-0000-7000-8000-000000000001"
+      }
+    },
+    {
+      "method": "hook/completed",
+      "params": {
+        "threadId": "00000000-0000-7000-8000-000000000001"
+      }
+    },
+    {
+      "method": "item/started",
+      "params": {
+        "threadId": "00000000-0000-7000-8000-000000000001"
+      }
+    },
+    {
+      "method": "item/completed",
+      "params": {
+        "threadId": "00000000-0000-7000-8000-000000000001"
+      }
+    },
+    {
+      "method": "thread/status/changed",
+      "params": {
+        "threadId": "00000000-0000-7000-8000-000000000001",
+        "status": {
+          "type": "systemError"
+        }
+      }
+    },
+    {
+      "method": "error",
+      "params": {
+        "error": {
+          "message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"The 'hs2-no-such-model' model is not supported when using Codex with a ChatGPT account.\"}}",
+          "codexErrorInfo": "other",
+          "additionalDetails": null,
+          "misalignment": null
+        },
+        "willRetry": false,
+        "threadId": "00000000-0000-7000-8000-000000000001",
+        "turnId": "00000000-0000-7000-8000-000000000002"
+      }
+    },
+    {
+      "method": "turn/completed",
+      "params": {
+        "threadId": "00000000-0000-7000-8000-000000000001",
+        "turn": {
+          "id": "00000000-0000-7000-8000-000000000002",
+          "rootTurnId": "00000000-0000-7000-8000-000000000002",
+          "items": [],
+          "itemsView": "notLoaded",
+          "status": "failed",
+          "error": {
+            "message": "{\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"The 'hs2-no-such-model' model is not supported when using Codex with a ChatGPT account.\"}}",
+            "codexErrorInfo": "other",
+            "additionalDetails": null,
+            "misalignment": null
+          },
+          "startedAt": 1792198603,
+          "completedAt": 1792198605,
+          "durationMs": 1596
+        }
+      }
+    }
+  ]
+}

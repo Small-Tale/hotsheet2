@@ -3,6 +3,7 @@
 //! (HS2-YMG48C).
 
 mod attach;
+pub(crate) mod codex_watch;
 pub(crate) mod launch;
 mod signals;
 
@@ -361,6 +362,10 @@ pub struct TerminalAiConnection {
     /// Internal lifecycle identity; the terminal API need not expose Codex/Claude session ids.
     #[serde(skip)]
     session_id: Option<String>,
+    /// The `CODEX_HOME` a Codex session reported (HS2-FKM97G); `None` is the default home.
+    /// Internal like `session_id`: it addresses the session on its daemon and message queue.
+    #[serde(skip)]
+    codex_home: Option<String>,
 }
 
 /// Why a terminal's AI session stopped: the tool's error category and message (for example

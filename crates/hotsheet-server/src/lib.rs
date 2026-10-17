@@ -300,6 +300,14 @@ pub struct AppState {
     terminal_ai_connections: Arc<Mutex<std::collections::HashMap<String, TerminalAiConnection>>>,
     /// Last trusted hook report for each live terminal, retained after SessionEnd for diagnosis.
     terminal_ai_last_reports: Arc<Mutex<std::collections::HashMap<String, TerminalAiConnection>>>,
+    /// Per-terminal rejoins of a Codex TUI's thread on the shared daemon, for halt detection
+    /// (HS2-MN865E). Dropping an entry closes its daemon connection.
+    codex_thread_watches: Arc<
+        Mutex<std::collections::HashMap<String, routes::terminals::codex_watch::CodexThreadWatch>>,
+    >,
+    /// The `CODEX_HOME` a Codex session that reported none runs under; `None` is the user's
+    /// default home (hermetic tests point it at an empty directory).
+    default_codex_home: Option<Arc<std::path::PathBuf>>,
     /// Machine-local checkout discovery. Checkout ids identify working directories and
     /// are intentionally separate from store ids and server authentication tokens.
     checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry,
@@ -522,6 +530,8 @@ impl AppState {
             terminal_questions: Arc::new(Mutex::new(std::collections::HashMap::new())),
             terminal_ai_connections: Arc::new(Mutex::new(std::collections::HashMap::new())),
             terminal_ai_last_reports: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            codex_thread_watches: Arc::default(),
+            default_codex_home: None,
             checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry::new(
                 machine_home.join("checkouts.json"),
             ),
@@ -958,6 +968,20 @@ impl AppState {
     pub fn with_terminal_broker_at(mut self, broker: terminal_broker::TerminalBroker) -> Self {
         self.terminal_broker = Some(broker);
         self
+    }
+
+    /// Treat `home` as the `CODEX_HOME` of Codex sessions that report none, so Codex halt
+    /// detection never reaches the user's real daemon from a hermetic test (HS2-MN865E).
+    pub fn with_default_codex_home(mut self, home: std::path::PathBuf) -> Self {
+        self.default_codex_home = Some(Arc::new(home));
+        self
+    }
+
+    pub(crate) fn default_codex_home(&self) -> std::path::PathBuf {
+        self.default_codex_home
+            .as_deref()
+            .cloned()
+            .unwrap_or_else(hotsheet_aitools::launch_safety::default_codex_home)
     }
 
     /// Override plugin search roots (for hermetic hosts and integration tests).

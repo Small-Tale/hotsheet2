@@ -994,6 +994,21 @@ are installed, enabled, or trusted. Use Codex `/hooks` to inspect their trust an
 After server restart, a live session must report again before its connection can be shown. A
 successful interactive permission prompt reaching Hot Sheet also proves the bridge is live.
 
+**Codex session address (HS2-FKM97G, HS2-MN865E).** Codex's `SessionStart` report also carries
+`codex_home` when `CODEX_HOME` is set; an unset home means the user's default. The server keeps
+it and the thread id (`session_id`) internal on the terminal's connection. A permission ask from
+the same session keeps the reported home. Codex halt detection rejoins the thread under that
+home. Observed live on codex 0.162.1:
+
+- `SessionStart` fires lazily, when the first prompt is submitted, so a freshly opened TUI has
+  no reported thread until its first turn (HS2-8R7SN0).
+- Its `session_id` is the thread id that `codex queue --thread` and `thread/resume` accept.
+- `codex queue` stores messages per `CODEX_HOME`, so a TUI started with `--no-daemon` under the
+  same home still received one. A different home cannot reach the thread
+  (`no rollout found for thread id`).
+- Pushing messages into a Codex session uses the shared session-push operation (HS2-PEJ962,
+  [13](13-drive-transport-interface.md) §13.12) with a `codex queue` adapter (HS2-FKM97G).
+
 A tool runs a project hook only once it is installed and, for Codex, trusted. A reported
 connection therefore shows that the session's hooks are live, and its permission prompts reach
 the app. A missing report means they stay in the terminal. Codex trusts each hook entry by
@@ -1028,7 +1043,38 @@ means the turn completed, so either sends `DELETE /terminals/{id}/halt`. `Sessio
 `SessionEnd` also clear an earlier halt when a session begins or ends. None of these events
 prints a hook decision, and outside a Hot Sheet terminal (no `HOTSHEET_TERMINAL_ID`) or
 without a reachable server they do nothing. Older Claude versions ignore the unknown event
-names. Codex has no equivalent hook yet (`HS2-5ZQ7J8`). Driven sessions report completed
+names. Codex has no equivalent hook (`HS2-5ZQ7J8`): a failed Codex turn fires
+`UserPromptSubmit` but no `Stop`, and no hook carries the failure.
+
+Codex halts are therefore detected best-effort by rejoining the TUI's thread on the shared
+app-server daemon (HS2-MN865E):
+
+- **Rejoin.** When a Codex session reports a UUID thread id, the server connects to
+  `<codex_home or the default home>/app-server-control/app-server-control.sock` with
+  `UdsWsTransport`. It sends `initialize` and `thread/resume {threadId}` only
+  (`hotsheet_aitools::codex_thread_watch`). It never sends `turn/start`, never answers a server
+  request, and never starts a daemon.
+- **Mapping.** `turn/completed` with `turn.status: "failed"`, or `error` with
+  `willRetry: false`, records the same terminal halt as `StopFailure`:
+  - `error_type` is `turn.error.codexErrorInfo` (the variant name).
+  - The message is `turn.error.message`, unwrapped from a provider JSON error body.
+  - `agent` is `codex`.
+- **Ignored and cleared.** `willRetry: true` is ignored. The next `turn/started` clears the halt.
+- **Lifecycle.** One watch runs per terminal. It is replaced by a newer session and closed on
+  `SessionEnd`, terminal kill, or shell exit.
+- **Verified live** on codex 0.162.1 (daemon 0.163.0) with an invalid model; the cassette is
+  `crates/hotsheet-aitools/tests/fixtures/codex-0.162.1-thread-rejoin-failure.json`.
+
+Limits:
+
+- The v2 protocol is experimental and its schema is version-specific.
+- TUIs started with `--no-daemon` or `daemon_auto_start = false` are invisible.
+- While a session is reported connected, the watch's subscription keeps the daemon from
+  unloading the thread (it otherwise unloads 30 minutes after the last subscriber).
+- A terminal whose Codex process dies without `SessionEnd` keeps its watch until the daemon
+  closes it.
+
+Driven sessions report completed
 provider failure diagnostics (`HS2-AZVE3P`). Identical active halt error type/message reports
 retain their original `at` timestamp and emit no new halt event (HS2-E6KAWY); clearing and
 halting again starts a new episode. See [client prompt policy](06-clients.md) for pause,

@@ -114,6 +114,7 @@ pub(crate) async fn ask_permission(
             Json(TerminalAiConnectionReq {
                 agent: body.agent.clone(),
                 session_id: body.session_id.clone(),
+                codex_home: None,
                 source: TerminalHookSource::PermissionRequest,
             }),
         )
