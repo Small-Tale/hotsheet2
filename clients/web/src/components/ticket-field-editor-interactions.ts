@@ -4,6 +4,7 @@ import { createScope } from 'kerfjs/scope';
 
 import { INSPECTOR_AND_EDITOR_ACTIONS, INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
 import { normalizeTicketTitleField, ticketTitleKeyFinishesEdit } from '../ticket-title-editing';
+import { TICKET_TAG_COMBOBOX_COMMIT } from './app-combobox-wiring';
 import { TAG_CHIP_REMOVE_ACTION } from './tag-chip';
 
 /**
@@ -61,7 +62,7 @@ export function wireTicketTitleEditor(root: HTMLElement, bindings: TicketTitleEd
   };
 }
 
-/** The tag editor: Enter or comma adds the typed tag, blur adds any pending text and flushes. */
+/** The tag editor: Kerf commits Enter/comma/options; blur adds any pending text and flushes. */
 export interface TicketTagEditorBindings {
   /** Add `value` (the input is cleared afterwards). */
   readonly add: (value: string) => void;
@@ -78,10 +79,8 @@ export function wireTicketTagEditor(root: HTMLElement, bindings: TicketTagEditor
     bindings.add(value);
   };
   lifetime.add(
-    delegate(root, 'keydown', INSPECTOR_AND_EDITOR_TARGETS.ticketTagInputField.selector, (event, target) => {
-      if (!['Enter', ','].includes((event as KeyboardEvent).key)) return;
-      event.preventDefault();
-      addFromInput(target as HTMLInputElement);
+    delegate(root, TICKET_TAG_COMBOBOX_COMMIT, INSPECTOR_AND_EDITOR_TARGETS.ticketTagInputField.selector, (event) => {
+      bindings.add((event as CustomEvent<string>).detail);
     }),
   );
   lifetime.add(

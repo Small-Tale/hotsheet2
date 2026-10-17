@@ -8,36 +8,3 @@
 .ticket-tag-editor__surface {
   width: min(remify(256px), calc(100vw - 4 * var(--kui-space-m)));
 }
-/* Stacks the caption over the field with the title and hint spaced from it. */
-.ticket-tag-editor__field {
-  display: grid;
-  margin-block: var(--kui-space-m) var(--kui-space-xs);
-  gap: var(--kui-space-2xs);
-}
-/* The field stays native because its suggestions come from a <datalist>, which wa-input's shadow
-   input cannot reference (KF-XDVAMR). */
-.ticket-tag-editor__input {
-  width: 100%;
-  min-width: 0;
-  height: remify(36px);
-  padding: 0 var(--kui-space-m);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-s);
-  color: var(--wa-color-text-normal);
-  background: var(--wa-color-surface-default);
-  box-sizing: border-box;
-  font: inherit;
-  font-size: var(--wa-font-size-xs);
-}
-/* Keyboard focus for the native field. */
-.ticket-tag-editor__input:focus-visible {
-  border-color: var(--wa-color-brand-border-normal);
-  outline: var(--wa-focus-ring);
-  outline-offset: 1px;
-}
-/* iOS zooms into a focused field under 16px (HS2-8JPRRC). */
-@media (pointer: coarse) {
-  .ticket-tag-editor__input {
-    font-size: max(var(--hs-touch-field-min-font-size), var(--wa-font-size-xs));
-  }
-}

@@ -1363,7 +1363,9 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   and 24px between the inspector's differing major sections (HS2-4Y6SM9).
   Editable tags use the shared `ListHeader` with a trailing icon-only Add tag action,
   matching the Views header, and a uniquely targeted anchored popover in sidebar and
-  reader instances. The popover contains a labeled autocomplete field,
+  reader instances. The popover contains a Kerf Combobox that snapshots unused tag suggestions
+  on open and offers creation for typed tags. Shared wiring also serves ProviderSetupForm so
+  keys are handled once (HS2-C32ERK). The field
   supports repeated Enter/comma additions, dismisses with Escape while restoring trigger
   focus, remains within the narrow viewport, and follows the canonical 16/8/4 spacing hierarchy.
   An unblocked ticket exposes a full-width shared-menu `Block ticket` action without an

@@ -10,7 +10,6 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import { Text } from '@kerfjs/ui/text';
-import { wireComboboxes } from '@kerfjs/ui/wire-comboboxes';
 import type { AttrSpec } from 'kerfjs';
 import { Check, ChevronRight, Copy, ExternalLink, LogIn, RefreshCw } from 'lucide';
 
@@ -105,20 +104,6 @@ function accountUsage(account: ProviderAccount, capitalized = true) {
  * form and the ticket-source setup dialog's other screens (the remote backup form) compose it
  * with their own back action (HS2-WP69TD).
  */
-/**
- * Wire the repository Comboboxes of every ProviderSetupForm under `root` (HS2-EN1E76): a picked or
- * typed repository stays in its field, which the form submits by name. Production and the UX demo
- * share it. Commas never commit; a repository name has none.
- */
-export function wireProviderSetupComboboxes(root: HTMLElement | Document): () => void {
-  return wireComboboxes(root, {
-    commitKeys: [],
-    onCommit: ({ input, value }) => {
-      input.value = value;
-    },
-  });
-}
-
 export function ProviderSetupBackButton({ action }: { action: AttrSpec<'data-action'> }) {
   // The one chevron back affordance shared by multi-screen setup dialogs (HS2-WJ4JDW).
   return <FlowBackButton action={action.value} label="Ticket source types" />;

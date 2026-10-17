@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { TICKET_TAG_COMBOBOX_COMMIT } from './app-combobox-wiring';
 import {
   wireBlockedReasonEditor,
   wireFeedbackChoices,
@@ -71,15 +72,13 @@ describe('ticket field editor wiring (HS2-KAWNER)', () => {
     expect(mine.every((entry) => entry.disposed)).toBe(true);
   });
 
-  it('adds on Enter, comma, and a non-empty blur, always flushes on blur, and removes a chip', () => {
+  it('adds combobox commits and a non-empty blur, always flushes on blur, and removes a chip', () => {
     const bindings = { add: vi.fn(), flush: vi.fn(), remove: vi.fn() };
     wireTicketTagEditor(root, bindings);
-    const input = { value: 'a' } as HTMLInputElement;
-    handler('keydown', '[name="ticket-tag-input"]')(keyEvent('Enter'), input);
-    input.value = 'b';
-    handler('keydown', '[name="ticket-tag-input"]')(keyEvent(','), input);
+    const input = { value: '' } as HTMLInputElement;
+    handler(TICKET_TAG_COMBOBOX_COMMIT, '[name="ticket-tag-input"]')({ detail: 'a' }, input);
+    handler(TICKET_TAG_COMBOBOX_COMMIT, '[name="ticket-tag-input"]')({ detail: 'b' }, input);
     input.value = 'x';
-    handler('keydown', '[name="ticket-tag-input"]')(keyEvent('x'), input);
     handler('focusout', '[name="ticket-tag-input"]')(new Event('focusout'), input);
     input.value = '  ';
     handler('focusout', '[name="ticket-tag-input"]')(new Event('focusout'), input);

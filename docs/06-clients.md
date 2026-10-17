@@ -84,11 +84,11 @@ Pointer-positioned context menus and the inspector/reader status popup retain th
 anchor through view morphs, including a replaced popup host or cleared inline position.
 Dismissal ends the status popup's anchor tracking so later renders do not reopen it.
 In the inspector and reader, Add tag is a distinct button that opens its own anchored,
-viewport-contained popover with a labeled autocomplete field. Enter or comma can add
-repeated tags, Escape restores focus to the trigger, and read-only providers omit the
-action entirely instead of presenting a disabled input/button hybrid. The editor uses a
-16px outer/title/input rhythm, 8px within the chip/editor group, and 4px between connected
-label/input content (HS2-4Y6SM9).
+viewport-contained popover with a Kerf Combobox. It snapshots unused tag suggestions when
+opened; the suggestion listbox rises above the popover instead of clipping inside it.
+Enter, comma, or choosing a suggestion can add repeated tags. Escape restores focus to the
+trigger, and read-only providers omit the action entirely. Kerf owns the field, label, and
+hint geometry; a List sets the title-to-field rhythm (HS2-4Y6SM9, HS2-C32ERK).
 The complete selection remains one field-aware Undo transaction. A capture-phase,
 composed-path-aware outside pointer-down dismisses the menu reliably across native and
 Web Awesome shadow-DOM controls (including an ordinary click on another ticket row),

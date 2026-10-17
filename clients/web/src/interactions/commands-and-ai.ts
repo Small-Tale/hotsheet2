@@ -14,15 +14,12 @@ import {
 import { type CommandDropTarget } from '../command-order';
 import { wireAiConversation } from '../components/ai-conversation-interactions';
 import { type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
+import { wireAppComboboxes } from '../components/app-combobox-wiring';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { wireCommandSettingsEditor } from '../components/command-settings-editor-interactions';
 import { type ConversationExportDialogState } from '../components/conversation-export-dialog';
 import { type ManualModelDialogState } from '../components/manual-model-dialog';
-import {
-  type ExternalProviderKind,
-  type GithubAuthState,
-  wireProviderSetupComboboxes,
-} from '../components/provider-setup-form';
+import { type ExternalProviderKind, type GithubAuthState } from '../components/provider-setup-form';
 import { type SettingsCategory } from '../components/settings-navigation';
 import { TERMINAL_LIMIT_FIELDS } from '../components/terminal-memory-settings';
 import { trashDraftIsDirty, type TrashRetentionDraft } from '../components/trash-settings';
@@ -441,8 +438,8 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   // Selectable transcript messages are interactive Kerf ContentItems; Kerf gives them Enter/Space
   // activation, which reaches the ordinary delegated click handler (HS2-P16J04).
   lifetime.add(wireContentItems(document.body));
-  // Provider setup's repository fields are Kerf Comboboxes (HS2-EN1E76).
-  lifetime.add(wireProviderSetupComboboxes(document.body));
+  // One Kerf Combobox wiring owner handles repository and Add tag fields (HS2-C32ERK).
+  lifetime.add(wireAppComboboxes(document.body));
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.copyConversationSelection.selector, (_event, target) => {
       const connectionId = target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId;

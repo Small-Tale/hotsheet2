@@ -4986,29 +4986,30 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector.getByRole('heading', { name: 'Autosaved inspector title' })).toBeVisible();
   await inspector.getByRole('button', { name: 'Add tag' }).click();
   const tagDialog = page.getByRole('dialog', { name: 'Add tag' }),
-    tagEditor = tagDialog.getByRole('combobox', { name: 'Tag name' });
+    tagEditor = tagDialog.getByRole('combobox', { name: 'Tag Name' });
   await expect(tagEditor).toBeFocused();
   expect(
     await tagDialog.evaluate((node) => {
       const editor = getComputedStyle(document.querySelector('[data-component="ticket-tag-editor"]')!),
-        label = getComputedStyle(node.querySelector('label')!),
-        input = getComputedStyle(node.querySelector('input')!);
-      // The field owns the title and hint spacing since Kerf Text renders both (HS2-DYNGY5); Kerf's
-      // AnchoredSurface owns the surface frame and padding (HS2-Q4JE3V).
+        list = node.querySelector<HTMLElement>('[data-component="list"]')!,
+        field = node.querySelector<HTMLElement>('[data-component="combobox"]')!,
+        input = getComputedStyle(field.querySelector('input')!);
+      // Kerf List spaces the title from the Combobox; the Combobox owns its field and hint
+      // while AnchoredSurface owns the frame (HS2-C32ERK).
       return {
         editorGap: editor.gap,
-        headingMargin: label.marginTop,
-        labelGap: label.gap,
+        titleGap: getComputedStyle(list).gap,
+        label: field.querySelector('label')?.textContent,
         inputPadding: input.paddingLeft,
-        helpMargin: label.marginBottom,
+        contained: field.getBoundingClientRect().right <= node.getBoundingClientRect().right,
       };
     }),
   ).toEqual({
     editorGap: '8px',
-    headingMargin: '16px',
-    labelGap: '4px',
-    inputPadding: '16px',
-    helpMargin: '8px',
+    titleGap: '16px',
+    label: 'Tag Name',
+    inputPadding: '8px',
+    contained: true,
   });
   await tagDialog.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-ticket-tag-editor-wide.png' });
   const addTagButton = inspector.getByRole('button', { name: 'Add tag' });

@@ -6,7 +6,7 @@ import { createScope } from 'kerfjs/scope';
 
 import { KeyboardSettings } from '../components/keyboard-settings';
 import { PermissionRulesSettings } from '../components/permission-rules-settings';
-import { ProviderSetupForm, wireProviderSetupComboboxes } from '../components/provider-setup-form';
+import { ProviderSetupForm } from '../components/provider-setup-form';
 import { type SettingsCategory } from '../components/settings-navigation';
 import { SettingsWorkspace } from '../components/settings-workspace';
 import { TerminalMemorySettings } from '../components/terminal-memory-settings';
@@ -338,7 +338,6 @@ export function TrashSettingsDemo() {
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireSetupSettingsDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
-  demoListeners.add(wireProviderSetupComboboxes(root));
   demoListeners.add(
     wireTrashSettings(root, {
       input: (value, field) => {

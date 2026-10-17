@@ -143,6 +143,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/conversation-export-dialog.tsx # Save scope/contents/collision dialog with shared push/pop navigation that reuses live AI-message selection
     src/components/choice-card.tsx       # Shared selectable option card around a native radio/checkbox (title, description, brand/danger/disabled; HS2-V7PCS6)
     src/components/native-textarea.css   # Shared native textarea chrome (border, radius, inset, focus, touch field-sizing) for note, composer, inline-reply, and Not Working fields (HS2-FXSMB4)
+    src/components/app-combobox-wiring.ts # One Kerf Combobox wiring per root; routes Add tag commits to tag editing and retains provider repository choices (HS2-C32ERK)
     src/components/flow-back-button.tsx # Shared chevron back affordance for multi-screen dialog detail screens
     src/components/project-close-dialog.tsx # Shared-menu running-resource inventory, keyed live terminal/shared-read-only-AIConversation preview, and explicit keep-running versus stop-all project-tab dismissal
     src/context-menu-position.ts # Shared viewport-edge clamping for fixed context menus

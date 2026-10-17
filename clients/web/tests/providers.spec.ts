@@ -82,7 +82,7 @@ test('adds a tag through the Add tag surface inside the modal reader (HS2-Q4JE3V
     await expect(reader).toBeVisible();
     const addTag = reader.getByRole('button', { name: 'Add tag' }),
       surface = page.getByRole('dialog', { name: 'Add tag' }),
-      input = surface.getByRole('combobox', { name: 'Tag name' });
+      input = surface.getByRole('combobox', { name: 'Tag Name' });
     await addTag.scrollIntoViewIfNeeded();
     await addTag.click();
     await expect(input).toBeFocused();
@@ -17560,7 +17560,7 @@ test('edits title and tags through controlled capability-aware inspector state',
   await page.screenshot({ path: 'target/visual-captures/hs2-9zpyr8-tags-production-wide.png', fullPage: true });
   await addTag.click();
   // Kerf's AnchoredSurface hosts the Add tag field outside the rail (HS2-Q4JE3V).
-  const tagInput = page.getByRole('dialog', { name: 'Add tag' }).getByRole('combobox', { name: 'Tag name' });
+  const tagInput = page.getByRole('dialog', { name: 'Add tag' }).getByRole('combobox', { name: 'Tag Name' });
   await expect(tagInput).toBeFocused();
   await tagInput.fill('regression');
   await tagInput.press('Enter');

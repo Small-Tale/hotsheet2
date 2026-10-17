@@ -3,7 +3,7 @@ import { expect, type Page, test } from '@playwright/test';
 import { openDemoProject } from './mobile-project-fixture';
 
 // HS2-8JPRRC: iOS zooms the page into any focused text field set below 16px, so touch screens keep
-// every native text field at least that size while desktop keeps the compact type.
+// every text field at least that size while desktop keeps the compact type.
 
 /** Computed font size (px) of every element matching `selector`, reading a custom element's inner field. */
 const fontSizes = (page: Page, selector: string) =>
@@ -31,6 +31,7 @@ async function collect(page: Page) {
   await page.goto('/ux-demo?component=ticket-inspector');
   await page.locator('[data-component="ticket-inspector"]').getByRole('button', { name: 'Add tag' }).click();
   await expect(page.locator('[name="ticket-tag-input"]')).toBeVisible();
+  // Kerf Combobox owns the Add tag field's touch-safe font size (HS2-C32ERK).
   sizes.tag = await fontSizes(page, '[name="ticket-tag-input"]');
   await page.goto('/ux-demo?component=ticket-attachments');
   // The purpose pill is a Kerf Select (no text entry); the batch label editor is the text field (HS2-K9HSXZ).

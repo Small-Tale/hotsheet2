@@ -25,9 +25,17 @@ describe('TicketTagEditor', () => {
     // Kerf openAnchoredSurface hosts the Add tag content; the editor keeps only the suggestions (HS2-Q4JE3V).
     expect(editable).not.toContain('popover="auto"');
     expect(editable).toContain('<datalist id="ticket-tag-sidebar-test-suggestions"');
-    expect(String(TicketTagPopoverContent({ suggestionsId: 'ticket-tag-sidebar-test-suggestions' }))).toContain(
-      'name="ticket-tag-input" list="ticket-tag-sidebar-test-suggestions"',
+    const popover = String(
+      TicketTagPopoverContent({
+        suggestionsId: 'ticket-tag-sidebar-test-suggestions',
+        suggestions: ['server'],
+      }),
     );
+    expect(popover).toContain('data-combobox-id="ticket-tag-sidebar-test-input"');
+    expect(popover).toContain('name="ticket-tag-input"');
+    expect(popover).toContain('role="option"');
+    expect(popover).toContain('data-value="server"');
+    expect(popover).toContain('Press Enter to add');
     expect(editable).not.toContain('aria-haspopup="dialog"');
     expect(editable).toContain('<option value="server"');
     expect(editable).not.toContain('<option value="client"');
@@ -47,8 +55,8 @@ describe('TicketTagEditor', () => {
     // Kerf Row lays out the chips and Kerf Text owns the title, caption, and hint typography (HS2-DYNGY5).
     expect(css).not.toContain('__chips');
     expect(css).not.toMatch(/__popover (?:strong|small|label) \{/);
-    expect(css).toMatch(
-      /\.ticket-tag-editor__field \{[^}]*margin-block: var\(--kui-space-m\) var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-2xs\)/,
-    );
+    expect(css).not.toContain('__field');
+    expect(css).not.toContain('__input');
+    expect(css).not.toContain('@media (pointer: coarse)');
   });
 });

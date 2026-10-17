@@ -1,5 +1,6 @@
 import { createScope } from 'kerfjs/scope';
 
+import { wireAppComboboxes } from '../components/app-combobox-wiring';
 import { demoModule as aiConversation } from './ai-conversation-demo';
 import { demoModule as appChrome } from './app-chrome-demo';
 import { demoModule as appDialogs } from './app-dialogs-demo';
@@ -114,6 +115,7 @@ export function registeredDemoIds(): string[] {
 /** Install every module's delegated interactions on the catalog root and return one disposer. */
 export function wireDemoModules(root: HTMLElement): () => void {
   const scope = createScope();
+  scope.add(wireAppComboboxes(document.body));
   for (const module of demoModules) if (module.wire) scope.add(module.wire(root));
   return () => {
     scope.dispose();

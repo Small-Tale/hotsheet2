@@ -1,6 +1,8 @@
 import './ticket-tag-editor.css';
 
 import { openAnchoredSurface } from '@kerfjs/ui/anchored-surface';
+import { Combobox } from '@kerfjs/ui/combobox';
+import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
 import { type OverlayHandle } from 'kerfjs/overlay';
@@ -60,29 +62,31 @@ export function TicketTagEditor({
 
 /**
  * Content of the Add tag surface. Kerf `openAnchoredSurface` owns its chrome, position, focus,
- * and dismissal; Enter and focusout on the field add the tag (HS2-Q4JE3V).
+ * and dismissal; Kerf commits Enter, comma, and chosen options, while focusout commits pending text.
  */
-export function TicketTagPopoverContent({ suggestionsId }: { suggestionsId?: string }) {
+export function TicketTagPopoverContent({
+  suggestionsId,
+  suggestions = [],
+}: {
+  suggestionsId?: string;
+  suggestions?: readonly string[];
+}) {
+  const id = suggestionsId?.replace(/-suggestions$/, '-input') ?? 'ticket-tag-popover-input';
   return (
     <div class="ticket-tag-editor__surface" data-component="ticket-tag-popover">
-      <Text flush lineHeight="tight">
-        <strong>Add tag</strong>
-      </Text>
-      <label class="ticket-tag-editor__field">
-        <Text variant="span" size="compact" tone="quiet">
-          Tag name
+      <List gap="m">
+        <Text flush lineHeight="tight">
+          <strong>Add tag</strong>
         </Text>
-        <input
-          class="ticket-tag-editor__input"
+        <Combobox
+          id={id}
           name="ticket-tag-input"
-          list={suggestionsId}
-          autocomplete="off"
+          label="Tag Name"
+          suggestions={suggestions}
           placeholder="Search or create a tag"
+          hint="Press Enter to add"
         />
-      </label>
-      <Text size="compact" tone="quiet" flush>
-        Press Enter to add
-      </Text>
+      </List>
     </div>
   );
 }
@@ -92,9 +96,17 @@ export function TicketTagPopoverContent({ suggestionsId }: { suggestionsId?: str
  * share this so the surface options cannot drift (HS2-Q4JE3V).
  */
 export function openTicketTagSurface(trigger: Element): OverlayHandle {
-  return openAnchoredSurface(
-    trigger,
-    TicketTagPopoverContent({ suggestionsId: (trigger as HTMLElement).dataset.tagSuggestions }),
-    { label: 'Add tag', placement: 'bottom', align: 'end', dismiss: ['escape', 'outside'] },
-  );
+  const suggestionsId = (trigger as HTMLElement).dataset.tagSuggestions;
+  const suggestions = suggestionsId
+    ? Array.from(
+        document.getElementById(suggestionsId)?.querySelectorAll('option[value]') ?? [],
+        (option) => (option as HTMLOptionElement).value,
+      )
+    : [];
+  return openAnchoredSurface(trigger, TicketTagPopoverContent({ suggestionsId, suggestions }), {
+    label: 'Add tag',
+    placement: 'bottom',
+    align: 'end',
+    dismiss: ['escape', 'outside'],
+  });
 }
