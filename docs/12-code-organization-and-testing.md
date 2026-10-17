@@ -804,13 +804,27 @@ which uses real captured runner output and spawns real processes; CI runs it in 
   | One web-only file after a `hotsheet-cli` source edit   | 9.3 s (cargo relink) | 1.9 s  |
 
   The full-suite gain is the build check, and the binary suites set the floor:
-  `local-host.e2e` takes 47 s and `stable-dev.e2e` 30 s (`HS2-XSP0GJ` tracks splitting them).
+  `local-host.e2e` took 47 s and `stable-dev.e2e` 30 s in this profile. A later two-file
+  measurement on the same loaded machine measured 43.1 s and 23.2 s respectively. The
+  independent local-host cases now run concurrently after their shared production build;
+  independent stable-dev process fixtures overlap in bounded pairs. In the comparable
+  two-file run, those file times fell to 27.3 s and 15.6 s, respectively (HS2-XSP0GJ),
+  a combined 42.9 s versus 66.2 s before. These are observed file times on a loaded
+  machine, not a guaranteed CI wall-time reduction.
 
 - **Slow-test profiles.** `node scripts/test-profile.mjs --top N` lists the slowest tests
   and files from runner reports. It reads `--nextest target/nextest/default/junit.xml`,
   which nextest writes on every run per `.config/nextest.toml`; `--vitest <json>`, from
   `--reporter=json --outputFile.json=<path>`; and `--playwright <json>`, from
   `--reporter=json`. CI prints the Rust and web-unit profiles after the tests.
+- **Full-suite bottlenecks (HS2-XSP0GJ).** A recent full nextest JUnit report covered 965
+  cases; the longest was the terminal shell-history isolation case at 51.4 s
+  (`HS2-5YC1E5`), followed by CLI permission-hook cases at 37.9–46.5 s
+  (`HS2-KV8H01`). A merged four-shard Playwright JSON report from CI run 39000860513
+  covered 857 cases. `providers.spec.ts` accounted for 2,389 of 4,226 summed test
+  seconds, far more than any other file; `HS2-JS8Q2K` tracks splitting it so shards
+  can balance its flows. These sums are test durations, including retries, rather than
+  elapsed suite wall time.
 - **Flaky-test quarantine.** A known flake is skipped through a marker that names its fix
   ticket and is tracked in [test-quarantine.md](test-quarantine.md). CI's
   `scripts/check-test-quarantine.mjs` keeps markers and rows one-to-one. Nobody silently

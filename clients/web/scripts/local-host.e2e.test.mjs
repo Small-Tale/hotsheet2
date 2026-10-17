@@ -152,7 +152,9 @@ afterAll(async () => {
   if (ownershipBuildRoot) await rm(ownershipBuildRoot, { recursive: true, force: true });
 });
 
-it('serves the production client and the local bridge without Vite', async () => {
+// Keep the large process fixture readable while changing only its scheduling (HS2-XSP0GJ).
+// prettier-ignore
+it.concurrent('serves the production client and the local bridge without Vite', async () => {
   const home = await mkdtemp(resolve(tmpdir(), 'hotsheet-local-host-home-')),
     port = await availablePort(),
     origin = `http://127.0.0.1:${port}`;
@@ -416,7 +418,9 @@ it('serves the production client and the local bridge without Vite', async () =>
 // HOTSHEET_HOME. A dev host must never take that server over, and `server:rebuild`'s stop must not
 // pull it out from under the production host. After every step a fresh browser on the pinned host
 // opens the project without an error or a server-build notice.
-it('keeps the pinned host on its own machine server across dev hosts and rebuild stops', async () => {
+// Keep the large process fixture readable while changing only its scheduling (HS2-XSP0GJ).
+// prettier-ignore
+it.concurrent('keeps the pinned host on its own machine server across dev hosts and rebuild stops', async () => {
   const home = await mkdtemp(resolve(tmpdir(), 'hotsheet-local-host-owner-')),
     runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-local-host-owner-runtime-')),
     pinnedPort = await availablePort(),

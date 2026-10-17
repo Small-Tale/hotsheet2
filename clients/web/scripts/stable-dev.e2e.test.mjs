@@ -115,7 +115,9 @@ it('serves the startup snapshot until the stable dev process restarts', async ()
 // HS2-KFKE8W: the real stable host serves a snapshot copied under a cache directory. A migration
 // job's lock binary used to resolve relative to that snapshot, so every HS1 import died with
 // `spawn …/target/debug/hotsheet-migrate ENOENT` before the migrator ever ran.
-it('starts an HS1 import job from the cache snapshot with the checkout migrator', async () => {
+// Keep the long real-process fixture readable while changing only its scheduling (HS2-XSP0GJ).
+// prettier-ignore
+it.concurrent('starts an HS1 import job from the cache snapshot with the checkout migrator', async () => {
   const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
   const home = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-home-'));
   const project = resolve(home, 'legacy-project');
@@ -197,7 +199,9 @@ it('starts an HS1 import job from the cache snapshot with the checkout migrator'
   }
 }, 120_000);
 
-it('exits with its Vite child when the process that started it dies (HS2-4SSWV5)', async () => {
+// Keep the process fixture readable while changing only its scheduling (HS2-XSP0GJ).
+// prettier-ignore
+it.concurrent('exits with its Vite child when the process that started it dies (HS2-4SSWV5)', async () => {
   const fixture = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-e2e-'));
   const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
   const port = await availablePort();
@@ -309,7 +313,9 @@ it('does not reload when a later route first imports another dependency', async 
   }
 }, 60_000);
 
-it('serves the app without a Vite reconnect client, HMR websocket, or reconnect logging', async () => {
+// Keep the browser fixture readable while changing only its scheduling (HS2-XSP0GJ).
+// prettier-ignore
+it.concurrent('serves the app without a Vite reconnect client, HMR websocket, or reconnect logging', async () => {
   const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
   const port = await availablePort();
   const child = spawn(
@@ -366,7 +372,9 @@ it('serves the app without a Vite reconnect client, HMR websocket, or reconnect 
   }
 }, 60_000);
 
-it('does not reload when the terminal runtime first lazy-loads its xterm dependencies', async () => {
+// Keep the browser fixture readable while changing only its scheduling (HS2-XSP0GJ).
+// prettier-ignore
+it.concurrent('does not reload when the terminal runtime first lazy-loads its xterm dependencies', async () => {
   // HS2-8JV12R ("client randomly restarts") investigation: a common cause of a dev-server full reload is
   // Vite discovering a new dependency at runtime and re-optimizing when a route first lazy-loads it. The
   // terminal viewport dynamically imports terminal-viewport-runtime, which pulls in @xterm/*. This pins
