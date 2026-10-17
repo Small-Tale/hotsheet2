@@ -80,6 +80,8 @@ pub struct TriggerOptions {
 pub struct TurnRequest<'a> {
     pub prompt: &'a str,
     pub resume: Option<&'a str>,
+    /// The resumed session's cumulative cost after its previous turn (HS2-4JPDJA).
+    pub session_cost_baseline_usd: Option<f64>,
     /// Plugin-validated provider model override.
     pub model: Option<&'a str>,
     /// Plugin-validated provider effort override.
@@ -89,6 +91,27 @@ pub struct TurnRequest<'a> {
     pub permission_mode: Option<&'a str>,
     pub worker: bool,
     pub conn_id: String,
+}
+
+/// A session for [`SafeTrigger::run_turn`] to resume.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ResumeSession<'a> {
+    /// The tool's session/thread id from an earlier [`TurnDone::session_id`].
+    pub session_id: &'a str,
+    /// That session's cumulative cost after its previous turn
+    /// ([`TurnDone::session_cost_usd`]), so the resumed turn reports only its own cost
+    /// (HS2-4JPDJA). `None` when unknown.
+    pub cost_baseline_usd: Option<f64>,
+}
+
+impl<'a> ResumeSession<'a> {
+    /// Resume `session_id` without a known cost baseline.
+    pub fn id(session_id: &'a str) -> Self {
+        Self {
+            session_id,
+            cost_baseline_usd: None,
+        }
+    }
 }
 
 pub fn prepare_trigger_with_home(
@@ -289,7 +312,7 @@ impl SafeTrigger {
     pub fn run_turn(
         &self,
         prompt: &str,
-        resume: Option<&str>,
+        resume: Option<ResumeSession<'_>>,
         worker: bool,
         conn_id: String,
         registry: &mut ConnectionRegistry,
@@ -306,7 +329,8 @@ impl SafeTrigger {
             effort: None,
             role: if worker { Role::Worker } else { Role::Main },
             conn_id,
-            resume: resume.map(str::to_string),
+            resume: resume.map(|resume| resume.session_id.to_string()),
+            session_cost_baseline_usd: resume.and_then(|resume| resume.cost_baseline_usd),
             mcp_config: self.mcp_config.clone(),
             permission_mode: Some(self.permission_mode.clone()),
             env: self.env.clone(),
@@ -336,6 +360,7 @@ impl SafeTrigger {
         let TurnRequest {
             prompt,
             resume,
+            session_cost_baseline_usd,
             model,
             effort,
             permission_mode,
@@ -354,6 +379,7 @@ impl SafeTrigger {
             role: if worker { Role::Worker } else { Role::Main },
             conn_id,
             resume: resume.map(str::to_string),
+            session_cost_baseline_usd,
             mcp_config: self.mcp_config.clone(),
             permission_mode: Some(
                 permission_mode

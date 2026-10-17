@@ -1,0 +1,310 @@
+[
+ {
+  "type": "system",
+  "subtype": "init",
+  "session_id": "session-redacted",
+  "model": "claude-haiku-5-5",
+  "permissionMode": "acceptEdits",
+  "claude_code_version": "2.1.302"
+ },
+ {
+  "type": "assistant",
+  "message": {
+   "model": "claude-haiku-5-5",
+   "id": "msg_1",
+   "type": "message",
+   "role": "assistant",
+   "content": [
+    {
+     "type": "tool_use",
+     "id": "toolu_1",
+     "name": "Bash",
+     "input": {
+      "command": "sleep 3; echo bg-two",
+      "description": "Sleep 3 seconds then echo bg-two",
+      "run_in_background": true
+     }
+    }
+   ],
+   "stop_reason": null,
+   "stop_sequence": null,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 99,
+    "cache_read_input_tokens": 26416,
+    "output_tokens": 16
+   }
+  },
+  "parent_tool_use_id": null,
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "system",
+  "subtype": "background_tasks_changed",
+  "tasks": [
+   {
+    "task_id": "task_1",
+    "run_id": "run_1",
+    "task_type": "local_bash",
+    "description": "Sleep 3 seconds then echo bg-two"
+   }
+  ],
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "system",
+  "subtype": "task_started",
+  "task_id": "task_1",
+  "run_id": "run_1",
+  "tool_use_id": "toolu_1",
+  "description": "Sleep 3 seconds then echo bg-two",
+  "is_backgrounded": true,
+  "task_type": "local_bash",
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "user",
+  "message": {
+   "role": "user",
+   "content": [
+    {
+     "tool_use_id": "toolu_1",
+     "type": "tool_result",
+     "content": "Command running in background with ID: task_1. Output is being written to: <redacted-path> You will be notified when it completes. To check interim output, use Read on that file path.",
+     "is_error": false
+    }
+   ]
+  },
+  "parent_tool_use_id": null,
+  "session_id": "session-redacted",
+  "tool_use_result": {
+   "stdout": "",
+   "stderr": "",
+   "interrupted": false,
+   "isImage": false,
+   "noOutputExpected": false,
+   "backgroundTaskId": "task_1"
+  }
+ },
+ {
+  "type": "assistant",
+  "message": {
+   "model": "claude-haiku-5-5",
+   "id": "msg_2",
+   "type": "message",
+   "role": "assistant",
+   "content": [
+    {
+     "type": "text",
+     "text": "STARTED"
+    }
+   ],
+   "stop_reason": null,
+   "stop_sequence": null,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 321,
+    "cache_read_input_tokens": 26515,
+    "output_tokens": 6
+   }
+  },
+  "parent_tool_use_id": null,
+  "session_id": "session-redacted"
+ },
+ {
+  "duration_api_ms": 12725,
+  "stop_reason": "end_turn",
+  "session_id": "session-redacted",
+  "total_cost_usd": 0.00644755,
+  "usage": {
+   "input_tokens": 4,
+   "cache_creation_input_tokens": 420,
+   "cache_read_input_tokens": 52931,
+   "output_tokens": 126,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   }
+  },
+  "modelUsage": {
+   "claude-haiku-5-5": {
+    "inputTokens": 18,
+    "outputTokens": 1266,
+    "thinkingTokens": 445,
+    "cacheReadInputTokens": 161590,
+    "cacheCreationInputTokens": 24378,
+    "webSearchRequests": 0,
+    "costUSD": 0.00644755,
+    "contextWindow": 1000000,
+    "maxOutputTokens": 128000,
+    "canonicalModel": "claude-haiku-5-5",
+    "provider": "firstParty",
+    "costBasis": "list"
+   }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "subagent_stats": {
+   "spawned": 0,
+   "requested": {
+    "background": 0,
+    "foreground": 0,
+    "unset": 0
+   },
+   "started_in_background": 0,
+   "max_depth": 0,
+   "spawned_by_subagents": 0,
+   "completed": 0,
+   "failed": 0,
+   "killed": {
+    "parent": 0,
+    "user": 0,
+    "system": 0
+   },
+   "refused": {
+    "depth_limit": 0,
+    "concurrency_limit": 0,
+    "budget": 0
+   },
+   "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 2,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "STARTED",
+  "type": "result",
+  "queued_turn_count": 0,
+  "result_index": 0
+ },
+ {
+  "type": "system",
+  "subtype": "task_updated",
+  "task_id": "task_1",
+  "run_id": "run_1",
+  "patch": {
+   "status": "completed"
+  },
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "system",
+  "subtype": "task_notification",
+  "task_id": "task_1",
+  "run_id": "run_1",
+  "tool_use_id": "toolu_1",
+  "status": "completed",
+  "summary": "Background command \"Sleep 3 seconds then echo bg-two\" completed (exit code 0)",
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "system",
+  "subtype": "background_tasks_changed",
+  "tasks": [],
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "system",
+  "subtype": "init",
+  "session_id": "session-redacted",
+  "model": "claude-haiku-5-5",
+  "permissionMode": "acceptEdits",
+  "claude_code_version": "2.1.302"
+ },
+ {
+  "type": "assistant",
+  "message": {
+   "model": "claude-haiku-5-5",
+   "id": "msg_3",
+   "type": "message",
+   "role": "assistant",
+   "content": [
+    {
+     "type": "text",
+     "text": "The background command `sleep 3; echo bg-two` finished with exit code 0. Nothing else is pending from this turn."
+    }
+   ],
+   "stop_reason": null,
+   "stop_sequence": null,
+   "usage": {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 434,
+    "cache_read_input_tokens": 26836,
+    "output_tokens": 4
+   }
+  },
+  "parent_tool_use_id": null,
+  "session_id": "session-redacted"
+ },
+ {
+  "duration_api_ms": 13793,
+  "stop_reason": "end_turn",
+  "session_id": "session-redacted",
+  "total_cost_usd": 0.00682361,
+  "usage": {
+   "input_tokens": 4,
+   "cache_creation_input_tokens": 434,
+   "cache_read_input_tokens": 26836,
+   "output_tokens": 41,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   }
+  },
+  "modelUsage": {
+   "claude-haiku-5-5": {
+    "inputTokens": 22,
+    "outputTokens": 1307,
+    "thinkingTokens": 445,
+    "cacheReadInputTokens": 188426,
+    "cacheCreationInputTokens": 24812,
+    "webSearchRequests": 0,
+    "costUSD": 0.00682361,
+    "contextWindow": 1000000,
+    "maxOutputTokens": 128000,
+    "canonicalModel": "claude-haiku-5-5",
+    "provider": "firstParty",
+    "costBasis": "list"
+   }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "origin": {
+   "kind": "task-notification",
+   "producer": "session-task",
+   "runId": "run_1"
+  },
+  "subagent_stats": {
+   "spawned": 0,
+   "requested": {
+    "background": 0,
+    "foreground": 0,
+    "unset": 0
+   },
+   "started_in_background": 0,
+   "max_depth": 0,
+   "spawned_by_subagents": 0,
+   "completed": 0,
+   "failed": 0,
+   "killed": {
+    "parent": 0,
+    "user": 0,
+    "system": 0
+   },
+   "refused": {
+    "depth_limit": 0,
+    "concurrency_limit": 0,
+    "budget": 0
+   },
+   "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 1,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "The background command `sleep 3; echo bg-two` finished with exit code 0. Nothing else is pending from this turn.",
+  "type": "result",
+  "queued_turn_count": 0,
+  "result_index": 1
+ }
+]

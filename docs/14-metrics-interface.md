@@ -153,7 +153,8 @@ Metrics can be shared across a team **through git** — no server sync needed:
   tokens must **not** be added again. That event currently omits model and cost. Claude
   2.1.241 emits `input_tokens`, `cache_read_input_tokens`,
   `cache_creation_input_tokens`, and `output_tokens` in the stream-json result; those three
-  input classes are summed, and top-level `total_cost_usd` is carried through
+  input classes are summed, and top-level `total_cost_usd` (session-cumulative, so a resumed
+  turn subtracts its recorded baseline, HS2-4JPDJA, docs/13 §13.6) is carried through
   `drive::Usage.cost_usd` (the live result omitted model). Both live tests require positive
   parsed input/output counts, so future silent schema drift fails the gated tier.
 - **ACP/OpenCode (HS2-96BZEF):** `acp_usage` maps only the standard

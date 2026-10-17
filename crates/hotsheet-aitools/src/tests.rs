@@ -1101,6 +1101,80 @@ fn single_turn_channel_streams_work_that_follows_a_premature_result() {
     assert!(!turn.is_busy());
 }
 
+const RESUME_BACKGROUND_CASSETTE: &str =
+    include_str!("../tests/fixtures/claude-2.1.302-resume-background.json");
+
+#[test]
+fn recorded_resumed_turn_with_background_work_drains_both_results_and_reports_its_own_cost() {
+    // HS2-4JPDJA, live Claude 2.1.302: a `--resume` turn that leaves a background Bash call
+    // running ends its first `result` ("STARTED") early, then Claude self-starts a follow-up
+    // turn for the task notification. The single-turn channel keeps both. `total_cost_usd`
+    // continues from the resumed session's total (0.00577084 after the previous process), so
+    // only the host-supplied baseline turns it into this turn's own cost.
+    let ch = ClaudeChannel::connect_single_turn(ScriptedClaude::new(ClaudeMode::Replay(
+        RESUME_BACKGROUND_CASSETTE,
+    )));
+    ch.set_session_cost_baseline(Some(0.005_770_84));
+    let mut turn = ch.start_turn("start a background command").unwrap();
+    let events = drain_turn(turn.as_mut());
+    let outputs = events
+        .iter()
+        .filter_map(|event| match event {
+            TurnEvent::Output(text) => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(outputs[0], "STARTED");
+    assert!(outputs[1].starts_with("The background command"));
+    assert_eq!(events.last(), Some(&TurnEvent::Done(DoneReason::Completed)));
+    let usage = turn.usage().expect("both results' usage");
+    // Per-result usage adds: (4 + 52931 + 420) + (4 + 26836 + 434) in, 126 + 41 out.
+    assert_eq!((usage.tokens_in, usage.tokens_out), (80_629, 167));
+    let cost = usage.cost_usd.unwrap();
+    assert!((cost - 0.001_052_77).abs() < 1e-9, "{cost}");
+    assert_eq!(ch.session_cost_usd(), Some(0.006_823_61));
+}
+
+#[test]
+fn a_turn_without_a_baseline_reports_the_session_total_and_a_mismatched_one_is_ignored() {
+    for (baseline, expected) in [(None, 0.006_823_61), (Some(0.5), 0.006_823_61)] {
+        let ch = ClaudeChannel::connect_single_turn(ScriptedClaude::new(ClaudeMode::Replay(
+            RESUME_BACKGROUND_CASSETTE,
+        )));
+        ch.set_session_cost_baseline(baseline);
+        let mut turn = ch.start_turn("go").unwrap();
+        drain_turn(turn.as_mut());
+        let cost = turn.usage().unwrap().cost_usd.unwrap();
+        assert!((cost - expected).abs() < 1e-12, "{baseline:?} -> {cost}");
+    }
+}
+
+#[test]
+fn a_persistent_channel_measures_a_turn_from_the_host_baseline_and_tracks_the_session_total() {
+    // A persistent process ends its turn at the first `result`: that turn costs the first
+    // cumulative total minus the host baseline, while the session total the channel reports
+    // (for the next turn's baseline) is the highest seen, including the follow-up result.
+    let ch = ClaudeChannel::connect(ScriptedClaude::new(ClaudeMode::Replay(
+        RESUME_BACKGROUND_CASSETTE,
+    )));
+    ch.set_session_cost_baseline(Some(0.005_770_84));
+    let mut first = ch.start_turn("one").unwrap();
+    drain_turn(first.as_mut());
+    let first_cost = first.usage().unwrap().cost_usd.unwrap();
+    assert!((first_cost - (0.006_447_55 - 0.005_770_84)).abs() < 1e-9);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while ch.session_cost_usd() != Some(0.006_823_61) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "follow-up result tracked"
+        );
+        std::thread::yield_now();
+    }
+    // Once the process has reported a cost, a later host baseline cannot rewind it.
+    ch.set_session_cost_baseline(Some(0.000_1));
+    assert_eq!(ch.session_cost_usd(), Some(0.006_823_61));
+}
+
 #[test]
 fn single_turn_channel_shows_the_result_text_of_a_tool_only_turn() {
     let ch = ClaudeChannel::connect_single_turn(ScriptedClaude::new(ClaudeMode::ToolOnly));
@@ -1489,6 +1563,7 @@ fn live(prompt: &str, cwd: &std::path::Path) -> LiveTrigger {
         role: Role::Main,
         conn_id: "conn-1".into(),
         resume: None,
+        session_cost_baseline_usd: None,
         mcp_config: None,
         permission_mode: None,
         env: Vec::new(),

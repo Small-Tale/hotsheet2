@@ -31,6 +31,9 @@ pub struct PrepareDrive {
 pub struct ClientTurnRequest<'a> {
     pub prompt: &'a str,
     pub resume: Option<&'a str>,
+    /// The resumed session's recorded cumulative cost, so the turn reports only its own
+    /// cost (HS2-4JPDJA).
+    pub session_cost_baseline_usd: Option<f64>,
     pub connection_id: &'a str,
     pub model: Option<&'a str>,
     pub effort: Option<&'a str>,
@@ -110,6 +113,7 @@ impl PreparedClientDrive for NativePreparedDrive {
                 TurnRequest {
                     prompt: request.prompt,
                     resume: request.resume,
+                    session_cost_baseline_usd: request.session_cost_baseline_usd,
                     model: request.model,
                     effort: request.effort,
                     permission_mode: request.permission_mode,
@@ -284,7 +288,7 @@ pub struct ClientSessionInfo {
     pub permission_mode: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct StoredClientSession {
     connection_id: String,
     tool: String,
@@ -297,6 +301,11 @@ struct StoredClientSession {
     /// (HS2-Z5QVXW). Catalogs written before it read as `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     permission_mode: Option<String>,
+    /// The session's cumulative cost after its last turn. Claude restores its
+    /// `total_cost_usd` from the session on `--resume`, so the next turn subtracts this to
+    /// report only its own cost (HS2-4JPDJA).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    session_cost_usd: Option<f64>,
 }
 
 impl From<&StoredClientSession> for ClientSessionInfo {
@@ -499,7 +508,7 @@ impl ClientDriveManager {
             tracing::warn!(drive = %connection.id, %error, "recording drive failed");
         }
         if let Some(session_id) = session_id {
-            if let Err(error) = self.record_session(&connection, session_id) {
+            if let Err(error) = self.record_session(&connection, session_id, None) {
                 {
                     let mut connections = self.connections.lock_or_recover();
                     connections.remove(&connection.id);
@@ -629,11 +638,17 @@ impl ClientDriveManager {
         state.control = Some(control.clone());
         state.active_session_key = Some(active_key);
         drop(state);
+        drop(active_sessions);
+        let session_cost_baseline_usd = resume.as_deref().and_then(|session_id| {
+            self.stored_session(&connection.project, &connection.tool, session_id)
+                .and_then(|session| session.session_cost_usd)
+        });
         Ok(ClientTurnJob {
             connection,
             control,
             turn_id,
             resume,
+            session_cost_baseline_usd,
             model,
             effort,
             permission_mode,
@@ -672,8 +687,9 @@ impl ClientDriveManager {
         }
         let session_id = state.session_id.clone();
         drop(state);
+        let session_cost_usd = result.as_ref().ok().and_then(|done| done.session_cost_usd);
         if let Some(session_id) = session_id {
-            if let Err(error) = self.record_session(connection, session_id) {
+            if let Err(error) = self.record_session(connection, session_id, session_cost_usd) {
                 connection.state.lock_or_recover().last_error = Some(error.to_string());
             }
         }
@@ -770,14 +786,22 @@ impl ClientDriveManager {
         &self,
         connection: &ClientConnection,
         session_id: String,
+        session_cost_usd: Option<f64>,
     ) -> Result<(), ClientDriveError> {
         let permission_mode = connection.state.lock_or_recover().permission_mode.clone();
         self.update_catalog(|next| {
+            let mut previous_cost = None;
             next.sessions.retain(|session| {
-                !(session.project == connection.project
+                let same = session.project == connection.project
                     && session.tool == connection.tool
-                    && session.session_id == session_id)
+                    && session.session_id == session_id;
+                if same {
+                    previous_cost = session.session_cost_usd;
+                }
+                !same
             });
+            // A turn that reported no cost keeps the last recorded total.
+            let session_cost_usd = session_cost_usd.or(previous_cost);
             next.sessions.push(StoredClientSession {
                 connection_id: connection.id.clone(),
                 tool: connection.tool.clone(),
@@ -786,6 +810,7 @@ impl ClientDriveManager {
                 updated_at_ms: now_ms(),
                 home_id: connection.home_id.clone(),
                 permission_mode,
+                session_cost_usd,
             });
         })
     }
@@ -890,6 +915,8 @@ pub struct ClientTurnJob {
     control: TurnControl,
     turn_id: String,
     resume: Option<String>,
+    /// The resumed session's recorded cumulative cost (HS2-4JPDJA).
+    session_cost_baseline_usd: Option<f64>,
     model: Option<String>,
     effort: Option<String>,
     permission_mode: Option<String>,
@@ -938,6 +965,7 @@ impl ClientTurnJob {
             ClientTurnRequest {
                 prompt,
                 resume: self.resume.as_deref(),
+                session_cost_baseline_usd: self.session_cost_baseline_usd,
                 connection_id: &self.connection.id,
                 model: self.model.as_deref().or(self.connection.model.as_deref()),
                 effort: self.effort.as_deref().or(self.connection.effort.as_deref()),
@@ -1063,6 +1091,7 @@ mod tests {
         Ok(TurnDone {
             reason,
             session_id: None,
+            session_cost_usd: None,
         })
     }
 
@@ -1364,6 +1393,7 @@ mod tests {
             &Ok(TurnDone {
                 reason: hotsheet_aitools::DoneReason::Completed,
                 session_id: Some("thread-1".into()),
+                session_cost_usd: None,
             }),
         );
         assert_eq!(
@@ -1411,6 +1441,71 @@ mod tests {
             None
         );
         assert_eq!(legacy.sessions("/project")[0].permission_mode, None);
+    }
+
+    /// HS2-4JPDJA: a resumed Claude session reports its cost cumulatively, so the catalog keeps
+    /// each session's total and the next turn on it starts from that baseline — across a
+    /// cost-less turn, a restart, and a reattach — while a new session starts from none.
+    #[test]
+    fn a_sessions_cumulative_cost_is_recorded_and_becomes_the_next_turns_baseline() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sessions.json");
+        let backend = Arc::new(StubBackend {
+            supports_interrupt: false,
+            envs: Mutex::default(),
+        });
+        let open = || {
+            ClientDriveManager::with_persistence(
+                backend.clone(),
+                path.clone(),
+                dir.path().join("homes"),
+            )
+            .unwrap()
+        };
+        let finish = |manager: &ClientDriveManager, job: &ClientTurnJob, cost: Option<f64>| {
+            manager.finish_turn(
+                job,
+                &Ok(TurnDone {
+                    reason: hotsheet_aitools::DoneReason::Completed,
+                    session_id: Some("thread-1".into()),
+                    session_cost_usd: cost,
+                }),
+            );
+        };
+        let manager = open();
+        manager
+            .create_or_attach(prepare("/project"), Some("chat".into()), None)
+            .unwrap();
+        let first = manager.begin_turn("chat", None, None, None).unwrap();
+        assert_eq!(first.session_cost_baseline_usd, None, "a new session");
+        finish(&manager, &first, Some(0.25));
+        let second = manager.begin_turn("chat", None, None, None).unwrap();
+        assert_eq!(second.session_cost_baseline_usd, Some(0.25));
+        // A turn that reports no cost (an error) keeps the recorded total.
+        finish(&manager, &second, None);
+        let third = manager.begin_turn("chat", None, None, None).unwrap();
+        assert_eq!(third.session_cost_baseline_usd, Some(0.25));
+        finish(&manager, &third, Some(0.5));
+        drop(manager);
+
+        // After a restart the chat resumes its stored session from the same baseline.
+        let restarted = open();
+        restarted
+            .create_or_attach(
+                prepare("/project"),
+                Some("chat".into()),
+                Some("thread-1".into()),
+            )
+            .unwrap();
+        let resumed = restarted.begin_turn("chat", None, None, None).unwrap();
+        assert_eq!(resumed.resume.as_deref(), Some("thread-1"));
+        assert_eq!(resumed.session_cost_baseline_usd, Some(0.5));
+        restarted.finish_turn(&resumed, &done(hotsheet_aitools::DoneReason::Completed));
+        // An explicitly chosen session that was never recorded has no baseline.
+        let other = restarted
+            .begin_turn("chat", Some("thread-2".into()), None, None)
+            .unwrap();
+        assert_eq!(other.session_cost_baseline_usd, None);
     }
 
     #[test]

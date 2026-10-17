@@ -261,6 +261,7 @@ impl PreparedClientDrive for FakePreparedClientDrive {
             return Ok(hotsheet_aitools::TurnDone {
                 reason,
                 session_id: Some("thread-1".into()),
+                session_cost_usd: None,
             });
         }
         if request.prompt == "tool-hold" {
@@ -289,6 +290,7 @@ impl PreparedClientDrive for FakePreparedClientDrive {
             return Ok(hotsheet_aitools::TurnDone {
                 reason: hotsheet_aitools::DoneReason::Interrupted,
                 session_id: request.resume.map(str::to_owned),
+                session_cost_usd: None,
             });
         }
         on_event(&hotsheet_aitools::TurnEvent::Usage(
@@ -315,6 +317,7 @@ impl PreparedClientDrive for FakePreparedClientDrive {
         Ok(hotsheet_aitools::TurnDone {
             reason: hotsheet_aitools::DoneReason::Completed,
             session_id: Some("thread-1".into()),
+            session_cost_usd: None,
         })
     }
 }

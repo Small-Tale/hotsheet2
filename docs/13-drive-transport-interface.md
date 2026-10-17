@@ -237,9 +237,28 @@ stream-json [--resume <id>]`; input `{"type":"user",…}`; output `system`/`init
 > process exits, so assistant text, tool use, and usage produced after an early or extra
 > `result` reach the turn. Before this, the child was orphaned unobserved and the client
 > showed an empty `0 tokens` turn while the session kept acting. The last `result` decides the
-> outcome, and an exit with no result is a failure. Result `usage` tokens add across a
-> turn, while `total_cost_usd` (process-cumulative) keeps its maximum. A result reporting no
-> model work (zero tokens and no cost) contributes no usage. When a successful turn streamed
+> outcome, and an exit with no result is a failure.
+>
+> A live 2.1.302 capture (HS2-4JPDJA, cassette `claude-2.1.302-resume-background.json`)
+> pinned the condition behind the early `result`. A turn that leaves background work running
+> (a `run_in_background` command or an `Agent` sub-agent, which backgrounds by default) gets
+> its first `result` while that work runs. When the work finishes, Claude self-starts a
+> follow-up turn: a new `system init`, then a `result` with
+> `origin.kind = "task-notification"`. That turn belongs to the same process, so the channel
+> drains it. No zero-usage result was observed. The scripted `PrematureResult` shape stays
+> covered.
+>
+> Result `usage` tokens are per result (main agent only) and add across the turn.
+> `total_cost_usd` is cumulative for the whole **session**, not just this process: it grows
+> across results in one process, and a `--resume` process continues from the resumed
+> session's total. A turn keeps the highest cost it sees and subtracts a baseline. In a
+> persistent process the baseline is the total the process had already reported. For a
+> resumed process it is the host's recorded total: `TurnDone::session_cost_usd` is stored on
+> the client-drive session catalog entry and passed back as
+> `LiveTrigger::session_cost_baseline_usd`. A total below the baseline means the baseline
+> belonged to another session, and the raw total stands. Without this, every resumed turn
+> re-reported all earlier turns' cost. A result reporting no model work (zero tokens and no
+> cost) contributes no usage. When a successful turn streamed
 > no assistant text, its final `result` text becomes the turn's output. The persistent
 > multi-turn mode (`ClaudeChannel::connect`) still ends a turn at its first `result`.
 > **Stopping a turn (HS2-V0SWSM):** Claude's stream-json channel has no interrupt message,
@@ -254,7 +273,11 @@ stream-json [--resume <id>]`; input `{"type":"user",…}`; output `system`/`init
 > `TurnControl::on_interrupt` callback that only wakes the turn, which then stops the process
 > on its owner thread. When no event arrives within the 600 s turn timeout, the turn stops the
 > process the same way and fails with a timeout diagnostic instead of leaving it working
-> unobserved. The polite SIGTERM reaches only the `claude` process, which cleans up its own
+> unobserved. This stays the decision for a single-turn process still running at the
+> timeout (HS2-4JPDJA): Hot Sheet stops it rather than detaching it, because nothing would
+> observe its output, tool use, or cost. The timeout is per event, and a running background
+> command emits no events. A background job that stays silent for 600 s is therefore stopped
+> with its process. The polite SIGTERM reaches only the `claude` process, which cleans up its own
 > tools. When it has to be force-killed, its descendant tree (Bash tool commands, MCP
 > servers) goes too: each descendant is frozen with SIGSTOP, the tree is re-walked until no
 > new process appears, and then every frozen process and `claude` get SIGKILL. The turn

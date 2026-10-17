@@ -81,7 +81,9 @@ pub(crate) fn cmd_trigger(store_path: &Path, args: TriggerArgs) -> Result<()> {
     let mut registry = ConnectionRegistry::new(30_000);
     let done = safe.run_turn(
         &prompt.unwrap_or_else(|| DEFAULT_TRIGGER_PROMPT.to_string()),
-        resume.as_deref(),
+        // A one-off `--resume` from the command line has no recorded baseline, so its cost
+        // includes the resumed session's earlier turns (HS2-4JPDJA).
+        resume.as_deref().map(hotsheet_aitools::ResumeSession::id),
         worker,
         format!("cli-{}", std::process::id()),
         &mut registry,
@@ -145,6 +147,9 @@ pub(crate) fn cmd_work(store_path: &Path, args: WorkArgs) -> Result<()> {
     // The tool's session/thread id, captured from turn 1 and passed as `resume` on every
     // subsequent turn so one session carries context across the loop (HS2-3C1XK3).
     let mut session: Option<String> = None;
+    // The session's cumulative cost after the previous turn, so each resumed turn reports
+    // only its own cost (HS2-4JPDJA).
+    let mut session_cost: Option<f64> = None;
     for turn in 1..=max {
         let before = ops::query(&store, &up_next_query())?;
         if before.is_empty() {
@@ -164,7 +169,12 @@ pub(crate) fn cmd_work(store_path: &Path, args: WorkArgs) -> Result<()> {
 
         let done = safe.run_turn(
             DEFAULT_TRIGGER_PROMPT_LOOP,
-            session.as_deref(),
+            session
+                .as_deref()
+                .map(|session_id| hotsheet_aitools::ResumeSession {
+                    session_id,
+                    cost_baseline_usd: session_cost,
+                }),
             worker,
             format!("cli-{}", std::process::id()),
             &mut registry,
@@ -174,6 +184,9 @@ pub(crate) fn cmd_work(store_path: &Path, args: WorkArgs) -> Result<()> {
         // Remember the session so the next turn resumes it (first non-None wins).
         if session.is_none() {
             session = done.session_id.clone();
+        }
+        if done.session_id == session && done.session_cost_usd.is_some() {
+            session_cost = done.session_cost_usd;
         }
         match done.reason {
             DoneReason::Completed => {}

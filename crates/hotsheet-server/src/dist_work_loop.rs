@@ -207,9 +207,10 @@ pub struct LiveDriveCtx {
     pub activity_sink: Option<ActivitySink>,
     /// Bounded raw turn events for the client transcript/replay stream.
     pub turn_sink: Option<TurnSink>,
-    /// Per-ticket tool session ids retained across Continued work passes.
+    /// Per-ticket tool session ids retained across Continued work passes, with the session's
+    /// cumulative cost after its last pass (the next pass's cost baseline, HS2-4JPDJA).
     pub worker_sessions:
-        Option<std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, String>>>>,
+        Option<std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, WorkerSession>>>>,
     /// Durable isolated homes keyed per ticket, so a fresh SafeTrigger can resume Codex.
     pub persistent_home_root: Option<std::path::PathBuf>,
 }
@@ -270,7 +271,9 @@ fn drive_one_ticket(
         None => Vec::new(),
     };
     let session_key = worker_session_key(store, id);
-    let resume = worker_resume(ctx, &session_key);
+    let retained = worker_session(ctx, &session_key);
+    let resume = retained.as_ref().map(|session| session.session_id.clone());
+    let cost_baseline = retained.and_then(|session| session.cost_usd);
     let persistent_home = worker_home(ctx, &session_key);
     // Fresh drive handle per pass, but a stable isolated home/session for this ticket.
     let mut safe = prepare_trigger_with_home(
@@ -326,7 +329,12 @@ fn drive_one_ticket(
     let turn_id = hotsheet_model::Ulid::new().to_string();
     let turn = safe.run_turn(
         prompt,
-        resume.as_deref(),
+        resume
+            .as_deref()
+            .map(|session_id| hotsheet_aitools::ResumeSession {
+                session_id,
+                cost_baseline_usd: cost_baseline,
+            }),
         true,
         conn.clone(),
         &mut registry,
@@ -389,7 +397,7 @@ fn drive_one_ticket(
         }
     };
     if let Some(session_id) = done.session_id.clone() {
-        remember_worker_session(ctx, session_key, session_id);
+        remember_worker_session(ctx, session_key, session_id, done.session_cost_usd);
     }
     let done = done.reason;
     emit_coarse_activity(
@@ -430,15 +438,47 @@ fn worker_session_key(store: &FsStore, id: &hotsheet_model::Ulid) -> String {
     format!("{}:{id}", crate::multistore::store_url_id(store))
 }
 
-fn worker_resume(ctx: &LiveDriveCtx, key: &str) -> Option<String> {
+/// A ticket's retained tool session.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct WorkerSession {
+    pub session_id: String,
+    /// The session's cumulative cost after its last pass (HS2-4JPDJA).
+    pub cost_usd: Option<f64>,
+}
+
+fn worker_session(ctx: &LiveDriveCtx, key: &str) -> Option<WorkerSession> {
     ctx.worker_sessions
         .as_ref()
         .and_then(|sessions| sessions.lock_or_recover().get(key).cloned())
 }
 
-fn remember_worker_session(ctx: &LiveDriveCtx, key: String, session_id: String) {
+#[cfg(test)]
+fn worker_resume(ctx: &LiveDriveCtx, key: &str) -> Option<String> {
+    worker_session(ctx, key).map(|session| session.session_id)
+}
+
+fn remember_worker_session(
+    ctx: &LiveDriveCtx,
+    key: String,
+    session_id: String,
+    cost_usd: Option<f64>,
+) {
     if let Some(sessions) = &ctx.worker_sessions {
-        sessions.lock_or_recover().insert(key, session_id);
+        let mut sessions = sessions.lock_or_recover();
+        // A pass that reported no cost keeps the same session's last recorded total.
+        let cost_usd = cost_usd.or_else(|| {
+            sessions
+                .get(&key)
+                .filter(|previous| previous.session_id == session_id)
+                .and_then(|previous| previous.cost_usd)
+        });
+        sessions.insert(
+            key,
+            WorkerSession {
+                session_id,
+                cost_usd,
+            },
+        );
     }
 }
 
@@ -611,12 +651,19 @@ mod tests {
         let home = worker_home(&ctx, &key).unwrap();
         assert_eq!(worker_resume(&ctx, &key), None);
 
-        remember_worker_session(&ctx, key.clone(), "thread-continued".into());
+        remember_worker_session(&ctx, key.clone(), "thread-continued".into(), Some(0.25));
 
         assert_eq!(
             worker_resume(&ctx, &key).as_deref(),
             Some("thread-continued")
         );
+        // HS2-4JPDJA: the next pass's cost baseline survives a cost-less pass on the same
+        // session and resets for a different session.
+        remember_worker_session(&ctx, key.clone(), "thread-continued".into(), None);
+        assert_eq!(worker_session(&ctx, &key).unwrap().cost_usd, Some(0.25));
+        remember_worker_session(&ctx, key.clone(), "thread-new".into(), None);
+        assert_eq!(worker_session(&ctx, &key).unwrap().cost_usd, None);
+        remember_worker_session(&ctx, key.clone(), "thread-continued".into(), Some(0.25));
         assert_eq!(worker_home(&ctx, &key).unwrap(), home);
         assert_ne!(
             worker_home(&ctx, &worker_session_key(&store, &Ulid::new())).unwrap(),

@@ -247,6 +247,11 @@ pub trait ClaudeChannelClient {
     /// The running session id (from the `system/init` event), for `Target`/resume; `None`
     /// until it's been observed.
     fn session_id(&self) -> Option<String>;
+    /// The session's cumulative cost so far (Claude's `result.total_cost_usd`), so the host
+    /// can pass it back as the baseline when it resumes the session (HS2-4JPDJA).
+    fn session_cost_usd(&self) -> Option<f64> {
+        None
+    }
     /// Inject one user message; returns a streaming [`TurnHandle`] for that turn.
     fn start_turn(&self, content: &str) -> Result<Box<dyn TurnHandle>, DriveError>;
 }

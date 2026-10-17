@@ -66,7 +66,8 @@ pub use ports::{
 };
 pub use registry::{Connection, ConnectionRegistry, Role};
 pub use safe_trigger::{
-    SafeTrigger, TriggerOptions, TurnRequest, prepare_trigger, prepare_trigger_with_home,
+    ResumeSession, SafeTrigger, TriggerOptions, TurnRequest, prepare_trigger,
+    prepare_trigger_with_home,
 };
 pub use spawn::{ContentMode, SpawnConfig, SpawnDrive};
 pub use system::SystemSpawner;

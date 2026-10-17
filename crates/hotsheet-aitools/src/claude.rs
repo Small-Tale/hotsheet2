@@ -51,9 +51,22 @@ struct Inner {
     interrupt_requested: AtomicBool,
     turn_timeout: Duration,
     terminate_grace: Duration,
+    /// The highest `result.total_cost_usd` seen. Claude reports it cumulatively for the whole
+    /// *session*: across turns in one process and across `--resume` processes (live-verified
+    /// on 2.1.302, HS2-4JPDJA).
+    session_cost_usd: Mutex<Option<f64>>,
+    /// The session's cumulative cost before this process started, supplied by the host that
+    /// resumes it, so the first turn reports only its own cost.
+    cost_baseline_usd: Mutex<Option<f64>>,
 }
 
 impl Inner {
+    /// The cumulative cost a new turn's own cost is measured from: what this process has
+    /// already reported, else the host's baseline for a resumed session.
+    fn turn_cost_baseline(&self) -> Option<f64> {
+        (*self.session_cost_usd.lock_or_recover()).or(*self.cost_baseline_usd.lock_or_recover())
+    }
+
     fn send_user(&self, content: &str) -> Result<(), DriveError> {
         let msg = json!({ "type": "user", "message": { "role": "user", "content": content } });
         self.writer
@@ -71,6 +84,12 @@ impl Inner {
             && let Some(sid) = v.get("session_id").and_then(Value::as_str)
         {
             *self.session_id.lock_or_recover() = Some(sid.to_string());
+        }
+        if v.get("type").and_then(Value::as_str) == Some("result")
+            && let Some(cost) = v.get("total_cost_usd").and_then(Value::as_f64)
+        {
+            let mut seen = self.session_cost_usd.lock_or_recover();
+            *seen = Some(seen.map_or(cost, |previous| previous.max(cost)));
         }
         let mut events = self.events.lock_or_recover();
         events.push(v);
@@ -130,6 +149,8 @@ fn start_reader(transport: Box<dyn RpcTransport>, timing: ChannelTiming) -> Arc<
         interrupt_requested: AtomicBool::new(false),
         turn_timeout: timing.turn_timeout,
         terminate_grace: timing.terminate_grace,
+        session_cost_usd: Mutex::new(None),
+        cost_baseline_usd: Mutex::new(None),
     });
     let ri = inner.clone();
     std::thread::spawn(move || {
@@ -203,6 +224,15 @@ impl ClaudeChannel {
         }
     }
 
+    /// The session's cumulative cost before this process, for a `--resume` process whose
+    /// host recorded it at the end of the previous turn (HS2-4JPDJA). Claude's
+    /// `total_cost_usd` restarts from the resumed session's total, so without it the first
+    /// turn reports every earlier turn's cost again. Ignored once this process has reported a
+    /// cost of its own.
+    pub fn set_session_cost_baseline(&self, baseline: Option<f64>) {
+        *self.inner.cost_baseline_usd.lock_or_recover() = baseline.filter(|cost| *cost > 0.0);
+    }
+
     /// Wake this channel's running turn the moment `control` requests an interrupt, so a
     /// Stop reaches a turn blocked waiting for Claude's next event (HS2-V0SWSM). The turn
     /// then stops the process on its owner thread and reports [`DoneReason::Interrupted`].
@@ -221,13 +251,19 @@ impl ClaudeChannelClient for ClaudeChannel {
         self.inner.session_id.lock_or_recover().clone()
     }
 
+    fn session_cost_usd(&self) -> Option<f64> {
+        *self.inner.session_cost_usd.lock_or_recover()
+    }
+
     fn start_turn(&self, content: &str) -> Result<Box<dyn TurnHandle>, DriveError> {
         // Capture the cursor BEFORE sending so a fast `result` can't slip past.
         let cursor = self.inner.events_len();
+        let cost_baseline = self.inner.turn_cost_baseline();
         self.inner.send_user(content)?;
         Ok(Box::new(ClaudeTurn {
             inner: self.inner.clone(),
             cursor,
+            cost_baseline,
             done: None,
             usage: None,
             pending: std::collections::VecDeque::new(),
@@ -247,6 +283,9 @@ impl ClaudeChannelClient for ClaudeChannel {
 struct ClaudeTurn {
     inner: Arc<Inner>,
     cursor: usize,
+    /// The session's cumulative cost when this turn started; the turn's own cost is the
+    /// latest cumulative `total_cost_usd` minus it (HS2-4JPDJA).
+    cost_baseline: Option<f64>,
     done: Option<DoneReason>,
     /// Token usage aggregated from this turn's `result` events (HS2-TJ8FGR). A result that
     /// reports no model work (zero tokens and no cost) contributes nothing, so a turn never
@@ -445,7 +484,8 @@ pub fn claude_result_usage(result: &Value) -> Option<crate::drive::Usage> {
 }
 
 /// Fold one `result` usage into a turn's total. Claude reports `usage` per result but
-/// `total_cost_usd` cumulatively for the process, so tokens add and cost keeps the maximum.
+/// `total_cost_usd` cumulatively for the session, so tokens add and cost keeps the maximum;
+/// the turn subtracts its starting baseline in `usage()` (HS2-4JPDJA).
 /// A result without model work (no tokens, no cost) is ignored.
 fn absorb_usage(total: &mut Option<crate::drive::Usage>, usage: Option<crate::drive::Usage>) {
     let Some(usage) = usage else {
@@ -738,7 +778,19 @@ impl TurnHandle for ClaudeTurn {
     }
 
     fn usage(&mut self) -> Option<crate::drive::Usage> {
-        self.usage.clone()
+        let mut usage = self.usage.clone()?;
+        usage.cost_usd = turn_cost(usage.cost_usd, self.cost_baseline);
+        Some(usage)
+    }
+}
+
+/// This turn's own cost from the session-cumulative `total_cost_usd` (HS2-4JPDJA). A
+/// cumulative cost below the baseline means the baseline belonged to another session, so the
+/// reported cost stands as is.
+fn turn_cost(cumulative: Option<f64>, baseline: Option<f64>) -> Option<f64> {
+    match (cumulative, baseline) {
+        (Some(total), Some(base)) if total >= base => Some(total - base),
+        (total, _) => total,
     }
 }
 
@@ -887,6 +939,9 @@ pub(crate) mod scripted {
         ToolOnly,
         /// Replay the synthetic HS2-RGMJSP sub-agent / background-task stream-json cassette.
         SubagentStream,
+        /// Replay a recorded stream-json cassette (a JSON array) on each user message, without
+        /// its leading `system`/`init` (the scripted process already sent one).
+        Replay(&'static str),
         /// The process exits on the user message without emitting a `result`.
         Crash,
         /// Emit some output, then keep working (no `result`, ignores stdin EOF) until a
@@ -1043,6 +1098,17 @@ pub(crate) mod scripted {
                         }
                         return Ok(());
                     }
+                    ClaudeMode::Replay(cassette) => {
+                        let records: Vec<Value> =
+                            serde_json::from_str(cassette).expect("valid cassette");
+                        let leading_init = records.first().is_some_and(|record| {
+                            record.get("subtype").and_then(Value::as_str) == Some("init")
+                        });
+                        for record in records.into_iter().skip(usize::from(leading_init)) {
+                            self.push(record);
+                        }
+                        return Ok(());
+                    }
                     ClaudeMode::ToolOnly => {
                         self.push(self.tool_use());
                         self.push(json!({ "type": "result", "subtype": "success",
@@ -1080,6 +1146,7 @@ pub(crate) mod scripted {
                     | ClaudeMode::PrematureResult
                     | ClaudeMode::ToolOnly
                     | ClaudeMode::SubagentStream
+                    | ClaudeMode::Replay(_)
                     | ClaudeMode::Crash
                     | ClaudeMode::Hang
                     | ClaudeMode::HangIgnoringTerm => ("success", false, "done"),
@@ -1129,6 +1196,20 @@ mod usage_tests {
         );
         assert!(env.contains(&("HOTSHEET_CLAUDE_PRETOOLUSE".into(), "1".into())));
         assert!(env.contains(&("KEEP".into(), "yes".into())));
+    }
+
+    #[test]
+    fn turn_cost_subtracts_a_matching_session_baseline() {
+        // HS2-4JPDJA: Claude's total_cost_usd is session-cumulative across --resume.
+        assert_eq!(turn_cost(Some(0.75), Some(0.5)), Some(0.25));
+        assert_eq!(turn_cost(Some(0.5), Some(0.5)), Some(0.0));
+        assert_eq!(turn_cost(Some(0.25), None), Some(0.25));
+        assert_eq!(
+            turn_cost(Some(0.25), Some(0.5)),
+            Some(0.25),
+            "a baseline above the total belongs to another session"
+        );
+        assert_eq!(turn_cost(None, Some(0.5)), None);
     }
 
     #[test]

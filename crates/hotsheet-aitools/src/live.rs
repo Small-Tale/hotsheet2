@@ -32,6 +32,9 @@ pub struct LiveTrigger {
     pub conn_id: String,
     /// Resume a prior session (channel `--resume`), if any.
     pub resume: Option<String>,
+    /// The resumed session's cumulative cost after its previous turn ([`TurnDone::session_cost_usd`]),
+    /// so a resumed Claude turn reports only its own cost (HS2-4JPDJA). Ignored without `resume`.
+    pub session_cost_baseline_usd: Option<f64>,
     /// Restrict a channel tool to only this MCP config (`--strict-mcp-config`), so it can
     /// reach the Hot Sheet shim but nothing else (ignored by other transports).
     pub mcp_config: Option<PathBuf>,
@@ -58,6 +61,10 @@ pub struct LiveTrigger {
 pub struct TurnDone {
     pub reason: DoneReason,
     pub session_id: Option<String>,
+    /// The session's cumulative cost after this turn (Claude's `total_cost_usd`), for the
+    /// caller to pass back as [`LiveTrigger::session_cost_baseline_usd`] when it resumes the
+    /// session (HS2-4JPDJA). `None` for tools that do not report one.
+    pub session_cost_usd: Option<f64>,
 }
 
 /// A failed live trigger.
@@ -127,6 +134,9 @@ pub fn run_trigger_controlled(
             })?;
             // One process per turn: drain it to exit so nothing runs unobserved (HS2-M5GN19).
             let channel = ClaudeChannel::connect_single_turn(transport);
+            if t.resume.is_some() {
+                channel.set_session_cost_baseline(t.session_cost_baseline_usd);
+            }
             // Stop ends the process even while the turn waits for Claude (HS2-V0SWSM).
             if let Some(control) = control {
                 channel.wake_on_interrupt(control);
@@ -319,7 +329,12 @@ fn drive_and_stream(
         .channel
         .and_then(|c| c.session_id())
         .or_else(|| ctx.app_server.and_then(|a| a.session_id()));
-    Ok(TurnDone { reason, session_id })
+    let session_cost_usd = ctx.channel.and_then(|c| c.session_cost_usd());
+    Ok(TurnDone {
+        reason,
+        session_id,
+        session_cost_usd,
+    })
 }
 
 /// Drain a turn's streaming events, heartbeating the connection busy at each one (via

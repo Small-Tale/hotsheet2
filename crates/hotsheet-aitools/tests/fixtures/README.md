@@ -59,3 +59,10 @@ Codex TUI thread received when the TUI turn failed on an invalid model (`turn/st
 HS2-FKM97G adds `codex-0.162.1-session-queue.json`: the Codex `SessionStart` and queued
 `UserPromptSubmit` hook stdin, and `codex queue` success and unknown-thread output. Ids and paths
 are synthetic. It pins that the hook `session_id` is the thread id `codex queue --thread` accepts.
+
+`claude-2.1.302-resume-background.json` (HS2-4JPDJA) is the sanitized **live** `--resume`
+turn that followed the sub-agent capture in the same session, driven the same single-turn way:
+it starts a `run_in_background` command and replies at once, so its first `result` precedes
+the task notification and a self-started follow-up turn. Its `total_cost_usd` values continue
+from the resumed session's total (0.00577084), which pins the session-cumulative cost the
+client-drive baseline subtracts.
