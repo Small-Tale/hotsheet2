@@ -689,6 +689,10 @@ preview/download, server directory browser) are separate design work.
   press of a habitual double-click keeps focus in the editor the first click opened.
   Rendered GFM task-list checkboxes stay read-only. The plain-text blocked reason and the
   ticket title keep double-click entry.
+  On phone-width inspector and reader surfaces, a static ticket title occupies at most
+  three lines until the user chooses **Show full title**. The disclosure expands and
+  collapses independently for each ticket and presentation across updates. Wide layouts
+  show the full title, and the title editor still grows to show its draft.
 
 - **Ticket claims.** Ticket rows show a yellow spinner directly after status only
   while a worker holds a non-expired claim lease. Started tickets without a lease remain

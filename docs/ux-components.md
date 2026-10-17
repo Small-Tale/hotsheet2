@@ -1295,7 +1295,9 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
 
 - `InspectorHeader`
   - ticket identifier
-  - full multi-line title with no line-count cap in the inspector sidebar
+  - full multi-line title at wide widths; the sidebar and reader cap static titles at
+    three lines on phone widths, with a Show full title / Collapse title control whose
+    state is independent per ticket and presentation (HS2-11F5F7)
   - capability-aware inline title editing with debounced persistence; the editor is a
     one-row textarea that wraps a long title onto the same lines as the static heading and
     grows with its content in the sidebar and the reader, at wide and narrow widths, without

@@ -707,3 +707,7 @@ Changed Codex hook review (`HS2-4AR09Z`): `crates/hotsheet-plugins/src/setup.rs`
 manifest-declared changed-byte notice; CLI `setup --json` returns the shared refresh envelope.
 `clients/web/src/project-bridge.ts` carries it to the project;
 `components/codex-hooks-notice-banner.tsx` renders it and project lifecycle handles dismissal.
+
+`clients/web/src/ticket-title-disclosure.ts` retains independent phone title expansion state
+for the inspector and reader (HS2-11F5F7); the rendered title and mobile cap are in
+`clients/web/src/components/ticket-inspector.{tsx,css}`.

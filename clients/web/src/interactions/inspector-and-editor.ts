@@ -45,6 +45,7 @@ import {
   ticketEditTarget,
   type TicketReaderFrame,
 } from '../ticket-reader-stack';
+import { toggleTicketTitleExpanded } from '../ticket-title-disclosure';
 import { type TicketTitleEditSurface, ticketTitleEditSurfaceOf } from '../ticket-title-editing';
 import { type TicketView } from '../ticket-views';
 import { data } from './dom';
@@ -494,6 +495,18 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     if (restoredTitle) titleAutosave.schedule(titleDraft.value);
     queueMicrotask(() => activeTicketSurface().querySelector<HTMLElement>('[name="ticket-title"]')?.focus());
   }
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.toggleTicketTitle.selector, (_event, target) => {
+      const disclosure = target.closest<HTMLElement>('[data-ticket-title-disclosure]');
+      const slug = disclosure?.dataset.ticketSlug;
+      const presentation = disclosure?.dataset.presentation;
+      if (!disclosure || !slug || (presentation !== 'sidebar' && presentation !== 'reader')) return;
+      const expanded = toggleTicketTitleExpanded(slug, presentation);
+      disclosure.dataset.titleExpanded = String(expanded);
+      target.setAttribute('aria-expanded', String(expanded));
+      target.textContent = expanded ? 'Collapse title' : 'Show full title';
+    }),
+  );
   lifetime.add(
     wireTicketTitleEditor(document.body, {
       begin: (target) => {

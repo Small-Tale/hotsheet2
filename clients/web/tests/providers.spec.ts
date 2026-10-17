@@ -17634,6 +17634,54 @@ test('wraps long titles while editing in the sidebar and reader at 1280 and 390 
   }
 });
 
+test('caps and discloses long mobile titles in the shipped inspector and reader (HS2-11F5F7)', async ({ page }) => {
+  const patches = await mockProject(page);
+  const longTitle =
+    'A long ticket title that fills more than three lines on a phone and can be expanded in the sidebar or reader independently';
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').first().click();
+  const inspector = page.locator('#app-right-rail');
+  await inspector.locator('[data-action="edit-ticket-title"]').dblclick();
+  const editor = inspector.getByRole('textbox', { name: 'Ticket Title' });
+  await editor.fill(longTitle);
+  await editor.press('Enter');
+  await expect.poll(() => patches.at(-1)?.title).toBe(longTitle);
+
+  const sidebar = inspector.locator('[data-ticket-title-disclosure]'),
+    sidebarTitle = sidebar.getByRole('heading', { name: longTitle }),
+    sidebarToggle = sidebar.getByRole('button', { name: 'Show full title' });
+  await expect(sidebarToggle).toBeVisible();
+  const heightInLines = (element: HTMLElement) => {
+    const style = getComputedStyle(element);
+    return element.getBoundingClientRect().height / parseFloat(style.lineHeight);
+  };
+  expect(await sidebarTitle.evaluate(heightInLines)).toBeLessThanOrEqual(3.1);
+  await sidebar.screenshot({ path: test.info().outputPath('hs2-11f5f7-sidebar-collapsed-390.png') });
+  await sidebarToggle.click();
+  await expect(sidebar).toHaveAttribute('data-title-expanded', 'true');
+  expect(await sidebarTitle.evaluate(heightInLines)).toBeGreaterThan(3.1);
+  await sidebar.screenshot({ path: test.info().outputPath('hs2-11f5f7-sidebar-expanded-390.png') });
+  await sidebar.getByRole('button', { name: 'Collapse title' }).click();
+  await expect(sidebar).toHaveAttribute('data-title-expanded', 'false');
+  await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
+  const reader = page.getByRole('dialog').locator('[data-ticket-title-disclosure]');
+  await expect(reader).toHaveAttribute('data-title-expanded', 'false');
+  await reader.screenshot({ path: test.info().outputPath('hs2-11f5f7-reader-collapsed-390.png') });
+  await reader.getByRole('button', { name: 'Show full title' }).click();
+  await expect(reader).toHaveAttribute('data-title-expanded', 'true');
+  await reader.screenshot({ path: test.info().outputPath('hs2-11f5f7-reader-expanded-390.png') });
+  await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
+  await expect(reader).toBeHidden();
+  await expect(sidebar).toHaveAttribute('data-title-expanded', 'false');
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await expect(sidebar.getByRole('button', { name: 'Show full title' })).toBeHidden();
+  expect(await sidebarTitle.evaluate(heightInLines)).toBeLessThanOrEqual(3.1);
+  await page.screenshot({ path: test.info().outputPath('hs2-11f5f7-app-wide-1280.png'), fullPage: true });
+});
+
 test('keeps the title editor on the surface that started the edit at 1280 and 390 (HS2-2M5BBN)', async ({ page }) => {
   const patches = await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 844 });

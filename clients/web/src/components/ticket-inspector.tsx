@@ -35,6 +35,7 @@ import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and
 import { ticketCloseReasonLabel } from '../ticket-close';
 import { ticketDisplayNumber } from '../ticket-display-number';
 import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-field-reconciliation';
+import { isTicketTitleExpanded } from '../ticket-title-disclosure';
 import type { TimelineUsageRow } from '../ticket-usage-timeline';
 import { LiveClaimNotice, type LiveClaimNoticeProps } from './active-claim';
 import { ConfidenceBadge } from './confidence-badge';
@@ -338,19 +339,35 @@ export function ticketInspectorPanel({
           </textarea>
         </div>
       ) : (
-        <h1
-          class={
-            presentation === 'reader'
-              ? 'ticket-inspector__title ticket-inspector__title--reader'
-              : 'ticket-inspector__title'
-          }
-          data-action={canUpdate ? 'edit-ticket-title' : undefined}
-          data-editable={String(canUpdate)}
-          tabIndex={canUpdate ? 0 : undefined}
-          title={canUpdate ? 'Double-click to edit title' : undefined}
+        <div
+          class="ticket-inspector__title-disclosure"
+          data-ticket-title-disclosure="true"
+          data-ticket-slug={slug}
+          data-presentation={presentation}
+          data-title-expanded={String(isTicketTitleExpanded(slug, presentation))}
         >
-          {title}
-        </h1>
+          <h1
+            class={
+              presentation === 'reader'
+                ? 'ticket-inspector__title ticket-inspector__title--reader'
+                : 'ticket-inspector__title'
+            }
+            data-action={canUpdate ? 'edit-ticket-title' : undefined}
+            data-editable={String(canUpdate)}
+            tabIndex={canUpdate ? 0 : undefined}
+            title={canUpdate ? 'Double-click to edit title' : undefined}
+          >
+            {title}
+          </h1>
+          <button
+            type="button"
+            class="ticket-inspector__title-toggle"
+            {...INSPECTOR_AND_EDITOR_ACTIONS.toggleTicketTitle.attrs}
+            aria-expanded={String(isTicketTitleExpanded(slug, presentation))}
+          >
+            {isTicketTitleExpanded(slug, presentation) ? 'Collapse title' : 'Show full title'}
+          </button>
+        </div>
       )}
       {liveClaim && <LiveClaimNotice {...liveClaim} />}
       {feedbackNeeded && (

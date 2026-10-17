@@ -12,6 +12,7 @@ export const INSPECTOR_AND_EDITOR_ACTIONS = {
   acceptRemoteTicketField: action('accept-remote-ticket-field'),
   applyTicketFieldMerge: action('apply-ticket-field-merge'),
   editTicketTitle: action('edit-ticket-title'),
+  toggleTicketTitle: action('toggle-ticket-title'),
   editMarkdown: action('edit-markdown'),
   addTicketNote: action('add-ticket-note'),
   cancelNewNote: action('cancel-new-note'),

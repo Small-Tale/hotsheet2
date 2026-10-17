@@ -323,6 +323,7 @@ inspector-and-editor	delegate	document.body	'click'	'[data-action="open-ticket-r
 inspector-and-editor	delegate	document.body	'click'	'[data-action="respond-to-feedback"]'
 inspector-and-editor	delegateCapture	document.body	'wa-hide'	'[data-component="ticket-reader"]'
 inspector-and-editor	delegateCapture	document.body	'wa-after-hide'	'[data-component="ticket-reader"]'
+inspector-and-editor	delegate	document.body	'click'	'[data-action="toggle-ticket-title"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="toggle-reader-text-size"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="set-inspector-tab"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="open-code-review"]'

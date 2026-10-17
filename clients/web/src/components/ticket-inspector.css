@@ -105,6 +105,35 @@
 .ticket-inspector__title[data-editable='true'] {
   cursor: text;
 }
+.ticket-inspector__title-toggle {
+  display: none;
+}
+@media (max-width: remify(640px)) {
+  .ticket-inspector__title-disclosure[data-title-expanded='false'] .ticket-inspector__title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+  }
+  .ticket-inspector__title-disclosure .ticket-inspector__title {
+    margin-bottom: var(--kui-space-2xs);
+  }
+  .ticket-inspector__title-toggle {
+    display: block;
+    margin: 0 var(--kui-space-m) var(--kui-space-m);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--wa-color-brand-on-quiet);
+    font: inherit;
+    font-size: var(--wa-font-size-s);
+    cursor: pointer;
+  }
+  .ticket-inspector__title-toggle:focus-visible {
+    outline: var(--wa-focus-ring);
+    outline-offset: 2px;
+  }
+}
 /* Loading skeleton title (HS2-REG3A2, HS2-XBHADT): two Skeleton lines in the title's place, with the
    loaded title's bottom gap above the (now compact, icon-only) tab strip (HS2-MYS1MR). */
 .ticket-inspector__title-placeholder {

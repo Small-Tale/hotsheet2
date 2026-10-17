@@ -110,7 +110,7 @@ describe('TicketInspector', () => {
     expect(markup).not.toContain('data-operation-id="sending"');
     expect(markup).toContain('Confirmed by Jira');
   });
-  it('allows the sidebar title to wrap without a line cap', () => {
+  it('caps static titles at three lines only on narrow screens', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/\.ticket-inspector__header \{[^}]*padding: 0;/);
@@ -123,6 +123,14 @@ describe('TicketInspector', () => {
     const titleRule = css.match(/\.ticket-inspector__title \{([^}]*)\}/)?.[1] ?? '';
     expect(titleRule).toContain('overflow-wrap: anywhere');
     expect(titleRule).not.toContain('line-clamp');
+    expect(css).toContain('@media (max-width: remify(640px))');
+    expect(css).toMatch(/\[data-title-expanded='false'\] \.ticket-inspector__title \{[^}]*-webkit-line-clamp: 3/);
+    expect(css).toMatch(/\.ticket-inspector__title-toggle \{[^}]*display: none/);
+    const sidebar = String(TicketInspector({ ...base }));
+    const reader = String(TicketInspector({ ...base, presentation: 'reader' }));
+    expect(sidebar).toContain('data-presentation="sidebar" data-title-expanded="false"');
+    expect(reader).toContain('data-presentation="reader" data-title-expanded="false"');
+    expect(sidebar).toContain('data-action="toggle-ticket-title" aria-expanded="false">Show full title</button>');
   });
 
   it('styles only its own title and maps persisted editor heights onto child tokens (HS2-DYAR0S)', () => {
