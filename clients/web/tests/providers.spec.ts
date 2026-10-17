@@ -24200,6 +24200,10 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
   await query.fill('created-after:');
   const helper = page.getByRole('group', { name: 'Date and time helper' });
   await expect(helper).toBeVisible();
+  await helper.getByLabel('Date').focus();
+  await expect(helper.getByLabel('Date')).toBeFocused();
+  await expect(helper.getByLabel('Date')).toHaveCSS('outline-style', 'solid');
+  await page.screenshot({ path: 'target/visual-captures/hs2-gefm29-production-date-wide.png' });
   await helper.getByLabel('Date').fill('2026-09-01');
   await helper.getByLabel('Time (Optional)').fill('11:05');
   await helper.getByRole('button', { name: 'Apply' }).click();

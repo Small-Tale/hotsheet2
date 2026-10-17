@@ -61,7 +61,7 @@ function withField(root: HTMLElement, target: Element, run: (id: string) => void
   if (id && scope && root.contains(scope)) run(id);
 }
 
-/** Read a date helper's Web Awesome inputs (they expose `value` on the host, HS2-HEXGFB) and apply them. */
+/** Read the date helper's native date/time inputs and apply them. */
 function applyDate(id: string, surface: Element, handlers: TicketSearchFieldHandlers) {
   const date = surface.querySelector<HTMLInputElement>(`[name="${TICKET_SEARCH_DATE_INPUT}"]`)?.value;
   if (!date) return;
@@ -112,7 +112,13 @@ function wireTicketSearchSurfaces(root: HTMLElement, handlers: TicketSearchField
     });
     // Enter inside the date helper applies it instead of submitting an enclosing form.
     handle.el.addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter' || !(event.target as Element).closest('wa-input')) return;
+      if (
+        event.key !== 'Enter' ||
+        !(event.target as Element).closest(
+          `input[name="${TICKET_SEARCH_DATE_INPUT}"], input[name="${TICKET_SEARCH_TIME_INPUT}"]`,
+        )
+      )
+        return;
       event.preventDefault();
       applyDate(id, handle.el, handlers);
     });

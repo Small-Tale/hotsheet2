@@ -1089,7 +1089,9 @@ date instead of submitting an enclosing form. Every path to a lifecycle date chi
 helper, a typed filter, a restored query, and the model rule — labels it through
 `searchDateLabel`, so a local `YYYY-MM-DD[THH:MM]` value reads in the machine locale's short
 date (and time) format (`created after 9/1/26, 11:05 AM`) while relative, zoned, and
-locale-typed values keep the text as written (HS2-074E0P). Kerf (5.0.0-beta.64, `KF-Q2G9QS`)
+locale-typed values keep the text as written (HS2-074E0P). The helper uses labeled native
+date and time inputs with a visible focus ring because Kerf beta.107 `TextField` does not
+support those input types (HS2-GEFM29). Kerf (5.0.0-beta.64, `KF-Q2G9QS`)
 restores the caret itself after a model-mode Backspace/Delete beside a chip and after a model
 field's clear, so the app no longer snapshots chip offsets or refocuses a cleared field
 (HS2-45F8WW). Syntax-help examples are Kerf action Chips (`insert-ticket-search-syntax`, the

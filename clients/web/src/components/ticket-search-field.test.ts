@@ -112,9 +112,14 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(field).not.toContain('aria-label="Date and time helper"');
     const date = String(TicketSearchDateHelper({ id: 'f', prefix: 'updated-after' }));
     expect(date).toContain('role="group" aria-label="Date and time helper" data-ticket-search-for="f"');
-    expect(date).toContain('<wa-input name="ticket-search-date" type="date" label="Date" size="small">');
+    expect(date).toContain(
+      '<label class="ticket-search-field__date-field"><span>Date</span><input name="ticket-search-date" type="date"></label>',
+    );
     expect(date).toContain('class="kui-button"');
-    expect(date).toContain('<wa-input name="ticket-search-time" type="time" label="Time (Optional)" size="small">');
+    expect(date).toContain(
+      '<label class="ticket-search-field__date-field"><span>Time (Optional)</span><input name="ticket-search-time" type="time"></label>',
+    );
+    expect(date).not.toContain('<wa-input');
     expect(date).toContain(`data-action="${TICKET_SEARCH_ACTIONS.applyDate.value}"`);
     expect(date).toContain('data-date-prefix="updated-after"');
     const open = String(TicketSearchField({ id: 'f', label: 'Search', model: model(), helpOpen: true }));

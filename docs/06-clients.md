@@ -660,7 +660,8 @@ preview/download, server directory browser) are separate design work.
   dialog and restoring a saved view flush pending text first. The field's render reads only
   Kerf's structural `SearchFieldModel.structure`, and the typed date-filter prefix reaches the
   date helper through a bound attribute, so keystrokes do not re-render the workspace
-  (HS2-X72PD6).
+  (HS2-X72PD6). The helper uses native labeled date and time inputs, with Enter applying
+  the chosen value in both the workspace and saved-view form (HS2-GEFM29).
   Text fields (details, title, blocked reason, notes, in the inspector, the reader, and
   linked readers) never write to the server while the user is typing. Keystrokes update the
   controlled draft and, after a 150 ms debounce, a local recovery copy in `localStorage`
