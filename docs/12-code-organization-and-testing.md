@@ -819,8 +819,12 @@ which uses real captured runner output and spawns real processes; CI runs it in 
   `--reporter=json`. CI prints the Rust and web-unit profiles after the tests.
 - **Full-suite bottlenecks (HS2-XSP0GJ).** A recent full nextest JUnit report covered 965
   cases; the longest was the terminal shell-history isolation case at 51.4 s
-  (`HS2-5YC1E5`), followed by CLI permission-hook cases at 37.9–46.5 s
-  (`HS2-KV8H01`). A merged four-shard Playwright JSON report from CI run 39000860513
+  (`HS2-5YC1E5`), followed by CLI permission-hook cases at 21.8–46.5 s
+  (`HS2-KV8H01`). A targeted rerun of all five permission-hook integration cases with
+  loopback access on 2026-10-17 passed in 1.181 s total (1.139–1.180 s per case),
+  without changing the fixtures. The long full-suite durations were not reproduced
+  and should be treated as host or suite contention rather than a fixed hook wait.
+  A merged four-shard Playwright JSON report from CI run 39000860513
   covered 857 cases. `providers.spec.ts` accounted for 2,389 of 4,226 summed test
   seconds, far more than any other file; `HS2-JS8Q2K` tracks splitting it so shards
   can balance its flows. These sums are test durations, including retries, rather than
