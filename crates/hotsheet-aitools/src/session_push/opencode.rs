@@ -64,6 +64,17 @@ impl OpenCodeHttpPush {
         }
     }
 
+    /// Restore the session chosen before a server restart.
+    pub fn restored(
+        launch: PushLaunch,
+        session_id: Option<String>,
+        http: Arc<dyn HttpPort>,
+    ) -> Self {
+        let adapter = Self::new(launch, http);
+        adapter.remember_session(session_id);
+        adapter
+    }
+
     fn url(&self, path: &str) -> String {
         format!(
             "{}{path}{}directory={}",

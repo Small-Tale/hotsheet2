@@ -405,6 +405,7 @@ mod tests {
                     cwd: None,
                     env: vec![],
                     replay_bytes: None,
+                    push: None,
                 })
                 .await
                 .unwrap();
@@ -520,6 +521,7 @@ mod tests {
                 cwd: None,
                 env: vec![],
                 replay_bytes: None,
+                push: None,
             })
             .await
             .unwrap();

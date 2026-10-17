@@ -485,6 +485,11 @@ point, and only Hot Sheet-owned `stream-json` processes could be messaged.
 - `GET /connections` lists `"message"` in a push-capable connection's `actions` and reports the
   tool-native `session_id` once it is known.
 - The adapter lives while its terminal does; the terminal's exit drops it with the connection.
+- For a detached-broker terminal, the broker retains the launch mechanism, loopback port,
+  password, directory, launch time, model, and resolved session id beside the live PTY. A
+  restarted server restores the adapter when it resumes that terminal. This state travels only
+  over the machine-local broker socket; HTTP terminal and connection responses never include
+  the password. A broker predating this state reports the session as unsupported after restart.
 
 ### OpenCode (`opencode-http`)
 

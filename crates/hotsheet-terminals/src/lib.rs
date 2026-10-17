@@ -29,9 +29,9 @@ pub mod viewer_output;
 pub mod wire_bytes;
 
 pub use broker::{
-    BrokerClient, BrokerStream, BrokerStreamReader, BrokerStreamWriter, BrokerTermInfo,
-    DEFAULT_IDLE_GRACE, Request as BrokerRequest, Response as BrokerResponse, SocketCleanup,
-    StreamIn, StreamOut, run_broker_process, serve_broker, serve_broker_with_idle,
+    BrokerClient, BrokerPushState, BrokerStream, BrokerStreamReader, BrokerStreamWriter,
+    BrokerTermInfo, DEFAULT_IDLE_GRACE, Request as BrokerRequest, Response as BrokerResponse,
+    SocketCleanup, StreamIn, StreamOut, run_broker_process, serve_broker, serve_broker_with_idle,
 };
 pub use busy::{Activity, BusyDetector, contains_spinner};
 pub use env::scrub_env;

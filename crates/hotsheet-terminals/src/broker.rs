@@ -9,8 +9,9 @@
 //! route through a client (spawn/discover/reconnect) is layered on top.
 
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -60,7 +61,14 @@ pub enum Request {
         /// terminal was spawned with.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         replay_bytes: Option<u64>,
+        /// Machine-local session-push state retained for the lifetime of this PTY.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        push: Option<Box<BrokerPushState>>,
     },
+    /// Retrieve push state on server reattachment. Never used on the client HTTP wire.
+    PushInfo { id: String },
+    /// Remember the resolved tool session after a successful message.
+    SetPushSession { id: String, session_id: String },
     /// List all hosted terminals.
     List,
     /// The terminal's state + scrollback snapshot. `bytes` asks for the scrollback's encoding
@@ -150,10 +158,17 @@ fn stream_default_true() -> bool {
 pub enum Response {
     /// Reply to [`Request::Ping`].
     Pong,
+    PushInfo {
+        push: BrokerPushState,
+    },
     /// One terminal's state (for `open`).
-    Terminal { info: BrokerTermInfo },
+    Terminal {
+        info: BrokerTermInfo,
+    },
     /// All terminals (for `list`).
-    List { terminals: Vec<BrokerTermInfo> },
+    List {
+        terminals: Vec<BrokerTermInfo>,
+    },
     /// State + scrollback (for `read`).
     Read {
         info: BrokerTermInfo,
@@ -164,7 +179,39 @@ pub enum Response {
     /// No terminal with that id.
     NotFound,
     /// The op failed.
-    Err { message: String },
+    Err {
+        message: String,
+    },
+}
+
+/// Sensitive launch details kept only in the detached broker and its Unix socket protocol.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BrokerPushState {
+    pub mechanism: String,
+    pub port: u16,
+    pub password: String,
+    pub directory: String,
+    pub launched_at_ms: u64,
+    pub model: Option<String>,
+    pub session_id: Option<String>,
+}
+
+struct RetainedPush {
+    terminal: Weak<crate::terminal::Terminal>,
+    state: BrokerPushState,
+}
+
+type Pushes = Arc<Mutex<std::collections::HashMap<String, RetainedPush>>>;
+
+fn prune_exited_pushes(pushes: &Pushes) {
+    pushes
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .retain(|_, push| {
+            push.terminal
+                .upgrade()
+                .is_some_and(|terminal| terminal.is_alive())
+        });
 }
 
 /// A terminal's state on the broker wire (mirrors the server's `TerminalInfo`).
@@ -242,6 +289,7 @@ pub async fn serve_broker_with_idle(
     idle_grace: Option<Duration>,
 ) {
     let clients = Arc::new(AtomicUsize::new(0));
+    let pushes: Pushes = Arc::new(Mutex::new(std::collections::HashMap::new()));
     let mut empty_since = tokio::time::Instant::now();
     let tick = idle_grace
         .map(|grace| grace.min(Duration::from_millis(250)))
@@ -252,15 +300,16 @@ pub async fn serve_broker_with_idle(
             accepted = listener.accept() => {
                 let Ok((stream, _addr)) = accepted else { continue };
                 clients.fetch_add(1, Ordering::SeqCst);
-                let (manager, project, clients) =
-                    (manager.clone(), project.clone(), clients.clone());
+                let (manager, project, clients, pushes) =
+                    (manager.clone(), project.clone(), clients.clone(), pushes.clone());
                 tokio::spawn(async move {
-                    let _ = handle_connection(stream, &project, &manager).await;
+                    let _ = handle_connection(stream, &project, &manager, &pushes).await;
                     clients.fetch_sub(1, Ordering::SeqCst);
                 });
             }
             _ = housekeeping.tick(), if idle_grace.is_some() => {
                 manager.reap();
+                prune_exited_pushes(&pushes);
                 if manager.count() == 0 && clients.load(Ordering::SeqCst) == 0 {
                     if empty_since.elapsed() >= idle_grace.unwrap() {
                         break;
@@ -277,6 +326,7 @@ async fn handle_connection(
     stream: UnixStream,
     project: &str,
     manager: &Arc<TerminalManager>,
+    pushes: &Pushes,
 ) -> std::io::Result<()> {
     let (read, mut write) = stream.into_split();
     let mut lines = BufReader::new(read).lines();
@@ -290,7 +340,7 @@ async fn handle_connection(
                 return stream_terminal(lines, write, project, manager, id, bytes).await;
             }
             Ok(req) => {
-                let resp = handle_request(project, manager, req).await;
+                let resp = handle_request(project, manager, pushes, req).await;
                 write_line(&mut write, &resp).await?;
             }
             Err(e) => {
@@ -431,7 +481,12 @@ async fn stream_terminal(
 /// Run one request against the manager (synchronous — PTY ops are quick, non-blocking).
 /// Answer one request. Only `Input` awaits (the PTY write runs on the terminal's writer
 /// thread, HS2-FERD7N); the other requests are immediate.
-async fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Request) -> Response {
+async fn handle_request(
+    project: &str,
+    manager: &Arc<TerminalManager>,
+    pushes: &Pushes,
+    req: Request,
+) -> Response {
     let key = |id: &str| (project.to_string(), id.to_string());
     match req {
         Request::Ping => Response::Pong,
@@ -443,6 +498,7 @@ async fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Requ
             cwd,
             env,
             replay_bytes,
+            push,
         } => {
             let spec = TermSpec {
                 kind,
@@ -457,15 +513,69 @@ async fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Requ
                 }),
             };
             match manager.get_or_spawn_with_status(key(&id), spec) {
-                Ok((term, spawned)) => Response::Terminal {
-                    info: BrokerTermInfo {
-                        spawned: Some(spawned),
-                        ..info_of(&term, &id)
-                    },
-                },
+                Ok((term, spawned)) => {
+                    if spawned {
+                        let mut retained = pushes.lock().unwrap_or_else(|e| e.into_inner());
+                        retained.remove(&id);
+                        if let Some(push) = push {
+                            retained.insert(
+                                id.clone(),
+                                RetainedPush {
+                                    terminal: Arc::downgrade(&term),
+                                    state: *push,
+                                },
+                            );
+                        }
+                    }
+                    Response::Terminal {
+                        info: BrokerTermInfo {
+                            spawned: Some(spawned),
+                            ..info_of(&term, &id)
+                        },
+                    }
+                }
                 Err(e) => Response::Err {
                     message: e.to_string(),
                 },
+            }
+        }
+        Request::PushInfo { id } => {
+            let Some(term) = manager.get(&key(&id)).filter(|term| term.is_alive()) else {
+                return Response::NotFound;
+            };
+            pushes
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&id)
+                .filter(|push| {
+                    push.terminal
+                        .upgrade()
+                        .is_some_and(|held| Arc::ptr_eq(&held, &term))
+                })
+                .map(|push| Response::PushInfo {
+                    push: push.state.clone(),
+                })
+                .unwrap_or(Response::NotFound)
+        }
+        Request::SetPushSession { id, session_id } => {
+            let Some(term) = manager.get(&key(&id)).filter(|term| term.is_alive()) else {
+                return Response::NotFound;
+            };
+            match pushes
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get_mut(&id)
+            {
+                Some(push)
+                    if push
+                        .terminal
+                        .upgrade()
+                        .is_some_and(|held| Arc::ptr_eq(&held, &term)) =>
+                {
+                    push.state.session_id = Some(session_id);
+                    Response::Ok
+                }
+                _ => Response::NotFound,
             }
         }
         Request::List => {
@@ -499,7 +609,10 @@ async fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Requ
             None => Response::NotFound,
         },
         Request::Kill { id } => match manager.kill(&key(&id)) {
-            Ok(true) => Response::Ok,
+            Ok(true) => {
+                pushes.lock().unwrap_or_else(|e| e.into_inner()).remove(&id);
+                Response::Ok
+            }
             Ok(false) => Response::NotFound,
             Err(e) => Response::Err {
                 message: e.to_string(),
@@ -692,6 +805,146 @@ mod tests {
     use super::*;
     use std::time::{Duration, Instant};
 
+    #[tokio::test]
+    async fn push_state_follows_the_live_terminal_and_remembers_its_session() {
+        let manager = Arc::new(TerminalManager::new());
+        let pushes = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let state = BrokerPushState {
+            mechanism: "opencode-http".into(),
+            port: 12345,
+            password: "secret".into(),
+            directory: "/test".into(),
+            launched_at_ms: 1,
+            model: Some("p/m".into()),
+            session_id: None,
+        };
+        let open = |push: Option<BrokerPushState>| Request::Open {
+            id: "ai".into(),
+            kind: TerminalKind::Ai,
+            command: "cat".into(),
+            args: vec![],
+            cwd: None,
+            env: vec![],
+            replay_bytes: None,
+            push: push.map(Box::new),
+        };
+        assert!(matches!(
+            handle_request("p", &manager, &pushes, open(Some(state.clone()))).await,
+            Response::Terminal {
+                info: BrokerTermInfo {
+                    spawned: Some(true),
+                    ..
+                }
+            }
+        ));
+        assert!(matches!(
+            handle_request(
+                "p",
+                &manager,
+                &pushes,
+                Request::SetPushSession {
+                    id: "ai".into(),
+                    session_id: "ses_one".into()
+                }
+            )
+            .await,
+            Response::Ok
+        ));
+        assert!(matches!(
+            handle_request(
+                "p",
+                &manager,
+                &pushes,
+                open(Some(BrokerPushState {
+                    password: "new-secret".into(),
+                    ..state.clone()
+                }))
+            )
+            .await,
+            Response::Terminal {
+                info: BrokerTermInfo {
+                    spawned: Some(false),
+                    ..
+                }
+            }
+        ));
+        let Response::PushInfo { push } = handle_request(
+            "p",
+            &manager,
+            &pushes,
+            Request::PushInfo { id: "ai".into() },
+        )
+        .await
+        else {
+            panic!("missing push state")
+        };
+        assert_eq!(push.password, "secret");
+        assert_eq!(push.session_id.as_deref(), Some("ses_one"));
+        assert!(matches!(
+            handle_request("p", &manager, &pushes, Request::Kill { id: "ai".into() }).await,
+            Response::Ok
+        ));
+        assert!(matches!(
+            handle_request(
+                "p",
+                &manager,
+                &pushes,
+                Request::PushInfo { id: "ai".into() }
+            )
+            .await,
+            Response::NotFound
+        ));
+        assert!(matches!(
+            handle_request("p", &manager, &pushes, open(None)).await,
+            Response::Terminal {
+                info: BrokerTermInfo {
+                    spawned: Some(true),
+                    ..
+                }
+            }
+        ));
+        assert!(matches!(
+            handle_request(
+                "p",
+                &manager,
+                &pushes,
+                Request::PushInfo { id: "ai".into() }
+            )
+            .await,
+            Response::NotFound
+        ));
+        manager.kill(&("p".into(), "ai".into())).unwrap();
+
+        // A child that exits by itself must not leave its password behind while the
+        // detached broker continues hosting other terminals.
+        let ended = Request::Open {
+            id: "ended".into(),
+            kind: TerminalKind::Ai,
+            command: "sh".into(),
+            args: vec!["-c".into(), "exit 0".into()],
+            cwd: None,
+            env: vec![],
+            replay_bytes: None,
+            push: Some(Box::new(state)),
+        };
+        assert!(matches!(
+            handle_request("p", &manager, &pushes, ended).await,
+            Response::Terminal { .. }
+        ));
+        assert!(
+            wait_until(
+                || !manager
+                    .get(&("p".into(), "ended".into()))
+                    .unwrap()
+                    .is_alive(),
+                5
+            )
+            .await
+        );
+        prune_exited_pushes(&pushes);
+        assert!(!pushes.lock().unwrap().contains_key("ended"));
+    }
+
     #[test]
     fn replay_size_is_optional_on_the_wire_and_reaches_the_spawned_terminal() {
         // HS2-Y5DYC0: an older server omits the size (the broker keeps 256 KiB); a newer one
@@ -702,6 +955,7 @@ mod tests {
             legacy,
             Request::Open {
                 replay_bytes: None,
+                push: None,
                 ..
             }
         ));
@@ -713,6 +967,7 @@ mod tests {
             cwd: None,
             env: vec![],
             replay_bytes,
+            push: None,
         };
         assert!(
             serde_json::to_value(open(None))
@@ -731,6 +986,7 @@ mod tests {
             .block_on(handle_request(
                 "proj",
                 &manager,
+                &Arc::new(Mutex::new(std::collections::HashMap::new())),
                 serde_json::from_value(sized).unwrap(),
             ));
         assert!(matches!(response, Response::Terminal { .. }));
@@ -806,6 +1062,7 @@ mod tests {
                 cwd: None,
                 env: vec![],
                 replay_bytes: None,
+                push: None,
             })
             .await
             .unwrap();
@@ -901,6 +1158,7 @@ mod tests {
                 cwd: None,
                 env: vec![],
                 replay_bytes: None,
+                push: None,
             })
             .await
             .unwrap();
@@ -973,6 +1231,7 @@ mod tests {
                 cwd: None,
                 env: vec![],
                 replay_bytes: None,
+                push: None,
             })
             .await
             .unwrap();
@@ -1035,6 +1294,7 @@ mod tests {
                 cwd: None,
                 env: vec![],
                 replay_bytes: None,
+                push: None,
             })
             .await
             .unwrap();
@@ -1156,6 +1416,7 @@ mod tests {
                     cwd: None,
                     env: vec![],
                     replay_bytes: None,
+                    push: None,
                 })
                 .await
                 .unwrap();
@@ -1185,6 +1446,7 @@ mod tests {
                 cwd: None,
                 env: vec![],
                 replay_bytes: None,
+                push: None,
             })
             .await
             .unwrap();
@@ -1260,6 +1522,7 @@ mod tests {
                 cwd: None,
                 env: vec![],
                 replay_bytes: None,
+                push: None,
             })
             .await
             .unwrap();
@@ -1314,6 +1577,7 @@ mod tests {
                 cwd: None,
                 env: vec![],
                 replay_bytes: None,
+                push: None,
             })
             .await
             .unwrap();

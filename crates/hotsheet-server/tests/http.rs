@@ -18740,6 +18740,7 @@ async fn broker_terminal_sessions_release_claims_including_after_a_server_restar
             cwd: None,
             env: vec![("HOTSHEET_WORKER_ID".into(), "claude-ai1".into())],
             replay_bytes: None,
+            push: None,
         })
         .await
         .unwrap();

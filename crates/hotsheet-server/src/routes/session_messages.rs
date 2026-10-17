@@ -32,6 +32,7 @@ pub(crate) struct PreparedSessionPush {
     pub(crate) args: Vec<String>,
     pub(crate) env: Vec<(String, String)>,
     pub(crate) adapter: Arc<dyn SessionPush>,
+    pub(crate) broker_state: hotsheet_terminals::BrokerPushState,
 }
 
 /// Prepare session push for an interactive launch of `plugin`, or `None` when the tool
@@ -78,6 +79,15 @@ pub(crate) fn prepare_session_push(
         launched_at_ms: crate::routes::permissions::now_ms(),
     };
     let wiring = session_push::launch_wiring(spec, &launch).unwrap_or_default();
+    let broker_state = hotsheet_terminals::BrokerPushState {
+        mechanism: spec.mechanism.clone(),
+        port: launch.port,
+        password: launch.password.clone(),
+        directory: launch.directory.clone(),
+        launched_at_ms: launch.launched_at_ms,
+        model: launch.model.clone(),
+        session_id: None,
+    };
     let Some(adapter) = session_push::adapter_for(spec, launch, Arc::new(UreqHttp::default()))
     else {
         return Ok(None);
@@ -86,7 +96,32 @@ pub(crate) fn prepare_session_push(
         args: wiring.args,
         env: wiring.env,
         adapter,
+        broker_state,
     }))
+}
+
+/// Restore a launch-wired adapter from state retained beside its live broker PTY.
+pub(crate) fn restore_broker_push(
+    state: &AppState,
+    id: &str,
+    push: hotsheet_terminals::BrokerPushState,
+) {
+    if push.mechanism != session_push::OPENCODE_HTTP {
+        return;
+    }
+    let launch = PushLaunch {
+        port: push.port,
+        password: push.password,
+        directory: push.directory,
+        model: push.model,
+        launched_at_ms: push.launched_at_ms,
+    };
+    let adapter = hotsheet_aitools::session_push::OpenCodeHttpPush::restored(
+        launch,
+        push.session_id,
+        Arc::new(UreqHttp::default()),
+    );
+    register(state, id, Arc::new(adapter));
 }
 
 /// Register a spawned terminal's adapter.
@@ -247,10 +282,24 @@ pub(crate) async fn message_connection(
                 .with_code("connection_not_found"),
         });
     };
+    let launch_wired = adapter.mechanism() == session_push::OPENCODE_HTTP;
     let receipt = tokio::task::spawn_blocking(move || adapter.message(&message))
         .await
         .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .map_err(push_error)?;
+    if let (true, Some(broker), Some(session_id)) =
+        (launch_wired, &state.terminal_broker, &receipt.session_id)
+    {
+        if let Err(error) = broker
+            .call(hotsheet_terminals::BrokerRequest::SetPushSession {
+                id: id.clone(),
+                session_id: session_id.clone(),
+            })
+            .await
+        {
+            tracing::warn!(%error, terminal = %id, "could not retain resolved push session in broker");
+        }
+    }
     Ok(Json(MessageConnectionResp {
         delivered: true,
         mechanism: receipt.mechanism,

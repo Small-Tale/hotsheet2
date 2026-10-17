@@ -41,6 +41,7 @@ pub(crate) async fn open_terminal(
     // Only a freshly spawned AI terminal registers its session-push adapter (HS2-PEJ962); a
     // reattach keeps the adapter (and port) its original launch registered.
     let push = launch.push;
+    let broker_push = launch.broker_push;
     let kind = if req.connect.is_some() {
         hotsheet_terminals::TerminalKind::Ai
     } else {
@@ -67,6 +68,7 @@ pub(crate) async fn open_terminal(
                 cwd: Some(cwd),
                 env: launch.env,
                 replay_bytes: Some(replay_bytes),
+                push: broker_push.map(Box::new),
             })
             .await
             .map_err(|e| {
@@ -95,6 +97,23 @@ pub(crate) async fn open_terminal(
                     terminal_session_worker_id(&id),
                     tb.clone(),
                 ),
+            }
+        } else if info.kind == hotsheet_terminals::TerminalKind::Ai {
+            // A fresh server may open the existing PTY before its startup resumption ran.
+            // Register the connection as well as its push adapter in that case.
+            let original_tool = info
+                .worker
+                .as_deref()
+                .and_then(|worker| worker.strip_suffix(&format!("-{id}")))
+                .filter(|tool| !tool.is_empty())
+                .or(req.connect.as_deref());
+            if let Some(tool) = original_tool {
+                if state.drive_registry.lock_or_recover().get(&id).is_none() {
+                    register_broker_terminal_connection(&state, &id, tool, tb.clone());
+                }
+                if session_messages::adapter(&state, &id).is_none() {
+                    restore_broker_push(&state, &id, tb).await;
+                }
             }
         }
         return Ok(Json(broker_info(info)));
@@ -143,6 +162,7 @@ struct PreparedTerminalLaunch {
     env: Vec<(String, String)>,
     /// The session-push adapter for a push-capable AI launch (HS2-PEJ962).
     push: Option<std::sync::Arc<dyn hotsheet_aitools::session_push::SessionPush>>,
+    broker_push: Option<hotsheet_terminals::BrokerPushState>,
 }
 
 fn terminal_launch(
@@ -163,6 +183,7 @@ fn terminal_launch(
             env: terminal_session_env(state, req, terminal_id, &command)?,
             command,
             push: None,
+            broker_push: None,
         });
     }
     if let Some(command) = &req.command {
@@ -171,6 +192,7 @@ fn terminal_launch(
             args: req.args.clone(),
             env: terminal_session_env(state, req, terminal_id, command)?,
             push: None,
+            broker_push: None,
         });
     }
     let Some(tool) = req.connect.as_deref() else {
@@ -180,6 +202,7 @@ fn terminal_launch(
             command,
             args: req.args.clone(),
             push: None,
+            broker_push: None,
         });
     };
     let root = state.store.root();
@@ -237,6 +260,7 @@ fn terminal_launch(
         command: program.to_string_lossy().into_owned(),
         args,
         env,
+        broker_push: push.as_ref().map(|prepared| prepared.broker_state.clone()),
         push: push.map(|prepared| prepared.adapter),
     })
 }
@@ -792,9 +816,19 @@ pub async fn resume_broker_terminal_sessions(state: &AppState) {
         match (info.kind, tool) {
             (hotsheet_terminals::TerminalKind::Ai, Some(tool)) => {
                 register_broker_terminal_connection(state, &info.id, tool, broker.clone());
+                restore_broker_push(state, &info.id, &broker).await;
             }
             _ => watch_broker_terminal_session_exit(state, &info.id, worker, broker.clone()),
         }
+    }
+}
+
+async fn restore_broker_push(state: &AppState, id: &str, broker: &terminal_broker::TerminalBroker) {
+    if let Ok(hotsheet_terminals::BrokerResponse::PushInfo { push }) = broker
+        .call(hotsheet_terminals::BrokerRequest::PushInfo { id: id.to_string() })
+        .await
+    {
+        session_messages::restore_broker_push(state, id, push);
     }
 }
 

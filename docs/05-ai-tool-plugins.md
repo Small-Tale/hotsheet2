@@ -597,6 +597,10 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   connected clients; any activity resets the grace. A server that outlives that idle
   exit reconnects through one shared restart lock, launches a fresh broker when the
   socket is gone, and retries the connection before serving the next terminal request.
+  For a push-capable AI terminal, the broker also retains its session-push launch details
+  and resolved session id while its PTY lives. Startup reattachment restores the server's
+  message adapter; the password stays on the machine-local broker protocol and is absent
+  from HTTP terminal metadata (HS2-6WA2D9).
   The server's per-terminal status pollers (busy feed, session-exit release, and the shell
   AI exit watch, every 500 ms) and its attach/launch existence checks use the broker's
   `info` op, which returns the terminal's state without its scrollback. A `read`

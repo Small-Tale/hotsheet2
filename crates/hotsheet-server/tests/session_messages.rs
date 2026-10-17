@@ -12,7 +12,9 @@ use std::sync::{Arc, Mutex};
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use base64::Engine as _;
-use hotsheet_server::{AppState, app};
+use hotsheet_server::terminal_broker::TerminalBroker;
+use hotsheet_server::{AppState, app, resume_broker_terminal_sessions};
+use hotsheet_terminals::TerminalManager;
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 use http_body_util::BodyExt;
 use tower::ServiceExt;
@@ -197,6 +199,124 @@ fn connection(list: &serde_json::Value, id: &str) -> serde_json::Value {
         .find(|connection| connection["id"] == id)
         .cloned()
         .unwrap_or(serde_json::Value::Null)
+}
+
+#[tokio::test]
+async fn a_broker_terminal_keeps_its_push_session_across_a_server_restart() {
+    let store_dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let plugins = tempfile::tempdir().unwrap();
+    write_plugin(
+        plugins.path(),
+        "fake-push",
+        r#"
+[session_push]
+mechanism = "opencode-http"
+port_args = ["--port", "{port}"]
+password_env = "OPENCODE_SERVER_PASSWORD"
+"#,
+    );
+    let socket_dir = tempfile::tempdir().unwrap();
+    let socket = socket_dir.path().join("broker.sock");
+    let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+    let broker_task = tokio::spawn(hotsheet_terminals::serve_broker(
+        listener,
+        "session-push-project".into(),
+        Arc::new(TerminalManager::new()),
+    ));
+    let broker = TerminalBroker::at(&socket, "session-push-project");
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()])
+        .with_terminal_broker_at(broker.clone());
+    let router = app(state);
+    let (flag, port, password) = launch(&router, "fake-push", "survives").await;
+    assert_eq!(flag, "--port");
+    assert!(password.len() >= 40);
+    let seen = fake_opencode(port.parse().unwrap());
+    let (status, delivered) = send(
+        &router,
+        "POST",
+        "/connections/survives/message",
+        Some(r#"{"text":"before restart"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{delivered}");
+    assert_eq!(delivered["session_id"], "ses_e2e");
+
+    // A second AppState has no adapters until startup reattaches to the detached broker.
+    let restarted = AppState::new(FsStore::open(store_dir.path()).unwrap(), SECRET.into())
+        .unwrap()
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()])
+        .with_terminal_broker_at(broker.clone());
+    resume_broker_terminal_sessions(&restarted).await;
+    let router = app(restarted);
+    let (status, connections) = send(&router, "GET", "/connections", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let listed = connection(&connections, "survives");
+    assert_eq!(listed["actions"], serde_json::json!(["message"]));
+    assert_eq!(listed["session_id"], "ses_e2e");
+    assert!(!connections.to_string().contains(&password));
+    let (_, terminals) = send(&router, "GET", "/terminals", None).await;
+    assert!(!terminals.to_string().contains(&password));
+    let (status, delivered) = send(
+        &router,
+        "POST",
+        "/connections/survives/message",
+        Some(r#"{"text":"after restart"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{delivered}");
+    assert_eq!(delivered["session_id"], "ses_e2e");
+
+    // Opening the same id from another fresh server reattaches instead of replacing the
+    // broker's port, password, and resolved session.
+    let reattaching = AppState::new(FsStore::open(store_dir.path()).unwrap(), SECRET.into())
+        .unwrap()
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()])
+        .with_terminal_broker_at(broker);
+    let reattach_router = app(reattaching);
+    let (_, reattached_port, reattached_password) =
+        launch(&reattach_router, "fake-push", "survives").await;
+    assert_eq!(reattached_port, port);
+    assert_eq!(reattached_password, password);
+    let (_, connections) = send(&reattach_router, "GET", "/connections", None).await;
+    assert_eq!(
+        connection(&connections, "survives")["session_id"],
+        "ses_e2e"
+    );
+    let (status, delivered) = send(
+        &reattach_router,
+        "POST",
+        "/connections/survives/message",
+        Some(r#"{"text":"after reattach"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{delivered}");
+    assert_eq!(delivered["session_id"], "ses_e2e");
+    let routes: Vec<_> = seen
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|entry| entry.route.clone())
+        .collect();
+    assert_eq!(
+        routes
+            .iter()
+            .filter(|route| route.as_str() == "GET /session")
+            .count(),
+        1
+    );
+    assert_eq!(
+        routes
+            .iter()
+            .filter(|route| route.as_str() == "POST /session/ses_e2e/prompt_async")
+            .count(),
+        3
+    );
+    let (status, _) = send(&reattach_router, "DELETE", "/terminals/survives", None).await;
+    assert!(status.is_success());
+    broker_task.abort();
 }
 
 #[tokio::test]
