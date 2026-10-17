@@ -413,7 +413,8 @@ test.describe('desktop', () => {
     const sizes = await collect(page);
     expect(sizes.details).toEqual([14]);
     expect(sizes.markdown).toEqual([14]);
-    expect(sizes.tag).toEqual([12]);
+    // The Add tag field is a Kerf Combobox at its compact 14px desktop size (HS2-C32ERK).
+    expect(sizes.tag).toEqual([14]);
     // The purpose pill is a Kerf Select now; the batch label editor is the attachment text field (HS2-K9HSXZ).
     expect(new Set(sizes.batchLabel)).toEqual(new Set([14]));
     // The repository field is a Kerf Combobox at its compact 14px desktop size (HS2-EN1E76).
