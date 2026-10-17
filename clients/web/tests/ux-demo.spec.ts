@@ -3897,9 +3897,6 @@ test('fits open search around the rendered project name and fills the remaining 
 });
 
 test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)', async ({ page }) => {
-  // Kerf beta.106 draws a group-owned Select's trigger outline too (KF-GWSEWC); HS2-W62C47 removes
-  // this expected failure once the Kerf fix ships. The assertions below stay the intended contract.
-  test.fail(true, 'KF-GWSEWC: a focusRingOwner="group" Select still outlines its trigger');
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=workspace-header');
   const header = page.locator('.workspace-header');
@@ -3947,6 +3944,25 @@ test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)', async ({
     path: test.info().outputPath('hs2-m1df1d-pill-focus-ring-wide.png'),
     clip: { x, y, width: Math.min(360, 1280 - x), height: Math.min(360, 800 - y) },
   });
+  await page.setViewportSize({ width: 390, height: 800 });
+  await expect(sort).toBeHidden();
+  await header.getByRole('button', { name: 'More Workspace Controls' }).click();
+  await expect(page.locator('[data-workspace-overflow-action="set-workspace-sort"]')).toHaveCount(4);
+  await expect
+    .poll(() =>
+      page
+        .locator('[data-workspace-overflow-action="set-workspace-sort"]')
+        .first()
+        .evaluate(
+          (node) =>
+            node
+              .closest('.kui-popup-menu__menu')!
+              .getAnimations()
+              .filter((animation) => animation.playState === 'running').length,
+        ),
+    )
+    .toBe(0);
+  await page.screenshot({ path: test.info().outputPath('hs2-w62c47-mobile-sort-menu-390.png') });
 });
 
 test('switches workspace header groups at Kerf toolbar width thresholds (HS2-BBG8ZC)', async ({ page }) => {

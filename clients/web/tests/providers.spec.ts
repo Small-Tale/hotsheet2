@@ -18200,9 +18200,24 @@ test('keeps the Drive menu open while choosing provider, model, and effort', asy
     'aria-checked',
     'true',
   );
+  const waitForMenuMotion = () =>
+    expect
+      .poll(() =>
+        menu
+          .locator(':scope > .kui-popup-menu__menu')
+          .evaluate((node) => node.getAnimations().filter((animation) => animation.playState === 'running').length),
+      )
+      .toBe(0);
+  await waitForMenuMotion();
   await page.screenshot({ path: 'target/visual-captures/hs2-s010qf-drive-options-open-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.screenshot({ path: 'target/visual-captures/hs2-s010qf-drive-options-open-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.getByRole('button', { name: 'Show Project Sidebar' }).click();
+  await options.click();
+  await expect(menu.getByRole('menu', { name: 'Drive Provider, Model, and Effort Options' })).toBeVisible();
+  await waitForMenuMotion();
+  await page.screenshot({ path: test.info().outputPath('hs2-s97etv-drive-options-app-390.png') });
   await page.mouse.click(1, 1);
   await expect(effort).toBeHidden();
 });

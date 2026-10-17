@@ -41,20 +41,21 @@ async function settledChoiceGeometry(choice: Locator) {
 const TOP_ITEMS =
   ':scope > .kui-popup-menu__menu > .kui-popup-menu__item, :scope > .kui-popup-menu__menu > .kui-popup-menu__submenu-host > .kui-popup-menu__item';
 
-// Kerf beta.106 opens every context-mode PopupMenu bottom-start, ignoring `placement="top-start"`
-// (KF-MXM1SH); HS2-S97ETV re-enables this once the Kerf fix ships.
-test.fixme('opens the Drive options popup above its anchor (KF-MXM1SH)', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/ux-demo?component=drive-options-menu');
-  const menu = page.locator('[data-context-menu="drive-options"]');
-  await expect(menu.locator(':scope > .kui-popup-menu__context-anchor')).toHaveAttribute('aria-expanded', 'true');
-  expect(
-    await menu.evaluate((node) => {
-      const anchor = node.querySelector(':scope > .kui-popup-menu__context-anchor')!.getBoundingClientRect(),
-        popup = node.querySelector(':scope > .kui-popup-menu__menu')!.getBoundingClientRect();
-      return anchor.top - popup.bottom;
-    }),
-  ).toBeGreaterThanOrEqual(0);
+test('opens the Drive options popup above its anchor (KF-MXM1SH, HS2-S97ETV)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/ux-demo?component=drive-options-menu');
+    const menu = page.locator('[data-context-menu="drive-options"]');
+    await expect(menu.locator(':scope > .kui-popup-menu__context-anchor')).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      await menu.evaluate((node) => {
+        const anchor = node.querySelector(':scope > .kui-popup-menu__context-anchor')!.getBoundingClientRect(),
+          popup = node.querySelector(':scope > .kui-popup-menu__menu')!.getBoundingClientRect();
+        return anchor.top - popup.bottom;
+      }),
+    ).toBeGreaterThanOrEqual(0);
+    await page.screenshot({ path: test.info().outputPath(`hs2-s97etv-drive-options-catalog-${width}.png`) });
+  }
 });
 
 test('uses one disclosure and aligned icon-label choices at wide and narrow sizes', async ({ page }) => {

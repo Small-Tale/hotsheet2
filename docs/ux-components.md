@@ -2360,6 +2360,13 @@ The first review should settle these before visual polish:
 - Whether the terminal drawer is part of the initial feature-floor demo or the first
   follow-on desktop slice.
 
+### Kerf beta.107 corrections
+
+Beta.107 keeps the compact workspace sort `Select` under its group's single focus ring
+(`KF-GWSEWC`, HS2-W62C47). Its context-mode `PopupMenu` honors `placement="top-start"`,
+so the Drive options popup opens above the control at desktop and phone widths
+(`KF-MXM1SH`, HS2-S97ETV). The restored browser checks cover both behaviors.
+
 ### Kerf beta.106 adoption
 
 Beta.106 (HS2-BH7NZ4) removed Hot Sheet's remaining dependence on Web Awesome inside Kerf components:

@@ -2463,7 +2463,8 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   The compact sort `Select` draws exactly one focus ring on its enclosing control group:
   the inner Web Awesome combobox ring is suppressed, the outer ring remains visible while
   the popup is open, and a true pill radius keeps the expanded outline from reading as a
-  rounded rectangle around the 44px group (HS2-M1DF1D).
+  rounded rectangle around the 44px group (HS2-M1DF1D). Kerf beta.107 also suppresses its
+  own trigger outline when `focusRingOwner="group"` (HS2-W62C47).
   When the center column contracts around an open sidebar/inspector or at 200% zoom,
   every control removed from the toolbar remains available from its keyboard- and
   touch-operable overflow menu. Utility actions relocate first, followed by sort,
