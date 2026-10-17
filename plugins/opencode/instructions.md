@@ -194,5 +194,13 @@ when CI resolves and complete it after a green result. Repair failures caused by
 ticket's own change before completion; create a prioritized follow-up bug for an
 independent failure. This does not defer local gates, integration, or pushing.
 
+**Use the full-suite CI run as the shared batch gate.** Record `CI gate commit: <full
+40-character SHA>` in each waiting ticket's note. The latest successful push run on
+the shipping branch covers that ticket only when the ticket commit is its ancestor;
+an older green run or an unrelated workflow does not count. When a batch is red,
+compare the commits since the last green run and the failing checks, then repair the
+responsible ticket or file an independent bug. Do not add a local last-green marker
+or repeat the full suite for every ticket; keep each ticket's affected local gates.
+
 **Pushing is up to this repository.** Follow whatever push/PR/review conventions this project
 already uses; this default guidance does not require or forbid pushing on its own.

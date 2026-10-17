@@ -60,6 +60,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   scripts/check-test-coverage.mjs # CI validator for docs/TEST-COVERAGE.md evidence
   scripts/test-quiet.mjs     # Quiet per-tier test wrapper: failure-only reporters, capped excerpts, full log path (HS2-CP63FG; tests: test-quiet.test.mjs + fixtures/test-quiet/)
   scripts/test-profile.mjs   # Slowest tests/files from nextest JUnit, Vitest JSON, and Playwright JSON reports (HS2-3PX1E4; tests: test-profile.test.mjs + fixtures/test-profile/)
+  scripts/ci-gate.mjs        # Read-only latest green main CI/commit coverage and final_testing ticket report (HS2-QCBEQF; tests: ci-gate.test.mjs)
   scripts/playwright-retries.mjs # browser-full job summary + warnings for Playwright tests that passed only on a retry (HS2-8YHY6V; tests: playwright-retries.test.mjs + fixtures/playwright-retries/)
   scripts/check-test-quarantine.mjs # CI check: flaky-test quarantine markers match docs/test-quarantine.md rows (HS2-3PX1E4)
   .config/nextest.toml       # nextest profile: JUnit report at target/nextest/default/junit.xml for test-profile (HS2-3PX1E4)

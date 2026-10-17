@@ -386,6 +386,13 @@ prioritized follow-up bug and record its slug and the CI evidence in the origina
 ticket's completion note. A remote check never excuses a failing local gate or an
 unintegrated, unpushed change.
 
+For this repository, run `node scripts/ci-gate.mjs status --covers <full-sha>` to
+read the latest successful `main` push run of the `CI` workflow and its coverage of
+the ticket commit. The helper also lists `final_testing` tickets whose notes carry
+`CI gate commit: <full-sha>`. It is read-only and reports unknown coverage when a
+commit is not available in the local checkout. A green descendant run may clear
+several waiting tickets at once.
+
 For each ticket:
 
 1. Implement the coherent ticket-sized change and update its docs and coverage matrix.
@@ -617,6 +624,14 @@ ticket; automatic claim-next skips final-testing tickets. Reclaim the exact tick
 when CI resolves and complete it after a green result. Repair failures caused by that
 ticket's own change before completion; create a prioritized follow-up bug for an
 independent failure. This does not defer local gates, integration, or pushing.
+
+**Use the full-suite CI run as the shared batch gate.** Record `CI gate commit: <full
+40-character SHA>` in each waiting ticket's note. The latest successful push run on
+the shipping branch covers that ticket only when the ticket commit is its ancestor;
+an older green run or an unrelated workflow does not count. When a batch is red,
+compare the commits since the last green run and the failing checks, then repair the
+responsible ticket or file an independent bug. Do not add a local last-green marker
+or repeat the full suite for every ticket; keep each ticket's affected local gates.
 
 **Pushing is up to this repository.** Follow whatever push/PR/review conventions this project
 already uses; this default guidance does not require or forbid pushing on its own.

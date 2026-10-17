@@ -654,6 +654,19 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   frames across paused seeks and held-pointer movement (HS2-DE781D). It waits for the
   final requested frame because a multi-step drag also decodes intermediate positions.
   `npm run test:e2e` still runs the full browser suite locally when a change warrants it.
+- **CI as the shared full-suite batch gate (HS2-QCBEQF).** Each ticket runs the local
+  tests its own diff affects at its declared risk tier, then commits and pushes to
+  `main`. A ticket waiting for remote verification stays Started in `final_testing`;
+  its note names the run and includes `CI gate commit: <full 40-character SHA>`.
+  `node scripts/ci-gate.mjs status --covers <full-sha>` reads the latest successful
+  `main` push run of the `CI` workflow. It reports whether that run contains the given
+  commit and lists waiting tickets with explicit markers. The helper is read-only:
+  GitHub Actions is the shared source of truth, and a missing local commit yields
+  `unknown` until the checkout has that commit. A green run covers all ancestor
+  ticket commits, even when it followed several pushes. A red run triggers targeted
+  attribution across commits since the last green run; repair the ticket responsible
+  for its own failure or file a prioritized bug for an independent failure. No local
+  last-green file or repeated per-ticket full-suite run is needed.
 - **Full browser suite in CI (HS2-D95TXJ).** The `browser-full` job runs all Playwright
   specs (Chromium plus the WebKit-launching specs) in four parallel shards. Each shard
   runs `--shard=<i>/4 --fully-parallel --workers=2 --reporter=blob`. Test-level sharding

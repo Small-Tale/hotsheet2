@@ -1,5 +1,10 @@
 # Feature Coverage Matrix
 
+HS2-QCBEQF covers the read-only CI batch-gate helper: `scripts/ci-gate.test.mjs`
+checks recorded GitHub runs, branch/workflow filtering, ancestry, unknown local
+commits, and explicit `final_testing` markers. A live `status --covers` call verifies
+the installed `gh`, Git, and Hot Sheet CLI path; CI runs the unit test.
+
 HS2-5WXA6W covers the terminal rail's shared All Tickets search scope. The rail
 component unit test checks view and All Tickets states; `clients/web/tests/search-scope.spec.ts`
 checks list matches, paged columns, return to view, notifications, and wide/narrow
