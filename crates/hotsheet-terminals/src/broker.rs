@@ -171,6 +171,9 @@ pub enum Response {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrokerTermInfo {
     pub id: String,
+    /// Present on an Open reply: whether that request spawned a PTY. Older brokers omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spawned: Option<bool>,
     /// Immutable creation kind. Older brokers report shell when this field is absent.
     #[serde(default)]
     pub kind: TerminalKind,
@@ -194,6 +197,7 @@ fn info_of(term: &crate::terminal::Terminal, id: &str) -> BrokerTermInfo {
     let osc = term.term_state();
     BrokerTermInfo {
         id: id.to_string(),
+        spawned: None,
         kind: term.kind(),
         alive: term.is_alive(),
         busy: term.activity() == crate::busy::Activity::Busy,
@@ -452,9 +456,12 @@ async fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Requ
                     usize::try_from(bytes).unwrap_or(usize::MAX)
                 }),
             };
-            match manager.get_or_spawn(key(&id), spec) {
-                Ok(term) => Response::Terminal {
-                    info: info_of(&term, &id),
+            match manager.get_or_spawn_with_status(key(&id), spec) {
+                Ok((term, spawned)) => Response::Terminal {
+                    info: BrokerTermInfo {
+                        spawned: Some(spawned),
+                        ..info_of(&term, &id)
+                    },
                 },
                 Err(e) => Response::Err {
                     message: e.to_string(),
@@ -1140,7 +1147,7 @@ mod tests {
         // Client A opens a long-lived terminal, then disconnects (drops).
         {
             let mut a = BrokerClient::connect(&sock).await.unwrap();
-            let _ = a
+            let opened = a
                 .request(&Request::Open {
                     id: "shared".into(),
                     kind: TerminalKind::Ai,
@@ -1152,6 +1159,7 @@ mod tests {
                 })
                 .await
                 .unwrap();
+            assert!(matches!(opened, Response::Terminal { info } if info.spawned == Some(true)));
         } // A's connection drops here — simulating the server going away.
 
         // Client B (a fresh "server") reconnects and finds the terminal still alive — the
@@ -1180,7 +1188,9 @@ mod tests {
             })
             .await
             .unwrap();
-        assert!(matches!(reopened, Response::Terminal { info } if info.kind == TerminalKind::Ai));
+        assert!(
+            matches!(reopened, Response::Terminal { info } if info.kind == TerminalKind::Ai && info.spawned == Some(false))
+        );
         b.request(&Request::Kill {
             id: "shared".into(),
         })

@@ -28,15 +28,26 @@ impl TerminalManager {
     /// previous one has exited. An already-live terminal is returned as-is (its `spec` arg is
     /// ignored) so many viewers share one stream.
     pub fn get_or_spawn(&self, key: TermKey, spec: TermSpec) -> Result<Arc<Terminal>, TermError> {
+        self.get_or_spawn_with_status(key, spec)
+            .map(|(term, _)| term)
+    }
+
+    /// Open a terminal and report whether this call spawned a new PTY. The decision and
+    /// replacement happen under one lock, so callers do not have to race a pre-check.
+    pub fn get_or_spawn_with_status(
+        &self,
+        key: TermKey,
+        spec: TermSpec,
+    ) -> Result<(Arc<Terminal>, bool), TermError> {
         let mut map = self.terminals.lock_or_recover();
         if let Some(t) = map.get(&key) {
             if t.is_alive() {
-                return Ok(t.clone());
+                return Ok((t.clone(), false));
             }
         }
         let term = Arc::new(Terminal::spawn(spec)?);
         map.insert(key, term.clone());
-        Ok(term)
+        Ok((term, true))
     }
 
     /// The live terminal for `key`, if any.
@@ -141,6 +152,30 @@ mod tests {
         mgr.kill(&k).unwrap();
         let replacement = mgr.get_or_spawn(k.clone(), TermSpec::new("cat")).unwrap();
         assert_eq!(replacement.kind(), TerminalKind::Shell);
+        mgr.kill(&k).unwrap();
+    }
+
+    #[test]
+    fn open_reports_spawn_for_a_tracked_terminal_that_exited() {
+        let mgr = TerminalManager::new();
+        let k = key("proj", "exited");
+        let mut short = TermSpec::new("printf");
+        short.args = vec!["done".into()];
+        let (first, spawned) = mgr.get_or_spawn_with_status(k.clone(), short).unwrap();
+        assert!(spawned);
+        assert!(wait_until(|| !first.is_alive(), 5));
+        assert!(mgr.get(&k).is_some(), "the dead PTY remains tracked");
+
+        let (replacement, spawned) = mgr
+            .get_or_spawn_with_status(k.clone(), TermSpec::new("cat"))
+            .unwrap();
+        assert!(spawned);
+        assert!(!Arc::ptr_eq(&first, &replacement));
+        let (reattached, spawned) = mgr
+            .get_or_spawn_with_status(k.clone(), TermSpec::new("cat"))
+            .unwrap();
+        assert!(!spawned);
+        assert!(Arc::ptr_eq(&replacement, &reattached));
         mgr.kill(&k).unwrap();
     }
 

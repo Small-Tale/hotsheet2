@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-R49G01 covers exit-then-reopen AI terminal registration. The terminal manager and
+connection registry unit tests assert atomic replacement detection and stale-monitor
+cleanup; real HTTP tests open, exit, and reopen the same AI terminal id in both in-process
+and detached-broker modes, then check the replacement connection survives the old monitor.
+`crates/hotsheet-server/tests/session_messages.rs` also verifies a fresh session-push
+adapter after a push-capable Connect terminal exits and reopens under the same id.
+
 HS2-TQ88K4 covers Kerf Button adoption for standalone actions in the web client. Component unit
 tests assert native button actions, disabled and loading states, icon labels, and `data-*` metadata;
 `clients/web/tests/ux-demo.spec.ts` and `clients/web/tests/providers.spec.ts` exercise those actions

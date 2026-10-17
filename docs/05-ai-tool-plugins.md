@@ -401,7 +401,9 @@ mid-write by another process, is skipped rather than aborting every other releas
 
 - **Connect terminals:** a server `connect` terminal uses its terminal id as the session. When
   the terminal exits or is deleted, the server releases the id's claims in every hosted
-  store. This works both in-process and with the detached terminal broker.
+  store. This works both in-process and with the detached terminal broker. Opening the same id
+  after its PTY exits creates a new AI connection and session-push registration; attaching to
+  a still-live PTY keeps its existing registration.
 - **Shell and command terminals:** every other server terminal gets `terminal-<terminal id>`,
   so a tool a user starts in it by hand claims under that id. The server releases the id's
   claims when the terminal exits or is deleted (HS2-RXWXQ8). It also releases them whenever

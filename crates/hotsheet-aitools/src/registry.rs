@@ -39,6 +39,7 @@ pub struct Connection {
 
 struct Entry {
     conn: Connection,
+    generation: u64,
     /// Last heartbeat; `None` = never active (idle).
     last_activity_ms: Option<u64>,
 }
@@ -47,6 +48,7 @@ struct Entry {
 pub struct ConnectionRegistry {
     entries: HashMap<String, Entry>,
     busy_window_ms: u64,
+    next_generation: u64,
 }
 
 impl ConnectionRegistry {
@@ -56,25 +58,52 @@ impl ConnectionRegistry {
         Self {
             entries: HashMap::new(),
             busy_window_ms,
+            next_generation: 0,
         }
     }
 
     /// Register (or replace) a connection; returns its id.
     pub fn register(&mut self, conn: Connection) -> String {
+        self.register_tracked(conn).0
+    }
+
+    /// Register a connection and return the generation owned by its lifecycle monitor.
+    /// An older monitor can use this to avoid removing a replacement with the same id.
+    pub fn register_tracked(&mut self, conn: Connection) -> (String, u64) {
         let id = conn.id.clone();
+        self.next_generation = self.next_generation.wrapping_add(1);
+        let generation = self.next_generation;
         self.entries.insert(
             id.clone(),
             Entry {
                 conn,
+                generation,
                 last_activity_ms: None,
             },
         );
-        id
+        (id, generation)
     }
 
     /// Remove a connection; returns whether it was present.
     pub fn unregister(&mut self, id: &str) -> bool {
         self.entries.remove(id).is_some()
+    }
+
+    /// Remove only the registration owned by this lifecycle monitor.
+    pub fn unregister_if_generation(&mut self, id: &str, generation: u64) -> bool {
+        if self.is_generation(id, generation) {
+            self.entries.remove(id);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Whether a monitor still owns this id's current registration.
+    pub fn is_generation(&self, id: &str, generation: u64) -> bool {
+        self.entries
+            .get(id)
+            .is_some_and(|entry| entry.generation == generation)
     }
 
     pub fn get(&self, id: &str) -> Option<&Connection> {
@@ -226,5 +255,17 @@ mod tests {
         assert!(r.is_busy("a", 10_003));
         r.set_idle("a");
         assert!(!r.is_busy("a", 10_003));
+    }
+
+    #[test]
+    fn old_terminal_monitor_cannot_unregister_a_replacement() {
+        let mut r = ConnectionRegistry::new(5_000);
+        let (_, first) = r.register_tracked(conn("terminal"));
+        let (_, replacement) = r.register_tracked(conn("terminal"));
+        assert_ne!(first, replacement);
+        assert!(!r.unregister_if_generation("terminal", first));
+        assert!(r.get("terminal").is_some());
+        assert!(r.unregister_if_generation("terminal", replacement));
+        assert!(r.get("terminal").is_none());
     }
 }

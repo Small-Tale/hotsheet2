@@ -57,7 +57,7 @@ pub(crate) async fn open_terminal(
     if let Some(tb) = &state.terminal_broker {
         // Newly-spawned vs reattach: a pre-check keeps the `connect` busy feed one-per-terminal
         // (no duplicate poll task on a reattach), mirroring the in-process path.
-        let newly_spawned = !matches!(tb.info(&id).await, Ok(Some(_)));
+        let previously_alive = matches!(tb.info(&id).await, Ok(Some(info)) if info.alive);
         let resp = tb
             .call(hotsheet_terminals::BrokerRequest::Open {
                 id: id.clone(),
@@ -76,15 +76,18 @@ pub(crate) async fn open_terminal(
             hotsheet_terminals::BrokerResponse::Terminal { info } => info,
             other => return Err(broker_err(other)),
         };
+        // A current broker reports the atomic Open decision. Older brokers do not, so
+        // fall back to the pre-Open liveness check for compatibility.
+        let newly_spawned = info.spawned.unwrap_or(!previously_alive);
         // Tool-in-terminal (HS2-4M67VN): register a live connection + feed its busy from the
         // broker-hosted terminal's inference (polled over the socket), once per fresh terminal.
         if newly_spawned {
             match &req.connect {
                 Some(tool) => {
+                    register_broker_terminal_connection(&state, &id, tool, tb.clone());
                     if let Some(push) = push {
                         session_messages::register(&state, &id, push);
                     }
-                    register_broker_terminal_connection(&state, &id, tool, tb.clone())
                 }
                 None => watch_broker_terminal_session_exit(
                     &state,
@@ -97,7 +100,6 @@ pub(crate) async fn open_terminal(
         return Ok(Json(broker_info(info)));
     }
 
-    let newly_spawned = state.terminals.get(&term_key(&state, &id)).is_none();
     let spec = hotsheet_terminals::TermSpec {
         kind,
         command: launch.command,
@@ -108,9 +110,9 @@ pub(crate) async fn open_terminal(
         cols: 80,
         replay_bytes: usize::try_from(replay_bytes).unwrap_or(usize::MAX),
     };
-    let term = state
+    let (term, newly_spawned) = state
         .terminals
-        .get_or_spawn(term_key(&state, &id), spec)
+        .get_or_spawn_with_status(term_key(&state, &id), spec)
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
 
     // Tool-in-terminal (HS2-4M67VN): register a live connection + feed its busy from the
@@ -118,10 +120,10 @@ pub(crate) async fn open_terminal(
     if newly_spawned {
         match &req.connect {
             Some(tool) => {
+                register_terminal_connection(&state, &id, tool, term.clone());
                 if let Some(push) = push {
                     session_messages::register(&state, &id, push);
                 }
-                register_terminal_connection(&state, &id, tool, term.clone())
             }
             None => {
                 watch_terminal_session_exit(&state, term.clone(), terminal_session_worker_id(&id))
@@ -497,9 +499,9 @@ fn register_terminal_connection(
     term: std::sync::Arc<hotsheet_terminals::Terminal>,
 ) {
     let registry = state.drive_registry();
-    {
+    let generation = {
         let mut r = registry.lock_or_recover();
-        r.register(hotsheet_aitools::Connection {
+        r.register_tracked(hotsheet_aitools::Connection {
             id: id.to_string(),
             project: state.store.root().display().to_string(),
             tool: tool.to_string(),
@@ -507,8 +509,9 @@ fn register_terminal_connection(
             transport: hotsheet_aitools::Transport::Pty,
             pid: None,
             started_at_ms: now_ms(),
-        });
-    }
+        })
+        .1
+    };
     let conn_id = id.to_string();
     let host = state.host.clone();
     let pushes = state.session_pushes.clone();
@@ -518,16 +521,21 @@ fn register_terminal_connection(
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             let alive = term.is_alive();
             if !alive {
-                {
+                let removed = {
                     let mut r = registry.lock_or_recover();
-                    r.unregister(&conn_id);
+                    r.unregister_if_generation(&conn_id, generation)
+                };
+                if removed {
+                    session_messages::unregister(&pushes, &conn_id);
+                    release_session_claims(host, worker).await;
                 }
-                session_messages::unregister(&pushes, &conn_id);
-                release_session_claims(host, worker).await;
                 break;
             }
             {
                 let mut r = registry.lock_or_recover();
+                if !r.is_generation(&conn_id, generation) {
+                    break;
+                }
                 match term.activity() {
                     hotsheet_terminals::Activity::Busy => r.note_activity(&conn_id, now_ms()),
                     hotsheet_terminals::Activity::Idle => r.set_idle(&conn_id),
@@ -550,9 +558,9 @@ fn register_broker_terminal_connection(
     broker: terminal_broker::TerminalBroker,
 ) {
     let registry = state.drive_registry();
-    {
+    let generation = {
         let mut r = registry.lock_or_recover();
-        r.register(hotsheet_aitools::Connection {
+        r.register_tracked(hotsheet_aitools::Connection {
             id: id.to_string(),
             project: state.store.root().display().to_string(),
             tool: tool.to_string(),
@@ -560,8 +568,9 @@ fn register_broker_terminal_connection(
             transport: hotsheet_aitools::Transport::Pty,
             pid: None,
             started_at_ms: now_ms(),
-        });
-    }
+        })
+        .1
+    };
     let conn_id = id.to_string();
     let host = state.host.clone();
     let pushes = state.session_pushes.clone();
@@ -572,6 +581,9 @@ fn register_broker_terminal_connection(
             match broker.info(&conn_id).await {
                 Ok(Some(info)) if info.alive => {
                     let mut r = registry.lock_or_recover();
+                    if !r.is_generation(&conn_id, generation) {
+                        break;
+                    }
                     if info.busy {
                         r.note_activity(&conn_id, now_ms());
                     } else {
@@ -580,12 +592,14 @@ fn register_broker_terminal_connection(
                 }
                 // Terminal gone (NotFound / exited) or broker unreachable → stop + unregister.
                 _ => {
-                    {
+                    let removed = {
                         let mut r = registry.lock_or_recover();
-                        r.unregister(&conn_id);
+                        r.unregister_if_generation(&conn_id, generation)
+                    };
+                    if removed {
+                        session_messages::unregister(&pushes, &conn_id);
+                        release_session_claims(host, worker).await;
                     }
-                    session_messages::unregister(&pushes, &conn_id);
-                    release_session_claims(host, worker).await;
                     break;
                 }
             }

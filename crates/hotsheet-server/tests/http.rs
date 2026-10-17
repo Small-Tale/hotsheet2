@@ -14090,6 +14090,97 @@ async fn a_connected_terminal_feeds_its_busy_into_the_connection_registry() {
     );
 }
 
+async fn assert_exited_ai_terminal_reregisters(application: axum::Router) {
+    let exited = serde_json::json!({
+        "command": "/bin/sh", "args": ["-c", "exit 0"], "connect": "claude", "id": "reopened-ai"
+    })
+    .to_string();
+    let resp = application
+        .clone()
+        .oneshot(authed("POST", "/terminals", Some(&exited)))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let mut observed_exit = false;
+    for _ in 0..50 {
+        let terminal = body_json(
+            application
+                .clone()
+                .oneshot(authed("GET", "/terminals/reopened-ai", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if terminal["alive"] == false {
+            observed_exit = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(observed_exit, "the first PTY should exit while tracked");
+
+    let replacement = serde_json::json!({
+        "command": "cat", "connect": "claude", "id": "reopened-ai"
+    })
+    .to_string();
+    for _ in 0..2 {
+        let resp = application
+            .clone()
+            .oneshot(authed("POST", "/terminals", Some(&replacement)))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(body_json(resp).await["alive"], true);
+    }
+    // The old exit monitor runs on a 500 ms cadence. It must not remove the replacement.
+    tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+    let connections = body_json(
+        application
+            .clone()
+            .oneshot(authed("GET", "/connections", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let registered = connections
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|connection| connection["id"] == "reopened-ai" && connection["tool"] == "claude")
+        .count();
+    assert_eq!(registered, 1, "replacement connection: {connections}");
+    let resp = application
+        .oneshot(authed("DELETE", "/terminals/reopened-ai", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn an_exited_in_process_ai_terminal_reregisters_when_reopened() {
+    assert_exited_ai_terminal_reregisters(app(state().1)).await;
+}
+
+#[tokio::test]
+async fn an_exited_broker_ai_terminal_reregisters_when_reopened() {
+    use hotsheet_server::terminal_broker::TerminalBroker;
+    use std::sync::Arc;
+
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("broker.sock");
+    let listener = tokio::net::UnixListener::bind(&sock).unwrap();
+    tokio::spawn(hotsheet_terminals::serve_broker(
+        listener,
+        "proj".into(),
+        Arc::new(hotsheet_terminals::TerminalManager::new()),
+    ));
+    let application = app(state()
+        .1
+        .with_terminal_broker_at(TerminalBroker::at(&sock, "proj")));
+    assert_exited_ai_terminal_reregisters(application).await;
+}
+
 #[tokio::test]
 async fn terminal_without_a_command_launches_the_users_default_shell() {
     let (_d, st) = state();

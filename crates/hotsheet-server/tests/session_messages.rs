@@ -334,6 +334,36 @@ async fn a_push_capable_terminal_is_launched_reachable_and_receives_prompts_and_
 }
 
 #[tokio::test]
+async fn a_push_capable_terminal_reopens_after_exit_with_a_fresh_adapter() {
+    let (_store, plugins, router) = fixture();
+    let manifest = plugins.path().join("fake-push/manifest.toml");
+    let original = std::fs::read_to_string(&manifest).unwrap();
+    std::fs::write(&manifest, original.replace("sleep 30", "sleep 0.1")).unwrap();
+    let (_, first_port, first_password) = launch(&router, "fake-push", "push-reopen").await;
+    for _ in 0..100 {
+        let (_, terminal) = send(&router, "GET", "/terminals/push-reopen", None).await;
+        if terminal["alive"] == false {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    let (_, terminal) = send(&router, "GET", "/terminals/push-reopen", None).await;
+    assert_eq!(terminal["alive"], false);
+
+    std::fs::write(&manifest, original).unwrap();
+    let (_, second_port, second_password) = launch(&router, "fake-push", "push-reopen").await;
+    assert!(first_port.parse::<u16>().is_ok());
+    assert!(second_port.parse::<u16>().is_ok());
+    assert_ne!(first_password, second_password);
+    tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+    let (_, connections) = send(&router, "GET", "/connections", None).await;
+    let reopened = connection(&connections, "push-reopen");
+    assert_eq!(reopened["actions"], serde_json::json!(["message"]));
+    let (status, _) = send(&router, "DELETE", "/terminals/push-reopen", None).await;
+    assert!(status.is_success());
+}
+
+#[tokio::test]
 async fn a_tool_without_a_push_mechanism_reports_the_capability_unsupported() {
     let (_store, _plugins, router) = fixture();
     let (flag, port, password) = launch(&router, "fake-nopush", "plain-1").await;
