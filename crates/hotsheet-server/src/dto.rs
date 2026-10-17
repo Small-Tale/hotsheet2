@@ -413,10 +413,6 @@ pub(crate) struct RenewReq {
 #[derive(Debug, Deserialize)]
 pub(crate) struct WsParams {
     pub(crate) secret: Option<String>,
-    /// The checkout this subscription serves and the client (browser tab) holding it, so the
-    /// server knows which projects are open (HS2-ARJ9J1).
-    pub(crate) checkout: Option<String>,
-    pub(crate) client: Option<String>,
 }
 
 // The full-ticket + note wire DTOs (`ApiTicket`/`ApiNote`) and their `From<&Ticket>`

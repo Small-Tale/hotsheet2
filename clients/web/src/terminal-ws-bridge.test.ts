@@ -203,18 +203,16 @@ describe('terminal WebSocket bridge', () => {
     await once(client, 'close');
   });
 
-  it('multiplexes two real upstream project sockets and unsubscribes one without closing the other', async () => {
+  it('uses one upstream for two checkouts and routes each store to its project', async () => {
     const upstreamHttp = createServer(),
       upstream = new WebSocketServer({ server: upstreamHttp });
     servers.push(upstream, upstreamHttp);
-    const upstreams = new Map<string, WebSocket>(),
+    const upstreams = new Set<WebSocket>(),
       targets: string[] = [];
     upstream.on('connection', (socket, request) => {
-      const target = new URL(request.url ?? '/', 'http://localhost');
-      const project = target.searchParams.get('checkout') ?? '';
-      upstreams.set(project, socket);
+      upstreams.add(socket);
       targets.push(request.url ?? '');
-      socket.on('close', () => upstreams.delete(project));
+      socket.on('close', () => upstreams.delete(socket));
     });
     const upstreamPort = await listen(upstreamHttp),
       bridgeHttp = createServer();
@@ -224,6 +222,7 @@ describe('terminal WebSocket bridge', () => {
       () => undefined,
       (project, client) =>
         `ws://127.0.0.1:${upstreamPort}/ws/sync?secret=server-only&checkout=${encodeURIComponent(project)}&client=${client}`,
+      (project) => [project],
     );
     const bridgePort = await listen(bridgeHttp),
       browser = new WebSocket(`ws://127.0.0.1:${bridgePort}${CHANGE_WS_MUX_PATH}`),
@@ -241,14 +240,17 @@ describe('terminal WebSocket bridge', () => {
         .map((frame) => frame.subscription)
         .sort(),
     ).toEqual([1, 2]);
-    expect(targets).toEqual(
-      expect.arrayContaining([
-        '/ws/sync?secret=server-only&checkout=a&client=tab',
-        '/ws/sync?secret=server-only&checkout=b&client=tab',
-      ]),
-    );
-    upstreams.get('a')!.send('{"cursor":1,"store":"a","kind":"created","id":"1","slug":"HS2-A"}');
-    upstreams.get('b')!.send('{"cursor":9,"store":"b","kind":"created","id":"9","slug":"HS2-B"}');
+    await vi.waitFor(() => {
+      expect(upstreams.size).toBe(1);
+    });
+    expect(
+      targets.some(
+        (target) => new URL(target, 'http://localhost').searchParams.getAll('checkout').sort().join() === 'a,b',
+      ),
+    ).toBe(true);
+    const [shared] = upstreams;
+    shared.send('{"cursor":1,"store":"a","kind":"created","id":"1","slug":"HS2-A"}');
+    shared.send('{"cursor":9,"store":"b","kind":"created","id":"9","slug":"HS2-B"}');
     await vi.waitFor(() => {
       expect(frames.filter((frame) => frame.type === 'event')).toHaveLength(2);
     });
@@ -266,14 +268,77 @@ describe('terminal WebSocket bridge', () => {
     ).toEqual([1, 2]);
     browser.send(JSON.stringify({ version: 1, type: 'unsubscribe', project: 'a', client: 'tab', subscription: 1 }));
     await vi.waitFor(() => {
-      expect(upstreams.has('a')).toBe(false);
+      expect([...upstreams].some((socket) => socket !== shared)).toBe(true);
     });
-    expect(upstreams.has('b')).toBe(true);
-    upstreams.get('b')!.send('{"cursor":10,"store":"b","kind":"changed","id":"9","slug":"HS2-B"}');
+    await vi.waitFor(() => {
+      expect(upstreams.size).toBe(1);
+    });
+    const [remaining] = upstreams;
+    expect(new URL(targets.at(-1)!, 'http://localhost').searchParams.getAll('checkout')).toEqual(['b']);
+    remaining.send('{"cursor":10,"store":"b","kind":"changed","id":"9","slug":"HS2-B"}');
     await vi.waitFor(() => {
       expect(frames.filter((frame) => frame.type === 'event')).toHaveLength(3);
     });
     expect(frames.at(-1)).toMatchObject({ project: 'b', type: 'event' });
+    browser.close();
+    await once(browser, 'close');
+  });
+
+  it('falls back to individual upstreams when an older server rejects repeated checkout parameters', async () => {
+    const upstreamHttp = createServer(),
+      upstream = new WebSocketServer({ noServer: true });
+    servers.push(upstream, upstreamHttp);
+    const accepted = new Map<string, WebSocket>(),
+      attempted: string[] = [];
+    upstreamHttp.on('upgrade', (request, socket, head) => {
+      const checkouts = new URL(request.url ?? '/', 'http://localhost').searchParams.getAll('checkout');
+      attempted.push(checkouts.join(','));
+      if (checkouts.length > 1) {
+        socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+        return;
+      }
+      upstream.handleUpgrade(request, socket, head, (client) => upstream.emit('connection', client, request));
+    });
+    upstream.on('connection', (socket, request) => {
+      const project = new URL(request.url ?? '/', 'http://localhost').searchParams.get('checkout') ?? '';
+      accepted.set(project, socket);
+      socket.on('close', () => {
+        if (accepted.get(project) === socket) accepted.delete(project);
+      });
+    });
+    const upstreamPort = await listen(upstreamHttp),
+      bridgeHttp = createServer();
+    servers.push(bridgeHttp);
+    installProjectWebSocketBridge(
+      { httpServer: bridgeHttp },
+      () => undefined,
+      (project, client) => {
+        return `ws://127.0.0.1:${upstreamPort}/ws/sync?secret=private&client=${client}&checkout=${project}`;
+      },
+    );
+    const bridgePort = await listen(bridgeHttp),
+      browser = new WebSocket(`ws://127.0.0.1:${bridgePort}${CHANGE_WS_MUX_PATH}`),
+      frames: ChangeWsMessage[] = [];
+    browser.on('message', (data) => {
+      frames.push(JSON.parse(webSocketRawText(data)) as ChangeWsMessage);
+    });
+    await once(browser, 'open');
+    browser.send(JSON.stringify({ version: 1, type: 'subscribe', project: 'a', client: 'tab', subscription: 1 }));
+    await vi.waitFor(() => {
+      expect(frames.some((frame) => frame.type === 'subscribed' && frame.project === 'a')).toBe(true);
+    });
+    browser.send(JSON.stringify({ version: 1, type: 'subscribe', project: 'b', client: 'tab', subscription: 2 }));
+    await vi.waitFor(() => {
+      expect(frames.filter((frame) => frame.type === 'subscribed')).toHaveLength(2);
+    });
+    expect(attempted).toContain('a,b');
+    await vi.waitFor(() => {
+      expect([...accepted.keys()].sort()).toEqual(['a', 'b']);
+    });
+    accepted.get('b')!.send('{"cursor":1,"store":"b","kind":"created","id":"1","slug":"HS2-B"}');
+    await vi.waitFor(() => {
+      expect(frames.some((frame) => frame.type === 'event' && frame.project === 'b')).toBe(true);
+    });
     browser.close();
     await once(browser, 'close');
   });

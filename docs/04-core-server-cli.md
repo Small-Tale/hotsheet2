@@ -204,6 +204,10 @@ stay hosted only while they are in use. The primary store, stores listed in `sto
 and stores added with `POST /stores` stay hosted for the life of the server. A client tags
 each change stream, `GET /ws/poll` or `/ws/sync`, with `checkout=<id>` and `client=<tab id>`.
 The web bridge adds `checkout`, since the browser only knows its project.
+`/ws/sync` also accepts repeated `checkout=` values, so one socket can hold presence for
+several checkouts in the same tab. Each value has its own lease and explicit close; a
+single-checkout URL remains valid for older bridges. A socket with no nonempty checkout
+still pins all hosted stores for version skew.
 
 - **Leases:** a lease stays live while a socket is open or a poll is in flight, and for 60 s
   after, which covers the gap between long-polls.

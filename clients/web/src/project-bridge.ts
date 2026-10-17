@@ -79,6 +79,7 @@ interface SessionTarget {
   root?: string;
   serverStore?: string;
   ticketStore?: string;
+  storeIds?: string[];
 }
 interface CorruptDiagnostic {
   path: string;
@@ -1534,7 +1535,15 @@ async function openPreparedLocalProject(
     registrationRepairAvailable =
       !hs1DataPresent && backedUp ? await hasHs1Registrations(root).catch(() => true) : false,
     hs1PostgresVersion = hs1DataPresent ? (await readFile(hs1MarkerPath, 'utf8').catch(() => '')).trim() : '';
-  sessions.set(opened.checkout.id, { ...target, ticketStore: activeStore });
+  const storeIds = await Promise.all(
+    opened.checkout.stores.map(async (store) =>
+      createHash('sha256')
+        .update(await realpath(store).catch(() => store))
+        .digest('hex')
+        .slice(0, 16),
+    ),
+  );
+  sessions.set(opened.checkout.id, { ...target, ticketStore: activeStore, storeIds });
   return {
     id: opened.checkout.id,
     root: opened.checkout.root,
@@ -1714,6 +1723,11 @@ export async function projectChangeWebSocketUrl(projectId: string, client?: stri
   url.searchParams.set('checkout', projectId);
   if (client) url.searchParams.set('client', client);
   return url.toString();
+}
+
+/** Hosted Git store ids used to route a shared upstream event to its open projects. */
+export function projectChangeStoreIds(projectId: string): string[] | undefined {
+  return sessions.get(projectId)?.storeIds;
 }
 
 export function authenticatedTerminalWebSocketUrl(origin: string, terminalId: string, secret: string): string {

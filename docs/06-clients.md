@@ -1717,15 +1717,21 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   **Multiplexed WebSocket (HS2-QJR1K6).** Projects sharing a bridge use one browser
   WebSocket. Versioned subscribe/unsubscribe frames add and remove projects without closing
   the others; every acknowledgement and live event carries its project id and subscription
-  token, so a late frame from a replaced subscription is ignored. The bridge opens one authenticated
-  upstream `/ws/sync` per subscribed project, retaining its checkout and tab presence.
+  token, so a late frame from a replaced subscription is ignored. The bridge groups projects
+  by authenticated server instance and tab, opens one upstream `/ws/sync` with repeated
+  `checkout=` values, and routes store-tagged events to the projects that use that store.
+  An unknown store is sent to every project. A source linked while its project stays open
+  can leave the bridge's store map stale until that project reopens (`HS2-NWKJ08`).
+  Adding or removing a project opens the replacement upstream before closing the old one;
+  the overlapping interval preserves continuity, and each project discards duplicate cursors.
+  If an older server rejects repeated checkouts, the bridge uses individual upstream sockets
+  for that server while retaining the shared browser socket.
   The browser's per-project transport still owns its own cursor, catchup poll, replay,
   overflow recovery, and bounded delivery queue. A bridge that rejects or does not answer the
   multiplexed upgrade falls back to the existing direct project WebSockets. A dropped shared socket
   closes each virtual project socket, so each transport replays from its own cursor before
   subscribing again. Cross-project delivery and cursors remain isolated.
-  Not multiplexed yet: presence for several checkouts on one upstream stream and cross-tab
-  sharing (`HS2-XAGJP3`, `HS2-NP7R42`).
+  Cross-tab sharing remains separate (`HS2-NP7R42`).
   With the off-by-default `hotsheet.change-stream-worker` local setting, one dedicated
   worker runs these transports for every open project and posts only validated, ordered,
   coalesced change events. The main thread applies them through the same consumer. A

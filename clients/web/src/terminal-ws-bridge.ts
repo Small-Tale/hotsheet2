@@ -4,12 +4,13 @@ import type { Duplex } from 'node:stream';
 import WebSocket, { WebSocketServer } from 'ws';
 
 import { CHANGE_WS_MUX_PATH, type ChangeWsCommand, type ChangeWsMessage, parseChangeWsCommand } from './change-ws-mux';
-import { projectChangeWebSocketUrl, projectTerminalWebSocketUrl } from './project-bridge';
+import { projectChangeStoreIds, projectChangeWebSocketUrl, projectTerminalWebSocketUrl } from './project-bridge';
 
 const browserAttach = /^\/__hotsheet\/project-api\/([^/]+)\/terminals\/([^/]+)\/attach$/;
 const browserSync = /^\/__hotsheet\/project-api\/([^/]+)\/ws\/sync$/;
 type TargetResolver = (projectId: string, terminalId: string) => string | undefined | Promise<string | undefined>;
 type SyncTargetResolver = (projectId: string, client?: string) => string | undefined | Promise<string | undefined>;
+type StoreResolver = (projectId: string) => string[] | undefined;
 
 export function webSocketRawText(data: WebSocket.RawData): string {
   if (Array.isArray(data)) return Buffer.concat(data).toString('utf8');
@@ -56,11 +57,175 @@ export function isProjectWebSocketPath(requestUrl: string | undefined): boolean 
   return pathname === CHANGE_WS_MUX_PATH || browserSync.test(pathname) || browserAttach.test(pathname);
 }
 
-function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver): void {
-  const subscriptions = new Map<string, { socket: WebSocket; subscription: number }>();
+function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver, resolveStores: StoreResolver): void {
+  type Subscription = {
+    project: string;
+    subscription: number;
+    target: string;
+    stores?: string[];
+    acknowledged: boolean;
+  };
+  type Group = {
+    base: string;
+    members: Map<string, Subscription>;
+    active?: WebSocket;
+    candidate?: WebSocket;
+    activeProjects: string;
+    legacy: boolean;
+    direct: Map<string, WebSocket>;
+  };
+  const subscriptions = new Map<string, Subscription>();
   const pending = new Map<string, { token: symbol; subscription: number }>();
+  const groups = new Map<string, Group>();
   const send = (message: ChangeWsMessage) => {
     if (browser.readyState === WebSocket.OPEN) browser.send(JSON.stringify(message));
+  };
+  const groupBase = (target: string): string => {
+    const url = new URL(target);
+    url.searchParams.delete('checkout');
+    return url.toString();
+  };
+  const ack = (member: Subscription) => {
+    if (member.acknowledged) return;
+    member.acknowledged = true;
+    send({ version: 1, type: 'subscribed', project: member.project, subscription: member.subscription });
+  };
+  const deliver = (group: Group, raw: WebSocket.RawData) => {
+    const data = webSocketRawText(raw);
+    let store: string | undefined;
+    try {
+      const event = JSON.parse(data) as { store?: unknown };
+      if (typeof event.store === 'string') store = event.store;
+    } catch {
+      // An older upstream frame has no routing metadata; preserve its broad delivery.
+    }
+    const members = [...group.members.values()];
+    const matched = store ? members.filter((member) => member.stores?.includes(store)) : [];
+    // Unknown or newly linked stores keep the old machine-wide delivery semantics.
+    for (const member of matched.length ? matched : members)
+      if (member.acknowledged)
+        send({ version: 1, type: 'event', project: member.project, subscription: member.subscription, data });
+  };
+  const reconcile = (group: Group) => {
+    group.candidate?.close();
+    group.candidate = undefined;
+    if (group.members.size === 0) {
+      group.active?.close();
+      for (const socket of group.direct.values()) socket.close();
+      groups.delete(group.base);
+      return;
+    }
+    if (group.legacy) {
+      let waiting = 0;
+      for (const member of group.members.values()) {
+        if (group.direct.has(member.project)) continue;
+        waiting += 1;
+        const socket = new WebSocket(member.target);
+        group.direct.set(member.project, socket);
+        socket.on('open', () => {
+          if (group.direct.get(member.project) !== socket) return;
+          ack(member);
+          waiting -= 1;
+          if (waiting === 0) {
+            group.active?.close();
+            group.active = undefined;
+          }
+        });
+        socket.on('message', (data) => {
+          if (group.direct.get(member.project) === socket && member.acknowledged)
+            send({
+              version: 1,
+              type: 'event',
+              project: member.project,
+              subscription: member.subscription,
+              data: webSocketRawText(data),
+            });
+        });
+        const closed = () => {
+          if (group.direct.get(member.project) !== socket) return;
+          group.direct.delete(member.project);
+          if (subscriptions.get(member.project) === member) {
+            group.members.delete(member.project);
+            subscriptions.delete(member.project);
+            send({ version: 1, type: 'closed', project: member.project, subscription: member.subscription });
+          }
+        };
+        socket.on('close', closed);
+        socket.on('error', closed);
+      }
+      if (waiting === 0) {
+        group.active?.close();
+        group.active = undefined;
+      }
+      return;
+    }
+    const members = [...group.members.values()];
+    const projects = members
+      .map((member) => member.project)
+      .sort()
+      .join('\u0000');
+    if (group.active?.readyState === WebSocket.OPEN && group.activeProjects === projects) {
+      for (const member of members) ack(member);
+      return;
+    }
+    const url = new URL(members[0].target);
+    url.searchParams.delete('checkout');
+    for (const member of members) {
+      const checkout = new URL(member.target).searchParams.get('checkout');
+      if (checkout) url.searchParams.append('checkout', checkout);
+    }
+    const candidate = new WebSocket(url.toString());
+    group.candidate = candidate;
+    candidate.on('open', () => {
+      if (group.candidate !== candidate) return;
+      const previous = group.active;
+      group.active = candidate;
+      group.activeProjects = projects;
+      group.candidate = undefined;
+      for (const member of group.members.values()) ack(member);
+      previous?.close();
+    });
+    candidate.on('message', (data) => {
+      if (group.active === candidate) deliver(group, data);
+    });
+    const closed = () => {
+      if (group.candidate === candidate) {
+        group.candidate = undefined;
+        if (members.length > 1) {
+          // A pre-multi-checkout server rejects duplicate checkout parameters.
+          group.legacy = true;
+          reconcile(group);
+        } else {
+          const member = members[0];
+          if (group.members.get(member.project) === member) {
+            group.members.delete(member.project);
+            subscriptions.delete(member.project);
+            send({ version: 1, type: 'closed', project: member.project, subscription: member.subscription });
+          }
+        }
+      } else if (group.active === candidate) {
+        group.active = undefined;
+        group.candidate?.close();
+        group.candidate = undefined;
+        for (const member of group.members.values()) {
+          subscriptions.delete(member.project);
+          send({ version: 1, type: 'closed', project: member.project, subscription: member.subscription });
+        }
+        group.members.clear();
+        groups.delete(group.base);
+      }
+    };
+    candidate.on('close', closed);
+    candidate.on('error', closed);
+  };
+  const remove = (member: Subscription) => {
+    const group = groups.get(groupBase(member.target));
+    if (!group || group.members.get(member.project) !== member) return;
+    group.members.delete(member.project);
+    subscriptions.delete(member.project);
+    group.direct.get(member.project)?.close();
+    group.direct.delete(member.project);
+    reconcile(group);
   };
   browser.on('message', (raw) => {
     let command: ChangeWsCommand | undefined;
@@ -78,20 +243,18 @@ function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver): vo
     if (command.type === 'unsubscribe') {
       if (pending.get(project)?.subscription === command.subscription) pending.delete(project);
       if (subscriptions.get(project)?.subscription === command.subscription) {
-        subscriptions.get(project)?.socket.close();
-        subscriptions.delete(project);
+        remove(subscriptions.get(project)!);
       }
       return;
     }
     const existing = subscriptions.get(project);
     if (existing) {
       if (existing.subscription === command.subscription) {
-        if (existing.socket.readyState === WebSocket.OPEN)
+        if (existing.acknowledged)
           send({ version: 1, type: 'subscribed', project, subscription: command.subscription });
         return;
       }
-      existing.socket.close();
-      subscriptions.delete(project);
+      remove(existing);
     }
     if (pending.get(project)?.subscription === command.subscription) return;
     const token = Symbol(project);
@@ -105,27 +268,22 @@ function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver): vo
           send({ version: 1, type: 'closed', project, subscription: command.subscription });
           return;
         }
-        const upstream = new WebSocket(target);
-        subscriptions.set(project, { socket: upstream, subscription: command.subscription });
-        upstream.on('open', () => {
-          send({ version: 1, type: 'subscribed', project, subscription: command.subscription });
-        });
-        upstream.on('message', (data) => {
-          send({
-            version: 1,
-            type: 'event',
-            project,
-            subscription: command.subscription,
-            data: webSocketRawText(data),
-          });
-        });
-        const closed = () => {
-          if (subscriptions.get(project)?.socket !== upstream) return;
-          subscriptions.delete(project);
-          send({ version: 1, type: 'closed', project, subscription: command.subscription });
+        const member: Subscription = {
+          project,
+          subscription: command.subscription,
+          target,
+          stores: resolveStores(project),
+          acknowledged: false,
         };
-        upstream.on('close', closed);
-        upstream.on('error', closed);
+        subscriptions.set(project, member);
+        const base = groupBase(target);
+        let group = groups.get(base);
+        if (!group) {
+          group = { base, members: new Map(), activeProjects: '', legacy: false, direct: new Map() };
+          groups.set(base, group);
+        }
+        group.members.set(project, member);
+        reconcile(group);
       })
       .catch(() => {
         if (pending.get(project)?.token !== token) return;
@@ -135,8 +293,17 @@ function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver): vo
   });
   browser.on('close', () => {
     pending.clear();
-    for (const upstream of subscriptions.values()) upstream.socket.close();
+    for (const group of groups.values()) {
+      group.active?.close();
+      group.candidate?.close();
+      for (const socket of group.direct.values()) socket.close();
+      group.active = undefined;
+      group.candidate = undefined;
+      group.members.clear();
+      group.direct.clear();
+    }
     subscriptions.clear();
+    groups.clear();
   });
 }
 
@@ -152,6 +319,7 @@ export function installProjectWebSocketBridge(
   },
   resolveTerminal: TargetResolver = projectTerminalWebSocketUrl,
   resolveSync: SyncTargetResolver = projectChangeWebSocketUrl,
+  resolveStores: StoreResolver = projectChangeStoreIds,
 ): void {
   const browserServer = new WebSocketServer({ noServer: true });
   server.httpServer?.on('upgrade', (request, socket, head) => {
@@ -166,7 +334,7 @@ export function installProjectWebSocketBridge(
     });
     if (new URL(request.url ?? '/', 'http://localhost').pathname === CHANGE_WS_MUX_PATH) {
       browserServer.handleUpgrade(request, socket, head, (browser) => {
-        serveChangeMux(browser, resolveSync);
+        serveChangeMux(browser, resolveSync, resolveStores);
       });
       return;
     }

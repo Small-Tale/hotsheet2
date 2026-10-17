@@ -1,7 +1,7 @@
 //! Store-scoped write routes (`/stores/{id}/...`, HS2-87).
 
 use crate::api_error::ApiError;
-use crate::dto::{CloseReq, CreateReq, UpdateReq, WsParams};
+use crate::dto::{CloseReq, CreateReq, UpdateReq};
 use crate::events::ChangeEvent;
 use crate::multistore::StoreEntry;
 use crate::routes::terminals::{TerminalInfo, broker_info, term_info};
@@ -133,22 +133,46 @@ pub(crate) async fn setup_tool(
 
 pub(crate) async fn ws_sync(
     State(state): State<AppState>,
-    Query(params): Query<WsParams>,
+    Query(params): Query<Vec<(String, String)>>,
     ws: WebSocketUpgrade,
 ) -> Response {
-    if params.secret.as_deref() != Some(state.secret.as_str()) {
+    let secret = params
+        .iter()
+        .find(|(key, _)| key == "secret")
+        .map(|(_, value)| value);
+    if secret.map(String::as_str) != Some(state.secret.as_str()) {
         return (StatusCode::UNAUTHORIZED, "missing or invalid secret").into_response();
     }
+    let client = params
+        .iter()
+        .find(|(key, _)| key == "client")
+        .map(|(_, value)| value.as_str());
+    let mut checkouts = params
+        .iter()
+        .filter(|(key, value)| key == "checkout" && !value.is_empty())
+        .map(|(_, value)| value.as_str())
+        .collect::<Vec<_>>();
+    checkouts.sort_unstable();
+    checkouts.dedup();
     let rx = state.events.subscribe();
-    let lease = begin_presence(
-        &state,
-        params.checkout.as_deref(),
-        params.client.as_deref(),
-        presence::Channel::Socket,
-    );
+    let leases = if checkouts.is_empty() {
+        vec![begin_presence(
+            &state,
+            None,
+            client,
+            presence::Channel::Socket,
+        )]
+    } else {
+        checkouts
+            .into_iter()
+            .map(|checkout| {
+                begin_presence(&state, Some(checkout), client, presence::Channel::Socket)
+            })
+            .collect()
+    };
     ws.on_upgrade(move |socket| async move {
         ws_loop(socket, rx).await;
-        drop(lease);
+        drop(leases);
     })
 }
 
