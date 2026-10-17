@@ -1232,8 +1232,58 @@ use crate::claude::ChannelTiming;
 fn quick_timing(turn_timeout_ms: u64, grace_ms: u64) -> ChannelTiming {
     ChannelTiming {
         turn_timeout: std::time::Duration::from_millis(turn_timeout_ms),
+        background_turn_timeout: std::time::Duration::from_millis(turn_timeout_ms * 3),
         terminate_grace: std::time::Duration::from_millis(grace_ms),
     }
+}
+
+#[test]
+fn background_tasks_extend_silence_but_still_stop_the_process_after_a_finite_bound() {
+    let claude = ScriptedClaude::new(ClaudeMode::Hang);
+    let events = claude.events();
+    let signals = claude.signal_log();
+    let ch = ClaudeChannel::connect_single_turn_with(claude, quick_timing(70, 5));
+    let mut turn = ch.start_turn("long background job").unwrap();
+    assert!(matches!(turn.next_event(), Some(TurnEvent::Output(_))));
+    events.send(serde_json::json!({"type":"system", "subtype":"background_tasks_changed", "tasks":[{"id":"task-1"}]}));
+    let started = std::time::Instant::now();
+    assert!(matches!(turn.wait(), DoneReason::Failed { .. }));
+    assert!(started.elapsed() >= std::time::Duration::from_millis(160));
+    assert_eq!(*signals.lock().unwrap(), vec!["TERM"]);
+}
+
+#[test]
+fn clearing_background_tasks_restores_the_normal_silence_bound() {
+    let claude = ScriptedClaude::new(ClaudeMode::Hang);
+    let events = claude.events();
+    let mut timing = quick_timing(70, 5);
+    timing.background_turn_timeout = std::time::Duration::from_millis(500);
+    let ch = ClaudeChannel::connect_single_turn_with(claude, timing);
+    let mut turn = ch.start_turn("long background job").unwrap();
+    assert!(matches!(turn.next_event(), Some(TurnEvent::Output(_))));
+    events.send(serde_json::json!({"type":"system", "subtype":"background_tasks_changed", "tasks":[{"id":"task-1"}]}));
+    events.send(
+        serde_json::json!({"type":"system", "subtype":"background_tasks_changed", "tasks":[]}),
+    );
+    let started = std::time::Instant::now();
+    assert!(matches!(turn.wait(), DoneReason::Failed { .. }));
+    assert!(started.elapsed() < std::time::Duration::from_millis(350));
+}
+
+#[test]
+fn malformed_background_update_preserves_the_last_valid_state_and_early_success_cannot_hide_timeout()
+ {
+    let claude = ScriptedClaude::new(ClaudeMode::Hang);
+    let events = claude.events();
+    let ch = ClaudeChannel::connect_single_turn_with(claude, quick_timing(70, 5));
+    let mut turn = ch.start_turn("long background job").unwrap();
+    assert!(matches!(turn.next_event(), Some(TurnEvent::Output(_))));
+    events.send(serde_json::json!({"type":"system", "subtype":"background_tasks_changed", "tasks":[{"id":"task-1"}]}));
+    events.send(serde_json::json!({"type":"system", "subtype":"background_tasks_changed", "tasks":"invalid"}));
+    events.send(serde_json::json!({"type":"result", "subtype":"success", "is_error":false, "result":"provisional"}));
+    let started = std::time::Instant::now();
+    assert!(matches!(turn.wait(), DoneReason::Failed { .. }));
+    assert!(started.elapsed() >= std::time::Duration::from_millis(160));
 }
 
 #[test]

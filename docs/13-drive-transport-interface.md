@@ -275,9 +275,12 @@ stream-json [--resume <id>]`; input `{"type":"user",…}`; output `system`/`init
 > process the same way and fails with a timeout diagnostic instead of leaving it working
 > unobserved. This stays the decision for a single-turn process still running at the
 > timeout (HS2-4JPDJA): Hot Sheet stops it rather than detaching it, because nothing would
-> observe its output, tool use, or cost. The timeout is per event, and a running background
-> command emits no events. A background job that stays silent for 600 s is therefore stopped
-> with its process. The polite SIGTERM reaches only the `claude` process, which cleans up its own
+> observe its output, tool use, or cost. The timeout is per event. When Claude reports a
+> nonempty `system/background_tasks_changed.tasks` list, the silence bound becomes 30 minutes;
+> an empty list restores 600 s. Malformed task lists leave the latest valid state intact.
+> Every observed event resets the applicable bound. Even after an early successful `result`,
+> exceeding the bound stops the process and fails the turn (HS2-PZMKXR). The polite SIGTERM
+> reaches only the `claude` process, which cleans up its own
 > tools. When it has to be force-killed, its descendant tree (Bash tool commands, MCP
 > servers) goes too: each descendant is frozen with SIGSTOP, the tree is re-walked until no
 > new process appears, and then every frozen process and `claude` get SIGKILL. The turn

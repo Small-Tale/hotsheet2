@@ -628,6 +628,7 @@ mod pump_tests {
             claude,
             ChannelTiming {
                 turn_timeout: std::time::Duration::from_secs(30),
+                background_turn_timeout: std::time::Duration::from_secs(90),
                 terminate_grace: std::time::Duration::from_secs(5),
             },
         );

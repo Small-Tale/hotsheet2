@@ -29,6 +29,8 @@ use crate::procio::{StreamChild, stop_process};
 
 /// How long a turn may wait without a new event before its process is stopped.
 const TURN_TIMEOUT: Duration = Duration::from_secs(600);
+/// Finite silence allowance while Claude reports live background tasks.
+const BACKGROUND_TURN_TIMEOUT: Duration = Duration::from_secs(1800);
 
 /// How long a stopped `claude` process gets to exit after SIGTERM before SIGKILL.
 const TERMINATE_GRACE: Duration = Duration::from_secs(5);
@@ -50,6 +52,7 @@ struct Inner {
     /// Set by a [`TurnControl`] wake callback; the blocked turn stops the process.
     interrupt_requested: AtomicBool,
     turn_timeout: Duration,
+    background_turn_timeout: Duration,
     terminate_grace: Duration,
     /// The highest `result.total_cost_usd` seen. Claude reports it cumulatively for the whole
     /// *session*: across turns in one process and across `--resume` processes (live-verified
@@ -148,6 +151,7 @@ fn start_reader(transport: Box<dyn RpcTransport>, timing: ChannelTiming) -> Arc<
         signals: Mutex::new(signals),
         interrupt_requested: AtomicBool::new(false),
         turn_timeout: timing.turn_timeout,
+        background_turn_timeout: timing.background_turn_timeout,
         terminate_grace: timing.terminate_grace,
         session_cost_usd: Mutex::new(None),
         cost_baseline_usd: Mutex::new(None),
@@ -172,6 +176,8 @@ fn start_reader(transport: Box<dyn RpcTransport>, timing: ChannelTiming) -> Arc<
 pub struct ChannelTiming {
     /// The longest wait for the next event before the turn times out and its process stops.
     pub turn_timeout: Duration,
+    /// The longest silence while `background_tasks_changed.tasks` is nonempty.
+    pub background_turn_timeout: Duration,
     /// How long a stopped process gets after SIGTERM before SIGKILL.
     pub terminate_grace: Duration,
 }
@@ -180,6 +186,7 @@ impl Default for ChannelTiming {
     fn default() -> Self {
         Self {
             turn_timeout: TURN_TIMEOUT,
+            background_turn_timeout: BACKGROUND_TURN_TIMEOUT,
             terminate_grace: TERMINATE_GRACE,
         }
     }
@@ -272,6 +279,7 @@ impl ClaudeChannelClient for ClaudeChannel {
             settled: None,
             emitted_output: false,
             result_text: None,
+            background_tasks_active: false,
         }))
     }
 }
@@ -304,6 +312,8 @@ struct ClaudeTurn {
     emitted_output: bool,
     /// The latest successful `result` text, shown when the turn emitted no assistant text.
     result_text: Option<String>,
+    /// The latest valid background-task list for this turn.
+    background_tasks_active: bool,
 }
 
 #[derive(Default)]
@@ -627,7 +637,12 @@ impl ClaudeTurn {
             return None;
         }
         let inner = self.inner.clone();
-        let deadline = Instant::now() + inner.turn_timeout;
+        let mut deadline = Instant::now()
+            + if self.background_tasks_active {
+                inner.background_turn_timeout
+            } else {
+                inner.turn_timeout
+            };
         let mut events = inner.events.lock_or_recover();
         loop {
             if inner.interrupt_requested.load(Ordering::SeqCst) && inner.can_stop() {
@@ -639,6 +654,18 @@ impl ClaudeTurn {
             }
             while self.cursor < events.len() {
                 let ev = &events[self.cursor];
+                if ev.get("type").and_then(Value::as_str) == Some("system")
+                    && ev.get("subtype").and_then(Value::as_str) == Some("background_tasks_changed")
+                    && let Some(tasks) = ev.get("tasks").and_then(Value::as_array)
+                {
+                    self.background_tasks_active = !tasks.is_empty();
+                }
+                deadline = Instant::now()
+                    + if self.background_tasks_active {
+                        inner.background_turn_timeout
+                    } else {
+                        inner.turn_timeout
+                    };
                 if ev.get("type").and_then(Value::as_str) == Some("result") {
                     // Capture token usage from every `result` event (HS2-TJ8FGR, HS2-M5GN19).
                     absorb_usage(&mut self.usage, claude_result_usage(ev));
@@ -686,16 +713,14 @@ impl ClaudeTurn {
                 // Never leave a timed-out process working unobserved (HS2-V0SWSM).
                 drop(events);
                 let stopped = inner.stop_process();
-                let reason = self.settled.take().unwrap_or_else(|| {
-                    DoneReason::failed(
-                        1,
-                        if stopped {
-                            "Timed out waiting for Claude turn result; the Claude process was stopped"
-                        } else {
-                            "Timed out waiting for Claude turn result"
-                        },
-                    )
-                });
+                let reason = DoneReason::failed(
+                    1,
+                    if stopped {
+                        "Timed out waiting for Claude turn result; the Claude process was stopped"
+                    } else {
+                        "Timed out waiting for Claude turn result"
+                    },
+                );
                 self.finish(reason);
                 return self.pending.pop_front().map(|event| self.emit(event));
             }
@@ -976,6 +1001,18 @@ pub(crate) mod scripted {
         signal_log: Arc<Mutex<Vec<&'static str>>>,
     }
 
+    /// Injects provider records into a scripted process after the turn starts.
+    pub struct ScriptedEvents(Pipe);
+
+    impl ScriptedEvents {
+        pub fn send(&self, record: Value) {
+            if let Some(out) = self.0.lock_or_recover().as_ref() {
+                out.send(record.to_string())
+                    .expect("scripted reader is running");
+            }
+        }
+    }
+
     impl ScriptedClaude {
         pub fn new(mode: ClaudeMode) -> Box<Self> {
             let (tx, rx) = channel::<String>();
@@ -996,6 +1033,10 @@ pub(crate) mod scripted {
         /// The signals the scripted process received, in order (`"TERM"`, `"KILL"`).
         pub fn signal_log(&self) -> Arc<Mutex<Vec<&'static str>>> {
             self.signal_log.clone()
+        }
+
+        pub fn events(&self) -> ScriptedEvents {
+            ScriptedEvents(self.pipe.clone())
         }
     }
 
