@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Page, test, type WebSocketRoute } from '@playwright/test';
 
 /**
  * HS2-6W1NNF: with WebSockets failing, every open project used to hold its own replay long-poll,
@@ -6,6 +6,7 @@ import { expect, type Page, test } from '@playwright/test';
  * whose bridge advertises the multiplexed change poll now share one long-poll request.
  */
 const MUX = '/__hotsheet/change-mux/poll';
+const WS_MUX = '/__hotsheet/change-mux/ws';
 const names = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel'];
 const projects = names.map((name) => ({
   id: `${name.toLowerCase()}-project`,
@@ -79,7 +80,7 @@ interface MuxPoll {
   timeout_ms: number;
 }
 
-async function installBridge(page: Page) {
+async function installBridge(page: Page, liveSockets = false) {
   const rows = new Map(
     projects.map((project) => [project.id, [row(`${project.name.toUpperCase()}1`, `${project.name} first`)]]),
   );
@@ -90,11 +91,37 @@ async function installBridge(page: Page) {
   const directPolls: string[] = [];
   const ticketLoads = new Map<string, number>();
   let chosen = 0;
+  let bridgeSocket: WebSocketRoute | undefined;
+  let bridgeSocketCount = 0;
+  const subscriptions = new Map<string, number>();
   const eventsAfter = (project: string, since: number) =>
     (log.get(project) ?? []).filter((item) => item.cursor > since);
-  // Every change transport fails its WebSocket upgrade, as behind a proxy that rejects upgrades.
+  // The original flow rejects every upgrade; the live flow serves one versioned bridge socket.
   await page.routeWebSocket(/.*/, (socket) => {
-    void socket.close();
+    if (!liveSockets || new URL(socket.url()).pathname !== WS_MUX) {
+      void socket.close();
+      return;
+    }
+    bridgeSocket = socket;
+    bridgeSocketCount += 1;
+    socket.onMessage((raw) => {
+      const command = JSON.parse(String(raw)) as { type: string; project: string; subscription: number };
+      if (command.type === 'subscribe') {
+        subscriptions.set(command.project, command.subscription);
+        socket.send(
+          JSON.stringify({
+            version: 1,
+            type: 'subscribed',
+            project: command.project,
+            subscription: command.subscription,
+          }),
+        );
+      } else if (command.type === 'unsubscribe' && subscriptions.get(command.project) === command.subscription)
+        subscriptions.delete(command.project);
+    });
+    socket.onClose(() => {
+      subscriptions.clear();
+    });
   });
   await page.route('**/*', async (route) => {
     const request = route.request(),
@@ -206,9 +233,30 @@ async function installBridge(page: Page) {
     const next = (cursor.get(project) ?? 1) + 1;
     cursor.set(project, next);
     log.set(project, [...(log.get(project) ?? []), { cursor: next, store: 'git', kind, id: slug, slug }]);
+    if (liveSockets && subscriptions.has(project))
+      bridgeSocket?.send(
+        JSON.stringify({
+          version: 1,
+          type: 'event',
+          project,
+          subscription: subscriptions.get(project),
+          data: JSON.stringify(log.get(project)!.at(-1)),
+        }),
+      );
     for (const wake of [...wakers]) wake();
   };
-  return { rows, emit, muxBodies, directPolls, ticketLoads, maxOpen: () => maxOpen, open: () => open };
+  return {
+    rows,
+    emit,
+    muxBodies,
+    directPolls,
+    ticketLoads,
+    subscriptions,
+    closeBridge: () => bridgeSocket?.close(),
+    bridgeSocketCount: () => bridgeSocketCount,
+    maxOpen: () => maxOpen,
+    open: () => open,
+  };
 }
 
 async function openAllProjects(page: Page) {
@@ -221,6 +269,39 @@ async function openAllProjects(page: Page) {
     await expect(page.getByRole('tab', { name: project.name })).toHaveAttribute('aria-selected', 'true');
   }
 }
+
+test('one live bridge WebSocket serves open projects through add, remove, and reconnect (HS2-QJR1K6)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const bridge = await installBridge(page, true);
+  await openAllProjects(page);
+  await expect.poll(() => bridge.bridgeSocketCount()).toBe(1);
+  await expect.poll(() => bridge.subscriptions.size).toBe(projects.length);
+  expect(bridge.directPolls).toEqual([]);
+
+  const target = projects[3];
+  bridge.rows.set(target.id, [...bridge.rows.get(target.id)!, row('DELTA2', 'Delta second')]);
+  bridge.emit(target.id, 'created', 'HS2-DELTA2');
+  await page.getByRole('tab', { name: target.name }).click();
+  await expect(page.locator('[data-ticket-slug="HS2-DELTA2"]')).toBeVisible();
+
+  const closing = projects[2];
+  await page.getByRole('tab', { name: closing.name }).click();
+  await page.getByRole('button', { name: `Close ${closing.name}` }).click();
+  await page.getByRole('button', { name: 'Close Project' }).click();
+  await expect.poll(() => bridge.subscriptions.has(closing.id)).toBe(false);
+  expect(bridge.subscriptions.has(target.id)).toBe(true);
+
+  await bridge.closeBridge();
+  await expect.poll(() => bridge.bridgeSocketCount(), { timeout: 30_000 }).toBe(2);
+  await expect.poll(() => bridge.subscriptions.size, { timeout: 30_000 }).toBe(projects.length - 1);
+  bridge.rows.set(target.id, [...bridge.rows.get(target.id)!, row('DELTA3', 'Delta third')]);
+  bridge.emit(target.id, 'created', 'HS2-DELTA3');
+  await page.getByRole('tab', { name: target.name }).click();
+  await expect(page.locator('[data-ticket-slug="HS2-DELTA3"]')).toBeVisible();
+});
 
 for (const mode of ['main thread', 'worker'] as const)
   test(`eight projects with failing WebSockets share one change long-poll (${mode})`, async ({ page }) => {

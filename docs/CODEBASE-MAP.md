@@ -201,6 +201,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/change-stream.worker.ts # Dedicated module-worker entry for the shared change stream (HS2-SH9179)
     src/change-poll-mux.ts # Per-origin, per-tab ChangePollMultiplexer: every project's `/ws/poll` joins one shared bridge request; abort+reissue on join/close, per-project fan-out and errors, permanent direct fallback on an older bridge (HS2-6W1NNF)
     src/change-mux-bridge.ts # Bridge half of the multiplexed change poll: `POST /__hotsheet/change-mux/poll` request validation and first-completion-plus-grace fan-in over each project's upstream `/ws/poll` (HS2-6W1NNF)
+    src/change-ws-mux.ts # Versioned shared change WebSocket protocol and browser-side virtual project sockets with direct-socket fallback (HS2-QJR1K6)
+    src/terminal-ws-bridge.ts # Browser WebSocket bridge: per-project terminal/change proxy and multiplexed change subscriptions over one browser socket (HS2-QJR1K6)
     src/change-stream-worker-host.ts # Main-thread worker owner: ordered per-project apply + ack, crash restart replaying from the last applied cursor, skew/ready/crash-loop fallback to the main-thread stream (HS2-SH9179)
     src/change-stream-worker.test.ts # Transition-matrix tests: handshake, gap, repeat, out-of-order, reconnect, cancel, restart, skew, coalescing/overflow
     src/local-bridge-client.ts # Typed `/__hotsheet/*` local-bridge adapter: JSON parse as unknown, server-error surfacing, and per-endpoint response parsers (HS2-313JET)

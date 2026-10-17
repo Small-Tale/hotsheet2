@@ -1671,8 +1671,8 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   no effort support hide that control and
   omit effort entirely from subsequent turn requests. Connection refresh and transcript updates share the existing
   replay-safe WebSocket/long-poll stream—this surface adds no timer or simple polling.
-  Each open project's primary transport is the credential-free, project-scoped
-  `/ws/sync` browser bridge. One long-poll handshake establishes the replay cursor and
+  When a bridge advertises `changeMuxPath`, each open project's primary transport uses the
+  credential-free `/__hotsheet/change-mux/ws` browser bridge. One long-poll handshake establishes the replay cursor and
   one zero-wait replay after the socket opens closes the subscribe race; an idle healthy
   socket issues no further requests. Disconnects, rejected upgrades, and older servers
   fall back through `/ws/poll`, replay the missing cursor span, and retry WebSocket with
@@ -1714,9 +1714,18 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   A bridge answering 400, 404, 405, or 501, an unsupported or empty answer, or more than 64
   waiting projects switches that multiplexer permanently to direct per-project polls. An
   older server behind a new bridge surfaces as that project's own error, as before.
-  Not multiplexed yet: the WebSocket itself (one per project, in a separate browser
-  connection pool), presence for several checkouts on one upstream stream, and cross-tab
-  sharing (`HS2-QJR1K6`, `HS2-XAGJP3`, `HS2-NP7R42`).
+  **Multiplexed WebSocket (HS2-QJR1K6).** Projects sharing a bridge use one browser
+  WebSocket. Versioned subscribe/unsubscribe frames add and remove projects without closing
+  the others; every acknowledgement and live event carries its project id and subscription
+  token, so a late frame from a replaced subscription is ignored. The bridge opens one authenticated
+  upstream `/ws/sync` per subscribed project, retaining its checkout and tab presence.
+  The browser's per-project transport still owns its own cursor, catchup poll, replay,
+  overflow recovery, and bounded delivery queue. A bridge that rejects or does not answer the
+  multiplexed upgrade falls back to the existing direct project WebSockets. A dropped shared socket
+  closes each virtual project socket, so each transport replays from its own cursor before
+  subscribing again. Cross-project delivery and cursors remain isolated.
+  Not multiplexed yet: presence for several checkouts on one upstream stream and cross-tab
+  sharing (`HS2-XAGJP3`, `HS2-NP7R42`).
   With the off-by-default `hotsheet.change-stream-worker` local setting, one dedicated
   worker runs these transports for every open project and posts only validated, ordered,
   coalesced change events. The main thread applies them through the same consumer. A

@@ -8,6 +8,7 @@ import {
   type ChangeStreamWorkerOpen,
   parseChangeStreamMainMessage,
 } from './change-stream-worker-protocol';
+import { createChangeWebSocketMultiplexers } from './change-ws-mux';
 import { type ProjectChangeTransportOptions, runProjectChangeTransport } from './project-change-poll';
 import { parsePollResponse } from './server-response-parsers';
 
@@ -54,6 +55,7 @@ export function createChangeStreamWorkerRuntime(options: ChangeStreamWorkerRunti
     parse: parsePollResponse,
     fetch: fetcher,
   });
+  const webSocketMultiplexerFor = createChangeWebSocketMultiplexers(options.openWebSocket);
   const changeClient = (message: ChangeStreamWorkerOpen): ChangeClient => {
     const direct = createWorkerChangeClient(message, fetcher);
     if (!message.changeMuxUrl) return direct;
@@ -86,7 +88,14 @@ export function createChangeStreamWorkerRuntime(options: ChangeStreamWorkerRunti
     run(
       {
         client: changeClient(message),
-        ...(options.openWebSocket ? { openWebSocket: options.openWebSocket } : {}),
+        ...(message.changeMuxUrl && message.webSocketUrl
+          ? {
+              openWebSocket: (url: string) =>
+                webSocketMultiplexerFor(message.changeMuxUrl!, message.clientId).open(message.project, url),
+            }
+          : options.openWebSocket
+            ? { openWebSocket: options.openWebSocket }
+            : {}),
         ...(message.resume ? { resume: message.resume } : {}),
         onError: (reason) => {
           if (controller.signal.aborted) return;

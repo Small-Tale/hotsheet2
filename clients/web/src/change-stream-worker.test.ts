@@ -29,6 +29,7 @@ const page = (cursor: number, events: ChangeEvent[] = [], overflow = false): Pol
 
 class FakeSocket extends EventTarget {
   readyState = 0;
+  readonly sent: string[] = [];
   constructor(readonly url: string) {
     super();
   }
@@ -40,6 +41,9 @@ class FakeSocket extends EventTarget {
     const message = new Event('message') as MessageEvent;
     Object.defineProperty(message, 'data', { value: JSON.stringify(value) });
     this.dispatchEvent(message);
+  }
+  send(value: string) {
+    this.sent.push(value);
   }
   close() {
     if (this.readyState === 3) return;
@@ -341,6 +345,67 @@ describe('change-stream worker runtime (HS2-SH9179)', () => {
       expect(requests).toHaveLength(2);
     });
     expect(requests[1].body.polls.map((poll) => poll.project)).toEqual(['a', 'b']);
+    runtime.dispose();
+  });
+
+  it('opens one change bridge socket for two project transports and keeps their events isolated (HS2-QJR1K6)', () => {
+    const { runs, runTransport } = fakeTransports();
+    const sockets: FakeSocket[] = [];
+    const runtime = createChangeStreamWorkerRuntime({
+      post: () => undefined,
+      runTransport,
+      openWebSocket: (url) => {
+        const socket = new FakeSocket(url);
+        sockets.push(socket);
+        return socket as unknown as WebSocket;
+      },
+    });
+    const mux = { changeMuxUrl: 'http://host/__hotsheet/change-mux/poll' };
+    runtime.handle(open('a', 1, { ...mux, webSocketUrl: 'ws://host/p/a/ws/sync', resume: { cursor: 7 } }));
+    runtime.handle(open('b', 1, { ...mux, webSocketUrl: 'ws://host/p/b/ws/sync', resume: { cursor: 19 } }));
+    expect(runs.map((run) => run.options.resume?.cursor)).toEqual([7, 19]);
+    const a = runs[0].options.openWebSocket!('ws://host/p/a/ws/sync');
+    const b = runs[1].options.openWebSocket!('ws://host/p/b/ws/sync');
+    expect(sockets.map((socket) => socket.url)).toEqual(['ws://host/__hotsheet/change-mux/ws']);
+    const seen: string[] = [];
+    a.addEventListener('message', (event) => seen.push(`a:${JSON.parse(event.data as string).cursor}`));
+    b.addEventListener('message', (event) => seen.push(`b:${JSON.parse(event.data as string).cursor}`));
+    sockets[0].open();
+    sockets[0].message({ version: 1, type: 'subscribed', project: 'a', subscription: 1 });
+    sockets[0].message({ version: 1, type: 'subscribed', project: 'b', subscription: 2 });
+    sockets[0].message({ version: 1, type: 'event', project: 'b', subscription: 2, data: '{"cursor":20}' });
+    sockets[0].message({ version: 1, type: 'event', project: 'a', subscription: 1, data: '{"cursor":8}' });
+    expect(seen).toEqual(['b:20', 'a:8']);
+    runtime.handle({ type: 'close', project: 'a', generation: 1 });
+    a.close();
+    expect(b.readyState).toBe(1);
+    runtime.dispose();
+  });
+
+  it('keeps a second project live when one multiplexed project overflows its delivery queue (HS2-QJR1K6)', async () => {
+    const posted: ChangeStreamWorkerMessage[] = [];
+    const { runs, runTransport } = fakeTransports();
+    const runtime = createChangeStreamWorkerRuntime({
+      post: (message) => posted.push(message),
+      runTransport,
+      maxQueuedEvents: 2,
+    });
+    const mux = { changeMuxUrl: 'http://host/__hotsheet/change-mux/poll' };
+    runtime.handle(open('a', 1, mux));
+    runtime.handle(open('b', 1, mux));
+    await runs[0].sink.deliver(page(1, [event(1)]), false);
+    await runs[0].sink.deliver(page(2, [event(2)]), false);
+    await runs[0].sink.deliver(page(3, [event(3)]), false);
+    await runs[0].sink.deliver(page(4, [event(4)]), false);
+    await runs[1].sink.deliver(page(20, [event(20, 'changed', 'HS2-B')]), false);
+    expect(batches(posted).map((batch) => batch.project)).toEqual(['a', 'b']);
+    runtime.handle({ type: 'ack', project: 'a', generation: 1, seq: 1 });
+    expect(batches(posted).at(-1)).toMatchObject({
+      project: 'a',
+      kind: 'deliver',
+      response: { cursor: 4, events: [], overflow: true },
+    });
+    expect(batches(posted)[1]).toMatchObject({ project: 'b', response: { cursor: 20, overflow: false } });
     runtime.dispose();
   });
 

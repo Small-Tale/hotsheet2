@@ -4,6 +4,7 @@ import { applyConversationActivity, applyConversationEvent } from '../ai-convers
 import { Api, CHANGE_STREAM_CLIENT_ID, type PollResponse } from '../api';
 import { changeMuxTarget, createChangePollMultiplexers } from '../change-poll-mux';
 import { type ChangeStreamWorkerLike, createChangeStreamWorkerHost } from '../change-stream-worker-host';
+import { createChangeWebSocketMultiplexers } from '../change-ws-mux';
 import type { ProjectTabBarMode } from '../components/project-tab-bar';
 import type { Project } from '../interactions/types';
 import type { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
@@ -120,6 +121,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
   // Projects whose bridge advertises it share one change long-poll per origin (HS2-6W1NNF),
   // on the main thread and in the worker alike.
   const multiplexerFor = createChangePollMultiplexers({ parse: parsePollResponse });
+  const webSocketMultiplexerFor = createChangeWebSocketMultiplexers();
   const changeMuxUrl = (current: Project): string | undefined =>
     current.changeMuxPath ? new URL(current.changeMuxPath, location.href).href : undefined;
   const startStream = (current: Project, directOptions: ProjectChangeStreamOptions): (() => void) => {
@@ -131,6 +133,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             changeMuxTarget(current.apiPath, '')?.project ?? current.id,
             directOptions.client,
           ),
+          openWebSocket: (url: string) =>
+            webSocketMultiplexerFor(muxUrl, CHANGE_STREAM_CLIENT_ID).open(current.id, url),
         }
       : directOptions;
     if (!useWorker) return startProjectChangeStream(streamOptions);

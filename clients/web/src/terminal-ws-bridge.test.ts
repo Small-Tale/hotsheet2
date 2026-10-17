@@ -5,12 +5,14 @@ import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket, { WebSocketServer } from 'ws';
 
+import { CHANGE_WS_MUX_PATH, type ChangeWsMessage } from './change-ws-mux';
 import {
   browserProjectWebSocketTarget,
   browserTerminalAttachTarget,
   installProjectWebSocketBridge,
   installTerminalWebSocketBridge,
   isProjectWebSocketPath,
+  webSocketRawText,
 } from './terminal-ws-bridge';
 
 const servers: Array<{ close(callback: () => void): void }> = [];
@@ -199,5 +201,80 @@ describe('terminal WebSocket bridge', () => {
     expect(upstreamUrl).toBe('/ws/sync?secret=server-only');
     client.close();
     await once(client, 'close');
+  });
+
+  it('multiplexes two real upstream project sockets and unsubscribes one without closing the other', async () => {
+    const upstreamHttp = createServer(),
+      upstream = new WebSocketServer({ server: upstreamHttp });
+    servers.push(upstream, upstreamHttp);
+    const upstreams = new Map<string, WebSocket>(),
+      targets: string[] = [];
+    upstream.on('connection', (socket, request) => {
+      const target = new URL(request.url ?? '/', 'http://localhost');
+      const project = target.searchParams.get('checkout') ?? '';
+      upstreams.set(project, socket);
+      targets.push(request.url ?? '');
+      socket.on('close', () => upstreams.delete(project));
+    });
+    const upstreamPort = await listen(upstreamHttp),
+      bridgeHttp = createServer();
+    servers.push(bridgeHttp);
+    installProjectWebSocketBridge(
+      { httpServer: bridgeHttp },
+      () => undefined,
+      (project, client) =>
+        `ws://127.0.0.1:${upstreamPort}/ws/sync?secret=server-only&checkout=${encodeURIComponent(project)}&client=${client}`,
+    );
+    const bridgePort = await listen(bridgeHttp),
+      browser = new WebSocket(`ws://127.0.0.1:${bridgePort}${CHANGE_WS_MUX_PATH}`),
+      frames: ChangeWsMessage[] = [];
+    browser.on('message', (data) => frames.push(JSON.parse(webSocketRawText(data)) as ChangeWsMessage));
+    await once(browser, 'open');
+    browser.send(JSON.stringify({ version: 1, type: 'subscribe', project: 'a', client: 'tab', subscription: 1 }));
+    browser.send(JSON.stringify({ version: 1, type: 'subscribe', project: 'b', client: 'tab', subscription: 2 }));
+    await vi.waitFor(() => {
+      expect(frames.filter((frame) => frame.type === 'subscribed')).toHaveLength(2);
+    });
+    expect(
+      frames
+        .filter((frame) => frame.type === 'subscribed')
+        .map((frame) => frame.subscription)
+        .sort(),
+    ).toEqual([1, 2]);
+    expect(targets).toEqual(
+      expect.arrayContaining([
+        '/ws/sync?secret=server-only&checkout=a&client=tab',
+        '/ws/sync?secret=server-only&checkout=b&client=tab',
+      ]),
+    );
+    upstreams.get('a')!.send('{"cursor":1,"store":"a","kind":"created","id":"1","slug":"HS2-A"}');
+    upstreams.get('b')!.send('{"cursor":9,"store":"b","kind":"created","id":"9","slug":"HS2-B"}');
+    await vi.waitFor(() => {
+      expect(frames.filter((frame) => frame.type === 'event')).toHaveLength(2);
+    });
+    expect(
+      frames
+        .filter((frame) => frame.type === 'event')
+        .map((frame) => frame.project)
+        .sort(),
+    ).toEqual(['a', 'b']);
+    expect(
+      frames
+        .filter((frame) => frame.type === 'event')
+        .map((frame) => frame.subscription)
+        .sort(),
+    ).toEqual([1, 2]);
+    browser.send(JSON.stringify({ version: 1, type: 'unsubscribe', project: 'a', client: 'tab', subscription: 1 }));
+    await vi.waitFor(() => {
+      expect(upstreams.has('a')).toBe(false);
+    });
+    expect(upstreams.has('b')).toBe(true);
+    upstreams.get('b')!.send('{"cursor":10,"store":"b","kind":"changed","id":"9","slug":"HS2-B"}');
+    await vi.waitFor(() => {
+      expect(frames.filter((frame) => frame.type === 'event')).toHaveLength(3);
+    });
+    expect(frames.at(-1)).toMatchObject({ project: 'b', type: 'event' });
+    browser.close();
+    await once(browser, 'close');
   });
 });
