@@ -225,17 +225,17 @@ export function QuickTicketComposer({
                 />
               )}
               {strandedAttachments && (
-                <wa-button
-                  appearance="plain"
-                  variant="danger"
-                  size="small"
-                  {...SEARCH_AND_COMPOSER_ACTIONS.clearNewTicketAttachments.attrs}
+                <Button
+                  emphasis="plain"
+                  tone={'danger'}
+                  size="compact"
+                  action={SEARCH_AND_COMPOSER_ACTIONS.clearNewTicketAttachments.value}
                   disabled={submitting}
+                  ariaLabel="Remove All Staged Attachments"
+                  icon={<LucideIcon size={14.4} icon={Trash2} name="trash-2" />}
                 >
-                  <LucideIcon slot="start" size={14.4} icon={Trash2} name="trash-2" />
-                  {/* wa-button names its inner button from slotted text, not the host aria-label (HS2-6TMT6Q). */}
-                  Remove all<span class="wa-visually-hidden"> staged attachments</span>
-                </wa-button>
+                  Remove All
+                </Button>
               )}
             </header>
             {attachments.length > 0 && (
@@ -318,22 +318,22 @@ export function QuickTicketComposer({
               </Text>
             )}
             <div class="quick-ticket-composer__actions">
-              <wa-button
+              <Button
                 type="button"
-                appearance="plain"
-                data-dialog="close"
-                data-action="cancel-ticket-composer"
+                emphasis="plain"
+                action={'cancel-ticket-composer'}
                 disabled={submitting}
+                rootAttributes={{ 'data-dialog': 'close' }}
               >
                 Cancel
-              </wa-button>
-              <wa-button
+              </Button>
+              <Button
                 type="submit"
-                appearance="accent"
+                emphasis="primary"
                 disabled={!canCreate || strandedAttachments || busy || submitting}
               >
                 {submitting ? 'Creating…' : 'Create ticket'}
-              </wa-button>
+              </Button>
             </div>
           </div>
           {!canCreate && (

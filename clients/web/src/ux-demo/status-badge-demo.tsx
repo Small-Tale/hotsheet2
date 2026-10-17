@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
@@ -93,9 +94,9 @@ export function StatusBadgeSettings() {
       <wa-checkbox name="compact" checked={statusBadgeSettings.compact.value}>
         Compact
       </wa-checkbox>
-      <wa-button type="button" data-action="reset-settings">
+      <Button type="button" action={'reset-settings'}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }

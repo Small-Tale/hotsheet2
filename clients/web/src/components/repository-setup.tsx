@@ -1,5 +1,6 @@
 import './repository-setup.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { uiColor } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -53,17 +54,12 @@ export function RepositorySetup({
         />
         {error && <StateBanner tone="danger" urgency="alert" title={error} />}
         <Row hAlign="right" gap="xs" wrap>
-          <wa-button
-            appearance="plain"
-            type="button"
-            {...REPOSITORY_ACTIONS.skipRepositoryRemote.attrs}
-            disabled={busy}
-          >
+          <Button emphasis="plain" type="button" action={REPOSITORY_ACTIONS.skipRepositoryRemote.value} disabled={busy}>
             Skip for Now
-          </wa-button>
-          <wa-button appearance="accent" type="submit" disabled={busy}>
+          </Button>
+          <Button emphasis="primary" type="submit" disabled={busy}>
             {busy ? 'Adding origin…' : 'Add origin'}
-          </wa-button>
+          </Button>
         </Row>
       </form>
     );
@@ -76,9 +72,9 @@ export function RepositorySetup({
       </Text>
       {error && <StateBanner tone="danger" urgency="alert" title={error} />}
       <Row hAlign="center">
-        <wa-button appearance="accent" type="button" {...REPOSITORY_ACTIONS.initializeRepository.attrs} disabled={busy}>
+        <Button emphasis="primary" type="button" action={REPOSITORY_ACTIONS.initializeRepository.value} disabled={busy}>
           {busy ? 'Initializing…' : 'Initialize Git repository'}
-        </wa-button>
+        </Button>
       </Row>
     </div>
   );

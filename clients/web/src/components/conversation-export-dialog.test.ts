@@ -90,7 +90,7 @@ describe('ConversationExportDialog', () => {
     expect(forward).toContain('data-navigation="push"');
     expect(forward).toContain('data-transition-style="push"');
     expect(forward).toContain('data-transition-direction="forward"');
-    expect(forward).toContain('class="flow-back-button"');
+    expect(forward).toContain('flow-back-button');
     expect(forward).toContain('data-action="previous-conversation-export-step"');
     expect(forward).toContain('data-lucide="chevron-left"');
     expect(forward).toContain('Message scope');

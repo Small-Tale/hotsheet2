@@ -1,9 +1,9 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/styles/utilities/visually-hidden.css';
 import '@kerfjs/ui/tab-bar.css';
 import './ticket-inspector.css';
 
 import { Badge } from '@kerfjs/ui/badge';
+import { Button } from '@kerfjs/ui/button';
 import { foregroundColorVar, pct, rem } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
@@ -465,30 +465,34 @@ export function ticketInspectorPanel({
                 <small>Remote values changed while this edit was pending; local fields take precedence.</small>
               )}
               {operation.state === 'needs_attention' && (
-                <wa-button
+                <Button
                   type="button"
-                  size="s"
-                  appearance="outlined"
-                  {...INSPECTOR_AND_EDITOR_ACTIONS.retryProviderOutbox.attrs}
-                  data-connection-id={operation.connection_id}
-                  data-operation-id={operation.operation_id}
+                  size="default"
+                  emphasis="secondary"
+                  action={INSPECTOR_AND_EDITOR_ACTIONS.retryProviderOutbox.value}
+                  rootAttributes={{
+                    'data-connection-id': operation.connection_id,
+                    'data-operation-id': operation.operation_id,
+                  }}
                 >
                   Retry
-                </wa-button>
+                </Button>
               )}
               {(operation.state === 'queued' ||
                 operation.state === 'rate_limited' ||
                 operation.state === 'needs_attention') && (
-                <wa-button
+                <Button
                   type="button"
-                  size="s"
-                  appearance="outlined"
-                  {...INSPECTOR_AND_EDITOR_ACTIONS.discardProviderOutbox.attrs}
-                  data-connection-id={operation.connection_id}
-                  data-operation-id={operation.operation_id}
+                  size="default"
+                  emphasis="secondary"
+                  action={INSPECTOR_AND_EDITOR_ACTIONS.discardProviderOutbox.value}
+                  rootAttributes={{
+                    'data-connection-id': operation.connection_id,
+                    'data-operation-id': operation.operation_id,
+                  }}
                 >
                   Discard Local Edit
-                </wa-button>
+                </Button>
               )}
             </div>
           ))}

@@ -12,7 +12,7 @@ describe('BulkTicketDialog', () => {
       BulkTicketDialog({ state: { kind: 'tag', mode: 'remove', count: 2, choices: ['bug', 'client'] } }),
     );
     expect(remove).toContain('label="Remove tag — 2 selected"');
-    expect(remove).toContain('data-action="choose-bulk-tag" data-tag="bug"');
+    expect(remove).toMatch(/<button(?=[^>]*data-action="choose-bulk-tag")(?=[^>]*data-tag="bug")/);
     expect(remove).toContain('data-component="row"');
     expect(remove).toContain('data-wrap="true"');
     expect(remove).toContain('<div role="group" aria-label="Tags in selection">');

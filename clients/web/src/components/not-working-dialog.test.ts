@@ -10,15 +10,15 @@ describe('NotWorkingDialog', () => {
   it('accepts either notes or pending attachments and exposes stable handlers', () => {
     const empty = String(NotWorkingDialog({ slug: 'HS2-DONE', note: '', attachments: [] }));
     expect(empty).toContain('data-action="submit-not-working"');
-    expect(empty).toContain('disabled>Report Not Working');
+    expect(empty).toMatch(/<button(?=[^>]*disabled)[^>]*>[^]*Report Not Working<\/span><\/button>/);
     expect(empty).toContain('aria-label="Browse evidence attachments"');
     const note = String(NotWorkingDialog({ slug: 'HS2-DONE', note: 'Regression', attachments: [] }));
-    expect(note).not.toContain('disabled>Report Not Working');
+    expect(note).not.toMatch(/<button(?=[^>]*disabled)[^>]*>[^]*Report Not Working<\/span><\/button>/);
     const attachment = String(
       NotWorkingDialog({ slug: 'HS2-DONE', note: '', attachments: [{ id: 'pending-1', name: 'proof.png' }] }),
     );
     expect(attachment).toContain('data-pending-attachment-id="pending-1"');
-    expect(attachment).not.toContain('disabled>Report Not Working');
+    expect(attachment).not.toMatch(/<button(?=[^>]*disabled)[^>]*>[^]*Report Not Working<\/span><\/button>/);
     expect(attachment).toContain('aria-label="Remove proof.png"');
   });
 
@@ -49,7 +49,7 @@ describe('NotWorkingDialog', () => {
     );
     expect(markup).toContain('Reopen Ticket — HS2-REOPEN');
     expect(markup).toContain('What needs another attempt?');
-    expect(markup).toContain('>Reopen Ticket</wa-button>');
+    expect(markup).toContain('>Reopen Ticket</span></button>');
   });
 
   it('keeps long filenames shrinkable and uses pointer/not-allowed cursor semantics', () => {
@@ -58,11 +58,13 @@ describe('NotWorkingDialog', () => {
     expect(picker).toContain('data-wrap="truncate"');
     const css = readFileSync(resolve(import.meta.dirname, 'pending-attachment-picker.css'), 'utf8');
     expect(css).not.toContain('__item');
-    // Web Awesome buttons own their pointer/not-allowed cursors; the dialog no longer styles buttons (HS2-P6ZJDS).
+    // Kerf buttons own their pointer/not-allowed cursors; the dialog does not style buttons (HS2-P6ZJDS).
     const dialogCss = readFileSync(resolve(import.meta.dirname, 'not-working-dialog.css'), 'utf8');
     expect(dialogCss).not.toMatch(/button|::part|__footer|__form|__hint/);
     const markup = String(NotWorkingDialog({ slug: 'HS2-DONE', note: 'Broken', attachments: [] }));
-    expect(markup).toContain('<wa-button type="submit" variant="danger">Report Not Working</wa-button>');
+    expect(markup).toMatch(
+      /<button(?=[^>]*type="submit")(?=[^>]*data-tone="danger")[^>]*>[^]*Report Not Working<\/span><\/button>/,
+    );
     expect(markup).toContain('aria-labelledby="not-working-note-label"');
   });
 });

@@ -303,8 +303,9 @@ describe('NoteCard', () => {
     expect(needed).toContain('Respond');
     expect(needed).toContain('data-action="dismiss-feedback"');
     expect(needed).toContain('No Response Needed');
-    expect(needed).toContain('size="small" appearance="outlined"');
-    expect(needed).toContain('size="small" appearance="accent"');
+    expect(needed).toContain('data-size="compact"');
+    expect(needed).toContain('data-emphasis="secondary"');
+    expect(needed).toContain('data-emphasis="primary"');
     expect(needed).not.toContain('data-lucide="circle-check"');
     const draft = String(
       NoteCard({
@@ -486,7 +487,8 @@ describe('NoteEditor and RespondToFeedbackButton (HS2-3X404M)', () => {
     expect(markup).toContain('placeholder="Additional response (optional)"');
     expect(markup.match(/data-note-response="true"/g)).toHaveLength(2);
     expect(markup).toContain('No Response Needed');
-    expect(markup).toMatch(/data-note-id="details"[^>]*>\s*Respond\s*</);
+    expect(markup).toContain('data-note-id="details"');
+    expect(markup).toContain('>Respond</span>');
   });
 
   it('draws the AI feedback disclosure arrows with Kerf DisclosureArrow (HS2-XSBED3)', () => {

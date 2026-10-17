@@ -25,14 +25,16 @@ describe('AIContentLabel', () => {
     const css = readFileSync(new URL('./ai-content-label.css', import.meta.url), 'utf8');
     expect(css).not.toContain('.kui-text');
   });
-  it('keeps one justified layout rule and composes Web Awesome buttons for feedback (HS2-T3SE2Z)', () => {
+  it('keeps one justified layout rule and composes Kerf buttons for feedback (HS2-T3SE2Z)', () => {
     const css = readFileSync(new URL('./ai-content-label.css', import.meta.url), 'utf8');
     expect(css.match(/\{/g)).toHaveLength(1);
     expect(css).toMatch(/\.ai-content-label \{[^}]*gap: var\(--kui-space-2xs\)/);
     // Glyphs are sized by the LucideIcon size prop, never by CSS on the Kerf svg (HS2-4AQJEX).
     expect(css).not.toMatch(/svg|__feedback/);
     const markup = String(AIContentLabel({ tool: 'Claude', feedbackTarget: 'note:one' }));
-    expect(markup.match(/<wa-button appearance="plain" size="small"/g)).toHaveLength(2);
+    expect(
+      markup.match(/<button[^>]*data-component="button"[^>]*data-emphasis="plain"[^>]*data-size="compact"/g),
+    ).toHaveLength(2);
     const icons = markup.match(/<svg[^>]*>/g) ?? [];
     expect(icons).toHaveLength(3);
     // The attribution glyph flows inline at the label's font size; feedback glyphs use the xs size.

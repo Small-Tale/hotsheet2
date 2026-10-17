@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
@@ -280,9 +281,9 @@ export function TicketRowSettings() {
         value={ticketRowSettings.confidence.value}
         choices={TICKET_ROW_CONFIDENCE_CHOICES}
       />
-      <wa-button type="button" data-action="reset-settings">
+      <Button type="button" action={'reset-settings'}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }

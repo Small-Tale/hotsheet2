@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
@@ -21,7 +21,7 @@ describe('Kerf application UI profile', () => {
       readFileSync(new URL('../.kerf-ui-profile.json', import.meta.url), 'utf8'),
     ) as KerfProfile;
     expect(profile.scope).toBe('workspace');
-    expect(profile.exceptions).toHaveLength(50);
+    expect(profile.exceptions).toHaveLength(52);
     for (const exception of profile.exceptions.slice(0, 16)) {
       expect(exception.id).toMatch(/^web-awesome-/);
       expect(exception.rules).toEqual(['KUI-L011']);
@@ -44,7 +44,7 @@ describe('Kerf application UI profile', () => {
     // HS2-M6B8AD reviewed every remaining nested-inset and dynamic-class review finding site by
     // site; each exception is exact (one file, one rule) and its rationale names the classes or
     // expressions it covers, so a new finding elsewhere still fails the gate.
-    const reviewed = profile.exceptions.slice(17, -1);
+    const reviewed = profile.exceptions.slice(17, -3);
     expect(reviewed.length).toBeGreaterThan(0);
     const ids = new Set<string>(),
       targets = new Set<string>(),
@@ -76,14 +76,18 @@ describe('Kerf application UI profile', () => {
     expect(targets.size).toBe(reviewed.length);
     expect(stale).toEqual([]);
     // A false Kerf composition finding, exact to one file and rule until the Kerf fix ships (HS2-BH7NZ4).
-    expect(profile.exceptions.at(-1)).toEqual(
+    expect(profile.exceptions.at(-3)).toEqual(
       expect.objectContaining({
         id: 'message-composer-trailing-zone',
         rules: ['KUI-L203'],
         target: 'src/components/ai-conversation.tsx',
       }),
     );
-    expect(profile.exceptions.at(-1)?.rationale).toContain('KF-Z00DKT');
+    expect(profile.exceptions.at(-3)?.rationale).toContain('KF-Z00DKT');
+    expect(profile.exceptions.slice(-2)).toEqual([
+      expect.objectContaining({ rules: ['KUI-L301'], target: 'src/components/quick-ticket-composer.tsx' }),
+      expect.objectContaining({ rules: ['KUI-L301'], target: 'src/components/workspace-controls.tsx' }),
+    ]);
   });
 
   it('restores Kerf-discouraged Web Awesome controls only until their adoption tickets land', () => {
@@ -92,17 +96,33 @@ describe('Kerf application UI profile', () => {
     const profile = JSON.parse(readFileSync(new URL('../.kerf-ui-profile.json', import.meta.url), 'utf8')) as {
       preferences: Record<string, { preferred: string; avoid: string[]; rationale: string }>;
     };
-    expect(Object.keys(profile.preferences).sort()).toEqual([
-      'action-button',
-      'boolean-option',
-      'compact-progress',
-      'text-entry',
-    ]);
-    expect(profile.preferences['action-button'].preferred).toBe('@kerfjs/ui:button');
-    expect(profile.preferences['action-button'].rationale).toContain('HS2-TQ88K4');
+    expect(Object.keys(profile.preferences).sort()).toEqual(['boolean-option', 'compact-progress', 'text-entry']);
     for (const key of ['text-entry', 'boolean-option', 'compact-progress'])
       expect(profile.preferences[key].rationale, key).toContain('HS2-SKD293');
     for (const preference of Object.values(profile.preferences)) expect(preference.avoid).toEqual([]);
+  });
+
+  it('keeps raw action buttons only at the TabBar end composition boundary', () => {
+    const root = new URL('./', import.meta.url);
+    const files = (directory: URL): URL[] =>
+      readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+        const path = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, directory);
+        return entry.isDirectory()
+          ? files(path)
+          : entry.name.endsWith('.tsx') && !entry.name.includes('.test.')
+            ? [path]
+            : [];
+      });
+    const usages = files(root)
+      .map((file) => ({
+        file: file.pathname.split('/src/')[1],
+        count: [...readFileSync(file, 'utf8').matchAll(/<wa-button\b/g)].length,
+      }))
+      .filter(({ count }) => count > 0);
+    expect(usages).toEqual([
+      { file: 'components/quick-ticket-composer.tsx', count: 1 },
+      { file: 'components/workspace-controls.tsx', count: 4 },
+    ]);
   });
 
   it('runs every static doctor stage while keeping browser execution opt-in', () => {

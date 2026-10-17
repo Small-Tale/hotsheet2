@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { delegate, signal } from 'kerfjs';
@@ -72,10 +73,14 @@ export const terminalVisibilityDemoOpen = signal(false),
 export function TerminalVisibilityDialogDemo() {
   return (
     <CatalogExample label="Interactive" align="inline-control">
-      <wa-button appearance="accent" data-action="show-terminal-visibility-demo" aria-haspopup="dialog">
-        <LucideIcon size="s" icon={Eye} name="eye" slot="start" />
+      <Button
+        emphasis="primary"
+        action={'show-terminal-visibility-demo'}
+        aria-haspopup="dialog"
+        icon={<LucideIcon size="s" icon={Eye} name="eye" />}
+      >
         Manage Workspace Visibility
-      </wa-button>
+      </Button>
       <TerminalVisibilityDialog
         open={terminalVisibilityDemoOpen.value}
         state={terminalVisibilityDemoState.value}

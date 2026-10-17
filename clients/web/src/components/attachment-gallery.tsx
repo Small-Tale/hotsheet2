@@ -1,7 +1,7 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import './attachment-gallery.css';
 
 import { Badge } from '@kerfjs/ui/badge';
+import { Button } from '@kerfjs/ui/button';
 import { ChoiceChips } from '@kerfjs/ui/choice-chips';
 import { px } from '@kerfjs/ui/css-values';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
@@ -997,20 +997,20 @@ export function AttachmentGallery({
                 // would fall below its readable width, such as at phone width (KF-PXCKVZ, HS2-HTRFDS).
                 action: (
                   <Row gap="xs" wrap>
-                    <wa-button
-                      size="small"
-                      variant="danger"
-                      {...ATTACHMENTS_AND_GALLERY_ACTIONS.retryGallerySave.attrs}
+                    <Button
+                      size="compact"
+                      tone={'danger'}
+                      action={ATTACHMENTS_AND_GALLERY_ACTIONS.retryGallerySave.value}
                     >
                       Retry Save
-                    </wa-button>
-                    <wa-button
-                      size="small"
-                      appearance="outlined"
-                      {...ATTACHMENTS_AND_GALLERY_ACTIONS.discardGallerySave.attrs}
+                    </Button>
+                    <Button
+                      size="compact"
+                      emphasis="secondary"
+                      action={ATTACHMENTS_AND_GALLERY_ACTIONS.discardGallerySave.value}
                     >
                       Discard Changes
-                    </wa-button>
+                    </Button>
                   </Row>
                 ),
               })}

@@ -50,7 +50,7 @@ describe('TicketCloseDialog', () => {
     expect(markup).toMatch(/HS2-TARGET <span class="kui-text"[^>]*data-tone="quiet"[^>]*>Beta<\/span>/);
     expect(markup).toMatch(/<span class="kui-text"[^>]*data-tone="quiet"[^>]*>Gamma<\/span>/);
     expect(markup).toContain('Select the existing ticket');
-    expect(markup).toContain('disabled>Mark as duplicate');
+    expect(markup).toMatch(/<button(?=[^>]*disabled)[^>]*>[^]*Mark as duplicate<\/span><\/button>/);
   });
 
   it('shows the selected canonical ticket and enables duplicate close', () => {
@@ -62,8 +62,8 @@ describe('TicketCloseDialog', () => {
     expect(markup).toContain('data-action="clear-ticket-close-target"');
     expect(markup).toContain('data-component="state-banner"');
     expect(markup).toContain('data-tone="success"');
-    expect(markup).toContain('>Mark as duplicate</wa-button>');
-    expect(markup).not.toContain('disabled>Mark as duplicate');
+    expect(markup).toContain('>Mark as duplicate</span></button>');
+    expect(markup).not.toMatch(/<button(?=[^>]*disabled)[^>]*>[^]*Mark as duplicate<\/span><\/button>/);
   });
 
   it('contains long result lists within a scrollable dialog surface', () => {

@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Row } from '@kerfjs/ui/row';
 import { wireCornerStatus } from '@kerfjs/ui/wire-corner-status';
@@ -17,18 +18,18 @@ export function AppLoadingIndicatorDemo() {
       note="Choose a loading state; the app indicator appears in the viewport corner."
     >
       <Row gap="xs" wrap>
-        <wa-button type="button" data-app-loading-demo="project">
+        <Button type="button" rootAttributes={{ 'data-app-loading-demo': 'project' }}>
           Project Load
-        </wa-button>
-        <wa-button type="button" data-app-loading-demo="start">
+        </Button>
+        <Button type="button" rootAttributes={{ 'data-app-loading-demo': 'start' }}>
           Update Start
-        </wa-button>
-        <wa-button type="button" data-app-loading-demo="progress">
+        </Button>
+        <Button type="button" rootAttributes={{ 'data-app-loading-demo': 'progress' }}>
           Update Progress
-        </wa-button>
-        <wa-button type="button" data-app-loading-demo="complete">
+        </Button>
+        <Button type="button" rootAttributes={{ 'data-app-loading-demo': 'complete' }}>
           Update Complete
-        </wa-button>
+        </Button>
       </Row>
       <AppLoadingIndicator progress={appLoadingDemoProgress.value} />
     </CatalogExample>

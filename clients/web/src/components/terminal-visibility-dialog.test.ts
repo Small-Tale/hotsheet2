@@ -122,9 +122,9 @@ describe('TerminalVisibilityDialog', () => {
       rename = String(TerminalVisibilityNameDialog({ prompt: { mode: 'rename', groupId: 'focus', value: 'Focus' } }));
     expect(add).toContain('label="Add Visibility Group"');
     expect(add).toContain('data-action="submit-terminal-visibility-name"');
-    expect(add).toContain('>Add</wa-button>');
+    expect(add).toContain('>Add</span></button>');
     expect(rename).toContain('label="Rename Visibility Group"');
     expect(rename).toContain('value="Focus"');
-    expect(rename).toContain('>Rename</wa-button>');
+    expect(rename).toContain('>Rename</span></button>');
   });
 });

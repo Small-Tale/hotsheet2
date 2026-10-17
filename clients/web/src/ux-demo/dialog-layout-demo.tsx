@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { delegate, signal } from 'kerfjs';
@@ -39,9 +40,9 @@ export function Hs1MigrationDialogDemo() {
   return (
     <CatalogExample align="glyph" label="Interactive">
       {!hs1MigrationDialogDemoOpen.value && (
-        <wa-button appearance="accent" data-action="open-hs1-migration-demo">
+        <Button emphasis="primary" action={'open-hs1-migration-demo'}>
           Open Import Dialog
-        </wa-button>
+        </Button>
       )}
       <Hs1MigrationDialog
         projectName="Demo"
@@ -61,9 +62,9 @@ export function Hs1MigrationDialogSettings() {
   return (
     <DemoSettingsForm settings="hs1-migration-dialog">
       <DeviceSetting value={hs1MigrationDialogDemoDevice.value} />
-      <wa-button type="button" data-action="reset-settings">
+      <Button type="button" action={'reset-settings'}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }

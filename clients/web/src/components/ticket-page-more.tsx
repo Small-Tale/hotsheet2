@@ -1,5 +1,4 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
-
+import { Button } from '@kerfjs/ui/button';
 import { Row } from '@kerfjs/ui/row';
 
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
@@ -18,17 +17,17 @@ export interface TicketPageMoreProps {
 export function TicketPageMore({ loading = false }: TicketPageMoreProps) {
   return (
     <Row hAlign="center" controlInsets="tb">
-      <wa-button
+      <Button
         type="button"
-        class="ticket-page-more"
-        appearance="filled-outlined"
-        pill
+        className={'ticket-page-more'}
+        emphasis="secondary"
+        shape="pill"
         loading={loading}
         disabled={loading}
-        {...INSPECTOR_AND_EDITOR_ACTIONS.loadNextTicketPage.attrs}
+        action={INSPECTOR_AND_EDITOR_ACTIONS.loadNextTicketPage.value}
       >
         {loading ? 'Loading…' : 'Load more tickets'}
-      </wa-button>
+      </Button>
     </Row>
   );
 }

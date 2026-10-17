@@ -277,7 +277,7 @@ describe('QuickTicketComposer', () => {
             attachmentsEnabled,
           }),
         ),
-      createDisabled = (markup: string) => /<wa-button[^>]*type="submit"[^>]*disabled/.test(markup);
+      createDisabled = (markup: string) => /<button(?=[^>]*type="submit")(?=[^>]*disabled)/.test(markup);
     // Source A takes attachments: files are staged, the drop zone shows, and Create is enabled.
     const sourceA = render('git-a', 'HS2 git tickets', true);
     expect(sourceA).toContain('data-pending-attachment-id="proof"');
@@ -296,7 +296,7 @@ describe('QuickTicketComposer', () => {
     );
     expect(sourceB).not.toContain('This ticket provider does not support attachments.');
     expect(sourceB).toMatch(
-      /<wa-button appearance="plain" variant="danger" size="small" data-action="clear-new-ticket-attachments">[\s\S]*slot="start"[\s\S]*data-lucide="trash-2"[\s\S]*Remove all<span class="wa-visually-hidden"> staged attachments<\/span><\/wa-button>/,
+      /<button(?=[^>]*data-action="clear-new-ticket-attachments")(?=[^>]*data-tone="danger")[^>]*>[\s\S]*data-lucide="trash-2"[\s\S]*Remove All<\/span><\/button>/,
     );
     expect(createDisabled(sourceB)).toBe(true);
     expect(render('github-b', 'GitHub issues', false, attachments.slice(0, 1))).toContain('Remove the staged file or');

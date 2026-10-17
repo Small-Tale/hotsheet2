@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { deviceClass } from '@kerfjs/ui/device-class';
 import { Select } from '@kerfjs/ui/select';
@@ -196,9 +197,9 @@ export function RepositoryStatusPopoverSettings() {
         }))}
       />
       <DeviceSetting value={repositoryDemoClient.value} />
-      <wa-button type="button" data-action="reset-settings">
+      <Button type="button" action={'reset-settings'}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }
@@ -207,9 +208,9 @@ export function ChangeEvidenceDialogSettings() {
   return (
     <DemoSettingsForm settings="change-evidence-dialog">
       <DeviceSetting value={repositoryDemoClient.value} />
-      <wa-button type="button" data-action="reset-settings">
+      <Button type="button" action={'reset-settings'}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }

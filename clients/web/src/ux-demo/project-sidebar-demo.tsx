@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { ResizableRegion } from '@kerfjs/ui/resizable-region';
 import { Select } from '@kerfjs/ui/select';
@@ -74,9 +75,9 @@ export function ProjectSidebarSettings() {
           { value: '120', label: '120 (Shown as 99+)' },
         ]}
       />
-      <wa-button type="button" data-action="reset-settings">
+      <Button type="button" action={'reset-settings'}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }

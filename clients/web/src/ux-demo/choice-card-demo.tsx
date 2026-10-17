@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { List } from '@kerfjs/ui/list';
 import { Select } from '@kerfjs/ui/select';
@@ -97,9 +98,9 @@ export function ChoiceCardSettings() {
       <wa-checkbox name="disabled" checked={choiceCardSettings.disabled.value}>
         Disabled
       </wa-checkbox>
-      <wa-button type="button" data-action="reset-settings">
+      <Button type="button" action={'reset-settings'}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }

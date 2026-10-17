@@ -1,6 +1,6 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import './corrupt-ticket-row.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { uiColor } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
@@ -46,32 +46,32 @@ function RecoveryActions({
   const key = corruptTicketKey(ticket);
   return (
     <>
-      <wa-button
-        variant="danger"
-        appearance="outlined"
-        size="small"
+      <Button
+        tone={'danger'}
+        emphasis="secondary"
+        size="compact"
         type="button"
-        {...NAVIGATION_AND_TABS_ACTIONS.revealCorruptTicket.attrs}
-        data-corrupt-key={key}
+        action={NAVIGATION_AND_TABS_ACTIONS.revealCorruptTicket.value}
         disabled={Boolean(recovery?.pending) || !hostActionsAvailable}
         title={hostOnlyDisabledReason('reveal-file', hostActionsAvailable)}
+        rootAttributes={{ 'data-corrupt-key': key }}
+        icon={<LucideIcon icon={FolderOpen} name="folder-open" size="s" />}
       >
-        <LucideIcon slot="start" icon={FolderOpen} name="folder-open" size="s" />
         {recovery?.pending === 'reveal' ? 'Showing…' : revealFileLabel()}
-      </wa-button>
+      </Button>
       {ticket.error_code !== 'upgrade_required' && (
-        <wa-button
-          variant="danger"
-          appearance="outlined"
-          size="small"
+        <Button
+          tone={'danger'}
+          emphasis="secondary"
+          size="compact"
           type="button"
-          {...NAVIGATION_AND_TABS_ACTIONS.repairCorruptTicket.attrs}
-          data-corrupt-key={key}
+          action={NAVIGATION_AND_TABS_ACTIONS.repairCorruptTicket.value}
           disabled={Boolean(recovery?.pending)}
+          rootAttributes={{ 'data-corrupt-key': key }}
+          icon={<LucideIcon icon={Bot} name="bot" size="s" />}
         >
-          <LucideIcon slot="start" icon={Bot} name="bot" size="s" />
           {recovery?.pending === 'repair' ? 'Queuing…' : 'Attempt AI repair'}
-        </wa-button>
+        </Button>
       )}
     </>
   );

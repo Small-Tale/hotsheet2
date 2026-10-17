@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
@@ -81,7 +82,7 @@ export function BulkTicketDialogDemo() {
   return (
     <>
       <CatalogExample align="glyph" label="Interactive">
-        {!open && <wa-button {...DEMO_ACTIONS.openBulkTicketDialogDemo.attrs}>Open Dialog</wa-button>}
+        {!open && <Button action={DEMO_ACTIONS.openBulkTicketDialogDemo.value}>Open Dialog</Button>}
         <BulkTicketDialog state={open ? bulkTicketDialogState(bulkTicketDialogSettings.scenario.value) : undefined} />
       </CatalogExample>
       <DemoEvent>{bulkTicketDialogSettings.event.value}</DemoEvent>
@@ -98,9 +99,9 @@ export function BulkTicketDialogSettings() {
         value={bulkTicketDialogSettings.scenario.value}
         choices={BULK_TICKET_DIALOG_SCENARIOS.map(({ value, label }) => ({ value, label }))}
       />
-      <wa-button type="button" {...DEMO_ACTIONS.resetSettings.attrs}>
+      <Button type="button" action={DEMO_ACTIONS.resetSettings.value}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }

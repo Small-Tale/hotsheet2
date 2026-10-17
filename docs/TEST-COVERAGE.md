@@ -1,5 +1,11 @@
 # Feature Coverage Matrix
 
+HS2-TQ88K4 covers Kerf Button adoption for standalone actions in the web client. Component unit
+tests assert native button actions, disabled and loading states, icon labels, and `data-*` metadata;
+`clients/web/tests/ux-demo.spec.ts` and `clients/web/tests/providers.spec.ts` exercise those actions
+inside dialog, settings, conversation, and notification flows at wide and narrow viewports. The
+TabBar end actions remain Web Awesome buttons under exact `KUI-L301` exceptions until HS2-H2ASWT.
+
 HS2-EFEWSC covers a production host pinned to one server revision while workspace
 source changes: `clients/web/src/project-bridge.test.ts` and `compatibility.test.ts`
 check that source staleness does not count as a selected-binary mismatch, while a

@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
 
@@ -10,9 +11,9 @@ export function AppEmptyState() {
         title="Open a Hot Sheet Project"
         detail="Choose a code checkout to discover its ticket sources and start working."
         action={
-          <wa-button appearance="accent" {...PROJECT_LIFECYCLE_ACTIONS.addProject.attrs}>
+          <Button emphasis="primary" action={PROJECT_LIFECYCLE_ACTIONS.addProject.value}>
             Open Project
-          </wa-button>
+          </Button>
         }
       />
     </List>

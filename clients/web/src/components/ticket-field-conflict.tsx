@@ -1,7 +1,7 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/textarea/textarea.js';
 import './ticket-field-conflict.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { ContentItem } from '@kerfjs/ui/content-item';
 import { rem, uiColor } from '@kerfjs/ui/css-values';
 import { Grid } from '@kerfjs/ui/grid';
@@ -66,24 +66,24 @@ export function TicketFieldConflict({ conflict, resolution }: TicketFieldConflic
             value={resolution}
           />
           <Row hAlign="right" gap="xs" wrap>
-            <wa-button
-              size="small"
-              appearance="outlined"
+            <Button
+              size="compact"
+              emphasis="secondary"
               type="button"
-              {...INSPECTOR_AND_EDITOR_ACTIONS.acceptRemoteTicketField.attrs}
+              action={INSPECTOR_AND_EDITOR_ACTIONS.acceptRemoteTicketField.value}
+              icon={<LucideIcon size="s" icon={RotateCcw} name="rotate-ccw" />}
             >
-              <LucideIcon slot="start" size="s" icon={RotateCcw} name="rotate-ccw" />
               Use Theirs
-            </wa-button>
-            <wa-button
-              size="small"
-              variant="brand"
+            </Button>
+            <Button
+              size="compact"
+              tone={'brand'}
               type="button"
-              {...INSPECTOR_AND_EDITOR_ACTIONS.applyTicketFieldMerge.attrs}
+              action={INSPECTOR_AND_EDITOR_ACTIONS.applyTicketFieldMerge.value}
+              icon={<LucideIcon size="s" icon={GitMerge} name="git-merge" />}
             >
-              <LucideIcon slot="start" size="s" icon={GitMerge} name="git-merge" />
               Apply Merged Value
-            </wa-button>
+            </Button>
           </Row>
         </List>
       </ContentItem>

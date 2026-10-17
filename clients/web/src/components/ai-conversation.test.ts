@@ -153,7 +153,7 @@ describe('AIConversation', () => {
     expect(markup).not.toContain('Enter to send');
     expect(markup).not.toContain('aria-describedby="ai-conversation-draft-dialog-hint"');
     expect(markup).toMatch(/aria-keyshortcuts="[^"]*Enter/);
-    expect(markup).toContain('class="ai-conversation__send"');
+    expect(markup).toContain('ai-conversation__send');
     expect(markup).toContain('data-lucide="arrow-up"');
     expect(markup).toContain('Codex is working');
     expect(markup).not.toContain('Session session-1');
@@ -368,7 +368,7 @@ describe('AIConversation', () => {
     expect(markup).toContain('data-component="message-composer"');
     expect(markup).toContain('data-submit-on-enter="true"');
     expect(markup).toContain('aria-keyshortcuts="Enter"');
-    expect(markup).toContain('class="ai-conversation__send"');
+    expect(markup).toContain('ai-conversation__send');
     expect(markup).toContain('data-lucide="arrow-up"');
     expect(markup).not.toContain('wa-dialog');
   });

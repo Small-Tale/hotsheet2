@@ -110,7 +110,7 @@
   gap: var(--kui-space-xs);
 }
 .note-card__respond {
-  width: 100%;
+  display: grid;
 }
 /* Feedback prompts split into clickable blocks with inline response textareas (HS2 feedback flow). */
 .note-card__feedback-prompt {

@@ -5,13 +5,6 @@
   align-items: end;
   gap: var(--kui-space-xs);
 }
-/* Square icon-only browse button: Web Awesome applies icon-button geometry only to a lone wa-icon, not a
-   Lucide SVG (KF-1315VN); remove once Kerf exposes an icon-only button. */
-.project-dialog__path wa-button::part(base) {
-  width: remify(40px);
-  min-height: remify(40px);
-  padding: 0;
-}
 /* The alert live region stays mounted so errors announce, but takes no List gap while empty. */
 .project-dialog__error:empty {
   display: none;

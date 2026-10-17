@@ -1,5 +1,4 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
-
+import { Button } from '@kerfjs/ui/button';
 import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -76,17 +75,16 @@ export function PermissionRulesSettings({ rules, revoking = [], message = '' }: 
                       {`${allowed ? 'Allow' : 'Deny'} · ${SCOPE_LABELS[rule.scope]}`}
                     </Text>
                   </List>
-                  <wa-button
-                    appearance="plain"
-                    size="small"
-                    {...NOTIFICATIONS_AND_LINKS_ACTIONS.revokePermissionRule.attrs}
-                    data-rule-key={key}
+                  <Button
+                    emphasis="plain"
+                    size="compact"
+                    action={NOTIFICATIONS_AND_LINKS_ACTIONS.revokePermissionRule.value}
                     disabled={revoking.includes(key)}
-                    aria-label={`Revoke ${rule.tool}: ${summary}`}
+                    ariaLabel={`Revoke ${rule.tool}: ${summary}`}
                     title="Forget this answer; the next identical request asks again"
-                  >
-                    <LucideIcon icon={Trash2} name="trash-2" />
-                  </wa-button>
+                    rootAttributes={{ 'data-rule-key': key }}
+                    icon={<LucideIcon icon={Trash2} name="trash-2" />}
+                  />
                 </Row>
               );
             })}

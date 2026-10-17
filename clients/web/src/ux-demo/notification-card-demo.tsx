@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { foregroundColorVar } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
@@ -33,9 +34,14 @@ const PERMISSION_SUMMARY = {
 
 function DemoAction({ label, appearance = 'plain' }: { label: string; appearance?: 'plain' | 'accent' | 'outlined' }) {
   return (
-    <wa-button size="small" appearance={appearance} type="button" {...DEMO_CARD_ACTION(label)}>
+    <Button
+      size="compact"
+      emphasis={appearance === 'accent' ? 'primary' : appearance === 'outlined' ? 'secondary' : 'plain'}
+      type="button"
+      rootAttributes={{ ...DEMO_CARD_ACTION(label) }}
+    >
       {label}
-    </wa-button>
+    </Button>
   );
 }
 

@@ -3685,7 +3685,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await page.setViewportSize({ width: 390, height: 760 });
   // At phone width the footer actions wrap inside the dialog instead of overflowing it.
   const footerBox = (await footer.boundingBox())!;
-  for (const action of await footer.locator('wa-button').all()) {
+  for (const action of await footer.locator('button.kui-button').all()) {
     const box = (await action.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(footerBox.x - 1);
     expect(box.x + box.width).toBeLessThanOrEqual(footerBox.x + footerBox.width + 1);
@@ -7120,9 +7120,9 @@ test('selects and copies chat messages before saving that range without choosing
   await expect(dialog).toContainText('Step 2 of 2');
   const back = dialog.getByRole('button', { name: 'Message scope' });
   await expect(back).toBeVisible();
-  // FlowBackButton is a wa-button (HS2-6XHBJT): its chevron is slotted into the host, not the inner button.
+  // FlowBackButton uses Kerf Button's leading icon beside its label.
   await expect(
-    dialog.locator('[data-action="previous-conversation-export-step"] > [data-lucide="chevron-left"]'),
+    dialog.locator('[data-action="previous-conversation-export-step"] [data-lucide="chevron-left"]'),
   ).toBeVisible();
   await dialog.evaluate(async (node) => {
     await Promise.all(
@@ -9897,7 +9897,7 @@ test('responds to feedback choices embedded in the ticket description', async ({
     open = inspector.getByRole('button', { name: 'Respond to Feedback' });
   await expect(sidebarDetails).toHaveCSS('background-color', 'color(srgb 1 0.982 0.91)');
   const sidebarInsets = await sidebarDetails.evaluate((surface) => {
-    const button = surface.querySelector('wa-button')!.getBoundingClientRect(),
+    const button = surface.querySelector('button.kui-button')!.getBoundingClientRect(),
       outer = surface.getBoundingClientRect();
     return { left: button.left - outer.left, right: outer.right - button.right, bottom: outer.bottom - button.bottom };
   });
@@ -12805,7 +12805,7 @@ test('keeps staged files but blocks Create on an attachment-less source, then cr
     dialog = page.getByRole('dialog', { name: 'Create ticket' }),
     form = dialog.locator('[data-action="create-ticket-form"]'),
     source = dialog.locator('kui-select[name="new-ticket-source"]'),
-    create = dialog.locator('wa-button[type="submit"]'),
+    create = dialog.locator('button[type="submit"]'),
     removeAll = form.getByRole('button', { name: 'Remove all staged attachments' }),
     stranded = form.locator('[data-new-ticket-attachments-stranded="true"]'),
     browse = form.getByLabel('Browse attachments for new ticket', { exact: true }),
@@ -13097,7 +13097,7 @@ async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source:
   const dialog = page.getByRole('dialog', { name: 'Create ticket' }),
     form = dialog.locator('[data-action="create-ticket-form"]'),
     sourceSelect = dialog.locator('kui-select[name="new-ticket-source"]'),
-    create = dialog.locator('wa-button[type="submit"]');
+    create = dialog.locator('button[type="submit"]');
   await page.getByRole('button', { name: 'New ticket…' }).click();
   await form.getByLabel('Browse attachments for new ticket', { exact: true }).setInputFiles([
     { name: 'trace.log', mimeType: 'text/plain', buffer: Buffer.from('trace') },
@@ -22755,17 +22755,13 @@ test('loads each board column independently, 100 rows at a time in the active so
   const scroller = column('Not Started').locator('[data-ticket-scroll-owner]');
   await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight));
   const endGap = await column('Not Started')
-    .locator('wa-button.ticket-page-more')
+    .locator('button.ticket-page-more')
     .evaluate((host) => {
-      const owner = host.closest('[data-ticket-scroll-owner]')!,
-        button = host.shadowRoot!.querySelector('[part~="base"]')!;
+      const owner = host.closest('[data-ticket-scroll-owner]')!;
       return {
-        host: host.getBoundingClientRect().height,
-        base: button.getBoundingClientRect().height,
-        below: owner.getBoundingClientRect().bottom - button.getBoundingClientRect().bottom,
+        below: owner.getBoundingClientRect().bottom - host.getBoundingClientRect().bottom,
       };
     });
-  expect(endGap.host).toBe(endGap.base);
   expect(endGap.below).toBeGreaterThanOrEqual(16);
   await page.screenshot({ path: 'target/visual-captures/claude/hs2-9vxr7h-board-column-end-wide.png' });
   await page.setViewportSize({ width: 390, height: 800 });
@@ -25761,7 +25757,7 @@ for (const surface of ['workspace', 'rail'] as const) {
         });
       };
       await expect(star).toBeDisabled();
-      await expect(controls.locator('.workspace-header__utility-group wa-button')).toHaveCount(0);
+      await expect(controls.locator('.workspace-header__utility-group button.kui-button')).toHaveCount(0);
       await select('HS2-DEMO01');
       await expectState('all');
       await star.click();
@@ -27084,17 +27080,13 @@ test('pauses and resumes notifications app-wide from the popup, sidebar, and ban
   expect(await page.evaluate(() => localStorage.getItem('hotsheet.notifications-paused'))).toBeNull();
 
   // Pause again from the sidebar, then resume from the banner.
-  await page
-    .locator('wa-button[data-action="pause-notifications"]:not(.permission-request-card__quiet-action)')
-    .click();
+  await page.getByRole('button', { name: 'Pause Notifications' }).first().click();
   await expect(popup).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Resume notifications' })).toBeVisible();
   await banner.getByRole('button', { name: 'Resume' }).click();
   await expect(banner).toHaveCount(0);
   await expect(popup).toBeVisible();
-  await expect(
-    page.locator('wa-button[data-action="pause-notifications"]:not(.permission-request-card__quiet-action)'),
-  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Pause Notifications' }).first()).toBeVisible();
   expect(answers).toBe(0);
 });
 

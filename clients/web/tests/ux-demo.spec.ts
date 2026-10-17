@@ -4767,7 +4767,7 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
     .getByLabel('Browse attachments for new ticket', { exact: true })
     .setInputFiles({ name: 'demo-proof.png', mimeType: 'image/png', buffer: Buffer.from('demo') });
   await expect(form.getByText('demo-proof.png')).toBeVisible();
-  const demoCreate = form.locator('wa-button[type="submit"]'),
+  const demoCreate = form.locator('button[type="submit"]'),
     demoStranded = form.locator('[data-new-ticket-attachments-stranded="true"]'),
     demoRemoveAll = form.getByRole('button', { name: 'Remove all staged attachments' });
   await expect(demoCreate).toHaveJSProperty('disabled', false);
@@ -6133,8 +6133,8 @@ test('uses semantic cursors across native and Web Awesome interactions', async (
     .evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="checkbox"]')!).cursor);
   expect(checkboxCursor).toBe('pointer');
   const buttonCursor = await inspector
-    .locator('wa-button[data-action="reset-settings"]')
-    .evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="base"]')!).cursor);
+    .locator('button[data-action="reset-settings"]')
+    .evaluate((node) => getComputedStyle(node).cursor);
   expect(buttonCursor).toBe('pointer');
   await page.locator('[data-action="toggle-settings"]').first().click();
   await page.locator('[data-component="ticket-list-row"]').click({ button: 'right' });
@@ -6144,13 +6144,11 @@ test('uses semantic cursors across native and Web Awesome interactions', async (
   );
   await page.goto('/ux-demo?component=quick-ticket-composer');
   await page.getByRole('button', { name: /New ticket/ }).click();
-  const create = page.locator('wa-button[type="submit"]');
+  const create = page.locator('button[type="submit"]');
   await create.evaluate((node) => {
     node.setAttribute('disabled', '');
   });
-  await expect
-    .poll(() => create.evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="base"]')!).cursor))
-    .toBe('not-allowed');
+  await expect.poll(() => create.evaluate((node) => getComputedStyle(node).cursor)).toBe('not-allowed');
 });
 
 test('exercises the five ProjectSidebar component demos and their controlled transitions', async ({ page }) => {
@@ -7143,12 +7141,12 @@ test('operates resizable-region keyboard and collapse transitions', async ({ pag
   await expect(vertical).toHaveAttribute('aria-valuenow', '196');
   await expect(horizontal).toHaveCSS('cursor', 'col-resize');
   await expect(vertical).toHaveCSS('cursor', 'row-resize');
-  // HS2-NADSB8: the Lucide icon sits in the wa-button start slot, on the label's line.
-  const collapseHost = page.locator('wa-button[data-action="toggle-resizable-collapse"]');
+  // The Kerf Button keeps its leading Lucide icon on the label's line.
+  const collapseHost = page.locator('button[data-action="toggle-resizable-collapse"]');
   const iconPlacement = () =>
     collapseHost.evaluate((button) => {
-      const icon = button.querySelector(':scope > svg[slot="start"]');
-      const label = button.shadowRoot?.querySelector('[part~="label"]');
+      const icon = button.querySelector('.kui-button__icon svg');
+      const label = button.querySelector('.kui-button__label');
       if (!icon || !label) return null;
       const iconBox = icon.getBoundingClientRect();
       const labelBox = label.getBoundingClientRect();
@@ -7852,8 +7850,8 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();
   const stopAutomation = card.getByRole('button', { name: 'Stop auto-allow Countdown' });
   await expect(stopAutomation).toHaveAttribute('title', 'Stop auto-allow countdown for this request');
-  // The icon-only Web Awesome button carries its Lucide glyph in light DOM on the host (HS2-EH5HEP).
-  const stopAutomationHost = card.locator('wa-button.permission-request-card__stop-automation');
+  // The icon-only Kerf button carries its Lucide glyph within the native button (HS2-EH5HEP).
+  const stopAutomationHost = card.locator('button.permission-request-card__stop-automation');
   await expect(stopAutomationHost.locator('[data-lucide="pause"]')).toBeVisible();
   expect((await stopAutomationHost.textContent())?.trim()).toBe('');
   await expect(card.locator('.permission-request-card__countdown')).toHaveCSS('border-top-style', 'none');
@@ -8073,20 +8071,20 @@ test('previews AIConversation public states at wide and narrow sizes', async ({ 
       return { gap: getComputedStyle(node).gap, glyphFitsText: glyph.height >= 9 && glyph.height <= 13 };
     }),
   ).toEqual({ gap: '4px', glyphFitsText: true });
-  // Feedback composes plain, small Web Awesome buttons instead of app-styled native buttons (HS2-T3SE2Z).
+  // Feedback composes plain, compact Kerf buttons with decorative Lucide glyphs (HS2-T3SE2Z).
   expect(
     await feedback.evaluate((node) => {
-      const buttons = [...node.querySelectorAll('wa-button')],
+      const buttons = [...node.querySelectorAll('button.kui-button')],
         glyph = buttons[0].querySelector('svg')!.getBoundingClientRect();
       return {
-        buttons: buttons.map((button) => [button.getAttribute('appearance'), button.getAttribute('size')]),
+        buttons: buttons.map((button) => [button.getAttribute('data-emphasis'), button.getAttribute('data-size')]),
         glyphFitsButton: glyph.height >= 9 && glyph.height <= 13,
       };
     }),
   ).toEqual({
     buttons: [
-      ['plain', 'small'],
-      ['plain', 'small'],
+      ['plain', 'compact'],
+      ['plain', 'compact'],
     ],
     glyphFitsButton: true,
   });

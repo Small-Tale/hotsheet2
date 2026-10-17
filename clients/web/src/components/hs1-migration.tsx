@@ -1,6 +1,7 @@
 import './hs1-migration.css';
 import '@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js';
 
+import { Button } from '@kerfjs/ui/button';
 import { uiColor } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -88,15 +89,15 @@ export function Hs1MigrationDialog({
                 disabled={busy}
               />
             </List>
-            <wa-button
-              appearance="outlined"
+            <Button
+              emphasis="secondary"
               type="button"
-              {...PROJECT_LIFECYCLE_ACTIONS.browseHs1TicketStore.attrs}
+              action={PROJECT_LIFECYCLE_ACTIONS.browseHs1TicketStore.value}
               disabled={busy || !hostActionsAvailable}
               title={hostOnlyDisabledReason('choose-folder', hostActionsAvailable)}
             >
               Choose…
-            </wa-button>
+            </Button>
           </Row>
           {busy && (
             <div role="status">
@@ -116,17 +117,17 @@ export function Hs1MigrationDialog({
             <></>
           )}
           <Row hAlign="right" gap="xs">
-            <wa-button
-              appearance="plain"
+            <Button
+              emphasis="plain"
               type="button"
-              {...PROJECT_LIFECYCLE_ACTIONS.dismissHs1Migration.attrs}
+              action={PROJECT_LIFECYCLE_ACTIONS.dismissHs1Migration.value}
               disabled={busy}
             >
               Not Now
-            </wa-button>
-            <wa-button appearance="accent" type="submit" disabled={busy}>
+            </Button>
+            <Button emphasis="primary" type="submit" disabled={busy}>
               {busy ? 'Importing…' : 'Import project'}
-            </wa-button>
+            </Button>
           </Row>
         </List>
       </form>

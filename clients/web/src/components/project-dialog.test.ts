@@ -92,7 +92,6 @@ describe('project dialogs', () => {
     // Kerf owns the dialog width, error tone, recovery banner, and checkout rows (HS2-FKPQW2).
     expect([...css.matchAll(/^[.\w@][^{\n]*\{/gm)].map((match) => match[0].trim())).toEqual([
       '.project-dialog__path {',
-      '.project-dialog__path wa-button::part(base) {',
       '.project-dialog__error:empty {',
     ]);
     expect(localMarkup).toContain('data-component="dialog-surface"');

@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, signal } from 'kerfjs';
@@ -286,9 +287,9 @@ export function PermissionRequestSettings() {
       <wa-checkbox name="explanation" checked={permissionRequestSettings.explanation.value}>
         Show explanation
       </wa-checkbox>
-      <wa-button type="button" data-action="reset-settings">
+      <Button type="button" action={'reset-settings'}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }

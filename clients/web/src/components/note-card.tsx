@@ -1,7 +1,7 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import './native-textarea.css';
 import './note-card.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { ContentItem, type ContentItemAppearance } from '@kerfjs/ui/content-item';
 import { rem, uiColor } from '@kerfjs/ui/css-values';
 import { DisclosureArrow } from '@kerfjs/ui/disclosure-arrow';
@@ -280,25 +280,24 @@ export function NoteEditor({
       {actions && (
         <div>
           {response && (
-            <wa-button
-              size="small"
-              appearance="outlined"
-              {...INSPECTOR_AND_EDITOR_ACTIONS.dismissFeedback.attrs}
-              data-note-id={id}
+            <Button
+              size="compact"
+              emphasis="secondary"
+              action={INSPECTOR_AND_EDITOR_ACTIONS.dismissFeedback.value}
               title="Clear this feedback request without replying"
+              rootAttributes={{ 'data-note-id': id }}
             >
               No Response Needed
-            </wa-button>
+            </Button>
           )}
-          <wa-button
-            size="small"
-            appearance="accent"
-            {...INSPECTOR_AND_EDITOR_ACTIONS.saveNoteEdit.attrs}
-            data-note-id={id}
-            data-note-response={response ? 'true' : undefined}
+          <Button
+            size="compact"
+            emphasis="primary"
+            action={INSPECTOR_AND_EDITOR_ACTIONS.saveNoteEdit.value}
+            rootAttributes={{ 'data-note-id': id, 'data-note-response': response ? 'true' : undefined }}
           >
             {response ? 'Respond' : 'Submit'}
-          </wa-button>
+          </Button>
         </div>
       )}
     </div>
@@ -308,14 +307,15 @@ export function NoteEditor({
 /** The full-width "Respond to Feedback" action that opens the reader at a feedback request (HS2-3X404M). */
 export function RespondToFeedbackButton({ id }: { id: string }) {
   return (
-    <wa-button
-      class="note-card__respond"
-      appearance="outlined"
-      {...INSPECTOR_AND_EDITOR_ACTIONS.respondToFeedback.attrs}
-      data-note-id={id}
-    >
-      Respond to Feedback
-    </wa-button>
+    <div class="note-card__respond">
+      <Button
+        emphasis="secondary"
+        action={INSPECTOR_AND_EDITOR_ACTIONS.respondToFeedback.value}
+        rootAttributes={{ 'data-note-id': id }}
+      >
+        Respond to Feedback
+      </Button>
+    </div>
   );
 }
 

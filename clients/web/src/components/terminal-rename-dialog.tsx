@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
 import { Spacer } from '@kerfjs/ui/spacer';
@@ -44,17 +45,17 @@ export function TerminalRenameDialog({ target }: { target?: TerminalRenameTarget
           />
           <Row vAlign="middle" gap="xs">
             {target?.defaultName ? (
-              <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.resetTerminalRename.attrs}>
+              <Button emphasis="plain" type="button" action={TERMINALS_ACTIONS.resetTerminalRename.value}>
                 Reset to Default
-              </wa-button>
+              </Button>
             ) : undefined}
             <Spacer flex />
-            <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.cancelTerminalRename.attrs}>
+            <Button emphasis="plain" type="button" action={TERMINALS_ACTIONS.cancelTerminalRename.value}>
               Cancel
-            </wa-button>
-            <wa-button appearance="accent" type="submit">
+            </Button>
+            <Button emphasis="primary" type="submit">
               Rename
-            </wa-button>
+            </Button>
           </Row>
         </List>
       </form>

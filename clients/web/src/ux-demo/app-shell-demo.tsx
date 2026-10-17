@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { px } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
@@ -152,9 +153,9 @@ export function AppShellSettings() {
       <wa-checkbox name="mobile-view-header" checked={appShellSettings.mobileView.value}>
         Phone view header (view Select and action)
       </wa-checkbox>
-      <wa-button type="button" data-action="reset-settings">
+      <Button type="button" action={'reset-settings'}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }
@@ -349,15 +350,19 @@ export function ResizableRegionDemo() {
         note="Drag either handle or use arrow keys while it is focused."
         align="inline-control"
       >
-        <wa-button appearance="outlined" data-action="toggle-resizable-collapse">
-          <LucideIcon
-            size="s"
-            slot="start"
-            icon={resizeDemoCollapsed.value ? PanelLeftOpen : PanelLeftClose}
-            name={resizeDemoCollapsed.value ? 'panel-left-open' : 'panel-left-close'}
-          />
+        <Button
+          emphasis="secondary"
+          action={'toggle-resizable-collapse'}
+          icon={
+            <LucideIcon
+              size="s"
+              icon={resizeDemoCollapsed.value ? PanelLeftOpen : PanelLeftClose}
+              name={resizeDemoCollapsed.value ? 'panel-left-open' : 'panel-left-close'}
+            />
+          }
+        >
           {resizeDemoCollapsed.value ? 'Restore horizontal region' : 'Collapse horizontal region'}
-        </wa-button>
+        </Button>
       </CatalogExample>
       <CatalogExample
         viewport={{ width: 'full', height: 'short', layout: 'flex', frame: 'solid', overflow: 'hidden', tokens }}
@@ -557,9 +562,9 @@ export function AppShellDemo() {
             <EmptyState
               title="Terminal Drawer"
               action={
-                <wa-button size="small" data-action="toggle-app-shell-demo-terminal-drawer">
+                <Button size="compact" action={'toggle-app-shell-demo-terminal-drawer'}>
                   Hide Terminal Drawer
-                </wa-button>
+                </Button>
               }
             />
           </section>

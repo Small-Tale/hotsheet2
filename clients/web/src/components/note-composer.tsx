@@ -1,7 +1,7 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import './native-textarea.css';
 import './note-composer.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { ContentItem } from '@kerfjs/ui/content-item';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
@@ -23,12 +23,12 @@ export function NoteComposer({ value = '' }: { value?: string }) {
             {value}
           </textarea>
           <Row hAlign="right" vAlign="middle" gap="xs">
-            <wa-button appearance="plain" type="button" {...INSPECTOR_AND_EDITOR_ACTIONS.cancelNewNote.attrs}>
+            <Button emphasis="plain" type="button" action={INSPECTOR_AND_EDITOR_ACTIONS.cancelNewNote.value}>
               Cancel
-            </wa-button>
-            <wa-button appearance="accent" type="submit" disabled={!value.trim()}>
+            </Button>
+            <Button emphasis="primary" type="submit" disabled={!value.trim()}>
               Add Note
-            </wa-button>
+            </Button>
           </Row>
         </List>
       </form>

@@ -1,7 +1,7 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import './ticket-close-dialog.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { rem, remify, uiColor } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListItem } from '@kerfjs/ui/list-item';
@@ -90,14 +90,14 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
                       detail={state.selected.title}
                       copyLayout="stacked"
                       action={
-                        <wa-button
+                        <Button
                           type="button"
-                          appearance="plain"
-                          size="small"
-                          {...TICKET_SELECTION_ACTIONS.clearTicketCloseTarget.attrs}
+                          emphasis="plain"
+                          size="compact"
+                          action={TICKET_SELECTION_ACTIONS.clearTicketCloseTarget.value}
                         >
                           Change
-                        </wa-button>
+                        </Button>
                       }
                     />
                   )}
@@ -155,18 +155,18 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
             </div>
             {/* The same footer layout as the project close dialog: Cancel leads, the decision trails (HS2-0DHVGK). */}
             <Row vAlign="middle" gap="xs">
-              <wa-button
+              <Button
                 type="button"
-                {...TICKET_SELECTION_ACTIONS.cancelTicketClose.attrs}
-                appearance="outlined"
+                action={TICKET_SELECTION_ACTIONS.cancelTicketClose.value}
+                emphasis="secondary"
                 disabled={state.submitting}
               >
                 Cancel
-              </wa-button>
+              </Button>
               <Spacer flex />
-              <wa-button type="submit" variant="brand" disabled={Boolean(validation) || state.submitting}>
+              <Button type="submit" tone={'brand'} disabled={Boolean(validation) || state.submitting}>
                 {state.submitting ? 'Closing…' : duplicate ? 'Mark as duplicate' : 'Close ticket'}
-              </wa-button>
+              </Button>
             </Row>
           </List>
         </form>

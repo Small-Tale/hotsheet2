@@ -1,6 +1,7 @@
 import './ticket-search-field.css';
 import '@kerfjs/ui/search-field.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { Chip } from '@kerfjs/ui/chip';
 import { flex, rem } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
@@ -221,9 +222,13 @@ export function TicketSearchDateHelper({ id, prefix }: { id: string; prefix: str
       <wa-input name={TICKET_SEARCH_DATE_INPUT} type="date" label="Date" size="small" />
       <wa-input name={TICKET_SEARCH_TIME_INPUT} type="time" label="Time (Optional)" size="small" />
       <div class="ticket-search-field__date-apply">
-        <wa-button size="small" {...TICKET_SEARCH_ACTIONS.applyDate.attrs} data-date-prefix={prefix}>
+        <Button
+          size="compact"
+          action={TICKET_SEARCH_ACTIONS.applyDate.value}
+          rootAttributes={{ 'data-date-prefix': prefix }}
+        >
           Apply
-        </wa-button>
+        </Button>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import '@kerfjs/ui/layout.css';
 
 import { Badge } from '@kerfjs/ui/badge';
+import { Button } from '@kerfjs/ui/button';
 import { rem } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
@@ -65,21 +66,23 @@ export function notificationNavigationPanel({
   // Kerf's Pane owns its footer's safe-area edges, so the inset lives on this inner box (HS2-KMDJRH).
   const footer = (
     <List controlInsets="trbl" rootAttributes={{ 'data-paused': String(paused) }}>
-      <wa-button
-        size="small"
-        appearance="outlined"
-        {...(paused
-          ? NOTIFICATIONS_AND_LINKS_ACTIONS.resumeNotifications.attrs
-          : NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.attrs)}
+      <Button
+        size="compact"
+        emphasis="secondary"
+        action={
+          paused
+            ? NOTIFICATIONS_AND_LINKS_ACTIONS.resumeNotifications.value
+            : NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.value
+        }
         title={
           paused
             ? 'Show permission popups again in every project'
             : 'Stop permission popups in every project until you resume'
         }
+        icon={<LucideIcon size="s" icon={paused ? Bell : BellOff} name={paused ? 'bell' : 'bell-off'} />}
       >
-        <LucideIcon size="s" slot="start" icon={paused ? Bell : BellOff} name={paused ? 'bell' : 'bell-off'} />
         {paused ? 'Resume Notifications' : 'Pause Notifications'}
-      </wa-button>
+      </Button>
     </List>
   );
   return {

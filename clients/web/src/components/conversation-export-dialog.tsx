@@ -1,7 +1,7 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/tag/tag.js';
 import './conversation-export-dialog.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { ContentItem } from '@kerfjs/ui/content-item';
 import { remify } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
@@ -188,32 +188,32 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
   );
   const scopeActions = (
     <>
-      <wa-button appearance="plain" type="button" data-action="cancel-conversation-export" disabled={busy}>
+      <Button emphasis="plain" type="button" action={'cancel-conversation-export'} disabled={busy}>
         Cancel
-      </wa-button>
-      <wa-button
-        appearance="accent"
+      </Button>
+      <Button
+        emphasis="primary"
         type="button"
-        data-action="next-conversation-export-step"
+        action={'next-conversation-export-step'}
         disabled={busy || selectedMessages.length === 0}
       >
         Continue
-      </wa-button>
+      </Button>
     </>
   );
   const bundleActions = (
     <>
-      <wa-button appearance="plain" type="button" data-action="cancel-conversation-export" disabled={busy}>
+      <Button emphasis="plain" type="button" action={'cancel-conversation-export'} disabled={busy}>
         Cancel
-      </wa-button>
-      <wa-button
-        appearance="accent"
+      </Button>
+      <Button
+        emphasis="primary"
         type="button"
-        data-action="finish-conversation-export"
+        action={'finish-conversation-export'}
         disabled={busy || Boolean(blockingValidation) || summaryUnavailable}
       >
         {submitLabel}
-      </wa-button>
+      </Button>
     </>
   );
 

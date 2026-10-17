@@ -1,6 +1,6 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import './command-run-dialog.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
@@ -38,13 +38,17 @@ export function CommandRunDialog({
           }}
           footer={
             <Row hAlign="right" vAlign="middle" gap="xs" wrap>
-              <wa-button appearance="outlined" {...COMMANDS_AND_AI_ACTIONS.dismissCommandDialog.attrs}>
+              <Button emphasis="secondary" action={COMMANDS_AND_AI_ACTIONS.dismissCommandDialog.value}>
                 Keep Running
-              </wa-button>
-              <wa-button variant="danger" {...COMMANDS_AND_AI_ACTIONS.confirmStopCommand.attrs} data-run-id={run?.id}>
-                <LucideIcon slot="start" icon={Square} name="square" size={13.6} />
+              </Button>
+              <Button
+                tone={'danger'}
+                action={COMMANDS_AND_AI_ACTIONS.confirmStopCommand.value}
+                rootAttributes={{ 'data-run-id': run?.id }}
+                icon={<LucideIcon icon={Square} name="square" size={13.6} />}
+              >
                 Stop Command
-              </wa-button>
+              </Button>
             </Row>
           }
         >

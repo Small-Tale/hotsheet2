@@ -21,7 +21,7 @@ it('composes an accessible permission-style halt card with the production action
   expect(markup).toContain('aria-label="AI session halted"');
   expect(markup).toMatch(/<article class="notification-card" data-elevation="popup"/);
   expect(markup).toContain('class="notification-card__details" data-appearance="code"');
-  expect(markup).toContain('class="halted-session-popup__primary"');
+  expect(markup).toContain('halted-session-popup__primary');
   expect(markup).toContain('data-action="open-halted-session"');
   expect(markup).toContain('data-action="dismiss-halted-session"');
   expect(markup).toContain('data-action="pause-notifications"');

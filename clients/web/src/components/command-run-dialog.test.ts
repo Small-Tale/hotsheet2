@@ -27,8 +27,8 @@ describe('CommandRunDialog', () => {
       expect(markup).not.toContain('<wa-dialog');
       expect(markup).toMatch(/<dialog[^>]*data-controlled-open="true"[^>]*class="kui-dialog-surface"/);
       expect(markup).toContain('data-component="dialog-surface"');
-      // The only native button is Kerf's header close; the app's actions stay Web Awesome buttons.
-      expect(markup.match(/<button/g)).toHaveLength(1);
+      // Kerf's header close and the confirmation actions are native buttons.
+      expect(markup.match(/<button/g)).toHaveLength(markup === output ? 1 : 3);
       expect(markup).toMatch(/<button[^>]*class="kui-dialog-surface__close"/);
     }
     // The output dialog relies on Kerf's header close; only the stop confirmation has a footer.
@@ -36,7 +36,7 @@ describe('CommandRunDialog', () => {
     expect(stop).toMatch(/<svg[^>]*data-size="13\.6"[^>]*--_kui-lucide-size:0\.85rem/);
     expect(output).toContain('class="command-run-dialog__output"');
     expect(stop).toMatch(/<footer class="kui-dialog-surface__footer"><div class="kui-row"/);
-    expect(stop).toMatch(/<wa-button variant="danger"[^>]*data-action="confirm-stop-command"/);
+    expect(stop).toMatch(/<button(?=[^>]*data-action="confirm-stop-command")(?=[^>]*data-tone="danger")/);
   });
 
   it('renders command output and a stop confirmation as distinct surfaces', () => {

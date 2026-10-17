@@ -101,7 +101,9 @@ describe('host-only controls on remote clients', () => {
     };
     const recovery = String(corruptTicketInspectorPanel({ ticket, hostActionsAvailable: false }).content);
     expect(recovery).toMatch(
-      new RegExp(`data-action="reveal-corrupt-ticket"[^>]*disabled[^>]*title="${reason('reveal-file')}"`),
+      new RegExp(
+        `<button(?=[^>]*data-action="reveal-corrupt-ticket")(?=[^>]*disabled)(?=[^>]*title="${reason('reveal-file')}")`,
+      ),
     );
     const project = String(ProjectDialog({ open: true, root: '/work', error: '', hostActionsAvailable: false }));
     expect(project.match(/data-action="browse-project-path"[^>]*>/g)?.join('')).toContain(reason('choose-folder'));
@@ -119,7 +121,9 @@ describe('host-only controls on remote clients', () => {
       }),
     );
     expect(hs1).toMatch(
-      new RegExp(`data-action="browse-hs1-ticket-store"[^>]*disabled[^>]*title="${reason('choose-folder')}"`),
+      new RegExp(
+        `<button(?=[^>]*data-action="browse-hs1-ticket-store")(?=[^>]*disabled)(?=[^>]*title="${reason('choose-folder')}")`,
+      ),
     );
     const setup = String(
       TicketSourceSetupDialog({

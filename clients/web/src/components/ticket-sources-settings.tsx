@@ -1,6 +1,7 @@
 import './ticket-sources-settings.css';
 
 import { Badge } from '@kerfjs/ui/badge';
+import { Button } from '@kerfjs/ui/button';
 import { flex, px, rem, uiColor } from '@kerfjs/ui/css-values';
 import { FramedList, FramedListRow } from '@kerfjs/ui/framed-list';
 import { Grid } from '@kerfjs/ui/grid';
@@ -356,17 +357,17 @@ export function AccountsSettings({
                             </List>
                           </Row>
                           {account.sources.length === 0 ? (
-                            <wa-button
-                              size="small"
-                              appearance="outlined"
+                            <Button
+                              size="compact"
+                              emphasis="secondary"
                               type="button"
-                              {...COMMANDS_AND_AI_ACTIONS.signOutAccount.attrs}
-                              data-item-id={account.id}
+                              action={COMMANDS_AND_AI_ACTIONS.signOutAccount.value}
                               disabled={busy}
+                              rootAttributes={{ 'data-item-id': account.id }}
+                              icon={<LucideIcon icon={LogOut} name="log-out" />}
                             >
-                              <LucideIcon slot="start" icon={LogOut} name="log-out" />
                               {busy ? 'Signing out…' : 'Sign out'}
-                            </wa-button>
+                            </Button>
                           ) : null}
                         </Row>
                       </FramedListRow>
@@ -393,16 +394,18 @@ export function AccountsSettings({
                                     </List>
                                   </Row>
                                   {unused && !confirming && (
-                                    <wa-button
-                                      size="small"
-                                      appearance="outlined"
+                                    <Button
+                                      size="compact"
+                                      emphasis="secondary"
                                       type="button"
-                                      {...COMMANDS_AND_AI_ACTIONS.requestUnusedAccountSourceRemoval.attrs}
-                                      data-account-id={account.id}
-                                      data-source-id={source.connection_id}
+                                      action={COMMANDS_AND_AI_ACTIONS.requestUnusedAccountSourceRemoval.value}
+                                      rootAttributes={{
+                                        'data-account-id': account.id,
+                                        'data-source-id': source.connection_id,
+                                      }}
                                     >
                                       Remove
-                                    </wa-button>
+                                    </Button>
                                   )}
                                 </Row>
                                 {unused && confirming && (
@@ -411,26 +414,28 @@ export function AccountsSettings({
                                       Remove this unused connection? The sign-in stays available.
                                     </Text>
                                     <Row gap="xs">
-                                      <wa-button
-                                        size="small"
-                                        appearance="plain"
+                                      <Button
+                                        size="compact"
+                                        emphasis="plain"
                                         type="button"
-                                        {...COMMANDS_AND_AI_ACTIONS.cancelUnusedAccountSourceRemoval.attrs}
+                                        action={COMMANDS_AND_AI_ACTIONS.cancelUnusedAccountSourceRemoval.value}
                                         disabled={removing}
                                       >
                                         Keep
-                                      </wa-button>
-                                      <wa-button
-                                        size="small"
-                                        variant="danger"
+                                      </Button>
+                                      <Button
+                                        size="compact"
+                                        tone={'danger'}
                                         type="button"
-                                        {...COMMANDS_AND_AI_ACTIONS.removeUnusedAccountSource.attrs}
-                                        data-account-id={account.id}
-                                        data-source-id={source.connection_id}
+                                        action={COMMANDS_AND_AI_ACTIONS.removeUnusedAccountSource.value}
                                         disabled={removing}
+                                        rootAttributes={{
+                                          'data-account-id': account.id,
+                                          'data-source-id': source.connection_id,
+                                        }}
                                       >
                                         {removing ? 'Removing…' : 'Remove connection'}
-                                      </wa-button>
+                                      </Button>
                                     </Row>
                                   </Row>
                                 )}

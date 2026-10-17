@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { List } from '@kerfjs/ui/list';
 import { Select } from '@kerfjs/ui/select';
@@ -289,9 +290,9 @@ export function AIConversationDemo() {
         }}
       >
         {aiConversationPresentation.value === 'dialog' && (
-          <wa-button appearance="accent" data-action="open-ai-conversation-demo">
+          <Button emphasis="primary" action={'open-ai-conversation-demo'}>
             Open Conversation
-          </wa-button>
+          </Button>
         )}
         <DemoEvent>
           {aiConversationSaveCount.value
@@ -377,13 +378,13 @@ export function AIConversationSettings() {
       />
       <DeviceSetting value={aiConversationDevice.value} />
       {aiConversationPresentation.value === 'dialog' && (
-        <wa-button type="button" data-action="open-ai-conversation-demo">
+        <Button type="button" action={'open-ai-conversation-demo'}>
           Open Conversation
-        </wa-button>
+        </Button>
       )}
-      <wa-button type="button" data-action="reset-settings">
+      <Button type="button" action={'reset-settings'}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }

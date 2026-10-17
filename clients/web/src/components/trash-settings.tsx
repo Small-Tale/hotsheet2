@@ -1,6 +1,6 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 
+import { Button } from '@kerfjs/ui/button';
 import { flex, px } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
@@ -75,9 +75,9 @@ export function TrashSettings({
                 required
               />
             </List>
-            <wa-button type="submit" variant="brand" disabled={!dirty}>
+            <Button type="submit" tone={'brand'} disabled={!dirty}>
               Apply Now
-            </wa-button>
+            </Button>
           </Row>
           {hint ? (
             <Text size="compact" data-role="trash-purge-hint">
@@ -101,12 +101,12 @@ export function TrashSettings({
             }}
             footer={
               <Row hAlign="right" vAlign="middle" gap="xs" wrap>
-                <wa-button appearance="outlined" {...COMMANDS_AND_AI_ACTIONS.revertTrashSettings.attrs}>
-                  Revert to {days} {days === 1 ? 'day' : 'days'}
-                </wa-button>
-                <wa-button variant="brand" {...COMMANDS_AND_AI_ACTIONS.applyLeavingTrashSettings.attrs}>
+                <Button emphasis="secondary" action={COMMANDS_AND_AI_ACTIONS.revertTrashSettings.value}>
+                  {`Revert to ${days} ${days === 1 ? 'day' : 'days'}`}
+                </Button>
+                <Button tone={'brand'} action={COMMANDS_AND_AI_ACTIONS.applyLeavingTrashSettings.value}>
                   Apply
-                </wa-button>
+                </Button>
               </Row>
             }
           >

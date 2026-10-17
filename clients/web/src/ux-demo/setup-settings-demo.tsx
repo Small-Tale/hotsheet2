@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
@@ -47,9 +48,9 @@ export function TicketSourceSetupDialogSettings() {
   return (
     <DemoSettingsForm settings="ticket-source-setup-dialog">
       <DeviceSetting value={ticketSourceDevice.value} />
-      <wa-button type="button" data-action="reset-settings">
+      <Button type="button" action={'reset-settings'}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }
@@ -325,9 +326,9 @@ export function TrashSettingsDemo() {
         <List gap="m">
           <TrashSettings {...state.leaving} />
           <Row gap="xs">
-            <wa-button appearance="outlined" type="button" {...TRASH_DEMO_LEAVE.attrs}>
+            <Button emphasis="secondary" type="button" action={TRASH_DEMO_LEAVE.value}>
               Leave Lifecycle
-            </wa-button>
+            </Button>
           </Row>
         </List>
       </CatalogExample>

@@ -1,7 +1,7 @@
 import './ai-conversation.css';
-import '@awesome.me/webawesome/dist/components/button/button.js';
 
 import { Badge } from '@kerfjs/ui/badge';
+import { Button } from '@kerfjs/ui/button';
 import { Chip } from '@kerfjs/ui/chip';
 import { ContentItem } from '@kerfjs/ui/content-item';
 import { flex, px, rem, remify, uiColor } from '@kerfjs/ui/css-values';
@@ -626,24 +626,22 @@ export function AIConversation(props: AIConversationProps) {
         </span>
         {selectedCount > 0 && (
           <span class="ai-conversation__selection-actions">
-            <wa-button
-              appearance="plain"
-              size="small"
-              {...COMMANDS_AND_AI_ACTIONS.copyConversationSelection.attrs}
-              aria-label="Copy Selected Messages"
+            <Button
+              emphasis="plain"
+              size="compact"
+              action={COMMANDS_AND_AI_ACTIONS.copyConversationSelection.value}
+              ariaLabel={'Copy Selected Messages'}
               title="Copy selected messages"
-            >
-              <LucideIcon size={14.4} icon={Copy} name="copy" />
-            </wa-button>
-            <wa-button
-              appearance="plain"
-              size="small"
-              {...COMMANDS_AND_AI_ACTIONS.clearConversationSelection.attrs}
-              aria-label="Clear Message Selection"
+              icon={<LucideIcon size={14.4} icon={Copy} name="copy" />}
+            />
+            <Button
+              emphasis="plain"
+              size="compact"
+              action={COMMANDS_AND_AI_ACTIONS.clearConversationSelection.value}
+              ariaLabel={'Clear Message Selection'}
               title="Clear message selection"
-            >
-              <LucideIcon size={14.4} icon={X} name="x" />
-            </wa-button>
+              icon={<LucideIcon size={14.4} icon={X} name="x" />}
+            />
           </span>
         )}
       </div>
@@ -779,18 +777,17 @@ export function AIConversation(props: AIConversationProps) {
         disabled={busy}
         submitOnEnter
         trailing={
-          <wa-button
-            class="ai-conversation__send"
-            appearance="accent"
-            size="small"
-            pill
+          <Button
+            className={'ai-conversation__send'}
+            emphasis="primary"
+            size="compact"
+            shape="pill"
             type="submit"
             disabled={busy || !draft.trim()}
-            aria-label={`Send Message to ${tool}`}
+            ariaLabel={`Send Message to ${tool}`}
             title={busy ? `${tool} is still working` : `Send message to ${tool}`}
-          >
-            <LucideIcon size="s" icon={ArrowUp} name="arrow-up" />
-          </wa-button>
+            icon={<LucideIcon size="s" icon={ArrowUp} name="arrow-up" />}
+          />
         }
       />
     </form>

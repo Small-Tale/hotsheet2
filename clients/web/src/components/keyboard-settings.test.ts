@@ -70,7 +70,9 @@ describe('KeyboardSettings', () => {
       markup.indexOf('data-shortcut-id="open-search"'),
       markup.indexOf('data-shortcut-id="undo"'),
     );
-    expect(searchRow).toMatch(/data-action="reset-shortcut"[^>]*data-shortcut-id="open-search"(?![^>]*disabled)/);
+    expect(searchRow).toMatch(
+      /<button(?=[^>]*data-action="reset-shortcut")(?=[^>]*data-shortcut-id="open-search")(?![^>]*disabled)/,
+    );
     // open-search and undo now collide → each flags a conflict.
     expect(searchRow).toContain('keyboard-settings__conflict');
     // The row being recorded shows the capture control and no static chord.

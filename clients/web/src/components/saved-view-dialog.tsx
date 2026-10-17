@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { remify } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
@@ -92,17 +93,17 @@ export function SavedViewDialog({
             ) : undefined}
             <footer>
               <Row hAlign="right" vAlign="middle" gap="xs">
-                <wa-button
-                  appearance="plain"
+                <Button
+                  emphasis="plain"
                   type="button"
-                  {...VIEWS_AND_SAVED_VIEWS_ACTIONS.cancelSavedView.attrs}
+                  action={VIEWS_AND_SAVED_VIEWS_ACTIONS.cancelSavedView.value}
                   disabled={busy || undefined}
                 >
                   Cancel
-                </wa-button>
-                <wa-button appearance="accent" type="submit" disabled={busy || undefined}>
+                </Button>
+                <Button emphasis="primary" type="submit" disabled={busy || undefined}>
                   {busy ? (rename ? 'Saving…' : 'Creating…') : title}
-                </wa-button>
+                </Button>
               </Row>
             </footer>
           </List>
@@ -146,22 +147,22 @@ export function SavedViewDeleteDialog({
           ) : undefined}
           <footer>
             <Row hAlign="right" vAlign="middle" gap="xs">
-              <wa-button
-                appearance="plain"
+              <Button
+                emphasis="plain"
                 type="button"
-                {...VIEWS_AND_SAVED_VIEWS_ACTIONS.cancelDeleteSavedView.attrs}
+                action={VIEWS_AND_SAVED_VIEWS_ACTIONS.cancelDeleteSavedView.value}
                 disabled={busy || undefined}
               >
                 Cancel
-              </wa-button>
-              <wa-button
-                variant="danger"
+              </Button>
+              <Button
+                tone={'danger'}
                 type="button"
-                {...VIEWS_AND_SAVED_VIEWS_ACTIONS.confirmDeleteSavedView.attrs}
+                action={VIEWS_AND_SAVED_VIEWS_ACTIONS.confirmDeleteSavedView.value}
                 disabled={busy || undefined}
               >
                 {busy ? 'Deleting…' : 'Delete View'}
-              </wa-button>
+              </Button>
             </Row>
           </footer>
         </List>

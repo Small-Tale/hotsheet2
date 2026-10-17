@@ -101,11 +101,11 @@ describe('TicketInspector', () => {
     );
     expect(markup).toContain('Jira sync');
     expect(markup).toContain('Credential expired');
-    expect(markup).toContain(
-      'data-action="retry-provider-outbox" data-connection-id="jira-eng" data-operation-id="stuck"',
+    expect(markup).toMatch(
+      /<button(?=[^>]*data-action="retry-provider-outbox")(?=[^>]*data-connection-id="jira-eng")(?=[^>]*data-operation-id="stuck")/,
     );
-    expect(markup).toContain(
-      'data-action="discard-provider-outbox" data-connection-id="jira-eng" data-operation-id="stuck"',
+    expect(markup).toMatch(
+      /<button(?=[^>]*data-action="discard-provider-outbox")(?=[^>]*data-connection-id="jira-eng")(?=[^>]*data-operation-id="stuck")/,
     );
     expect(markup).not.toContain('data-operation-id="sending"');
     expect(markup).toContain('Confirmed by Jira');

@@ -1,6 +1,7 @@
 import './ticket-source-setup-dialog.css';
 import '@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js';
 
+import { Button } from '@kerfjs/ui/button';
 import { uiColor } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListItem } from '@kerfjs/ui/list-item';
@@ -375,27 +376,25 @@ export function TicketSourceSetupDialog({
     <></>
   );
   const rootActions = (
-      <wa-button
-        class="ticket-source-setup__root-cancel"
-        appearance="plain"
-        {...PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.attrs}
-      >
-        Cancel
-      </wa-button>
+      <span class="ticket-source-setup__root-cancel">
+        <Button emphasis="plain" action={PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.value}>
+          Cancel
+        </Button>
+      </span>
     ),
     detailActions = created ? (
       <>
-        <wa-button appearance="plain" type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.attrs}>
+        <Button emphasis="plain" type="button" action={PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.value}>
           Skip for Now
-        </wa-button>
-        <wa-button
-          appearance="accent"
+        </Button>
+        <Button
+          emphasis="primary"
           type="button"
-          {...PROJECT_LIFECYCLE_ACTIONS.submitTicketStoreRemote.attrs}
+          action={PROJECT_LIFECYCLE_ACTIONS.submitTicketStoreRemote.value}
           disabled={remoteBusy}
         >
           {remoteBusy ? 'Connecting…' : 'Connect & push'}
-        </wa-button>
+        </Button>
       </>
     ) : editingGit && removingProviderId === editingGit.connectionId ? (
       <div class="ticket-source-setup__removal" role="group" aria-label="Confirm Removal">
@@ -408,44 +407,45 @@ export function TicketSourceSetupDialog({
           Tickets stay in the Git repository. You can add that repository again later.
         </Text>
         <Row hAlign="right" vAlign="middle" gap="xs">
-          <wa-button appearance="plain" type="button" {...COMMANDS_AND_AI_ACTIONS.cancelProviderRemoval.attrs}>
+          <Button emphasis="plain" type="button" action={COMMANDS_AND_AI_ACTIONS.cancelProviderRemoval.value}>
             Keep
-          </wa-button>
-          <wa-button
-            variant="danger"
-            appearance="accent"
+          </Button>
+          <Button
+            tone={'danger'}
+            emphasis="primary"
             type="button"
-            {...COMMANDS_AND_AI_ACTIONS.confirmProviderRemoval.attrs}
+            action={COMMANDS_AND_AI_ACTIONS.confirmProviderRemoval.value}
             disabled={providerBusy}
           >
             {providerBusy ? 'Removing…' : 'Remove'}
-          </wa-button>
+          </Button>
         </Row>
       </div>
     ) : editingGit ? (
       <>
-        <wa-button
-          class="ticket-source-setup__remove"
-          variant="danger"
-          appearance="plain"
-          type="button"
-          {...COMMANDS_AND_AI_ACTIONS.requestProviderRemoval.attrs}
-          disabled={providerBusy}
-        >
-          <LucideIcon slot="start" icon={Trash2} name="trash-2" />
-          Remove from This Project…
-        </wa-button>
-        <wa-button appearance="plain" type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.attrs}>
+        <span class="ticket-source-setup__remove">
+          <Button
+            tone={'danger'}
+            emphasis="plain"
+            type="button"
+            action={COMMANDS_AND_AI_ACTIONS.requestProviderRemoval.value}
+            disabled={providerBusy}
+            icon={<LucideIcon icon={Trash2} name="trash-2" />}
+          >
+            Remove from This Project…
+          </Button>
+        </span>
+        <Button emphasis="plain" type="button" action={PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.value}>
           Done
-        </wa-button>
-        <wa-button
-          appearance="accent"
+        </Button>
+        <Button
+          emphasis="primary"
           type="button"
           disabled={providerBusy}
-          {...PROJECT_LIFECYCLE_ACTIONS.submitGitSourceRelink.attrs}
+          action={PROJECT_LIFECYCLE_ACTIONS.submitGitSourceRelink.value}
         >
           {providerBusy ? 'Saving…' : 'Save location'}
-        </wa-button>
+        </Button>
       </>
     ) : editing && removingProviderId === editing.id ? (
       // One wrapping group, so the morph replaces the edit actions instead of recycling the clicked
@@ -464,67 +464,70 @@ export function TicketSourceSetupDialog({
           Settings → Accounts.
         </Text>
         <Row hAlign="right" vAlign="middle" gap="xs">
-          <wa-button
-            appearance="plain"
+          <Button
+            emphasis="plain"
             type="button"
-            {...COMMANDS_AND_AI_ACTIONS.cancelProviderRemoval.attrs}
+            action={COMMANDS_AND_AI_ACTIONS.cancelProviderRemoval.value}
             disabled={providerBusy}
           >
             Keep
-          </wa-button>
-          <wa-button
-            variant="danger"
-            appearance="accent"
+          </Button>
+          <Button
+            tone={'danger'}
+            emphasis="primary"
             type="button"
-            {...COMMANDS_AND_AI_ACTIONS.confirmProviderRemoval.attrs}
+            action={COMMANDS_AND_AI_ACTIONS.confirmProviderRemoval.value}
             disabled={providerBusy}
           >
             {providerBusy ? 'Removing…' : 'Remove'}
-          </wa-button>
+          </Button>
         </Row>
       </div>
     ) : (
       <>
         {editing && (
-          <wa-button
-            class="ticket-source-setup__remove"
-            variant="danger"
-            appearance="plain"
-            type="button"
-            {...COMMANDS_AND_AI_ACTIONS.requestProviderRemoval.attrs}
-            disabled={providerBusy}
-          >
-            <LucideIcon slot="start" icon={Trash2} name="trash-2" />
-            Remove from This Project…
-          </wa-button>
+          <span class="ticket-source-setup__remove">
+            <Button
+              tone={'danger'}
+              emphasis="plain"
+              type="button"
+              action={COMMANDS_AND_AI_ACTIONS.requestProviderRemoval.value}
+              disabled={providerBusy}
+              icon={<LucideIcon icon={Trash2} name="trash-2" />}
+            >
+              Remove from This Project…
+            </Button>
+          </span>
         )}
         {editing && (
-          <wa-button
-            class="ticket-source-setup__toggle"
-            appearance="plain"
-            type="button"
-            {...COMMANDS_AND_AI_ACTIONS.toggleProviderDisabled.attrs}
-            disabled={providerBusy}
-          >
-            <LucideIcon
-              slot="start"
-              icon={editing.disabled ? Power : PowerOff}
-              name={editing.disabled ? 'power' : 'power-off'}
-            />
-            {editing.disabled ? 'Enable' : 'Disable'}
-          </wa-button>
+          <span class="ticket-source-setup__toggle">
+            <Button
+              emphasis="plain"
+              type="button"
+              action={COMMANDS_AND_AI_ACTIONS.toggleProviderDisabled.value}
+              disabled={providerBusy}
+              icon={
+                <LucideIcon
+                  icon={editing.disabled ? Power : PowerOff}
+                  name={editing.disabled ? 'power' : 'power-off'}
+                />
+              }
+            >
+              {editing.disabled ? 'Enable' : 'Disable'}
+            </Button>
+          </span>
         )}
-        <wa-button appearance="plain" type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.attrs}>
+        <Button emphasis="plain" type="button" action={PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.value}>
           Cancel
-        </wa-button>
-        <wa-button
-          appearance="accent"
+        </Button>
+        <Button
+          emphasis="primary"
           type="button"
-          {...COMMANDS_AND_AI_ACTIONS.submitProviderSetup.attrs}
+          action={COMMANDS_AND_AI_ACTIONS.submitProviderSetup.value}
           disabled={providerBusy || (kind === 'github' && !editing && githubAuth?.state !== 'authorized')}
         >
           {providerBusy ? 'Saving…' : editing ? 'Save changes' : 'Connect provider'}
-        </wa-button>
+        </Button>
       </>
     );
   return (

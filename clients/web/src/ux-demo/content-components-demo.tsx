@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { List } from '@kerfjs/ui/list';
 import { Select } from '@kerfjs/ui/select';
@@ -361,9 +362,9 @@ export function MarkdownEditorSettings() {
           { value: 'flush', label: 'Flush (Host Owns the Inset)' },
         ]}
       />
-      <wa-button type="button" {...DEMO_ACTIONS.resetSettings.attrs}>
+      <Button type="button" action={DEMO_ACTIONS.resetSettings.value}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }

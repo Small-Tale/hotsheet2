@@ -800,9 +800,9 @@ request, not an alert; it is a non-modal popup that queues (§3.4).
   button (one per window, lower corner opposite the dismiss buttons); image buttons
   with ~10 px padding and no border; spring loading on drags.
 
-**Hot Sheet application.** `wa-button variant="brand"` is the one primary per
-surface; `variant="danger"` never receives autofocus; icon-only buttons carry
-`wa-tooltip`/`title` and an accessible name; "Bulk Edit…", "Move to…",
+**Hot Sheet application.** Kerf `Button tone="brand"` is the one primary per
+surface; danger actions never receive initial focus; icon-only buttons carry
+an `ariaLabel` and optional `title`; "Bulk Edit…", "Move to…",
 "Report Not Working…" end with an ellipsis.
 
 ### 4.9 Text fields, text views, token fields, combo boxes

@@ -33,9 +33,9 @@ describe('ticket source surfaces', () => {
       String(ProviderSetupForm({ kind: 'github', auth }));
     const idle = form();
     expect(idle).toContain('data-action="start-github-sign-in"');
-    expect(idle).toContain('Sign in with GitHub</wa-button>');
+    expect(idle).toContain('Sign in with GitHub</span></button>');
     expect(idle).toContain('data-component="sunken-panel"');
-    expect(idle).toContain('appearance="accent"');
+    expect(idle).toContain('data-emphasis="primary"');
     expect(idle).toContain('data-action="choose-github-enterprise"');
     expect(idle).toContain('copies your one-time code');
     expect(idle).not.toContain('data-component="grid"');
@@ -72,11 +72,11 @@ describe('ticket source surfaces', () => {
           navigation: 'none',
         }),
       );
-    expect(dialog()).toMatch(/data-action="submit-provider-setup" disabled/);
+    expect(dialog()).toMatch(/<button(?=[^>]*data-action="submit-provider-setup")(?=[^>]*disabled)/);
     expect(dialog({ ...blank, session: 's', state: 'authorized' })).not.toMatch(
-      /data-action="submit-provider-setup" disabled/,
+      /<button(?=[^>]*data-action="submit-provider-setup")(?=[^>]*disabled)/,
     );
-    expect(dialog(undefined, true)).not.toMatch(/data-action="submit-provider-setup" disabled/);
+    expect(dialog(undefined, true)).not.toMatch(/<button(?=[^>]*data-action="submit-provider-setup")(?=[^>]*disabled)/);
   });
 
   it('lists every reachable repository for search and explains missing ones (HS2-27T5WT)', () => {
@@ -137,9 +137,9 @@ describe('ticket source surfaces', () => {
     // A project disables its own source from its editor (HS2-SM9PM8).
     expect(dialog(false)).toContain('data-action="toggle-provider-disabled"');
     expect(dialog(false)).toContain('data-lucide="power-off"');
-    expect(dialog(false)).toMatch(/power-off[\s\S]*?Disable<\/wa-button>/);
+    expect(dialog(false)).toMatch(/power-off[\s\S]*?Disable<\/span><\/button>/);
     expect(dialog(true)).toContain('data-lucide="power"');
-    expect(dialog(true)).toMatch(/Enable<\/wa-button>/);
+    expect(dialog(true)).toMatch(/Enable<\/span><\/button>/);
     const connecting = String(
       TicketSourceSetupDialog({
         project: { root: '/work/demo', name: 'Demo', stores: [] },
@@ -512,9 +512,9 @@ describe('ticket source surfaces', () => {
     expect(markup).toContain('cannot verify it is the same repository');
     expect(markup).toContain('data-action="relink-git-source"');
     expect(markup).toContain('data-action="submit-git-source-relink"');
-    expect(markup).toContain('>Save location</wa-button>');
+    expect(markup).toContain('>Save location</span></button>');
     expect(markup).toContain('name="project-source-color" value="#3b82f6" data-source-id="git-local" checked');
-    expect(markup).toContain('>Done</wa-button>');
+    expect(markup).toContain('>Done</span></button>');
     expect(markup).toContain('Remove from This Project…');
     const removing = String(
       TicketSourceSetupDialog({
@@ -612,11 +612,11 @@ describe('ticket source surfaces', () => {
     expect(confirming).toContain('data-account-id="jira-token" data-source-id="jira-ops"');
     // Only an account no source uses can be signed out, and its button names it.
     expect(markup.match(/data-action="sign-out-account"/g)).toHaveLength(1);
-    expect(markup).toMatch(/data-action="sign-out-account" data-item-id="github-app-01unused"/);
+    expect(markup).toMatch(/<button(?=[^>]*data-action="sign-out-account")(?=[^>]*data-item-id="github-app-01unused")/);
     expect(markup).toContain('No ticket source uses this sign-in.');
     expect(markup).toContain('data-lucide="log-out"');
     const busy = String(AccountsSettings({ accounts, signingOut: 'github-app-01unused' }));
-    expect(busy).toMatch(/data-item-id="github-app-01unused" disabled[\s\S]*?Signing out…/);
+    expect(busy).toMatch(/<button(?=[^>]*data-item-id="github-app-01unused")(?=[^>]*disabled)[^]*?Signing out…/);
     const empty = String(AccountsSettings({ accounts: [], error: 'Server unavailable' }));
     expect(empty).toContain('No accounts yet.');
     expect(empty).toContain('role="alert"');

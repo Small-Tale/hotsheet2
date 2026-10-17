@@ -1,8 +1,8 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import './native-textarea.css';
 import './not-working-dialog.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
 import { FieldLabel, Text } from '@kerfjs/ui/text';
@@ -85,17 +85,17 @@ export function NotWorkingDialog({
             )}
           </div>
           <Row hAlign="right" vAlign="middle" gap="xs">
-            <wa-button
+            <Button
               type="button"
-              appearance="plain"
-              {...TICKET_SELECTION_ACTIONS.cancelNotWorking.attrs}
+              emphasis="plain"
+              action={TICKET_SELECTION_ACTIONS.cancelNotWorking.value}
               disabled={submitting}
             >
               Cancel
-            </wa-button>
-            <wa-button type="submit" variant="danger" disabled={submitting || empty}>
+            </Button>
+            <Button type="submit" tone={'danger'} disabled={submitting || empty}>
               {submitting ? 'Submitting…' : submitLabel}
-            </wa-button>
+            </Button>
           </Row>
         </List>
       </form>

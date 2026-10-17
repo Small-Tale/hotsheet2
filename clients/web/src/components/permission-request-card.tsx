@@ -1,6 +1,6 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import './permission-request-card.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Check, CircleAlert, Clock3, ExternalLink, Pause, ShieldCheck, X } from 'lucide';
@@ -119,29 +119,29 @@ export function PermissionRequestCard({
 
   const footer = history ? undefined : (
     <>
-      <wa-button
-        appearance="plain"
-        size="small"
-        class="permission-request-card__quiet-action"
-        {...NOTIFICATIONS_AND_LINKS_ACTIONS.ignorePermission.attrs}
-        // Escape activates Ignore while the shell popup is lifted above a modal (HS2-S8K9BG).
-        {...{ [TOP_LAYER_DISMISS_ATTRIBUTE]: '' }}
-        data-request-key={item.key}
-      >
-        Ignore
-      </wa-button>
+      <span class="permission-request-card__quiet-action">
+        <Button
+          emphasis="plain"
+          size="compact"
+          action={NOTIFICATIONS_AND_LINKS_ACTIONS.ignorePermission.value}
+          rootAttributes={{ ...{ [TOP_LAYER_DISMISS_ATTRIBUTE]: '' }, 'data-request-key': item.key }}
+        >
+          Ignore
+        </Button>
+      </span>
       {presentation === 'popup' && (
         // Pauses every interruptive notification in all projects; requests keep collecting in
         // Notifications until Resume (HS2-QYA9SC).
-        <wa-button
-          appearance="plain"
-          size="small"
-          class="permission-request-card__quiet-action"
-          {...NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.attrs}
-          title="Stop permission popups in every project until you resume"
-        >
-          Pause Notifications
-        </wa-button>
+        <span class="permission-request-card__quiet-action">
+          <Button
+            emphasis="plain"
+            size="compact"
+            action={NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.value}
+            title="Stop permission popups in every project until you resume"
+          >
+            Pause Notifications
+          </Button>
+        </span>
       )}
     </>
   );
@@ -156,76 +156,67 @@ export function PermissionRequestCard({
           >
             Auto-{countdownAction} in <strong data-permission-countdown-value>{countdown}</strong>
           </span>
-          <wa-button
-            appearance="plain"
-            size="small"
-            class="permission-request-card__stop-automation"
-            {...NOTIFICATIONS_AND_LINKS_ACTIONS.cancelPermissionAutomation.attrs}
-            data-request-key={item.key}
-            aria-label={`Stop auto-${countdownAction} Countdown`}
+          <Button
+            emphasis="plain"
+            size="compact"
+            className={'permission-request-card__stop-automation'}
+            action={NOTIFICATIONS_AND_LINKS_ACTIONS.cancelPermissionAutomation.value}
+            ariaLabel={`Stop auto-${countdownAction} Countdown`}
             title={`Stop auto-${countdownAction} countdown for this request`}
-          >
-            <LucideIcon size={14.4} icon={Pause} name="pause" />
-          </wa-button>
+            rootAttributes={{ 'data-request-key': item.key }}
+            icon={<LucideIcon size={14.4} icon={Pause} name="pause" />}
+          />
         </div>
       )}
       <div class="permission-request-card__buttons">
         <span class="permission-request-card__decision">
-          <wa-button
-            appearance="outlined"
-            size="small"
-            {...NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.attrs}
-            data-decision="deny"
-            data-scope="once"
-            data-request-key={item.key}
+          <Button
+            emphasis="secondary"
+            size="compact"
+            action={NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.value}
             disabled={state === 'resolving'}
+            rootAttributes={{ 'data-decision': 'deny', 'data-scope': 'once', 'data-request-key': item.key }}
           >
             Deny
-          </wa-button>
+          </Button>
         </span>
         <span class="permission-request-card__decision">
-          <wa-button
-            appearance="outlined"
-            size="small"
-            {...NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.attrs}
-            data-decision="allow"
-            data-scope="chat"
-            data-request-key={item.key}
+          <Button
+            emphasis="secondary"
+            size="compact"
+            action={NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.value}
             disabled={state === 'resolving'}
             title="Allow this exact request again in this chat without asking, until the chat closes"
+            rootAttributes={{ 'data-decision': 'allow', 'data-scope': 'chat', 'data-request-key': item.key }}
           >
             Allow for This Chat
-          </wa-button>
+          </Button>
         </span>
         {alwaysSupported && (
           <span class="permission-request-card__decision">
-            <wa-button
-              appearance="outlined"
-              size="small"
-              {...NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.attrs}
-              data-decision="allow"
-              data-scope="always"
-              data-request-key={item.key}
+            <Button
+              emphasis="secondary"
+              size="compact"
+              action={NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.value}
               disabled={state === 'resolving'}
+              rootAttributes={{ 'data-decision': 'allow', 'data-scope': 'always', 'data-request-key': item.key }}
             >
               Always Allow
-            </wa-button>
+            </Button>
           </span>
         )}
         <span class="permission-request-card__decision">
-          <wa-button
-            variant="brand"
-            appearance="accent"
-            size="small"
-            class="permission-request-card__primary"
-            {...NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.attrs}
-            data-decision="allow"
-            data-scope="once"
-            data-request-key={item.key}
+          <Button
+            tone={'brand'}
+            emphasis="primary"
+            size="compact"
+            className={'permission-request-card__primary'}
+            action={NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.value}
             disabled={state === 'resolving'}
+            rootAttributes={{ 'data-decision': 'allow', 'data-scope': 'once', 'data-request-key': item.key }}
           >
             {alwaysSupported ? 'Allow Once' : 'Allow'}
-          </wa-button>
+          </Button>
         </span>
       </div>
     </div>

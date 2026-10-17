@@ -1,7 +1,7 @@
 import './keyboard-settings.css';
-import '@awesome.me/webawesome/dist/components/button/button.js';
 
 import { Badge } from '@kerfjs/ui/badge';
+import { Button } from '@kerfjs/ui/button';
 import { flex, px, uiColor } from '@kerfjs/ui/css-values';
 import { FramedList, FramedListRow } from '@kerfjs/ui/framed-list';
 import { List } from '@kerfjs/ui/list';
@@ -50,15 +50,15 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
               use platform conventions. Changes are saved on this device.
             </Text>
           </Row>
-          <wa-button
-            appearance="outlined"
-            size="small"
-            {...COMMANDS_AND_AI_ACTIONS.resetAllShortcuts.attrs}
+          <Button
+            emphasis="secondary"
+            size="compact"
+            action={COMMANDS_AND_AI_ACTIONS.resetAllShortcuts.value}
             disabled={!hasOverrides}
+            icon={<LucideIcon size={14.4} icon={RotateCcw} name="rotate-ccw" />}
           >
-            <LucideIcon slot="start" size={14.4} icon={RotateCcw} name="rotate-ccw" />
             Reset All to Defaults
-          </wa-button>
+          </Button>
         </Row>
         {KEYBOARD_SHORTCUT_GROUPS.map((group) => {
           const shortcuts = KEYBOARD_SHORTCUTS.filter((shortcut) => shortcut.group === group);
@@ -127,50 +127,56 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
                             )}
                             {shortcut.editable ? (
                               capturing ? (
-                                <wa-button
-                                  appearance="outlined"
-                                  size="small"
-                                  {...COMMANDS_AND_AI_ACTIONS.cancelShortcutCapture.attrs}
+                                <Button
+                                  emphasis="secondary"
+                                  size="compact"
+                                  action={COMMANDS_AND_AI_ACTIONS.cancelShortcutCapture.value}
+                                  ariaLabel={`Cancel Editing ${shortcut.label}`}
                                   title="Cancel"
-                                >
-                                  <LucideIcon
-                                    size={14.4}
-                                    icon={X}
-                                    name="x"
-                                    label={`Cancel editing ${shortcut.label}`}
-                                  />
-                                </wa-button>
+                                  icon={
+                                    <LucideIcon
+                                      size={14.4}
+                                      icon={X}
+                                      name="x"
+                                      label={`Cancel editing ${shortcut.label}`}
+                                    />
+                                  }
+                                />
                               ) : (
                                 <>
-                                  <wa-button
-                                    appearance="outlined"
-                                    size="small"
-                                    {...COMMANDS_AND_AI_ACTIONS.editShortcut.attrs}
-                                    data-shortcut-id={shortcut.id}
+                                  <Button
+                                    emphasis="secondary"
+                                    size="compact"
+                                    action={COMMANDS_AND_AI_ACTIONS.editShortcut.value}
+                                    ariaLabel={`Change Shortcut for ${shortcut.label}`}
                                     title="Change shortcut"
-                                  >
-                                    <LucideIcon
-                                      size={14.4}
-                                      icon={Pencil}
-                                      name="pencil"
-                                      label={`Change shortcut for ${shortcut.label}`}
-                                    />
-                                  </wa-button>
-                                  <wa-button
-                                    appearance="outlined"
-                                    size="small"
-                                    {...COMMANDS_AND_AI_ACTIONS.resetShortcut.attrs}
-                                    data-shortcut-id={shortcut.id}
+                                    rootAttributes={{ 'data-shortcut-id': shortcut.id }}
+                                    icon={
+                                      <LucideIcon
+                                        size={14.4}
+                                        icon={Pencil}
+                                        name="pencil"
+                                        label={`Change shortcut for ${shortcut.label}`}
+                                      />
+                                    }
+                                  />
+                                  <Button
+                                    emphasis="secondary"
+                                    size="compact"
+                                    action={COMMANDS_AND_AI_ACTIONS.resetShortcut.value}
+                                    ariaLabel={`Reset ${shortcut.label} to Its Default`}
                                     disabled={!overridden}
                                     title="Reset to default"
-                                  >
-                                    <LucideIcon
-                                      size={14.4}
-                                      icon={RotateCcw}
-                                      name="rotate-ccw"
-                                      label={`Reset ${shortcut.label} to its default`}
-                                    />
-                                  </wa-button>
+                                    rootAttributes={{ 'data-shortcut-id': shortcut.id }}
+                                    icon={
+                                      <LucideIcon
+                                        size={14.4}
+                                        icon={RotateCcw}
+                                        name="rotate-ccw"
+                                        label={`Reset ${shortcut.label} to its default`}
+                                      />
+                                    }
+                                  />
                                 </>
                               )
                             ) : (

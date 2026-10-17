@@ -1,6 +1,6 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/textarea/textarea.js';
 
+import { Button } from '@kerfjs/ui/button';
 import { remify } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
@@ -51,12 +51,12 @@ export function AiFeedbackDialog({ state }: { state?: AiFeedbackDialogState }) {
             <footer>
               <Row vAlign="middle" gap="xs">
                 <Spacer flex />
-                <wa-button appearance="plain" type="button" {...COMMANDS_AND_AI_ACTIONS.cancelAiFeedback.attrs}>
+                <Button emphasis="plain" type="button" action={COMMANDS_AND_AI_ACTIONS.cancelAiFeedback.value}>
                   Cancel
-                </wa-button>
-                <wa-button appearance="accent" type="submit">
+                </Button>
+                <Button emphasis="primary" type="submit">
                   {state.revising ? 'Update feedback' : 'Save feedback'}
-                </wa-button>
+                </Button>
               </Row>
             </footer>
           </List>

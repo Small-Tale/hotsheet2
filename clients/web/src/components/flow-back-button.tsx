@@ -1,5 +1,4 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
-
+import { Button } from '@kerfjs/ui/button';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { ChevronLeft } from 'lucide';
@@ -20,18 +19,18 @@ export function FlowBackButton({
 }) {
   return (
     <Row>
-      <wa-button
-        class="flow-back-button"
-        appearance="plain"
-        variant="brand"
-        size="small"
+      <Button
+        className={'flow-back-button'}
+        emphasis="plain"
+        tone={'brand'}
+        size="compact"
         type="button"
-        data-action={action}
+        action={action}
         disabled={disabled}
+        icon={<LucideIcon size="s" icon={ChevronLeft} name="chevron-left" />}
       >
-        <LucideIcon slot="start" size="s" icon={ChevronLeft} name="chevron-left" />
         {label}
-      </wa-button>
+      </Button>
     </Row>
   );
 }

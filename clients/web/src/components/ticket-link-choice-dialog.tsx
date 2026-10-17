@@ -1,5 +1,4 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
-
+import { Button } from '@kerfjs/ui/button';
 import { uiColor } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListItem } from '@kerfjs/ui/list-item';
@@ -30,13 +29,13 @@ export function TicketLinkChoiceDialog({ choice }: { choice?: TicketLinkChoice }
         }}
         footer={
           <Row hAlign="right" vAlign="middle" gap="xs">
-            <wa-button
+            <Button
               type="button"
-              appearance="outlined"
-              {...NOTIFICATIONS_AND_LINKS_ACTIONS.cancelTicketLinkChoice.attrs}
+              emphasis="secondary"
+              action={NOTIFICATIONS_AND_LINKS_ACTIONS.cancelTicketLinkChoice.value}
             >
               Cancel
-            </wa-button>
+            </Button>
           </Row>
         }
       >

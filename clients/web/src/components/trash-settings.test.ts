@@ -24,14 +24,16 @@ describe('TrashSettings', () => {
 
   it('puts "Apply Now" beside the field and enables it only for an unapplied value (HS2-KPD942)', () => {
     const clean = String(TrashSettings({ days: 30 }));
-    expect(clean).toMatch(/<wa-button type="submit" variant="brand" disabled[^>]*>\s*Apply Now/);
+    expect(clean).toMatch(
+      /<button(?=[^>]*type="submit")(?=[^>]*data-tone="brand")(?=[^>]*disabled)[^>]*>[^]*Apply Now<\/span><\/button>/,
+    );
     expect(clean).not.toContain('Save retention');
     expect(clean).not.toContain('data-role="trash-purge-hint"');
     const same = String(TrashSettings({ days: 30, draft: { value: ' 30 ', purgeCount: 4 } }));
     expect(same).not.toContain('data-role="trash-purge-hint"');
     const dirty = String(TrashSettings({ days: 30, draft: { value: '7', purgeCount: 3 } }));
     expect(dirty).toContain('value="7"');
-    expect(dirty).not.toMatch(/variant="brand" disabled/);
+    expect(dirty).not.toMatch(/<button(?=[^>]*type="submit")(?=[^>]*disabled)/);
     expect(dirty).toContain('data-dirty="true"');
     expect(dirty).toContain('3 tickets in Trash will be purged');
     expect(dirty).not.toContain('trash-retention-leave-dialog');

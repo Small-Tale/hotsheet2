@@ -1,6 +1,6 @@
 import './pending-attachment-picker.css';
-import '@awesome.me/webawesome/dist/components/button/button.js';
 
+import { Button } from '@kerfjs/ui/button';
 import { flex, px, uiColor } from '@kerfjs/ui/css-values';
 import { FileDropZone, FilePickerTrigger } from '@kerfjs/ui/file-picker';
 import { List } from '@kerfjs/ui/list';
@@ -64,15 +64,15 @@ export function PendingAttachmentPicker({
                       {item.name}
                     </Text>
                   </Row>
-                  <wa-button
-                    appearance="plain"
-                    size="small"
-                    {...TICKET_SELECTION_ACTIONS.removeNotWorkingAttachment.attrs}
-                    data-pending-attachment-id={item.id}
+                  <Button
+                    emphasis="plain"
+                    size="compact"
+                    action={TICKET_SELECTION_ACTIONS.removeNotWorkingAttachment.value}
+                    rootAttributes={{ 'data-pending-attachment-id': item.id }}
                   >
                     {/* The labeled icon names Web Awesome's inner button (a host aria-label does not). */}
                     <LucideIcon size={14.4} icon={Trash2} name="trash-2" label={`Remove ${item.name}`} />
-                  </wa-button>
+                  </Button>
                 </Row>
               </SunkenPanel>
             ))}

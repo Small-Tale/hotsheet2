@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Pane } from '@kerfjs/ui/pane';
 import { Row } from '@kerfjs/ui/row';
@@ -61,11 +62,11 @@ export function ContentTransitionDemo() {
                 region="footer"
                 sideLayout="actions"
                 label="Setup actions transition"
-                a={<wa-button>Cancel</wa-button>}
+                a={<Button>Cancel</Button>}
                 b={
                   <>
-                    <wa-button>Skip</wa-button>
-                    <wa-button appearance="accent">Connect</wa-button>
+                    <Button>Skip</Button>
+                    <Button emphasis="primary">Connect</Button>
                   </>
                 }
               />
@@ -84,10 +85,10 @@ export function ContentTransitionDemo() {
       </CatalogExample>
       <CatalogExample label="Navigation" align="inline-control" viewport={{ width: 'medium' }}>
         <Row hAlign="space-between" fill>
-          <wa-button data-action="transition-back">Back</wa-button>
-          <wa-button appearance="accent" data-action="transition-forward">
+          <Button action={'transition-back'}>Back</Button>
+          <Button emphasis="primary" action={'transition-forward'}>
             Continue
-          </wa-button>
+          </Button>
         </Row>
       </CatalogExample>
     </>
@@ -126,9 +127,9 @@ export function ContentTransitionSettings() {
           { value: 'b', label: 'B' },
         ]}
       />
-      <wa-button type="button" data-action="reset-settings">
+      <Button type="button" action={'reset-settings'}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }

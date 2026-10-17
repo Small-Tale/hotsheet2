@@ -1,5 +1,6 @@
 import '@awesome.me/webawesome/dist/components/input/input.js';
 
+import { Button } from '@kerfjs/ui/button';
 import { remify } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
@@ -80,12 +81,12 @@ export function TerminalVisibilityNameDialog({ prompt }: { prompt?: TerminalVisi
               autofocus
             />
             <Row hAlign="right" vAlign="middle" gap="xs">
-              <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.cancelTerminalVisibilityName.attrs}>
+              <Button emphasis="plain" type="button" action={TERMINALS_ACTIONS.cancelTerminalVisibilityName.value}>
                 Cancel
-              </wa-button>
-              <wa-button appearance="accent" type="submit">
+              </Button>
+              <Button emphasis="primary" type="submit">
                 {adding ? 'Add' : 'Rename'}
-              </wa-button>
+              </Button>
             </Row>
           </List>
         </form>
@@ -122,22 +123,22 @@ export function TerminalVisibilityDialog({
         }}
         footer={
           <Row hAlign="right" vAlign="middle" gap="xs">
-            <wa-button
-              appearance="plain"
+            <Button
+              emphasis="plain"
               type="button"
-              data-action="hide-all-terminals-in-group"
+              action={'hide-all-terminals-in-group'}
               disabled={visibleGroups.length === 0}
             >
               Hide Listed
-            </wa-button>
-            <wa-button
-              appearance="plain"
+            </Button>
+            <Button
+              emphasis="plain"
               type="button"
-              data-action="show-all-terminals-in-group"
+              action={'show-all-terminals-in-group'}
               disabled={visibleGroups.length === 0}
             >
               Show Listed
-            </wa-button>
+            </Button>
           </Row>
         }
       >

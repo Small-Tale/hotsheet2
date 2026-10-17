@@ -1,6 +1,7 @@
 import './provider-setup-form.css';
 import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
 
+import { Button } from '@kerfjs/ui/button';
 import { Combobox } from '@kerfjs/ui/combobox';
 import { rem } from '@kerfjs/ui/css-values';
 import { Grid } from '@kerfjs/ui/grid';
@@ -164,31 +165,32 @@ export function ProviderSetupForm({
                 {auth.userCode}
               </output>
               <Row vAlign="middle" gap="xs" wrap>
-                <wa-button
-                  appearance="accent"
+                <Button
+                  emphasis="primary"
                   type="button"
-                  {...COMMANDS_AND_AI_ACTIONS.copyGithubCode.attrs}
-                  data-key="copy-github-code"
+                  action={COMMANDS_AND_AI_ACTIONS.copyGithubCode.value}
+                  rootAttributes={{ 'data-key': 'copy-github-code' }}
+                  icon={<LucideIcon size="s" icon={Copy} name="copy" />}
                 >
-                  <LucideIcon size="s" slot="start" icon={Copy} name="copy" />{' '}
                   {auth.copied ? 'Copy again' : 'Copy code'}
-                </wa-button>
-                <wa-button
-                  appearance="plain"
+                </Button>
+                <Button
+                  emphasis="plain"
                   type="button"
-                  {...COMMANDS_AND_AI_ACTIONS.reopenGithubSignIn.attrs}
-                  data-key="reopen-github-sign-in"
+                  action={COMMANDS_AND_AI_ACTIONS.reopenGithubSignIn.value}
+                  rootAttributes={{ 'data-key': 'reopen-github-sign-in' }}
+                  icon={<LucideIcon size="s" icon={ExternalLink} name="external-link" />}
                 >
-                  <LucideIcon size="s" slot="start" icon={ExternalLink} name="external-link" /> Reopen GitHub
-                </wa-button>
-                <wa-button
-                  appearance="plain"
+                  Reopen GitHub
+                </Button>
+                <Button
+                  emphasis="plain"
                   type="button"
-                  {...COMMANDS_AND_AI_ACTIONS.cancelGithubSignIn.attrs}
-                  data-key="cancel-github-sign-in"
+                  action={COMMANDS_AND_AI_ACTIONS.cancelGithubSignIn.value}
+                  rootAttributes={{ 'data-key': 'cancel-github-sign-in' }}
                 >
                   Cancel
-                </wa-button>
+                </Button>
               </Row>
               <Text tone="quiet" flush role="status">
                 Waiting for GitHub…
@@ -213,22 +215,23 @@ export function ProviderSetupForm({
                 <span slot="hint">The address you use to open GitHub Enterprise in a browser.</span>
               </wa-input>
               <Row vAlign="middle" gap="xs" wrap>
-                <wa-button
-                  appearance="accent"
+                <Button
+                  emphasis="primary"
                   type="button"
-                  {...COMMANDS_AND_AI_ACTIONS.startGithubSignIn.attrs}
-                  data-key="start-github-sign-in"
+                  action={COMMANDS_AND_AI_ACTIONS.startGithubSignIn.value}
+                  rootAttributes={{ 'data-key': 'start-github-sign-in' }}
+                  icon={<LucideIcon size="s" icon={LogIn} name="log-in" />}
                 >
-                  <LucideIcon size="s" slot="start" icon={LogIn} name="log-in" /> Sign in with GitHub Enterprise
-                </wa-button>
-                <wa-button
-                  appearance="plain"
+                  Sign in with GitHub Enterprise
+                </Button>
+                <Button
+                  emphasis="plain"
                   type="button"
-                  {...COMMANDS_AND_AI_ACTIONS.chooseGithubDotcom.attrs}
-                  data-key="choose-github-dotcom"
+                  action={COMMANDS_AND_AI_ACTIONS.chooseGithubDotcom.value}
+                  rootAttributes={{ 'data-key': 'choose-github-dotcom' }}
                 >
                   Use GitHub.com Instead
-                </wa-button>
+                </Button>
               </Row>
             </>
           ) : (
@@ -274,22 +277,23 @@ export function ProviderSetupForm({
                 Sheet opens GitHub in a small window and copies your one-time code for you.
               </Text>
               <Row vAlign="middle" gap="xs" wrap>
-                <wa-button
-                  appearance="accent"
+                <Button
+                  emphasis="primary"
                   type="button"
-                  {...COMMANDS_AND_AI_ACTIONS.startGithubSignIn.attrs}
-                  data-key="start-github-sign-in"
+                  action={COMMANDS_AND_AI_ACTIONS.startGithubSignIn.value}
+                  rootAttributes={{ 'data-key': 'start-github-sign-in' }}
+                  icon={<LucideIcon size="s" icon={LogIn} name="log-in" />}
                 >
-                  <LucideIcon size="s" slot="start" icon={LogIn} name="log-in" /> Sign in with GitHub
-                </wa-button>
-                <wa-button
-                  appearance="plain"
+                  Sign in with GitHub
+                </Button>
+                <Button
+                  emphasis="plain"
                   type="button"
-                  {...COMMANDS_AND_AI_ACTIONS.chooseGithubEnterprise.attrs}
-                  data-key="choose-github-enterprise"
+                  action={COMMANDS_AND_AI_ACTIONS.chooseGithubEnterprise.value}
+                  rootAttributes={{ 'data-key': 'choose-github-enterprise' }}
                 >
                   Use GitHub Enterprise…
-                </wa-button>
+                </Button>
               </Row>
             </>
           )}

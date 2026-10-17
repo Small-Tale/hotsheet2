@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { Select } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 
@@ -55,9 +56,9 @@ export function SettingsWorkspaceSettings() {
           { value: 'deny', label: 'Auto-Deny' },
         ]}
       />
-      <wa-button type="button" {...DEMO_ACTIONS.resetSettings.attrs}>
+      <Button type="button" action={DEMO_ACTIONS.resetSettings.value}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }

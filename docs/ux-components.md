@@ -2380,10 +2380,14 @@ Beta.106 (HS2-BH7NZ4) removed Hot Sheet's remaining dependence on Web Awesome in
   dashboard feedback copy is one `List`.
 - **Doctor.** Select labels follow title case (`KUI-D040`); `ChoiceChips` is wired at both entries
   and the attachment intent picker keeps independent checkboxes with `multiple: 'toggle'`. Kerf now
-  discourages `wa-button`, `wa-input`, `wa-textarea`, `wa-checkbox`, and `wa-progress-ring`;
-  `.kerf-ui-profile.json` keeps them allowed until HS2-TQ88K4 and HS2-SKD293 adopt Kerf `Button`,
-  `TextField`, `Checkbox`, and `ProgressRing`. One `KUI-L203` exception covers Kerf's stale
-  `MessageComposer` composition zone (KF-Z00DKT).
+  discourages `wa-button`, `wa-input`, `wa-textarea`, `wa-checkbox`, and `wa-progress-ring`.
+  Standalone actions use Kerf `Button`, including dialog footers and icon-only actions. Their
+  delegated action is the `action` prop; application metadata is passed through `rootAttributes`.
+  `QuickTicketLauncher` and `TicketViewAction` keep raw `wa-button` because Kerf beta.106's TabBar
+  `end` zone accepts that component but rejects Kerf `Button` (`KUI-L202`). Two exact `KUI-L301`
+  exceptions document that boundary. The profile continues temporarily allowing the other
+  discouraged controls until HS2-SKD293 adopts Kerf `TextField`, `Checkbox`, and `ProgressRing`.
+  One `KUI-L203` exception covers Kerf's stale `MessageComposer` composition zone (KF-Z00DKT).
 
 ### Kerf beta.24 layout adoption
 

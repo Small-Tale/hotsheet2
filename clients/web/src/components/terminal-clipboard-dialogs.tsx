@@ -1,5 +1,6 @@
 import './terminal-clipboard-dialogs.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { remify } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -117,13 +118,17 @@ export function TerminalCopyDialog({ state }: { state?: TerminalCopyState }) {
             {state?.text ?? ''}
           </textarea>
           <Row hAlign="right" vAlign="middle" gap="xs">
-            <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.closeTerminalCopy.attrs}>
+            <Button emphasis="plain" type="button" action={TERMINALS_ACTIONS.closeTerminalCopy.value}>
               Done
-            </wa-button>
-            <wa-button appearance="accent" type="button" {...TERMINALS_ACTIONS.confirmTerminalCopy.attrs}>
-              <LucideIcon icon={Copy} name="copy" slot="start" />
+            </Button>
+            <Button
+              emphasis="primary"
+              type="button"
+              action={TERMINALS_ACTIONS.confirmTerminalCopy.value}
+              icon={<LucideIcon icon={Copy} name="copy" />}
+            >
               Copy
-            </wa-button>
+            </Button>
           </Row>
         </List>
       </DialogSurface>
@@ -170,13 +175,16 @@ export function TerminalPasteDialog({ state }: { state?: TerminalPasteState }) {
               autocorrect="off"
             />
             <Row hAlign="right" vAlign="middle" gap="xs">
-              <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.cancelTerminalPaste.attrs}>
+              <Button emphasis="plain" type="button" action={TERMINALS_ACTIONS.cancelTerminalPaste.value}>
                 Cancel
-              </wa-button>
-              <wa-button appearance="accent" type="submit">
-                <LucideIcon icon={ClipboardPaste} name="clipboard-paste" slot="start" />
+              </Button>
+              <Button
+                emphasis="primary"
+                type="submit"
+                icon={<LucideIcon icon={ClipboardPaste} name="clipboard-paste" />}
+              >
                 Paste
-              </wa-button>
+              </Button>
             </Row>
           </List>
         </form>

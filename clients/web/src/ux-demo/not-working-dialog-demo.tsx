@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -24,7 +25,7 @@ export function NotWorkingDialogDemo() {
   return (
     <>
       <CatalogExample align="glyph" label="Interactive">
-        <wa-button data-action="open-not-working-demo">Open Not Working Dialog</wa-button>
+        <Button action={'open-not-working-demo'}>Open Not Working Dialog</Button>
         <NotWorkingDialog
           slug="HS2-DEMO"
           open={notWorkingDemoOpen.value}

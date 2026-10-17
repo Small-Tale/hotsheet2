@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Row } from '@kerfjs/ui/row';
 import { delegate, signal } from 'kerfjs';
@@ -501,8 +502,8 @@ export function TerminalEditMenuDemo() {
   return (
     <CatalogExample label="Interactive">
       <Row gap="xs">
-        <wa-button data-edit-menu-demo-open>Long-Press Here</wa-button>
-        <wa-button data-edit-menu-demo-open="selection">Long-Press a Word</wa-button>
+        <Button rootAttributes={{ 'data-edit-menu-demo-open': '' }}>Long-Press Here</Button>
+        <Button rootAttributes={{ 'data-edit-menu-demo-open': 'selection' }}>Long-Press a Word</Button>
       </Row>
       <DemoEvent live={false} attributes={{ 'data-edit-menu-demo-output': '' }}>
         {editMenuDemoOutput.value || 'Open the menu, then choose an action.'}
@@ -517,11 +518,11 @@ export function terminalClipboardDemo(copy: boolean) {
     <CatalogExample label="Interactive">
       <Row gap="xs">
         {copy ? (
-          <wa-button data-clipboard-demo-open="copy">Open Copy Sheet</wa-button>
+          <Button rootAttributes={{ 'data-clipboard-demo-open': 'copy' }}>Open Copy Sheet</Button>
         ) : (
           <>
-            <wa-button data-clipboard-demo-open="denied">Clipboard Denied</wa-button>
-            <wa-button data-clipboard-demo-open="unavailable">Clipboard Unavailable</wa-button>
+            <Button rootAttributes={{ 'data-clipboard-demo-open': 'denied' }}>Clipboard Denied</Button>
+            <Button rootAttributes={{ 'data-clipboard-demo-open': 'unavailable' }}>Clipboard Unavailable</Button>
           </>
         )}
       </Row>
@@ -541,8 +542,8 @@ export function TerminalRenameDialogDemo() {
   return (
     <CatalogExample label="Interactive">
       <Row gap="xs">
-        <wa-button data-rename-demo-open="renamed">Rename a Renamed Terminal</wa-button>
-        <wa-button data-rename-demo-open="default">Rename a Default-Named Terminal</wa-button>
+        <Button rootAttributes={{ 'data-rename-demo-open': 'renamed' }}>Rename a Renamed Terminal</Button>
+        <Button rootAttributes={{ 'data-rename-demo-open': 'default' }}>Rename a Default-Named Terminal</Button>
       </Row>
       <DemoEvent live={false} attributes={{ 'data-rename-demo-output': '' }}>
         {renameDemoOutput.value || 'Reset to default appears only while a rename applies.'}

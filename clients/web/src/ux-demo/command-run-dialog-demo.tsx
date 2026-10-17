@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Select } from '@kerfjs/ui/select';
 import { delegate, delegateCapture, signal } from 'kerfjs';
@@ -101,7 +102,7 @@ export function CommandRunDialogDemo() {
         {commandRunDialogSettings.open.value && (
           <CommandRunDialog command={command} run={stop ? runningRun : completedRun} confirmStop={stop} />
         )}
-        <wa-button {...DEMO_ACTIONS.openCommandRunDialogDemo.attrs}>Open Dialog</wa-button>
+        <Button action={DEMO_ACTIONS.openCommandRunDialogDemo.value}>Open Dialog</Button>
       </CatalogExample>
       <DemoEvent>{commandRunDialogSettings.event.value}</DemoEvent>
     </>
@@ -120,9 +121,9 @@ export function CommandRunDialogSettings() {
           { value: 'stop', label: 'Stop Confirmation' },
         ]}
       />
-      <wa-button type="button" {...DEMO_ACTIONS.resetSettings.attrs}>
+      <Button type="button" action={DEMO_ACTIONS.resetSettings.value}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }

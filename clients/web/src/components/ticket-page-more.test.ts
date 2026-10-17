@@ -11,7 +11,7 @@ import { TicketPageMore } from './ticket-page-more';
 describe('extracted shared presentations', () => {
   it('renders the idle and loading ticket page continuation', () => {
     const idle = String(TicketPageMore({}));
-    expect(idle).toContain('class="ticket-page-more"');
+    expect(idle).toContain('ticket-page-more');
     expect(idle).toContain('data-action="load-next-ticket-page"');
     expect(idle).toContain('Load more tickets');
     expect(idle).not.toContain('disabled');
@@ -39,7 +39,7 @@ describe('extracted shared presentations', () => {
     for (const action of [COMMANDS_AND_AI_ACTIONS.backProviderKind, PROJECT_LIFECYCLE_ACTIONS.backTicketStoreRemote]) {
       const markup = String(ProviderSetupBackButton({ action }));
       // It composes the shared FlowBackButton, the one back affordance across setup dialogs (HS2-WJ4JDW).
-      expect(markup).toContain('class="flow-back-button"');
+      expect(markup).toContain('flow-back-button');
       expect(markup).toContain('type="button"');
       expect(markup).toContain(`data-action="${action.value}"`);
       expect(markup).toContain('Ticket source types');

@@ -97,7 +97,7 @@ describe('content components', () => {
     ];
     const inspector = String(TicketNotes({ notes }));
     expect(inspector.match(/data-action="respond-to-feedback"/g)).toHaveLength(1);
-    expect(inspector).toMatch(/data-note-id="active"[^]*data-action="respond-to-feedback" data-note-id="active"/);
+    expect(inspector).toMatch(/<button(?=[^>]*data-action="respond-to-feedback")(?=[^>]*data-note-id="active")/);
     expect(String(TicketNotes({ notes, readerMode: true }))).not.toContain('respond-to-feedback');
     expect(
       String(

@@ -1,6 +1,6 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import './project-close-dialog.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { remify } from '@kerfjs/ui/css-values';
 import { deviceClass } from '@kerfjs/ui/device-class';
 import { List } from '@kerfjs/ui/list';
@@ -124,8 +124,8 @@ function ResourceDetail({ resource, projectId }: { resource: ProjectCloseResourc
 
 /**
  * Move focus to the dialog's safe default action (Cancel) once it has rendered (HS2-9YGNMX). The dialog
- * renders already open, so its native focusing steps run before the autofocus `wa-button` has a shadow
- * button to delegate to, and land on the first focusable area instead: the scrollable running-items List,
+ * renders already open, so its native focusing steps may land on the first focusable area instead:
+ * the scrollable running-items List,
  * whose square scroller outline the aside clips. Callers run this after presenting a new dialog.
  */
 export function focusProjectCloseDialogDefault(root?: ParentNode): void {
@@ -133,7 +133,7 @@ export function focusProjectCloseDialogDefault(root?: ParentNode): void {
   if (typeof document === 'undefined' || typeof requestAnimationFrame === 'undefined') return;
   requestAnimationFrame(() => {
     const target = (root ?? document).querySelector<HTMLElement & { updateComplete?: Promise<unknown> }>(
-      '[data-dialog-component="project-close-dialog"] [autofocus]',
+      '[data-dialog-component="project-close-dialog"] [data-default-focus]',
     );
     if (!target) return;
     void Promise.resolve(target.updateComplete).then(() => {
@@ -168,39 +168,38 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
         // Cancel stands apart on the leading edge; the keep/stop decisions stay grouped on the right (HS2-0DHVGK).
         footer={
           <Row vAlign="middle" gap="xs" wrap flex>
-            <wa-button
+            <Button
               type="button"
-              size="small"
-              appearance="outlined"
-              {...TERMINALS_ACTIONS.cancelProjectClose.attrs}
+              size="compact"
+              emphasis="secondary"
+              action={TERMINALS_ACTIONS.cancelProjectClose.value}
               disabled={busy}
-              // The safe default focus target; see focusProjectCloseDialogDefault (HS2-9YGNMX).
-              autofocus
+              rootAttributes={{ 'data-default-focus': '' }}
             >
               Cancel
-            </wa-button>
+            </Button>
             <Spacer flex />
-            <wa-button
+            <Button
               type="button"
-              size="small"
-              appearance="outlined"
-              {...TERMINALS_ACTIONS.confirmCloseProject.attrs}
-              data-project-id={state.projectId}
+              size="compact"
+              emphasis="secondary"
+              action={TERMINALS_ACTIONS.confirmCloseProject.value}
               disabled={busy}
+              rootAttributes={{ 'data-project-id': state.projectId }}
             >
               {closingProject ? 'Closing…' : hasResources ? 'Keep Running' : 'Close Project'}
-            </wa-button>
+            </Button>
             {hasResources && (
-              <wa-button
+              <Button
                 type="button"
-                size="small"
-                variant="danger"
-                {...TERMINALS_ACTIONS.closeAllProjectResources.attrs}
-                data-project-id={state.projectId}
+                size="compact"
+                tone={'danger'}
+                action={TERMINALS_ACTIONS.closeAllProjectResources.value}
                 disabled={busy}
+                rootAttributes={{ 'data-project-id': state.projectId }}
               >
                 {closingAll ? 'Stopping…' : 'Stop & Close'}
-              </wa-button>
+              </Button>
             )}
           </Row>
         }

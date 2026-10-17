@@ -1,5 +1,6 @@
 import './project-dialog.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { remify } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListItem } from '@kerfjs/ui/list-item';
@@ -57,16 +58,15 @@ export function ProjectDialog({
             </Text>
             <div class="project-dialog__path">
               <wa-input name="project-root" label="Project Folder" value={root} required />
-              <wa-button
-                appearance="outlined"
+              <Button
+                emphasis="secondary"
                 type="button"
-                {...PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.attrs}
-                aria-label="Browse for Project Folder"
+                action={PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.value}
+                ariaLabel={'Browse for Project Folder'}
                 title={hostOnlyDisabledReason('choose-folder', hostActionsAvailable) ?? 'Browse for project folder'}
                 disabled={!hostActionsAvailable}
-              >
-                <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
-              </wa-button>
+                icon={<LucideIcon size="s" icon={Ellipsis} name="ellipsis" />}
+              />
             </div>
             <div class="project-dialog__path">
               <wa-input
@@ -74,16 +74,15 @@ export function ProjectDialog({
                 label="Ticket Store (Optional)"
                 placeholder="Automatically discover &lt;project&gt;.hs2"
               />
-              <wa-button
-                appearance="outlined"
+              <Button
+                emphasis="secondary"
                 type="button"
-                {...PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.attrs}
-                aria-label="Browse for Ticket Store"
+                action={PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.value}
+                ariaLabel={'Browse for Ticket Store'}
                 title={hostOnlyDisabledReason('choose-folder', hostActionsAvailable) ?? 'Browse for ticket store'}
                 disabled={!hostActionsAvailable}
-              >
-                <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
-              </wa-button>
+                icon={<LucideIcon size="s" icon={Ellipsis} name="ellipsis" />}
+              />
             </div>
             <div class="project-dialog__error" role="alert">
               {error && (
@@ -102,25 +101,25 @@ export function ProjectDialog({
                 title="Unresponsive Local Server"
                 detail={`Hot Sheet cannot verify active work. Recovery first asks process ${recovery.expected.pid} to stop, then force-stops only that exact registered instance if necessary.`}
                 action={
-                  <wa-button
-                    appearance="outlined"
+                  <Button
+                    emphasis="secondary"
                     type="button"
-                    {...PROJECT_LIFECYCLE_ACTIONS.recoverUnhealthyServer.attrs}
+                    action={PROJECT_LIFECYCLE_ACTIONS.recoverUnhealthyServer.value}
                     disabled={recoveryBusy}
                   >
                     {recoveryBusy ? 'Recovering…' : 'Stop server and retry'}
-                  </wa-button>
+                  </Button>
                 }
               />
             )}
             <footer>
               <Row hAlign="right" vAlign="middle" gap="xs">
-                <wa-button appearance="plain" type="button" {...PROJECT_LIFECYCLE_ACTIONS.cancelOpenProject.attrs}>
+                <Button emphasis="plain" type="button" action={PROJECT_LIFECYCLE_ACTIONS.cancelOpenProject.value}>
                   Cancel
-                </wa-button>
-                <wa-button appearance="accent" type="submit">
+                </Button>
+                <Button emphasis="primary" type="submit">
                   Open Project
-                </wa-button>
+                </Button>
               </Row>
             </footer>
           </List>
@@ -205,9 +204,9 @@ export function RemoteProjectDialog({
         )}
         <footer>
           <Row hAlign="right" vAlign="middle" gap="xs">
-            <wa-button appearance="plain" type="button" {...PROJECT_LIFECYCLE_ACTIONS.cancelRemoteProject.attrs}>
+            <Button emphasis="plain" type="button" action={PROJECT_LIFECYCLE_ACTIONS.cancelRemoteProject.value}>
               Cancel
-            </wa-button>
+            </Button>
           </Row>
         </footer>
       </List>

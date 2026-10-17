@@ -1,6 +1,6 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import './halted-session-popup.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { foregroundColorVar } from '@kerfjs/ui/css-values';
 import { Row } from '@kerfjs/ui/row';
 import { CircleAlert, CircleHelp } from 'lucide';
@@ -44,33 +44,34 @@ export function HaltedSessionPopup({ episode }: { episode: HaltedSessionEpisode 
         details={answerable ? undefined : { text: episode.message, appearance: question ? 'prose' : 'code' }}
         quietActions={
           <>
-            <wa-button
-              appearance="plain"
-              size="small"
-              {...NOTIFICATIONS_AND_LINKS_ACTIONS.dismissHaltedSession.attrs}
-              data-halt-key={episode.key}
-              {...{ [TOP_LAYER_DISMISS_ATTRIBUTE]: '' }}
+            <Button
+              emphasis="plain"
+              size="compact"
+              action={NOTIFICATIONS_AND_LINKS_ACTIONS.dismissHaltedSession.value}
+              rootAttributes={{ 'data-halt-key': episode.key, ...{ [TOP_LAYER_DISMISS_ATTRIBUTE]: '' } }}
             >
               Dismiss
-            </wa-button>
-            <wa-button appearance="plain" size="small" {...NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.attrs}>
+            </Button>
+            <Button emphasis="plain" size="compact" action={NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.value}>
               Pause Notifications
-            </wa-button>
+            </Button>
           </>
         }
         endActions={
-          <wa-button
-            class="halted-session-popup__primary"
-            size="small"
-            // A question is answered in the popup's form, so returning to the terminal is secondary there.
-            {...(answerable ? { appearance: 'outlined' } : { variant: 'brand', appearance: 'accent' })}
-            {...(answerable
-              ? NOTIFICATIONS_AND_LINKS_ACTIONS.returnTerminalQuestion.attrs
-              : NOTIFICATIONS_AND_LINKS_ACTIONS.openHaltedSession.attrs)}
-            data-halt-key={episode.key}
+          <Button
+            className={'halted-session-popup__primary'}
+            size="compact"
+            emphasis={answerable ? 'secondary' : 'primary'}
+            tone={answerable ? 'neutral' : 'brand'}
+            action={
+              answerable
+                ? NOTIFICATIONS_AND_LINKS_ACTIONS.returnTerminalQuestion.value
+                : NOTIFICATIONS_AND_LINKS_ACTIONS.openHaltedSession.value
+            }
+            rootAttributes={{ 'data-halt-key': episode.key }}
           >
             {answerable ? 'Answer in terminal' : 'Open session'}
-          </wa-button>
+          </Button>
         }
       >
         {answerable ? (
@@ -113,15 +114,15 @@ export function HaltedSessionPopup({ episode }: { episode: HaltedSessionEpisode 
             ))}
             <p class="halted-session-popup__answer-error" role="alert" hidden />
             <Row hAlign="right">
-              <wa-button
-                class="halted-session-popup__send"
-                variant="brand"
-                appearance="accent"
-                size="small"
+              <Button
+                className={'halted-session-popup__send'}
+                tone={'brand'}
+                emphasis="primary"
+                size="compact"
                 type="submit"
               >
                 Send Answer
-              </wa-button>
+              </Button>
             </Row>
           </form>
         ) : undefined}

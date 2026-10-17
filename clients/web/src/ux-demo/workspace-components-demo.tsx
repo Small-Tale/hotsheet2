@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Grid } from '@kerfjs/ui/grid';
 import { openPopupMenuAt, type PopupMenuElement } from '@kerfjs/ui/popup-menu';
@@ -422,7 +423,7 @@ function WorkspaceContent() {
     return (
       <>
         <NotificationCenter {...workspaceDemoNotifications.value} />
-        <wa-button data-action="reset-workspace-notifications">Reset Notifications</wa-button>
+        <Button action={'reset-workspace-notifications'}>Reset Notifications</Button>
       </>
     );
   const tickets = filteredWorkspaceTickets();
@@ -504,9 +505,9 @@ export function QuickTicketComposerSettings() {
           { value: 'several', label: 'Several (Source Select)' },
         ]}
       />
-      <wa-button type="button" data-action="reset-settings">
+      <Button type="button" action={'reset-settings'}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }
@@ -661,9 +662,9 @@ export function TicketInspectorSettings() {
           { value: 'details', label: 'Details Changed Elsewhere' },
         ]}
       />
-      <wa-button type="button" data-action="reset-settings">
+      <Button type="button" action={'reset-settings'}>
         Reset
-      </wa-button>
+      </Button>
     </DemoSettingsForm>
   );
 }
@@ -716,7 +717,7 @@ export function TicketInspectorDemo({ collapseControl = true }: { collapseContro
       {inspectorOpen.value ? (
         <TicketInspector {...demoInspectorProps()} collapseControl={collapseControl} />
       ) : (
-        <wa-button data-action="toggle-ticket-inspector">Open Ticket Inspector</wa-button>
+        <Button action={'toggle-ticket-inspector'}>Open Ticket Inspector</Button>
       )}
       <DemoEvent>{collectionEvent.value}</DemoEvent>
     </CatalogExample>

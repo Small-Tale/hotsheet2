@@ -1,3 +1,4 @@
+import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Row } from '@kerfjs/ui/row';
 import { delegate, signal } from 'kerfjs';
@@ -57,9 +58,9 @@ export function ProjectDialogDemo() {
     >
       <Row gap="xs" wrap>
         {Object.entries(variants).map(([id, label]) => (
-          <wa-button data-action="show-project-dialog-demo" data-variant={id}>
+          <Button action={'show-project-dialog-demo'} rootAttributes={{ 'data-variant': id }}>
             {label}
-          </wa-button>
+          </Button>
         ))}
       </Row>
       <DemoEvent>{result.value}</DemoEvent>
