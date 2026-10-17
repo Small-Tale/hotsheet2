@@ -3465,7 +3465,7 @@ test('exposes every MarkdownPreview and AIContentLabel presentation variant', as
   );
   expect(await labels.first().evaluate(attributionColor)).not.toBe(await inherit.evaluate(attributionColor));
   await expect(labels.nth(1)).toHaveAccessibleName('AI-generated; may contain errors');
-  await expect(labels.nth(2).getByRole('button', { name: /Helpful/ })).toBeVisible();
+  await expect(labels.nth(2).getByRole('button', { name: /^Helpful\b/ })).toBeVisible();
 });
 
 /** WCAG contrast of a code chip's text against its fill composited over the opaque container behind it. */
@@ -9239,11 +9239,7 @@ test('renders project-owned ticket sources and machine-wide accounts at wide and
     const card = (await accounts.locator('[data-account-id="github-app-01unused"]').boundingBox())!,
       button = (await signOut.boundingBox())!;
     expect(button.x + button.width).toBeLessThanOrEqual(card.x + card.width);
-    expect(
-      await signOut.evaluate(
-        (node) => getComputedStyle(node.shadowRoot!.querySelector<HTMLElement>('[part~="base"]')!).cursor,
-      ),
-    ).toBe('pointer');
+    expect(await signOut.evaluate((node) => getComputedStyle(node).cursor)).toBe('pointer');
     await expect(page.locator('[data-component="accounts-settings"]').nth(1)).toContainText('No accounts yet.');
     // The load-error alert keeps the danger color; only footnotes are quiet (HS2-JCPM76).
     const errored = page.locator('[data-component="accounts-settings"]').nth(1),

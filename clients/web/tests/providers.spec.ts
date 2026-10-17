@@ -15212,10 +15212,10 @@ test('renders exactly once when the long poll announces a permission request', a
     expect(
       await button.evaluate((element) => {
         const rect = element.getBoundingClientRect();
-        // A Web Awesome button's role lives in its shadow root, so the hit test reports the host.
+        // Native buttons may report an icon or label child; Web Awesome reports its host.
         const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2),
           root = element.getRootNode();
-        return hit === element || (root instanceof ShadowRoot && hit === root.host);
+        return element.contains(hit) || (root instanceof ShadowRoot && hit === root.host);
       }),
     ).toBe(true);
   }
@@ -15232,10 +15232,10 @@ test('renders exactly once when the long poll announces a permission request', a
   expect(
     await popup.getByRole('button', { name: 'Always Allow' }).evaluate((element) => {
       const rect = element.getBoundingClientRect();
-      // A Web Awesome button's role lives in its shadow root, so the hit test reports the host.
+      // Native buttons may report an icon or label child; Web Awesome reports its host.
       const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2),
         root = element.getRootNode();
-      return hit === element || (root instanceof ShadowRoot && hit === root.host);
+      return element.contains(hit) || (root instanceof ShadowRoot && hit === root.host);
     }),
   ).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-y1hn0d-permission-popup-390.png', fullPage: true });
@@ -15300,10 +15300,10 @@ for (const viewport of [
       expect(
         await button.evaluate((element) => {
           const rect = element.getBoundingClientRect();
-          // A Web Awesome button's role lives in its shadow root, so the hit test reports the host.
+          // Native buttons may report an icon or label child; Web Awesome reports its host.
           const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2),
             root = element.getRootNode();
-          return hit === element || (root instanceof ShadowRoot && hit === root.host);
+          return element.contains(hit) || (root instanceof ShadowRoot && hit === root.host);
         }),
       ).toBe(true);
     }
@@ -15378,10 +15378,10 @@ for (const viewport of [
       expect(
         await button.evaluate((element) => {
           const rect = element.getBoundingClientRect();
-          // A Web Awesome button's role lives in its shadow root, so the hit test reports the host.
+          // Native buttons may report an icon or label child; Web Awesome reports its host.
           const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2),
             root = element.getRootNode();
-          return hit === element || (root instanceof ShadowRoot && hit === root.host);
+          return element.contains(hit) || (root instanceof ShadowRoot && hit === root.host);
         }),
       ).toBe(true);
     }

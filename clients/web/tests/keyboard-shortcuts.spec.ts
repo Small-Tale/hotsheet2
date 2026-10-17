@@ -273,7 +273,7 @@ for (const apple of [true, false]) {
     await record('undo');
     await page.keyboard.down('Control');
     await page.keyboard.up('Control');
-    await screen.getByRole('button', { name: 'Cancel editing Undo', exact: true }).click();
+    await screen.getByRole('button', { name: 'Cancel Editing Undo', exact: true }).click();
     expect(await stored()).toEqual(saved);
 
     // Different physical modifiers stay distinct; adding the exact same chord flags both rows.
