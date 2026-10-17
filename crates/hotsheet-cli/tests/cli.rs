@@ -658,6 +658,8 @@ fn permission_hook_reports_session_start_and_end_as_the_terminals_ai_connection(
             .env("HOTSHEET_SERVER", &url)
             .env("HOTSHEET_SECRET", "terminal-secret")
             .env("HOTSHEET_TERMINAL_ID", "codex-7")
+            .env_remove("CLAUDE_CODE_MESSAGING_SOCKET")
+            .env_remove("CLAUDE_CODE_MESSAGING_TOKEN")
             .args(["permission-hook", "--agent", "codex"])
             .write_stdin(input)
             .assert()
@@ -682,11 +684,48 @@ fn permission_hook_reports_session_start_and_end_as_the_terminals_ai_connection(
     );
     let body: serde_json::Value = serde_json::from_str(&homed.2).unwrap();
     assert_eq!(body["codex_home"], "/tmp/codex-home");
+    assert!(
+        body.get("messaging_socket").is_none(),
+        "no inbox outside Claude"
+    );
     let ended = hook(r#"{"hook_event_name":"SessionEnd","session_id":"s-1","reason":"exit"}"#);
     assert_eq!(
         ended.0,
         "DELETE /terminals/codex-7/ai-connection?session_id=s-1 HTTP/1.1"
     );
+}
+
+#[test]
+fn claude_session_start_reports_its_inbox_socket_token_and_version() {
+    // HS2-M15CHN: Claude exports its per-session inbox to hooks; SessionStart forwards the
+    // socket, token, and Claude version so the server can message the session later.
+    let home = tempfile::tempdir().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || capture_one_request(listener));
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", home.path())
+        .env_remove("HOTSHEET_PROJECT")
+        .env("HOTSHEET_SERVER", &url)
+        .env("HOTSHEET_SECRET", "terminal-secret")
+        .env("HOTSHEET_TERMINAL_ID", "claude-3")
+        .env("CLAUDE_CODE_MESSAGING_SOCKET", "/tmp/cc-socks/42.sock")
+        .env("CLAUDE_CODE_MESSAGING_TOKEN", "inbox-token")
+        .env("AI_AGENT", "claude-code_2-1-302_harness")
+        .env_remove("CLAUDE_CODE_EXECPATH")
+        .args(["permission-hook", "--agent", "claude"])
+        .write_stdin(r#"{"hook_event_name":"SessionStart","session_id":"s-9","source":"startup"}"#)
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+    let started = server.join().unwrap();
+    assert_eq!(started.0, "POST /terminals/claude-3/ai-connection HTTP/1.1");
+    let body: serde_json::Value = serde_json::from_str(&started.2).unwrap();
+    assert_eq!(body["agent"], "claude");
+    assert_eq!(body["messaging_socket"], "/tmp/cc-socks/42.sock");
+    assert_eq!(body["messaging_token"], "inbox-token");
+    assert_eq!(body["tool_version"], "2.1.302");
 }
 
 #[cfg(unix)]

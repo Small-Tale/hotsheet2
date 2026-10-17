@@ -517,3 +517,152 @@ async fn a_hook_reported_codex_thread_receives_prompts_through_codex_queue() {
     );
     let _ = send(&router, "DELETE", "/terminals/codexing", None).await;
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_hook_reported_claude_inbox_receives_prompts_and_its_token_is_never_served() {
+    // HS2-M15CHN: Claude's SessionStart hook reports its inbox socket, token, and version; the
+    // server registers the built-in `claude-inbox` adapter for that terminal, and the shared
+    // operation writes the 2.1.302 line shape to exactly that socket. Walk the states: no
+    // report, a live inbox, a same-session permission re-report, a command, a vanished
+    // socket, an old Claude, a new session without an inbox, and SessionEnd.
+    use std::os::unix::net::UnixListener;
+    let store_dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let router = app(AppState::new(store, SECRET.into()).unwrap());
+    let prompt = r#"{"text":"Ticket HS-1 changed; re-read it."}"#;
+    let message = |router: axum::Router, body: &'static str| async move {
+        send(&router, "POST", "/connections/inbox/message", Some(body)).await
+    };
+    let (status, _) = send(
+        &router,
+        "POST",
+        "/terminals",
+        Some(r#"{"command":"cat","id":"inbox"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        message(router.clone(), prompt).await.0,
+        StatusCode::NOT_FOUND
+    );
+
+    let sockets = tempfile::tempdir().unwrap();
+    let socket = sockets.path().join("cc.sock");
+    let listener = UnixListener::bind(&socket).unwrap();
+    let reader = std::thread::spawn(move || {
+        let mut frames = Vec::new();
+        for _ in 0..2 {
+            let (mut conn, _) = listener.accept().unwrap();
+            let mut got = String::new();
+            conn.read_to_string(&mut got).unwrap();
+            frames.push(got);
+        }
+        frames
+    });
+    let claude = |session: &str, version: &str| {
+        serde_json::json!({
+            "agent": "claude",
+            "session_id": session,
+            "messaging_socket": socket.display().to_string(),
+            "messaging_token": "secret-inbox-token",
+            "tool_version": version,
+        })
+        .to_string()
+    };
+    let report = |body: String| {
+        let router = router.clone();
+        async move {
+            send(
+                &router,
+                "POST",
+                "/terminals/inbox/ai-connection",
+                Some(&body),
+            )
+            .await
+            .0
+        }
+    };
+    assert_eq!(
+        report(claude("s-1", "2.1.302")).await,
+        StatusCode::NO_CONTENT
+    );
+    let (status, listed) = send(&router, "GET", "/terminals", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let raw = listed.to_string();
+    assert!(
+        !raw.contains("secret-inbox-token") && !raw.contains("cc.sock"),
+        "inbox details stay in the server: {raw}"
+    );
+    let (status, body) = message(router.clone(), prompt).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["mechanism"], "claude-inbox");
+    assert_eq!(body["session_id"], "s-1");
+    assert_eq!(body["confirmed"], false, "the socket never answers");
+    // The same session re-reporting without its inbox (a permission ask) keeps it.
+    let ask = serde_json::json!({ "agent": "claude", "session_id": "s-1", "source": "permission_request" });
+    assert_eq!(report(ask.to_string()).await, StatusCode::NO_CONTENT);
+    assert_eq!(
+        message(router.clone(), r#"{"text":"second"}"#).await.0,
+        StatusCode::OK
+    );
+    let frames = reader.join().unwrap();
+    let lines: Vec<serde_json::Value> = frames[0]
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(
+        lines,
+        vec![
+            serde_json::json!({ "type": "auth", "token": "secret-inbox-token" }),
+            serde_json::json!({
+                "type": "user",
+                "message": { "role": "user", "content": "Ticket HS-1 changed; re-read it." },
+                "from": "hotsheet",
+                "session_id": "s-1",
+            }),
+        ]
+    );
+    assert!(frames[1].contains(r#""content":"second""#));
+
+    // Claude has no UI-command channel; a vanished socket is unreachable.
+    let (status, body) = message(router.clone(), r#"{"command":"agent_cycle"}"#).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["code"], "session_push_unsupported");
+    std::fs::remove_file(&socket).unwrap();
+    let (status, body) = message(router.clone(), prompt).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY, "{body}");
+    assert_eq!(body["code"], "session_unreachable");
+
+    // A Claude older than the inbox registers nothing; neither does a new session without one.
+    report(claude("s-2", "2.1.200")).await;
+    assert_eq!(
+        message(router.clone(), prompt).await.0,
+        StatusCode::NOT_FOUND
+    );
+    report(claude("s-3", "2.1.302")).await;
+    assert_eq!(
+        message(router.clone(), prompt).await.0,
+        StatusCode::BAD_GATEWAY
+    );
+    report(r#"{"agent":"claude","session_id":"s-4"}"#.into()).await;
+    assert_eq!(
+        message(router.clone(), prompt).await.0,
+        StatusCode::NOT_FOUND
+    );
+
+    // SessionEnd drops the adapter.
+    report(claude("s-5", "2.1.302")).await;
+    send(
+        &router,
+        "DELETE",
+        "/terminals/inbox/ai-connection?session_id=s-5",
+        None,
+    )
+    .await;
+    assert_eq!(
+        message(router.clone(), prompt).await.0,
+        StatusCode::NOT_FOUND
+    );
+    let _ = send(&router, "DELETE", "/terminals/inbox", None).await;
+}

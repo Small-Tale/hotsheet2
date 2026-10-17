@@ -123,6 +123,10 @@ pub(crate) fn register_reported(
     };
     let program = match state.session_push_programs.get(plugin.id()) {
         Some(program) => program.clone(),
+        // A socket-based mechanism (Claude's inbox, HS2-M15CHN) never runs the tool.
+        None if !session_push::reported_needs_program(&spec.mechanism) => {
+            std::path::PathBuf::from(plugin.id())
+        }
         None => {
             let declared = plugin
                 .manifest

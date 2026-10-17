@@ -1,0 +1,34 @@
+{
+  "captured": "2026-10-17 live, HS2-M15CHN: interactive `claude --model haiku` 2.1.302 in a PTY, macOS",
+  "session_start_env": {
+    "CLAUDE_CODE_MESSAGING_SOCKET": "/tmp/cc-socks/00000.sock",
+    "CLAUDE_CODE_MESSAGING_TOKEN": "token-redacted",
+    "AI_AGENT": "claude-code_2-1-302_agent",
+    "_note": "AI_AGENT was read from a Claude Bash tool environment (2.1.300); the hook environment was not dumped"
+  },
+  "posted_lines": [
+    { "type": "auth", "token": "token-redacted" },
+    {
+      "type": "user",
+      "message": { "role": "user", "content": "Hot Sheet E2E: reply with exactly the single word KUMQUAT and nothing else. Do not use tools." },
+      "from": "hotsheet",
+      "session_id": "session-redacted"
+    }
+  ],
+  "socket_reply": null,
+  "observed": {
+    "user_prompt_submit": {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "session-redacted",
+      "permission_mode": "auto",
+      "prompt": "Hot Sheet E2E: reply with exactly the single word KUMQUAT and nothing else. Do not use tools."
+    },
+    "stop": {
+      "hook_event_name": "Stop",
+      "session_id": "session-redacted",
+      "stop_hook_active": false,
+      "last_assistant_message": "KUMQUAT"
+    },
+    "transcript_preamble": "Another Claude session sent a message:"
+  }
+}

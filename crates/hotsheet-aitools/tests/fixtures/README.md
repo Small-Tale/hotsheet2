@@ -66,3 +66,11 @@ it starts a `run_in_background` command and replies at once, so its first `resul
 the task notification and a self-started follow-up turn. Its `total_cost_usd` values continue
 from the resumed session's total (0.00577084), which pins the session-cumulative cost the
 client-drive baseline subtracts.
+
+`claude-2.1.302-inbox-message.json` (HS2-M15CHN) is a sanitized **live** capture. A real
+interactive `claude` 2.1.302, started in a Hot Sheet terminal by a temp-store
+`hotsheet-server`, reported its inbox socket through the `SessionStart` hook. The server then
+posted these lines, and the idle session answered them as a new turn. At capture time the post
+went through the spike's message route; the shared `claude-inbox` session-push adapter that
+replaced it writes the same frame. The socket path, token, and session id are redacted. The
+socket writes no reply.

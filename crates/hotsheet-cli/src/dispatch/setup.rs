@@ -1163,19 +1163,48 @@ pub(crate) fn report_terminal_session(
         SessionHookEvent::Resumed => delete("halt", None),
         SessionHookEvent::Connected => post(
             "ai-connection",
-            // Codex queues messages per `CODEX_HOME`, so the server can message this session
-            // only through the home it runs under (HS2-FKM97G). Unset means the default home.
-            serde_json::json!({
-                "agent": agent,
-                "session_id": session_id,
-                "codex_home": (agent == Some("codex"))
-                    .then(|| std::env::var("CODEX_HOME").ok())
-                    .flatten()
-                    .filter(|home| !home.trim().is_empty()),
-            }),
+            connection_body(agent, session_id, &|key| std::env::var(key).ok()),
         ),
         SessionHookEvent::Disconnected => delete("ai-connection", session_id),
     }
+}
+
+/// The `SessionStart` report body: the agent, its session id, and the address the server
+/// messages the session through (`docs/13` §13.12).
+/// - Codex queues messages per `CODEX_HOME`, so the server can reach the session only
+///   through the home it runs under (HS2-FKM97G). Unset means the default home.
+/// - Claude exports its session inbox (socket path and per-session token) to hooks; the
+///   report adds both plus the Claude version (HS2-M15CHN). The token stays in server memory
+///   and is never served back.
+pub(crate) fn connection_body(
+    agent: Option<&str>,
+    session_id: Option<&str>,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> serde_json::Value {
+    let mut body = serde_json::json!({
+        "agent": agent,
+        "session_id": session_id,
+        "codex_home": (agent == Some("codex"))
+            .then(|| env("CODEX_HOME"))
+            .flatten()
+            .filter(|home| !home.trim().is_empty()),
+    });
+    if agent == Some("claude")
+        && let Some(socket) =
+            env("CLAUDE_CODE_MESSAGING_SOCKET").filter(|socket| !socket.trim().is_empty())
+    {
+        body["messaging_socket"] = socket.into();
+        if let Some(token) = env("CLAUDE_CODE_MESSAGING_TOKEN").filter(|token| !token.is_empty()) {
+            body["messaging_token"] = token.into();
+        }
+        if let Some(version) = hotsheet_aitools::session_push::claude_version_from_env(
+            env("AI_AGENT").as_deref(),
+            env("CLAUDE_CODE_EXECPATH").as_deref(),
+        ) {
+            body["tool_version"] = version.into();
+        }
+    }
+    body
 }
 
 pub(crate) fn wait_for_terminal_question_answer(

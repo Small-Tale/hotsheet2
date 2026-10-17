@@ -385,3 +385,40 @@ fn recorded_claude_21302_subagent_stream_maps_results_and_attributes_sub_agent_w
         "an early result plus the self-started follow-up result"
     );
 }
+
+#[test]
+fn recorded_claude_21302_inbox_lines_match_the_session_push_frame() {
+    // HS2-M15CHN: the lines a live 2.1.302 session accepted as a new turn are exactly what the
+    // `claude-inbox` session-push adapter writes for the same token, session, and text.
+    use hotsheet_aitools::session_push as push;
+    let cassette: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/claude-2.1.302-inbox-message.json")).unwrap();
+    let env = &cassette["session_start_env"];
+    let posted = cassette["posted_lines"].as_array().unwrap();
+    let user = &posted[1];
+    let frame = push::claude_message_frame(
+        env["CLAUDE_CODE_MESSAGING_TOKEN"].as_str(),
+        user["session_id"].as_str(),
+        user["message"]["content"].as_str().unwrap(),
+    )
+    .unwrap();
+    let written: Vec<serde_json::Value> = frame
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(&written, posted);
+    let version = push::claude_version_from_env(env["AI_AGENT"].as_str(), None).unwrap();
+    assert_eq!(version, push::CLAUDE_VERIFIED_INBOX_VERSION);
+    assert!(push::claude_version_supported(Some(&version)));
+    assert_eq!(
+        push::claude_socket_path(env["CLAUDE_CODE_MESSAGING_SOCKET"].as_str().unwrap()),
+        "/tmp/cc-socks/00000.sock"
+    );
+    // The session answered the posted prompt as an ordinary turn.
+    let observed = &cassette["observed"];
+    assert_eq!(
+        observed["user_prompt_submit"]["prompt"],
+        user["message"]["content"]
+    );
+    assert_eq!(observed["stop"]["last_assistant_message"], "KUMQUAT");
+}

@@ -858,6 +858,18 @@ impl ClaudeStreamTransport {
         cwd: &Path,
         options: ClaudeStreamSpawnOptions<'_>,
     ) -> std::io::Result<Box<Self>> {
+        let args = stream_args(&options);
+        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        let env = headless_claude_env(options.env);
+        Ok(Box::new(Self(StreamChild::spawn(
+            program, &refs, cwd, &env,
+        )?)))
+    }
+}
+
+/// The `claude -p` stream-json argument list for a persistent child.
+pub(crate) fn stream_args(options: &ClaudeStreamSpawnOptions<'_>) -> Vec<String> {
+    {
         let mut args: Vec<String> = [
             "-p",
             "--input-format",
@@ -893,11 +905,14 @@ impl ClaudeStreamTransport {
             args.push("--effort".into());
             args.push(effort.to_string());
         }
-        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        let env = headless_claude_env(options.env);
-        Ok(Box::new(Self(StreamChild::spawn(
-            program, &refs, cwd, &env,
-        )?)))
+        // A bypass-mode session holds every cross-session message for an approval dialog a
+        // headless child cannot show; accept them so a Hot Sheet inbox message is not parked
+        // (HS2-M15CHN, code.claude.com/docs/en/cross-session-messaging).
+        if options.permission_mode == Some("bypassPermissions") {
+            args.push("--settings".into());
+            args.push(r#"{"crossSessionInbound":"accept"}"#.into());
+        }
+        args
     }
 }
 
@@ -1196,6 +1211,34 @@ mod usage_tests {
         );
         assert!(env.contains(&("HOTSHEET_CLAUDE_PRETOOLUSE".into(), "1".into())));
         assert!(env.contains(&("KEEP".into(), "yes".into())));
+    }
+
+    #[test]
+    fn only_a_bypass_mode_child_accepts_cross_session_messages() {
+        // HS2-M15CHN: a bypass-mode session holds inbox messages for a dialog -p cannot show.
+        let settings = |mode: Option<&str>| {
+            let args = stream_args(&ClaudeStreamSpawnOptions {
+                permission_mode: mode,
+                ..Default::default()
+            });
+            args.iter()
+                .position(|arg| arg == "--settings")
+                .map(|at| args[at + 1].clone())
+        };
+        assert_eq!(
+            settings(Some("bypassPermissions")).as_deref(),
+            Some(r#"{"crossSessionInbound":"accept"}"#)
+        );
+        assert_eq!(settings(Some("acceptEdits")), None);
+        assert_eq!(settings(None), None);
+        let args = stream_args(&ClaudeStreamSpawnOptions {
+            permission_mode: Some("auto"),
+            model: Some("haiku"),
+            ..Default::default()
+        });
+        assert_eq!(&args[..2], ["-p", "--input-format"]);
+        assert!(args.windows(2).any(|w| w == ["--permission-mode", "auto"]));
+        assert!(args.windows(2).any(|w| w == ["--model", "haiku"]));
     }
 
     #[test]

@@ -116,6 +116,9 @@ pub(crate) async fn ask_permission(
                 session_id: body.session_id.clone(),
                 codex_home: None,
                 source: TerminalHookSource::PermissionRequest,
+                messaging_socket: None,
+                messaging_token: None,
+                tool_version: None,
             }),
         )
         .await;

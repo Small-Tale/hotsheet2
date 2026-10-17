@@ -366,6 +366,29 @@ pub struct TerminalAiConnection {
     /// Internal like `session_id`: it addresses the session on its daemon and message queue.
     #[serde(skip)]
     codex_home: Option<String>,
+    /// The inbox a Claude session reported (HS2-M15CHN): its socket path, per-session token,
+    /// and Claude version. The token is a credential: it stays in server memory and is never
+    /// serialized.
+    #[serde(skip)]
+    claude_inbox: Option<ClaudeInbox>,
+}
+
+/// A Claude session's inbox socket, as its `SessionStart` hook reported it (HS2-M15CHN).
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct ClaudeInbox {
+    pub(crate) socket: String,
+    pub(crate) token: Option<String>,
+    pub(crate) tool_version: Option<String>,
+}
+
+impl std::fmt::Debug for ClaudeInbox {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClaudeInbox")
+            .field("socket", &self.socket)
+            .field("token", &self.token.as_ref().map(|_| "<redacted>"))
+            .field("tool_version", &self.tool_version)
+            .finish()
+    }
 }
 
 /// The address a connection's hook reported, for a reported session-push mechanism
@@ -379,6 +402,18 @@ pub(crate) fn reported_session(
             hotsheet_aitools::session_push::CODEX_HOME_FIELD.to_string(),
             home.clone(),
         );
+    }
+    if let Some(inbox) = &connection.claude_inbox {
+        use hotsheet_aitools::session_push::{
+            CLAUDE_SOCKET_FIELD, CLAUDE_TOKEN_FIELD, CLAUDE_VERSION_FIELD,
+        };
+        fields.insert(CLAUDE_SOCKET_FIELD.to_string(), inbox.socket.clone());
+        if let Some(token) = &inbox.token {
+            fields.insert(CLAUDE_TOKEN_FIELD.to_string(), token.clone());
+        }
+        if let Some(version) = &inbox.tool_version {
+            fields.insert(CLAUDE_VERSION_FIELD.to_string(), version.clone());
+        }
     }
     hotsheet_aitools::session_push::ReportedSession {
         session_id: connection.session_id.clone(),

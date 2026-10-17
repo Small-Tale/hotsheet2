@@ -71,6 +71,13 @@ args = []
 model_args = ["--model", "{model}"]
 effort_args = ["--effort", "{effort}"]
 
+[session_push]
+# A running Claude session is messaged through its per-session inbox Unix socket (docs/13
+# §13.12, HS2-M15CHN; pinned live on 2.1.302). The address is reported, not launch-wired: the
+# SessionStart hook reports CLAUDE_CODE_MESSAGING_SOCKET/TOKEN and the Claude version, and the
+# host registers the adapter then.
+mechanism = "claude-inbox"
+
 [metrics]
 # Claude reports token usage on its stream-json `result` event; the host maps it to a
 # UsageEvent (docs/14, HS2-TJ8FGR). `source` selects the `claude_result_usage` parser.

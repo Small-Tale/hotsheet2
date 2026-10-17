@@ -12,12 +12,13 @@
 //! | --- | --- | --- |
 //! | `opencode-http` | [`OpenCodeHttpPush`] — the TUI's own HTTP server | `--port {port}` + a random `OPENCODE_SERVER_PASSWORD` |
 //! | `codex-queue` | [`CodexQueuePush`] — `codex queue --thread <id>` | none: the `SessionStart` hook reports the thread id and `CODEX_HOME` |
+//! | `claude-inbox` | [`ClaudeInboxPush`] — the session's inbox Unix socket | none: the `SessionStart` hook reports the socket, token, and Claude version |
 //!
 //! A **reported** mechanism ([`is_reported`]) learns its address after launch from the tool's
 //! `SessionStart` hook; the host builds its adapter with [`adapter_for_reported`] from a
-//! [`ReportedSession`] and registers it in the same per-terminal map. The Claude inbox-socket
-//! adapter (HS2-M15CHN) is reported the same way.
+//! [`ReportedSession`] and registers it in the same per-terminal map.
 
+mod claude;
 mod codex;
 mod http;
 mod opencode;
@@ -26,6 +27,13 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+pub use claude::{
+    ClaudeInboxPush, MECHANISM as CLAUDE_INBOX, SOCKET_FIELD as CLAUDE_SOCKET_FIELD,
+    TOKEN_FIELD as CLAUDE_TOKEN_FIELD, VERIFIED_INBOX_VERSION as CLAUDE_VERIFIED_INBOX_VERSION,
+    VERSION_FIELD as CLAUDE_VERSION_FIELD, claude_version_from_env,
+    message_frame as claude_message_frame, socket_path as claude_socket_path,
+    version_supported as claude_version_supported,
+};
 pub use codex::{
     CODEX_HOME_FIELD, CodexQueuePush, MECHANISM as CODEX_QUEUE, codex_error_line, queued_message_id,
 };
@@ -122,6 +130,12 @@ pub fn is_reported(spec: &hotsheet_plugins::SessionPushSpec) -> bool {
 
 /// [`is_reported`] by mechanism name, for an already-built adapter.
 pub fn is_reported_mechanism(mechanism: &str) -> bool {
+    mechanism == CODEX_QUEUE || mechanism == CLAUDE_INBOX
+}
+
+/// Whether a reported mechanism runs the tool's own binary to deliver (`codex queue`), so the
+/// host must resolve it. The Claude inbox writes to a socket and needs no program.
+pub fn reported_needs_program(mechanism: &str) -> bool {
     mechanism == CODEX_QUEUE
 }
 
@@ -149,6 +163,10 @@ pub fn adapter_for_reported(
             .filter(|home| !home.trim().is_empty())
             .map(PathBuf::from);
         return CodexQueuePush::new(program, thread, home)
+            .map(|push| Arc::new(push) as Arc<dyn SessionPush>);
+    }
+    if spec.mechanism == CLAUDE_INBOX {
+        return ClaudeInboxPush::from_reported(reported)
             .map(|push| Arc::new(push) as Arc<dyn SessionPush>);
     }
     None

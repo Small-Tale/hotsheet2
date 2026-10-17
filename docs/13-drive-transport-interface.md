@@ -447,8 +447,9 @@ one unavailable provider cannot hide another resumable conversation (HS2-YHQCS2)
 
 ## 13.12 Messaging a live interactive session (session push, HS2-PEJ962)
 
-**Status: Partial**. Shipped: the operation, the OpenCode adapter, and the `codex queue` adapter
-(HS2-FKM97G). The Claude inbox-socket adapter (HS2-M15CHN) is a separate ticket.
+**Status: Partial**. Shipped: the operation, the OpenCode adapter, the `codex queue` adapter
+(HS2-FKM97G), and the Claude inbox-socket adapter (HS2-M15CHN). Client callers are tracked
+separately (HS2-NN6EXP).
 
 Hot Sheet can push a message into an _interactive_ AI session that one of its terminals
 launched (Connect / `POST /terminals {connect}`), so an attached agent hears about a new note or
@@ -526,6 +527,52 @@ capture is `crates/hotsheet-aitools/tests/fixtures/codex-0.162.1-session-queue.j
   same home is still reached. A thread the home does not know exits 1 with
   `no rollout found for thread id`, reported as `502 session_unreachable`.
 
+### Claude (`claude-inbox`, a reported mechanism)
+
+Pinned against Claude Code 2.1.302 by a PTY spike and a live Hot Sheet run. In that run a
+temp-store `hotsheet-server` launched interactive `claude` in a terminal; its `SessionStart`
+hook reported the inbox, and the posted message started a turn that the session answered. The
+sanitized capture is `crates/hotsheet-aitools/tests/fixtures/claude-2.1.302-inbox-message.json`.
+
+- **Address.** Claude Code 2.1.224+ binds a per-session Unix socket for
+  [cross-session messaging](https://code.claude.com/docs/en/cross-session-messaging). It
+  exports `CLAUDE_CODE_MESSAGING_SOCKET` (a plain path such as `/tmp/cc-socks/<pid>.sock`;
+  `/status` shows it as `uds:<path>`) and `CLAUDE_CODE_MESSAGING_TOKEN` to hooks.
+  - Hot Sheet's `SessionStart` report adds `messaging_socket`, `messaging_token`, and
+    `tool_version` (from `AI_AGENT`, else the versioned `CLAUDE_CODE_EXECPATH`).
+  - `reported_session` exposes these as the `messaging_socket`, `messaging_token`, and
+    `tool_version` fields.
+  - The token is a per-session credential. It stays in server memory on the live connection,
+    and neither terminal APIs nor the last-hook-report history serve it or the socket path.
+  - A permission ask from the same session keeps the inbox its `SessionStart` recorded.
+  - No program is resolved; the adapter only writes to the socket.
+- **Prompt.** One connection gets an optional auth line, then one `user` line:
+
+  ```text
+  {"type":"auth","token":"<token>"}
+  {"type":"user","message":{"role":"user","content":"<text>"},"from":"hotsheet","session_id":"<id>"}
+  ```
+
+  - `session_id` makes Claude drop a line meant for an earlier session.
+  - An idle session starts a turn (with `UserPromptSubmit` firing); a busy one reads the message
+    between tool calls.
+  - Claude presents it to the model as a message from "another Claude session", not as user
+    input, and its permission prompts still apply.
+  - The socket writes nothing back, so `confirmed` is always `false`. Hot Sheet cannot tell
+    whether the session's inbound controls delivered or held the message.
+  - The text limit is 100,000 characters. `banner` is ignored.
+
+- **Version check.** A report from a known Claude older than 2.1.224 registers no adapter. An
+  unknown version is accepted, because exporting a socket implies support.
+- **Command.** Not supported (`422 session_push_unsupported`).
+- **Bypass mode.** A session that bypasses permissions holds every inbound message for an
+  approval dialog. A Hot Sheet `-p` stream child launched in `bypassPermissions` therefore also
+  gets `--settings {"crossSessionInbound":"accept"}`. This bypass path is doc-sourced, not yet
+  live-verified (HS2-FBR3NB). Native Windows (a named pipe) is not supported.
+- **Channels.** Claude Code [channels](https://code.claude.com/docs/en/channels) remain out of
+  scope. They are a research preview with hidden flags, an allowlist, and an interactive
+  dialog, and they are ignored under `-p`.
+
 ### Reported mechanisms: the shared registration path
 
 A mechanism whose address is learned after launch is **reported**
@@ -537,10 +584,12 @@ like this:
    address on the terminal's internal connection.
 2. **Build.** `routes::terminals::reported_session` turns it into a
    `session_push::ReportedSession {session_id, fields}`. Each tool's hook-reported fields
-   (`codex_home`, and later the Claude socket and token) are added in that function.
+   (`codex_home`; the Claude `messaging_socket`, `messaging_token`, and `tool_version`) are
+   added in that function.
 3. **Register.** `routes::session_messages::register_reported` builds the adapter with
    `session_push::adapter_for_reported(spec, reported, program)` and puts it in the same
-   per-terminal map. The program is the plugin's `[launch] program`, resolved on `PATH`.
+   per-terminal map. The program is the plugin's `[launch] program`, resolved on `PATH`; a
+   mechanism that runs no program (`claude-inbox`, see `reported_needs_program`) skips that.
    - A newer report replaces it.
    - A launch-wired adapter is never displaced.
 4. **Unregister.** `unregister_reported` drops only reported adapters, on `SessionEnd`,

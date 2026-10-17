@@ -426,6 +426,15 @@ pub(crate) struct TerminalAiConnectionReq {
     pub(crate) codex_home: Option<String>,
     #[serde(default)]
     pub(crate) source: TerminalHookSource,
+    /// Claude's `CLAUDE_CODE_MESSAGING_SOCKET`, when the session has an inbox (HS2-M15CHN).
+    #[serde(default)]
+    pub(crate) messaging_socket: Option<String>,
+    /// Claude's per-session `CLAUDE_CODE_MESSAGING_TOKEN`; kept in memory only.
+    #[serde(default)]
+    pub(crate) messaging_token: Option<String>,
+    /// The reporting tool's version, for the inbox adapter's version check.
+    #[serde(default)]
+    pub(crate) tool_version: Option<String>,
 }
 
 /// `POST /terminals/{id}/ai-connection` — an AI session in the terminal started with Hot Sheet's
@@ -469,6 +478,27 @@ pub(crate) async fn connect_terminal_ai(
                 .filter(|previous| session_id.is_some() && previous.session_id == session_id)
                 .and_then(|previous| previous.codex_home.clone())
         });
+    // Likewise the Claude inbox (HS2-M15CHN): only SessionStart reports it.
+    let claude_inbox = body
+        .messaging_socket
+        .map(|socket| socket.trim().to_owned())
+        .filter(|socket| !socket.is_empty())
+        .map(|socket| super::ClaudeInbox {
+            socket,
+            token: body.messaging_token.filter(|token| !token.is_empty()),
+            tool_version: body
+                .tool_version
+                .map(|version| version.trim().chars().take(32).collect::<String>())
+                .filter(|version| !version.is_empty()),
+        })
+        .or_else(|| {
+            state
+                .terminal_ai_connections
+                .lock_or_recover()
+                .get(&id)
+                .filter(|previous| session_id.is_some() && previous.session_id == session_id)
+                .and_then(|previous| previous.claude_inbox.clone())
+        });
     let connection = TerminalAiConnection {
         agent: agent.clone(),
         at: OffsetDateTime::now_utc()
@@ -476,6 +506,7 @@ pub(crate) async fn connect_terminal_ai(
             .unwrap_or_default(),
         session_id,
         codex_home,
+        claude_inbox,
         source: body.source,
     };
     let started_from_shell = terminal_foreground_command(&state, &id).await == Some(true);
@@ -483,7 +514,14 @@ pub(crate) async fn connect_terminal_ai(
     state
         .terminal_ai_last_reports
         .lock_or_recover()
-        .insert(id.clone(), connection.clone());
+        // Report history only; the inbox credential lives on the live connection.
+        .insert(
+            id.clone(),
+            TerminalAiConnection {
+                claude_inbox: None,
+                ..connection.clone()
+            },
+        );
     let (watch_session, watch_home) =
         (connection.session_id.clone(), connection.codex_home.clone());
     let reported = super::reported_session(&connection);

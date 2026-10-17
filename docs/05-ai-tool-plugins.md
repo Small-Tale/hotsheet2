@@ -1009,6 +1009,16 @@ home. Observed live on codex 0.162.1:
 - Pushing messages into a Codex session uses the shared session-push operation (HS2-PEJ962,
   [13](13-drive-transport-interface.md) §13.12) with a `codex queue` adapter (HS2-FKM97G).
 
+**Claude session inbox (HS2-M15CHN).** Claude's `SessionStart` report also carries the
+session's cross-session inbox: `messaging_socket` and `messaging_token` (Claude's
+`CLAUDE_CODE_MESSAGING_SOCKET` and `CLAUDE_CODE_MESSAGING_TOKEN`), plus `tool_version` read from
+`AI_AGENT` or `CLAUDE_CODE_EXECPATH`. The server keeps them in memory on the terminal's live
+connection only. The token is a per-session credential, so terminal APIs and the last-hook-report
+history never serve it or the socket path. A permission ask from the same session keeps the
+inbox. The shared session-push operation then messages the session through the `claude-inbox`
+adapter ([13](13-drive-transport-interface.md) §13.12). That adapter's wire format was pinned
+live on Claude Code 2.1.302.
+
 A tool runs a project hook only once it is installed and, for Codex, trusted. A reported
 connection therefore shows that the session's hooks are live, and its permission prompts reach
 the app. A missing report means they stay in the terminal. Codex trusts each hook entry by
