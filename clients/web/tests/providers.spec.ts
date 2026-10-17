@@ -4529,9 +4529,9 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await page.screenshot({ path: 'target/visual-captures/hs2-3d8frb-terminal-context-menu.png', fullPage: true });
   await tileMenu.getByText('Hide Terminal').click();
   const manageVisibility = page.getByRole('button', { name: 'Manage workspace visibility' });
-  await expect(page.locator('.terminal-dashboard-controls__count')).not.toContainText('≥');
+  await expect(page.locator('[data-component="badge"][data-placement="corner"]')).not.toContainText('≥');
   // The hidden-count badge keeps readable text on its loud warning fill in both themes (HS2-8VBFP1).
-  const countBadge = page.locator('.terminal-dashboard-controls__count'),
+  const countBadge = page.locator('[data-component="badge"][data-placement="corner"]'),
     badgeContrast = () =>
       countBadge.evaluate((node) => {
         const channels = (value: string) =>
@@ -4554,14 +4554,16 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect.poll(badgeContrast).toBeGreaterThanOrEqual(4.5);
   await manageVisibility.screenshot({ path: test.info().outputPath('hidden-count-badge-dark.png') });
+  await manageVisibility.screenshot({ path: 'target/visual-captures/hs2-9j6myj-hidden-count-dark.png' });
   await page.emulateMedia({ colorScheme: 'light' });
   await manageVisibility.screenshot({ path: test.info().outputPath('hidden-count-badge-light.png') });
+  await manageVisibility.screenshot({ path: 'target/visual-captures/hs2-9j6myj-hidden-count-light.png' });
   await manageVisibility.click();
   const visibilityDialog = page.locator('[data-terminal-visibility-dialog]');
   await visibilityDialog.getByRole('button', { name: 'Show Codex Main' }).click();
   await page.keyboard.press('Escape');
   await expect(compactTile).toBeVisible();
-  await expect(page.locator('.terminal-dashboard-controls__count')).toHaveCount(0);
+  await expect(page.locator('[data-component="badge"][data-placement="corner"]')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-terminal-dashboard-small.png', fullPage: true });
   await expect(page.locator('kui-select[name="terminal-grouping"]')).toHaveCount(0);
   const visibilitySelect = page.locator('kui-select[name="terminal-visibility-group"]'),
@@ -7867,8 +7869,7 @@ test('shows a real terminal hook report separately from MCP and bridge reachabil
     hook('SessionStart');
     // No hotsheet-mcp connects for this terminal, so once the grace period ends the hook-only
     // session shows the combined badge as not fully connected (HS2-670ADP).
-    await expect(tab.locator('[data-ai-connection="mcp_missing"]')).toHaveAttribute(
-      'title',
+    await expect(tab.locator('.terminal-drawer__ai-connection title')).toHaveText(
       /MCP not connected\..*Last trusted hook report: SessionStart at /,
       { timeout: 25_000 },
     );
@@ -7881,7 +7882,7 @@ test('shows a real terminal hook report separately from MCP and bridge reachabil
       last_hook_report: { source: 'session_start' },
     });
     hook('SessionEnd');
-    await expect(tab.locator('[data-ai-connection="mcp_missing"]')).toHaveCount(0);
+    await expect(tab).not.toHaveAttribute('data-ai-connection', 'mcp_missing');
     expect(
       (
         await server.request<Array<{ ai_connection?: unknown; last_hook_report?: { source: string } }>>('/terminals')
@@ -7972,11 +7973,10 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
       last_assistant_message: 'Selected model is at capacity. Please try a different model.',
     });
     await expect(halted).toBeVisible();
-    await expect(halted).toHaveAttribute(
-      'title',
+    await expect(halted.locator('title')).toHaveText(
       'Stopped: Selected model is at capacity. Please try a different model.',
     );
-    await expect(halted.locator('[data-lucide="triangle-alert"]')).toHaveCSS('color', /rgb\(/);
+    await expect(halted).toHaveCSS('color', /rgb\(/);
     await expect(tab.locator('.terminal-drawer__busy-dot')).toHaveCount(0);
     await expect(projectAttention).toBeVisible();
     await page.screenshot({ path: test.info().outputPath('hs2-hj4d1h-halted-1280.png') });
@@ -8124,8 +8124,8 @@ test('recovers a missing Codex connection when its interactive permission hook r
     await expect(connection).toHaveCount(0);
     await expect(tileConnection).toHaveCount(0);
     await page.clock.fastForward(16_000);
-    await expect(connection).toHaveAttribute('data-ai-connection', 'missing');
-    await expect(connection.locator('[data-lucide="unplug"]')).toBeVisible();
+    await expect(tab).toHaveAttribute('data-ai-connection', 'missing');
+    await expect(connection).toHaveAttribute('data-lucide', 'unplug');
     await expect(tileConnection).toHaveAttribute('data-ai-connection', 'missing');
 
     // A permission request can arrive even when SessionStart was missed. The real CLI hook
@@ -8164,17 +8164,16 @@ test('recovers a missing Codex connection when its interactive permission hook r
         return pendingId;
       })
       .toBeGreaterThan(0);
-    await expect(connection).toHaveAttribute('data-ai-connection', 'connected');
-    await expect(connection).toHaveAttribute(
-      'title',
+    await expect(tab).toHaveAttribute('data-ai-connection', 'connected');
+    await expect(connection.locator('title')).toHaveText(
       /Codex is connected to Hot Sheet: its permission prompts come to the app and its hotsheet-mcp tools are connected\. Last trusted hook report: PermissionRequest at .*\./,
     );
-    await expect(connection.locator('[data-lucide="plug"]')).toBeVisible();
+    await expect(connection).toHaveAttribute('data-lucide', 'plug');
     await expect(tileConnection).toHaveAttribute('data-ai-connection', 'connected');
-    await expect(tileConnection).toHaveAttribute('title', (await connection.getAttribute('title')) as string);
+    await expect(tileConnection).toHaveAttribute('title', (await connection.locator('title').textContent()) as string);
     await page.screenshot({ path: test.info().outputPath('hs2-xysxvt-connected-1280.png') });
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(connection).toHaveAttribute('data-ai-connection', 'connected');
+    await expect(tab).toHaveAttribute('data-ai-connection', 'connected');
     await tab.screenshot({ path: test.info().outputPath('hs2-xysxvt-connected-tab-390.png') });
     await page.setViewportSize({ width: 1280, height: 800 });
     await server.request(`/permissions/${pendingId}`, 'POST', { decision: 'allow', scope: 'once' });
@@ -8187,14 +8186,13 @@ test('recovers a missing Codex connection when its interactive permission hook r
     // session must leave the tab and tile connected to the new session.
     hook({ hook_event_name: 'SessionStart', session_id: 'session-2', source: 'clear' });
     hook({ hook_event_name: 'SessionEnd', session_id: 'session-1', reason: 'other' });
-    await expect(connection).toHaveAttribute('data-ai-connection', 'connected');
-    await expect(connection.locator('[data-lucide="plug"]')).toBeVisible();
-    await expect(connection.locator('[data-lucide="unplug"]')).toHaveCount(0);
+    await expect(tab).toHaveAttribute('data-ai-connection', 'connected');
+    await expect(connection).toHaveAttribute('data-lucide', 'plug');
     await expect(tileConnection).toHaveAttribute('data-ai-connection', 'connected');
     await expect(tileConnection.locator('[data-lucide="plug"]')).toBeVisible();
     await drawer.screenshot({ path: test.info().outputPath('hs2-xysxvt-clear-connected-drawer-1280.png') });
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(connection).toHaveAttribute('data-ai-connection', 'connected');
+    await expect(tab).toHaveAttribute('data-ai-connection', 'connected');
     await tab.screenshot({ path: test.info().outputPath('hs2-xysxvt-clear-connected-tab-390.png') });
     await page.setViewportSize({ width: 1280, height: 800 });
 
@@ -8222,7 +8220,7 @@ test('recovers a missing Codex connection when its interactive permission hook r
 
     // Codex exits: SessionEnd clears it everywhere.
     hook({ hook_event_name: 'SessionEnd', session_id: 'session-2', reason: 'exit' });
-    await expect(connection).toHaveAttribute('data-ai-connection', 'missing');
+    await expect(tab).toHaveAttribute('data-ai-connection', 'missing');
     await expect(tileConnection).toHaveAttribute('data-ai-connection', 'missing');
     expect((await server.request<Array<{ ai_connection?: unknown }>>('/terminals'))[0].ai_connection).toBeUndefined();
   } finally {
@@ -8277,9 +8275,9 @@ test('warns when an AI tab never connects to Hot Sheet, and clears once it does 
   // A freshly started session gets a grace period to report in before it is flagged.
   await expect(connection).toHaveCount(0);
   await page.clock.fastForward(16_000);
-  await expect(connection).toHaveAttribute('data-ai-connection', 'missing');
-  await expect(connection).toHaveAttribute('title', /^Codex is not connected to Hot Sheet: .*Run \/hooks in Codex/);
-  await expect(connection.locator('[data-lucide="unplug"]')).toBeVisible();
+  await expect(tab).toHaveAttribute('data-ai-connection', 'missing');
+  await expect(connection.locator('title')).toHaveText(/^Codex is not connected to Hot Sheet: .*Run \/hooks in Codex/);
+  await expect(connection).toHaveAttribute('data-lucide', 'unplug');
   await expect(tileConnection).toHaveAttribute('data-ai-connection', 'missing');
   await expect(tileConnection.locator('[data-lucide="unplug"]')).toBeVisible();
   await page.clock.runFor(500);
@@ -8303,8 +8301,8 @@ test('warns when an AI tab never connects to Hot Sheet, and clears once it does 
       overflow: false,
     },
   });
-  await expect(connection).toHaveAttribute('data-ai-connection', 'connected');
-  await expect(connection.locator('[data-lucide="plug"]')).toBeVisible();
+  await expect(tab).toHaveAttribute('data-ai-connection', 'connected');
+  await expect(connection).toHaveAttribute('data-lucide', 'plug');
   await expect(tileConnection).toHaveAttribute('data-ai-connection', 'connected');
   await expect(tileConnection.locator('[data-lucide="plug"]')).toBeVisible();
 });
@@ -8886,7 +8884,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(dialog).not.toHaveAttribute('open');
     await expect(chat).toHaveCount(0);
     await expect(dashboard.locator('[data-component="terminal-tile"]')).toHaveCount(2);
-    await expect(page.locator('.terminal-dashboard-controls__count')).not.toContainText('≥');
+    await expect(page.locator('[data-component="badge"][data-placement="corner"]')).not.toContainText('≥');
     await page.reload();
     await page.getByRole('button', { name: 'Workspace Grid' }).click();
     await expect(chat).toHaveCount(0);
@@ -8910,7 +8908,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.keyboard.press('Escape');
     await page.setViewportSize({ width: 1440, height: 900 });
     await expect(chat).toBeVisible();
-    await expect(page.locator('.terminal-dashboard-controls__count')).toHaveCount(0);
+    await expect(page.locator('[data-component="badge"][data-placement="corner"]')).toHaveCount(0);
     await page.screenshot({
       path: `target/visual-captures/hs2-se3rvm-dashboard-${theme}-chat.png`,
       animations: 'disabled',
@@ -8986,7 +8984,7 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   await page.screenshot({ path: 'target/visual-captures/hs2-wf0xqa-transparent-tab-bar-wide.png', fullPage: true });
   await page.keyboard.press('Escape');
   await expect(codex).toHaveCount(0);
-  await expect(page.locator('.terminal-dashboard-controls__count')).not.toContainText('≥');
+  await expect(page.locator('[data-component="badge"][data-placement="corner"]')).not.toContainText('≥');
   await selector.locator('.kui-select__trigger').click();
   await selector.locator('.kui-select__option[data-value="default"]').click();
   await expect(selector).not.toHaveAttribute('open');

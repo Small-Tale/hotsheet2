@@ -57,23 +57,6 @@
   /* 2xs here plus the strip's 2xs padding keeps the tabs at the xs inline inset. */
   padding-inline: var(--kui-space-2xs);
 }
-/* Labelled status icons in TabBarItem's phrasing trailing slot need a title tooltip that LucideIcon
-   cannot carry yet (KF-2V9XJQ), so these app-owned spans keep their inline geometry. */
-.terminal-drawer__halt,
-.terminal-drawer__permission-mode {
-  display: inline-flex;
-  flex: none;
-}
-.terminal-drawer__status {
-  display: inline-flex;
-  align-items: center;
-  gap: remify(4px);
-  flex: none;
-}
-.terminal-drawer__ai-connection {
-  display: inline-flex;
-  flex: none;
-}
 .terminal-drawer__content {
   min-width: 0;
   min-height: 0;

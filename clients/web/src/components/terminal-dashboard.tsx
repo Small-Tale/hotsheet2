@@ -2,7 +2,7 @@ import '@kerfjs/ui/floating-toolbar.css';
 import './terminal-dashboard.css';
 
 import { Badge } from '@kerfjs/ui/badge';
-import { uiColor } from '@kerfjs/ui/css-values';
+import { px, uiColor } from '@kerfjs/ui/css-values';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
@@ -177,33 +177,33 @@ export function TerminalVisibilityControls({
             <ToolbarControlGroup single>
               <button
                 type="button"
-                class="terminal-dashboard-controls__visibility"
                 {...TERMINALS_ACTIONS.openTerminalVisibility.attrs}
                 aria-label="Manage workspace visibility"
                 title="Manage Workspace Visibility"
               >
                 <LucideIcon icon={Eye} name="eye" />
                 {hiddenCount > 0 && (
-                  <span class="terminal-dashboard-controls__count" aria-hidden="true">
+                  <Badge placement="corner" tone="warning" appearance="solid" size="compact" ariaHidden>
                     {hiddenCount}
-                  </span>
+                  </Badge>
                 )}
               </button>
             </ToolbarControlGroup>
             <ToolbarControlGroup single>
-              <div class="terminal-dashboard-controls__visibility-select">
-                <Select
-                  name="terminal-visibility-group"
-                  ariaLabel="Terminal Visibility Group"
-                  // The control group paints the pill chrome and focus ring around the trigger.
-                  presentation="toolbar-borderless"
-                  size="compact"
-                  focusRingOwner="group"
-                  value={activeId}
-                  choices={choices}
-                  renderSelected={(choice) => <span>{choice.label}</span>}
-                />
-              </div>
+              <Select
+                className="terminal-dashboard-controls__visibility-select"
+                name="terminal-visibility-group"
+                ariaLabel="Terminal Visibility Group"
+                // The control group paints the pill chrome and focus ring around the trigger.
+                presentation="toolbar-borderless"
+                size="compact"
+                focusRingOwner="group"
+                value={activeId}
+                minTriggerWidth={px(88)}
+                maxTriggerWidth={px(160)}
+                choices={choices}
+                renderSelected={(choice) => <span>{choice.label}</span>}
+              />
             </ToolbarControlGroup>
           </>
         }
@@ -401,7 +401,11 @@ function TerminalCard({
               </button>
               {/* Progress follows the identity in the shrinking leading zone, so the trailing zone holds
                   one unwrappable action group and a narrow card truncates the identity instead. */}
-              {session.progress !== undefined && <span class="terminal-tile__progress">{session.progress}%</span>}
+              {session.progress !== undefined && (
+                <Text variant="span" size="compact" tone="quiet">
+                  {session.progress}%
+                </Text>
+              )}
             </>
           }
           trailing={
@@ -608,8 +612,12 @@ export function WorkspaceGridChatCard({ chat, previewScale = 1 }: { chat: Worksp
             <LucideIcon icon={MessageSquare} name="message-square" size={8} color={uiColor('brand-on-quiet')} />
           </span>
           <div>
-            <strong>{chat.tool} AI Chat</strong>
-            <p>{chat.summary || `Open ${chat.name} to continue the conversation.`}</p>
+            <Text variant="span" size="medium" wrap="truncate">
+              <strong>{chat.tool} AI Chat</strong>
+            </Text>
+            <Text variant="p" size="medium" tone="quiet" wrap="anywhere" maxLines={3} flush>
+              {chat.summary || `Open ${chat.name} to continue the conversation.`}
+            </Text>
           </div>
         </div>
       </div>

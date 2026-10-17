@@ -559,7 +559,7 @@ describe('halted AI sessions (HS2-HJ4D1H)', () => {
       );
     const halted = markup(true, true);
     expect(halted).toContain('class="terminal-drawer__halt"');
-    expect(halted).toContain(`title="Stopped: ${halt.message}"`);
+    expect(halted).toContain(`<title>Stopped: ${halt.message}</title>`);
     expect(halted).toContain('data-lucide="triangle-alert"');
     expect(halted).not.toContain('terminal-drawer__busy-dot');
     const resumed = markup(true, false);
@@ -647,7 +647,7 @@ describe('TerminalDrawer chat permission indicator (HS2-NHRDMW)', () => {
     expect(safe).toContain('data-permission-warning="false"');
     const risky = draw({ label: 'Bypass permissions', warning: 'Runs everything.' });
     expect(risky).toContain('data-permission-warning="true"');
-    expect(risky).toContain('title="Permissions: Bypass permissions. Runs everything."');
+    expect(risky).toContain('<title>Permissions: Bypass permissions. Runs everything.</title>');
     // A stopped chat's error takes the trailing slot; no mode means no indicator.
     expect(draw({ label: 'Accept edits' }, 'Model at capacity')).not.toContain('Permissions:');
     expect(draw()).not.toContain('terminal-drawer__permission-mode');

@@ -115,6 +115,9 @@ describe('TerminalDashboard', () => {
     expect(markup).toContain('data-action="open-grid-ai-chat"');
     expect(markup).toContain('Claude AI Chat');
     expect(markup).toContain('Reviewing the workspace changes');
+    expect(markup).toMatch(/data-component="text"[^>]*data-size="medium"[^>]*><strong>Claude AI Chat<\/strong>/);
+    expect(markup).toContain('data-max-lines="3"');
+    expect(markup).toMatch(/data-component="text"[^>]*data-size="compact"[^>]*>42%<\/span>/);
     expect(markup).toMatch(
       /class="terminal-tile__state" title="Working"><span class="kui-badge"[^>]*aria-label="Working"/,
     );
@@ -321,11 +324,12 @@ describe('TerminalDashboard', () => {
     );
     expect(markup).toMatch(/<div class="kui-toolbar__trailing"><div class="kui-toolbar-control-group"/);
     expect(markup).not.toContain('visibility-toolbar');
-    // The group Select is wrapped by the app; its root carries no app class (KUI-L022).
-    expect(markup).toContain(
-      '<div class="terminal-dashboard-controls__visibility-select"><kui-select class="kui-select kui-select--custom-selected"',
-    );
-    expect(markup).toContain('>2</span>');
+    // Kerf caps the Select's renderSelected trigger without an app width wrapper.
+    expect(markup).toContain('terminal-dashboard-controls__visibility-select"');
+    expect(markup).toContain('data-trigger-max="" data-trigger-min=""');
+    expect(markup).not.toContain('<div class="terminal-dashboard-controls__visibility-select"');
+    expect(markup).toContain('data-component="badge" data-tone="warning" data-appearance="solid"');
+    expect(markup).toContain('data-placement="corner" aria-hidden="true">2</span>');
     expect(markup).toContain('name="terminal-visibility-group"');
     expect(markup).toContain(
       'class="kui-select__custom-selected"><span class="kui-select__custom-selected-content"><span>Focus</span>',
@@ -426,6 +430,8 @@ describe('TerminalDashboard', () => {
     expect(controls).toContain('data-presentation="toolbar-borderless"');
     expect(controls).toContain('data-size="compact"');
     expect(controls).toContain('data-focus-ring-owner="group"');
+    expect(css).not.toContain('.terminal-dashboard-controls__count');
+    expect(css).not.toContain('.terminal-tile__progress');
   });
   it('clips a phone dedicated terminal through the session it renders (HS2-DR549A)', () => {
     const session = { id: 't1', projectId: 'p', projectName: 'P', alive: true, busy: false, scrollback: '' };

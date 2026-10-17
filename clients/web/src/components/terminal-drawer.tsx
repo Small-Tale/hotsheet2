@@ -4,6 +4,7 @@ import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
+import { Row } from '@kerfjs/ui/row';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { TabBarItem } from '@kerfjs/ui/tab-bar-item';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -234,32 +235,34 @@ export function TerminalDrawer({
               selectAction="select-drawer-item"
               closeAction="close-terminal-tab"
               closeIcon={<LucideIcon icon={X} name="x" />}
-              rootAttributes={{ 'data-tab-kind': 'terminal', 'data-terminal-id': session.id }}
+              rootAttributes={{
+                'data-tab-kind': 'terminal',
+                'data-terminal-id': session.id,
+                'data-ai-connection': session.halt ? undefined : session.aiConnection,
+              }}
               leading={<LucideIcon icon={SquareTerminal} name="square-terminal" />}
               trailing={
                 session.halt ? (
                   // A halted AI session (HS2-HJ4D1H) outranks busy: it is waiting for the user.
-                  <span
-                    class="terminal-drawer__halt"
-                    role="img"
-                    aria-label={`Stopped: ${session.halt.message}`}
+                  <LucideIcon
+                    className="terminal-drawer__halt"
+                    size="s"
+                    icon={TriangleAlert}
+                    name="triangle-alert"
+                    color={uiColor('danger-on-quiet')}
+                    label={`Stopped: ${session.halt.message}`}
                     title={`Stopped: ${session.halt.message}`}
-                  >
-                    <LucideIcon
-                      size="s"
-                      icon={TriangleAlert}
-                      name="triangle-alert"
-                      color={uiColor('danger-on-quiet')}
-                    />
-                  </span>
+                  />
                 ) : session.aiConnection ? (
-                  <span class="terminal-drawer__status">
+                  <Row vAlign="middle" gap="2xs">
                     {/* Whether the tab's AI session reaches Hot Sheet (HS2-EV1XK3). */}
-                    <span
-                      class="terminal-drawer__ai-connection"
-                      data-ai-connection={session.aiConnection}
-                      role="img"
-                      aria-label={aiConnectionLabel(
+                    <LucideIcon
+                      className="terminal-drawer__ai-connection"
+                      size="s"
+                      icon={session.aiConnection === 'connected' ? Plug : Unplug}
+                      name={session.aiConnection === 'connected' ? 'plug' : 'unplug'}
+                      color={uiColor(session.aiConnection === 'connected' ? 'neutral-on-quiet' : 'warning-on-quiet')}
+                      label={aiConnectionLabel(
                         session.aiConnection,
                         session.ai_connection?.agent,
                         session.tool,
@@ -273,15 +276,9 @@ export function TerminalDrawer({
                         session.last_hook_report ?? session.ai_connection,
                         session.mcp_connected,
                       )}
-                    >
-                      {session.aiConnection === 'connected' ? (
-                        <LucideIcon size="s" icon={Plug} name="plug" color={uiColor('neutral-on-quiet')} />
-                      ) : (
-                        <LucideIcon size="s" icon={Unplug} name="unplug" color={uiColor('warning-on-quiet')} />
-                      )}
-                    </span>
+                    />
                     {session.busy ? <BusyDot /> : undefined}
-                  </span>
+                  </Row>
                 ) : session.busy ? (
                   <BusyDot />
                 ) : undefined
@@ -301,37 +298,38 @@ export function TerminalDrawer({
             selectAction="select-drawer-item"
             closeAction="close-ai-chat-tab"
             closeIcon={<LucideIcon icon={X} name="x" />}
-            rootAttributes={{ 'data-tab-kind': 'ai-chat', 'data-chat-id': chat.id }}
+            rootAttributes={{
+              'data-tab-kind': 'ai-chat',
+              'data-chat-id': chat.id,
+              'data-permission-warning':
+                chat.permissionMode && !chat.error ? String(Boolean(chat.permissionMode.warning)) : undefined,
+            }}
             leading={<LucideIcon icon={MessageSquare} name="message-square" />}
             trailing={
               chat.error ? (
-                <span
-                  class="terminal-drawer__halt"
-                  role="img"
-                  aria-label={`Stopped: ${chat.error}`}
+                <LucideIcon
+                  className="terminal-drawer__halt"
+                  size="s"
+                  icon={TriangleAlert}
+                  name="triangle-alert"
+                  color={uiColor('danger-on-quiet')}
+                  label={`Stopped: ${chat.error}`}
                   title={`Stopped: ${chat.error}`}
-                >
-                  <LucideIcon size="s" icon={TriangleAlert} name="triangle-alert" color={uiColor('danger-on-quiet')} />
-                </span>
+                />
               ) : chat.permissionMode ? (
-                <span
-                  class="terminal-drawer__permission-mode"
-                  role="img"
-                  data-permission-warning={String(Boolean(chat.permissionMode.warning))}
-                  aria-label={`Permissions: ${chat.permissionMode.label}`}
+                <LucideIcon
+                  className="terminal-drawer__permission-mode"
+                  size="s"
+                  icon={chat.permissionMode.warning ? ShieldAlert : ShieldCheck}
+                  name={chat.permissionMode.warning ? 'shield-alert' : 'shield-check'}
+                  color={uiColor(chat.permissionMode.warning ? 'danger-on-quiet' : 'neutral-on-quiet')}
+                  label={`Permissions: ${chat.permissionMode.label}`}
                   title={
                     chat.permissionMode.warning
                       ? `Permissions: ${chat.permissionMode.label}. ${chat.permissionMode.warning}`
                       : `Permissions: ${chat.permissionMode.label}`
                   }
-                >
-                  <LucideIcon
-                    size="s"
-                    icon={chat.permissionMode.warning ? ShieldAlert : ShieldCheck}
-                    name={chat.permissionMode.warning ? 'shield-alert' : 'shield-check'}
-                    color={uiColor(chat.permissionMode.warning ? 'danger-on-quiet' : 'neutral-on-quiet')}
-                  />
-                </span>
+                />
               ) : undefined
             }
           />

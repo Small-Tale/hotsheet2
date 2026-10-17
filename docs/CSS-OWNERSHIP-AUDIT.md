@@ -281,13 +281,13 @@ frame` insets its rows. Also retained are the phrasing-only copy grids inside ro
   a short drawer grid. The controls wrapper is a Kerf `Row`, so `.terminal-dashboard-controls` is
   removed. Since Kerf beta.106 (`KF-3ZJ9PF`) one filled `List` gathers the title and copy in its
   middle, so the former inner `List` workaround is gone (HS2-BH7NZ4).
-- Retained with exact upstream requests: the visibility Select and ticket-rail view-title width
-  bounds (`KF-DQANHZ`), the hidden-item corner count (`KF-WT2EMZ`), and the drawer tab
-  status-icon wrappers that carry a hover title (`KF-2V9XJQ`). `HS2-9J6MYJ` adopts those
-  shipped APIs.
+- `HS2-9J6MYJ` adopts the shipped Kerf APIs: Select props bound the visibility and ticket-rail
+  triggers (`KF-DQANHZ`), a corner Badge draws the hidden-item count (`KF-WT2EMZ`), and titled
+  LucideIcons replace the drawer status-icon wrappers (`KF-2V9XJQ`). Kerf Text now renders tile
+  progress and workspace-chat preview copy.
 - Owned contracts that stay: the key bar's sticky Fn group, touch scroller, and safe-area backing;
   focus-mode placement and backdrop; grid fitting, canvas, previews, magnification, and mobile
-  keyboard geometry. Generic tile identity and footer typography remain in `HS2-9J6MYJ`.
+  keyboard geometry. The native tile identity action retains its desktop and phone layout.
 
 ## Development and catalog UI update (HS2-3AZ08H)
 

@@ -20,36 +20,8 @@
   align-items: center;
   gap: var(--wa-space-xs);
 }
-/* App-owned hidden-item count dot over the native Eye button (a corner indicator, not a Badge;
-   KF-WT2EMZ requests a Kerf corner count). */
-.terminal-dashboard-controls__count {
-  position: absolute;
-  top: remify(-4px);
-  right: remify(-3.2px);
-  display: grid;
-  min-width: remify(16px);
-  height: remify(16px);
-  padding: 0 remify(3.2px);
-  border-radius: var(--wa-border-radius-pill);
-  /* Loud fills pair with their on-loud text token; on-normal turns light in dark mode (HS2-8VBFP1). */
-  color: var(--wa-color-warning-on-loud);
-  background: var(--wa-color-warning-fill-loud);
-  font-size: var(--wa-font-size-3xs);
-  font-weight: 700;
-  line-height: 1;
-  place-items: center;
-}
-.terminal-dashboard-controls__visibility {
-  /* Positions the count dot against the native button. */
-  position: relative;
-}
-/* App-owned wrapper that bounds the group Select's width (until KF-DQANHZ) and tunes its public
-   selected-value tokens. */
+/* Public Select tokens keep the closed visibility group label in the compact toolbar style. */
 .terminal-dashboard-controls__visibility-select {
-  display: flex;
-  width: max-content;
-  min-width: remify(88px);
-  max-width: remify(160px);
   --kui-select-selected-color: var(--wa-color-neutral-on-quiet);
   --kui-select-selected-font-size: var(--wa-font-size-xs);
   --kui-select-selected-font-weight: var(--wa-font-weight-semibold);
@@ -188,23 +160,6 @@
   min-width: 0;
   align-content: center;
   gap: var(--wa-space-xs);
-}
-.workspace-chat-tile__preview-surface strong {
-  overflow: hidden;
-  font-size: var(--wa-font-size-m);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.workspace-chat-tile__preview-surface p {
-  display: -webkit-box;
-  margin: 0;
-  overflow: hidden;
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-s);
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
 }
 /* Plain-text scrollback fallback shown before the emulator connects. */
 .terminal-tile__preview pre {
@@ -395,11 +350,6 @@
   line-height: var(--wa-line-height-condensed);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-/* Busy progress text beside the identity. */
-.terminal-tile__progress {
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
 }
 /* Zero-size positioned anchor at the safe-area corner: the Kerf FloatingToolbar keeps its own
    bottom-end inset relative to this anchor, so it clears the device inset without app CSS on the

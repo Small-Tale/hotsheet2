@@ -51,6 +51,8 @@ describe('TerminalTicketRail', () => {
     // The view title is Kerf's title Select with an inset ring, not an app className hook (HS2-DAMHD1).
     expect(viewSelect).toContain('data-presentation="title"');
     expect(viewSelect).toContain('data-focus-ring-inset="true"');
+    expect(viewSelect).toContain('terminal-ticket-rail__view');
+    expect(viewSelect).toContain('data-trigger-max=""');
     expect(viewSelect).not.toContain('terminal-ticket-rail__view-select');
   });
   it('is a Workbench navigation panel whose root view lists tickets under its pinned controls (HS2-FY06N4)', () => {

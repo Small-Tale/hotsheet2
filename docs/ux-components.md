@@ -1963,8 +1963,9 @@ Styling ownership (HS2-DR549A):
   cursor, dimming, and absent hover chrome (KF-FTADQT, adopted in HS2-T44PFW).
 - **Visibility Select.** It uses Kerf's `toolbar-borderless` compact presentation, with a
   group-owned focus ring. A Kerf `Row` hosts the visibility controls beside the workspace header
-  actions (HS2-1Q6GER). The Select's width bound and the hidden-item corner count stay app-owned
-  until Kerf ships `KF-DQANHZ` and `KF-WT2EMZ`.
+  actions (HS2-1Q6GER). Kerf `Select.maxTriggerWidth` bounds the selected group without a width
+  wrapper (`KF-DQANHZ`); a solid warning Kerf `Badge` sits at the visibility button's corner and
+  reports the active group's hidden count (`KF-WT2EMZ`, HS2-9J6MYJ).
 - **Empty, loading, and message copy.** A filled, centered Kerf `List` of `Text` (HS2-1Q6GER)
   gathers the title and copy in its middle (`KF-3ZJ9PF`, HS2-BH7NZ4). It has no icon slot, so a
   short (about 100px) drawer grid never clips the title. Loading and message copy is a polite
@@ -1974,6 +1975,11 @@ Styling ownership (HS2-DR549A):
   `focus` (drawer focus mode) drops the viewport's `--kui-space-xs` inset so the terminal fills
   the focused surface edge to edge. Its dedicated rules follow the shared viewport rules so they
   win in every connection state.
+- **Tile and tab copy.** Kerf `Text` renders the terminal's progress and the scaled workspace chat
+  preview's heading and summary; the native tile identity button keeps its desktop and phone
+  layout. Drawer status glyphs put accessible names and hover titles directly on Kerf
+  `LucideIcon`, with Kerf `Row` aligning connection and busy icons (`KF-2V9XJQ`, HS2-9J6MYJ).
+  The workspace chat preview retains its fixed natural canvas and scale.
 - **`TerminalPreview`.** The live, non-interactive scaled terminal preview fills its positioned
   container and owns its frame, 1280×768 scaled canvas, and connecting fallback, which hides once
   the viewport connects or reconnects (HS2-148B5C). Containers tune only its public tokens:

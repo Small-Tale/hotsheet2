@@ -1,6 +1,7 @@
 import '@kerfjs/ui/nav-stack.css';
 import './terminal-ticket-rail.css';
 
+import { px } from '@kerfjs/ui/css-values';
 import { NavStack, type NavStackView } from '@kerfjs/ui/nav-stack';
 import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
@@ -79,20 +80,22 @@ export function terminalTicketRailPanel({
   const heading = searchScope?.allTickets ? (
     <ToolbarText text="All Tickets" size="xlarge-fixed" />
   ) : views.length ? (
-    <div class="terminal-ticket-rail__view">
+    <>
       {/* Kerf's view-title Select: a 36px trigger flush with the list below, its caret beside the
           label, and an inset focus ring the rail's clipping ancestors never crop (HS2-HEYASQ,
           HS2-DAMHD1). */}
       <Select
+        className="terminal-ticket-rail__view"
         presentation="title"
         focusRingInset
+        maxTriggerWidth={px(192)}
         name="terminal-rail-view"
         value={selectedViewId}
         ariaLabel="Ticket Rail View"
         choices={views.map((view) => ({ value: view.id, label: view.label }))}
         renderSelected={(choice) => <span>{choice.label}</span>}
       />
-    </div>
+    </>
   ) : (
     <ToolbarText text={title} size="xlarge-fixed" />
   );

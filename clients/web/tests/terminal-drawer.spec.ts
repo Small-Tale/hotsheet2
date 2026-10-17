@@ -77,28 +77,26 @@ for (const width of [1280, 390]) {
         .getByRole('region', { name: 'Terminal Tab States' })
         .locator('[data-component="terminal-drawer"]'),
       tab = (id: string) => states.locator(`[data-tab-kind="terminal"][data-terminal-id="${id}"]`);
-    await expect(tab('connected').locator('[data-ai-connection="connected"] [data-lucide="plug"]')).toBeVisible();
+    await expect(tab('connected')).toHaveAttribute('data-ai-connection', 'connected');
+    await expect(tab('connected').locator('[data-lucide="plug"]')).toBeVisible();
     await expect(tab('connected').locator('.terminal-drawer__busy-dot')).toBeVisible();
-    await expect(tab('connected').locator('.terminal-drawer__ai-connection')).toHaveAttribute(
-      'title',
+    await expect(tab('connected').locator('.terminal-drawer__ai-connection title')).toHaveText(
       /connected to Hot Sheet: its permission prompts come to the app and its hotsheet-mcp tools are connected\. Last trusted hook report: SessionStart at 2026-10-05T08:00:00Z/,
     );
     // HS2-670ADP: hooks without hotsheet-mcp are not fully connected, so the same badge shows unplug.
-    await expect(tab('mcp-missing').locator('[data-ai-connection="mcp_missing"] [data-lucide="unplug"]')).toBeVisible();
+    await expect(tab('mcp-missing')).toHaveAttribute('data-ai-connection', 'mcp_missing');
+    await expect(tab('mcp-missing').locator('[data-lucide="unplug"]')).toBeVisible();
     await expect(tab('mcp-missing').locator('.terminal-drawer__ai-connection')).toHaveAttribute(
       'aria-label',
       /^Claude is not fully connected to Hot Sheet: MCP not connected\./,
     );
-    await expect(tab('missing').locator('[data-ai-connection="missing"] [data-lucide="unplug"]')).toBeVisible();
-    await expect(tab('missing').locator('.terminal-drawer__ai-connection')).toHaveAttribute(
-      'title',
-      /Run \/hooks in Codex/,
-    );
-    await expect(tab('missing').locator('.terminal-drawer__ai-connection')).toHaveAttribute(
-      'title',
+    await expect(tab('missing')).toHaveAttribute('data-ai-connection', 'missing');
+    await expect(tab('missing').locator('[data-lucide="unplug"]')).toBeVisible();
+    await expect(tab('missing').locator('.terminal-drawer__ai-connection title')).toHaveText(/Run \/hooks in Codex/);
+    await expect(tab('missing').locator('.terminal-drawer__ai-connection title')).toHaveText(
       /Run hotsheet-cli hook-diagnose inside this terminal/,
     );
-    await expect(tab('halted').locator('.terminal-drawer__halt [data-lucide="triangle-alert"]')).toBeVisible();
+    await expect(tab('halted').locator('.terminal-drawer__halt[data-lucide="triangle-alert"]')).toBeVisible();
     // The status icons sit on the tab label's center line.
     for (const [id, name] of [
       ['connected', 'Connected'],
@@ -107,10 +105,11 @@ for (const width of [1280, 390]) {
     ] as const) {
       const [label, icon] = await Promise.all([
         tab(id).getByText(name, { exact: true }).boundingBox(),
-        tab(id).locator('.terminal-drawer__ai-connection svg').boundingBox(),
+        tab(id).locator('svg.terminal-drawer__ai-connection').boundingBox(),
       ]);
       expect(Math.abs(label!.y + label!.height / 2 - (icon!.y + icon!.height / 2))).toBeLessThanOrEqual(1.5);
     }
     await states.screenshot({ path: test.info().outputPath(`hs2-ev1xk3-tab-states-${width}.png`) });
+    await states.screenshot({ path: `target/visual-captures/hs2-9j6myj-tab-states-${width}.png` });
   });
 }

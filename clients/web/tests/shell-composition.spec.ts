@@ -150,7 +150,7 @@ test('composes the desktop shell, project strip, grid zoom, and magnified focus 
   await expect(strip).toHaveCSS('border-bottom-width', '1px');
 
   // The visibility Select is configured as a borderless toolbar trigger inside its control group.
-  const visibility = page.locator('.terminal-dashboard-controls__visibility-select [data-component="select"]');
+  const visibility = page.locator('[data-component="select"].terminal-dashboard-controls__visibility-select');
   await expect(visibility).toHaveAttribute('data-presentation', 'toolbar-borderless');
   await expect(visibility).toHaveAttribute('data-focus-ring-owner', 'group');
 
