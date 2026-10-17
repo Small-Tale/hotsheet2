@@ -302,6 +302,28 @@ fn shell_history_environment(
     command: &str,
     inherit: bool,
 ) -> std::io::Result<Vec<(String, String)>> {
+    let original = std::env::var_os("ZDOTDIR")
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(std::path::PathBuf::from));
+    shell_history_environment_with_startup_dir(
+        history_home,
+        project,
+        terminal_id,
+        command,
+        inherit,
+        original.as_deref(),
+    )
+}
+
+// Keep the real shell startup source injectable so tests never run a developer's dotfiles.
+fn shell_history_environment_with_startup_dir(
+    history_home: &FsPath,
+    project: &FsPath,
+    terminal_id: &str,
+    command: &str,
+    inherit: bool,
+    original: Option<&FsPath>,
+) -> std::io::Result<Vec<(String, String)>> {
     if inherit {
         return Ok(Vec::new());
     }
@@ -329,13 +351,9 @@ fn shell_history_environment(
             let zdotdir = directory.join("zdotdir");
             let history = directory.join("zsh_history");
             std::fs::create_dir_all(&zdotdir)?;
-            let original = std::env::var_os("ZDOTDIR")
-                .map(std::path::PathBuf::from)
-                .or_else(|| std::env::var_os("HOME").map(std::path::PathBuf::from));
             let quoted = |path: &FsPath| path.to_string_lossy().replace('\'', "'\\''");
             for name in [".zshenv", ".zprofile", ".zshrc", ".zlogin", ".zlogout"] {
                 let source = original
-                    .as_ref()
                     .map(|root| root.join(name))
                     .filter(|path| path != &zdotdir.join(name));
                 let source_line = source.map_or_else(String::new, |path| {
@@ -832,7 +850,9 @@ mod foreground_command_tests {
 
 #[cfg(test)]
 mod terminal_history_tests {
-    use super::{shell_command_args, shell_history_environment};
+    use super::{
+        shell_command_args, shell_history_environment, shell_history_environment_with_startup_dir,
+    };
 
     /// HS2-FQEESP: terminal history is rooted at the state's injected machine home, so two
     /// states in one process never share (or touch the real) `~/.hotsheet2` history.
@@ -886,8 +906,22 @@ mod terminal_history_tests {
             shell_history_environment(home.path(), &project_a, "two", "/bin/bash", false).unwrap();
         let bash_other_project =
             shell_history_environment(home.path(), &project_b, "one", "/bin/bash", false).unwrap();
-        let zsh =
-            shell_history_environment(home.path(), &project_a, "one", "/bin/zsh", false).unwrap();
+        let startup = home.path().join("original-zdotdir");
+        std::fs::create_dir(&startup).unwrap();
+        std::fs::write(
+            startup.join(".zshrc"),
+            "export HS2_HISTORY_TEST_STARTUP=loaded\n",
+        )
+        .unwrap();
+        let zsh = shell_history_environment_with_startup_dir(
+            home.path(),
+            &project_a,
+            "one",
+            "/bin/zsh",
+            false,
+            Some(&startup),
+        )
+        .unwrap();
         assert_eq!(bash_a, bash_again);
         assert_ne!(bash_a, bash_other_terminal);
         assert_ne!(bash_a, bash_other_project);
@@ -902,17 +936,28 @@ mod terminal_history_tests {
         );
         let zdotdir = zsh.iter().find(|(key, _)| key == "ZDOTDIR").unwrap();
         assert!(std::path::Path::new(&zdotdir.1).join(".zshrc").is_file());
+        assert!(
+            std::fs::read_to_string(std::path::Path::new(&zdotdir.1).join(".zshrc"))
+                .unwrap()
+                .contains(&format!("source '{}'", startup.join(".zshrc").display()))
+        );
         if std::path::Path::new("/bin/zsh").is_file() {
+            let histfile = &zsh.iter().find(|(key, _)| key == "HISTFILE").unwrap().1;
+            // Source our wrapper explicitly; an interactive login shell loads machine/user
+            // startup code and can stall this otherwise isolated history assertion.
             let output = std::process::Command::new("/bin/zsh")
-                .args(["-ic", "print -r -- $HISTFILE"])
+                .args([
+                    "-fc",
+                    "source \"$ZDOTDIR/.zshrc\"; print -r -- $HISTFILE; print -r -- $HS2_HISTORY_TEST_STARTUP",
+                ])
                 .envs(zsh.iter().cloned())
                 .output()
                 .unwrap();
             let printed = String::from_utf8_lossy(&output.stdout);
             assert_eq!(
-                printed.trim(),
-                zsh.iter().find(|(key, _)| key == "HISTFILE").unwrap().1
-            )
+                printed.lines().collect::<Vec<_>>(),
+                [histfile.as_str(), "loaded"]
+            );
         }
         assert!(
             std::path::Path::new(&bash_a[0].1)
