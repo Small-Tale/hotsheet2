@@ -250,3 +250,138 @@ fn recorded_codex_01621_session_queue_matches_the_push_adapter() {
         "{reason}"
     );
 }
+
+/// HS2-NTP52W / HS2-RGMJSP: a sanitized **live** Claude Code 2.1.302 capture driven exactly
+/// like the single-turn channel (stdin closed at the first `result`, read to EOF). The
+/// sub-agent tool is `Agent` and runs in the background by default, so its `tool_result`
+/// ("Async agent launched") arrives at once; Claude ends the first `result` while the sub-agent
+/// and the backgrounded Bash call still run, then starts its own follow-up turn (a second
+/// `system init`, `result.origin.kind = "task-notification"`). Only main-agent text is the
+/// reply, every call finishes on its result, and sub-agent work stays labelled narration.
+#[test]
+fn recorded_claude_21302_subagent_stream_maps_results_and_attributes_sub_agent_work() {
+    use hotsheet_aitools::TurnEvent;
+    use hotsheet_aitools::tool_progress::{ToolTransition, tool_transition};
+    let records: Vec<serde_json::Value> =
+        serde_json::from_str(include_str!("fixtures/claude-2.1.302-stream-subagent.json")).unwrap();
+    let events = hotsheet_aitools::claude_stream_events(&records);
+
+    let outputs = events
+        .iter()
+        .filter_map(|event| match event {
+            TurnEvent::Output(text) => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(outputs.len(), 3, "{outputs:#?}");
+    assert!(outputs[0].starts_with("Both have started"));
+    assert!(outputs[1].starts_with("The sub-agent has returned"));
+    assert_eq!(
+        outputs[2], "DONE",
+        "the self-started follow-up turn's reply"
+    );
+    assert!(
+        outputs.iter().all(|text| *text != "sub-agent-ran"),
+        "sub-agent text never joins the main reply"
+    );
+    let natives = events
+        .iter()
+        .filter_map(|event| match event {
+            TurnEvent::NativeActivity { payload, .. } => Some(payload),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let shape = natives
+        .iter()
+        .map(|payload| {
+            (
+                payload["hook_event_name"].as_str().unwrap(),
+                payload["tool_name"].as_str().unwrap_or(""),
+                payload["parent_tool_use_id"].as_str().unwrap_or(""),
+                payload["subtype"].as_str().unwrap_or(""),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        shape,
+        [
+            ("PreToolUse", "Bash", "", ""),
+            ("PreToolUse", "Agent", "", ""),
+            ("TaskNotification", "", "", "task_started"),
+            ("PostToolUse", "Agent", "", ""),
+            ("PreToolUse", "Bash", "toolu_2", ""),
+            ("TaskNotification", "", "", "task_progress"),
+            ("TaskNotification", "", "", "task_started"),
+            ("PostToolUse", "Bash", "", ""),
+            ("PostToolUse", "Bash", "toolu_2", ""),
+            ("SubagentMessage", "", "toolu_2", ""),
+            ("TaskNotification", "", "", "task_notification"),
+            ("TaskNotification", "", "", "task_notification"),
+            ("PreToolUse", "Read", "", ""),
+            ("PostToolUse", "Read", "", ""),
+        ],
+        "task_updated is not narrated; background_tasks_changed is not activity"
+    );
+    assert_eq!(natives[10]["status"], "completed");
+    assert_eq!(natives[10]["tool_use_id"], "toolu_2");
+    assert_eq!(natives[11]["tool_use_id"], "toolu_1");
+    let transitions = events
+        .iter()
+        .filter_map(tool_transition)
+        .collect::<Vec<_>>();
+    // The async Agent call and the backgrounded Bash call both finish on their immediate
+    // results; the sub-agent's own Bash call never opens a main-agent tool.
+    let started = |id: &str, name: &str| ToolTransition::Started {
+        id: Some(id.into()),
+        name: name.into(),
+    };
+    let finished = |id: &str, name: &str| ToolTransition::Finished {
+        id: Some(id.into()),
+        name: Some(name.into()),
+    };
+    assert_eq!(
+        transitions,
+        [
+            started("toolu_1", "Bash"),
+            started("toolu_2", "Agent"),
+            finished("toolu_2", "Agent"),
+            finished("toolu_1", "Bash"),
+            started("toolu_4", "Read"),
+            finished("toolu_4", "Read"),
+        ]
+    );
+    let summaries = natives
+        .iter()
+        .filter_map(|payload| {
+            hotsheet_ticketing::activity::claude_activity(
+                payload,
+                "event-redacted",
+                "time-redacted",
+            )
+            .map(|event| event.summary)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        summaries,
+        [
+            "claude ran `sleep 3; echo bg-done`",
+            "claude called Agent",
+            "claude started a background task: Run echo sub-agent-ran",
+            "claude ran `echo sub-agent-ran` (sub-agent)",
+            "claude background task update: Running Echo sub-agent-ran marker",
+            "claude started a background task: Sleep 3 seconds then echo bg-done",
+            "claude sub-agent: sub-agent-ran",
+            "claude background task completed: sub-agent-ran",
+            "claude background task completed: Background command \"Sleep 3 seconds then echo bg-done\" completed (exit code 0)",
+            "claude called Read",
+        ]
+    );
+    let dones = events
+        .iter()
+        .filter(|event| matches!(event, TurnEvent::Done(_)))
+        .count();
+    assert_eq!(
+        dones, 2,
+        "an early result plus the self-started follow-up result"
+    );
+}

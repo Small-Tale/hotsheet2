@@ -30,8 +30,27 @@ placeholder; the password and machine paths are removed.
 `claude-stream-subagent-synthetic.json` (HS2-RGMJSP) is **synthetic, not a live capture**: it
 is assembled from Claude Code's documented stream-json record shapes to pin the channel's
 mapping of `tool_result` echoes, `parent_tool_use_id` sub-agent records, a
-`run_in_background` Bash call, and background-task `system` notifications. Replace it with a
-sanitized live capture (and note any shape differences) when the creds-gated capture runs.
+`run_in_background` Bash call, and background-task `system` notifications. It stays as the
+foreground `Task` and failed-tool edge case beside the live capture below.
+
+`claude-2.1.302-stream-subagent.json` (HS2-NTP52W) is a sanitized **live** capture of
+`claude -p --input-format stream-json --output-format stream-json --verbose
+--include-hook-events --model haiku` driven like the single-turn channel (stdin closed at the
+first `result`, read to EOF). One turn ran a `run_in_background` Bash call and an `Agent`
+sub-agent. Shape differences from the synthetic cassette:
+
+- The sub-agent tool is `Agent`, and it runs in the background by default.
+- Sub-agent records add `agent_id`, `subagent_type`, and `task_description`.
+- Task records carry `tool_use_id`.
+- A `task_updated` `patch` precedes each `task_notification`, and `background_tasks_changed`
+  lists the live tasks.
+- The first `result` arrives while the background work still runs. Claude then self-starts a
+  follow-up turn (a second `system init`, `result.origin.kind = "task-notification"`) before
+  it exits.
+
+Hook records (from the capturing user's own global hooks), thinking-token estimates, and
+rate-limit events were dropped. Ids are aliased, and paths, signatures, timestamps, and
+session ids are redacted.
 
 HS2-MN865E adds `codex-0.162.1-thread-rejoin-failure.json`: what a read-only `thread/resume` rejoin of a
 Codex TUI thread received when the TUI turn failed on an invalid model (`turn/started`, `error

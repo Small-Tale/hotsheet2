@@ -1,0 +1,729 @@
+[
+ {
+  "type": "system",
+  "subtype": "init",
+  "session_id": "session-redacted",
+  "model": "claude-haiku-5-5",
+  "permissionMode": "acceptEdits",
+  "claude_code_version": "2.1.302"
+ },
+ {
+  "type": "assistant",
+  "message": {
+   "model": "claude-haiku-5-5",
+   "id": "msg_1",
+   "type": "message",
+   "role": "assistant",
+   "content": [
+    {
+     "type": "thinking",
+     "thinking": "",
+     "signature": ""
+    }
+   ],
+   "stop_reason": null,
+   "stop_sequence": null,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 12243,
+    "cache_read_input_tokens": 11508,
+    "output_tokens": 2
+   }
+  },
+  "parent_tool_use_id": null,
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "assistant",
+  "message": {
+   "model": "claude-haiku-5-5",
+   "id": "msg_1",
+   "type": "message",
+   "role": "assistant",
+   "content": [
+    {
+     "type": "tool_use",
+     "id": "toolu_1",
+     "name": "Bash",
+     "input": {
+      "command": "sleep 3; echo bg-done",
+      "description": "Sleep 3 seconds then echo bg-done",
+      "run_in_background": true
+     }
+    }
+   ],
+   "stop_reason": null,
+   "stop_sequence": null,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 12243,
+    "cache_read_input_tokens": 11508,
+    "output_tokens": 2
+   }
+  },
+  "parent_tool_use_id": null,
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "assistant",
+  "message": {
+   "model": "claude-haiku-5-5",
+   "id": "msg_1",
+   "type": "message",
+   "role": "assistant",
+   "content": [
+    {
+     "type": "tool_use",
+     "id": "toolu_2",
+     "name": "Agent",
+     "input": {
+      "description": "Run echo sub-agent-ran",
+      "subagent_type": "general-purpose",
+      "prompt": "Run the Bash command `echo sub-agent-ran` and reply with its output only."
+     }
+    }
+   ],
+   "stop_reason": null,
+   "stop_sequence": null,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 12243,
+    "cache_read_input_tokens": 11508,
+    "output_tokens": 2
+   }
+  },
+  "parent_tool_use_id": null,
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "system",
+  "subtype": "background_tasks_changed",
+  "tasks": [
+   {
+    "task_id": "task_1",
+    "run_id": "run_1",
+    "task_type": "local_agent",
+    "subagent_type": "general-purpose",
+    "description": "Run echo sub-agent-ran"
+   }
+  ],
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "system",
+  "subtype": "task_started",
+  "task_id": "task_1",
+  "run_id": "run_1",
+  "tool_use_id": "toolu_2",
+  "description": "Run echo sub-agent-ran",
+  "subagent_type": "general-purpose",
+  "is_backgrounded": true,
+  "spawn_depth": 1,
+  "task_type": "local_agent",
+  "prompt": "Run the Bash command `echo sub-agent-ran` and reply with its output only.",
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "user",
+  "message": {
+   "role": "user",
+   "content": [
+    {
+     "tool_use_id": "toolu_2",
+     "type": "tool_result",
+     "content": [
+      {
+       "type": "text",
+       "text": "Async agent launched successfully. (This tool result is internal metadata \u2014 never quote or paste any part of it, including the agentId below, into a user-facing reply.)\nagentId: task_1 (internal ID - do not mention to user. Use SendMessage with to: 'task_1', summary: '<5-10 word recap>' to continue this agent.)\nThe agent is working in the background. You will be notified automatically when it completes. You know nothing about its results until that notification arrives \u2014 do not report, assume, or predict them; continue other work or respond to the user in the meantime.\nDo not duplicate this agent's work \u2014 avoid working with the same files or topics it is using.\noutput_file: <redacted-path>\nDo NOT Read or tail this file via the shell tool \u2014 it is the full subagent JSONL transcript and reading it will overflow your context. If the user asks for progress, say the agent is still running; you'll get a completion notification."
+      }
+     ]
+    }
+   ]
+  },
+  "parent_tool_use_id": null,
+  "session_id": "session-redacted",
+  "tool_use_result": {
+   "isAsync": true,
+   "status": "async_launched",
+   "agentId": "task_1",
+   "description": "Run echo sub-agent-ran",
+   "resolvedModel": "claude-haiku-5-5",
+   "prompt": "Run the Bash command `echo sub-agent-ran` and reply with its output only.",
+   "outputFile": "<redacted-path>",
+   "canReadOutputFile": true,
+   "canContinueAgent": true
+  }
+ },
+ {
+  "type": "assistant",
+  "message": {
+   "model": "claude-haiku-5-5",
+   "id": "msg_2",
+   "type": "message",
+   "role": "assistant",
+   "content": [
+    {
+     "type": "tool_use",
+     "id": "toolu_3",
+     "name": "Bash",
+     "input": {
+      "command": "echo sub-agent-ran",
+      "description": "Echo sub-agent-ran marker"
+     }
+    }
+   ],
+   "stop_reason": null,
+   "stop_sequence": null,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 8361,
+    "cache_read_input_tokens": 7293,
+    "output_tokens": 17
+   }
+  },
+  "parent_tool_use_id": "toolu_2",
+  "agent_id": "task_1",
+  "session_id": "session-redacted",
+  "subagent_type": "general-purpose",
+  "task_description": "Run echo sub-agent-ran"
+ },
+ {
+  "type": "system",
+  "subtype": "task_progress",
+  "task_id": "task_1",
+  "run_id": "run_1",
+  "tool_use_id": "toolu_2",
+  "description": "Running Echo sub-agent-ran marker",
+  "subagent_type": "general-purpose",
+  "usage": {
+   "total_tokens": 15679,
+   "tool_uses": 1
+  },
+  "last_tool_name": "Bash",
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "system",
+  "subtype": "background_tasks_changed",
+  "tasks": [
+   {
+    "task_id": "task_1",
+    "run_id": "run_1",
+    "task_type": "local_agent",
+    "subagent_type": "general-purpose",
+    "description": "Run echo sub-agent-ran"
+   },
+   {
+    "task_id": "task_2",
+    "run_id": "run_2",
+    "task_type": "local_bash",
+    "description": "Sleep 3 seconds then echo bg-done"
+   }
+  ],
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "system",
+  "subtype": "task_started",
+  "task_id": "task_2",
+  "run_id": "run_2",
+  "tool_use_id": "toolu_1",
+  "description": "Sleep 3 seconds then echo bg-done",
+  "is_backgrounded": true,
+  "task_type": "local_bash",
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "user",
+  "message": {
+   "role": "user",
+   "content": [
+    {
+     "tool_use_id": "toolu_1",
+     "type": "tool_result",
+     "content": "Command running in background with ID: task_2. Output is being written to: <redacted-path> You will be notified when it completes. To check interim output, use Read on that file path.",
+     "is_error": false
+    }
+   ]
+  },
+  "parent_tool_use_id": null,
+  "session_id": "session-redacted",
+  "tool_use_result": {
+   "stdout": "",
+   "stderr": "",
+   "interrupted": false,
+   "isImage": false,
+   "noOutputExpected": false,
+   "backgroundTaskId": "task_2"
+  }
+ },
+ {
+  "type": "user",
+  "message": {
+   "role": "user",
+   "content": [
+    {
+     "tool_use_id": "toolu_3",
+     "type": "tool_result",
+     "content": "sub-agent-ran",
+     "is_error": false
+    }
+   ]
+  },
+  "parent_tool_use_id": "toolu_2",
+  "agent_id": "task_1",
+  "session_id": "session-redacted",
+  "subagent_type": "general-purpose",
+  "task_description": "Run echo sub-agent-ran"
+ },
+ {
+  "type": "assistant",
+  "message": {
+   "model": "claude-haiku-5-5",
+   "id": "msg_3",
+   "type": "message",
+   "role": "assistant",
+   "content": [
+    {
+     "type": "thinking",
+     "thinking": "",
+     "signature": ""
+    }
+   ],
+   "stop_reason": null,
+   "stop_sequence": null,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 689,
+    "cache_read_input_tokens": 15654,
+    "output_tokens": 6
+   }
+  },
+  "parent_tool_use_id": "toolu_2",
+  "agent_id": "task_1",
+  "session_id": "session-redacted",
+  "subagent_type": "general-purpose",
+  "task_description": "Run echo sub-agent-ran"
+ },
+ {
+  "type": "assistant",
+  "message": {
+   "model": "claude-haiku-5-5",
+   "id": "msg_3",
+   "type": "message",
+   "role": "assistant",
+   "content": [
+    {
+     "type": "text",
+     "text": "sub-agent-ran"
+    }
+   ],
+   "stop_reason": null,
+   "stop_sequence": null,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 689,
+    "cache_read_input_tokens": 15654,
+    "output_tokens": 6
+   }
+  },
+  "parent_tool_use_id": "toolu_2",
+  "agent_id": "task_1",
+  "session_id": "session-redacted",
+  "subagent_type": "general-purpose",
+  "task_description": "Run echo sub-agent-ran"
+ },
+ {
+  "type": "system",
+  "subtype": "task_updated",
+  "task_id": "task_1",
+  "run_id": "run_1",
+  "patch": {
+   "status": "completed"
+  },
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "system",
+  "subtype": "task_notification",
+  "task_id": "task_1",
+  "run_id": "run_1",
+  "tool_use_id": "toolu_2",
+  "status": "completed",
+  "summary": "sub-agent-ran",
+  "usage": {
+   "total_tokens": 16587,
+   "tool_uses": 1
+  },
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "system",
+  "subtype": "background_tasks_changed",
+  "tasks": [
+   {
+    "task_id": "task_2",
+    "run_id": "run_2",
+    "task_type": "local_bash",
+    "description": "Sleep 3 seconds then echo bg-done"
+   }
+  ],
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "assistant",
+  "message": {
+   "model": "claude-haiku-5-5",
+   "id": "msg_4",
+   "type": "message",
+   "role": "assistant",
+   "content": [
+    {
+     "type": "thinking",
+     "thinking": "",
+     "signature": ""
+    }
+   ],
+   "stop_reason": null,
+   "stop_sequence": null,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 1047,
+    "cache_read_input_tokens": 23751,
+    "output_tokens": 2
+   }
+  },
+  "parent_tool_use_id": null,
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "assistant",
+  "message": {
+   "model": "claude-haiku-5-5",
+   "id": "msg_4",
+   "type": "message",
+   "role": "assistant",
+   "content": [
+    {
+     "type": "text",
+     "text": "Both have started, and I'm waiting on them before replying:\n\n- **Background Bash** (`sleep 3; echo bg-done`) is running as task `task_2`.\n- **Sub-agent** (general-purpose, `echo sub-agent-ran`) is running in the background.\n\nI'll reply `DONE` once the sub-agent has returned and the background command's output is available."
+    }
+   ],
+   "stop_reason": null,
+   "stop_sequence": null,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 1047,
+    "cache_read_input_tokens": 23751,
+    "output_tokens": 2
+   }
+  },
+  "parent_tool_use_id": null,
+  "session_id": "session-redacted"
+ },
+ {
+  "duration_api_ms": 7631,
+  "stop_reason": "end_turn",
+  "session_id": "session-redacted",
+  "total_cost_usd": 0.0047921100000000005,
+  "usage": {
+   "input_tokens": 4,
+   "cache_creation_input_tokens": 13290,
+   "cache_read_input_tokens": 35259,
+   "output_tokens": 652,
+   "output_tokens_details": {
+    "thinking_tokens": 272
+   }
+  },
+  "modelUsage": {
+   "claude-haiku-5-5": {
+    "inputTokens": 8,
+    "outputTokens": 840,
+    "cacheReadInputTokens": 58206,
+    "cacheCreationInputTokens": 22340,
+    "webSearchRequests": 0,
+    "costUSD": 0.0047921100000000005,
+    "contextWindow": 1000000,
+    "maxOutputTokens": 128000,
+    "thinkingTokens": 361,
+    "canonicalModel": "claude-haiku-5-5",
+    "provider": "firstParty",
+    "costBasis": "list"
+   }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "subagent_stats": {
+   "spawned": 1,
+   "requested": {
+    "background": 0,
+    "foreground": 0,
+    "unset": 1
+   },
+   "started_in_background": 1,
+   "max_depth": 1,
+   "spawned_by_subagents": 0,
+   "completed": 1,
+   "failed": 0,
+   "killed": {
+    "parent": 0,
+    "user": 0,
+    "system": 0
+   },
+   "refused": {
+    "depth_limit": 0,
+    "concurrency_limit": 0,
+    "budget": 0
+   },
+   "by_type": {
+    "general-purpose": 1
+   }
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 3,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Both have started, and I'm waiting on them before replying:\n\n- **Background Bash** (`sleep 3; echo bg-done`) is running as task `task_2`.\n- **Sub-agent** (general-purpose, `echo sub-agent-ran`) is running in the background.\n\nI'll reply `DONE` once the sub-agent has returned and the background command's output is available.",
+  "type": "result",
+  "queued_turn_count": 0,
+  "result_index": 0
+ },
+ {
+  "type": "system",
+  "subtype": "init",
+  "session_id": "session-redacted",
+  "model": "claude-haiku-5-5",
+  "permissionMode": "acceptEdits",
+  "claude_code_version": "2.1.302"
+ },
+ {
+  "type": "system",
+  "subtype": "task_updated",
+  "task_id": "task_2",
+  "run_id": "run_2",
+  "patch": {
+   "status": "completed"
+  },
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "system",
+  "subtype": "task_notification",
+  "task_id": "task_2",
+  "run_id": "run_2",
+  "tool_use_id": "toolu_1",
+  "status": "completed",
+  "summary": "Background command \"Sleep 3 seconds then echo bg-done\" completed (exit code 0)",
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "system",
+  "subtype": "background_tasks_changed",
+  "tasks": [],
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "assistant",
+  "message": {
+   "model": "claude-haiku-5-5",
+   "id": "msg_5",
+   "type": "message",
+   "role": "assistant",
+   "content": [
+    {
+     "type": "thinking",
+     "thinking": "",
+     "signature": ""
+    }
+   ],
+   "stop_reason": null,
+   "stop_sequence": null,
+   "usage": {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 857,
+    "cache_read_input_tokens": 24798,
+    "output_tokens": 8
+   }
+  },
+  "parent_tool_use_id": null,
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "assistant",
+  "message": {
+   "model": "claude-haiku-5-5",
+   "id": "msg_5",
+   "type": "message",
+   "role": "assistant",
+   "content": [
+    {
+     "type": "text",
+     "text": "The sub-agent has returned. The background command's completion notification hasn't arrived yet, so I'll check its output file."
+    }
+   ],
+   "stop_reason": null,
+   "stop_sequence": null,
+   "usage": {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 857,
+    "cache_read_input_tokens": 24798,
+    "output_tokens": 8
+   }
+  },
+  "parent_tool_use_id": null,
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "assistant",
+  "message": {
+   "model": "claude-haiku-5-5",
+   "id": "msg_5",
+   "type": "message",
+   "role": "assistant",
+   "content": [
+    {
+     "type": "tool_use",
+     "id": "toolu_4",
+     "name": "Read",
+     "input": {
+      "file_path": "<redacted-path>"
+     }
+    }
+   ],
+   "stop_reason": null,
+   "stop_sequence": null,
+   "usage": {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 857,
+    "cache_read_input_tokens": 24798,
+    "output_tokens": 8
+   }
+  },
+  "parent_tool_use_id": null,
+  "session_id": "session-redacted"
+ },
+ {
+  "type": "user",
+  "message": {
+   "role": "user",
+   "content": [
+    {
+     "tool_use_id": "toolu_4",
+     "type": "tool_result",
+     "content": "1\tbg-done\n2\t\n3\t[exited with code 0]\n4\t"
+    }
+   ]
+  },
+  "parent_tool_use_id": null,
+  "session_id": "session-redacted",
+  "tool_use_result": {
+   "type": "text",
+   "file": {
+    "filePath": "<redacted-path>",
+    "content": "bg-done\n\n[exited with code 0]\n",
+    "numLines": 4,
+    "startLine": 1,
+    "totalLines": 4
+   }
+  }
+ },
+ {
+  "type": "assistant",
+  "message": {
+   "model": "claude-haiku-5-5",
+   "id": "msg_6",
+   "type": "message",
+   "role": "assistant",
+   "content": [
+    {
+     "type": "text",
+     "text": "DONE"
+    }
+   ],
+   "stop_reason": null,
+   "stop_sequence": null,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 761,
+    "cache_read_input_tokens": 25655,
+    "output_tokens": 5
+   }
+  },
+  "parent_tool_use_id": null,
+  "session_id": "session-redacted"
+ },
+ {
+  "duration_api_ms": 10479,
+  "stop_reason": "end_turn",
+  "session_id": "session-redacted",
+  "total_cost_usd": 0.00577084,
+  "usage": {
+   "input_tokens": 6,
+   "cache_creation_input_tokens": 1618,
+   "cache_read_input_tokens": 50453,
+   "output_tokens": 300,
+   "output_tokens_details": {
+    "thinking_tokens": 84
+   }
+  },
+  "modelUsage": {
+   "claude-haiku-5-5": {
+    "inputTokens": 14,
+    "outputTokens": 1140,
+    "cacheReadInputTokens": 108659,
+    "cacheCreationInputTokens": 23958,
+    "webSearchRequests": 0,
+    "costUSD": 0.00577084,
+    "contextWindow": 1000000,
+    "maxOutputTokens": 128000,
+    "thinkingTokens": 445,
+    "canonicalModel": "claude-haiku-5-5",
+    "provider": "firstParty",
+    "costBasis": "list"
+   }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "origin": {
+   "kind": "task-notification",
+   "producer": "session-task",
+   "runId": "run_1"
+  },
+  "subagent_stats": {
+   "spawned": 1,
+   "requested": {
+    "background": 0,
+    "foreground": 0,
+    "unset": 1
+   },
+   "started_in_background": 1,
+   "max_depth": 1,
+   "spawned_by_subagents": 0,
+   "completed": 1,
+   "failed": 0,
+   "killed": {
+    "parent": 0,
+    "user": 0,
+    "system": 0
+   },
+   "refused": {
+    "depth_limit": 0,
+    "concurrency_limit": 0,
+    "budget": 0
+   },
+   "by_type": {
+    "general-purpose": 1
+   }
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 2,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "DONE",
+  "type": "result",
+  "queued_turn_count": 0,
+  "result_index": 1
+ }
+]

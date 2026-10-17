@@ -383,15 +383,18 @@ fn tool_result_events(v: &Value, projection: &AssistantProjection) -> Vec<TurnEv
 }
 
 /// A background-task `system` record (`task_started`, `task_progress`, `task_notification`)
-/// as a `TaskNotification` event; other system records (init, compaction, status) are not
-/// activity.
+/// as a `TaskNotification` event; other system records (init, compaction, status,
+/// `background_tasks_changed`) are not activity. Claude 2.1.302 also emits `task_updated`
+/// (a bare `patch` such as `{status, end_time}`) immediately before the `task_notification`
+/// carrying the same status and a summary, so it is skipped rather than narrated twice
+/// (HS2-NTP52W live capture).
 fn task_notification_event(v: &Value) -> Option<TurnEvent> {
     let subtype = v.get("subtype").and_then(Value::as_str)?;
-    if !subtype.starts_with("task_") {
+    if !subtype.starts_with("task_") || subtype == "task_updated" {
         return None;
     }
     let mut payload = json!({ "hook_event_name": "TaskNotification", "subtype": subtype });
-    for key in ["task_id", "status", "task_type"] {
+    for key in ["task_id", "status", "task_type", "tool_use_id"] {
         if let Some(value) = v.get(key).and_then(Value::as_str) {
             payload[key] = Value::String(value.to_string());
         }

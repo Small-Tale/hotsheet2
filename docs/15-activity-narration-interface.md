@@ -205,10 +205,19 @@ client adapter, never a server dependency; other clients can inject another
   `parent_tool_use_id`, are summarized with a "(sub-agent)" suffix, and never open their own
   in-flight call. Background-task `system` records (`task_started`, `task_progress`,
   `task_notification`) become `TaskNotification` Notes ("claude background task completed:
-  …"); other `system` records (init, compaction) stay silent. These shapes follow Claude
-  Code's documented stream-json output and are pinned by a synthetic cassette
-  (`crates/hotsheet-aitools/tests/fixtures/claude-stream-subagent-synthetic.json`); a
-  creds-gated live capture to confirm them is tracked separately.
+  …"); other `system` records (init, compaction, `background_tasks_changed`) stay silent,
+  and `task_updated` (a bare status `patch` sent just before the matching
+  `task_notification`) is skipped so a finished task is narrated once. A live Claude Code
+  2.1.302 capture (HS2-NTP52W,
+  `crates/hotsheet-aitools/tests/fixtures/claude-2.1.302-stream-subagent.json`) confirmed
+  these shapes and pins them beside the original synthetic cassette. The sub-agent tool is
+  `Agent`. It runs in the background by default: its `tool_result` ("Async agent launched")
+  arrives at once, and sub-agent records also carry `agent_id`, `subagent_type`, and
+  `task_description`. Task records carry `tool_use_id`, which the payload keeps. Claude can
+  end a turn's first `result` while background work still runs. It then starts its own
+  follow-up turn (a new `system init`; `result.origin.kind = "task-notification"`) whose
+  reply belongs to the same single-turn process, so the channel drains it
+  ([13](13-drive-transport-interface.md)).
 - **Shipped (HS2-3GRNZW) — opt-in durable distillation:** bounded deterministic
   milestone windows, privacy-safe serializable summarizer requests, a pluggable local
   summarizer boundary, deterministic fallback, and provenance-derived idempotent
