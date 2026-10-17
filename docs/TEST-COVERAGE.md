@@ -818,6 +818,6 @@ identity and real-store persistence assertions still run in full.
 
 ### Read-only AI setup diagnosis (HS2-9N8KVR)
 
-| Behavior | Unit coverage | End-to-end coverage | Manual follow-up |
-| --- | --- | --- | --- |
+| Behavior                                                                                                                    | Unit coverage                                     | End-to-end coverage                                                                                                                              | Manual follow-up                                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Plan setup artifact changes and distinguish current, missing, outdated, preserved, and disabled integrations without writes | `crates/hotsheet-plugins/src/setup.rs` plan tests | `crates/hotsheet-cli/tests/cli.rs # setup_diagnose_is_read_only_and_predicts_refresh_paths` checks a byte-identical tree and refresh path parity | In a live Codex session, review `/hooks` after changed hook bytes and confirm its connection report; offline trust cannot be proven |
