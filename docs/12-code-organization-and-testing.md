@@ -204,6 +204,35 @@ optional sccache remains complementary because it can reuse compiler outputs acr
 two target directories. `cargo clean` removes the nested Clippy directory along with the
 rest of `target`.
 
+### 12.6.2.1 Build artifact retention and disk headroom
+
+Keep a separate Cargo `target/` for each active checkout, as described above. Before
+starting concurrent cold Rust builds, check free space with `df -h .` and measure the
+existing targets with `du -sh target` in each checkout. Reserve the greater of 100 GiB
+or 50 GiB plus twice the most recently observed growth of one cold worker target. If
+there is no useful growth measurement, run only one cold build at a time and measure
+its target before scheduling another. Recheck free space after each build. These are
+local scheduling limits, not reasons to remove source or diagnostic evidence.
+
+Retain an active checkout's artifacts while its tests, lint, server, or browser checks
+need those binaries. For a finished isolated worktree, first confirm its ticket commit
+is reachable from the shipping branch and pushed, required CI is green, and any logs or
+captures needed for the ticket are attached or stored outside `target/`. In that exact
+worktree, inspect `cargo clean --dry-run`, then run `cargo clean` to discard generated
+artifacts. Remove the finished worktree with `git worktree remove <path>`; its branch
+remains available. Apply the same integration and evidence checks before removing a
+separate scratch clone. Never leave a scratch clone as the only copy of an unintegrated
+commit.
+
+In the main checkout, keep warm binaries while space permits. If headroom falls below
+the reserve, measure `target/clippy` and `target/debug` separately. When no lint is
+running, inspect `cargo clean --target-dir target/clippy --dry-run` and then run the
+same command without `--dry-run` to reclaim the isolated Clippy artifacts. If that is
+insufficient and no development build is running, inspect and run `cargo clean
+--profile dev` in the same way; the next build will be cold. Recheck `df -h .` and
+update the cold-build growth estimate. Do not use broad `git clean` or delete an
+unscoped `target/`: ignored captures and other evidence may live there.
+
 ---
 
 ### 12.6.3 Web interaction ownership
