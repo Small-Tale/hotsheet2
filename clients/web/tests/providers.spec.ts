@@ -17678,7 +17678,7 @@ test('caps and discloses long mobile titles in the shipped inspector and reader 
   await expect(sidebar).toHaveAttribute('data-title-expanded', 'false');
   await page.setViewportSize({ width: 1280, height: 844 });
   await expect(sidebar.getByRole('button', { name: 'Show full title' })).toBeHidden();
-  expect(await sidebarTitle.evaluate(heightInLines)).toBeLessThanOrEqual(3.1);
+  expect(await sidebarTitle.evaluate((node) => getComputedStyle(node).webkitLineClamp)).toBe('none');
   await page.screenshot({ path: test.info().outputPath('hs2-11f5f7-app-wide-1280.png'), fullPage: true });
 });
 

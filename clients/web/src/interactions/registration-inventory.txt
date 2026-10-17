@@ -299,6 +299,7 @@ inspector-and-editor	delegate	document.body	'input'	'[name="ticket-conflict-reso
 inspector-and-editor	delegate	document.body	'focusout'	'[name="ticket-conflict-resolution"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="accept-remote-ticket-field"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="apply-ticket-field-merge"]'
+inspector-and-editor	delegate	document.body	'click'	'[data-action="toggle-ticket-title"]'
 inspector-and-editor	wireTicketTitleEditor	document.body
 inspector-and-editor	delegate	document.body	'keydown'	'[data-component="ticket-inspector-header"]'
 inspector-and-editor	delegate	document.body	'keydown'	'[data-component="ticket-inspector-body"]'
@@ -323,7 +324,6 @@ inspector-and-editor	delegate	document.body	'click'	'[data-action="open-ticket-r
 inspector-and-editor	delegate	document.body	'click'	'[data-action="respond-to-feedback"]'
 inspector-and-editor	delegateCapture	document.body	'wa-hide'	'[data-component="ticket-reader"]'
 inspector-and-editor	delegateCapture	document.body	'wa-after-hide'	'[data-component="ticket-reader"]'
-inspector-and-editor	delegate	document.body	'click'	'[data-action="toggle-ticket-title"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="toggle-reader-text-size"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="set-inspector-tab"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="open-code-review"]'
