@@ -90,7 +90,7 @@ async fn websocket_push_and_long_poll_fallback_share_one_replay_cursor() {
 async fn one_sync_socket_keeps_two_checkouts_present_and_closes_each_lease_separately() {
     let directory = tempfile::tempdir().unwrap();
     let primary =
-        FsStore::init(&directory.path().join("primary"), &StoreMetadata::new("HS")).unwrap();
+        FsStore::init(directory.path().join("primary"), &StoreMetadata::new("HS")).unwrap();
     let registry = directory.path().join("checkouts.json");
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
