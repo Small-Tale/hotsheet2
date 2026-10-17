@@ -750,6 +750,20 @@ impl FsStore {
         self.autocommit_impl(message, Some(paths))
     }
 
+    /// Queue one path-scoped Git commit without waiting for Git on the caller's thread.
+    /// The process-wide committer may combine it with other queued jobs for this store;
+    /// call [`flush_background_commits`] when the commit must be observable, including
+    /// before server shutdown. As with ordinary mutation commits, Git errors are
+    /// best-effort and do not undo ticket files already written.
+    pub fn queue_autocommit_paths(&self, message: &str, paths: &[PathBuf]) {
+        CommitJob {
+            store: self.clone().with_background_autocommit(),
+            message: message.to_owned(),
+            paths: paths.to_vec(),
+        }
+        .run();
+    }
+
     fn autocommit_impl(
         &self,
         message: &str,

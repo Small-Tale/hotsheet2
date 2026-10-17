@@ -1035,8 +1035,9 @@ deadline. The shared
   template, `waited_ms`, `in_use`, and `capacity`. `GET /health`
   reports the live pool as `api_offload: {in_use, capacity, waiting, long_waits}`.
   The checkout batch response includes `Server-Timing` measurements for admission,
-  ticket writes, Git commit, index refresh, event publication, worklist refresh, and total
-  handling time. These timings describe local server work; clients can measure their
+  ticket writes, Git commit enqueue, index refresh, event publication, worklist refresh, and total
+  handling time. The path-scoped Git commit runs on the process-wide background committer and is
+  flushed at shutdown; `git;dur` measures enqueue time, not commit completion. These timings describe local server work; clients can measure their
   subsequent page query separately.
   Aggressive fetch/rebase/merge-on-conflict is the sync engine (`docs/03`; HS2-19); the
   semantic merge driver (§2.7) resolves concurrent edits. Bounded `ls`/full-text reads and

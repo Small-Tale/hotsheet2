@@ -687,12 +687,9 @@ pub(crate) async fn batch_update_checkout_tickets(
             .map(|ticket| entry.store.ticket_path(&ticket.id))
             .collect::<Vec<_>>();
         let git_started = Instant::now();
-        if let Err(error) = entry
+        entry
             .store
-            .autocommit_paths("Update selected Hot Sheet tickets", &paths)
-        {
-            tracing::warn!(%error, "hotsheet batch autocommit failed");
-        }
+            .queue_autocommit_paths("Update selected Hot Sheet tickets", &paths);
         git_time += git_started.elapsed();
         let [index, events, worklist] = state.changed_many_in(&entry, "updated", &tickets);
         index_time += index;

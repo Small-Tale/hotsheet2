@@ -10055,6 +10055,117 @@ async fn repository_setup_initializes_only_the_checkout_and_preserves_existing_o
 }
 
 #[tokio::test]
+async fn checkout_batch_queues_one_path_scoped_commit_for_its_ticket_writes() {
+    let (store, state) = state();
+    let git = |args: &[&str]| {
+        let output = hotsheet_ticketing::git::command()
+            .arg("-C")
+            .arg(store.path())
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap()
+    };
+    git(&["init", "-q"]);
+    assert!(
+        FsStore::open(store.path())
+            .unwrap()
+            .autocommit("initial store")
+            .unwrap()
+    );
+
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(state.with_checkout_registry(registry.path().join("checkouts.json")));
+    let registration =
+        serde_json::json!({"root":checkout.path(),"alias":"batch-git","stores":[store.path()]});
+    let registered = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts",
+            Some(&registration.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(registered.status(), StatusCode::CREATED);
+
+    let mut ids = Vec::new();
+    for title in ["First batch ticket", "Second batch ticket"] {
+        let response = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/batch-git/tickets",
+                Some(&serde_json::json!({"title":title}).to_string()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        ids.push(
+            body_json(response).await["qualified_id"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+        );
+    }
+    hotsheet_ticketing::flush_background_commits();
+    let before = git(&["rev-list", "--count", "HEAD"])
+        .trim()
+        .parse::<usize>()
+        .unwrap();
+
+    let batch = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/batch-git/batch",
+            Some(
+                &serde_json::json!({"updates":[
+                    {"id":ids[0],"title":"First updated"},
+                    {"id":ids[1],"title":"Second updated"}
+                ]})
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(batch.status(), StatusCode::OK);
+    assert!(
+        batch
+            .headers()
+            .get("server-timing")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("git;dur=")
+    );
+    hotsheet_ticketing::flush_background_commits();
+
+    let after = git(&["rev-list", "--count", "HEAD"])
+        .trim()
+        .parse::<usize>()
+        .unwrap();
+    assert_eq!(
+        after,
+        before + 1,
+        "one batch should enqueue one commit for this store"
+    );
+    assert_eq!(
+        git(&["log", "-1", "--format=%s"]).trim(),
+        "Update selected Hot Sheet tickets"
+    );
+    let changed = git(&["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"]);
+    assert_eq!(changed.lines().count(), 2, "{changed}");
+    assert!(git(&["status", "--porcelain"]).trim().is_empty());
+}
+
+#[tokio::test]
 async fn checkout_ticket_routes_resolve_qualified_ids_for_notes_restore_assign_and_batch() {
     // Every checkout-scoped single-ticket handler shares one resolver, so the qualified
     // `connection:native` id the client sends (HS2-HX0VM9) works everywhere (HS2-QS9EQD).
