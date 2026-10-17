@@ -6541,6 +6541,11 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await page.screenshot({ path: test.info().outputPath('project-sidebar-command-hover.png') });
   // The conversation toggle exposes its pressed and disabled states through demo settings (HS2-PK67QK).
   const conversation = sidebar.getByRole('button', { name: 'Open Codex Conversation' });
+  await expect(conversation).toHaveAttribute('data-component', 'button');
+  await expect(conversation).toHaveCSS('cursor', 'pointer');
+  const toggleSize = await conversation.boundingBox();
+  expect(toggleSize?.width).toBe(44);
+  expect(toggleSize?.height).toBe(44);
   await page.locator('[data-action="toggle-settings"]').first().click();
   const settings = page.getByRole('complementary', { name: 'ProjectSidebar Settings' });
   await expect(settings).toBeVisible();
@@ -6551,7 +6556,15 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await settings.locator('wa-checkbox[name="conversation-disabled"]').click();
   await expect(conversation).toBeDisabled();
   await expect(conversation).toHaveCSS('cursor', 'not-allowed');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await conversation.scrollIntoViewIfNeeded();
   await page.screenshot({ path: test.info().outputPath('project-sidebar-conversation-states.png') });
+  await page.setViewportSize({ width: 390, height: 1000 });
+  await conversation.scrollIntoViewIfNeeded();
+  await expect(conversation).toBeInViewport();
+  await expect(conversation).toHaveCSS('cursor', 'not-allowed');
+  await page.screenshot({ path: test.info().outputPath('project-sidebar-conversation-disabled-phone.png') });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await settings.locator('wa-checkbox[name="conversation-disabled"]').click();
   await conversation.click();
   await expect(conversation).toHaveAttribute('aria-pressed', 'false');

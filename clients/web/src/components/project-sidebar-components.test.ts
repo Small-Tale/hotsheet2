@@ -512,12 +512,18 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).not.toContain('name="drive-tool"');
     expect(markup).toContain('Drive with Codex');
     expect(markup).toContain('Choose Drive Provider, Model, and Effort');
-    expect(markup).toContain(
-      'data-action="open-conversation" aria-label="Open Codex Conversation" title="Open chat without starting the Hot Sheet workflow" aria-pressed="false"',
-    );
+    expect(markup).toContain('data-component="button"');
+    expect(markup).toContain('data-action="open-conversation"');
+    expect(markup).toContain('aria-label="Open Codex Conversation"');
+    expect(markup).toContain('title="Open chat without starting the Hot Sheet workflow"');
+    expect(markup).toContain('aria-pressed="false"');
+    expect(markup).not.toContain('project-sidebar__conversation"');
     expect(markup).not.toContain('aria-pressed="false" disabled');
-    expect(String(ProjectSidebar({ ...base, driveTool: 'claude', conversationOpen: true }))).toContain(
-      'aria-label="Open Claude Conversation"',
+    const opened = String(ProjectSidebar({ ...base, driveTool: 'claude', conversationOpen: true }));
+    expect(opened).toContain('aria-label="Open Claude Conversation"');
+    expect(opened).toContain('aria-pressed="true"');
+    expect(String(ProjectSidebar({ ...base, conversationDisabled: true }))).toMatch(
+      /data-action="open-conversation"[^>]*disabled/,
     );
     const options = String(
       ProjectSidebar({

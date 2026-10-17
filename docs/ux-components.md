@@ -281,7 +281,9 @@ already-loaded project tickets. Open is the active-work axis (exactly Not Starte
 Started; Backlog is excluded), while Up Next counts only workflow-open
 tickets carrying the Up Next flag. It updates with the same reactive ticket collection and
 does not introduce polling or another network request.
-The chat toggle beside Drive carries a solid, compact, danger-tone Kerf `Badge` with the unread AI
+The chat toggle beside Drive is Kerf's icon-only, rounded `Button` with a controlled pressed
+state and the disabled `not-allowed` cursor (KF-HJD6XB, HS2-Q5ZZFF). It carries a solid,
+compact, danger-tone Kerf `Badge` with the unread AI
 chat count (`99+` past 99) on its top-end corner. An app-owned wrapper places the badge, and its
 props configure it. The badge overhangs only the top edge because the rail's resize separator
 covers anything past the button's end. The demo's Unread chat messages setting shows none, 3, and

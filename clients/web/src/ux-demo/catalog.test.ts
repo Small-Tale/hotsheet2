@@ -264,6 +264,7 @@ describe('UX demo catalog', () => {
             !findDemo(id) &&
             ![
               'badge',
+              'button',
               'list',
               'list-action-row',
               'loading-spinner',
@@ -565,6 +566,7 @@ describe('UX demo catalog', () => {
 
   it('records the planned ProjectSidebar composition', () => {
     expect(findDemo('project-sidebar')?.uses).toEqual([
+      'button',
       'toolbar',
       'project-summary',
       'repository-summary',

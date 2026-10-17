@@ -19,27 +19,3 @@
   right: 0;
   pointer-events: none;
 }
-/* App-owned native toggle beside DriveControl until HS2-Q5ZZFF adopts a pressed Kerf Button
-   (formerly IconToggleButton, KF-HJD6XB). */
-.project-sidebar__conversation {
-  display: grid;
-  width: remify(44px);
-  min-width: remify(44px);
-  min-height: remify(44px);
-  padding: 0;
-  border: 0;
-  border-radius: remify(10px);
-  color: var(--wa-color-neutral-on-normal);
-  background: var(--wa-color-neutral-fill-normal);
-  cursor: pointer;
-  place-items: center;
-}
-.project-sidebar__conversation:hover,
-.project-sidebar__conversation[aria-pressed='true'] {
-  background: var(--wa-color-brand-fill-quiet);
-  color: var(--wa-color-brand-on-quiet);
-}
-.project-sidebar__conversation:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}

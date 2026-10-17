@@ -2,6 +2,7 @@ import '@kerfjs/ui/layout.css';
 import './project-sidebar.css';
 
 import { Badge } from '@kerfjs/ui/badge';
+import { Button } from '@kerfjs/ui/button';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Text } from '@kerfjs/ui/text';
@@ -113,19 +114,15 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
           />
         )}
         <span class="project-sidebar__conversation-anchor">
-          {/* Stays an app-owned native toggle: a pressed Kerf Button (formerly IconToggleButton) replaces it in
-              HS2-Q5ZZFF (KF-HJD6XB, HS2-TQDZET). */}
-          <button
-            type="button"
-            class="project-sidebar__conversation"
-            {...COMMANDS_AND_AI_ACTIONS.openConversation.attrs}
-            aria-label={`Open ${driveToolLabel} Conversation${unreadLabel ? `, ${unreadLabel}` : ''}`}
+          <Button
+            action={COMMANDS_AND_AI_ACTIONS.openConversation.value}
+            ariaLabel={`Open ${driveToolLabel} Conversation${unreadLabel ? `, ${unreadLabel}` : ''}`}
             title="Open chat without starting the Hot Sheet workflow"
-            aria-pressed={props.conversationOpen ? 'true' : 'false'}
+            icon={<LucideIcon size="s" icon={MessageSquare} name="message-square" />}
+            shape="rounded"
+            pressed={Boolean(props.conversationOpen)}
             disabled={props.conversationDisabled}
-          >
-            <LucideIcon size="s" icon={MessageSquare} name="message-square" />
-          </button>
+          />
           {unread > 0 && (
             // The button's accessible name already announces the count, so the badge is decorative.
             <span class="project-sidebar__conversation-badge" data-unread-count={String(unread)}>

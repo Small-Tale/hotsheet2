@@ -1172,7 +1172,7 @@
       "id": "project-sidebar",
       "name": "ProjectSidebar",
       "kind": "composition",
-      "purpose": "Project summary, repository state, views, commands, and drive controls.",
+      "purpose": "Project summary, repository state, views, commands, drive controls, and a Kerf chat toggle.",
       "useWhen": [
         "Hot Sheet needs project summary, repository state, views, commands, and drive controls."
       ],

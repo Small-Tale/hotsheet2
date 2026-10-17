@@ -54,6 +54,7 @@ export const demoCatalog: DemoCategory[] = [
       ]),
       cataloged('app-loading-indicator', ['state-banner', 'loading-spinner']),
       cataloged('project-sidebar', [
+        'button',
         'toolbar',
         'project-summary',
         'repository-summary',

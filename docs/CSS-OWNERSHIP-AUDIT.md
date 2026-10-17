@@ -77,7 +77,7 @@ All paths are repository-relative. **Current** means the primary's active scope;
 | `clients/web/src/components/project-close-dialog.css`         | Terminal preview aspect sizing is owned; intro/list-detail panes/empty/prose/error/actions are generic.                                                                                                                                                                         | Dialogs                                            |
 | `clients/web/src/components/project-dialog.css`               | Path/recovery/provider choices are owned; form layout/prose/recovery banner/remote rows are generic.                                                                                                                                                                            | Dialogs                                            |
 | `clients/web/src/components/project-setup-warning-banner.css` | Setup state is owned; hook-based flat StateBanner geometry needs public configuration.                                                                                                                                                                                          | Feedback                                           |
-| `clients/web/src/components/project-sidebar.css`              | HS2-302C76: layout wrappers now Kerf List; remaining: centered caption, DriveControl grid track, native conversation toggle (KF-HBWDHE).                                                                                                                                        | Shell/project                                      |
+| `clients/web/src/components/project-sidebar.css`              | HS2-Q5ZZFF: DriveControl grid track and unread Badge anchor remain; the chat toggle chrome is Kerf Button.                                                                                                                                                                      | Shell/project                                      |
 | `clients/web/src/components/project-statistics.css`           | HS2-3V3JY6: removed; Pane, kui-content and Text compose the page.                                                                                                                                                                                                               | Shell/project                                      |
 | `clients/web/src/components/project-summary.css`              | HS2-H0THQW: domain chart CSS, every rule justified; counts use Kerf Text; compact size is one rule.                                                                                                                                                                             | Shell/project; retain chart                        |
 | `clients/web/src/components/project-tab-bar.css`              | HS2-VMHN64: 4 justified strip rules (public TabBar tokens, surface/divider variants, mobile centering); selected-value layout uses Kerf Row/Text.                                                                                                                               | Shell/project                                      |
@@ -266,9 +266,9 @@ frame` insets its rows. Also retained are the phrasing-only copy grids inside ro
   unstyled wrapper. The `KUI-L004` profile exception for its options half is gone.
 - The project work summary is centered Kerf `Text` (`align="center"`), so its CSS rule is gone.
   The test hook is now `data-work-summary`.
-- The project sidebar chat toggle stays an app-owned native button: Kerf's pressed `Button` (formerly `IconToggleButton`) shows
-  the default cursor while disabled, not this app's not-allowed cursor (`KF-HJD6XB`; `HS2-Q5ZZFF`
-  adopts it).
+- The project sidebar chat toggle is a pressed Kerf `Button` (formerly `IconToggleButton`),
+  with Kerf's disabled `not-allowed` cursor (KF-HJD6XB, HS2-Q5ZZFF). The app CSS retains
+  only the Drive row and the unread Badge anchor.
 - Retained: the ProjectSummary chart tile (bar geometry), the project tab, tab bar, and close or
   open dialog geometry, the app shell safe areas, and the workspace header rules recorded in their
   manifest rows. Further shell, tab, and header chrome is tracked in `HS2-9TH4AC`.
