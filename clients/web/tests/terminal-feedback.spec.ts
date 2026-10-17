@@ -250,7 +250,9 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
-    tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]'),
+    tile = dashboard.locator(
+      'article.terminal-tile[data-terminal-key="terminal-feedback:nano"][data-magnified="false"]',
+    ),
     preview = tile.locator('[data-display-mode="scaled-preview"]'),
     geometry = (locator: typeof preview) =>
       locator.evaluate((element) => {
@@ -304,6 +306,7 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
       expect(value!.scaleSkew).toBeLessThan(0.001);
       return value!;
     };
+  await expect(tile).toHaveCount(1);
   await expect(preview).toHaveAttribute('data-grid-size', '80x24');
   await expect(preview).toHaveAttribute('data-pty-size', '80x24');
   await expect(preview).toHaveAttribute('data-sizing-focus', 'true');
@@ -339,9 +342,15 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   await expect(footerMenu.getByText('Hide Terminal')).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-rq290f-terminal-footer-menu-after.png', fullPage: true });
   await page.keyboard.press('Escape');
+  await expect(footerMenu).toBeHidden();
+  await expect(tile).toHaveCount(1);
   await tile.click();
   const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
     magnifiedViewport = magnified.locator('[data-display-mode="interactive"]');
+  await expect(tile).toHaveCount(1);
+  await expect(
+    magnified.locator('article.terminal-tile[data-terminal-key="terminal-feedback:nano"][data-magnified="true"]'),
+  ).toHaveCount(1);
   await expect(magnifiedViewport).not.toHaveAttribute('data-grid-policy', 'dashboard-80x24');
   await expect(magnifiedViewport).not.toHaveAttribute('data-grid-size', '80x24');
   await expect
