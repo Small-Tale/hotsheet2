@@ -16,7 +16,7 @@ export interface BulkTicketDialogBindings {
 }
 
 const dialogSelector =
-  '[data-component="bulk-tag-dialog"], [data-component="bulk-delete-dialog"], [data-component="empty-trash-dialog"]';
+  '[data-dialog-component="bulk-tag-dialog"], [data-dialog-component="bulk-delete-dialog"], [data-dialog-component="empty-trash-dialog"]';
 
 /** Wire the bulk tag, delete, and empty-trash dialog actions under `root`. */
 export function wireBulkTicketDialog(root: HTMLElement, bindings: BulkTicketDialogBindings): () => void {
@@ -53,8 +53,8 @@ export function wireBulkTicketDialog(root: HTMLElement, bindings: BulkTicketDial
     }),
   );
   lifetime.add(
-    delegate(root, 'wa-hide', dialogSelector, (event, target) => {
-      // A nested Web Awesome popup (tooltip, dropdown) also emits wa-hide; only the dialog's own counts.
+    delegate(root, 'kui-request-close', dialogSelector, (event, target) => {
+      // Only the dialog's own close request counts.
       if (event.target !== target) return;
       bindings.dismiss('hide');
     }),

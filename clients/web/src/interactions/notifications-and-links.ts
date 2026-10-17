@@ -211,9 +211,14 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'wa-hide', NOTIFICATIONS_AND_LINKS_TARGETS.ticketLinkChoiceDialog.selector, () => {
-      if (ticketLinkChoice.value) cancelTicketLinkChoice();
-    }),
+    delegateCapture(
+      document.body,
+      'kui-request-close',
+      NOTIFICATIONS_AND_LINKS_TARGETS.ticketLinkChoiceDialog.selector,
+      () => {
+        if (ticketLinkChoice.value) cancelTicketLinkChoice();
+      },
+    ),
   );
   return () => {
     lifetime.dispose();

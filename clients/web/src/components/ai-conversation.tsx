@@ -1,11 +1,8 @@
-import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './ai-conversation.css';
-import '@kerfjs/ui/surface-scaffold/register';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 
 import { Badge } from '@kerfjs/ui/badge';
 import { Chip } from '@kerfjs/ui/chip';
-import { Composer } from '@kerfjs/ui/composer';
 import { ContentItem } from '@kerfjs/ui/content-item';
 import { flex, px, rem, remify, uiColor } from '@kerfjs/ui/css-values';
 import { deviceClass } from '@kerfjs/ui/device-class';
@@ -13,6 +10,7 @@ import { EmptyState } from '@kerfjs/ui/empty-state';
 import { List } from '@kerfjs/ui/list';
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { MessageComposer } from '@kerfjs/ui/message-composer';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { StateBanner } from '@kerfjs/ui/state-banner';
@@ -507,7 +505,7 @@ export const VERY_SHORT_CHAT_HEIGHT = 320;
  * every message. A short chat is therefore compact: the banner shows its one-line form, the
  * "Click to select" hint row above the transcript steps aside while a turn's progress line shows
  * (it returns when the turn ends, and the selection bar still appears once messages are selected),
- * and the draft's growth is capped (it scrolls inside the Composer beyond that). A tall chat or the
+ * and the draft's growth is capped (it scrolls inside the MessageComposer beyond that). A tall chat or the
  * dialog keeps the full layout.
  */
 export function embeddedComposerLayout(availableHeight: number | undefined): {
@@ -696,7 +694,7 @@ export function AIConversation(props: AIConversationProps) {
     ),
     transcript = (
       // Kerf List is the transcript scroller: its block-end scrollClearance lets messages scroll
-      // beneath the floating Composer while the last one still rests above it. The dialog's
+      // beneath the floating MessageComposer while the last one still rests above it. The dialog's
       // DialogSurface footer publishes that clearance (KF-913AT2, HS2-HVZVEA); in the drawer the
       // measured composer form does (HS2-W0KJVQ). The app-owned content column keeps its own inset.
       <List
@@ -767,15 +765,11 @@ export function AIConversation(props: AIConversationProps) {
       />
     </div>
   ) : null;
-  // Kerf Composer owns the raised frame, focus-within border, and the auto-growing borderless field;
-  // `submitOnEnter` with `wireComposers` sends on Enter (KF-S5EG5K, HS2-94T958). The app form submits.
+  // Kerf MessageComposer owns the raised frame, focus-within border, and the auto-growing borderless field;
+  // `submitOnEnter` with `wireMessageComposers` sends on Enter (KF-S5EG5K, HS2-94T958). The app form submits.
   // No visible keyboard hint: the field announces Enter through `aria-keyshortcuts` (HS2-3VQSZD).
   const composer = readOnly ? null : (
-    <form
-      slot={presentation === 'dialog' ? 'footer' : undefined}
-      class="ai-conversation__composer"
-      {...COMMANDS_AND_AI_ACTIONS.sendConversationTurn.attrs}
-    >
+    <form class="ai-conversation__composer" {...COMMANDS_AND_AI_ACTIONS.sendConversationTurn.attrs}>
       {busy && turnProgress && (
         <ConversationTurnProgressLine
           progress={turnProgress}
@@ -784,7 +778,7 @@ export function AIConversation(props: AIConversationProps) {
           compact={formLayout.compact}
         />
       )}
-      <Composer
+      <MessageComposer
         label={`Message ${tool}`}
         name="conversation-draft"
         id={`ai-conversation-draft-${presentation}`}
@@ -793,7 +787,7 @@ export function AIConversation(props: AIConversationProps) {
         maxRows={formLayout.maxRows}
         disabled={busy}
         submitOnEnter
-        actions={
+        trailing={
           <wa-button
             class="ai-conversation__send"
             appearance="accent"
@@ -840,45 +834,35 @@ export function AIConversation(props: AIConversationProps) {
       bodyLayout="fill-last"
       footerPresentation="floating"
       footerOffset={handsetDevice().value ? remify(8) : remify(16)}
-      rootAttributes={{ 'data-key': 'ai-conversation-surface' }}
+      label={`${tool} conversation`}
+      lightDismiss
+      withoutHeader
+      className="ai-conversation"
+      rootAttributes={{
+        'data-key': 'ai-conversation',
+        ...COMMANDS_AND_AI_TARGETS.aiConversationDialog.attrs,
+        'data-read-only': String(readOnly),
+        'data-selection-id': selectionId,
+        'data-controlled-open': String(open),
+      }}
+      footer={composer ?? undefined}
     >
-      <wa-dialog
-        data-key="ai-conversation"
-        class="ai-conversation"
-        {...COMMANDS_AND_AI_TARGETS.aiConversation.attrs}
-        data-presentation="dialog"
-        data-read-only={String(readOnly)}
-        data-selection-id={selectionId}
-        label={`${tool} conversation`}
-        open={open || undefined}
-        data-controlled-open={String(open)}
-        light-dismiss
-        without-header
-        with-footer={!readOnly}
-      >
-        <Toolbar
-          dividerSides=""
-          leading={
-            <>
-              <ToolbarControlGroup single tileTone="brand">
-                <LucideIcon color={uiColor('brand-on-quiet')} icon={Bot} name="bot" />
-              </ToolbarControlGroup>
-              <ToolbarText
-                text={`${tool} Conversation`}
-                id="ai-conversation-title"
-                size="xlarge"
-                description={summary}
-              />
-            </>
-          }
-          trailing={<AIConversationToolbar {...props} presentation="dialog" />}
-        />
-        {foreground && <div class="ai-conversation__foreground">{foreground}</div>}
-        {savedNotice}
-        {selectionStatus}
-        {transcript}
-        {composer}
-      </wa-dialog>
+      <Toolbar
+        dividerSides=""
+        leading={
+          <>
+            <ToolbarControlGroup single tileTone="brand">
+              <LucideIcon color={uiColor('brand-on-quiet')} icon={Bot} name="bot" />
+            </ToolbarControlGroup>
+            <ToolbarText text={`${tool} Conversation`} id="ai-conversation-title" size="xlarge" description={summary} />
+          </>
+        }
+        trailing={<AIConversationToolbar {...props} presentation="dialog" />}
+      />
+      {foreground && <div class="ai-conversation__foreground">{foreground}</div>}
+      {savedNotice}
+      {selectionStatus}
+      {transcript}
     </DialogSurface>
   );
 }

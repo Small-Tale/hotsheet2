@@ -42,7 +42,7 @@ const render = (selectedId: string = 'grid') =>
   );
 describe('TerminalDrawer', () => {
   it('keeps the grid tab fixed while the shared tab strip overflows', () => {
-    // Kerf's pinned AppTab owns the sticky treatment; the app adds no rule or class (HS2-WF3W6A).
+    // Kerf's pinned TabBarItem owns the sticky treatment; the app adds no rule or class (HS2-WF3W6A).
     const css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8');
     expect(css).toContain("@import '@kerfjs/ui/tab-bar.css'");
     expect(css).not.toContain('terminal-drawer__grid-tab');
@@ -82,8 +82,8 @@ describe('TerminalDrawer', () => {
   });
   it('sizes terminal names from their content instead of reserving icon-width name space', () => {
     const markup = render();
-    expect(markup).toContain('class="kui-app-tab terminal-tab"');
-    expect(markup).toMatch(/class="kui-app-tab terminal-tab"[^>]*style="[^"]*144px"/);
+    expect(markup).toContain('class="kui-tab-bar-item terminal-tab"');
+    expect(markup).toMatch(/class="kui-tab-bar-item terminal-tab"[^>]*style="[^"]*144px"/);
     expect(markup).toContain('data-size="compact"');
   });
   it('renders a manual Kerf tab bar with adjacent creation and a far-edge hide action', () => {
@@ -101,11 +101,11 @@ describe('TerminalDrawer', () => {
     expect(markup).not.toContain('data-lucide="grid-3x3"');
     expect(markup).toMatch(/data-kui-tab-list[\s\S]*Terminal 2[\s\S]*kui-tab-bar__trailing[\s\S]*New Drawer Item/);
     expect(markup).toMatch(/kui-tab-bar__end[\s\S]*terminal-drawer__actions[\s\S]*Hide Terminal Drawer/);
-    expect(markup).toContain('data-component="app-tab"');
+    expect(markup).toContain('data-component="tab-bar-item"');
     expect(markup).toContain('data-tab-kind="terminal"');
     expect(markup).toContain('draggable="true"');
     expect(markup).toContain('tabindex="0"');
-    expect(markup).toContain('class="kui-app-tab');
+    expect(markup).toContain('class="kui-tab-bar-item');
     expect(markup).toContain('data-action="close-terminal-tab"');
     expect(markup.indexOf('Terminal 1')).toBeLessThan(markup.indexOf('aria-label="Busy"'));
     for (const action of ['select-drawer-item', 'toggle-terminal-drawer', 'toggle-terminal-drawer-maximize'])
@@ -135,7 +135,7 @@ describe('TerminalDrawer', () => {
         }),
       );
     expect(chat).toContain('data-mode="ai-chat"');
-    expect(chat).toContain('data-component="app-tab"');
+    expect(chat).toContain('data-component="tab-bar-item"');
     expect(chat).toContain('data-action="close-ai-chat-tab"');
     expect(chat).toContain('data-presentation="embedded"');
     for (const item of ['Terminal', 'AI shell', 'AI Chat', 'Saved Conversation…']) expect(chat).toContain(item);
@@ -148,7 +148,7 @@ describe('TerminalDrawer', () => {
     expect(chat).not.toContain('terminal-drawer__create-menu');
     expect(chat).not.toContain('data-component="list-header"');
     expect(chat).not.toContain('data-lucide="chevron-right"');
-    expect(chat.match(/<wa-dropdown-item/g)).toHaveLength(4);
+    expect(chat.match(/class="kui-popup-menu__item"/g)).toHaveLength(4);
   });
   it('shows the selected chat toolbar controls in the tab toolbar, not a title bar (HS2-DMH8MX, HS2-59F7WK)', () => {
     const conversation: AIConversationProps = {
@@ -200,7 +200,11 @@ describe('TerminalDrawer', () => {
     expect(content).not.toContain('Claude conversation');
     expect(content).not.toContain('data-component="conversation-model-control"');
     expect(content).not.toContain('data-action="save-conversation"');
-    expect(content).not.toContain('data-component="toolbar"');
+    // The only Toolbar in the body is the MessageComposer's own action row (Kerf beta.106).
+    expect(content.match(/data-component="toolbar"/g)).toHaveLength(1);
+    expect(content).toMatch(
+      /data-component="message-composer"[^]*?<footer class="kui-toolbar" data-component="toolbar"/,
+    );
     // A terminal or the grid shows no chat controls.
     expect(drawer('one')).not.toContain('data-component="conversation-model-control"');
     expect(drawer('grid')).not.toContain('data-action="save-conversation"');
@@ -313,11 +317,11 @@ describe('TerminalDrawer', () => {
 
   it('reserves the shared trailing tab slot whether or not a terminal has state', () => {
     const markup = render();
-    expect(markup.match(/kui-app-tab__trailing/g)).toHaveLength(2);
+    expect(markup.match(/kui-tab-bar-item__trailing/g)).toHaveLength(2);
     expect(markup).toMatch(
-      /Terminal 1<\/span><span class="kui-app-tab__trailing"><svg[^>]*class="[^"]*terminal-drawer__busy-dot[^"]*"/,
+      /Terminal 1<\/span><span class="kui-tab-bar-item__trailing"><svg[^>]*class="[^"]*terminal-drawer__busy-dot[^"]*"/,
     );
-    expect(markup).toMatch(/Terminal 2<\/span><span class="kui-app-tab__trailing"><\/span>/);
+    expect(markup).toMatch(/Terminal 2<\/span><span class="kui-tab-bar-item__trailing"><\/span>/);
   });
   it('describes the rail double-click state', () => {
     const markup = String(

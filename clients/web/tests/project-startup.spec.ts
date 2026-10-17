@@ -320,7 +320,7 @@ test('opens remembered projects concurrently, wires original order, and restores
   await page.evaluate(() => {
     document.documentElement.dataset.theme = 'dark';
   });
-  await expect(page.getByRole('combobox', { name: 'Project', exact: true })).toHaveValue('beta');
+  await expect(page.getByRole('combobox', { name: 'Project', exact: true })).toContainText('beta');
   await page.locator('[data-component="app-shell"]').evaluate(async (node) => {
     await Promise.all(
       node
@@ -358,7 +358,7 @@ test('shows the active project while other remembered projects are still opening
   await expect
     .poll(() => tabHosts.evaluateAll((items) => items.map((item) => item.getAttribute('data-project-pending'))))
     .toEqual(['true', 'false', 'true']);
-  // Kerf's named pending AppTab keeps the name as the visible and accessible name, busy, with close
+  // Kerf's named pending TabBarItem keeps the name as the visible and accessible name, busy, with close
   // and drag off (HS2-XGSSK1).
   const alphaPending = tabHosts.nth(0);
   await expect(alphaPending.getByRole('tab', { name: 'alpha', exact: true })).toBeEnabled();
@@ -389,7 +389,7 @@ test('shows the active project while other remembered projects are still opening
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('.project-tab-bar--mobile')).toBeVisible();
   await expect(opening).toBeVisible();
-  await expect(page.locator('wa-select[name="mobile-project"]')).toHaveJSProperty(
+  await expect(page.locator('kui-select[name="mobile-project"]')).toHaveJSProperty(
     'value',
     `pending:${rootFor('alpha')}`,
   );
@@ -454,7 +454,7 @@ test('keeps each failed root and recovery identity, then recovers the selected t
   await expect(page.locator('.project-tab-bar--mobile')).toBeVisible();
   await expect(page.getByRole('tab', { name: 'beta', exact: true })).toBeHidden();
   await expect(failure).toBeVisible();
-  await expect(page.locator('wa-select[name="mobile-project"]')).toBeVisible();
+  await expect(page.locator('kui-select[name="mobile-project"]')).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-rsx13q-restore-failure-390.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
   fixture.unavailable.delete('beta');
@@ -538,7 +538,7 @@ test('activates a passive tab after closing the active project, then opens again
   await page.getByRole('tab', { name: /^beta/ }).hover();
   await page.getByRole('button', { name: 'Close beta', exact: true }).click();
   await page
-    .locator('[data-component="project-close-dialog"]')
+    .locator('[data-dialog-component="project-close-dialog"]')
     .getByRole('button', { name: 'Close Project', exact: true })
     .click();
   await expect(page.getByRole('tab', { name: /^gamma/ })).toHaveAttribute('aria-selected', 'true');
@@ -550,7 +550,7 @@ test('activates a passive tab after closing the active project, then opens again
     await page.getByRole('tab', { name: new RegExp(`^${name}`) }).hover();
     await page.getByRole('button', { name: `Close ${name}`, exact: true }).click();
     await page
-      .locator('[data-component="project-close-dialog"]')
+      .locator('[data-dialog-component="project-close-dialog"]')
       .getByRole('button', { name: 'Close Project', exact: true })
       .click();
     await expect(page.getByRole('tab', { name: new RegExp(`^${name}`) })).toHaveCount(0);

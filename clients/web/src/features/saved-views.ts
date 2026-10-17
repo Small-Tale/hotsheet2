@@ -2,6 +2,7 @@ import { effect, type Signal, signal } from 'kerfjs';
 
 import { Api, type CustomView } from '../api';
 import type { SavedViewContextMenuState } from '../components/view-navigation';
+import { syncControlledOpen } from '../controlled-open';
 import { flushDraftInputs } from '../draft-input-coalescing';
 import { type InlineSearchToken, orderedSearchText } from '../inline-search';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
@@ -52,7 +53,7 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
     savedViewDeleteTargetId = signal<string | undefined>(undefined),
     savedViewDeleteBusy = signal(false),
     savedViewDeleteError = signal('');
-  // Kerf's managed TokenSearchModel owns the dialog's query text, chips, and tag completion
+  // Kerf's managed SearchFieldModel owns the dialog's query text, chips, and tag completion
   // (HS2-5JXBQY); `savedViewQuery`/`savedViewQueryTokens` are projections of its state.
   const savedViewSearchModel = createTicketSearchModel({
     tags: availableSearchTags,
@@ -120,7 +121,7 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
   }
   /** Replace the trailing uncommitted filter text matched by `pattern` with a chip at that position. */
   function focusSavedViewQuery(offset?: number) {
-    restoreInlineSearchCaret(document, '[data-token-search-editor="saved-view-query"]', offset);
+    restoreInlineSearchCaret(document, '[data-search-field-editor="saved-view-query"]', offset);
   }
   async function saveSavedView(form: HTMLFormElement) {
     const current = project();
@@ -166,9 +167,9 @@ export function createSavedViewsController(dependencies: SavedViewsControllerDep
     savedViewDeleteBusy.value = false;
     savedViewDeleteError.value = '';
     requestAnimationFrame(() =>
-      requestAnimationFrame(() =>
-        document.querySelector<Control>('[data-component="saved-view-delete-dialog"]')?.show?.(),
-      ),
+      requestAnimationFrame(() => {
+        syncControlledOpen(document);
+      }),
     );
   }
   function closeSavedViewDelete() {

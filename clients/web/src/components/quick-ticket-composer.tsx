@@ -1,13 +1,12 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
-import '@awesome.me/webawesome/dist/components/option/option.js';
 import '@awesome.me/webawesome/dist/styles/utilities/visually-hidden.css';
 import './quick-ticket-composer.css';
 
+import { Button } from '@kerfjs/ui/button';
 import { foregroundColorVar } from '@kerfjs/ui/css-values';
 import { FileDropZone, FilePickerTrigger } from '@kerfjs/ui/file-picker';
-import { IconButton } from '@kerfjs/ui/icon-button';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
@@ -17,6 +16,7 @@ import { Paperclip, Plus, Star, Trash2, TriangleAlert, Upload } from 'lucide';
 
 import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
 import { SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
+import { quietWebAwesomeNativeDialog } from '../wa-dialog-semantics';
 import { TicketCategorySelect } from './ticket-category-select';
 
 /** The warning foreground of the composer's attachment notices. */
@@ -74,8 +74,8 @@ export function showQuickTicketComposer(root: ParentNode): boolean {
     requestAnimationFrame(() => showQuickTicketComposer(root));
     return false;
   }
-  const nativeDialog = dialog.shadowRoot?.querySelector('dialog');
-  if (nativeDialog) nativeDialog.setAttribute('role', 'presentation');
+  // The host is the one exposed dialog; Web Awesome 3.14 would also label the shadow dialog.
+  const nativeDialog = quietWebAwesomeNativeDialog(dialog);
   if (dialog.open && (!nativeDialog || nativeDialog.open)) return false;
   void dialog.show();
   return true;
@@ -244,14 +244,13 @@ export function QuickTicketComposer({
                   <div class="quick-ticket-composer__attachment" data-pending-attachment-id={item.id}>
                     <LucideIcon size={14.4} icon={Paperclip} name="paperclip" />
                     <span title={item.name}>{item.name}</span>
-                    <IconButton
-                      icon={Trash2}
-                      iconName="trash-2"
-                      label={`Remove ${item.name}`}
+                    <Button
+                      icon={<LucideIcon icon={Trash2} name="trash-2" />}
+                      ariaLabel={`Remove ${item.name}`}
                       action={SEARCH_AND_COMPOSER_ACTIONS.removeNewTicketAttachment.value}
-                      appearance="plain"
-                      variant="danger"
-                      size="xs"
+                      emphasis="plain"
+                      tone="danger"
+                      size="compact"
                       rootAttributes={{ 'data-pending-attachment-id': item.id }}
                     />
                   </div>
@@ -305,7 +304,7 @@ export function QuickTicketComposer({
                 </Text>
                 <Select
                   name="new-ticket-source"
-                  ariaLabel="Ticket source"
+                  ariaLabel="Ticket Source"
                   value={source ?? sources[0].value}
                   choices={sources}
                   size="compact"

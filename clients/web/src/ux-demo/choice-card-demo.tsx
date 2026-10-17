@@ -81,7 +81,7 @@ export function ChoiceCardSettings() {
     <DemoSettingsForm settings="choice-card">
       <Select
         name="type"
-        label="Input type"
+        label="Input Type"
         value={choiceCardSettings.type.value}
         choices={(['radio', 'checkbox'] as const).map((value) => ({ value, label: value }))}
       />

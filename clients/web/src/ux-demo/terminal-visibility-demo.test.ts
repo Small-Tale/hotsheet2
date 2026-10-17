@@ -33,10 +33,14 @@ describe('TerminalVisibilityDialog demo', () => {
     closeTerminalVisibilityDemo();
     const closed = String(TerminalVisibilityDialogDemo());
     expect(closed).toContain('Manage Workspace Visibility');
-    expect(closed).not.toMatch(/data-terminal-visibility-dialog[^>]*\sopen/);
+    expect(closed).toMatch(/data-terminal-visibility-dialog=""[^>]*data-controlled-open="false"/);
     showTerminalVisibilityDemo();
-    expect(String(TerminalVisibilityDialogDemo())).toMatch(/data-terminal-visibility-dialog[^>]*\sopen/);
+    expect(String(TerminalVisibilityDialogDemo())).toMatch(
+      /data-terminal-visibility-dialog=""[^>]*data-controlled-open="true"/,
+    );
     closeTerminalVisibilityDemo();
-    expect(String(TerminalVisibilityDialogDemo())).not.toMatch(/data-terminal-visibility-dialog[^>]*\sopen/);
+    expect(String(TerminalVisibilityDialogDemo())).not.toMatch(
+      /data-terminal-visibility-dialog=""[^>]*data-controlled-open="true"/,
+    );
   });
 });

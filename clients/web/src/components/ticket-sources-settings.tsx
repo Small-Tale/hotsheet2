@@ -181,7 +181,7 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
             <Grid minColumnWidth={rem(22)} autoFill>
               <Select
                 name="project-default-source"
-                label="Default source"
+                label="Default Source"
                 value={defaultSource?.connectionId ?? ''}
                 choices={sources.map((source) => ({
                   value: source.connectionId,

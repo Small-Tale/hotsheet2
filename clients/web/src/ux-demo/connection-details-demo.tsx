@@ -95,7 +95,7 @@ export function ConnectionDetailsDialogSettings() {
     <DemoSettingsForm settings="connection-details-dialog">
       <Select
         name="scenario"
-        label="Compatibility scenario"
+        label="Compatibility Scenario"
         value={connectionDetailsScenario.value}
         choices={[
           { value: 'source-stale', label: 'Source build is stale.' },

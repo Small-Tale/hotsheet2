@@ -27,8 +27,8 @@ describe('CommandRunDialog demo (HS2-CWWX7S, HS2-Z7C27E)', () => {
 
   it('renders the run-output presentation by default and offers both presentations', () => {
     const markup = String(CommandRunDialogDemo());
-    expect(markup).toContain('data-component="command-run-dialog"');
-    expect(markup).toMatch(/<wa-dialog[^>]* open/);
+    expect(markup).toContain('data-dialog-component="command-run-dialog"');
+    expect(markup).toMatch(/<dialog[^>]*data-controlled-open="true"[^>]*class="kui-dialog-surface"/);
     expect(markup).not.toContain('command-cancellation-dialog');
     expect(markup).toContain('All checks passed in 4.2s');
     const settings = String(CommandRunDialogSettings());
@@ -41,12 +41,12 @@ describe('CommandRunDialog demo (HS2-CWWX7S, HS2-Z7C27E)', () => {
     setCommandRunDialogPresentation('stop');
     expect(commandRunDialogSettings.open.value).toBe(true);
     const markup = String(CommandRunDialogDemo());
-    expect(markup).toContain('data-component="command-cancellation-dialog"');
+    expect(markup).toContain('data-dialog-component="command-cancellation-dialog"');
     expect(markup).toContain('data-run-id="run-43"');
 
     dismissCommandRunDialogDemo();
     expect(commandRunDialogSettings.open.value).toBe(false);
-    expect(String(CommandRunDialogDemo())).not.toContain('<wa-dialog');
+    expect(String(CommandRunDialogDemo())).not.toContain('<dialog');
     expect(commandRunDialogSettings.event.value).toBe('Kept Run checks running');
 
     setCommandRunDialogPresentation('stop');
@@ -57,7 +57,7 @@ describe('CommandRunDialog demo (HS2-CWWX7S, HS2-Z7C27E)', () => {
     expect(commandRunDialogSettings.event.value).toBe('Stop requested for run-43');
   });
 
-  it('ignores a repeated dismiss (a wa-hide after a button close) instead of rewriting the event', () => {
+  it('ignores a repeated dismiss (a close request after a button close) instead of rewriting the event', () => {
     confirmStopCommandRunDemo('run-43');
     dismissCommandRunDialogDemo();
     expect(commandRunDialogSettings.event.value).toBe('Stop requested for run-43');

@@ -1,5 +1,8 @@
 import '@kerfjs/ui/select/register';
 import '@kerfjs/ui/popup-menu/register';
+// DialogSurface close requests and chrome measurement, from the browser entry only: the register
+// touches the document as it loads (Kerf UI 5.0.0-beta.106), which node-environment unit tests lack.
+import '@kerfjs/ui/surface-scaffold/register';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
@@ -9,6 +12,7 @@ import '@kerfjs/ui/webawesome.css';
 import './hot-sheet-tokens.css';
 import './style.css';
 
+import { wireChoiceChips } from '@kerfjs/ui/wire-choice-chips';
 import { wireCornerStatus } from '@kerfjs/ui/wire-corner-status';
 import { wireResizableRegions } from '@kerfjs/ui/wire-resizable-regions';
 import { wireScrollDividers } from '@kerfjs/ui/wire-scroll-dividers';
@@ -27,3 +31,6 @@ void wireCornerStatus(appRoot);
 // SplitView's documented wiring contract (Repository Status list-detail, HS2-3B8345). Its split is not
 // resizable today, so there is no size to persist; a future resizable region commits through here.
 void wireResizableRegions(appRoot, { onCommit: () => undefined });
+// ChoiceChips' documented wiring (Kerf beta.106): a `multiple: true` group's listbox selection. The
+// app's multi-choice groups are `multiple: 'toggle'` checkboxes today, which need none (HS2-BH7NZ4).
+void wireChoiceChips(appRoot);

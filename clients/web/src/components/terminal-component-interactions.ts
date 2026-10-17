@@ -100,7 +100,7 @@ export function wireTerminalClipboardSheets(root: HTMLElement, bindings: Termina
     }),
   );
   lifetime.add(
-    delegate(root, 'wa-hide', TERMINALS_TARGETS.terminalCopyDialog.selector, () => {
+    delegate(root, 'kui-request-close', TERMINALS_TARGETS.terminalCopyDialog.selector, () => {
       bindings.closeCopy();
     }),
   );
@@ -118,7 +118,7 @@ export function wireTerminalClipboardSheets(root: HTMLElement, bindings: Termina
     }),
   );
   lifetime.add(
-    delegate(root, 'wa-hide', TERMINALS_TARGETS.terminalPasteDialog.selector, () => {
+    delegate(root, 'kui-request-close', TERMINALS_TARGETS.terminalPasteDialog.selector, () => {
       bindings.closePaste();
     }),
   );

@@ -43,7 +43,9 @@ describe('isSidePanelPortal (HS2-5APX20)', () => {
     ({ matches: (selector: string) => selector.split(', ').some((part) => own.includes(part)) }) as unknown as Node;
 
   it('keeps a phone side panel open for the menus and dialogs it launches', () => {
+    // `dialog` covers a Kerf DialogSurface, a native <dialog> without a role attribute (HS2-BH7NZ4).
     for (const own of [
+      'dialog',
       'wa-dialog',
       'wa-drawer',
       '[role="dialog"]',

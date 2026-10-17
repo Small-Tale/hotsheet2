@@ -66,7 +66,7 @@ test('copies all terminal text or a selection from the phone copy sheet', async 
   await page.screenshot({ path: test.info().outputPath('hs2-frb545-focus-clipboard-pill.png') });
 
   await pill.getByRole('button', { name: 'Copy Terminal Text' }).tap();
-  const sheet = page.locator('[data-component="terminal-copy-dialog"]'),
+  const sheet = page.locator('[data-dialog-component="terminal-copy-dialog"]'),
     field = sheet.getByRole('textbox', { name: 'Terminal text' });
   await expect(sheet).toHaveJSProperty('open', true);
   await expect(field).toHaveJSProperty('readOnly', true);
@@ -125,7 +125,7 @@ test('pastes the clipboard into the phone terminal and keeps sticky modifiers of
   await drawer.getByRole('group', { name: 'Clipboard' }).getByRole('button', { name: 'Paste' }).tap();
   // xterm normalizes pasted newlines to carriage returns, as a desktop paste does.
   await expect.poll(async () => (await sentInput(page)).slice(before)).toEqual(['echo hi\rls']);
-  await expect(page.locator('[data-component="terminal-paste-dialog"]')).toHaveJSProperty('open', false);
+  await expect(page.locator('[data-dialog-component="terminal-paste-dialog"]')).toHaveJSProperty('open', false);
   await expect(textarea).toBeFocused();
 
   // With the keyboard up, the key bar's Fn row carries the same actions without scrolling.
@@ -167,7 +167,7 @@ test('falls back to a paste sheet when clipboard reading is denied or unavailabl
     });
   });
   const { drawer, textarea } = await openFocusedDrawerTerminal(page);
-  const sheet = page.locator('[data-component="terminal-paste-dialog"]'),
+  const sheet = page.locator('[data-dialog-component="terminal-paste-dialog"]'),
     field = sheet.getByRole('textbox', { name: 'Text to paste' });
   await drawer.getByRole('group', { name: 'Clipboard' }).getByRole('button', { name: 'Paste' }).tap();
   await expect(sheet).toHaveJSProperty('open', true);
@@ -245,7 +245,7 @@ test('copies and pastes from the phone magnified terminal Toolbar', async ({ pag
   });
   await page.screenshot({ path: test.info().outputPath('hs2-frb545-magnified-toolbar-390.png') });
   await footer.getByRole('button', { name: 'Copy Terminal Text' }).tap();
-  const sheet = page.locator('[data-component="terminal-copy-dialog"]');
+  const sheet = page.locator('[data-dialog-component="terminal-copy-dialog"]');
   await expect(sheet.getByRole('textbox', { name: 'Terminal text' })).toHaveValue(/GNU nano 8\.4/);
   await expect(sheet).toContainText('select part of Nano');
   await sheet.getByRole('button', { name: 'Done' }).tap();
@@ -326,7 +326,7 @@ test('opens the terminal edit menu on a long-press and copies and pastes through
   // Copy Text… opens the HS2-FRB545 copy sheet for this terminal.
   await copyItem.tap();
   await expect(menu).toHaveCount(0);
-  const sheet = page.locator('[data-component="terminal-copy-dialog"]');
+  const sheet = page.locator('[data-dialog-component="terminal-copy-dialog"]');
   await expect(sheet).toHaveJSProperty('open', true);
   await expect(sheet.getByRole('textbox', { name: 'Terminal text' })).toHaveValue(/GNU nano 8\.4/);
   await sheet.getByRole('button', { name: 'Done' }).tap();
@@ -391,7 +391,7 @@ test.describe('desktop', () => {
     await expect(page.locator('[data-action="copy-terminal-text"], [data-action="paste-terminal-text"]')).toHaveCount(
       0,
     );
-    await expect(page.locator('[data-component="terminal-copy-dialog"]')).toHaveJSProperty('open', false);
+    await expect(page.locator('[data-dialog-component="terminal-copy-dialog"]')).toHaveJSProperty('open', false);
     await page.screenshot({ path: test.info().outputPath('hs2-frb545-desktop-1280.png') });
   });
 });
@@ -432,7 +432,7 @@ test.describe('touch tablet at a desktop width', () => {
     await page.screenshot({ path: test.info().outputPath('hs2-5dhhpv-drawer-rail-1180.png') });
 
     await railCopy.tap();
-    const sheet = page.locator('[data-component="terminal-copy-dialog"]');
+    const sheet = page.locator('[data-dialog-component="terminal-copy-dialog"]');
     await expect(sheet).toHaveJSProperty('open', true);
     await expect(sheet.getByRole('textbox', { name: 'Terminal text' })).toHaveValue(/GNU nano 8\.4/);
     await sheet.getByRole('button', { name: 'Copy', exact: true }).tap();
@@ -606,14 +606,15 @@ test('selects a range of terminal text with a long-press and drag, and copies it
   await page.touchscreen.tap(screen.x + 8, screen.y + 8);
   await expect(menu).toHaveCount(0);
   await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
-  // Escape dismisses it too while the focused terminal holds the keyboard, and never reaches the shell
-  // as ESC (HS2-B06X7Y).
+  // Escape dismisses it too and never reaches the shell as ESC (HS2-B06X7Y). Kerf's menu takes the
+  // keyboard while open (beta.106) and hands it back to the focused terminal once dismissed.
   await touchSelect(page, { x: screen.x + screen.width - 4, y: screen.y + screen.height - 4 });
   await expect(menu.getByRole('menuitem', { name: 'Paste' })).toBeVisible();
-  await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();
+  await expect.poll(() => menu.evaluate((node) => node.contains(document.activeElement))).toBe(true);
   const sentBefore = (await sentInput(page)).length;
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
+  await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();
   await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
   expect((await sentInput(page)).slice(sentBefore)).toEqual([]);
   // With the menu closed, Escape is the terminal's again.

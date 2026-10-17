@@ -11,10 +11,10 @@ interface Limits {
 }
 
 async function choose(page: Page, name: string, value: string) {
-  const select = page.locator(`wa-select[name="${name}"]`);
-  await select.locator('[part~="combobox"]').click();
-  await expect(select).toHaveJSProperty('open', true);
-  await select.locator(`wa-option[value="${value}"]`).click();
+  const select = page.locator(`kui-select[name="${name}"]`);
+  await select.locator('.kui-select__trigger').click();
+  await expect(select).toHaveAttribute('open', '');
+  await select.locator(`.kui-select__option[data-value="${value}"]`).click();
   await expect(select).toHaveJSProperty('value', value);
 }
 
@@ -42,7 +42,7 @@ test('saves machine-wide terminal limits and sizes terminals opened afterward', 
     await page.getByLabel('Settings View').click();
     await page.getByRole('button', { name: 'Terminal memory', exact: true }).click();
     const settings = page.locator('[data-component="terminal-memory-settings"]'),
-      history = page.locator('wa-select[name="terminal-history-lines"]');
+      history = page.locator('kui-select[name="terminal-history-lines"]');
     await expect(settings.getByRole('heading', { name: 'Terminal memory' })).toBeVisible();
     await expect(history).toHaveJSProperty('value', 'default');
     await expect(history).toContainText(`Default (${initial.defaults.history_lines.toLocaleString('en-US')} lines)`);
@@ -55,7 +55,7 @@ test('saves machine-wide terminal limits and sizes terminals opened afterward', 
     const saved = await server.request<Limits>('/terminal-limits');
     // The unset replay follows the configured history, so a reconnect restores what the client keeps.
     expect(saved.effective.replay_bytes).toBe(10_000 * 192);
-    await expect(page.locator('wa-select[name="terminal-replay-bytes"]')).toContainText('Default (1.8 MB)');
+    await expect(page.locator('kui-select[name="terminal-replay-bytes"]')).toContainText('Default (1.8 MB)');
 
     await choose(page, 'terminal-warm-terminals', '4');
     await expect.poll(async () => (await server.request<Limits>('/terminal-limits')).configured.warm_terminals).toBe(4);
@@ -94,7 +94,10 @@ test('lays out every Terminal memory state without overflow at wide and phone wi
     await expect(examples).toHaveCount(6);
     await expect(page.locator('[data-role="terminal-limits-conservative"]')).toHaveCount(1);
     // The CLI-set 8,000-line history is listed and selected although it is not a preset.
-    await expect(examples.nth(1).locator('wa-select[name="terminal-history-lines"]')).toHaveJSProperty('value', '8000');
+    await expect(examples.nth(1).locator('kui-select[name="terminal-history-lines"]')).toHaveJSProperty(
+      'value',
+      '8000',
+    );
     for (const example of await examples.all()) {
       const box = (await example.boundingBox())!;
       expect(box.x).toBeGreaterThanOrEqual(0);

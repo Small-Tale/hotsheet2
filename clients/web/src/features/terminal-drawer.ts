@@ -118,7 +118,7 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
               ? drawer?.querySelector<HTMLElement>('[data-item-id="grid"]')
               : [...(drawer?.querySelectorAll<HTMLElement>('[data-tab-id]') ?? [])]
                   .find((item) => item.dataset.tabId === id)
-                  ?.querySelector<HTMLElement>('.kui-app-tab__select');
+                  ?.querySelector<HTMLElement>('.kui-tab-bar-item__select');
         tab?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         if (drawerTabFocusRequestStillOwned(scheduled, document.activeElement, document.body)) tab?.focus();
       }),

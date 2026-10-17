@@ -32,12 +32,13 @@ export function wireWorkspaceHeaderActions(root: HTMLElement, bindings: Workspac
     bindings.sort(nextWorkspaceSort(current.sort, current.direction, choice));
   };
   lifetime.add(
-    delegate(root, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, target) => {
-      sortBy((target as HTMLElement & { value: string }).value as WorkspaceSort);
+    // A click, not `change`, so choosing the current sort again still reverses its direction.
+    delegate(root, 'click', 'kui-select[name="workspace-sort"] .kui-select__option', (_event, target) => {
+      sortBy((target as HTMLElement).dataset.value as WorkspaceSort);
     }),
   );
   lifetime.add(
-    delegate(root, 'wa-select', '[data-workspace-overflow]', (event) => {
+    delegate(root, 'kui-menu-select', '[data-workspace-overflow]', (event) => {
       const item = (event as CustomEvent<{ item: HTMLElement }>).detail.item,
         { workspaceOverflowAction: action, viewMode, workspaceSort } = item.dataset;
       if (action === 'toggle-selected-up-next') bindings.toggleSelectedUpNext();

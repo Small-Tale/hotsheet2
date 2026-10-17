@@ -18,6 +18,28 @@
       }
     }
   ],
+  "preferences": {
+    "action-button": {
+      "preferred": "@kerfjs/ui:button",
+      "avoid": [],
+      "rationale": "Kerf 5.0.0-beta.106 discourages wa-button; Hot Sheet still renders raw wa-button until HS2-TQ88K4 adopts Kerf Button, then restores this avoid list."
+    },
+    "text-entry": {
+      "preferred": "@kerfjs/ui:text-field",
+      "avoid": [],
+      "rationale": "Kerf 5.0.0-beta.106 discourages wa-input and wa-textarea; HS2-SKD293 adopts Kerf TextField, then restores this avoid list."
+    },
+    "boolean-option": {
+      "preferred": "@kerfjs/ui:checkbox",
+      "avoid": [],
+      "rationale": "Kerf 5.0.0-beta.106 discourages wa-checkbox; HS2-SKD293 adopts Kerf Checkbox, then restores this avoid list."
+    },
+    "compact-progress": {
+      "preferred": "@kerfjs/ui:progress-ring",
+      "avoid": [],
+      "rationale": "Kerf 5.0.0-beta.106 discourages wa-progress-ring; HS2-SKD293 adopts Kerf ProgressRing, then restores this avoid list."
+    }
+  },
   "exceptions": [
     {
       "id": "web-awesome-ai-conversation-parts",
@@ -312,6 +334,12 @@
       "rules": ["KUI-L004"],
       "target": "src/components/halted-session-popup.tsx",
       "rationale": "Reviewed HS2-SWY32A: design: halted-session-popup__question adds room inside the bordered question group, while halted-session-popup__free-text supplies the text field's own input inset; both are visible and intentional in wide and phone captures."
+    },
+    {
+      "id": "message-composer-trailing-zone",
+      "rules": ["KUI-L203"],
+      "target": "src/components/ai-conversation.tsx",
+      "rationale": "Kerf beta.106's composition catalog still declares MessageComposer's removed actions zone, so a correct trailing prop reads as empty (KF-Z00DKT); remove once it ships."
     }
   ]
 }

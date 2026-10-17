@@ -111,12 +111,12 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'wa-hide', '[data-remote-project-dialog]', () => {
+    delegate(document.body, 'kui-request-close', '[data-remote-project-dialog]', () => {
       remoteProjectDialogOpen.value = false;
     }),
   );
   lifetime.add(
-    delegate(document.body, 'wa-hide', '[data-project-dialog]', () => {
+    delegate(document.body, 'kui-request-close', '[data-project-dialog]', () => {
       unhealthyServerRecovery.value = undefined;
       projectDialogOpen.value = false;
     }),

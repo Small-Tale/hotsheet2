@@ -127,7 +127,7 @@ import { syncFocusedDraftControl } from '../focused-draft-sync';
 import { projectHaltedSessions } from '../halted-sessions';
 import { effectiveSearch, type InlineSearchToken, orderedSearchText } from '../inline-search';
 import { beginInteractionTiming } from '../interaction-performance';
-import type { Control, DetailsFinishTask, NotWorkingTarget, PendingEvidence, Project } from '../interactions/types';
+import type { DetailsFinishTask, NotWorkingTarget, PendingEvidence, Project } from '../interactions/types';
 import { stringArray, tryParseJson } from '../json-value';
 import { isAppleShortcutPlatform, loadShortcutOverrides, type ShortcutChord } from '../keyboard-shortcuts';
 import { localBridge } from '../local-bridge-client';
@@ -2771,8 +2771,9 @@ export async function startHotSheetWebClient() {
     waitUntilSafe: async () => {
       for (let open = openMetadataPopup(); open; open = openMetadataPopup())
         await new Promise<void>((resolve) => {
+          // A popover's `toggle` fires (on the popover itself) once it has closed.
           open.addEventListener(
-            'wa-after-hide',
+            'toggle',
             () => {
               resolve();
             },
@@ -2926,10 +2927,11 @@ export async function startHotSheetWebClient() {
         };
     }
   }
+  // An open Select listbox or inspector status menu: Kerf popovers in the top layer (@kerfjs/ui beta.106).
   const openMetadataPopup = () =>
-    [...document.querySelectorAll<Control>('wa-select, wa-dropdown[data-inspector-status-menu]')].find(
-      (node) => node.open,
-    );
+    document.querySelector<HTMLElement>(
+      'kui-select > .kui-select__popup:popover-open, [data-inspector-status-menu] > .kui-popup-menu__menu:popover-open',
+    ) ?? undefined;
   function beginLocalTicketMutation() {
     // A refresh may already have passed the barrier and be waiting on an older
     // ticket snapshot. Invalidate that active-project response before applying
@@ -4612,12 +4614,6 @@ export async function startHotSheetWebClient() {
     },
     set ticketLinkReturnFocus(value) {
       ticketLinkReturnFocus = value;
-    },
-    get manualModelDialogShown() {
-      return aiConfigurationController.manualModelDialogShown;
-    },
-    set manualModelDialogShown(value) {
-      aiConfigurationController.manualModelDialogShown = value;
     },
     get permissionCountdown() {
       return permissionsController.permissionCountdown;

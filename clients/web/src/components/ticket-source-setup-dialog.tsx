@@ -553,7 +553,7 @@ export function TicketSourceSetupDialog({
         <div data-demo-ticket-source-scenario>
           <Select
             name="scenario"
-            label="Preview dialog state"
+            label="Preview Dialog State"
             value={previewScenario}
             choices={previewScenarioChoices}
           />

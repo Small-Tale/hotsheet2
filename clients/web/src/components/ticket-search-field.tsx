@@ -1,14 +1,14 @@
 import './ticket-search-field.css';
-import '@kerfjs/ui/token-search-field.css';
+import '@kerfjs/ui/search-field.css';
 
 import { Chip } from '@kerfjs/ui/chip';
 import { flex, rem } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
+import { SearchField } from '@kerfjs/ui/search-field';
+import { createSearchFieldModel, type SearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { Text } from '@kerfjs/ui/text';
-import { TokenSearchField } from '@kerfjs/ui/token-search-field';
-import { createTokenSearchModel, type TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { computed, type ReadonlySignal } from 'kerfjs';
 import { action } from 'kerfjs/actions';
@@ -18,7 +18,7 @@ import { activeDatePrefix } from '../inline-search';
 
 /**
  * Delegated action specs every TicketSearchField renders (markup spreads `.attrs`; handlers
- * register `.selector`; Kerf's TokenSearchField takes the `.value` names). Each action element sits inside
+ * register `.selector`; Kerf's SearchField takes the `.value` names). Each action element sits inside
  * the field's `.ticket-search-field` group, so a handler resolves the owning field through
  * `ticketSearchFieldId` instead of a per-consumer action name (HS2-N5G6JS). Chip edit, chip
  * removal, and clear are Kerf's managed model actions (HS2-5JXBQY); the app's handlers for
@@ -36,7 +36,7 @@ export const TICKET_SEARCH_ACTIONS = {
 
 // Kerf keeps a collapsible field visually open while its model has content. A disabled
 // field shows an empty display model so it can close without clearing the real query.
-const disabledCollapsedModel = createTokenSearchModel();
+const disabledCollapsedModel = createSearchFieldModel();
 
 /** Native input names inside a field's date helper, resolved relative to that field. */
 export const TICKET_SEARCH_DATE_INPUT = 'ticket-search-date';
@@ -49,9 +49,9 @@ export interface TicketSearchFieldProps {
   /**
    * The Kerf-managed search model (`createTicketSearchModel`): it owns the query text, the
    * committed chips, the `tag:` suggestions, and the edit/remove/clear actions; register it under
-   * the same id in `wireTokenSearchFields({ models })`.
+   * the same id in `wireSearchFields({ models })`.
    */
-  model: TokenSearchModel;
+  model: SearchFieldModel;
   placeholder?: string;
   disabled?: boolean;
   autofocus?: boolean;
@@ -89,8 +89,8 @@ const localSearchDateTimeExample = new Intl.DateTimeFormat(undefined, {
 export function ticketSearchFieldId(target: Element): string | undefined {
   return (
     target.closest<HTMLElement>('[data-ticket-search-for]')?.dataset.ticketSearchFor ??
-    target.closest<HTMLElement>('.ticket-search-field')?.querySelector<HTMLElement>('[data-token-search-id]')?.dataset
-      .tokenSearchId
+    target.closest<HTMLElement>('.ticket-search-field')?.querySelector<HTMLElement>('[data-search-field-id]')?.dataset
+      .searchFieldId
   );
 }
 
@@ -155,7 +155,7 @@ export function TicketSearchHelp({ id }: { id: string }) {
     <div
       class="ticket-search-surfaces ticket-search-field__help"
       data-ticket-search-for={id}
-      data-token-search-keep-open
+      data-search-field-keep-open
     >
       <List gap="xs">
         <List gap="2xs">
@@ -215,7 +215,7 @@ export function TicketSearchDateHelper({ id, prefix }: { id: string; prefix: str
       role="group"
       aria-label="Date and time helper"
       data-ticket-search-for={id}
-      data-token-search-keep-open
+      data-search-field-keep-open
     >
       {/* Web Awesome owns the date and time fields and the Apply button (HS2-HEXGFB). */}
       <wa-input name={TICKET_SEARCH_DATE_INPUT} type="date" label="Date" size="small" />
@@ -241,7 +241,7 @@ function TicketSearchSurfaceState({
   helpOpen,
 }: {
   id: string;
-  model: TokenSearchModel;
+  model: SearchFieldModel;
   open: boolean;
   helpOpen: boolean;
 }) {
@@ -257,14 +257,14 @@ function TicketSearchSurfaceState({
   );
 }
 
-const typedDatePrefixes = new WeakMap<TokenSearchModel, ReadonlySignal<string>>();
+const typedDatePrefixes = new WeakMap<SearchFieldModel, ReadonlySignal<string>>();
 
 /**
  * The lifecycle date filter being typed, bound straight onto the surface marker's attribute: the
  * field's render never reads the per-keystroke model state, so typing does not re-render the host
  * (HS2-X72PD6). One stable `computed` per model keeps the binding from going stale.
  */
-function typedDatePrefix(model: TokenSearchModel): ReadonlySignal<string> {
+function typedDatePrefix(model: SearchFieldModel): ReadonlySignal<string> {
   let prefix = typedDatePrefixes.get(model);
   if (!prefix) {
     prefix = computed(() => activeDatePrefix(model.state.value.query) ?? '');
@@ -275,7 +275,7 @@ function typedDatePrefix(model: TokenSearchModel): ReadonlySignal<string> {
 
 /**
  * The syntax-help disclosure as Kerf's compact trailing action (KF-R056AJ, HS2-P1689S): Kerf sizes,
- * shapes, and states it like the clear button; `data-token-search-keep-open` keeps the field's
+ * shapes, and states it like the clear button; `data-search-field-keep-open` keeps the field's
  * surfaces open while it is pressed.
  */
 function ticketSearchHelpTrailing(help: boolean, open: boolean) {
@@ -287,7 +287,7 @@ function ticketSearchHelpTrailing(help: boolean, open: boolean) {
           action: TICKET_SEARCH_ACTIONS.toggleHelp.value,
           expanded: open,
           haspopup: 'dialog' as const,
-          attributes: { 'data-token-search-keep-open': '' },
+          attributes: { 'data-search-field-keep-open': '' },
         },
       }
     : {};
@@ -298,8 +298,8 @@ export interface TicketSearchFormFieldProps {
   id: string;
   /** Visible form label (Kerf renders it with the same inset and typography as `wa-input`). */
   label: string;
-  /** The Kerf-managed search model, registered under `id` in `wireTokenSearchFields({ models })`. */
-  model: TokenSearchModel;
+  /** The Kerf-managed search model, registered under `id` in `wireSearchFields({ models })`. */
+  model: SearchFieldModel;
   placeholder?: string;
   disabled?: boolean;
   /** Supporting text below the field, referenced by `aria-describedby`. */
@@ -313,7 +313,7 @@ export interface TicketSearchFormFieldProps {
 
 /**
  * The ticket search query editor as a form field beside Web Awesome controls (HS2-E40KC0):
- * Kerf's `TokenSearchField presentation="form-field"` (visible label, hint, required marker,
+ * Kerf's `SearchField presentation="form-field"` (visible label, hint, required marker,
  * full width, no Toolbar) driven by the same managed model, with the syntax-help button. Its
  * date/help surfaces are Kerf anchored surfaces, which stay interactive inside a `wa-dialog`
  * (KF-F52T5D). The app-owned wrapper carries the field id
@@ -335,7 +335,7 @@ export function TicketSearchFormField({
   return (
     // A Kerf List stacks the field and its surface state (HS2-4GX2YS).
     <List gap="2xs" className="ticket-search-form-field" rootAttributes={{ 'data-ticket-search-for': id }}>
-      <TokenSearchField
+      <SearchField
         presentation="form-field"
         className="ticket-search-field__query"
         id={id}
@@ -357,8 +357,8 @@ export function TicketSearchFormField({
 }
 
 /**
- * The ticket search query editor: Kerf's grouped TokenSearchField driven by a managed
- * `TokenSearchModel` (grammar, chips, in-place tag completion), plus Hot Sheet's lifecycle date
+ * The ticket search query editor: Kerf's grouped SearchField driven by a managed
+ * `SearchFieldModel` (grammar, chips, in-place tag completion), plus Hot Sheet's lifecycle date
  * helper and syntax help. Every ticket-search surface (workspace header, workspace-grid rail,
  * saved-view dialog) composes this one component so the helpers cannot drift apart or be
  * forgotten (HS2-N5G6JS, HS2-5JXBQY). A consumer chooses how the group sizes in its toolbar through
@@ -395,13 +395,13 @@ export function TicketSearchField({
       clearLabel,
       ...ticketSearchHelpTrailing(help, helpOpen),
       // The field's token colors are set on this app-owned hook, shared with TicketSearchFormField
-      // (HS2-8FS5BJ, HS2-RXHZVR), never by reaching into Kerf's `.kui-token-search`.
+      // (HS2-8FS5BJ, HS2-RXHZVR), never by reaching into Kerf's `.kui-search-field`.
       className: 'ticket-search-field__query',
       fill: layout === 'row',
     },
     content = (
       <>
-        {collapsible ? <TokenSearchField {...field} collapsible expanded={open} /> : <TokenSearchField {...field} />}
+        {collapsible ? <SearchField {...field} collapsible expanded={open} /> : <SearchField {...field} />}
         <TicketSearchSurfaceState id={id} model={model} open={open} helpOpen={help && helpOpen} />
       </>
     );

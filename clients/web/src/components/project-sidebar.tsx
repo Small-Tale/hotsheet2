@@ -113,8 +113,8 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
           />
         )}
         <span class="project-sidebar__conversation-anchor">
-          {/* Stays an app-owned native toggle: Kerf IconToggleButton shows the default cursor while
-              disabled, not this app's not-allowed cursor (KF-HJD6XB, HS2-TQDZET). */}
+          {/* Stays an app-owned native toggle: a pressed Kerf Button (formerly IconToggleButton) replaces it in
+              HS2-Q5ZZFF (KF-HJD6XB, HS2-TQDZET). */}
           <button
             type="button"
             class="project-sidebar__conversation"

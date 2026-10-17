@@ -1,3 +1,4 @@
+import { openPopupMenu } from '@kerfjs/ui/popup-menu';
 import { delegate, delegateCapture } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -144,11 +145,11 @@ export function wireCommandSettingsEditor(root: HTMLElement, bindings: CommandSe
   );
   lifetime.add(
     delegate(root, 'contextmenu', rowSelector, (event, target) => {
-      // Right-click opens the row's PopupMenu (a wa-dropdown root) in place of a separate context menu.
-      const menu = target.querySelector<HTMLElement & { open: boolean }>(rowMenuSelector);
+      // Right-click opens the row's PopupMenu in place of a separate context menu.
+      const menu = target.querySelector<HTMLElement>(rowMenuSelector);
       if (!menu) return;
       event.preventDefault();
-      menu.open = true;
+      openPopupMenu(menu);
     }),
   );
   lifetime.add(

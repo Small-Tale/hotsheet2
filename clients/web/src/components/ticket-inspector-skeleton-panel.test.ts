@@ -15,7 +15,7 @@ describe('TicketInspectorSkeleton', () => {
     expect(markup).toContain('data-component="toolbar-text" data-size="small" data-placeholder="true"');
     expect(markup).toContain('class="ticket-info-panel__section ticket-info-panel__details-section"');
     // Real Kerf tab bar with four disabled placeholder tabs and Info selected.
-    expect(markup.match(/data-component="app-tab"/g)).toHaveLength(4);
+    expect(markup.match(/data-component="tab-bar-item"/g)).toHaveLength(4);
     expect(markup).toMatch(/data-tab-id="info"[^>]*data-selected="true"[^>]*data-placeholder="true"/);
     expect(markup).toContain('role="tab" aria-selected="true"');
     // Real section headers/controls are drawn (labels are chrome, not per-ticket values).
@@ -45,7 +45,7 @@ describe('TicketInspectorSkeleton', () => {
     expect(markup).not.toContain('ticket-inspector-skeleton__');
     expect(markup).not.toContain('ticket-inspector-skeleton-panel');
     // HS2-MYS1MR: the loading tabs use the loaded sidebar inspector's icon-only presentation.
-    expect(markup.match(/data-component="app-tab"[^>]*data-presentation="icon-only"/g)).toHaveLength(4);
+    expect(markup.match(/data-component="tab-bar-item"[^>]*data-presentation="icon-only"/g)).toHaveLength(4);
   });
 
   it('shows the known slug while its ticket loads, and a skeleton slug otherwise', () => {

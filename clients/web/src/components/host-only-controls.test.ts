@@ -24,9 +24,13 @@ const review: CodeReview = {
     { sha: 'aaa1111', short_sha: 'aaa1111', subject: 'First', committed_at: '2026-09-02T09:00:00Z' },
   ],
 };
+/** A Kerf PopupMenu item's opening tag; a disabled one carries `aria-disabled="true"` and its reason as `title`. */
 const menuItem = (markup: string, id: string) =>
-  markup.match(new RegExp(`<wa-dropdown-item[^>]*data-(?:item-id|repository-file-action|action)="${id}"[^>]*>`))?.[0] ??
-  '';
+  markup.match(
+    new RegExp(
+      `<button(?=[^>]*class="kui-popup-menu__item")[^>]*data-(?:item-id|repository-file-action|action)="${id}"[^>]*>`,
+    ),
+  )?.[0] ?? '';
 
 describe('host-only controls on remote clients', () => {
   it('reports a reason only when the action is unavailable', () => {

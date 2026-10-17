@@ -350,7 +350,7 @@ function AppShellMobileViewHeader({ value, choices, action }: AppShellMobileView
             size="compact"
             name="mobile-view"
             value={value}
-            ariaLabel="Ticket view"
+            ariaLabel="Ticket View"
             choices={choices}
             renderSelected={(choice) => <span>{choice.label}</span>}
           />

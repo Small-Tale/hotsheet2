@@ -1,5 +1,4 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
-import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 
 import { flex, px } from '@kerfjs/ui/css-values';
@@ -92,21 +91,16 @@ export function TrashSettings({
       </List>
       {draft?.leaving && dirty && (
         <div data-key="trash-retention-leave-dialog">
-          <DialogSurface size="small">
-            <wa-dialog
-              data-key="trash-retention-leave-dialog"
-              open
-              label="Apply the new Trash retention?"
-              {...COMMANDS_AND_AI_TARGETS.trashRetentionLeaveDialog.attrs}
-            >
-              <List gap="xs">
-                <Text flush>
-                  You changed Trash retention to {draft.value.trim()} {draft.value.trim() === '1' ? 'day' : 'days'} but
-                  did not apply it.
-                </Text>
-                {hint ? <Text flush>{hint}</Text> : null}
-              </List>
-              <Row slot="footer" hAlign="right" vAlign="middle" gap="xs" wrap>
+          <DialogSurface
+            label="Apply the new Trash retention?"
+            size="small"
+            rootAttributes={{
+              'data-key': 'trash-retention-leave-dialog',
+              ...COMMANDS_AND_AI_TARGETS.trashRetentionLeaveDialog.attrs,
+              'data-controlled-open': 'true',
+            }}
+            footer={
+              <Row hAlign="right" vAlign="middle" gap="xs" wrap>
                 <wa-button appearance="outlined" {...COMMANDS_AND_AI_ACTIONS.revertTrashSettings.attrs}>
                   Revert to {days} {days === 1 ? 'day' : 'days'}
                 </wa-button>
@@ -114,7 +108,15 @@ export function TrashSettings({
                   Apply
                 </wa-button>
               </Row>
-            </wa-dialog>
+            }
+          >
+            <List gap="xs">
+              <Text flush>
+                You changed Trash retention to {draft.value.trim()} {draft.value.trim() === '1' ? 'day' : 'days'} but
+                did not apply it.
+              </Text>
+              {hint ? <Text flush>{hint}</Text> : null}
+            </List>
           </DialogSurface>
         </div>
       )}

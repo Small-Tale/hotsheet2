@@ -5,7 +5,7 @@ import { TerminalCopyDialog, TerminalEditMenu, TerminalPasteDialog } from './ter
 describe('TerminalCopyDialog', () => {
   it('renders a closed dialog with no state', () => {
     const markup = String(TerminalCopyDialog({}));
-    expect(markup).toContain('data-component="terminal-copy-dialog"');
+    expect(markup).toContain('data-dialog-component="terminal-copy-dialog"');
     expect(markup).toContain('data-controlled-open="false"');
   });
 
@@ -66,7 +66,7 @@ describe('TerminalEditMenu (HS2-KKP8YJ)', () => {
     // Kerf PopupMenu positions the context anchor through its own inline coordinates.
     expect(markup).toMatch(/popup-menu-context-x:120px;[^"]*popup-menu-context-y:340px/);
     expect(markup).toContain('data-context-menu="terminal-edit"');
-    expect(markup.match(/<wa-dropdown-item/g)).toHaveLength(2);
+    expect(markup.match(/class="kui-popup-menu__item"/g)).toHaveLength(2);
     expect(markup).toContain('data-action="copy-terminal-text"');
     expect(markup).toContain('data-action="paste-terminal-text"');
     expect(markup).toContain('Copy Text…');
@@ -79,7 +79,7 @@ describe('TerminalEditMenu (HS2-KKP8YJ)', () => {
 
   it('leads with Copy for a long-press selection (HS2-EYR96N)', () => {
     const markup = String(TerminalEditMenu({ state: { x: 120, y: 340, selection: true } }));
-    expect(markup.match(/<wa-dropdown-item/g)).toHaveLength(3);
+    expect(markup.match(/class="kui-popup-menu__item"/g)).toHaveLength(3);
     const order = ['copy-terminal-selection', 'copy-terminal-text', 'paste-terminal-text'].map((action) =>
       markup.indexOf(`data-action="${action}"`),
     );

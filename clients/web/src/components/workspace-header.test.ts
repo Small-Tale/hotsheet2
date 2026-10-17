@@ -33,7 +33,7 @@ describe('WorkspaceHeader', () => {
       const markup = String(WorkspaceControls({ mode, searchOpen: true }));
       expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-expanded="false"/);
       expect(markup).toContain('data-search-open="false"');
-      expect(markup).toContain('data-token-search-keep-open="true"');
+      expect(markup).toContain('data-search-field-keep-open="true"');
     }
     expect(String(WorkspaceControls({ mode: 'list', searchOpen: true }))).toMatch(
       /class="kui-toolbar-control-group ticket-search-field"[^>]*data-expanded="true"/,
@@ -117,25 +117,25 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain(
       'data-segment-value="settings" data-selected="true" aria-label="Settings View" aria-pressed="true"',
     );
-    expect(markup).not.toContain('data-token-search-editor="workspace-search"');
-    expect(enabled).toContain('data-token-search-editor="workspace-search"');
+    expect(markup).not.toContain('data-search-field-editor="workspace-search"');
+    expect(enabled).toContain('data-search-field-editor="workspace-search"');
     expect(enabled).toContain('role="searchbox" aria-label="Search tickets"');
     expect(enabled).toMatch(
-      /data-token-search-text data-empty="false">NOT <\/span><span class="kui-token-search__token"[^>]*data-token-value="tag:server">.*tag:server.*data-token-search-text data-empty="false"> AND tag:cl<\/span>/s,
+      /data-search-field-text data-empty="false">NOT <\/span><span class="kui-search-field__token"[^>]*data-token-value="tag:server">.*tag:server.*data-search-field-text data-empty="false"> AND tag:cl<\/span>/s,
     );
     expect(enabled).toContain('aria-label="Edit tag:server"');
     expect(enabled).toContain('>tag:server</button>');
     expect(enabled).toContain('aria-label="Remove tag:server"');
     // The settings view disables the field, and Kerf renders no suggestions for a disabled field; an
     // enabled field shows Kerf's in-flow rows without the committed tag (HS2-5JXBQY).
-    expect(markup).not.toContain('kui-token-search__suggestion');
-    expect(enabled).toContain('class="kui-token-search__suggestion" data-token-search-suggestion="tag:client"');
-    expect(enabled).not.toContain('data-token-search-suggestion="tag:server"');
+    expect(markup).not.toContain('kui-search-field__suggestion');
+    expect(enabled).toContain('class="kui-search-field__suggestion" data-search-field-suggestion="tag:client"');
+    expect(enabled).not.toContain('data-search-field-suggestion="tag:server"');
     expect(enabled).toContain('data-action="edit-ticket-search-token"');
     expect(enabled).toContain('data-action="clear-ticket-search"');
     expect(markup).toContain('name="workspace-sort"');
-    expect(markup).toContain('aria-label="Sort tickets: Priority, descending"');
-    expect(markup).toContain('<wa-option value="priority"');
+    expect(markup).toContain('aria-label="Sort Tickets: Priority, descending"');
+    expect(markup).toContain('class="kui-select__option" role="option" tabindex="-1" data-value="priority"');
     expect(markup).toContain(
       'class="kui-select__custom-selected"><span class="kui-select__custom-selected-content"><svg data-lucide="arrow-down-wide-narrow"',
     );
@@ -172,7 +172,7 @@ describe('WorkspaceHeader', () => {
       ).length,
     ).toBe(2);
     expect(beforeOverflow).toContain(
-      'data-component="token-search-field" data-token-search-id="workspace-search" data-disabled="true"',
+      'data-component="search-field" data-search-field-id="workspace-search" data-disabled="true"',
     );
     const headerCss = readFileSync(resolve(import.meta.dirname, 'workspace-header.css'), 'utf8'),
       shellCss = readFileSync(resolve(import.meta.dirname, 'app-shell.css'), 'utf8');
@@ -183,7 +183,7 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).not.toContain('ticket-search-field');
     expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-content="search"/);
     // Token colors and the helper popovers belong to TicketSearchField, not the header (HS2-N5G6JS).
-    expect(headerCss).not.toContain('.kui-token-search {');
+    expect(headerCss).not.toContain('.kui-search-field {');
     expect(headerCss).not.toContain('search-suggestions');
     expect(headerCss).not.toContain('search-help');
     expect(headerCss).not.toContain('.workspace-header__overflow-group {');
@@ -219,7 +219,7 @@ describe('WorkspaceHeader', () => {
       const label = sort === 'updated' ? 'Recently Updated' : sort[0].toUpperCase() + sort.slice(1);
       expect(
         String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list', sort, sortDirection: direction })),
-      ).toContain(`aria-label="Sort tickets: ${label}, ${direction}"`);
+      ).toContain(`aria-label="Sort Tickets: ${label}, ${direction}"`);
     },
   );
 
@@ -254,16 +254,16 @@ describe('WorkspaceHeader', () => {
       }),
     );
     expect(markup).toMatch(
-      /data-token-value="tag:client"[\s\S]*<\/span><span data-token-search-text data-empty="true">\u200b<\/span><\/div>/,
+      /data-token-value="tag:client"[\s\S]*<\/span><span data-search-field-text data-empty="true">\u200b<\/span><\/div>/,
     );
   });
 
   it('omits status sorting from column view while retaining it for list view', () => {
     expect(String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'board' }))).not.toContain(
-      '<wa-option value="status"',
+      'class="kui-select__option" role="option" tabindex="-1" data-value="status"',
     );
     expect(String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list' }))).toContain(
-      '<wa-option value="status"',
+      'class="kui-select__option" role="option" tabindex="-1" data-value="status"',
     );
   });
 
@@ -274,7 +274,7 @@ describe('WorkspaceHeader', () => {
     expect(markup.match(/data-action="set-view-mode"/g)).toHaveLength(4);
   });
 
-  it('delegates the collapsed find state to the canonical TokenSearchField trigger', () => {
+  it('delegates the collapsed find state to the canonical SearchField trigger', () => {
     const markup = String(
       WorkspaceHeader({
         projectName: 'Hot Sheet 2',
@@ -284,10 +284,10 @@ describe('WorkspaceHeader', () => {
       }),
     );
     expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"(?=[^>]*data-expanded="false")/);
-    expect(markup).toContain('data-component="token-search-field" data-token-search-id="workspace-search"');
+    expect(markup).toContain('data-component="search-field" data-search-field-id="workspace-search"');
     expect(markup).toContain('data-collapsible="true" data-expanded="false"');
     expect(markup).toContain(
-      'class="kui-token-search__expand" data-action="expand-token-search" aria-label="Search tickets"',
+      'class="kui-search-field__expand" data-action="expand-search-field" aria-label="Search tickets"',
     );
     expect(markup).not.toContain('class="workspace-header__search-button"');
     expect(markup).not.toContain('aria-label="Matching tags"');
@@ -371,7 +371,7 @@ describe('WorkspaceHeader', () => {
     const markup = String(WorkspaceHeader({ projectName: 'Demo', mode: 'list', selectedTicketCount: 1, ...guards }));
     expect(markup).toMatch(/<button[^>]*disabled[^>]*data-action="toggle-selected-up-next"/);
     expect(markup).toMatch(
-      /<wa-dropdown-item[^>]*data-workspace-overflow-action="toggle-selected-up-next"[^>]*disabled/,
+      /<button[^>]*data-workspace-overflow-action="toggle-selected-up-next"[^>]*class="kui-popup-menu__item"[^>]*aria-disabled="true"/,
     );
   });
 
@@ -430,7 +430,7 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).not.toContain('.workspace-header__sort-group:focus-within');
     // The Select hands its focus ring to the group (`focusRingOwner="group"`).
     expect(markup).toMatch(
-      /<wa-select[^>]*data-presentation="toolbar-borderless"[^>]*data-caret="false"[^>]*data-selected-presentation="icon-only"[^>]*data-focus-ring-owner="group"[^>]*name="workspace-sort"/,
+      /<kui-select[^>]*data-presentation="toolbar-borderless"[^>]*data-caret="false"[^>]*data-selected-presentation="icon-only"[^>]*data-focus-ring-owner="group"[^>]*name="workspace-sort"/,
     );
     expect(headerCss).toContainSource(
       '.workspace-header__sort-group { --kui-select-selected-color: var(--kui-toolbar-control-color); }',

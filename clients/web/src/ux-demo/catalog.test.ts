@@ -141,7 +141,7 @@ describe('UX demo catalog', () => {
       'app-empty-state',
       'app-error',
       'content-transition',
-      'app-tab',
+      'tab-bar-item',
       'select',
       'toolbar',
       'floating-toolbar',
@@ -207,9 +207,9 @@ describe('UX demo catalog', () => {
       'terminal-dashboard',
     ]);
     expect(findDemo('project-tabs')?.uses).toEqual(['project-tab', 'select']);
-    expect(findDemo('project-tab')?.uses).toEqual(['app-tab']);
+    expect(findDemo('project-tab')?.uses).toEqual(['tab-bar-item']);
     expect(findDemo('terminal-drawer')?.uses).toEqual([
-      'app-tab',
+      'tab-bar-item',
       'list-item',
       'list-header',
       'ai-conversation',
@@ -235,7 +235,7 @@ describe('UX demo catalog', () => {
       'toolbar',
       'toolbar-text',
       'toolbar-control-group',
-      'app-tab',
+      'tab-bar-item',
       'ticket-info-panel',
       'ticket-timeline',
       'ticket-code-review',

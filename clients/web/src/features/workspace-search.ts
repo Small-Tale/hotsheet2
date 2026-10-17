@@ -140,7 +140,7 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
       searchReplacedError = '';
     }
   }
-  // Kerf's managed TokenSearchModel owns the workspace search text, its chips, and the in-place tag
+  // Kerf's managed SearchFieldModel owns the workspace search text, its chips, and the in-place tag
   // completion (HS2-5JXBQY); `searchQuery`/`searchTokens` are projections of its state for the rest
   // of the app, and every change schedules the debounced ticket search.
   const workspaceSearchModel = createTicketSearchModel({
@@ -410,7 +410,7 @@ export function createWorkspaceSearchController(dependencies: WorkspaceSearchDep
     return availableSearchTagsValue;
   }
   function focusWorkspaceSearch(offset?: number) {
-    restoreInlineSearchCaret(document, '[data-token-search-editor="workspace-search"]', offset);
+    restoreInlineSearchCaret(document, '[data-search-field-editor="workspace-search"]', offset);
   }
   /** Publish typed search text still waiting for a typing pause, before reading the projections. */
   function flushWorkspaceSearch() {

@@ -1,6 +1,6 @@
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Grid } from '@kerfjs/ui/grid';
-import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
+import type { SearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { batch, signal } from 'kerfjs';
@@ -35,7 +35,7 @@ export function ticketSearchDemoHelpIsOpen(id: string): boolean {
  * A Kerf-managed demo model whose actions also narrate the catalog's event line, so the demo
  * proves which model action each control reaches (HS2-N5G6JS, HS2-5JXBQY).
  */
-function demoModel(initial = '', { commit = true } = {}): TokenSearchModel {
+function demoModel(initial = '', { commit = true } = {}): SearchFieldModel {
   const model = createTicketSearchModel({ tags: () => TICKET_SEARCH_DEMO_TAGS });
   if (initial && commit) replaceTicketSearch(model, initial);
   else if (initial) model.replace({ query: initial, tokens: [] });
@@ -75,8 +75,8 @@ function demoModel(initial = '', { commit = true } = {}): TokenSearchModel {
   };
 }
 
-/** The demo fields' models, keyed by editor id for `wireTokenSearchFields({ models })`. */
-export const ticketSearchDemoModels: Readonly<Record<string, TokenSearchModel>> = {
+/** The demo fields' models, keyed by editor id for `wireSearchFields({ models })`. */
+export const ticketSearchDemoModels: Readonly<Record<string, SearchFieldModel>> = {
   'ticket-search-demo': demoModel(),
   'ticket-search-demo-collapsible': demoModel(),
   'ticket-search-demo-grow': demoModel(),
@@ -88,7 +88,7 @@ export const ticketSearchDemoModels: Readonly<Record<string, TokenSearchModel>> 
 /** The saved-view dialog catalog entry's seeded query model. */
 export const savedViewDemoSearchModel = demoModel('is:open tag:bug');
 
-export function ticketSearchDemoModel(id: string): TokenSearchModel | undefined {
+export function ticketSearchDemoModel(id: string): SearchFieldModel | undefined {
   if (id === 'saved-view-query') return savedViewDemoSearchModel;
   return Object.hasOwn(ticketSearchDemoModels, id) ? ticketSearchDemoModels[id] : undefined;
 }

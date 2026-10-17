@@ -38,7 +38,7 @@ export const TICKET_SELECTION_TARGETS = {
   closeTicketContextAction: attr('data-context-action', 'Close ticket'),
   ticketCloseReasonField: attr('name', 'ticket-close-reason'),
   ticketCloseTargetSearchField: attr('name', 'ticket-close-target-search'),
-  ticketCloseDialog: attr('data-component', 'ticket-close-dialog'),
+  ticketCloseDialog: attr('data-dialog-component', 'ticket-close-dialog'),
   notWorkingNoteField: attr('name', 'not-working-note'),
   notWorkingDropzone: attr('data-not-working-dropzone', 'true'),
   notWorkingDialog: attr('data-component', 'not-working-dialog'),

@@ -1,4 +1,4 @@
-import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
+import type { SearchFieldModel } from '@kerfjs/ui/search-field-model';
 import type { Signal } from 'kerfjs';
 
 import {
@@ -74,7 +74,7 @@ export interface TerminalRailSurfaceDependencies {
   ) => TicketViewActionSpec | undefined;
   ticketViewTitle: (view: TicketScope) => string;
   viewMode: Signal<WorkspaceViewMode>;
-  workspaceSearchModel: TokenSearchModel;
+  workspaceSearchModel: SearchFieldModel;
 }
 
 /**

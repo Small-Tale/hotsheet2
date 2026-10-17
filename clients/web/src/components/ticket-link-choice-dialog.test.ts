@@ -32,7 +32,7 @@ const choice: TicketLinkChoice = {
 describe('TicketLinkChoiceDialog', () => {
   it('renders a focused exact-match choice without advanced-search controls', () => {
     const markup = String(TicketLinkChoiceDialog({ choice }));
-    expect(markup).toContain('data-component="ticket-link-choice-dialog"');
+    expect(markup).toContain('data-dialog-component="ticket-link-choice-dialog"');
     expect(markup).toContain('More than one ticket has this exact reference.');
     expect(markup.match(/data-action="select-ticket-link-match"/g)).toHaveLength(2);
     expect(markup).toContain('data-ticket-project-id="alpha-01"');

@@ -190,7 +190,7 @@ test('opens ticket references from interactive terminals without linking scaled 
   await expect(page.locator('.app-toast')).toContainText('No exact match for HS2-MISSING.');
   await remount();
   await clickTerminalReference(page, viewport, 'HS2-SHARED');
-  const choice = page.locator('[data-component="ticket-link-choice-dialog"]');
+  const choice = page.locator('[data-dialog-component="ticket-link-choice-dialog"]');
   await expect(choice).toHaveJSProperty('open', true);
   await expect(choice.getByRole('button').filter({ hasText: 'Shared terminal destination' })).toHaveCount(2);
   await page.keyboard.press('Escape');
@@ -313,7 +313,7 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   await expect(preview).toHaveAttribute('data-geometry-ready', 'true');
   await expect(preview.locator('.xterm-rows')).toContainText('GNU nano');
   await expect(preview.locator('.xterm-rows')).toContainText('Exit');
-  await expect(page.locator('wa-select[name="terminal-grouping"]')).toHaveCount(0);
+  await expect(page.locator('kui-select[name="terminal-grouping"]')).toHaveCount(0);
   const wideAspect = (await assertGridGeometry()).aspect,
     wideFont = await preview.getAttribute('data-font-size');
   await page.waitForTimeout(250);
@@ -421,7 +421,7 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   await page.screenshot({ path: 'target/visual-captures/hs2-hpjb1k-maximize-immediate-after.png', fullPage: true });
   await drawer.getByRole('tab', { name: 'Project grid' }).click();
   await expect(drawer).toHaveAttribute('data-mode', 'grid');
-  await expect(drawer.locator('wa-select[name="terminal-visibility-group"]')).toHaveCount(0);
+  await expect(drawer.locator('kui-select[name="terminal-visibility-group"]')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-p0pyh7-drawer-without-visibility.png', fullPage: true });
   // The drawer grid tile's More actions menu renders (it used to set state nothing drew) with Open
   // only, since terminal visibility is dashboard-scoped; Open switches the drawer to that terminal
@@ -429,7 +429,7 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   await drawer.getByRole('button', { name: 'More Actions for nano' }).click();
   const drawerMenu = drawer.locator('[data-context-menu="terminal"]');
   await expect(drawerMenu.getByRole('menu').first()).toBeVisible();
-  await expect(drawerMenu.locator('wa-dropdown-item')).toHaveCount(1);
+  await expect(drawerMenu.locator('.kui-popup-menu__item')).toHaveCount(1);
   await expect(drawerMenu.getByText('Hide Terminal')).toHaveCount(0);
   await expect(page.locator('[data-context-menu="terminal"]')).toHaveCount(1);
   await drawerMenu.getByText('Open').click();

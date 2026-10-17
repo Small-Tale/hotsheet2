@@ -66,7 +66,7 @@ export function ProjectSidebarSettings() {
       </wa-checkbox>
       <Select
         name="conversation-unread"
-        label="Unread chat messages"
+        label="Unread Chat Messages"
         value={projectSidebarSettings.conversationUnread.value}
         choices={[
           { value: '0', label: 'None' },

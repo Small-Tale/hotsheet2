@@ -39,7 +39,7 @@ describe('TrashSettings', () => {
 
   it('asks to apply or revert an unapplied value when navigation is held (HS2-F55956)', () => {
     const markup = String(TrashSettings({ days: 30, draft: { value: '1', purgeCount: 1, leaving: true } }));
-    expect(markup).toContain('data-component="trash-retention-leave-dialog"');
+    expect(markup).toContain('data-dialog-component="trash-retention-leave-dialog"');
     expect(markup).toContain('You changed Trash retention to 1 day but');
     expect(markup).toContain('1 ticket in Trash will be purged');
     expect(markup).toContain('data-action="revert-trash-settings"');

@@ -36,17 +36,17 @@ describe('TerminalTicketRail', () => {
     const markup = String(TerminalTicketRail({ ...props, collapseControl: true }));
     expect(markup).toContain('data-component="nav-stack"');
     expect(markup).toContain('name="terminal-rail-project"');
-    expect(markup).toMatch(/data-component="toolbar-control-group"[^>]*><wa-select[^>]*name="terminal-rail-project"/);
+    expect(markup).toMatch(/data-component="toolbar-control-group"[^>]*><kui-select[^>]*name="terminal-rail-project"/);
     expect(markup).toContain('Project One');
     expect(markup).toContain('name="terminal-rail-view"');
     expect(markup).toContain('Queue');
     expect(markup).toContain('aria-label="Hide ticket rail"');
     expect(markup).toContain('data-action="toggle-ticket-inspector"');
     expect(markup).toContain('data-component="terminal-ticket-rail-list"');
-    expect(markup.match(/<wa-select[^>]*name="terminal-rail-project"[^>]*>/)?.[0]).not.toContain(
+    expect(markup.match(/<kui-select[^>]*name="terminal-rail-project"[^>]*>/)?.[0]).not.toContain(
       'kui-select--fit-menu',
     );
-    const viewSelect = markup.match(/<wa-select[^>]*name="terminal-rail-view"[^>]*>/)?.[0];
+    const viewSelect = markup.match(/<kui-select[^>]*name="terminal-rail-view"[^>]*>/)?.[0];
     expect(viewSelect).not.toContain('kui-select--fit-menu');
     // The view title is Kerf's title Select with an inset ring, not an app className hook (HS2-DAMHD1).
     expect(viewSelect).toContain('data-presentation="title"');

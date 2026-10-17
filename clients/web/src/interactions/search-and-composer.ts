@@ -1,6 +1,6 @@
-import { readTokenSearchField } from '@kerfjs/ui/token-search-field';
-import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
-import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
+import { readSearchField } from '@kerfjs/ui/search-field';
+import type { SearchFieldModel } from '@kerfjs/ui/search-field-model';
+import { wireSearchFields } from '@kerfjs/ui/wire-search-fields';
 import { attr, delegate, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -29,8 +29,8 @@ import { type PendingEvidence, type Project } from './types';
 export interface SearchAndComposerInteractionsDependencies {
   readonly searchOpen: Signal<boolean>;
   /** Kerf-managed ticket search models, keyed by their TicketSearchField ids (HS2-5JXBQY). */
-  readonly workspaceSearchModel: TokenSearchModel;
-  readonly savedViewSearchModel: TokenSearchModel;
+  readonly workspaceSearchModel: SearchFieldModel;
+  readonly savedViewSearchModel: SearchFieldModel;
   /** A chip's caret position in each model, for focus restoration around Kerf's chip actions. */
   readonly workspaceSearchTokenOffset: (raw: string) => number | undefined;
   readonly savedViewSearchTokenOffset: (raw: string) => number | undefined;
@@ -179,7 +179,7 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
   // caller-owned date/help surfaces.
   // An empty search blurred by a pointer press collapses only after that press's click, so the
   // collapsing row never shifts the control the user pressed (Kerf KF-64W0RN, HS2-YVBGW3).
-  const tokenSearchFields = wireTokenSearchFields(document.body, {
+  const tokenSearchFields = wireSearchFields(document.body, {
     models: { 'workspace-search': workspaceSearchModel, 'saved-view-query': savedViewSearchModel },
     collapsible: { signals: { 'workspace-search': searchOpen }, keepOpenOn: keepSearchOpenForShadowTarget },
     // Enter commits a trailing filter through the model; the rebuilt editor gets its caret back at the end.
@@ -188,7 +188,7 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     },
   });
   lifetime.add(tokenSearchFields);
-  const workspaceSearchEditor = attr('data-token-search-editor', 'workspace-search');
+  const workspaceSearchEditor = attr('data-search-field-editor', 'workspace-search');
   // Kerf's empty-blur check counts whitespace as content. For the workspace's collapsible
   // field, whitespace has no search meaning, so close it once focus really leaves. Defer a
   // pointer blur until after click, just as Kerf does for a completely empty field.
@@ -220,21 +220,21 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
   lifetime.add(
     delegate(document.body, 'focusout', workspaceSearchEditor.selector, (event, target) => {
       const editor = target as HTMLElement;
-      const field = editor.closest<HTMLElement>('[data-component="token-search-field"]');
+      const field = editor.closest<HTMLElement>('[data-component="search-field"]');
       if (!field || field.dataset.collapsible !== 'true') return;
-      const value = readTokenSearchField(editor);
+      const value = readSearchField(editor);
       if (!isWhitespaceOnlySearch(value)) return;
       const next = (event as FocusEvent).relatedTarget;
-      if (next instanceof Element && (field.contains(next) || next.closest('[data-token-search-keep-open]'))) return;
+      if (next instanceof Element && (field.contains(next) || next.closest('[data-search-field-keep-open]'))) return;
       const collapse = () => {
         const current = document.querySelector<HTMLElement>(workspaceSearchEditor.selector);
         if (
           !current ||
           field.contains(document.activeElement) ||
-          document.activeElement?.closest('[data-token-search-keep-open]')
+          document.activeElement?.closest('[data-search-field-keep-open]')
         )
           return;
-        const currentValue = readTokenSearchField(current);
+        const currentValue = readSearchField(current);
         if (isWhitespaceOnlySearch(currentValue)) {
           workspaceSearchModel.replace({ query: '', tokens: [] });
           searchOpen.value = false;

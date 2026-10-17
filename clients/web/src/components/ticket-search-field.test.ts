@@ -31,8 +31,8 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(markup).toMatch(/ticket-search-field"[^>]*data-expanded="true"/);
     expect(markup).toContain('data-content="search"');
     // The token colors sit on the app-owned hook Kerf renders on its field root (HS2-8FS5BJ).
-    expect(markup).toContain('class="kui-token-search ticket-search-field__query"');
-    expect(markup).toContain('data-component="token-search-field" data-token-search-id="demo-search"');
+    expect(markup).toContain('class="kui-search-field ticket-search-field__query"');
+    expect(markup).toContain('data-component="search-field" data-search-field-id="demo-search"');
     expect(markup).toContain('role="searchbox" aria-label="Search tickets"');
     expect(markup).toContain('data-token-value="is:open"');
     expect(markup).toContain('>parser</span>');
@@ -48,11 +48,11 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(helpButton).toContain('aria-label="Search Syntax Help"');
     expect(helpButton).toContain('aria-expanded="false"');
     expect(helpButton).toContain('aria-haspopup="dialog"');
-    expect(helpButton).toContain('data-token-search-keep-open');
+    expect(helpButton).toContain('data-search-field-keep-open');
     expect(markup).not.toContain('ticket-search-field__help-button');
     expect(markup).toContain('data-lucide="circle-help"');
     expect(markup).toContain('data-collapsible="false" data-expanded="true"');
-    expect(markup).not.toContain('kui-token-search__suggestions');
+    expect(markup).not.toContain('kui-search-field__suggestions');
     expect(markup).not.toContain('aria-label="Date and time helper"');
     expect(markup).not.toContain('aria-label="Search syntax"');
     expect(markup).not.toContain('workspace-search');
@@ -62,7 +62,7 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     const suggest = (committed: string, typing: string) =>
       [
         ...String(TicketSearchField({ id: 'f', label: 'Search', model: model(committed, typing) })).matchAll(
-          /data-token-search-suggestion="([^"]+)"/g,
+          /data-search-field-suggestion="([^"]+)"/g,
         ),
       ].map((match) => match[1]);
     // Case-insensitive prefix, committed chips excluded, quoted values for spaces.
@@ -75,9 +75,9 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(suggest('tag:client', 'tag:client parser')).toEqual([]);
     expect(suggest('', '')).toEqual([]);
     const markup = String(TicketSearchField({ id: 'f', label: 'Search', model: model('', 'tag:n') }));
-    expect(markup).toContain('class="kui-token-search__suggestions" data-token-search-keep-open');
+    expect(markup).toContain('class="kui-search-field__suggestions" data-search-field-keep-open');
     expect(markup).toContain(
-      '<button type="button" class="kui-token-search__suggestion" data-token-search-suggestion="tag:&quot;needs design&quot;">tag:&quot;needs design&quot;</button>',
+      '<button type="button" class="kui-search-field__suggestion" data-search-field-suggestion="tag:&quot;needs design&quot;">tag:&quot;needs design&quot;</button>',
     );
   });
 
@@ -121,7 +121,7 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(open).toContain('data-date-prefix="" data-help-open="true"');
     const help = String(TicketSearchHelp({ id: 'f' }));
     expect(help).toContain(
-      'class="ticket-search-surfaces ticket-search-field__help" data-ticket-search-for="f" data-token-search-keep-open',
+      'class="ticket-search-surfaces ticket-search-field__help" data-ticket-search-for="f" data-search-field-keep-open',
     );
     expect(help).toContain('<strong>Tags</strong>');
     expect(help).toContain('<strong>Content</strong>');
@@ -150,13 +150,13 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     const closed = String(TicketSearchField({ ...props, model: model(), expanded: false }));
     expect(closed).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-expanded="false"/);
     expect(closed).toContain('data-collapsible="true" data-expanded="false"');
-    expect(closed).toContain('data-action="expand-token-search"');
-    expect(closed).not.toContain('kui-token-search__suggestions');
+    expect(closed).toContain('data-action="expand-search-field"');
+    expect(closed).not.toContain('kui-search-field__suggestions');
     expect(closed).not.toContain('data-help-open="true"');
     const open = String(TicketSearchField({ ...props, model: model('', 'tag:s'), expanded: true }));
     expect(open).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-expanded="true"/);
     expect(open).toContain('data-collapsible="true" data-expanded="true"');
-    expect(open).toContain('data-token-search-suggestion="tag:server"');
+    expect(open).toContain('data-search-field-suggestion="tag:server"');
     expect(open).toContain('data-help-open="true"');
     const reclosed = String(TicketSearchField({ ...props, model: model(), expanded: false }));
     expect(reclosed).toBe(closed);
@@ -181,7 +181,7 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     );
     // Only a literal class is classifiable by the Kerf analyzer; consumers pick a `layout`, never a class.
     expect(markup).toContain('class="kui-toolbar-control-group ticket-search-field"');
-    expect(markup).toContain('data-token-search-id="saved-view-query" data-disabled="true"');
+    expect(markup).toContain('data-search-field-id="saved-view-query" data-disabled="true"');
     expect(markup).toContain('data-placeholder="Find tickets"');
     expect(markup).toContain('aria-label="Clear search query"');
   });
@@ -227,7 +227,7 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     const css = readFileSync(new URL('./ticket-search-field.css', import.meta.url), 'utf8');
     expect(css).not.toContain('.ticket-search-field--grow-inline');
     expect(css).not.toContain('min-width: 19rem');
-    expect(css).not.toContain('--kui-token-search-expanded-width');
+    expect(css).not.toContain('--kui-search-field-expanded-width');
     expect(css).not.toContain('ticket-search-field--row');
     expect(css).not.toContain(':not(.ticket-search-field--open)');
     expect(css).not.toContain('@keyframes');
@@ -255,23 +255,23 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     const markup = String(TicketSearchFormField({ id: 'form-search', label: 'View query', model: model('is:open') }));
     // Kerf renders `className` on the form-field root (KF-5G8WJ0), the same hook the grouped field uses.
     expect(markup).toContain(
-      '<div class="kui-token-search__field ticket-search-field__query" data-token-search-form-field="form-search"',
+      '<div class="kui-search-field__field ticket-search-field__query" data-search-field-form-field="form-search"',
     );
     expect(markup).toContain('data-token-value="is:open"');
     const grouped = String(TicketSearchField({ id: 'grouped', label: 'Search', model: model('is:open') }));
-    expect(grouped).toContain('class="kui-token-search ticket-search-field__query"');
+    expect(grouped).toContain('class="kui-search-field ticket-search-field__query"');
   });
 
   it('owns the token colors and helper popover styles that every consumer shares', () => {
     const css = readFileSync(new URL('./ticket-search-field.css', import.meta.url), 'utf8');
     expect(css).not.toContain('.ticket-search-field {');
     expect(css).not.toContain(".ticket-search-field[data-content='search']");
-    // The chip tint is set on the app's own className hook, never on Kerf's `.kui-token-search`, and
+    // The chip tint is set on the app's own className hook, never on Kerf's `.kui-search-field`, and
     // the tokens that equal Kerf's defaults are not restated (HS2-8FS5BJ). Kerf's use-site token
     // fallbacks let the bare hook apply, so it needs no grouped-root qualifier and the form field
     // shares it (KF-5G8WJ0, HS2-RXHZVR).
     expect(css).toContainSource(
-      '.ticket-search-field__query { --kui-token-search-token-background: var(--wa-color-brand-fill-quiet); }',
+      '.ticket-search-field__query { --kui-search-field-token-background: var(--wa-color-brand-fill-quiet); }',
     );
     expect(css).not.toContain('.ticket-search-field .ticket-search-field__query');
     expect(css).not.toContain('.kui-');

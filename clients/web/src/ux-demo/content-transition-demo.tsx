@@ -109,7 +109,7 @@ export function ContentTransitionSettings() {
     <DemoSettingsForm settings="content-transition">
       <Select
         name="transition-style"
-        label="Transition style"
+        label="Transition Style"
         value={transitionStyle.value}
         choices={[
           { value: 'push', label: 'Push' },
@@ -119,7 +119,7 @@ export function ContentTransitionSettings() {
       />
       <Select
         name="transition-side"
-        label="Visible side"
+        label="Visible Side"
         value={transitionSide.value}
         choices={[
           { value: 'a', label: 'A' },

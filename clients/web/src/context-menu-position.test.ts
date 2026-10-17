@@ -11,6 +11,26 @@ import {
 
 afterEach(() => vi.unstubAllGlobals());
 
+/**
+ * A fake Kerf PopupMenu root (Kerf UI 5.0.0-beta.106): `openPopupMenu` dispatches an open request the
+ * register answers by marking the opener `aria-expanded="true"`, which `isPopupMenuOpen` reads.
+ */
+function fakeMenuRoot() {
+  const opener = {
+    expanded: false,
+    getAttribute: (name: string) => (name === 'aria-expanded' ? String(opener.expanded) : null),
+  };
+  return {
+    opener,
+    querySelector: () => opener,
+    dispatchEvent: (event: Event) => {
+      if (event.type === 'kui-popup-menu-open-request') opener.expanded = true;
+      if (event.type === 'kui-popup-menu-close-request') opener.expanded = false;
+      return true;
+    },
+  };
+}
+
 describe('maintainContextPopupMenuAnchor', () => {
   it('restores lost anchors and replacement hosts but never reopens a dismissed menu', () => {
     let changed = () => {};
@@ -32,9 +52,16 @@ describe('maintainContextPopupMenuAnchor', () => {
       removeEventListener: (name: string) => listeners.delete(name),
     });
     const makeMenu = () => {
-      const properties = new Map<string, string>();
+      const properties = new Map<string, string>(),
+        root = fakeMenuRoot();
       return {
-        open: false,
+        ...root,
+        get open() {
+          return root.opener.expanded;
+        },
+        set open(value: boolean) {
+          root.opener.expanded = value;
+        },
         isConnected: true,
         style: {
           getPropertyValue: (name: string) => properties.get(name) ?? '',
@@ -61,8 +88,49 @@ describe('maintainContextPopupMenuAnchor', () => {
     changed();
     expect(second.open).toBe(false);
     expect(disconnect).toHaveBeenCalledOnce();
-    expect(listeners.has('wa-hide')).toBe(false);
+    expect(listeners.has('toggle')).toBe(false);
     stop();
+  });
+  it('stops observing once the observed menu panel closes itself (its popover toggle)', () => {
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      'MutationObserver',
+      class {
+        observe() {}
+        disconnect() {
+          disconnect();
+        }
+      },
+    );
+    const listeners = new Map<string, (event: Event) => void>();
+    vi.stubGlobal('document', {
+      body: {},
+      addEventListener: (name: string, handler: (event: Event) => void) => listeners.set(name, handler),
+      removeEventListener: (name: string) => listeners.delete(name),
+    });
+    class FakeElement {
+      readonly fake = true;
+    }
+    vi.stubGlobal('HTMLElement', FakeElement);
+    const menu = Object.assign(new FakeElement(), fakeMenuRoot(), {
+      isConnected: true,
+      style: { setProperty: () => undefined },
+      getAttribute: () => null,
+      matches: (selector: string) => selector === '.kui-popup-menu',
+    });
+    const panel = Object.assign(new FakeElement(), {
+      parentElement: menu,
+      matches: (selector: string) => selector === '.kui-popup-menu__menu',
+    });
+    const root = { querySelector: () => menu } as unknown as ParentNode;
+    maintainContextPopupMenuAnchor('[data-inspector-status-menu]', { x: 1, y: 2 }, () => true, root);
+    expect(menu.opener.expanded).toBe(true);
+    // An opening toggle is not a dismissal.
+    listeners.get('toggle')!({ type: 'toggle', newState: 'open', target: panel } as unknown as Event);
+    expect(disconnect).not.toHaveBeenCalled();
+    listeners.get('toggle')!({ type: 'toggle', newState: 'closed', target: panel } as unknown as Event);
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(listeners.has('toggle')).toBe(false);
   });
 });
 
@@ -73,8 +141,10 @@ describe('reanchorReplacedContextPopupMenus', () => {
     const makeMenu = (style: string) => {
       const state = { style, opens: 0 };
       const menu = {
-        set open(value: boolean) {
-          if (value) state.opens += 1;
+        querySelector: () => null,
+        dispatchEvent: (event: Event) => {
+          if (event.type === 'kui-popup-menu-open-request') state.opens += 1;
+          return true;
         },
         getAttribute: (name: string) => (name === 'style' ? state.style : null),
       } as unknown as ContextPopupMenuElement;

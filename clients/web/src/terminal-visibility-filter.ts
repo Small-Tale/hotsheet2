@@ -5,7 +5,7 @@ import { type TerminalVisibilityType, terminalVisibilityTypes } from './terminal
 interface TypeSelect extends HTMLElement {
   value: string | string[] | null;
 }
-const selector = 'wa-select[name="terminal-visibility-types"]';
+const selector = 'kui-select[name="terminal-visibility-types"]';
 
 /**
  * Report the controlled Kerf multiple Select's value changes, including its Select all / Clear

@@ -479,9 +479,9 @@ test('a warm switch restores the list cursor with the query that issued it, so L
   // P1 warms with a cursor issued for the default sort.
   await warmUp(workspace, [1, 0]);
   // Changing the (workspace-wide) sort in P0 leaves P1's cached cursor bound to the old sort.
-  const sort = page.locator('wa-select[name="workspace-sort"]');
+  const sort = page.locator('kui-select[name="workspace-sort"]');
   await sort.click();
-  await sort.locator('wa-option[value="priority"]').click();
+  await sort.locator('.kui-select__option[data-value="priority"]').click();
   await expect(sort).toHaveJSProperty('value', 'priority');
   // Park P1's own reload so Load more acts on the restored warm continuation, not a fresh first page.
   workspace.hold(1);

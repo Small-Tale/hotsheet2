@@ -24,7 +24,7 @@ type InlineSearchTokenValue =
 export type InlineSearchToken = InlineSearchTokenValue & { offset?: number };
 export type InlineSearchPart = { kind: 'text'; value: string } | { kind: 'token'; token: InlineSearchToken };
 
-/** Kerf `TokenSearchToken` shape (kept structural to avoid a runtime import in the model). */
+/** Kerf `SearchFieldToken` shape (kept structural to avoid a runtime import in the model). */
 export interface TokenSearchTokenLike {
   value: string;
   label: string;
@@ -33,8 +33,8 @@ export interface TokenSearchTokenLike {
 }
 
 /**
- * Adapt an app `InlineSearchToken` to kerf's flat `TokenSearchToken`. Kerf keys chips on
- * `value`, so we key on the token's canonical `raw` — that lets `readTokenSearchField`
+ * Adapt an app `InlineSearchToken` to kerf's flat `SearchFieldToken`. Kerf keys chips on
+ * `value`, so we key on the token's canonical `raw` — that lets `readSearchField`
  * round-trip the raw back to us, which `tokenFromRaw` reconstructs into an `InlineSearchToken`.
  */
 export function toTokenSearchToken(token: InlineSearchToken): TokenSearchTokenLike {
@@ -47,7 +47,7 @@ export function toTokenSearchToken(token: InlineSearchToken): TokenSearchTokenLi
 }
 
 /**
- * Rebuild `InlineSearchToken`s from the `TokenSearchToken`s kerf's `readTokenSearchField`
+ * Rebuild `InlineSearchToken`s from the `SearchFieldToken`s kerf's `readSearchField`
  * returns. Prefer the matching current token (keeps parsed values such as a date's ISO
  * timestamp stable) and fall back to `tokenFromRaw` for chips the caller has not seen yet.
  */

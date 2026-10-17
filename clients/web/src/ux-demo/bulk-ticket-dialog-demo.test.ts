@@ -55,12 +55,12 @@ describe('BulkTicketDialog demo (HS2-PS9BQV)', () => {
     expect(closed).toContain('data-action="open-bulk-ticket-dialog-demo"');
     expect(closed).toContain('Delete 5 tickets requested.');
     openBulkTicketDialogDemo();
-    expect(String(BulkTicketDialogDemo())).toContain('data-component="bulk-tag-dialog"');
+    expect(String(BulkTicketDialogDemo())).toContain('data-dialog-component="bulk-tag-dialog"');
 
     closeBulkTicketDialogDemo('Dismissed');
     setBulkTicketDialogScenario('delete');
     expect(bulkTicketDialogSettings.open.value).toBe(true);
-    expect(String(BulkTicketDialogDemo())).toContain('data-component="bulk-delete-dialog"');
+    expect(String(BulkTicketDialogDemo())).toContain('data-dialog-component="bulk-delete-dialog"');
 
     const { root, control } = fakeRoot();
     resetBulkTicketDialogDemo(root);

@@ -1,4 +1,4 @@
-import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
+import type { SearchFieldModel } from '@kerfjs/ui/search-field-model';
 import type { Signal } from 'kerfjs';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
@@ -164,7 +164,7 @@ export interface HotSheetAppDependencies {
   savedViewError: Signal<string>;
   savedViewHelpOpen: Signal<boolean>;
   savedViewName: Signal<string>;
-  savedViewSearchModel: TokenSearchModel;
+  savedViewSearchModel: SearchFieldModel;
   searchMatchKeys: Signal<Set<string> | undefined>;
   shellMode: Signal<ProjectStripMode>;
   consumeSkipNextTicketMotion: () => boolean;

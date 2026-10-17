@@ -640,7 +640,7 @@ function wireAppShellDemo(root: HTMLElement): () => void {
     }),
   );
   demoListeners.add(
-    delegate(root, 'change', 'wa-select[name="mobile-project"]', (_event, target) => {
+    delegate(root, 'change', 'kui-select[name="mobile-project"]', (_event, target) => {
       selectProjectTab((target as HTMLInputElement).value);
     }),
   );
@@ -752,7 +752,7 @@ function wireAppShellDemo(root: HTMLElement): () => void {
     }),
   );
   demoListeners.add(
-    delegate(root, 'change', '[data-app-shell-demo] wa-select[name="mobile-view"]', (_event, target) => {
+    delegate(root, 'change', '[data-app-shell-demo] kui-select[name="mobile-view"]', (_event, target) => {
       const value = (target as FormControl).value;
       appShellSettings.mobileViewValue.value = value;
       shellEvent.value = `${value === 'all' ? 'Queue' : value.charAt(0).toUpperCase() + value.slice(1)} view selected.`;

@@ -17,7 +17,7 @@ import { syncSettingsControls } from './settings-controls';
 export type CommandRunDialogPresentation = 'output' | 'stop';
 
 const COMMAND_RUN_DIALOG_DEMO_SELECTOR =
-  '[data-component="command-run-dialog"], [data-component="command-cancellation-dialog"]';
+  '[data-dialog-component="command-run-dialog"], [data-dialog-component="command-cancellation-dialog"]';
 
 export const commandRunDialogSettings = {
   presentation: signal<CommandRunDialogPresentation>('output'),
@@ -59,7 +59,7 @@ const runningRun: CommandRun = {
 /**
  * CommandRunDialog renders an open `wa-dialog` whenever it is mounted, the same way the app shows it
  * while a command dialog is selected; the demo mounts it on selection, presentation swap, or Open
- * dialog, and unmounts it on dismiss or Web Awesome's own `wa-hide` (HS2-Z7C27E).
+ * dialog, and unmounts it on dismiss or the Kerf dialog's own close request (`kui-request-close`, HS2-Z7C27E).
  */
 export function showCommandRunDialogDemo(): void {
   commandRunDialogSettings.open.value = true;
@@ -148,7 +148,7 @@ function wireCommandRunDialogDemo(root: HTMLElement): () => void {
     }),
   );
   demoListeners.add(
-    delegateCapture(root, 'wa-hide', COMMAND_RUN_DIALOG_DEMO_SELECTOR, () => {
+    delegateCapture(root, 'kui-request-close', COMMAND_RUN_DIALOG_DEMO_SELECTOR, () => {
       dismissCommandRunDialogDemo();
     }),
   );

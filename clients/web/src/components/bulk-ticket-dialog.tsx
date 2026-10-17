@@ -1,5 +1,4 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
-import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 
 import { List } from '@kerfjs/ui/list';
@@ -19,20 +18,16 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
   if (state.kind === 'empty-trash')
     return (
       <div data-key="bulk-ticket-dialog">
-        <DialogSurface size="small">
-          <wa-dialog data-key="bulk-ticket-dialog" open data-component="empty-trash-dialog" label="Empty Trash?">
-            <List gap="m">
-              <Text flush>
-                Permanently remove {state.count} ticket{state.count === 1 ? '' : 's'} from this project’s active store.
-                Git history will still contain the removed files.
-              </Text>
-              {Boolean(state.error) && (
-                <Text flush tone="danger" role="alert">
-                  {state.error}
-                </Text>
-              )}
-            </List>
-            <Row slot="footer" hAlign="right" vAlign="middle" gap="xs" wrap>
+        <DialogSurface
+          label="Empty Trash?"
+          size="small"
+          rootAttributes={{
+            'data-key': 'bulk-ticket-dialog',
+            'data-dialog-component': 'empty-trash-dialog',
+            'data-controlled-open': 'true',
+          }}
+          footer={
+            <Row hAlign="right" vAlign="middle" gap="xs" wrap>
               <wa-button
                 {...TICKET_SELECTION_ACTIONS.cancelBulkTicketAction.attrs}
                 appearance="outlined"
@@ -44,24 +39,35 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
                 {state.busy ? 'Emptying…' : 'Empty Trash'}
               </wa-button>
             </Row>
-          </wa-dialog>
+          }
+        >
+          <List gap="m">
+            <Text flush>
+              Permanently remove {state.count} ticket{state.count === 1 ? '' : 's'} from this project’s active store.
+              Git history will still contain the removed files.
+            </Text>
+            {Boolean(state.error) && (
+              <Text flush tone="danger" role="alert">
+                {state.error}
+              </Text>
+            )}
+          </List>
         </DialogSurface>
       </div>
     );
   if (state.kind === 'delete')
     return (
       <div data-key="bulk-ticket-dialog-2">
-        <DialogSurface size="small">
-          <wa-dialog
-            data-key="bulk-ticket-dialog-2"
-            open
-            data-component="bulk-delete-dialog"
-            label={`Delete ${state.count} ticket${state.count === 1 ? '' : 's'}?`}
-          >
-            <Text flush>
-              Deleted tickets leave the active project views. This action can be undone with the standard Undo shortcut.
-            </Text>
-            <Row slot="footer" hAlign="right" vAlign="middle" gap="xs" wrap>
+        <DialogSurface
+          label={`Delete ${state.count} ticket${state.count === 1 ? '' : 's'}?`}
+          size="small"
+          rootAttributes={{
+            'data-key': 'bulk-ticket-dialog-2',
+            'data-dialog-component': 'bulk-delete-dialog',
+            'data-controlled-open': 'true',
+          }}
+          footer={
+            <Row hAlign="right" vAlign="middle" gap="xs" wrap>
               <wa-button {...TICKET_SELECTION_ACTIONS.cancelBulkTicketAction.attrs} appearance="outlined">
                 Cancel
               </wa-button>
@@ -69,55 +75,56 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
                 Delete {state.count} ticket{state.count === 1 ? '' : 's'}
               </wa-button>
             </Row>
-          </wa-dialog>
+          }
+        >
+          <Text flush>
+            Deleted tickets leave the active project views. This action can be undone with the standard Undo shortcut.
+          </Text>
         </DialogSurface>
       </div>
     );
   const adding = state.mode === 'add';
   return (
     <div data-key="bulk-ticket-dialog-3">
-      <DialogSurface size="small">
-        <wa-dialog
-          data-key="bulk-ticket-dialog-3"
-          open
-          data-component="bulk-tag-dialog"
-          label={`${adding ? 'Add' : 'Remove'} tag — ${state.count} selected`}
-        >
-          <form {...TICKET_SELECTION_ACTIONS.submitBulkTag.attrs} data-tag-mode={state.mode}>
-            <List gap="m">
-              <wa-input name="bulk-ticket-tag" label={adding ? 'Tag to add' : 'Tag to remove'} required autofocus />
-              {!adding && state.choices.length > 0 && (
-                <div role="group" aria-label="Tags in selection">
-                  <Row gap="xs" wrap>
-                    {state.choices.map((tag) => (
-                      <wa-button
-                        type="button"
-                        size="small"
-                        appearance="outlined"
-                        {...TICKET_SELECTION_ACTIONS.chooseBulkTag.attrs}
-                        data-tag={tag}
-                      >
-                        {tag}
-                      </wa-button>
-                    ))}
-                  </Row>
-                </div>
-              )}
-              <Row hAlign="right" vAlign="middle" gap="xs" wrap>
-                <wa-button
-                  type="button"
-                  {...TICKET_SELECTION_ACTIONS.cancelBulkTicketAction.attrs}
-                  appearance="outlined"
-                >
-                  Cancel
-                </wa-button>
-                <wa-button type="submit" variant="brand">
-                  {adding ? 'Add tag' : 'Remove tag'}
-                </wa-button>
-              </Row>
-            </List>
-          </form>
-        </wa-dialog>
+      <DialogSurface
+        label={`${adding ? 'Add' : 'Remove'} tag — ${state.count} selected`}
+        size="small"
+        rootAttributes={{
+          'data-key': 'bulk-ticket-dialog-3',
+          'data-dialog-component': 'bulk-tag-dialog',
+          'data-controlled-open': 'true',
+        }}
+      >
+        <form {...TICKET_SELECTION_ACTIONS.submitBulkTag.attrs} data-tag-mode={state.mode}>
+          <List gap="m">
+            <wa-input name="bulk-ticket-tag" label={adding ? 'Tag to add' : 'Tag to remove'} required autofocus />
+            {!adding && state.choices.length > 0 && (
+              <div role="group" aria-label="Tags in selection">
+                <Row gap="xs" wrap>
+                  {state.choices.map((tag) => (
+                    <wa-button
+                      type="button"
+                      size="small"
+                      appearance="outlined"
+                      {...TICKET_SELECTION_ACTIONS.chooseBulkTag.attrs}
+                      data-tag={tag}
+                    >
+                      {tag}
+                    </wa-button>
+                  ))}
+                </Row>
+              </div>
+            )}
+            <Row hAlign="right" vAlign="middle" gap="xs" wrap>
+              <wa-button type="button" {...TICKET_SELECTION_ACTIONS.cancelBulkTicketAction.attrs} appearance="outlined">
+                Cancel
+              </wa-button>
+              <wa-button type="submit" variant="brand">
+                {adding ? 'Add tag' : 'Remove tag'}
+              </wa-button>
+            </Row>
+          </List>
+        </form>
       </DialogSurface>
     </div>
   );

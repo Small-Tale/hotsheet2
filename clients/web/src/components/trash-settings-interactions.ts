@@ -46,10 +46,15 @@ export function wireTrashSettings(root: HTMLElement, bindings: TrashSettingsBind
     }),
   );
   lifetime.add(
-    delegateCapture(root, 'wa-hide', COMMANDS_AND_AI_TARGETS.trashRetentionLeaveDialog.selector, (event, target) => {
-      if (event.target !== event.currentTarget && !(event.target as Element).matches('wa-dialog')) return;
-      bindings.dismissLeaving(target as HTMLElement);
-    }),
+    delegateCapture(
+      root,
+      'kui-request-close',
+      COMMANDS_AND_AI_TARGETS.trashRetentionLeaveDialog.selector,
+      (event, target) => {
+        if (event.target !== target) return;
+        bindings.dismissLeaving(target as HTMLElement);
+      },
+    ),
   );
   return () => {
     lifetime.dispose();

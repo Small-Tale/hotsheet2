@@ -3,15 +3,17 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('project dialog lifecycle', () => {
-  it('synchronizes native Web Awesome dismissal back to the Kerf open signal', () => {
+  it('synchronizes a Kerf DialogSurface close request back to the open signal (HS2-BH7NZ4)', () => {
     const source = ['./app/runtime.tsx', './features/project-lifecycle.ts', './interactions/project-lifecycle.ts']
       .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
       .join('\n');
 
     expect(source).toMatchSource(
-      /delegate\(document\.body,'wa-hide','\[data-project-dialog\]',\(\)=>\{unhealthyServerRecovery\.value=undefined;projectDialogOpen\.value=false\}\)/,
+      /delegate\(document\.body,'kui-request-close','\[data-project-dialog\]',\(\)=>\{unhealthyServerRecovery\.value=undefined;projectDialogOpen\.value=false\}\)/,
     );
-    expect(source).not.toMatch(/delegate\(document\.body,'wa-request-close','\[data-project-dialog\]'/);
+    expect(source).not.toMatch(/delegate\(document\.body,'wa-hide','\[data-project-dialog\]'/);
+    // Ticket setup waits for the opening dialog's native `close` (after its exit motion), not wa-after-hide.
+    expect(source).toContainSource("openingDialog!.addEventListener('close',presentSetup,{once:true})");
   });
 
   it('clears setup state on the actual dialog hide event so later renders cannot reopen it', () => {

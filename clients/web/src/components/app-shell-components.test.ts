@@ -207,9 +207,10 @@ describe('application shell components', () => {
       mobileView: { value: 'trash', choices, action: { kind: 'empty-trash' } },
     });
     expect(markup).toContain('app-shell__mobile-view-header');
-    const select = /<wa-select\b[^>]*>/.exec(markup)?.[0] ?? '';
+    // The Kerf Select root carries the name; its native combobox trigger carries the accessible name.
+    const select = /<kui-select\b[^>]*>(?:<span[^>]*>[^<]*<\/span>)?<button[^>]*>/.exec(markup)?.[0] ?? '';
     expect(select).toContain('name="mobile-view"');
-    expect(select).toContain('aria-label="Ticket view"');
+    expect(select).toContain('aria-label="Ticket View"');
     expect(markup).toContain('data-action="open-empty-trash"');
     expect(markup).not.toContain('desktop-only');
     const without = render({ pageHeader: '<p class="desktop-only">Page</p>' as never });
@@ -273,9 +274,9 @@ describe('application shell components', () => {
     expect(ring(true)).toBe('true');
     expect(css).not.toContain('--kui-resizable-region-separator-color');
   });
-  it('leaves the inspector-sidebar tab presentation to AppTab (HS2-PKPGGZ)', () => {
+  it('leaves the inspector-sidebar tab presentation to TabBarItem (HS2-PKPGGZ)', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
-    expect(css).not.toContain('.kui-app-tab__name');
+    expect(css).not.toContain('.kui-tab-bar-item__name');
   });
   it('lets the composer own the workspace top rhythm without removing spacing when absent', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
@@ -330,7 +331,7 @@ describe('application shell components', () => {
     expect(markup).toContain('draggable="true"');
     expect(markup).toContain('tabindex="0"');
     expect(markup).toContain('aria-keyshortcuts="Delete Backspace Alt+Shift+ArrowLeft Alt+Shift+ArrowRight"');
-    expect(markup).toMatch(/app-tab__close[^>]*tabindex="-1"|tabindex="-1"[^>]*app-tab__close/);
+    expect(markup).toMatch(/tab-bar-item__close[^>]*tabindex="-1"|tabindex="-1"[^>]*tab-bar-item__close/);
     expect(markup).toContain('data-lucide="cloud"');
     expect(markup).toContain('aria-label="Project busy"');
     expect(markup).not.toContain('data-lucide="loader-circle"');
@@ -357,7 +358,7 @@ describe('application shell components', () => {
       ProjectTab({ id: 'pending:/work/alpha', name: 'alpha', location: 'local', pending: true }),
     );
     expect(pendingTab).toContain('data-project-pending="true"');
-    // Kerf's named pending AppTab (HS2-XGSSK1): the visible name is the accessible name and it stays selectable.
+    // Kerf's named pending TabBarItem (HS2-XGSSK1): the visible name is the accessible name and it stays selectable.
     expect(pendingTab).toContain('data-pending="true"');
     expect(pendingTab).not.toContain('kui-skeleton');
     expect(pendingTab).toContain('aria-busy="true"');
@@ -432,10 +433,10 @@ describe('application shell components', () => {
     expect(projectTabCss).toMatchSource(
       /\.project-tab__work\[data-active="true"\]\s+\.project-tab__work-count\s*\{[^}]*color:\s*var\(--wa-color-text-normal\)/,
     );
-    // Kerf owns the attention and drop-target treatments; the tab configures its own AppTab root through
+    // Kerf owns the attention and drop-target treatments; the tab configures its own TabBarItem root through
     // public tokens (HS2-AT4AAA, HS2-T67Z3N) and never reaches into the strip that composes it (HS2-DR549A).
     expect(projectTabCss).toContainSource(
-      "[data-tab-kind='project'] { --kui-app-tab-attention-color: var(--wa-color-danger-on-quiet); }",
+      "[data-tab-kind='project'] { --kui-tab-bar-item-attention-color: var(--wa-color-danger-on-quiet); }",
     );
     expect(projectTabCss).not.toContain('.project-tab-bar');
     expect(projectTabCss).not.toContain('[data-attention=');
@@ -468,9 +469,9 @@ describe('application shell components', () => {
     const projectCss = readFileSync(new URL('./project-tab.css', import.meta.url), 'utf8'),
       barCss = readFileSync(new URL('./project-tab-bar.css', import.meta.url), 'utf8');
     expect(String(ProjectTab({ id: 'focus', name: 'Focus', location: 'local' }))).toMatch(
-      /class="kui-app-tab" data-component="app-tab"[^>]*data-name-overflow="visible"/,
+      /class="kui-tab-bar-item" data-component="tab-bar-item"[^>]*data-name-overflow="visible"/,
     );
-    expect(projectCss).not.toContain('.project-tab:has(.kui-app-tab__close)');
+    expect(projectCss).not.toContain('.project-tab:has(.kui-tab-bar-item__close)');
     expect(barCss).toMatch(
       /\.project-tab-bar \{[^}]*--kui-tab-bar-strip-margin-block: calc\(var\(--kui-space-2xs\) \* -1\);[^}]*--kui-tab-bar-strip-padding: var\(--kui-space-2xs\);/,
     );
@@ -601,11 +602,13 @@ describe('application shell components', () => {
     expect(markup).not.toContain('data-tab-kind="project"');
     expect(markup).toContain('class="project-tab-bar project-tab-bar--mobile"');
     expect(markup).toContain('name="mobile-project"');
-    // The shadow combobox uses Web Awesome's label contract, not host ARIA alone.
-    expect(markup).toMatch(/<wa-select\b[^>]*\slabel="Project"/);
+    // Kerf Select's native combobox trigger is named "Project".
+    expect(markup).toMatch(
+      /<kui-select\b[^>]*name="mobile-project"[\s\S]*?class="kui-select__trigger"[^>]*aria-label="Project"/,
+    );
     expect(markup).toContain('value="two"');
-    expect(markup).toContain('<wa-option value="one"');
-    expect(markup).toContain('<wa-option value="two"');
+    expect(markup).toMatch(/class="kui-select__option"[^>]*data-value="one"/);
+    expect(markup).toMatch(/class="kui-select__option"[^>]*data-value="two"/);
     // The dashboard mode switcher and Add-project action remain.
     expect(markup).toContain('aria-label="Workspace Grid"');
     expect(markup).toContain('data-action="choose-project"');
@@ -623,7 +626,7 @@ describe('application shell components', () => {
         tabs: [{ id: 'demo', name: 'Demo', location: 'local', selected: true, operation }],
       }),
     );
-    expect(markup).toMatch(/<wa-select\b[^>]*\slabel="Project"/);
+    expect(markup).toMatch(/<kui-select\b[\s\S]*?class="kui-select__trigger"[^>]*aria-label="Project"/);
     // Kerf Row and compact Text lay out the selected value (HS2-VMHN64).
     expect(markup).toMatch(/class="kui-row project-tab-bar__selected-project"[^>]*>Demo/);
     expect(markup).toContain(`aria-label="${operation.label}"`);

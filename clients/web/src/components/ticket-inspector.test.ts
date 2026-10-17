@@ -213,7 +213,7 @@ describe('TicketInspector', () => {
       expect(markup).toContain('aria-label="Ticket Inspector Sections"');
       expect(markup).toMatch(
         new RegExp(
-          `data-inspector-tab="${tab}"[^>]*data-component="app-tab"[^>]*data-tab-id="${tab}"[^>]*data-selected="true"`,
+          `data-inspector-tab="${tab}"[^>]*data-component="tab-bar-item"[^>]*data-tab-id="${tab}"[^>]*data-selected="true"`,
         ),
       );
       // Icon-only tabs keep their name as the accessible name (Kerf beta.60 presentation).
@@ -233,7 +233,7 @@ describe('TicketInspector', () => {
       );
       expect(markup).toContain('data-appearance="borderless"');
       if (tab === 'info') {
-        expect(markup.match(/<wa-option value="feature"/g)).toHaveLength(1);
+        expect(markup.match(/class="kui-select__option"[^>]*data-value="feature"/g)).toHaveLength(1);
         expect(markup).toContain('data-component="ticket-notes"');
         expect(markup).toContain('data-component="markdown-preview"');
       }
@@ -503,12 +503,12 @@ describe('TicketInspector', () => {
   });
 
   it('keeps attachment names shrinkable while preserving the compact menu trigger', () => {
-    // Kerf Text truncates the name inside a flexible Row; the menu is a Kerf IconButton (HS2-K9HSXZ).
+    // Kerf Text truncates the name inside a flexible Row; the menu is a Kerf icon-only Button (HS2-K9HSXZ).
     const markup = String(TicketAttachments({ attachments: [{ id: 'one', name: 'a-very-long-name.png' }] }));
     expect(markup).toMatch(
       /data-component="row"[^>]*data-flex[\s\S]*?data-wrap="truncate"[^>]*>a-very-long-name\.png/u,
     );
-    expect(markup).toMatch(/data-component="icon-button"/u);
+    expect(markup).toMatch(/data-component="button"[^>]*data-icon-only/u);
   });
 
   it('contains metadata and ticket content within narrow inspector bounds', () => {
@@ -554,11 +554,11 @@ describe('TicketInspector', () => {
     expect(String(TicketInspector({ ...base, presentation: 'reader' }))).toMatch(
       /data-inspector-tab="info"[^>]*data-presentation="segmented"[^>]*data-size="compact"/,
     );
-    // The tabs are configured through AppTab props and the tab strip; no app class sits on the tab root.
+    // The tabs are configured through TabBarItem props and the tab strip; no app class sits on the tab root.
     expect(markup).not.toContain('ticket-inspector__tab"');
     // Fill allocation centers each tab; the icon-to-name gap is the public layout token.
     expect(inspectorCss).toMatch(/\.ticket-inspector__tabs-frame \{[^}]*--kui-layout-item-gap: var\(--kui-space-2xs\)/);
-    expect(inspectorCss).not.toMatch(/\.kui-app-tab__select \{/);
+    expect(inspectorCss).not.toMatch(/\.kui-tab-bar-item__select \{/);
     // Each direct child sits 8px from the edge through the column's own inline padding (HS2-KZ646H); headers
     // get a 1px transparent border + 8px padding (17px text) and bordered surfaces own their border+padding
     // at the 8px column — no negative margins and no child-margin rule (HS2-R64ETQ).

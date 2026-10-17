@@ -203,7 +203,7 @@ test('orders terminal and AI-chat tabs as one persistent, keyboard-accessible dr
   await expect.poll(() => drawerOrder(drawer)).toEqual(['shell-one', 'shell-two', chatId!]);
   await dragBefore(page, chatId!, 'shell-one');
   await expect.poll(() => drawerOrder(drawer)).toEqual([chatId!, 'shell-one', 'shell-two']);
-  const shellTwo = drawer.locator('[data-tab-id="shell-two"] .kui-app-tab__select');
+  const shellTwo = drawer.locator('[data-tab-id="shell-two"] .kui-tab-bar-item__select');
   await shellTwo.press('Alt+Shift+ArrowLeft');
   await expect.poll(() => drawerOrder(drawer)).toEqual([chatId!, 'shell-two', 'shell-one']);
   await expect(shellTwo).toBeFocused();
@@ -255,7 +255,7 @@ test('orders terminal and AI-chat tabs as one persistent, keyboard-accessible dr
   await expect(shellTwo).toBeFocused();
   await page.keyboard.press('Delete');
   await expect.poll(() => drawerOrder(drawer)).toEqual(['shell-one']);
-  const shellOne = drawer.locator('[data-tab-id="shell-one"] .kui-app-tab__select');
+  const shellOne = drawer.locator('[data-tab-id="shell-one"] .kui-tab-bar-item__select');
   await expect(shellOne).toHaveAttribute('aria-selected', 'true');
   await expect(shellOne).toBeFocused();
 });

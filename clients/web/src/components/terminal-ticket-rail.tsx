@@ -82,7 +82,7 @@ export function terminalTicketRailPanel({
         focusRingInset
         name="terminal-rail-view"
         value={selectedViewId}
-        ariaLabel="Ticket rail view"
+        ariaLabel="Ticket Rail View"
         choices={views.map((view) => ({ value: view.id, label: view.label }))}
         renderSelected={(choice) => <span>{choice.label}</span>}
       />
@@ -100,7 +100,7 @@ export function terminalTicketRailPanel({
             presentation="toolbar-borderless"
             name="terminal-rail-project"
             value={selectedProjectId}
-            ariaLabel="Ticket rail project"
+            ariaLabel="Ticket Rail Project"
             triggerWidth="max-content"
             choices={projects.map((project) => ({ value: project.id, label: project.name }))}
             renderSelected={(choice) => <span>{choice.label}</span>}

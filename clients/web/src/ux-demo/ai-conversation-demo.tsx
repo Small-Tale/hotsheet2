@@ -15,6 +15,7 @@ import {
 } from '../ai-conversation';
 import { AIConversation, type AIConversationProps, AIConversationToolbar } from '../components/ai-conversation';
 import { wireAiConversation } from '../components/ai-conversation-interactions';
+import { syncControlledOpen } from '../controlled-open';
 import {
   type ConversationHistoryCursor,
   conversationSentHistory,
@@ -349,7 +350,7 @@ export function AIConversationSettings() {
       {aiConversationPresentation.value === 'embedded' && (
         <Select
           name="chat-height"
-          label="Chat height"
+          label="Chat Height"
           value={aiConversationChatHeight.value}
           choices={[
             { value: 'full', label: 'Tall Chat' },
@@ -359,7 +360,7 @@ export function AIConversationSettings() {
       )}
       <Select
         name="scenario"
-        label="Public state"
+        label="Public State"
         value={aiConversationScenario.value}
         choices={[
           { value: 'empty', label: 'Empty' },
@@ -391,7 +392,7 @@ export function AIConversationSettings() {
 export function openAIConversationDemo(root: HTMLElement): void {
   aiConversationDemoOpen.value = true;
   queueMicrotask(() => {
-    root.querySelector<HTMLElement & { show?(): void }>('[data-component="ai-conversation"]')?.show?.();
+    syncControlledOpen(root);
   });
 }
 

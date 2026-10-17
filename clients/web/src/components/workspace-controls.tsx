@@ -5,9 +5,9 @@ import { foregroundColorVar, px } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuItem } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
+import type { SearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { SegmentedControl, type SegmentedControlChoice } from '@kerfjs/ui/segmented-control';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
-import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import type { IconNode } from 'lucide';
@@ -90,9 +90,9 @@ function WorkspaceUpNextIcon({ state }: { state: WorkspaceUpNextState }) {
   );
 }
 
-let inertSearchModel: TokenSearchModel | undefined;
+let inertSearchModel: SearchFieldModel | undefined;
 /** An empty, tag-less model for previews that render the controls without the app's search state. */
-function previewSearchModel(): TokenSearchModel {
+function previewSearchModel(): SearchFieldModel {
   inertSearchModel ??= createTicketSearchModel({ tags: () => [] });
   return inertSearchModel;
 }
@@ -106,7 +106,7 @@ export interface WorkspaceHeaderProps {
    * The Kerf-managed workspace search model the TicketSearchField renders (HS2-5JXBQY). The app
    * always passes its own; a standalone preview without one renders an inert, tag-less model.
    */
-  searchModel?: TokenSearchModel;
+  searchModel?: SearchFieldModel;
   searchHelpOpen?: boolean;
   sort?: WorkspaceSort;
   sortDirection?: WorkspaceSortDirection;
@@ -297,39 +297,6 @@ export function workspaceSortTrigger(sort: WorkspaceSort, direction: WorkspaceSo
   return sortTriggerIcons[sort][direction];
 }
 
-export function wireWorkspaceOverflowKeyboard(root: Document | HTMLElement): () => void {
-  const onKeydown = (event: Event) => {
-    const keyboard = event as KeyboardEvent;
-    if (!['Enter', ' ', 'ArrowDown'].includes(keyboard.key)) return;
-    const origin = keyboard.target;
-    if (!(origin instanceof Element)) return;
-    const trigger = origin.closest<HTMLElement>('[data-workspace-overflow] > [slot="trigger"]');
-    if (!trigger) return;
-    const dropdown = trigger.closest<HTMLElement & { open: boolean }>('[data-workspace-overflow]');
-    if (!dropdown || dropdown.open) return;
-    keyboard.preventDefault();
-    keyboard.stopPropagation();
-    dropdown.open = true;
-  };
-  const onAfterShow = (event: Event) => {
-    const dropdown = event.target;
-    if (!(dropdown instanceof HTMLElement) || !dropdown.matches('[data-workspace-overflow]')) return;
-    requestAnimationFrame(() => {
-      const first = dropdown.querySelector<HTMLElement & { active?: boolean }>('wa-dropdown-item:not([disabled])');
-      if (!first) return;
-      first.active = true;
-      first.tabIndex = 0;
-      first.focus({ preventScroll: true });
-    });
-  };
-  root.addEventListener('keydown', onKeydown);
-  root.addEventListener('wa-after-show', onAfterShow);
-  return () => {
-    root.removeEventListener('keydown', onKeydown);
-    root.removeEventListener('wa-after-show', onAfterShow);
-  };
-}
-
 function WorkspaceOverflowControls({
   mode,
   projectActionsDisabled,
@@ -373,7 +340,7 @@ function WorkspaceOverflowControls({
       icon={<LucideIcon icon={MoreHorizontal} name="ellipsis" />}
       caret={false}
       placement="bottom-end"
-      rootAttributes={{ 'data-workspace-overflow': 'true', 'data-token-search-keep-open': 'true' }}
+      rootAttributes={{ 'data-workspace-overflow': 'true', 'data-search-field-keep-open': 'true' }}
       items={[
         {
           label: 'Toggle Up Next',
@@ -505,7 +472,7 @@ export function WorkspaceControls({
     sortSelect = (
       <Select
         name="workspace-sort"
-        ariaLabel={`Sort tickets: ${sortLabel}, ${sortDirection}`}
+        ariaLabel={`Sort Tickets: ${sortLabel}, ${sortDirection}`}
         value={sort}
         choices={sortChoices}
         disabled={projectActionsDisabled}

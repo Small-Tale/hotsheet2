@@ -12,7 +12,7 @@ for (const systemTheme of ['light', 'dark'] as const) {
     const stage = page.getByRole('region', { name: 'ProjectDialog Examples' });
     const palette = () =>
       dialog.evaluate((element) => ({
-        surface: getComputedStyle(element.shadowRoot!.querySelector('dialog')!).backgroundColor,
+        surface: getComputedStyle(element).backgroundColor,
         foreground: getComputedStyle(element.querySelector('[data-component="list-item"]')!).color,
         canvas: getComputedStyle(document.documentElement).backgroundColor,
       }));
@@ -79,11 +79,7 @@ test('demonstrates project chooser states and opens again after empty, error, an
   await expect
     .poll(() =>
       remote.evaluate(
-        (element) =>
-          element.shadowRoot
-            ?.querySelector('dialog')
-            ?.getAnimations()
-            .filter((animation) => animation.playState === 'running').length ?? -1,
+        (element) => element.getAnimations().filter((animation) => animation.playState === 'running').length,
       ),
     )
     .toBe(0);

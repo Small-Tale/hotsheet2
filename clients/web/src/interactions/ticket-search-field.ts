@@ -1,6 +1,6 @@
 import { openAnchoredSurface } from '@kerfjs/ui/anchored-surface';
-import { placeTokenSearchCaret } from '@kerfjs/ui/token-search-field';
-import { type TokenSearchModel } from '@kerfjs/ui/token-search-model';
+import { placeSearchFieldCaret } from '@kerfjs/ui/search-field';
+import { type SearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { delegate } from 'kerfjs';
 import { type OverlayHandle } from 'kerfjs/overlay';
 import { createScope } from 'kerfjs/scope';
@@ -49,7 +49,7 @@ export interface TicketSearchFieldHandlers {
  * model commit it, so a filter becomes a chip beside the existing ones, plain words stay words,
  * and existing tokens (anchored at earlier offsets) are kept.
  */
-export function insertSearchSyntax(model: Pick<TokenSearchModel, 'state' | 'edit'>, token: string) {
+export function insertSearchSyntax(model: Pick<SearchFieldModel, 'state' | 'edit'>, token: string) {
   const { query, tokens } = model.state.value;
   model.edit({ query: `${query.trimEnd()}${query.trim() ? ' ' : ''}${token} `, tokens }, true);
 }
@@ -83,7 +83,7 @@ interface OpenSurface {
  * `data-ticket-search-surface-state` marker its TicketSearchField renders (HS2-8TE69P). The
  * surfaces hang off the field's group (or form-field wrapper), live in the top layer or the
  * enclosing `wa-dialog`'s host slot (KF-F52T5D), and never take focus, so typing stays in the
- * editor. Their wrappers carry `data-token-search-keep-open`, so pressing inside one does not
+ * editor. Their wrappers carry `data-search-field-keep-open`, so pressing inside one does not
  * collapse the field. The date helper follows the query and closes only through state; help
  * also closes on Escape or an outside press, routed through `toggleHelp`.
  */
@@ -105,7 +105,7 @@ function wireTicketSearchSurfaces(root: HTMLElement, handlers: TicketSearchField
       initialFocus: false,
       dismiss: false,
     });
-    handle.el.setAttribute('data-token-search-keep-open', '');
+    handle.el.setAttribute('data-search-field-keep-open', '');
     handle.el.addEventListener('click', (event) => {
       if ((event.target as Element).closest(TICKET_SEARCH_ACTIONS.applyDate.selector))
         applyDate(id, handle.el, handlers);
@@ -134,7 +134,7 @@ function wireTicketSearchSurfaces(root: HTMLElement, handlers: TicketSearchField
           handlers.toggleHelp(id);
         },
       });
-    handle.el.setAttribute('data-token-search-keep-open', '');
+    handle.el.setAttribute('data-search-field-keep-open', '');
     // Example chips are native buttons, so a click covers pointer, Enter, and Space (HS2-FR1Y70).
     handle.el.addEventListener('click', (event) => {
       const chip = (event.target as Element).closest<HTMLElement>(TICKET_SEARCH_ACTIONS.insertSyntax.selector);
@@ -181,10 +181,10 @@ function wireTicketSearchSurfaces(root: HTMLElement, handlers: TicketSearchField
 
 /**
  * Wire the delegated actions of every TicketSearchField under `root`. Kerf's
- * `wireTokenSearchFields` owns editor chrome, submit, collapsible behavior, and (with the
+ * `wireSearchFields` owns editor chrome, submit, collapsible behavior, and (with the
  * registered models) parsing, chips, suggestions, edit, removal, and clear; this adds the Hot
  * Sheet helper surfaces (date helper, syntax help), focus restoration around Kerf's chip and
- * clear actions, and Home/⌘← caret placement. Register it before `wireTokenSearchFields` so the
+ * clear actions, and Home/⌘← caret placement. Register it before `wireSearchFields` so the
  * focus handlers can read a chip's position before Kerf removes or expands it.
  */
 export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearchFieldHandlers): InteractionTeardown {
@@ -194,12 +194,12 @@ export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearch
     delegate(
       root,
       'keydown',
-      '.ticket-search-field [data-token-search-editor], .ticket-search-form-field [data-token-search-editor]',
+      '.ticket-search-field [data-search-field-editor], .ticket-search-form-field [data-search-field-editor]',
       (event, target) => {
         const keyboard = event as KeyboardEvent;
         if (keyboard.key === 'Home' || (keyboard.key === 'ArrowLeft' && (keyboard.metaKey || keyboard.ctrlKey))) {
           event.preventDefault();
-          placeTokenSearchCaret(target as HTMLElement, 0);
+          placeSearchFieldCaret(target as HTMLElement, 0);
         }
       },
     ),

@@ -10,6 +10,11 @@ import {
   TicketRowContextMenu,
 } from './ticket-row-context-menu';
 
+/** The opening tag of the Kerf PopupMenu item whose leading attributes start with `attribute`. */
+const itemTag = (markup: string, attribute: string) => new RegExp(`<button ${attribute}[^>]*>`).exec(markup)?.[0] ?? '';
+/** Kerf PopupMenu items disable with `aria-disabled="true"` (Kerf UI 5.0.0-beta.106). */
+const disabledItem = (markup: string, attribute: string) => itemTag(markup, attribute).includes('aria-disabled="true"');
+
 describe('TicketRowContextMenu', () => {
   it('uses the composed path so shadow-menu interactions are inside and rows are outside', () => {
     const shadowPart = { matches: () => false };
@@ -40,11 +45,11 @@ describe('TicketRowContextMenu', () => {
 
   it('disables destination actions when every selected ticket is already there', () => {
     const backlog = String(TicketRowContextMenu({ x: 0, y: 0, status: 'backlog', allInBacklog: true }));
-    expect(backlog).toContain('data-context-action="Move to Backlog" disabled');
-    expect(backlog).not.toContain('data-context-action="Archive ticket" disabled');
+    expect(disabledItem(backlog, 'data-context-action="Move to Backlog"')).toBe(true);
+    expect(disabledItem(backlog, 'data-context-action="Archive ticket"')).toBe(false);
     const archive = String(TicketRowContextMenu({ x: 0, y: 0, status: 'archive', allInArchive: true }));
-    expect(archive).toContain('data-context-action="Archive ticket" disabled');
-    expect(archive).not.toContain('data-context-action="Move to Backlog" disabled');
+    expect(disabledItem(archive, 'data-context-action="Archive ticket"')).toBe(true);
+    expect(disabledItem(archive, 'data-context-action="Move to Backlog"')).toBe(false);
   });
 
   it('offers Restore from Trash first only when every selected ticket is in Trash (HS2-MWDR19)', () => {
@@ -55,33 +60,33 @@ describe('TicketRowContextMenu', () => {
     expect(trash).toContain('Restore from Trash');
     expect(trash).toContain('data-lucide="archive-restore"');
     expect(trash.indexOf(restore)).toBeLessThan(trash.indexOf('data-context-field="category"'));
-    expect(trash).not.toContain(`${restore} disabled`);
-    expect(String(TicketRowContextMenu({ x: 0, y: 0, allInTrash: true, canBulkUpdate: false }))).toContain(
-      `${restore} disabled`,
-    );
+    expect(disabledItem(trash, restore)).toBe(false);
+    expect(
+      disabledItem(String(TicketRowContextMenu({ x: 0, y: 0, allInTrash: true, canBulkUpdate: false })), restore),
+    ).toBe(true);
   });
 
   it('renders checked metadata submenus with stable bulk mutation contracts', () => {
     const markup = String(TicketRowContextMenu({ x: 12, y: 24, category: 'bug', priority: 'high', status: 'started' }));
     for (const field of ['category', 'priority', 'status']) expect(markup).toContain(`data-context-field="${field}"`);
-    // PopupMenu submenu choices: the app's routing attributes lead, then Kerf's own (HS2-2EHD8R).
-    expect(markup).toContain(
-      'data-context-field="category" data-context-value="bug" slot="submenu" value="bug" type="checkbox" checked',
-    );
-    expect(markup).toContain(
-      'data-context-field="priority" data-context-value="high" slot="submenu" value="high" type="checkbox" checked',
-    );
-    expect(markup).toContain(
-      'data-context-field="status" data-context-value="started" slot="submenu" value="started" type="checkbox" checked',
-    );
+    // PopupMenu submenu choices: the app's routing attributes lead, then Kerf's checkable item (HS2-2EHD8R).
+    for (const [field, value] of [
+      ['category', 'bug'],
+      ['priority', 'high'],
+      ['status', 'started'],
+    ]) {
+      const tag = itemTag(markup, `data-context-field="${field}" data-context-value="${value}"`);
+      expect(tag).toContain('role="menuitemcheckbox"');
+      expect(tag).toContain(`value="${value}" aria-checked="true"`);
+    }
     expect(markup).toContain('data-lucide="sparkles"');
     expect(markup).toContain('data-lucide="chevrons-up"');
     expect(markup).toContain('data-lucide="badge-check"');
     // A submenu cannot hold the status separator before Backlog (Kerf gap KF-7KR1BC).
-    expect(markup).toContain(
-      'data-context-field="status" data-context-value="backlog" slot="submenu" value="backlog" type="checkbox"',
-    );
-    expect(markup).not.toContain('<wa-divider slot="submenu">');
+    const backlog = itemTag(markup, 'data-context-field="status" data-context-value="backlog"');
+    expect(backlog).toContain('role="menuitemcheckbox"');
+    expect(backlog).toContain('aria-checked="false"');
+    expect(markup).not.toMatch(/data-submenu=""[^>]*>(?:(?!<\/div>)[^])*kui-popup-menu__divider/);
     expect(markup).toContain('data-context-menu="ticket"');
     expect(markup).toContain('data-context-field="status" data-context-value="archive"');
   });
@@ -100,11 +105,12 @@ describe('TicketRowContextMenu', () => {
 
   it('capability-disables every mutating bulk action while preserving duplication', () => {
     const markup = String(TicketRowContextMenu({ x: 0, y: 0, canBulkUpdate: false }));
-    expect(markup).toContain('data-context-action="Add tag" disabled');
-    expect(markup).toContain('data-context-action="Remove tag" disabled');
-    expect(markup).toContain('data-context-action="Delete ticket" variant="danger" disabled');
+    expect(disabledItem(markup, 'data-context-action="Add tag"')).toBe(true);
+    expect(disabledItem(markup, 'data-context-action="Remove tag"')).toBe(true);
+    expect(disabledItem(markup, 'data-context-action="Delete ticket"')).toBe(true);
+    expect(itemTag(markup, 'data-context-action="Delete ticket"')).toContain('data-tone="danger"');
     expect(markup).toContain('data-context-action="Duplicate ticket"');
-    expect(markup).not.toContain('data-context-action="Duplicate ticket" disabled');
+    expect(disabledItem(markup, 'data-context-action="Duplicate ticket"')).toBe(false);
   });
 
   it('hides Open ticket when more than one ticket is selected (HS2-XRENF2)', () => {
@@ -152,10 +158,13 @@ describe('TicketRowContextMenu', () => {
     expect(verified).toContain('Reopen Ticket');
     expect(verified).toContain('data-lucide="rotate-ccw"');
     expect(verified.indexOf(action)).toBeLessThan(verified.indexOf('data-context-action="Open ticket"'));
-    expect(verified).not.toContain(`${action} disabled`);
+    expect(disabledItem(verified, action)).toBe(false);
     expect(
-      String(TicketRowContextMenu({ x: 0, y: 0, status: 'archive', reopenAction: true, canBulkUpdate: false })),
-    ).toContain(`${action} disabled`);
+      disabledItem(
+        String(TicketRowContextMenu({ x: 0, y: 0, status: 'archive', reopenAction: true, canBulkUpdate: false })),
+        action,
+      ),
+    ).toBe(true);
     expect(String(TicketRowContextMenu({ x: 0, y: 0, status: 'completed' }))).not.toContain(action);
   });
 

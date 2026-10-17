@@ -40,7 +40,7 @@ export function galleryKeyTargetsTextField(event: Event): boolean {
       (target) =>
         target instanceof HTMLElement &&
         target.matches(
-          'input, textarea, select, wa-input, wa-textarea, wa-select, [role="textbox"], [contenteditable]:not([contenteditable="false"])',
+          'input, textarea, select, wa-input, wa-textarea, kui-select, [role="textbox"], [contenteditable]:not([contenteditable="false"])',
         ),
     );
 }
@@ -301,7 +301,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   function markDragTarget(target: HTMLElement) {
     target.dataset.draggingTicket = 'true';
     if (target.matches('.kui-list-item')) target.dataset.state = 'drag-target';
-    if (target.matches('.kui-app-tab')) target.dataset.dropTarget = 'true';
+    if (target.matches('.kui-tab-bar-item')) target.dataset.dropTarget = 'true';
   }
   function clearDragTarget(target: HTMLElement) {
     delete target.dataset.draggingTicket;
@@ -647,7 +647,9 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     });
   }
   // Outside presses and Escape close the shell's context menus through the helper the UX demos
-  // share (HS2-AFCWNG); the visibility-group menu keeps Escape for its dialog.
+  // share (HS2-AFCWNG); the visibility-group menu keeps Escape for its dialog. Kerf's PopupMenu
+  // (beta.106) handles Escape and item choice itself and stops the key at the document, so every
+  // menu also follows the menu's own close (`hide`) to clear its state, HS2-BH7NZ4.
   const dismissible = (
     surface: string,
     menu: { value: unknown },
@@ -658,6 +660,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     close: () => {
       menu.value = undefined;
     },
+    hide: true,
     ...options,
   });
   lifetime.add(

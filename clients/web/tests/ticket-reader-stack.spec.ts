@@ -265,11 +265,12 @@ test('uses native modality for focus, nested Escape, backdrop policy, and respon
     expect(await reader.evaluate((host) => host.contains(document.activeElement))).toBe(true);
   }
   const status = reader.locator('[data-action="open-inspector-status-menu"]');
-  const statusMenu = reader.locator('[data-inspector-status-menu]');
+  // A Kerf context PopupMenu keeps its open state on its anchor's aria-expanded.
+  const statusMenu = reader.locator('[data-inspector-status-menu] > .kui-popup-menu__context-anchor');
   await status.click();
-  await expect(statusMenu).toHaveJSProperty('open', true);
+  await expect(statusMenu).toHaveAttribute('aria-expanded', 'true');
   await page.keyboard.press('Escape');
-  await expect(statusMenu).toHaveJSProperty('open', false);
+  await expect(statusMenu).toHaveAttribute('aria-expanded', 'false');
   await page.waitForTimeout(200);
   await expect(reader).toBeVisible();
   await page.mouse.click(4, 4);
@@ -620,9 +621,9 @@ test('manages attachments in a link-opened reader through its owning project (HS
   await expect(relabelled.getByRole('button', { name: 'Edit Batch Label Relabelled from a link' })).toBeVisible();
   // Change the batch purpose.
   // The purpose pill is a Kerf Select (HS2-K9HSXZ).
-  const purpose = relabelled.locator('wa-select[name="attachment-batch-purpose"]');
+  const purpose = relabelled.locator('kui-select[name="attachment-batch-purpose"]');
   await purpose.click();
-  await purpose.locator('wa-option[value="correctness_evidence"]').click();
+  await purpose.locator('.kui-select__option[data-value="correctness_evidence"]').click();
   await expect
     .poll(() => (writes.at(-1)?.body as { purpose?: string } | undefined)?.purpose)
     .toBe('correctness_evidence');
@@ -703,7 +704,7 @@ test('keeps linked reader attachment batches read-only for a provider without at
   const batch = linked.locator('[data-attachment-batch="linked-batch"]');
   await expect(batch.getByRole('heading', { name: 'Linked evidence' })).toBeVisible();
   await expect(batch.locator('wa-input[name="attachment-batch-label"]')).toHaveJSProperty('disabled', true);
-  await expect(batch.locator('wa-select[name="attachment-batch-purpose"]')).toHaveJSProperty('disabled', true);
+  await expect(batch.locator('kui-select[name="attachment-batch-purpose"] > .kui-select__trigger')).toBeDisabled();
   await expect(linked.locator('[data-action="edit-attachment-batch-label"]')).toHaveCount(0);
   await expect(
     linked.locator(

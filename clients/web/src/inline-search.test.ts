@@ -154,7 +154,7 @@ describe('inline advanced-search tokens', () => {
     expect(tokenQuery([tokenFromRaw('is:duplicate')!])).toEqual({ close_reason: 'duplicate' });
   });
 
-  it('adapts inline tokens to kerf TokenSearchToken keyed on raw', () => {
+  it('adapts inline tokens to kerf SearchFieldToken keyed on raw', () => {
     const tag = { ...tokenFromRaw('tag:client')!, offset: 3 };
     expect(toTokenSearchToken(tag)).toEqual({
       value: 'tag:client',

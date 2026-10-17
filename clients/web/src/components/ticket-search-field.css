@@ -1,12 +1,12 @@
-/* TicketSearchField: Kerf's grouped TokenSearchField owns the border, padding, and focus ring.
+/* TicketSearchField: Kerf's grouped SearchField owns the border, padding, and focus ring.
    Kerf openAnchoredSurface owns the date helper and syntax help chrome, position, and hosting
    (HS2-8TE69P); this module keeps token colors and the layout of its own surface content. */
 /* Both presentations' quieter chips: the token color is set on the app-owned `className` hook
-   Kerf's TokenSearchField renders on its root in the grouped and the form-field presentation alike
+   Kerf's SearchField renders on its root in the grouped and the form-field presentation alike
    (HS2-8FS5BJ, HS2-RXHZVR). Kerf resolves its token defaults at their use sites, so the bare hook
    applies (KF-5G8WJ0); the surface and border tokens match Kerf's defaults and are not restated. */
 .ticket-search-field__query {
-  --kui-token-search-token-background: var(--wa-color-brand-fill-quiet);
+  --kui-search-field-token-background: var(--wa-color-brand-fill-quiet);
 }
 /* Surface content (app-owned markup inside Kerf's anchored surface): a readable width clamped
    to the viewport beside the surface's own inset. */

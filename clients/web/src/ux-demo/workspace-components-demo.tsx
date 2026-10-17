@@ -6,7 +6,7 @@ import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
-import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
+import { wireSearchFields } from '@kerfjs/ui/wire-search-fields';
 import { delegate, effect, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -33,7 +33,6 @@ import {
 import { TicketList } from '../components/ticket-list';
 import type { TicketRowProps } from '../components/ticket-row';
 import { statusMenuAnchorY } from '../components/ticket-status-menu';
-import { wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
 import {
   applyWorkspaceSortDirection,
   defaultWorkspaceSortDirection,
@@ -251,7 +250,7 @@ export function toggleWorkspaceDemoUpNext(): void {
 }
 
 export function focusWorkspaceSearch(root: ParentNode): boolean {
-  const input = root.querySelector<HTMLElement>('[data-token-search-editor="workspace-search"]');
+  const input = root.querySelector<HTMLElement>('[data-search-field-editor="workspace-search"]');
   if (!input) return false;
   input.focus({ preventScroll: true });
   return true;
@@ -431,7 +430,7 @@ function WorkspaceContent() {
       <DemoSettingsPreview description="Configure ticket providers, project defaults, commands, and local checkout behavior for Hot Sheet 2.">
         <Select
           name="default-ticket-provider"
-          label="Default ticket provider"
+          label="Default Ticket Provider"
           value="git"
           choices={[
             { value: 'git', label: 'Hot Sheet Git' },
@@ -497,7 +496,7 @@ export function QuickTicketComposerSettings() {
     <DemoSettingsForm settings="quick-ticket-composer">
       <Select
         name="composer-source-count"
-        label="Writable ticket sources"
+        label="Writable Ticket Sources"
         value={composerMultipleSources.value ? 'several' : 'one'}
         choices={[
           { value: 'one', label: 'One (Plain Text)' },
@@ -631,7 +630,7 @@ export function TicketInspectorSettings() {
     <DemoSettingsForm settings="ticket-inspector">
       <Select
         name="inspector-live-claim"
-        label="Live claim (AI working)"
+        label="Live Claim (AI Working)"
         value={inspectorLiveClaim.value}
         choices={[
           { value: 'none', label: 'None' },
@@ -654,7 +653,7 @@ export function TicketInspectorSettings() {
       />
       <Select
         name="inspector-field-conflict"
-        label="Field conflict"
+        label="Field Conflict"
         value={inspectorFieldConflict.value}
         choices={[
           { value: 'none', label: 'None' },
@@ -773,7 +772,7 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
   // Kerf owns editor chrome, collapsible behavior, and, through the registered models, parsing,
   // chips, suggestions, chip edit/removal, and clear (HS2-5JXBQY).
   demoListeners.add(
-    wireTokenSearchFields(root, {
+    wireSearchFields(root, {
       models: {
         'workspace-search': workspaceSearchModel,
         ...ticketSearchDemoModels,
@@ -781,7 +780,7 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
       },
       // Enter commits a trailing filter through the model; the rebuilt editor gets its caret back at the end.
       onSubmit: ({ id }) => {
-        restoreInlineSearchCaret(root, `[data-token-search-editor="${id}"]`);
+        restoreInlineSearchCaret(root, `[data-search-field-editor="${id}"]`);
       },
       collapsible: {
         keepOpenOn: keepSearchOpenForShadowTarget,
@@ -844,7 +843,6 @@ function wireWorkspaceComponentsDemo(root: HTMLElement): () => void {
       resetWorkspaceDemoNotifications();
     }),
   );
-  demoListeners.add(wireWorkspaceOverflowKeyboard(root));
   function openSelectedDemoTicketActions(target: Element): void {
     const selected = collectionTickets.value.find((ticket) => ticket.selected);
     if (!selected) return;

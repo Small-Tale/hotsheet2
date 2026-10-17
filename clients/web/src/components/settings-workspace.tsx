@@ -104,7 +104,7 @@ export function SettingsWorkspace({
           <Grid minColumnWidth={rem(15)} gap="m">
             <Select
               name="permission-automation-action"
-              label="Automatic decision"
+              label="Automatic Decision"
               value={permissions.automation.action}
               choices={[
                 { value: 'off', label: 'Off' },
@@ -114,7 +114,7 @@ export function SettingsWorkspace({
             />
             <Select
               name="permission-automation-delay"
-              label="After visible for"
+              label="After Visible For"
               value={String(permissions.automation.delayMs)}
               disabled={permissions.automation.action === 'off'}
               choices={permissions.delays

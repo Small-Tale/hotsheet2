@@ -31,5 +31,5 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
  * Markup spreads `.attrs` where it renders a literal; handlers use `.selector`.
  */
 export const NOTIFICATIONS_AND_LINKS_TARGETS = {
-  ticketLinkChoiceDialog: attr('data-component', 'ticket-link-choice-dialog'),
+  ticketLinkChoiceDialog: attr('data-dialog-component', 'ticket-link-choice-dialog'),
 } as const;

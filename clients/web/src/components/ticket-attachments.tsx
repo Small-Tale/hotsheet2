@@ -1,10 +1,10 @@
 import './ticket-attachments.css';
 
 import { Badge } from '@kerfjs/ui/badge';
+import { Button } from '@kerfjs/ui/button';
 import { ContentItem } from '@kerfjs/ui/content-item';
 import { flex, px, uiColor } from '@kerfjs/ui/css-values';
 import { FileDropZone, FilePickerTrigger } from '@kerfjs/ui/file-picker';
-import { IconButton } from '@kerfjs/ui/icon-button';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListInsetControl } from '@kerfjs/ui/list-inset-control';
@@ -223,7 +223,7 @@ export function TicketAttachments({
                 data-attachment-actor-name={group.actor?.display_name ?? ''}
               >
                 <List gap="xs">
-                  {/* Kerf List, Row, Text, IconButton, wa-input, and Select own the header stack, title, label
+                  {/* Kerf List, Row, Text, Button, wa-input, and Select own the header stack, title, label
                     editor, and purpose pill (HS2-K9HSXZ). The editor stays rendered (hidden) because
                     regrouping reads its label, and keeps one position so focusing it survives the
                     rerender that opens it; while it is open it replaces the title. */}
@@ -244,7 +244,7 @@ export function TicketAttachments({
                     </ListInsetControl>
                     {editing ? undefined : (
                       // Kerf Text titles the batch and wraps a long label; an editable batch adds a Kerf
-                      // IconButton Edit action, and double-clicking the title is a shortcut (HS2-K9HSXZ).
+                      // icon-only Button Edit action, and double-clicking the title is a shortcut (HS2-K9HSXZ).
                       <Row
                         hAlign="full"
                         vAlign="top"
@@ -260,13 +260,12 @@ export function TicketAttachments({
                           </ListInsetText>
                         </Row>
                         {manageable && (
-                          <IconButton
-                            icon={Pencil}
-                            iconName="pencil"
-                            label={`Edit Batch Label ${shownLabel}`}
+                          <Button
+                            icon={<LucideIcon icon={Pencil} name="pencil" />}
+                            ariaLabel={`Edit Batch Label ${shownLabel}`}
                             action={ATTACHMENTS_AND_GALLERY_ACTIONS.editAttachmentBatchLabel.value}
-                            appearance="plain"
-                            size="xs"
+                            emphasis="plain"
+                            size="compact"
                           />
                         )}
                       </Row>
@@ -287,7 +286,7 @@ export function TicketAttachments({
                   </List>
                   {group.items.map((attachment) => (
                     // The app-owned wrapper carries the drag source and row identity Kerf roots protect
-                    // (`draggable`, `data-component`); Kerf ContentItem, Row, Text, and IconButton own the
+                    // (`draggable`, `data-component`); Kerf ContentItem, Row, Text, and icon-only Button own the
                     // row chrome (HS2-K9HSXZ).
                     <div
                       class="ticket-attachments__item"
@@ -328,13 +327,12 @@ export function TicketAttachments({
                             )}
                           </Row>
                           {menuable && (
-                            <IconButton
-                              icon={MoreHorizontal}
-                              iconName="more-horizontal"
-                              label={`More Actions for ${attachment.name}`}
+                            <Button
+                              icon={<LucideIcon icon={MoreHorizontal} name="more-horizontal" />}
+                              ariaLabel={`More Actions for ${attachment.name}`}
                               action={ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentMenu.value}
-                              appearance="plain"
-                              size="xs"
+                              emphasis="plain"
+                              size="compact"
                             />
                           )}
                         </Row>

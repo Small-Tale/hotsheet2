@@ -8,7 +8,6 @@ import { PENDING_ATTACHMENT_PICKER } from '../components/pending-attachment-pick
 import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import { wireTicketCollection } from '../components/ticket-collection-interactions';
 import { isPlainTicketReselection, selectAllTickets } from '../components/ticket-selection';
-import { wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { createCoalescedInput } from '../debounced-autosave';
 import { routeFilePicker } from '../file-picker-routes';
@@ -265,7 +264,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
             '[data-component="ticket-inspector-header"], [data-component="ticket-inspector-body"], [data-component="ticket-reader"]',
           ) &&
           active.matches(
-            'input, textarea, select, wa-input, wa-textarea, wa-select, [role="textbox"], [contenteditable]:not([contenteditable="false"])',
+            'input, textarea, select, wa-input, wa-textarea, kui-select, [role="textbox"], [contenteditable]:not([contenteditable="false"])',
           ) &&
           isPlainTicketReselection(selectedTicketSlugs.value, selectedTicket.value?.slug, slug, {
             range: pointer.shiftKey,
@@ -276,7 +275,6 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
       },
     ),
   );
-  lifetime.add(wireWorkspaceOverflowKeyboard(document.body));
   lifetime.add(
     delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.toggleSelectedUpNext.selector, () => {
       const selected = selectedRows();
@@ -382,11 +380,16 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'wa-hide', TICKET_SELECTION_TARGETS.ticketCloseDialog.selector, (event, target) => {
-      if (event.composedPath()[0] !== target) return;
-      closeTargetSearchInput.cancel();
-      closeTicketCloseDialog();
-    }),
+    delegate(
+      document.body,
+      'kui-request-close',
+      TICKET_SELECTION_TARGETS.ticketCloseDialog.selector,
+      (event, target) => {
+        if (event.composedPath()[0] !== target) return;
+        closeTargetSearchInput.cancel();
+        closeTicketCloseDialog();
+      },
+    ),
   );
   lifetime.add(
     delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.openDuplicateTarget.selector, (_event, target) => {

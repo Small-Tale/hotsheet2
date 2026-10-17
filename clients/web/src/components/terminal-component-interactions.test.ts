@@ -75,7 +75,7 @@ describe('terminal component wiring (HS2-XE048K)', () => {
     handler('click', action('confirm-terminal-copy'))(new Event('click'), {});
     expect(bindings.confirmCopy.mock.calls).toEqual([[field]]);
     handler('click', action('close-terminal-copy'))(new Event('click'), {});
-    handler('wa-hide', '[data-component="terminal-copy-dialog"]')(new Event('wa-hide'), {});
+    handler('kui-request-close', '[data-dialog-component="terminal-copy-dialog"]')(new Event('kui-request-close'), {});
     expect(bindings.closeCopy).toHaveBeenCalledTimes(2);
     const preventDefault = vi.fn();
     handler('submit', action('submit-terminal-paste'))({ preventDefault }, { querySelector: () => ({ value: 'ls' }) });
@@ -83,7 +83,7 @@ describe('terminal component wiring (HS2-XE048K)', () => {
     expect(preventDefault).toHaveBeenCalledTimes(2);
     expect(bindings.submitPaste.mock.calls).toEqual([['ls'], ['']]);
     handler('click', action('cancel-terminal-paste'))(new Event('click'), {});
-    handler('wa-hide', '[data-component="terminal-paste-dialog"]')(new Event('wa-hide'), {});
+    handler('kui-request-close', '[data-dialog-component="terminal-paste-dialog"]')(new Event('kui-request-close'), {});
     expect(bindings.closePaste).toHaveBeenCalledTimes(2);
   });
 

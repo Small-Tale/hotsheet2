@@ -1,8 +1,5 @@
-import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
-import '@kerfjs/ui/surface-scaffold/register';
 
-import { AppTab } from '@kerfjs/ui/app-tab';
 import { remify } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
@@ -13,6 +10,7 @@ import { Row } from '@kerfjs/ui/row';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { TabBar } from '@kerfjs/ui/tab-bar';
+import { TabBarItem } from '@kerfjs/ui/tab-bar-item';
 import { Text } from '@kerfjs/ui/text';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { Eye, EyeOff, Globe, MessageSquare, Pencil, Plus, Sparkles, Terminal, Trash2 } from 'lucide';
@@ -62,34 +60,35 @@ export function TerminalVisibilityNameDialog({ prompt }: { prompt?: TerminalVisi
   const adding = prompt?.mode === 'add';
   return (
     <div data-key="terminal-visibility-dialog">
-      <DialogSurface preferredWidth={remify(448)} viewportGutter={remify(16)}>
-        <wa-dialog
-          data-key="terminal-visibility-dialog"
-          data-terminal-visibility-name-dialog
-          label={adding ? 'Add Visibility Group' : 'Rename Visibility Group'}
-          open={Boolean(prompt)}
-          data-controlled-open={String(Boolean(prompt))}
-        >
-          <form {...TERMINALS_ACTIONS.submitTerminalVisibilityName.attrs}>
-            <List gap="l">
-              <wa-input
-                name="terminal-visibility-group-name"
-                label="Group Name"
-                value={prompt?.value ?? ''}
-                required
-                autofocus
-              />
-              <Row hAlign="right" vAlign="middle" gap="xs">
-                <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.cancelTerminalVisibilityName.attrs}>
-                  Cancel
-                </wa-button>
-                <wa-button appearance="accent" type="submit">
-                  {adding ? 'Add' : 'Rename'}
-                </wa-button>
-              </Row>
-            </List>
-          </form>
-        </wa-dialog>
+      <DialogSurface
+        label={adding ? 'Add Visibility Group' : 'Rename Visibility Group'}
+        preferredWidth={remify(448)}
+        viewportGutter={remify(16)}
+        rootAttributes={{
+          'data-key': 'terminal-visibility-dialog',
+          'data-terminal-visibility-name-dialog': '',
+          'data-controlled-open': String(Boolean(prompt)),
+        }}
+      >
+        <form {...TERMINALS_ACTIONS.submitTerminalVisibilityName.attrs}>
+          <List gap="l">
+            <wa-input
+              name="terminal-visibility-group-name"
+              label="Group Name"
+              value={prompt?.value ?? ''}
+              required
+              autofocus
+            />
+            <Row hAlign="right" vAlign="middle" gap="xs">
+              <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.cancelTerminalVisibilityName.attrs}>
+                Cancel
+              </wa-button>
+              <wa-button appearance="accent" type="submit">
+                {adding ? 'Add' : 'Rename'}
+              </wa-button>
+            </Row>
+          </List>
+        </form>
       </DialogSurface>
     </div>
   );
@@ -110,102 +109,19 @@ export function TerminalVisibilityDialog({
 
   return (
     <div data-key="terminal-visibility-dialog-2">
-      <DialogSurface preferredWidth={remify(672)} viewportGutter={remify(16)} maxHeight={remify(704)} bodyInset="none">
-        <wa-dialog
-          data-key="terminal-visibility-dialog-2"
-          data-terminal-visibility-dialog
-          label="Manage Workspace Visibility"
-          aria-label="Manage Workspace Visibility"
-          open={open}
-          data-controlled-open={String(open)}
-        >
-          <List>
-            <List dividerSides="b">
-              <TabBar
-                id="terminal-visibility-groups"
-                label="Terminal Visibility Groups"
-                className="terminal-visibility-dialog__toolbar"
-                trailingPlacement="adjacent"
-                trailing={
-                  <ToolbarControlGroup single appearance="borderless" size="compact" content="icon">
-                    <button
-                      type="button"
-                      {...TERMINALS_ACTIONS.addTerminalVisibilityGroup.attrs}
-                      aria-label="Add Visibility Group"
-                      title="Add visibility group"
-                    >
-                      <LucideIcon icon={Plus} name="plus" size={16} />
-                    </button>
-                  </ToolbarControlGroup>
-                }
-              >
-                {state.groups.map((group) => (
-                  <AppTab
-                    id={group.id}
-                    name={group.name}
-                    selected={group.id === active.id}
-                    closable={false}
-                    className="terminal-visibility-dialog__tab"
-                    selectAction="select-terminal-visibility-tab"
-                    rootAttributes={{ 'data-visibility-group-id': group.id }}
-                  />
-                ))}
-              </TabBar>
-            </List>
-            <List controlInsets="trbl" dividerSides="b">
-              <Select
-                name="terminal-visibility-types"
-                label="Item types"
-                placeholderText="No types selected"
-                multiple
-                value={types}
-                choices={TERMINAL_VISIBILITY_TYPE_CHOICES}
-                selectAllLabel="Select all"
-                clearLabel="Clear"
-              />
-            </List>
-            <List gap="l" controlInsets="trbl">
-              {visibleGroups.length === 0 ? (
-                <Text tone="quiet">No workspace items match the selected types.</Text>
-              ) : (
-                visibleGroups.map((group) => (
-                  <section data-key={group.projectId}>
-                    <ListHeader label={group.projectName} />
-                    <List className="terminal-visibility-dialog__rows">
-                      {group.items.map((item) => {
-                        const { key, label } = item;
-                        const visible = !hidden.has(key);
-                        return (
-                          <ListItem
-                            action="toggle-terminal-visibility"
-                            itemId={key}
-                            accessibleLabel={`${visible ? 'Hide' : 'Show'} ${label}`}
-                            state={visible ? 'visible' : 'hidden'}
-                            icon={<LucideIcon icon={visible ? Eye : EyeOff} name={visible ? 'eye' : 'eye-off'} />}
-                            label={
-                              visible ? (
-                                label
-                              ) : (
-                                <Text variant="span" tone="quiet">
-                                  {label}
-                                </Text>
-                              )
-                            }
-                            trailing={
-                              <Text variant="span" size="compact" tone="quiet">
-                                {visible ? 'Visible' : 'Hidden'}
-                              </Text>
-                            }
-                          />
-                        );
-                      })}
-                    </List>
-                  </section>
-                ))
-              )}
-            </List>
-          </List>
-          <Row slot="footer" hAlign="right" vAlign="middle" gap="xs">
+      <DialogSurface
+        label="Manage Workspace Visibility"
+        preferredWidth={remify(672)}
+        viewportGutter={remify(16)}
+        maxHeight={remify(704)}
+        bodyInset="none"
+        rootAttributes={{
+          'data-key': 'terminal-visibility-dialog-2',
+          'data-terminal-visibility-dialog': '',
+          'data-controlled-open': String(open),
+        }}
+        footer={
+          <Row hAlign="right" vAlign="middle" gap="xs">
             <wa-button
               appearance="plain"
               type="button"
@@ -223,33 +139,120 @@ export function TerminalVisibilityDialog({
               Show Listed
             </wa-button>
           </Row>
-          {contextMenu && contextMenu.id !== DEFAULT_TERMINAL_VISIBILITY_GROUP_ID && (
-            // A context-mode Kerf PopupMenu anchored at the pointer (HS2-84751P); the app owns the open
-            // state through `contextMenu` and reveals the rendered menu with `revealContextPopupMenu`.
-            <PopupMenu
-              context
-              anchor={contextMenuAnchor(contextMenu.x, contextMenu.y)}
-              label="Visibility Group Actions"
-              rootAttributes={{
-                'data-context-menu': 'terminal-visibility-group',
-                'data-context-group-id': contextMenu.id,
-              }}
-              items={[
-                {
-                  label: 'Rename…',
-                  action: 'rename-terminal-visibility-group',
-                  icon: <LucideIcon icon={Pencil} name="pencil" />,
-                },
-                {
-                  label: 'Delete',
-                  action: 'remove-terminal-visibility-group',
-                  tone: 'danger',
-                  icon: <LucideIcon icon={Trash2} name="trash-2" />,
-                },
-              ]}
+        }
+      >
+        <List>
+          <List dividerSides="b">
+            <TabBar
+              id="terminal-visibility-groups"
+              label="Terminal Visibility Groups"
+              className="terminal-visibility-dialog__toolbar"
+              trailingPlacement="adjacent"
+              trailing={
+                <ToolbarControlGroup single appearance="borderless" size="compact" content="icon">
+                  <button
+                    type="button"
+                    {...TERMINALS_ACTIONS.addTerminalVisibilityGroup.attrs}
+                    aria-label="Add Visibility Group"
+                    title="Add visibility group"
+                  >
+                    <LucideIcon icon={Plus} name="plus" size={16} />
+                  </button>
+                </ToolbarControlGroup>
+              }
+            >
+              {state.groups.map((group) => (
+                <TabBarItem
+                  id={group.id}
+                  name={group.name}
+                  selected={group.id === active.id}
+                  closable={false}
+                  className="terminal-visibility-dialog__tab"
+                  selectAction="select-terminal-visibility-tab"
+                  rootAttributes={{ 'data-visibility-group-id': group.id }}
+                />
+              ))}
+            </TabBar>
+          </List>
+          <List controlInsets="trbl" dividerSides="b">
+            <Select
+              name="terminal-visibility-types"
+              label="Item Types"
+              placeholderText="No types selected"
+              multiple
+              value={types}
+              choices={TERMINAL_VISIBILITY_TYPE_CHOICES}
+              selectAllLabel="Select all"
+              clearLabel="Clear"
             />
-          )}
-        </wa-dialog>
+          </List>
+          <List gap="l" controlInsets="trbl">
+            {visibleGroups.length === 0 ? (
+              <Text tone="quiet">No workspace items match the selected types.</Text>
+            ) : (
+              visibleGroups.map((group) => (
+                <section data-key={group.projectId}>
+                  <ListHeader label={group.projectName} />
+                  <List className="terminal-visibility-dialog__rows">
+                    {group.items.map((item) => {
+                      const { key, label } = item;
+                      const visible = !hidden.has(key);
+                      return (
+                        <ListItem
+                          action="toggle-terminal-visibility"
+                          itemId={key}
+                          accessibleLabel={`${visible ? 'Hide' : 'Show'} ${label}`}
+                          state={visible ? 'visible' : 'hidden'}
+                          icon={<LucideIcon icon={visible ? Eye : EyeOff} name={visible ? 'eye' : 'eye-off'} />}
+                          label={
+                            visible ? (
+                              label
+                            ) : (
+                              <Text variant="span" tone="quiet">
+                                {label}
+                              </Text>
+                            )
+                          }
+                          trailing={
+                            <Text variant="span" size="compact" tone="quiet">
+                              {visible ? 'Visible' : 'Hidden'}
+                            </Text>
+                          }
+                        />
+                      );
+                    })}
+                  </List>
+                </section>
+              ))
+            )}
+          </List>
+        </List>
+        {contextMenu && contextMenu.id !== DEFAULT_TERMINAL_VISIBILITY_GROUP_ID && (
+          // A context-mode Kerf PopupMenu anchored at the pointer (HS2-84751P); the app owns the open
+          // state through `contextMenu` and reveals the rendered menu with `revealContextPopupMenu`.
+          <PopupMenu
+            context
+            anchor={contextMenuAnchor(contextMenu.x, contextMenu.y)}
+            label="Visibility Group Actions"
+            rootAttributes={{
+              'data-context-menu': 'terminal-visibility-group',
+              'data-context-group-id': contextMenu.id,
+            }}
+            items={[
+              {
+                label: 'Rename…',
+                action: 'rename-terminal-visibility-group',
+                icon: <LucideIcon icon={Pencil} name="pencil" />,
+              },
+              {
+                label: 'Delete',
+                action: 'remove-terminal-visibility-group',
+                tone: 'danger',
+                icon: <LucideIcon icon={Trash2} name="trash-2" />,
+              },
+            ]}
+          />
+        )}
       </DialogSurface>
     </div>
   );

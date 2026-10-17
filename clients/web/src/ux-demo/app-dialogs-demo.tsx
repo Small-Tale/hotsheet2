@@ -237,7 +237,7 @@ function wireAppDialogsDemo(root: HTMLElement): () => void {
     delegate(
       root,
       'click',
-      '[data-component="project-close-dialog"] [data-action="select-project-close-resource"]',
+      '[data-dialog-component="project-close-dialog"] [data-action="select-project-close-resource"]',
       (_event, target) => {
         const key = target.getAttribute('data-item-id');
         if (key) projectCloseDemoSelection.value = key;

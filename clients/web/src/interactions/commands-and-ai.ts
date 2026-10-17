@@ -29,6 +29,7 @@ import { trashDraftIsDirty, type TrashRetentionDraft } from '../components/trash
 import { wireTrashSettings } from '../components/trash-settings-interactions';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
+import { syncControlledOpen } from '../controlled-open';
 import { type ConversationExportDraft } from '../conversation-export';
 import { type ConversationHistoryDirection } from '../conversation-history';
 import { type ConversationSelectionModifiers } from '../conversation-selection';
@@ -158,7 +159,6 @@ export interface CommandAndAiInteractionsDependencies {
   readonly selectDefaultPermissionMode: (mode: string, tool?: string) => boolean;
   readonly selectDefaultProvider: (tool: string) => void;
   readonly restoreCommandEditorAfterManualModel: (state: ManualModelDialogState | undefined) => void;
-  manualModelDialogShown: boolean;
   readonly aiDefaults: Signal<AiToolDefaults>;
   readonly ticketSourceSetupProject: Signal<Project | undefined>;
   readonly providerSetupKind: Signal<ExternalProviderKind | undefined>;
@@ -531,7 +531,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   lifetime.add(
     delegateCapture(
       document.body,
-      'wa-hide',
+      'kui-request-close',
       COMMANDS_AND_AI_TARGETS.conversationExportDialog.selector,
       (event, target) => {
         if (event.target !== target) return;
@@ -571,8 +571,9 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       };
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
+          // Open the rendered Kerf dialog now (not on the next render) so the field can take focus.
+          syncControlledOpen(document);
           const dialog = document.querySelector<Control>(COMMANDS_AND_AI_TARGETS.aiFeedbackDialog.selector);
-          dialog?.show?.();
           dialog?.querySelector<HTMLTextAreaElement>('[name="ai-feedback-explanation"]')?.focus();
         }),
       );
@@ -599,7 +600,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'wa-hide', COMMANDS_AND_AI_TARGETS.aiFeedbackDialog.selector, () => {
+    delegateCapture(document.body, 'kui-request-close', COMMANDS_AND_AI_TARGETS.aiFeedbackDialog.selector, () => {
       aiFeedbackDialog.value = undefined;
     }),
   );
@@ -622,8 +623,8 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   lifetime.add(
     delegateCapture(
       document.body,
-      'wa-hide',
-      '[data-component="command-run-dialog"], [data-component="command-cancellation-dialog"]',
+      'kui-request-close',
+      '[data-dialog-component="command-run-dialog"], [data-dialog-component="command-cancellation-dialog"]',
       () => {
         commandDialogId.value = undefined;
         commandStopConfirmation.value = false;
@@ -1013,12 +1014,12 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   // Project Settings → AI tools (HS2-EK24KF): the default provider, then each provider's own model
   // and effort; the provider a field belongs to is its block's `data-ai-provider`.
   lifetime.add(
-    delegate(document.body, 'change', 'wa-select[name="ai-default-tool"]', (_event, target) => {
+    delegate(document.body, 'change', 'kui-select[name="ai-default-tool"]', (_event, target) => {
       selectDefaultProvider((target as Control).value);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', 'wa-select[name^="ai-provider-model-"]', (_event, target) => {
+    delegate(document.body, 'change', 'kui-select[name^="ai-provider-model-"]', (_event, target) => {
       const block = target.closest<HTMLElement>('[data-ai-provider]'),
         tool = block?.dataset.aiProvider,
         model = (target as Control).value;
@@ -1028,7 +1029,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', 'wa-select[name^="ai-provider-effort-"]', (_event, target) => {
+    delegate(document.body, 'change', 'kui-select[name^="ai-provider-effort-"]', (_event, target) => {
       const tool = target.closest<HTMLElement>('[data-ai-provider]')?.dataset.aiProvider;
       if (tool) selectDefaultEffort((target as Control).value, tool);
     }),
@@ -1036,7 +1037,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   // Each provider's default chat permission mode (HS2-NHRDMW). Declining a warned mode puts the
   // Select back on the saved value.
   lifetime.add(
-    delegate(document.body, 'change', 'wa-select[name^="ai-provider-permission-mode-"]', (_event, target) => {
+    delegate(document.body, 'change', 'kui-select[name^="ai-provider-permission-mode-"]', (_event, target) => {
       const block = target.closest<HTMLElement>('[data-ai-provider]'),
         tool = block?.dataset.aiProvider,
         control = target as Control;
@@ -1076,17 +1077,10 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'wa-after-show', COMMANDS_AND_AI_TARGETS.manualModelDialog.selector, () => {
-      dependencies.manualModelDialogShown = true;
-    }),
-  );
-  lifetime.add(
-    delegateCapture(document.body, 'wa-hide', COMMANDS_AND_AI_TARGETS.manualModelDialog.selector, () => {
-      if (dependencies.manualModelDialogShown) {
-        const state = manualModelDialog.value;
-        manualModelDialog.value = undefined;
-        restoreCommandEditorAfterManualModel(state);
-      }
+    delegateCapture(document.body, 'kui-request-close', COMMANDS_AND_AI_TARGETS.manualModelDialog.selector, () => {
+      const state = manualModelDialog.value;
+      manualModelDialog.value = undefined;
+      restoreCommandEditorAfterManualModel(state);
     }),
   );
   lifetime.add(
@@ -1170,7 +1164,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', 'wa-select[name="project-default-source"]', (_event, target) => {
+    delegate(document.body, 'change', 'kui-select[name="project-default-source"]', (_event, target) => {
       const id = (target as Control).value;
       if (id) void setProjectDefaultSource(id);
     }),

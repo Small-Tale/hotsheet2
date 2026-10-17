@@ -169,7 +169,7 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'wa-hide', VIEWS_AND_SAVED_VIEWS_TARGETS.savedViewDialog.selector, (event) => {
+    delegate(document.body, 'kui-request-close', VIEWS_AND_SAVED_VIEWS_TARGETS.savedViewDialog.selector, (event) => {
       if (savedViewBusy.value) {
         event.preventDefault();
         return;
@@ -189,13 +189,18 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'wa-hide', VIEWS_AND_SAVED_VIEWS_TARGETS.savedViewDeleteDialog.selector, (event) => {
-      if (savedViewDeleteBusy.value) {
-        event.preventDefault();
-        return;
-      }
-      closeSavedViewDelete();
-    }),
+    delegate(
+      document.body,
+      'kui-request-close',
+      VIEWS_AND_SAVED_VIEWS_TARGETS.savedViewDeleteDialog.selector,
+      (event) => {
+        if (savedViewDeleteBusy.value) {
+          event.preventDefault();
+          return;
+        }
+        closeSavedViewDelete();
+      },
+    ),
   );
   return () => {
     lifetime.dispose();

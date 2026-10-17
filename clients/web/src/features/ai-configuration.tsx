@@ -1,3 +1,4 @@
+import { closePopupMenu } from '@kerfjs/ui/popup-menu';
 import type { Signal } from 'kerfjs';
 import { signal } from 'kerfjs';
 
@@ -11,9 +12,11 @@ import {
 import { type AiToolDefaults, type AiToolDescriptor, Api, type CommandDefinition, type ToolConnection } from '../api';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { type ManualModelDialogState } from '../components/manual-model-dialog';
+import { syncControlledOpen } from '../controlled-open';
 import { conversationTranscriptMarkdown } from '../conversation-export';
 import { syncConversationScroll } from '../conversation-scroll';
 import type { Control, Project } from '../interactions/types';
+import { isPopupMenuOpen } from '../popup-menu-state';
 import { compatibleAiEffort, type DrawerAIChat, keptEffort } from '../project-drive';
 
 export interface AiConfigurationDependencies {
@@ -60,7 +63,6 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     driveOptionsAnchor = signal<{ x: number; y: number } | undefined>(undefined),
     driveOverridesByProject = signal<Record<string, Partial<AiToolDefaults>>>({}),
     manualModelDialog = signal<ManualModelDialogState | undefined>(undefined);
-  let manualModelDialogShown = false;
   let aiConfigurationProjectId = '';
   // Per-project AI tool inventory + defaults so a warm project tab switch restores them without a
   // blocking refetch (HS2-AZZ9TF). The runtime drops entries when a project closes or is LRU-evicted.
@@ -347,15 +349,11 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
       descriptor = aiTools.value.find((item) => item.id === selection.tool),
       custom =
         selection.model && !descriptor?.models.some((model) => model.id === selection.model) ? selection.model : '';
-    // The conversation model popup is a native wa-dropdown (no signal); close the open one so it
-    // does not stay open behind — and after — the modal manual-model dialog (HS2-0W8QD9).
-    if (target === 'conversation')
-      document.querySelectorAll<Control>('.ai-conversation__model-menu[open]').forEach((menu) => menu.hide?.());
-    else if (target === 'command')
-      document
-        .querySelectorAll<Control>('.command-settings-editor__ai-selection wa-dropdown[open]')
-        .forEach((menu) => menu.hide?.());
-    manualModelDialogShown = false;
+    // A model PopupMenu keeps its own open state (no signal); close an open one so it does not stay
+    // open behind — and after — the modal manual-model dialog (HS2-0W8QD9).
+    if (target === 'conversation' || target === 'command')
+      for (const menu of document.querySelectorAll<HTMLElement>('.kui-popup-menu'))
+        if (isPopupMenuOpen(menu)) closePopupMenu(menu);
     manualModelDialog.value = {
       target,
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
@@ -367,8 +365,9 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     };
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
-        const dialog = document.querySelector<Control>('[data-component="manual-model-dialog"]');
-        dialog?.show?.();
+        // Open the rendered Kerf dialog now (not on the next render) so the field can take focus.
+        syncControlledOpen(document);
+        const dialog = document.querySelector<Control>('[data-dialog-component="manual-model-dialog"]');
         dialog?.querySelector<Control>('[name="manual-model"]')?.focus();
       }),
     );
@@ -569,12 +568,6 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     forgetAiConfiguration,
     saveAiDefaults,
     conversationAiSelection,
-    get manualModelDialogShown() {
-      return manualModelDialogShown;
-    },
-    set manualModelDialogShown(value: typeof manualModelDialogShown) {
-      manualModelDialogShown = value;
-    },
     get aiConfigurationProjectId() {
       return aiConfigurationProjectId;
     },

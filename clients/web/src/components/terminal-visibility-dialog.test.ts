@@ -36,13 +36,15 @@ describe('TerminalVisibilityDialog', () => {
     );
     expect(markup).toContain('data-component="select"');
     expect(markup).toContain('name="terminal-visibility-types"');
-    expect(markup).toContain('placeholder="No types selected"');
+    expect(markup).toContain('data-placeholder-text="No types selected"');
     expect(markup).not.toContain('terminal-visibility-dialog__type-icon');
     expect(markup).toContain('multiple');
-    expect(markup).toMatch(/<wa-option value="shell"(?! selected)/);
+    expect(markup).toMatch(/class="kui-select__option"[^>]*data-value="shell" aria-selected="false"/);
     expect(markup).toContain('data-select-action="all"');
     expect(markup).toContain('data-select-action="clear"');
-    expect(markup).toContain('value="browser" disabled title="Web browser tiles are not available yet."');
+    expect(markup).toContain(
+      'data-value="browser" aria-selected="false" aria-disabled="true" title="Web browser tiles are not available yet."',
+    );
     expect(markup).toContain('class="kui-select__icon"');
     expect(markup).toContain('No workspace items match the selected types.');
     expect(markup).not.toContain('data-component="list-header"');
@@ -59,13 +61,13 @@ describe('TerminalVisibilityDialog', () => {
     // The Add icon is sized by its LucideIcon prop inside a Kerf ToolbarControlGroup (HS2-YNW0B3).
     expect(markup).toMatch(/aria-label="Add Visibility Group"[^]*?<svg[^>]*data-lucide="plus"[^>]*data-size="16"/);
   });
-  it('uses selected app-tab styling, shared menu headers, and shared menu rows', () => {
+  it('uses selected tab-bar-item styling, shared menu headers, and shared menu rows', () => {
     const markup = String(
       TerminalVisibilityDialog({ open: true, state: initialTerminalVisibilityState(), scope: 'dashboard', groups }),
     );
     expect(markup).toContain('role="tablist"');
-    expect(markup).toContain('class="kui-app-tab terminal-visibility-dialog__tab"');
-    expect(markup).toContain('data-component="app-tab"');
+    expect(markup).toContain('class="kui-tab-bar-item terminal-visibility-dialog__tab"');
+    expect(markup).toContain('data-component="tab-bar-item"');
     expect(markup).toContain('data-selected="true"');
     expect(markup).toContain('data-component="list-header"');
     expect(markup).toContain('data-action="toggle-terminal-visibility"');

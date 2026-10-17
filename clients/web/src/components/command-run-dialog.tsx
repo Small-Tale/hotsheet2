@@ -1,5 +1,4 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
-import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import './command-run-dialog.css';
 
 import { List } from '@kerfjs/ui/list';
@@ -29,15 +28,16 @@ export function CommandRunDialog({
   if (confirmStop)
     return (
       <div class="command-run-dialog" data-key="command-cancellation-dialog">
-        <DialogSurface size="small">
-          <wa-dialog
-            data-key="command-cancellation-dialog"
-            open
-            label={`Stop ${command.title}?`}
-            data-component="command-cancellation-dialog"
-          >
-            <Text flush>The command is still running. Stop it now?</Text>
-            <Row slot="footer" hAlign="right" vAlign="middle" gap="xs" wrap>
+        <DialogSurface
+          label={`Stop ${command.title}?`}
+          size="small"
+          rootAttributes={{
+            'data-key': 'command-cancellation-dialog',
+            'data-dialog-component': 'command-cancellation-dialog',
+            'data-controlled-open': 'true',
+          }}
+          footer={
+            <Row hAlign="right" vAlign="middle" gap="xs" wrap>
               <wa-button appearance="outlined" {...COMMANDS_AND_AI_ACTIONS.dismissCommandDialog.attrs}>
                 Keep Running
               </wa-button>
@@ -46,26 +46,34 @@ export function CommandRunDialog({
                 Stop Command
               </wa-button>
             </Row>
-          </wa-dialog>
+          }
+        >
+          <Text flush>The command is still running. Stop it now?</Text>
         </DialogSurface>
       </div>
     );
   return (
     <div class="command-run-dialog" data-key="command-run-dialog">
-      <DialogSurface size="small">
-        <wa-dialog data-key="command-run-dialog" open label={command.title} data-component="command-run-dialog">
-          <List gap="m">
-            <Row hAlign="full" vAlign="middle" gap="xs">
-              <strong>{run ? run.state : 'Never run'}</strong>
-              {run?.exit_code !== undefined && <span>Exit {run.exit_code}</span>}
-            </Row>
-            <pre class="command-run-dialog__output" aria-label="Command output">
-              {run?.output.length
-                ? run.output.map((line) => `${line.stream === 'stderr' ? 'error: ' : ''}${line.text}`).join('\n')
-                : 'No output recorded.'}
-            </pre>
-          </List>
-        </wa-dialog>
+      <DialogSurface
+        label={command.title}
+        size="small"
+        rootAttributes={{
+          'data-key': 'command-run-dialog',
+          'data-dialog-component': 'command-run-dialog',
+          'data-controlled-open': 'true',
+        }}
+      >
+        <List gap="m">
+          <Row hAlign="full" vAlign="middle" gap="xs">
+            <strong>{run ? run.state : 'Never run'}</strong>
+            {run?.exit_code !== undefined && <span>Exit {run.exit_code}</span>}
+          </Row>
+          <pre class="command-run-dialog__output" aria-label="Command output">
+            {run?.output.length
+              ? run.output.map((line) => `${line.stream === 'stderr' ? 'error: ' : ''}${line.text}`).join('\n')
+              : 'No output recorded.'}
+          </pre>
+        </List>
       </DialogSurface>
     </div>
   );

@@ -10,6 +10,7 @@ import {
   TerminalVisibilityNameDialog,
   type TerminalVisibilityNamePrompt,
 } from '../components/terminal-visibility-dialog';
+import { closedPopupMenuRoot } from '../popup-menu-state';
 import {
   activeTerminalVisibilityGroup,
   addTerminalVisibilityGroup,
@@ -25,7 +26,7 @@ import {
 } from '../terminal-visibility';
 import { wireTerminalVisibilityTypeFilter } from '../terminal-visibility-filter';
 import { DEMO_ACTIONS } from './demo-actions';
-import type { DemoModule, FormControl } from './demo-module';
+import { type DemoModule, type FormControl, listen } from './demo-module';
 
 export const terminalVisibilityDemoGroups: TerminalDashboardGroup[] = [
   {
@@ -172,11 +173,16 @@ export function setAllTerminalVisibilityDemo(visible: boolean) {
 function wireTerminalVisibilityDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
   demoListeners.add(
-    delegate(root, 'wa-hide', '[data-context-menu]', (event, target) => {
-      if (event.target !== target || (target as HTMLElement).dataset.contextMenu !== 'terminal-visibility-group')
-        return;
-      window.setTimeout(closeTerminalVisibilityDemoContextMenu, 0);
-    }),
+    // The Kerf menu's own close: its top-level panel's popover `toggle`, which does not bubble.
+    listen(
+      root,
+      'toggle',
+      (event) => {
+        if (closedPopupMenuRoot(event)?.dataset.contextMenu !== 'terminal-visibility-group') return;
+        window.setTimeout(closeTerminalVisibilityDemoContextMenu, 0);
+      },
+      { capture: true },
+    ),
   );
   demoListeners.add(
     delegate(root, 'click', DEMO_ACTIONS.showTerminalVisibilityDemo.selector, showTerminalVisibilityDemo),
@@ -185,7 +191,7 @@ function wireTerminalVisibilityDemo(root: HTMLElement): () => void {
     terminalVisibilityDemoTypes.value = types;
   });
   demoListeners.add(
-    delegate(root, 'wa-hide', '[data-terminal-visibility-dialog]', (event, target) => {
+    delegate(root, 'kui-request-close', '[data-terminal-visibility-dialog]', (event, target) => {
       if (event.target === target) closeTerminalVisibilityDemo();
     }),
   );

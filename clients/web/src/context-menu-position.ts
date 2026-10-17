@@ -1,5 +1,7 @@
 import { openPopupMenu, openPopupMenuAt } from '@kerfjs/ui/popup-menu';
 
+import { closedPopupMenuRoot, isPopupMenuOpen } from './popup-menu-state';
+
 export interface ContextMenuSize {
   width: number;
   height: number;
@@ -38,7 +40,7 @@ export function viewportSafeContextMenuPosition(
 }
 
 /** The Kerf PopupMenu root a context-mode menu renders (`data-context-menu` names the surface). */
-export type ContextPopupMenuElement = HTMLElement & { open: boolean };
+export type ContextPopupMenuElement = HTMLElement;
 
 /**
  * Open the context-mode Kerf PopupMenu that a menu signal has just rendered. The menu carries its
@@ -50,7 +52,7 @@ export type ContextPopupMenuElement = HTMLElement & { open: boolean };
 export function revealContextPopupMenu(surface: string, root: ParentNode = document, attempts = 3): void {
   const menu = root.querySelector<ContextPopupMenuElement>(`[data-context-menu="${surface}"]`);
   if (menu) {
-    if (!menu.open) openContextPopupMenu(menu);
+    if (!isPopupMenuOpen(menu)) openContextPopupMenu(menu);
     return;
   }
   if (attempts <= 0) return;
@@ -68,7 +70,7 @@ export function openContextPopupMenu(menu: ContextPopupMenuElement): void {
 
 /** Keep a context popup opened from a persistent trigger at its click anchor while
  * the view morphs. Unlike signal-owned context menus, the trigger and menu remain
- * mounted after dismissal, so the hide event ends this observation. */
+ * mounted after dismissal, so the menu's closing `toggle` ends this observation. */
 export function maintainContextPopupMenuAnchor(
   selector: string,
   position: ContextMenuPosition,
@@ -82,10 +84,10 @@ export function maintainContextPopupMenuAnchor(
     if (!active) return;
     active = false;
     observer.disconnect();
-    document.removeEventListener('wa-hide', onHide, true);
+    document.removeEventListener('toggle', onHide, true);
   };
   const onHide = (event: Event) => {
-    if (event.target === current && current?.isConnected) stop();
+    if (current?.isConnected && closedPopupMenuRoot(event) === current) stop();
   };
   const reanchor = () => {
     if (!isCurrent()) {
@@ -94,7 +96,7 @@ export function maintainContextPopupMenuAnchor(
     }
     const menu = root.querySelector<ContextPopupMenuElement>(selector);
     if (!menu) return;
-    if (menu === current && !menu.open) {
+    if (menu === current && !isPopupMenuOpen(menu)) {
       stop();
       return;
     }
@@ -106,7 +108,7 @@ export function maintainContextPopupMenuAnchor(
   };
   const observer = new MutationObserver(reanchor);
   observer.observe(document.body, { childList: true, attributes: true, attributeFilter: ['style'], subtree: true });
-  document.addEventListener('wa-hide', onHide, true);
+  document.addEventListener('toggle', onHide, true);
   reanchor();
   return stop;
 }

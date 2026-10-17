@@ -455,7 +455,7 @@ describe('ProjectSidebar component slice', () => {
     expect(css).not.toMatch(/\.(project-summary|drive-control)\b/);
     expect(css).toMatch(/\.project-sidebar__drive-row \{[^}]*grid-template-columns: minmax\(0, 1fr\) auto/);
     // Kerf Text owns the work summary (HS2-TQDZET); the conversation toggle stays app-owned until
-    // IconToggleButton's disabled cursor matches the app (KF-HJD6XB).
+    // HS2-Q5ZZFF adopts a pressed Kerf Button (KF-HJD6XB).
     expect(css).not.toContain('.project-sidebar__work-summary');
     expect(css).toContain('.project-sidebar__conversation');
     // Kerf's Toolbar pins its zones to their columns, so the lone collapse control already sits at the

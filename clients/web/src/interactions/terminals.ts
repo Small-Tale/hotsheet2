@@ -25,6 +25,7 @@ import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../cont
 import { copyWithSelection } from '../copy-text';
 import { type DrawerTabCloseAction, drawerTabCloseIds } from '../drawer-tab-order';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
+import { closedPopupMenuRoot } from '../popup-menu-state';
 import { type DrawerAIChat } from '../project-drive';
 import {
   pasteIntoTerminalViewport,
@@ -62,10 +63,6 @@ import { wireTerminalVisibilityTypeFilter } from '../terminal-visibility-filter'
 import { wireTopLayerOverlays } from '../top-layer-overlay';
 import { data } from './dom';
 import { type Control, type Project } from './types';
-
-export function allowInterruptedDrawerPopupShow(menu: { open: boolean; popup?: { active: boolean } }) {
-  if (menu.open && menu.popup?.active) menu.popup.active = false;
-}
 
 /** Live application bindings used by this handler group. */
 export interface TerminalInteractionsDependencies {
@@ -374,6 +371,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   // lands in that terminal even if the drawer selection changed underneath the dialog.
   let clipboardViewport: HTMLElement | undefined,
     editMenuViewport: HTMLElement | undefined,
+    editMenuFocus: HTMLElement | undefined,
     refocusAfterPaste: HTMLElement | undefined,
     clipboardGeneration = 0;
   const viewportTitle = (viewport: HTMLElement) =>
@@ -408,6 +406,9 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
         { x, y } = (event as CustomEvent<TerminalEditMenuDetail>).detail;
       const { selection } = (event as CustomEvent<TerminalEditMenuDetail>).detail;
       editMenuViewport = viewport;
+      // Kerf's menu takes focus while open (beta.106); a terminal that held the keyboard gets it back.
+      const active = document.activeElement;
+      editMenuFocus = active instanceof HTMLElement && viewport.contains(active) ? active : undefined;
       terminalEditMenu.value = {
         ...viewportSafeContextMenuPosition(x, y, window.innerWidth, window.innerHeight, {
           width: 192,
@@ -417,6 +418,21 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       };
     }),
   );
+  // Once the edit menu closes (an item, Escape, or an outside press), return the keyboard to the
+  // terminal that held it, unless the user has since moved focus elsewhere (HS2-BH7NZ4).
+  const restoreEditMenuFocus = (event: Event) => {
+    if (closedPopupMenuRoot(event)?.dataset.contextMenu !== 'terminal-edit') return;
+    const focus = editMenuFocus;
+    editMenuFocus = undefined;
+    if (!focus) return;
+    window.requestAnimationFrame(() => {
+      const active = document.activeElement;
+      const lost =
+        !active || active === document.body || !active.isConnected || Boolean(active.closest('.kui-popup-menu'));
+      if (focus.isConnected && lost) focus.focus({ preventScroll: true });
+    });
+  };
+  document.addEventListener('toggle', restoreEditMenuFocus, { capture: true, signal: lifetime.signal });
   // Escape dismisses the open edit menu even while a focused terminal holds the keyboard: xterm's
   // helper textarea handles Escape and stops it, so the document-level dismiss never sees it. Capture
   // it first, and do not also send ESC to the shell (HS2-B06X7Y).
@@ -518,11 +534,12 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'wa-after-hide', TERMINALS_TARGETS.terminalPasteDialog.selector, (event, target) => {
+    // The native `close` event does not bubble, so it is delegated in the capture phase.
+    delegateCapture(document.body, 'close', TERMINALS_TARGETS.terminalPasteDialog.selector, (event, target) => {
       if (event.target !== target) return;
       const viewport = refocusAfterPaste;
       refocusAfterPaste = undefined;
-      // Web Awesome refocuses the opener in a task queued before this event; run after it.
+      // The closing dialog returns focus to its opener first; run after it.
       if (viewport?.isConnected)
         window.setTimeout(() => {
           keepTerminalFocus(viewport);
@@ -556,7 +573,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'wa-hide', '[data-terminal-visibility-dialog]', (event, target) => {
+    delegate(document.body, 'kui-request-close', '[data-terminal-visibility-dialog]', (event, target) => {
       if (event.target !== target) return;
       terminalVisibilityContextMenu.value = undefined;
       terminalVisibilityNamePrompt.value = undefined;
@@ -642,7 +659,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'wa-hide', '[data-terminal-visibility-name-dialog]', () => {
+    delegate(document.body, 'kui-request-close', '[data-terminal-visibility-name-dialog]', () => {
       terminalVisibilityNamePrompt.value = undefined;
     }),
   );
@@ -704,7 +721,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     delegate(document.body, 'dblclick', TERMINALS_ACTIONS.toggleTerminalDrawerMaximize.selector, (event) => {
       if (
         (event.target as Element).closest(
-          'button, input, textarea, select, a, wa-button, wa-dropdown, [data-tab-kind="terminal"]',
+          'button, input, textarea, select, a, wa-button, .kui-popup-menu, [data-tab-kind="terminal"]',
         )
       )
         return;
@@ -724,13 +741,6 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       selectDrawerItem(tab?.dataset.terminalId || tab?.dataset.chatId || data(target).itemId || 'grid');
     }),
   );
-  void delegateCapture(document.body, 'wa-show', '[data-terminal-drawer-create]', (event, target) => {
-    if (event.target !== target) return;
-    const menu = target as HTMLElement & { open: boolean; popup?: { active: boolean } };
-    // Web Awesome keeps popup.active during its hide animation. Its next
-    // showMenu call otherwise returns early and misses the keyboard listener.
-    allowInterruptedDrawerPopupShow(menu);
-  });
   lifetime.add(
     delegate(document.body, 'click', TERMINALS_ACTIONS.createTerminalDrawerItem.selector, (event, target) => {
       const kind = data(target).itemId as 'default-shell' | 'ai-shell' | 'ai-chat';
@@ -775,7 +785,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'wa-hide', TERMINALS_TARGETS.projectCloseDialog.selector, () => {
+    delegateCapture(document.body, 'kui-request-close', TERMINALS_TARGETS.projectCloseDialog.selector, () => {
       if (!projectCloseDialog.value?.operation) cancelProjectClose();
     }),
   );

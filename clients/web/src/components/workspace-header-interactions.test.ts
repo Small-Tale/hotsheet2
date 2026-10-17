@@ -19,7 +19,7 @@ vi.mock('kerfjs', async (original) => ({
 const handler = (event: string) => registrations.find((item) => item.event === event)!.handle;
 const overflow = (dataset: Record<string, string>) => {
   const item = { dataset };
-  handler('wa-select')({ detail: { item } }, {});
+  handler('kui-menu-select')({ detail: { item } }, {});
   return item;
 };
 
@@ -41,7 +41,11 @@ describe('wireWorkspaceHeaderActions (HS2-AAX2B5)', () => {
   wireWorkspaceHeaderActions({} as HTMLElement, bindings);
 
   it('cycles the sort from the menu and the overflow, flipping direction on a repeated choice', () => {
-    handler('click')({}, { value: 'priority' });
+    // A click on a Kerf Select option (its value is `data-value`) picks the sort.
+    expect(registrations.find((item) => item.event === 'click')?.selector).toBe(
+      'kui-select[name="workspace-sort"] .kui-select__option',
+    );
+    handler('click')({}, { dataset: { value: 'priority' } });
     const first = current;
     overflow({ workspaceOverflowAction: 'set-workspace-sort', workspaceSort: 'priority' });
     expect(current.sort).toBe('priority');

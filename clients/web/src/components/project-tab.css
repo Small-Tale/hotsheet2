@@ -1,13 +1,13 @@
-/* Project tabs carry no app class (HS2-T67Z3N): each tab configures its own AppTab root (marked by its
+/* Project tabs carry no app class (HS2-T67Z3N): each tab configures its own TabBarItem root (marked by its
    `data-tab-kind` root attribute) through Kerf's public tokens. Kerf's attention name color defaults
    to warning, but a project needing attention is a failure state; a disconnected project reads
    quiet. A drag over a tab keeps Kerf's own `dropTarget` fill, ring, and color. */
 [data-tab-kind='project'] {
-  --kui-app-tab-attention-color: var(--wa-color-danger-on-quiet);
+  --kui-tab-bar-item-attention-color: var(--wa-color-danger-on-quiet);
 }
 /* A disconnected project's name reads quiet. */
 [data-tab-kind='project'][data-disconnected='true'] {
-  --kui-app-tab-color: var(--wa-color-neutral-on-quiet);
+  --kui-tab-bar-item-color: var(--wa-color-neutral-on-quiet);
 }
 /* A fixed 16px trailing slot, so the spinner never shifts the tab's width. */
 .project-tab__busy {
@@ -20,7 +20,7 @@
 .project-tab__state {
   display: inline-flex;
 }
-/* The pending-notification bell and count; Kerf AppTab has no notification slot. */
+/* The pending-notification bell and count; Kerf TabBarItem has no notification slot. */
 .project-tab__notification {
   display: flex;
   color: var(--wa-color-warning-on-quiet);

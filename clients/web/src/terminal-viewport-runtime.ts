@@ -10,6 +10,7 @@ import {
   MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT,
   normalizeMobileTerminalColumns,
 } from './mobile-terminal-columns';
+import { isPopupMenuOpen } from './popup-menu-state';
 import {
   TERMINAL_EDIT_MENU_EVENT,
   TERMINAL_PASTE_EVENT,
@@ -1341,8 +1342,8 @@ function initializeTerminalViewport(
     // press or keystroke ends the window, so focus the user moves on purpose is never taken back.
     const reclaim = (event: FocusEvent) => {
         // Only a closed dropdown's restored trigger yields: a menu the user reopens keeps its focus.
-        const dropdown = event.target instanceof Element ? event.target.closest('wa-dropdown') : null;
-        if (dropdown && !(dropdown as Element & { open?: boolean }).open) focusIfCurrent(true);
+        const menu = event.target instanceof Element ? event.target.closest('.kui-popup-menu') : null;
+        if (menu && !isPopupMenuOpen(menu)) focusIfCurrent(true);
       },
       stopReclaim = () => {
         document.removeEventListener('focusin', reclaim, true);

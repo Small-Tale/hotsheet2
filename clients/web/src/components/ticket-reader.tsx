@@ -7,6 +7,7 @@ import { Text } from '@kerfjs/ui/text';
 import type { SafeHtml } from 'kerfjs';
 
 import { INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
+import { quietWebAwesomeNativeDialog } from '../wa-dialog-semantics';
 import { TicketInspector, type TicketInspectorProps } from './ticket-inspector';
 
 export type TicketReaderProps = Omit<TicketInspectorProps, 'presentation'> & {
@@ -32,8 +33,8 @@ export function showTicketReaderDialog(root: ParentNode, frameId: string): boole
     `[data-component="ticket-reader"][data-reader-frame-id="${CSS.escape(frameId)}"]`,
   );
   if (!dialog) return false;
-  const nativeDialog = dialog.shadowRoot?.querySelector('dialog');
-  if (nativeDialog) nativeDialog.setAttribute('role', 'presentation');
+  // The host is the one exposed dialog; Web Awesome 3.14 would also label the shadow dialog.
+  const nativeDialog = quietWebAwesomeNativeDialog(dialog);
   if (dialog.open && (!nativeDialog || nativeDialog.open)) return false;
   void dialog.show();
   return true;

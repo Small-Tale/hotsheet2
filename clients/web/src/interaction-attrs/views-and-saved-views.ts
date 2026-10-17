@@ -26,6 +26,6 @@ export const VIEWS_AND_SAVED_VIEWS_ACTIONS = {
 export const VIEWS_AND_SAVED_VIEWS_TARGETS = {
   ticketSelectionRoot: attr('data-ticket-selection-root', 'true'),
   savedViewNameField: attr('name', 'saved-view-name'),
-  savedViewDialog: attr('data-component', 'saved-view-dialog'),
-  savedViewDeleteDialog: attr('data-component', 'saved-view-delete-dialog'),
+  savedViewDialog: attr('data-dialog-component', 'saved-view-dialog'),
+  savedViewDeleteDialog: attr('data-dialog-component', 'saved-view-delete-dialog'),
 } as const;

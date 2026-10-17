@@ -1,4 +1,4 @@
-import { placeTokenSearchCaret } from '@kerfjs/ui/token-search-field';
+import { placeSearchFieldCaret } from '@kerfjs/ui/search-field';
 
 const pending = new WeakMap<ParentNode, Map<string, object>>();
 
@@ -30,6 +30,6 @@ export function restoreInlineSearchCaret(root: ParentNode, selector: string, off
         document.activeElement !== document.body)
     )
       return;
-    placeTokenSearchCaret(replacement, offset);
+    placeSearchFieldCaret(replacement, offset);
   });
 }

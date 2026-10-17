@@ -342,11 +342,14 @@ describe('RepositoryStatusPopover', () => {
       }),
     );
     const item = (action: string) =>
-      multiple.match(new RegExp(`<wa-dropdown-item[^>]*data-repository-file-action="${action}"[^>]*>`))?.[0] ?? '';
+      multiple.match(
+        new RegExp(`<button(?=[^>]*class="kui-popup-menu__item")[^>]*data-repository-file-action="${action}"[^>]*>`),
+      )?.[0] ?? '';
     // A multi-file selection still diffs together but cannot open or reveal one host path.
-    expect(item('show-diff')).not.toMatch(/\sdisabled/);
-    expect(item('open')).toMatch(/\sdisabled/);
-    expect(item('reveal')).toMatch(/\sdisabled/);
+    expect(item('show-diff')).toContain('data-repository-file-action="show-diff"');
+    expect(item('show-diff')).not.toContain('aria-disabled="true"');
+    expect(item('open')).toContain('aria-disabled="true"');
+    expect(item('reveal')).toContain('aria-disabled="true"');
   });
 
   it('renders an actionable error without inventing repository values', () => {

@@ -200,7 +200,7 @@ export function TicketRowSettings() {
       />
       <Select
         name="started-phase"
-        label="Started phase"
+        label="Started Phase"
         value={ticketRowSettings.startedPhase.value}
         choices={[
           { value: '', label: 'None' },
@@ -221,13 +221,13 @@ export function TicketRowSettings() {
       <wa-input name="category" label="Category" value={ticketRowSettings.category.value} />
       <Select
         name="category-icon"
-        label="Category icon"
+        label="Category Icon"
         value={ticketRowSettings.categoryIcon.value}
         choices={CATEGORY_ICONS.map((option) => ({ value: option.value, label: option.label }))}
       />
       <Select
         name="category-color"
-        label="Category icon color"
+        label="Category Icon Color"
         value={ticketRowSettings.categoryColor.value}
         choices={CATEGORY_COLORS.map((option): SelectChoice => ({ value: option.value, label: option.label }))}
       />
@@ -256,7 +256,7 @@ export function TicketRowSettings() {
       </wa-checkbox>
       <Select
         name="claim-eta"
-        label="Claim ETA (shown while AI working)"
+        label="Claim ETA (Shown While AI Working)"
         value={ticketRowSettings.claimEta.value}
         choices={[
           { value: 'none', label: 'No Estimate' },
@@ -266,7 +266,7 @@ export function TicketRowSettings() {
       />
       <Select
         name="phase-estimate"
-        label="Testing phase estimate (shown in Initial or Final testing)"
+        label="Testing Phase Estimate (Shown in Initial or Final Testing)"
         value={ticketRowSettings.phaseEstimate.value}
         choices={[
           { value: 'none', label: 'No Estimate' },
@@ -276,7 +276,7 @@ export function TicketRowSettings() {
       />
       <Select
         name="confidence"
-        label="Completion confidence (shown when completed or verified)"
+        label="Completion Confidence (Shown When Completed or Verified)"
         value={ticketRowSettings.confidence.value}
         choices={TICKET_ROW_CONFIDENCE_CHOICES}
       />

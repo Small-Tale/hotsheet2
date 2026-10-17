@@ -674,14 +674,18 @@ describe('newly created terminal focus versus its creating menu (HS2-FB4DKM)', (
     dispose();
   });
 
-  it('reclaims focus a closed dropdown restores to its trigger after focus landed, but not for an open menu', () => {
+  it('reclaims focus a closed PopupMenu restores to its trigger after focus landed, but not for an open menu', () => {
     const { terminal, holder, focusLanded, documentListeners, dispose } = mount();
     focusLanded();
     const reclaim = documentListeners.get('focusin');
     expect(reclaim).toBeDefined();
-    reclaim?.({ target: holder({ selector: 'wa-dropdown', value: { open: true } }) });
+    // A Kerf PopupMenu root reports its open state on its opener's aria-expanded (Kerf UI beta.106).
+    const menuRoot = (expanded: boolean) => ({
+      querySelector: () => ({ getAttribute: (name: string) => (name === 'aria-expanded' ? String(expanded) : null) }),
+    });
+    reclaim?.({ target: holder({ selector: '.kui-popup-menu', value: menuRoot(true) }) });
     expect(terminal.focus).toHaveBeenCalledTimes(1);
-    reclaim?.({ target: holder({ selector: 'wa-dropdown', value: { open: false } }) });
+    reclaim?.({ target: holder({ selector: '.kui-popup-menu', value: menuRoot(false) }) });
     expect(terminal.focus).toHaveBeenCalledTimes(2);
     reclaim?.({ target: holder() });
     expect(terminal.focus).toHaveBeenCalledTimes(2);

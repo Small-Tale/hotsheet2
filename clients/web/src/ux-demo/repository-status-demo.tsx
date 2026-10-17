@@ -188,7 +188,7 @@ export function RepositoryStatusPopoverSettings() {
     <DemoSettingsForm settings="repository-status-popover">
       <Select
         name="scenario"
-        label="Repository scenario"
+        label="Repository Scenario"
         value={repositoryDemoScenario.value}
         choices={(['clean', 'dirty', 'ahead', 'behind', 'diverged', 'conflicted', 'error'] as const).map((value) => ({
           value,

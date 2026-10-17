@@ -93,7 +93,7 @@ export function TerminalMemorySettings({ limits, deviceDefaults, message = '' }:
         <Grid minColumnWidth={rem(15)} gap="m">
           <Select
             name={TERMINAL_LIMIT_FIELDS.historyLines}
-            label="Terminal history"
+            label="Terminal History"
             hint="Lines a terminal keeps to scroll back through. A magnified dashboard card keeps a fifth."
             value={selected(configured?.history_lines)}
             disabled={loading}
@@ -107,7 +107,7 @@ export function TerminalMemorySettings({ limits, deviceDefaults, message = '' }:
           />
           <Select
             name={TERMINAL_LIMIT_FIELDS.replayBytes}
-            label="Server replay buffer"
+            label="Server Replay Buffer"
             hint="Recent output the server keeps per terminal and replays after a reconnect. The default follows the history."
             value={selected(configured?.replay_bytes)}
             disabled={loading}
@@ -121,7 +121,7 @@ export function TerminalMemorySettings({ limits, deviceDefaults, message = '' }:
           />
           <Select
             name={TERMINAL_LIMIT_FIELDS.warmTerminals}
-            label="Warm terminals"
+            label="Warm Terminals"
             hint="Terminals kept running in the background after you switch away, so they reappear instantly."
             value={selected(configured?.warm_terminals)}
             disabled={loading}

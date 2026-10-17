@@ -94,7 +94,9 @@ describe('QuickTicketComposer', () => {
     expect(expanded).toContain('Browse attachments for new ticket');
     expect(expanded).toContain('Drop attachment files anywhere in this area or browse');
     expect(expanded).toContain('data-pending-attachment-id="proof"');
-    expect(expanded).toContain('data-component="icon-button" data-action="remove-new-ticket-attachment"');
+    expect(expanded).toMatch(
+      /data-component="button"[^>]*data-icon-only=""[^>]*data-action="remove-new-ticket-attachment"/u,
+    );
     expect(expanded).toContain('aria-label="Remove proof.png"');
     expect(expanded).toContain('data-component="file-picker-trigger"');
     expect(expanded).not.toContain('data-lucide="x"');
@@ -115,7 +117,17 @@ describe('QuickTicketComposer', () => {
 
   it('opens the persistent live Web Awesome dialog so it can remember its trigger', () => {
     const calls: string[] = [];
-    const nativeDialog = { open: false, setAttribute: (name: string, value: string) => calls.push(`${name}:${value}`) };
+    const attributes = new Map([['aria-labelledby', 'title']]);
+    const nativeDialog = {
+      open: false,
+      getAttribute: (name: string) => attributes.get(name) ?? null,
+      hasAttribute: (name: string) => attributes.has(name),
+      removeAttribute: (name: string) => attributes.delete(name),
+      setAttribute: (name: string, value: string) => {
+        attributes.set(name, value);
+        calls.push(`${name}:${value}`);
+      },
+    };
     const dialog = {
       open: false,
       shadowRoot: { querySelector: () => nativeDialog },
@@ -127,10 +139,13 @@ describe('QuickTicketComposer', () => {
     const root = { querySelector: () => dialog } as unknown as ParentNode;
     expect(showQuickTicketComposer(root)).toBe(true);
     expect(calls).toEqual(['role:presentation', 'show']);
+    // Web Awesome 3.14 labels the shadow dialog by its header; the host stays the one named dialog.
+    expect(attributes.has('aria-labelledby')).toBe(false);
     dialog.open = true;
     nativeDialog.open = true;
     expect(showQuickTicketComposer(root)).toBe(false);
-    expect(calls).toEqual(['role:presentation', 'show', 'role:presentation']);
+    // Already presentational: a repeat open does not rewrite the role.
+    expect(calls).toEqual(['role:presentation', 'show']);
   });
 
   it('keeps one-line details vertically resizable (auto-growing on touch) and places Up Next after category', () => {
@@ -183,8 +198,8 @@ describe('QuickTicketComposer', () => {
     expect(multiple).toMatch(
       /class="kui-row quick-ticket-composer__source"[\s\S]*Creating in[\s\S]*name="new-ticket-source"/,
     );
-    expect(multiple).toContain('aria-label="Ticket source"');
-    expect(multiple).toMatch(/<wa-select[^>]*name="new-ticket-source"[^>]*value="github-b"/);
+    expect(multiple).toContain('aria-label="Ticket Source"');
+    expect(multiple).toMatch(/<kui-select[^>]*name="new-ticket-source"[^>]*value="github-b"/);
     expect(multiple).toContain('HS2 git tickets');
     expect(multiple).not.toContain('>Creating in GitHub issues</span>');
     const submitting = String(
@@ -197,8 +212,8 @@ describe('QuickTicketComposer', () => {
         ],
       }),
     );
-    expect(submitting).toMatch(/<wa-select[^>]*name="new-ticket-source"[^>]*value="git-a"/);
-    expect(submitting).toMatch(/<wa-select[^>]*name="new-ticket-source"[^>]*disabled/);
+    expect(submitting).toMatch(/<kui-select[^>]*name="new-ticket-source"[^>]*value="git-a"/);
+    expect(submitting).toMatch(/<kui-select[^>]*name="new-ticket-source"[^>]*disabled/);
   });
 
   it('makes only a non-default destination prominent and names both sources (HS2-FXN0EZ)', () => {

@@ -146,12 +146,12 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add view' }).click();
-  const dialog = page.locator('[data-component="saved-view-dialog"]');
+  const dialog = page.locator('[data-dialog-component="saved-view-dialog"]');
   await expect(dialog.getByRole('textbox', { name: 'View Name' })).toBeVisible();
   await dialog.getByRole('textbox', { name: 'View Name' }).fill('Needs docs');
   const query = dialog.getByRole('searchbox', { name: 'Search query' });
   // The query is Kerf's form-field presentation, not a toolbar group (HS2-E40KC0).
-  await expect(dialog.locator('[data-component="token-search-field"][data-presentation="form-field"]')).toHaveCount(1);
+  await expect(dialog.locator('[data-component="search-field"][data-presentation="form-field"]')).toHaveCount(1);
   await expect(dialog.locator('.kui-toolbar')).toHaveCount(0);
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
@@ -165,11 +165,9 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
           const input = node.querySelector<HTMLElement>('wa-input[name="saved-view-name"]')!,
             inputLabel = input.shadowRoot!.querySelector<HTMLElement>('[part~="form-control-label"]')!,
             inputBox = input.shadowRoot!.querySelector<HTMLElement>('[part~="base"]')!.getBoundingClientRect(),
-            queryLabel = node.querySelector<HTMLElement>('[data-token-search-form-label="saved-view-query"]')!,
+            queryLabel = node.querySelector<HTMLElement>('[data-search-field-form-label="saved-view-query"]')!,
             queryBox = node
-              .querySelector<HTMLElement>(
-                '[data-component="token-search-field"][data-token-search-id="saved-view-query"]',
-              )!
+              .querySelector<HTMLElement>('[data-component="search-field"][data-search-field-id="saved-view-query"]')!
               .getBoundingClientRect(),
             style = (element: HTMLElement) => {
               const computed = getComputedStyle(element);
@@ -189,13 +187,13 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
       )
       .toEqual({ typography: true, labelInset: true, edges: true });
     await query.fill('tag:docs ');
-    await expect(dialog.locator('[data-component="token-search-token"]')).toContainText('tag:docs');
+    await expect(dialog.locator('[data-component="search-field-token"]')).toContainText('tag:docs');
     await page.screenshot({ path: `target/visual-captures/hs2-y5hmrt-query-${width}.png` });
     await dialog.getByRole('button', { name: 'Clear search query' }).click();
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   await query.fill('tag:docs ');
-  await expect(dialog.locator('[data-component="token-search-token"]')).toContainText('tag:docs');
+  await expect(dialog.locator('[data-component="search-field-token"]')).toContainText('tag:docs');
   await page.waitForTimeout(250);
   await page.screenshot({
     path: 'target/visual-captures/hs2-r7gpjm-create-view-wide.png',
@@ -221,10 +219,10 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await menu.getByText('Edit View…').click();
   await expect(dialog).toHaveAttribute('data-mode', 'rename');
   await expect(query).toBeVisible();
-  await expect(dialog.locator('[data-component="token-search-token"]')).toContainText('tag:docs');
+  await expect(dialog.locator('[data-component="search-field-token"]')).toContainText('tag:docs');
   await dialog.getByRole('textbox', { name: 'View Name' }).fill('Documentation');
   await query.fill('tag:client ');
-  await expect(dialog.locator('[data-component="token-search-token"]')).toContainText('tag:client');
+  await expect(dialog.locator('[data-component="search-field-token"]')).toContainText('tag:client');
   await page.waitForTimeout(250);
   await page.screenshot({
     path: 'target/visual-captures/hs2-r7gpjm-edit-view-wide.png',
@@ -261,7 +259,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   const sidebarRail = page.locator('#app-left-rail');
   await narrowMenu.getByText('Delete View…').click();
   await expect(sidebarRail).toHaveAttribute('data-collapsed', 'false');
-  const confirmation = page.locator('[data-component="saved-view-delete-dialog"]');
+  const confirmation = page.locator('[data-dialog-component="saved-view-delete-dialog"]');
   await expect(confirmation).toContainText('Tickets are not affected.');
   await page.screenshot({
     path: 'target/visual-captures/hs2-5apx20-sidebar-delete-dialog-narrow.png',
@@ -292,7 +290,7 @@ test('scopes the search bar to a selected shared view without populating it (HS2
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add view' }).click();
-  const dialog = page.locator('[data-component="saved-view-dialog"]');
+  const dialog = page.locator('[data-dialog-component="saved-view-dialog"]');
   await dialog.getByRole('textbox', { name: 'View Name' }).fill('Needs docs');
   await dialog.getByRole('searchbox', { name: 'Search query' }).fill('tag:docs ');
   await dialog.getByRole('button', { name: 'Create View' }).click();
@@ -307,7 +305,7 @@ test('scopes the search bar to a selected shared view without populating it (HS2
   const search = page.getByRole('searchbox', { name: 'Search tickets' });
   await expect(search).toHaveText('');
   await expect(
-    page.locator('[data-token-search-id="workspace-search"] [data-component="token-search-token"]'),
+    page.locator('[data-search-field-id="workspace-search"] [data-component="search-field-token"]'),
   ).toHaveCount(0);
 
   // A search-bar query narrows the view: (tag:docs) AND (bar query).
@@ -322,7 +320,7 @@ test('scopes the search bar to a selected shared view without populating it (HS2
   await page.getByRole('button', { name: 'Add view', exact: true }).click();
   const seeded = dialog.getByRole('searchbox', { name: 'Search query' });
   await expect(seeded).toContainText(') AND (saved)');
-  await expect(seeded.locator('[data-component="token-search-token"]')).toContainText('tag:docs');
+  await expect(seeded.locator('[data-component="search-field-token"]')).toContainText('tag:docs');
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await search.click();
 
@@ -352,7 +350,7 @@ test('keeps immediate saved-view query replacement focused when opening frames r
   const frames = await holdAnimationFrames(page);
   try {
     await page.getByRole('button', { name: 'Add view', exact: true }).click();
-    const dialog = page.locator('[data-component="saved-view-dialog"]'),
+    const dialog = page.locator('[data-dialog-component="saved-view-dialog"]'),
       name = dialog.getByRole('textbox', { name: 'View Name' }),
       query = dialog.getByRole('searchbox', { name: 'Search query' });
     await expect(query).toBeVisible();
@@ -371,11 +369,11 @@ test('keeps immediate saved-view query replacement focused when opening frames r
     });
     await expect(query).toBeFocused();
     await page.keyboard.insertText('before is:active after ');
-    await expect(query.locator('[data-component="token-search-token"]')).toHaveAttribute(
+    await expect(query.locator('[data-component="search-field-token"]')).toHaveAttribute(
       'data-token-value',
       'is:active',
     );
-    await expect(query.locator('[data-token-search-text]')).toHaveText(['before ', ' after ']);
+    await expect(query.locator('[data-search-field-text]')).toHaveText(['before ', ' after ']);
     await expect(name).toHaveValue('');
     await name.fill('Immediate query');
     await frames.evaluate((clock) => {
@@ -412,7 +410,7 @@ test('keeps saved-view cancel and reopen authoritative across delayed frames and
   const frames = await holdAnimationFrames(page);
   try {
     const add = page.getByRole('button', { name: 'Add view', exact: true }),
-      dialog = page.locator('[data-component="saved-view-dialog"]'),
+      dialog = page.locator('[data-dialog-component="saved-view-dialog"]'),
       name = dialog.getByRole('textbox', { name: 'View Name' }),
       query = dialog.getByRole('searchbox', { name: 'Search query' });
     await add.click();
@@ -426,7 +424,7 @@ test('keeps saved-view cancel and reopen authoritative across delayed frames and
     await page.keyboard.press('Tab');
     await expect(query).toBeFocused();
     await page.keyboard.insertText('discarded is:active query ');
-    await expect(query.locator('[data-component="token-search-token"]')).toHaveAttribute(
+    await expect(query.locator('[data-component="search-field-token"]')).toHaveAttribute(
       'data-token-value',
       'is:active',
     );
@@ -458,7 +456,7 @@ test('keeps saved-view cancel and reopen authoritative across delayed frames and
       clock.advance();
     });
     await page.keyboard.insertText('tag:docs ');
-    await expect(query.locator('[data-component="token-search-token"]')).toHaveAttribute(
+    await expect(query.locator('[data-component="search-field-token"]')).toHaveAttribute(
       'data-token-value',
       'tag:docs',
     );
@@ -481,7 +479,7 @@ test('keeps saved-view cancel and reopen authoritative across delayed frames and
     await page.keyboard.press('Tab');
     await expect(query).toBeFocused();
     await query.fill('refilled is:active after ');
-    await expect(query.locator('[data-component="token-search-token"]')).toHaveAttribute(
+    await expect(query.locator('[data-component="search-field-token"]')).toHaveAttribute(
       'data-token-value',
       'is:active',
     );
@@ -511,16 +509,16 @@ test('offers tag completion, the date helper, and syntax help inside the saved-v
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add view' }).click();
-  const dialog = page.locator('[data-component="saved-view-dialog"]');
+  const dialog = page.locator('[data-dialog-component="saved-view-dialog"]');
   const query = dialog.getByRole('searchbox', { name: 'Search query' });
   await dialog.getByRole('textbox', { name: 'View Name' }).fill('Recent docs');
   // The same in-place tag completion as the workspace search, fed by the project's tags.
   await query.fill('tag:');
   // Kerf's model renders the in-place tag completion inside the field (HS2-5JXBQY).
-  const suggestions = dialog.locator('.kui-token-search__suggestions');
+  const suggestions = dialog.locator('.kui-search-field__suggestions');
   await expect(suggestions.getByRole('button')).toHaveText(['tag:client', 'tag:docs']);
   await suggestions.getByRole('button', { name: 'tag:docs' }).click();
-  const chips = dialog.locator('[data-component="token-search-token"]');
+  const chips = dialog.locator('[data-component="search-field-token"]');
   await expect(chips).toHaveCount(1);
   await expect(chips.first()).toHaveAttribute('data-token-value', 'tag:docs');
   await expect(suggestions).toHaveCount(0);
@@ -530,15 +528,15 @@ test('offers tag completion, the date helper, and syntax help inside the saved-v
   await dialog.getByRole('button', { name: 'Search Syntax Help' }).click();
   const help = dialog.getByRole('dialog', { name: 'Search syntax' });
   await expect(help.locator('[data-syntax-group]')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
-  // The help is a Kerf anchored surface hosted in the wa-dialog's interactive slot (KF-F52T5D,
-  // HS2-8TE69P): it floats outside the field's flow, stays in the viewport, and keeps focus in the field.
+  // The help is a Kerf anchored surface hosted inside the Kerf dialog (KF-F52T5D, HS2-8TE69P,
+  // HS2-BH7NZ4): it floats outside the field's flow, stays in the viewport, and keeps focus in the field.
   await expect(help).toBeVisible();
   expect(
     await help.evaluate((node) => {
       const box = node.getBoundingClientRect();
       return {
         position: getComputedStyle(node).position,
-        hosted: node.closest('wa-dialog') !== null,
+        hosted: node.closest('dialog.kui-dialog-surface') !== null,
         inFieldFlow: node.closest('.ticket-search-form-field') !== null,
         onScreen: box.top >= 0 && box.bottom <= innerHeight + 1 && box.left >= 0 && box.right <= innerWidth + 1,
         tall: box.height > 200,

@@ -1,11 +1,11 @@
 import './terminal-drawer.css';
 
-import { AppTab } from '@kerfjs/ui/app-tab';
 import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { TabBar } from '@kerfjs/ui/tab-bar';
+import { TabBarItem } from '@kerfjs/ui/tab-bar-item';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import {
@@ -206,7 +206,7 @@ export function TerminalDrawer({
       projectName,
     })),
     tabs = [
-      <AppTab
+      <TabBarItem
         id="grid"
         name="Project grid"
         selected={selected === 'grid'}
@@ -222,7 +222,7 @@ export function TerminalDrawer({
         const session = sessionsById.get(id);
         if (session)
           return (
-            <AppTab
+            <TabBarItem
               id={session.id}
               name={session.title ?? session.id}
               selected={selected === session.id}
@@ -290,7 +290,7 @@ export function TerminalDrawer({
           );
         const chat = chatsById.get(id)!;
         return (
-          <AppTab
+          <TabBarItem
             id={chat.id}
             name={chat.name}
             selected={selected === chat.id}

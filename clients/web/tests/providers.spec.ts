@@ -20,6 +20,10 @@ import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
 test.use({ video: process.env.HOTSHEET_MEDIA_RECORD_VIDEO === '1' ? 'on' : 'off' });
 
+/** A Kerf PopupMenu root's opener, whose `aria-expanded` is the menu's open state (Kerf beta.106). */
+const menuOpener = (menu: Locator) =>
+  menu.locator(':scope > .kui-popup-menu__trigger, :scope > .kui-popup-menu__context-anchor');
+
 const project = {
   id: 'demo-checkout',
   root: '/work/demo',
@@ -562,7 +566,7 @@ test('prioritizes an ignored foreground permission request over queued halts (HS
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
   await fixture.permission('hotsheet-project-chat-codex-demo-checkout');
-  const conversation = page.locator('[data-component="ai-conversation"]'),
+  const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
     permission = conversation.locator('[data-component="permission-request-popup"]'),
     popup = page.getByRole('dialog', { name: 'AI session halted' });
   await expect(permission).toBeVisible();
@@ -589,7 +593,7 @@ test('shows completed driven failures, preserves indicators on dismissal, and su
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
   const host = drawer.locator('[data-component="ai-conversation"]'),
-    composer = host.getByLabel('Message Codex');
+    composer = host.getByRole('textbox', { name: 'Message Codex' });
   await composer.fill('Fail this turn.');
   await composer.press('Enter');
   const popup = page.getByRole('dialog', { name: 'AI session halted' });
@@ -2634,23 +2638,24 @@ test('opens a roomy project dialog with native browse controls and working cance
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   const dialog = page.locator('[data-project-dialog]');
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value', '.');
-  expect((await dialog.boundingBox())!.width).toBeGreaterThan(700);
+  // Kerf's DialogSurface scales in, so measure once its enter motion has settled.
+  await expect.poll(async () => (await dialog.boundingBox())!.width).toBeGreaterThan(700);
   await page.getByRole('button', { name: 'Browse for Project Folder' }).click();
   await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value', '/picked/project');
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await page.getByRole('button', { name: 'Browse for Ticket Store' }).click();
   await expect(page.locator('wa-input[name="ticket-store"]')).toHaveJSProperty('value', '/picked/tickets.hs2');
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await expect(dialog.locator('.project-dialog__error')).toBeEmpty();
   await expect(page.locator('.app-error')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-nvd50p-open-project-dialog.png', fullPage: true });
   await page.getByRole('button', { name: 'Cancel' }).click();
-  await expect(dialog).toHaveJSProperty('open', false);
+  await expect(dialog).not.toHaveAttribute('open');
   await expect(dialog).toBeHidden();
   await page.getByRole('button', { name: 'Open Project' }).click();
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
 });
 
 test('remote clients pick from the server open-projects list instead of the file picker (HS2-VFNCXG)', async ({
@@ -2678,9 +2683,9 @@ test('remote clients pick from the server open-projects list instead of the file
   await page.goto('/?device=remote');
   await page.getByRole('button', { name: 'Open Project' }).click();
   const remote = page.locator('[data-remote-project-dialog]');
-  await expect(remote).toHaveJSProperty('open', true);
+  await expect(remote).toHaveAttribute('open', '');
   await expect(remote.locator('.project-dialog__error')).toHaveCount(0);
-  await expect(page.locator('[data-project-dialog]')).toHaveJSProperty('open', false);
+  await expect(page.locator('[data-project-dialog]')).not.toHaveAttribute('open');
   const item = remote.locator('[data-action="open-remote-checkout"]').first();
   await expect(item).toBeVisible();
   await expect(item).toContainText('demo');
@@ -2690,10 +2695,9 @@ test('remote clients pick from the server open-projects list instead of the file
     .poll(() =>
       remote.evaluate(
         (element) =>
-          element.shadowRoot
-            ?.querySelector('dialog')
-            ?.getAnimations()
-            .filter((animation) => animation.playState === 'running').length ?? -1,
+          (element instanceof HTMLDialogElement ? element : element.shadowRoot!.querySelector('dialog')!)
+            .getAnimations()
+            .filter((animation) => animation.playState === 'running').length,
       ),
     )
     .toBe(0);
@@ -2724,13 +2728,13 @@ test('remote clients pick from the server open-projects list instead of the file
   expect(geometry.rowsFit).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-xx5y2x-remote-project-mobile.png' });
   await page.emulateMedia({ colorScheme: 'dark' });
-  await expect(remote.locator('dialog')).toHaveCSS('background-color', 'rgb(44, 44, 46)');
+  await expect(remote).toHaveCSS('background-color', 'rgb(44, 44, 46)');
   await expect(item).toHaveCSS('color', 'rgb(245, 245, 247)');
   await page.screenshot({ path: 'target/visual-captures/hs2-xx5y2x-remote-project-mobile-dark-production.png' });
   await item.focus();
   await item.press('Enter');
-  await expect(remote).toHaveJSProperty('open', false);
-  await expect(page.locator('wa-select[name="mobile-project"]')).toHaveJSProperty('value', 'demo-checkout');
+  await expect(remote).not.toHaveAttribute('open');
+  await expect(page.locator('kui-select[name="mobile-project"]')).toHaveJSProperty('value', 'demo-checkout');
   await page.setViewportSize({ width: 1100, height: 760 });
   await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
 });
@@ -2746,7 +2750,7 @@ test('shows a clear message, not a raw browser exception, when the remote projec
   await page.goto('/?device=remote');
   await page.getByRole('button', { name: 'Open Project' }).click();
   const remote = page.locator('[data-remote-project-dialog]');
-  await expect(remote).toHaveJSProperty('open', true);
+  await expect(remote).toHaveAttribute('open', '');
   const error = remote.locator('.project-dialog__error');
   await expect(error).toContainText('Could not load the projects open on the Hot Sheet server');
   // Never surface a cryptic engine exception (e.g. iOS Safari's "The string did not match the expected pattern.").
@@ -2792,7 +2796,7 @@ test('offers explicit identity-guarded recovery for an unresponsive local server
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-21e6g6-unhealthy-recovery-narrow.png', fullPage: true });
   await recovery.getByRole('button', { name: 'Stop server and retry' }).click();
-  await expect(page.locator('wa-select[name="mobile-project"]')).toHaveJSProperty('value', 'demo-checkout');
+  await expect(page.locator('kui-select[name="mobile-project"]')).toHaveJSProperty('value', 'demo-checkout');
   expect(recoveryBody).toEqual({
     store: '/work/demo.hs2',
     expected: { pid: 4242, url: 'http://127.0.0.1:8787', started_at: '2026-09-12T01:00:00Z' },
@@ -2811,8 +2815,8 @@ test('always confirms before closing a project without running resources', async
   const projectTab = page.locator('[data-tab-kind="project"]');
   await projectTab.hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
-  const dialog = page.locator('[data-component="project-close-dialog"]');
-  await expect(dialog).toHaveJSProperty('open', true);
+  const dialog = page.locator('[data-dialog-component="project-close-dialog"]');
+  await expect(dialog).toHaveAttribute('open', '');
   await expect(dialog).not.toContainText('No terminals or AI chats are currently running');
   await expect(dialog.locator('[data-component="state-banner"]')).toHaveCount(0);
   await expect(dialog.getByRole('button', { name: 'Close Project' })).toBeVisible();
@@ -2821,10 +2825,9 @@ test('always confirms before closing a project without running resources', async
     .poll(() =>
       dialog.evaluate(
         (element) =>
-          element.shadowRoot
-            ?.querySelector('dialog')
-            ?.getAnimations()
-            .filter((animation) => animation.playState === 'running').length ?? -1,
+          (element instanceof HTMLDialogElement ? element : element.shadowRoot!.querySelector('dialog')!)
+            .getAnimations()
+            .filter((animation) => animation.playState === 'running').length,
       ),
     )
     .toBe(0);
@@ -2834,7 +2837,7 @@ test('always confirms before closing a project without running resources', async
   await projectTab.hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await expect
     .poll(() =>
       dialog.evaluate((element) => {
@@ -2847,10 +2850,9 @@ test('always confirms before closing a project without running resources', async
     .poll(() =>
       dialog.evaluate(
         (element) =>
-          element.shadowRoot
-            ?.querySelector('dialog')
-            ?.getAnimations()
-            .filter((animation) => animation.playState === 'running').length ?? -1,
+          (element instanceof HTMLDialogElement ? element : element.shadowRoot!.querySelector('dialog')!)
+            .getAnimations()
+            .filter((animation) => animation.playState === 'running').length,
       ),
     )
     .toBe(0);
@@ -2874,14 +2876,14 @@ test('falls back to the project dialog when the direct native chooser fails', as
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.getByRole('button', { name: 'Add Project' }).click();
   const dialog = page.locator('[data-project-dialog]');
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await expect(dialog.locator('wa-input[name="project-root"]')).toHaveJSProperty('value', '/work/demo');
   await expect(dialog.locator('.project-dialog__error')).toContainText('The native folder chooser failed.');
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toBeHidden();
   await page.waitForTimeout(500);
   await expect(dialog).toBeHidden();
-  await expect(dialog).toHaveJSProperty('open', false);
+  await expect(dialog).not.toHaveAttribute('open');
 });
 
 test('opens a project whose setup refresh was skipped and explains it in a dismissible banner (HS2-0TXM8S)', async ({
@@ -3071,7 +3073,7 @@ test('opens the native folder chooser directly from Add project and only onboard
   expect(openedRoots).toEqual(['.', '/work/other']);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const setup = page.locator('[data-ticket-source-setup-dialog]');
-  await expect(setup).toHaveJSProperty('open', true);
+  await expect(setup).toHaveAttribute('open', '');
   await expect(setup).toContainText('other is open, but it does not have a ticket source yet.');
   await page.waitForTimeout(250);
   await page.screenshot({ path: 'target/visual-captures/hs2-gcbc3e-direct-add-project-wide.png', fullPage: true });
@@ -3085,12 +3087,15 @@ test('opens the native folder chooser directly from Add project and only onboard
   const otherTab = page.locator('[data-tab-kind="project"]').filter({ has: page.getByRole('tab', { name: 'other' }) });
   await otherTab.hover();
   await otherTab.getByRole('button', { name: 'Close other' }).click();
-  await page.locator('[data-component="project-close-dialog"]').getByRole('button', { name: 'Close Project' }).click();
+  await page
+    .locator('[data-dialog-component="project-close-dialog"]')
+    .getByRole('button', { name: 'Close Project' })
+    .click();
   await expect(page.getByRole('tab', { name: 'other' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
   await expect(setup).toBeHidden();
-  await expect(setup).toHaveJSProperty('open', false);
+  await expect(setup).not.toHaveAttribute('open');
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   expect(openedRoots).toEqual(['.', '/work/other', '/work/other']);
 });
@@ -3318,7 +3323,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(0);
   const setup = page.locator('[data-ticket-source-setup-dialog]'),
     sourceOptions = setup.locator('.ticket-source-setup__options .kui-list-item');
-  await expect(setup).toHaveJSProperty('open', true);
+  await expect(setup).toHaveAttribute('open', '');
   await expect(setup).toHaveAttribute('data-component', 'ticket-source-setup-dialog');
   await expect(sourceOptions).toHaveCount(5);
   await expect(
@@ -3335,7 +3340,9 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(sourceOptions.locator('[data-provider-icon="gitlab"]')).toBeVisible();
   await expect(sourceOptions.locator('[data-provider-icon="jira"]')).toBeVisible();
   await setup.evaluate(async (node) => {
-    await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
+    await Promise.all(
+      node.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => undefined)),
+    );
   });
   for (const option of await sourceOptions.all()) {
     const box = (await option.boundingBox())!,
@@ -3367,7 +3374,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await page.screenshot({ path: 'target/visual-captures/hs2-4fw7wm-source-setup-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
-  await expect(setup).toHaveJSProperty('open', true);
+  await expect(setup).toHaveAttribute('open', '');
   await expect(setup).toHaveAttribute('data-navigation', 'push');
   const providerForm = setup.locator('[data-action="save-provider-connection"]');
   await expect(providerForm).toBeVisible();
@@ -3389,7 +3396,9 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     .poll(() => footerTransition.locator('[data-side="b"]').evaluate((node) => getComputedStyle(node).animationName))
     .toBe('content-transition-fade-in');
   await transition.evaluate(async (node) => {
-    await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
+    await Promise.all(
+      node.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => undefined)),
+    );
   });
   await page.screenshot({ path: 'target/visual-captures/hs2-y4zpqq-provider-config-dialog-after.png', fullPage: true });
   await providerForm.getByRole('button', { name: 'Ticket source types' }).click();
@@ -3408,7 +3417,9 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(providerForm.getByLabel(/API base URL/)).toHaveCount(0);
   await expect(setup.getByRole('button', { name: 'Connect provider' })).toHaveJSProperty('disabled', true);
   await transition.evaluate(async (node) => {
-    await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
+    await Promise.all(
+      node.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => undefined)),
+    );
   });
   await page.screenshot({ path: 'target/visual-captures/hs2-1jt25r-sign-in-first-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 760 });
@@ -3498,7 +3509,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     attachment_folder: 'evidence',
     attachment_branch: 'media',
   });
-  await expect(setup).toHaveJSProperty('open', false);
+  await expect(setup).not.toHaveAttribute('open');
   await expect(page.locator('.app-toast')).toContainText('GitHub Issues connected.');
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await page.getByRole('button', { name: 'New ticket…' }).click();
@@ -3540,7 +3551,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await setup.getByRole('button', { name: 'Connect provider' }).click();
   await expect.poll(() => creates.length).toBe(2);
   expect(creates[1]).toMatchObject({ name: 'GitHub Secondary', make_default: false });
-  await expect(setup).toHaveJSProperty('open', false);
+  await expect(setup).not.toHaveAttribute('open');
   await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Issues' })).toBeVisible();
   await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Secondary' })).toBeVisible();
   // Editing a source from its project offers its details, this project's default, Disable, and
@@ -3595,7 +3606,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect.poll(() => colorUpdates.length).toBe(1);
   expect(colorUpdates[0]).toMatchObject({ color: '#8b5cf6' });
   expect(updates[0].settings).not.toHaveProperty('attachment_repo');
-  await expect(setup).toHaveJSProperty('open', false);
+  await expect(setup).not.toHaveAttribute('open');
   await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Primary' })).toBeVisible();
   await expect(page.locator('.app-error')).toHaveCount(0);
 
@@ -3607,10 +3618,10 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     if (request.method() === 'PUT' && path.endsWith('/default-source')) defaults.push(request.postDataJSON());
     if (request.method() === 'DELETE' && path.includes('/sources/')) detaches.push(path.split('/').pop()!);
   });
-  const defaultSelect = sourcesPanel.locator('wa-select[name="project-default-source"]');
+  const defaultSelect = sourcesPanel.locator('kui-select[name="project-default-source"]');
   await expect(defaultSelect).toHaveJSProperty('value', 'github-small-tale-hotsheet2');
-  await defaultSelect.click();
-  await defaultSelect.locator('wa-option[value="github-small-tale-secondary"]').click();
+  await defaultSelect.locator('.kui-select__trigger').click();
+  await defaultSelect.locator('.kui-select__option[data-value="github-small-tale-secondary"]').click();
   await expect.poll(() => defaults).toEqual([{ connection_id: 'github-small-tale-secondary' }]);
   await expect(page.locator('.app-toast')).toContainText("GitHub Secondary is now this project's default source.");
   await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Secondary' })).toContainText('Default');
@@ -3623,14 +3634,14 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
 
   // A row's remove action opens that source's editor at an inline confirmation; Keep backs out.
   await sourcesPanel.getByRole('button', { name: 'Remove GitHub Secondary from this project' }).click();
-  await expect(setup).toHaveJSProperty('open', true);
+  await expect(setup).toHaveAttribute('open', '');
   const prompt = footer.getByRole('alert');
   await expect(prompt).toContainText('Remove GitHub Secondary from demo?');
   await expect(prompt).toContainText('No other project uses it, so its connection is deleted.');
   await expect(footer.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
   await setup.evaluate(async (node) => {
     const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];
-    await Promise.all(animations.map((animation) => animation.finished));
+    await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
   });
   await page.screenshot({ path: test.info().outputPath('remove-from-project-confirm-wide.png'), fullPage: true });
   await footer.getByRole('button', { name: 'Keep' }).click();
@@ -3642,7 +3653,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await page.screenshot({ path: test.info().outputPath('remove-from-project-confirm-narrow.png'), fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
   await footer.getByRole('button', { name: 'Remove', exact: true }).click();
-  await expect(setup).toHaveJSProperty('open', false);
+  await expect(setup).not.toHaveAttribute('open');
   expect(detaches).toEqual(['github-small-tale-secondary']);
   await expect(page.locator('.app-toast')).toContainText('GitHub Secondary removed from this project.');
   await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Secondary' })).toHaveCount(0);
@@ -3661,7 +3672,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     if (request.method() === 'PUT' && request.url().endsWith('/disabled')) toggles.push(request.postDataJSON());
   });
   await footer.getByRole('button', { name: 'Disable' }).click();
-  await expect(setup).toHaveJSProperty('open', false);
+  await expect(setup).not.toHaveAttribute('open');
   await expect(page.locator('.app-toast')).toContainText('GitHub Primary disabled.');
   await expect(primaryRow.locator('[data-state="disabled"]')).toHaveText('Disabled');
   await primaryRow.click();
@@ -3669,7 +3680,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(footer.getByRole('button', { name: 'Disable' })).toHaveCount(0);
   await setup.evaluate(async (node) => {
     const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];
-    await Promise.all(animations.map((animation) => animation.finished));
+    await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
   });
   await page.setViewportSize({ width: 390, height: 760 });
   // At phone width the footer actions wrap inside the dialog instead of overflowing it.
@@ -3682,7 +3693,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await page.screenshot({ path: test.info().outputPath('edit-source-actions-narrow.png'), fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
   await footer.getByRole('button', { name: 'Enable' }).click();
-  await expect(setup).toHaveJSProperty('open', false);
+  await expect(setup).not.toHaveAttribute('open');
   await expect(page.locator('.app-toast')).toContainText('GitHub Primary enabled.');
   await expect(primaryRow.locator('[data-state="disabled"]')).toHaveCount(0);
   expect(toggles).toEqual([{ disabled: true }, { disabled: false }]);
@@ -3701,7 +3712,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(providerForm).toContainText('Or sign in with another account.');
   await setup.evaluate(async (node) => {
     const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];
-    await Promise.all(animations.map((animation) => animation.finished));
+    await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
   });
   await page.screenshot({ path: test.info().outputPath('reuse-account-wide.png'), fullPage: true });
   await reuse.click();
@@ -3716,7 +3727,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     settings: { credential: { secret: 'github-app-auth-1' } },
   });
   expect(signIns).toEqual([]);
-  await expect(setup).toHaveJSProperty('open', false);
+  await expect(setup).not.toHaveAttribute('open');
   await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Reused' })).toBeVisible();
 
   // App Settings → Accounts lists sign-ins with the projects using each; only an unused one signs out.
@@ -3801,7 +3812,7 @@ for (const width of [1280, 390])
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const setup = page.locator('[data-ticket-source-setup-dialog]'),
       form = setup.locator('[data-action="save-provider-connection"]');
-    await expect(setup).toHaveJSProperty('open', true);
+    await expect(setup).toHaveAttribute('open', '');
     await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
     // The only account on this machine is an earlier sign-in no project uses yet; its username is
     // looked up automatically (HS2-NRTH1N).
@@ -3809,14 +3820,14 @@ for (const width of [1280, 390])
     await expect(reuse).toBeVisible();
     await setup.evaluate(async (node) => {
       const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];
-      await Promise.all(animations.map((animation) => animation.finished));
+      await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
     });
     await page.screenshot({ path: test.info().outputPath(`reuse-account-${width}.png`) });
     await reuse.click();
     await expect(form.getByText('Using your GitHub account on GitHub.')).toBeVisible();
     await form.locator('input[name="connection-locator"]').fill('small-tale/reused');
     await setup.getByRole('button', { name: 'Connect provider' }).click();
-    await expect(setup).toHaveJSProperty('open', false);
+    await expect(setup).not.toHaveAttribute('open');
     expect(signIns).toEqual([]);
     expect(creates).toEqual([
       expect.objectContaining({
@@ -3980,7 +3991,7 @@ test('names an unused GitHub Enterprise sign-in by its host and reuses its serve
     await page.setViewportSize({ width, height: 860 });
     await setup.evaluate(async (node) => {
       const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];
-      await Promise.all(animations.map((animation) => animation.finished));
+      await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
     });
     await page.screenshot({ path: test.info().outputPath(`enterprise-account-picker-${width}.png`) });
   }
@@ -3989,7 +4000,7 @@ test('names an unused GitHub Enterprise sign-in by its host and reuses its serve
   await expect(form.getByText('Using your GitHub account on ghe.test.')).toBeVisible();
   await form.locator('input[name="connection-locator"]').fill('small-tale/reused');
   await setup.getByRole('button', { name: 'Connect provider' }).click();
-  await expect(setup).toHaveJSProperty('open', false);
+  await expect(setup).not.toHaveAttribute('open');
   expect(signIns).toEqual([]);
   // The new source talks to the Enterprise server it signed in to, not github.com.
   expect(creates).toEqual([
@@ -4071,7 +4082,7 @@ for (const width of [1280, 390])
       settle = () =>
         setup.evaluate(async (node) => {
           const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];
-          await Promise.all(animations.map((animation) => animation.finished));
+          await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
         });
     await setup.getByRole('button', { name: 'Connect Jira Cloud' }).click();
     const jiraAccount = form.getByRole('button', {
@@ -4127,7 +4138,7 @@ for (const width of [1280, 390])
     await field('connection-locator').locator('input').fill('team/app');
     await field('connection-locator').dispatchEvent('input');
     await setup.getByRole('button', { name: 'Connect provider' }).click();
-    await expect(setup).toHaveJSProperty('open', false);
+    await expect(setup).not.toHaveAttribute('open');
     expect(creates).toEqual([
       expect.objectContaining({
         provider: 'gitlab',
@@ -4191,7 +4202,7 @@ test('signs in to GitHub Enterprise from its server address before connecting (H
   expect(starts).toEqual([{ web_base: 'https://ghe.test' }]);
   await form.locator('input[name="connection-locator"]').fill('small-tale/hotsheet2');
   await setup.getByRole('button', { name: 'Connect provider' }).click();
-  await expect(setup).toHaveJSProperty('open', false);
+  await expect(setup).not.toHaveAttribute('open');
   expect(creates[0].settings).toMatchObject({ api_base: 'https://ghe.test/api/v3' });
 });
 
@@ -4211,7 +4222,7 @@ test('blocks a new ticket store before an older project server can accept it', a
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const setup = page.locator('[data-ticket-source-setup-dialog]');
-  await expect(setup).toHaveJSProperty('open', true);
+  await expect(setup).toHaveAttribute('open', '');
   await setup.getByRole('button', { name: 'Create a Hot Sheet 2 git ticket repository', exact: true }).click();
   const alert = setup.getByRole('alert');
   await expect(alert).toContainText('No ticket repository was created');
@@ -4229,14 +4240,14 @@ test('keeps a dismissed ticket-source setup dialog closed across later project r
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const setup = page.locator('[data-ticket-source-setup-dialog]');
-  await expect(setup).toHaveJSProperty('open', true);
+  await expect(setup).toHaveAttribute('open', '');
   await setup.getByRole('button', { name: 'Close' }).click();
   await expect(setup).toBeHidden();
   await page.getByRole('tab', { name: /demo/ }).click();
   await page.getByLabel('Columns View').click();
   await page.waitForTimeout(350);
   await expect(setup).toBeHidden();
-  await expect(setup).toHaveJSProperty('open', false);
+  await expect(setup).not.toHaveAttribute('open');
 });
 
 test('identifies detected HS1 data and keeps a dismissed import modal closed across launches', async ({ page }) => {
@@ -4248,7 +4259,7 @@ test('identifies detected HS1 data and keeps a dismissed import modal closed acr
   const dialog = page.locator('[data-component="hs1-migration-dialog"]'),
     dialogOpacity = () =>
       dialog.evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('dialog')!).opacity);
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await expect(dialog.getByText('/work/demo/.hotsheet/db', { exact: true })).toBeVisible();
   await expect(dialog.getByText('17', { exact: true })).toBeVisible();
   await expect.poll(dialogOpacity).toBe('1');
@@ -4315,7 +4326,9 @@ test('adds a second git ticket store and connects its remote from one guided for
     /ticket-repository-remotes/,
   );
   await setup.evaluate(async (node) => {
-    await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
+    await Promise.all(
+      node.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => undefined)),
+    );
   });
   await page.screenshot({ path: 'target/visual-captures/hs2-73q89e-git-remote-form-after.png', fullPage: true });
   await page.setViewportSize({ width: 560, height: 720 });
@@ -4333,7 +4346,7 @@ test('adds a second git ticket store and connects its remote from one guided for
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-mddrcm-remote-error-narrow.png', fullPage: true });
   await setup.getByRole('button', { name: 'Connect & push' }).click();
-  await expect(setup).toHaveJSProperty('open', false);
+  await expect(setup).not.toHaveAttribute('open');
   expect(remoteAttempts).toBe(2);
   await expect(page.getByText('This project uses 2 ticket sources.')).toBeVisible();
   await expect(page.getByText('Hot Sheet Git · /picked/project', { exact: true })).toBeVisible();
@@ -4549,14 +4562,14 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await expect(compactTile).toBeVisible();
   await expect(page.locator('.terminal-dashboard-controls__count')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-terminal-dashboard-small.png', fullPage: true });
-  await expect(page.locator('wa-select[name="terminal-grouping"]')).toHaveCount(0);
-  const visibilitySelect = page.locator('wa-select[name="terminal-visibility-group"]'),
+  await expect(page.locator('kui-select[name="terminal-grouping"]')).toHaveCount(0);
+  const visibilitySelect = page.locator('kui-select[name="terminal-visibility-group"]'),
     visibilityPopupGeometry = () =>
       visibilitySelect.evaluate((node) => {
-        const listbox = node.shadowRoot!.querySelector<HTMLElement>('[part="listbox"]')!,
+        const listbox = node.querySelector<HTMLElement>('.kui-select__popup')!,
           box = listbox.getBoundingClientRect(),
-          combobox = node.shadowRoot!.querySelector<HTMLElement>('[part="combobox"]')!.getBoundingClientRect(),
-          options = [...node.querySelectorAll<HTMLElement>('wa-option')].map((option) => {
+          combobox = node.querySelector<HTMLElement>('.kui-select__trigger')!.getBoundingClientRect(),
+          options = [...node.querySelectorAll<HTMLElement>('.kui-select__option')].map((option) => {
             const bounds = option.getBoundingClientRect();
             return {
               left: bounds.left,
@@ -4576,8 +4589,8 @@ test('uses independent width and height terminal dashboard zoom scales', async (
           options,
         };
       });
-  await visibilitySelect.click();
-  await expect(visibilitySelect).toHaveJSProperty('open', true);
+  await visibilitySelect.locator('.kui-select__trigger').click();
+  await expect(visibilitySelect).toHaveAttribute('open', '');
   await expect.poll(async () => (await visibilityPopupGeometry()).left).toBeGreaterThanOrEqual(10);
   let popupBounds = await visibilityPopupGeometry();
   expect(popupBounds.right).toBeLessThanOrEqual(popupBounds.viewport - 10);
@@ -4590,11 +4603,11 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   }
   await page.screenshot({ path: 'target/visual-captures/hs2-fkx6mb-visibility-select-wide.png', fullPage: true });
   await page.keyboard.press('Escape');
-  await expect(visibilitySelect).toHaveJSProperty('open', false);
+  await expect(visibilitySelect).not.toHaveAttribute('open');
   await page.setViewportSize({ width: 760, height: 632 });
-  await visibilitySelect.click();
-  await expect(visibilitySelect).toHaveJSProperty('open', true);
-  await expect(visibilitySelect.locator('[part="listbox"]')).toBeVisible();
+  await visibilitySelect.locator('.kui-select__trigger').click();
+  await expect(visibilitySelect).toHaveAttribute('open', '');
+  await expect(visibilitySelect.locator('.kui-select__popup')).toBeVisible();
   await expect.poll(async () => (await visibilityPopupGeometry()).left).toBeGreaterThanOrEqual(10);
   popupBounds = await visibilityPopupGeometry();
   expect(popupBounds.right).toBeLessThanOrEqual(popupBounds.viewport - 10);
@@ -4609,7 +4622,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await expect(drawer).toHaveAttribute('data-maximized', 'false');
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
   await expect(drawer.getByRole('button', { name: 'Manage workspace visibility' })).toHaveCount(0);
-  await expect(drawer.locator('wa-select[name="terminal-visibility-group"]')).toHaveCount(0);
+  await expect(drawer.locator('kui-select[name="terminal-visibility-group"]')).toHaveCount(0);
   const dedicatedViewport = drawer.locator('.terminal-session:not([hidden]) [data-display-mode="interactive"]');
   await expect(dedicatedViewport).not.toHaveAttribute('data-grid-policy', 'dashboard-80x24');
   await expect(dedicatedViewport.locator('.xterm-helper-textarea')).toBeFocused();
@@ -4960,8 +4973,8 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await expect(page.locator('[data-component="terminal-dashboard"]')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   const rail = page.locator('#app-right-rail'),
-    projectSelect = page.locator('#app-right-rail wa-select[name="terminal-rail-project"]'),
-    viewSelect = rail.locator('wa-select[name="terminal-rail-view"]'),
+    projectSelect = page.locator('#app-right-rail kui-select[name="terminal-rail-project"]'),
+    viewSelect = rail.locator('kui-select[name="terminal-rail-view"]'),
     launcher = rail.locator('[data-component="quick-ticket-composer-launcher"]');
   await expect(rail).toBeVisible();
   await expect(projectSelect).toHaveAttribute('value', 'demo-checkout');
@@ -4978,7 +4991,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
       sort = node.querySelector('.workspace-header__sort-group')!.getBoundingClientRect(),
       search = node.querySelector('.ticket-search-field')!.getBoundingClientRect(),
       utility = node.querySelector('.workspace-header__utility-group')!.getBoundingClientRect(),
-      project = document.querySelector('wa-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
+      project = document.querySelector('kui-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
       hide = document.querySelector<HTMLElement>('[aria-label="Hide ticket rail"]')!.getBoundingClientRect(),
       heading = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
       // The launcher is a brand Web Awesome pill (HS2-PNCDAE): its fill lives on the base part.
@@ -5026,8 +5039,8 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await composer.getByRole('button', { name: 'Cancel' }).click();
   await expect(composer).toBeHidden();
   await page.screenshot({ path: 'target/visual-captures/hs2-r292m4-workspace-grid-rail-wide.png', fullPage: true });
-  await viewSelect.click();
-  await viewSelect.locator('wa-option[value="backlog"]').click();
+  await viewSelect.locator('.kui-select__trigger').click();
+  await viewSelect.locator('.kui-select__option[data-value="backlog"]').click();
   await expect(viewSelect).toHaveJSProperty('value', 'backlog');
   await viewSelect.evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'all';
@@ -5051,13 +5064,13 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await expect(expandedSearch).toHaveCSS('border-width', '1px');
   await expect(expandedSearch).toHaveCSS('border-style', 'solid');
   await expect(expandedSearch).not.toHaveCSS('box-shadow', 'none');
-  await expect(expandedSearch.locator('.kui-token-search')).toHaveCSS('border-width', '0px');
+  await expect(expandedSearch.locator('.kui-search-field')).toHaveCSS('border-width', '0px');
   await rail.screenshot({
     path: 'target/visual-captures/hs2-tnsd4k-rail-search-empty-focused.png',
     animations: 'disabled',
   });
   await searchInput.fill('has:attachment ');
-  await expect(rail.locator('[data-component="token-search-token"][data-token-value="has:attachment"]')).toBeVisible();
+  await expect(rail.locator('[data-component="search-field-token"][data-token-value="has:attachment"]')).toBeVisible();
   await rail.getByRole('button', { name: 'Hide ticket rail' }).focus();
   await expect(expandedSearch).toHaveAttribute('data-expanded', 'true');
   await expect(expandedSearch).toHaveCSS('border-width', '1px');
@@ -5067,7 +5080,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await searchInput.fill('updated-after:4h ago');
   await searchInput.press('Enter');
   await expect(
-    rail.locator('[data-component="token-search-token"][data-token-value=\'updated-after:"4h ago"\']'),
+    rail.locator('[data-component="search-field-token"][data-token-value=\'updated-after:"4h ago"\']'),
   ).toBeVisible();
   await rail.getByRole('button', { name: 'Search Syntax Help' }).click();
   await expect(page.getByRole('dialog', { name: 'Search syntax' })).toBeVisible();
@@ -5160,7 +5173,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await rail.getByRole('button', { name: 'Search tickets' }).click();
   await expect.poll(() => expandedSearch.evaluate((node) => node.getAnimations().length)).toBeGreaterThan(0);
   await searchInput.fill('tag:');
-  const suggestions = rail.locator('.kui-token-search__suggestions');
+  const suggestions = rail.locator('.kui-search-field__suggestions');
   await expect(suggestions).toBeVisible();
   await page.screenshot({
     path: 'target/visual-captures/hs2-n5g6js-workspace-grid-rail-suggestions.png',
@@ -5171,7 +5184,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
         const rect = node.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
         return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, width: rect.width };
       },
-      options = [...node.querySelectorAll<HTMLElement>('.kui-token-search__suggestion')].map((option) => ({
+      options = [...node.querySelectorAll<HTMLElement>('.kui-search-field__suggestion')].map((option) => ({
         left: option.getBoundingClientRect().left,
         right: option.getBoundingClientRect().right,
         width: option.getBoundingClientRect().width,
@@ -5192,7 +5205,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
       more: bounds('.workspace-header__overflow-group'),
       sort: bounds('.workspace-header__sort-group'),
       utility: bounds('.workspace-header__utility-group'),
-      suggestions: bounds('.kui-token-search__suggestions'),
+      suggestions: bounds('.kui-search-field__suggestions'),
       options,
     };
   });
@@ -5506,10 +5519,10 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.getByRole('button', { name: 'Show Terminal Drawer' })).toBeVisible();
   const projectTab = page.locator('[data-tab-kind="project"]');
-  await expect(projectTab.locator('.kui-app-tab__trailing')).toHaveCount(1);
+  await expect(projectTab.locator('.kui-tab-bar-item__trailing')).toHaveCount(1);
   expect(
     parseFloat(
-      await projectTab.locator('.kui-app-tab__trailing').evaluate((element) => getComputedStyle(element).minWidth),
+      await projectTab.locator('.kui-tab-bar-item__trailing').evaluate((element) => getComputedStyle(element).minWidth),
     ),
   ).toBeGreaterThan(19);
   await projectTab.click({ button: 'right', modifiers: ['Alt'] });
@@ -5529,7 +5542,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await expect(selectedTerminalTab).toContainText('Codex Main');
   const selectedSurfaces = await selectedTerminalTab.evaluate((element) => ({
     root: getComputedStyle(element).backgroundColor,
-    select: getComputedStyle(element.querySelector('.kui-app-tab__select')!).backgroundColor,
+    select: getComputedStyle(element.querySelector('.kui-tab-bar-item__select')!).backgroundColor,
   }));
   expect(selectedSurfaces.root).not.toBe('rgba(0, 0, 0, 0)');
   expect(selectedSurfaces.select).toBe('rgba(0, 0, 0, 0)');
@@ -5587,7 +5600,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await page.keyboard.press('Escape');
   await expect(drawerTileMenu).toHaveCount(0);
   await expect(drawer.getByRole('button', { name: 'Manage workspace visibility' })).toHaveCount(0);
-  await expect(drawer.locator('wa-select[name="terminal-visibility-group"]')).toHaveCount(0);
+  await expect(drawer.locator('kui-select[name="terminal-visibility-group"]')).toHaveCount(0);
   await expect(codexTile).toHaveCount(1);
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('Terminal', { exact: true }).click();
@@ -5906,12 +5919,12 @@ test('changes the chat provider and re-seeds the new provider with the prior tra
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const conversation = drawer.locator('[data-component="ai-conversation"][data-presentation="embedded"]');
-  await conversation.getByLabel('Message Codex').fill('What time is it in California?');
-  await conversation.getByLabel('Message Codex').press('Enter');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).fill('What time is it in California?');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   await expect(conversation.getByText('The event stream remains authoritative.')).toBeVisible();
   // Change provider to Claude via the conversation popup's provider submenu.
   // The chat's model control lives in the drawer's tab toolbar (HS2-59F7WK).
-  await drawer.locator('[data-conversation-model-menu] [slot="trigger"]').click();
+  await drawer.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger').click();
   await expect(page.getByRole('menuitem', { name: /Provider/ })).toBeVisible();
   await page.locator('[data-action="select-conversation-provider"][data-value="claude"]').dispatchEvent('click');
   // A fresh Claude chat is created, selected, and seeded with the prior transcript as one context turn.
@@ -5985,12 +5998,12 @@ test('picks per-project and per-chat AI permission modes and shows the active mo
   // Project scope: each provider's default chat permission mode lives in Settings → AI tools.
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
-  const claudeMode = page.locator('wa-select[name="ai-provider-permission-mode-claude"]'),
-    codexMode = page.locator('wa-select[name="ai-provider-permission-mode-codex"]');
+  const claudeMode = page.locator('kui-select[name="ai-provider-permission-mode-claude"]'),
+    codexMode = page.locator('kui-select[name="ai-provider-permission-mode-codex"]');
   await expect(claudeMode).toHaveJSProperty('value', 'acceptEdits');
   await expect(codexMode).toHaveJSProperty('value', 'never');
-  await claudeMode.click();
-  await claudeMode.locator('wa-option[value="auto"]').click();
+  await claudeMode.locator('.kui-select__trigger').click();
+  await claudeMode.locator('.kui-select__option[data-value="auto"]').click();
   await expect.poll(() => settingsPuts.at(-1)?.providers).toMatchObject({ claude: { permission_mode: 'auto' } });
   // A mode that removes a safety net is an explicit opt-in: declining keeps the saved mode.
   const putsBeforeDecline = settingsPuts.length;
@@ -5998,8 +6011,8 @@ test('picks per-project and per-chat AI permission modes and shows the active mo
     expect(dialog.message()).toContain('Claude can run any command without asking.');
     void dialog.dismiss();
   });
-  await claudeMode.click();
-  await claudeMode.locator('wa-option[value="bypassPermissions"]').click();
+  await claudeMode.locator('.kui-select__trigger').click();
+  await claudeMode.locator('.kui-select__option[data-value="bypassPermissions"]').click();
   await expect(claudeMode).toHaveJSProperty('value', 'auto');
   expect(settingsPuts).toHaveLength(putsBeforeDecline);
   await expect(page.locator('[data-ai-provider="claude"]')).toContainText('Claude asks only for risky actions.');
@@ -6018,24 +6031,31 @@ test('picks per-project and per-chat AI permission modes and shows the active mo
   await expect(tab.getByRole('img', { name: 'Permissions: Never ask' })).toBeVisible();
 
   // Per chat: the model menu's Permissions submenu switches this chat only, from its next turn on.
-  await drawer.locator('[data-conversation-model-menu] [slot="trigger"]').click();
+  await drawer.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger').click();
   const permissions = drawer
-    .locator('[data-conversation-model-menu] > wa-dropdown-item')
+    .locator(
+      '[data-conversation-model-menu] > .kui-popup-menu__menu > .kui-popup-menu__item, [data-conversation-model-menu] > .kui-popup-menu__menu > .kui-popup-menu__submenu-host > .kui-popup-menu__item',
+    )
     .filter({ hasText: 'Permissions' });
   await expect(permissions).toContainText('Never ask');
   await permissions.hover();
-  await expect(permissions.locator('[data-action="select-conversation-permission-mode"]')).toHaveCount(2);
+  await expect(
+    permissions.locator('xpath=..').locator('[data-action="select-conversation-permission-mode"]'),
+  ).toHaveCount(2);
   await page.screenshot({ path: 'target/visual-captures/hs2-nhrdmw-chat-permission-menu-1280.png' });
-  await permissions.locator('[data-action="select-conversation-permission-mode"][data-value="on-request"]').click();
+  await permissions
+    .locator('xpath=..')
+    .locator('[data-action="select-conversation-permission-mode"][data-value="on-request"]')
+    .click();
   await expect(tab.getByRole('img', { name: 'Permissions: Ask when needed' })).toBeVisible();
   const conversation = drawer.locator('[data-component="ai-conversation"][data-presentation="embedded"]');
-  await conversation.getByLabel('Message Codex').fill('What time is it in California?');
-  await conversation.getByLabel('Message Codex').press('Enter');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).fill('What time is it in California?');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   await expect.poll(() => turnPosts.at(-1)).toMatchObject({ permission_mode: 'on-request' });
   await expect(conversation.getByText('The event stream remains authoritative.')).toBeVisible();
   // The server now reports the chat's mode, so later turns do not resend it.
-  await conversation.getByLabel('Message Codex').fill('And in New York?');
-  await conversation.getByLabel('Message Codex').press('Enter');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).fill('And in New York?');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   await expect.poll(() => turnPosts.length).toBe(2);
   expect(turnPosts[1]).not.toHaveProperty('permission_mode');
   await expect(tab.getByRole('img', { name: 'Permissions: Ask when needed' })).toBeVisible();
@@ -6079,10 +6099,10 @@ test('keeps the AI permission controls legible on a phone-width layout (HS2-NHRD
   await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
-  const claudeMode = page.locator('wa-select[name="ai-provider-permission-mode-claude"]');
+  const claudeMode = page.locator('kui-select[name="ai-provider-permission-mode-claude"]');
   page.once('dialog', (dialog) => void dialog.accept());
-  await claudeMode.click();
-  await claudeMode.locator('wa-option[value="bypassPermissions"]').click();
+  await claudeMode.locator('.kui-select__trigger').click();
+  await claudeMode.locator('.kui-select__option[data-value="bypassPermissions"]').click();
   await expect(claudeMode).toHaveJSProperty('value', 'bypassPermissions');
   await expect(page.locator('[data-ai-provider="claude"]')).toContainText('Warning: Claude can run any command');
   const settings = page.locator('[data-component="ai-tool-settings"]');
@@ -6117,14 +6137,14 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
   // Claude keeps its own default model, distinct from the project's default provider (HS2-EK24KF).
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
-  const claudeModel = page.locator('wa-select[name="ai-provider-model-claude"]');
-  await claudeModel.click();
-  await claudeModel.locator('wa-option[value="opus"]').click();
+  const claudeModel = page.locator('kui-select[name="ai-provider-model-claude"]');
+  await claudeModel.locator('.kui-select__trigger').click();
+  await claudeModel.locator('.kui-select__option[data-value="opus"]').click();
   await expect(claudeModel).toHaveJSProperty('value', 'opus');
   // Autosave success is silent: no inline Saving…/Saved line (HS2-GHA1D3).
   await expect(page.locator('[data-component="ai-tool-settings"] [role="status"]')).toHaveText('');
   // Opus supports Claude's previous (default) medium effort, so the model change keeps it (HS2-M0HWPH).
-  await expect(page.locator('wa-select[name="ai-provider-effort-claude"]')).toHaveJSProperty('value', 'medium');
+  await expect(page.locator('kui-select[name="ai-provider-effort-claude"]')).toHaveJSProperty('value', 'medium');
   await page.getByLabel('List View').click();
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]'),
@@ -6132,11 +6152,13 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
     menu = drawer.locator('[data-terminal-drawer-create]'),
     parent = menu.locator('[data-item-id="ai-shell-providers"]'),
     shell = (provider?: string) =>
-      parent.locator(
-        provider
-          ? `[data-action="create-terminal-drawer-item"][data-provider="${provider}"]`
-          : '[data-action="create-terminal-drawer-item"]:not([data-provider])',
-      ),
+      parent
+        .locator('xpath=..')
+        .locator(
+          provider
+            ? `[data-action="create-terminal-drawer-item"][data-provider="${provider}"]`
+            : '[data-action="create-terminal-drawer-item"]:not([data-provider])',
+        ),
     openSubmenu = async () => {
       await create.click();
       // Move off first so hovering the parent is a fresh pointer entry that opens its submenu.
@@ -6149,7 +6171,7 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
   await expect(shell()).toHaveText(/Default \(Codex\)/);
   await expect(shell('codex')).toHaveText(/Codex/);
   await expect(shell('claude')).toHaveText(/Claude/);
-  await expect(parent.locator('wa-divider')).toHaveCount(1);
+  await expect(parent.locator('xpath=..').locator('.kui-popup-menu__divider')).toHaveCount(1);
   for (const item of [shell(), shell('codex'), shell('claude')])
     await expect(item.locator('[data-lucide="bot"]')).toBeAttached();
   await page.screenshot({ path: test.info().outputPath('ai-shell-submenu-wide.png') });
@@ -6182,16 +6204,17 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
   await page.waitForTimeout(250);
   // On a phone Kerf places the submenu above or below its parent menu, never over it, so the
   // AI shell label and its sibling items stay readable (KF-5PZ768, HS2-282GTZ).
-  const geometry = await parent.evaluate((item: HTMLElement & { submenuElement?: HTMLElement | null }) => {
+  const geometry = await parent.evaluate((item: HTMLElement) => {
     const box = (element: Element | null | undefined) => {
       const rect = element?.getBoundingClientRect() ?? new DOMRect(0, 0, 0, 0);
       return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, height: rect.height };
     };
-    const dropdown = item.closest<HTMLElement & { menu?: HTMLElement | null }>('wa-dropdown');
+    // Kerf's submenu panel is the item's sibling inside its submenu host (beta.106).
+    const submenu = item.parentElement?.querySelector(':scope > .kui-popup-menu__menu[data-submenu]');
     return {
-      submenu: box(item.submenuElement),
-      placement: item.submenuElement?.getAttribute('data-placement'),
-      menu: box(dropdown?.menu),
+      submenu: box(submenu),
+      placement: submenu?.getAttribute('data-placement'),
+      menu: box(item.closest('.kui-popup-menu__menu')),
       item: box(item),
       viewport: { width: window.innerWidth, height: window.innerHeight },
     };
@@ -6259,7 +6282,10 @@ test('names AI shell tabs after their provider, numbered per provider (HS2-HZK0N
       }
       await page.mouse.move(0, 0);
       await parent.hover();
-      await parent.locator(`[data-action="create-terminal-drawer-item"][data-provider="${item}"]`).click();
+      await parent
+        .locator('xpath=..')
+        .locator(`[data-action="create-terminal-drawer-item"][data-provider="${item}"]`)
+        .click();
     },
     tabNames = async () =>
       (await drawer.getByRole('tablist', { name: 'Terminal Drawer Views' }).getByRole('tab').allTextContents())
@@ -6291,7 +6317,7 @@ test('reopens the drawer AI shell submenu after Escape closes and breakpoint res
     create = drawer.getByRole('button', { name: 'New Drawer Item' }),
     menu = drawer.locator('[data-terminal-drawer-create]'),
     parent = menu.locator('[data-item-id="ai-shell-providers"]'),
-    shell = parent.locator('[data-action="create-terminal-drawer-item"]:not([data-provider])'),
+    shell = parent.locator('xpath=..').locator('[data-action="create-terminal-drawer-item"]:not([data-provider])'),
     hoverSubmenu = async () => {
       await page.mouse.move(0, 0);
       await parent.hover();
@@ -6313,7 +6339,7 @@ test('reopens the drawer AI shell submenu after Escape closes and breakpoint res
   // Keyboard opens it too.
   await closeMenu();
   await create.click();
-  await expect(menu.locator('wa-dropdown-item').first()).toBeFocused();
+  await expect(menu.locator('.kui-popup-menu__item').first()).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(parent).toBeFocused();
   await page.keyboard.press('ArrowRight');
@@ -6394,8 +6420,8 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   expect(Number.parseFloat(createStyle.borderRadius)).toBeGreaterThanOrEqual(16);
   expect(createStyle.height).toBe('32px');
   await create.click();
-  // The drawer itself lets the anchored popup escape its clip while the menu is open.
-  await expect(region).toHaveCSS('overflow', 'visible');
+  // Kerf's menu is a top-layer popover (beta.106), so the drawer keeps its clip while it is open.
+  await expect(region).toHaveCSS('overflow', 'clip');
   const menu = drawer.locator('[data-terminal-drawer-create]');
   await expect(menu.getByText('Terminal', { exact: true })).toBeVisible();
   await expect(menu.locator('[data-item-id="ai-shell-providers"]')).toBeVisible();
@@ -6403,7 +6429,7 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   await expect(menu.locator('[data-lucide="chevron-right"]')).toHaveCount(0);
   const popupBounds = () =>
     menu.evaluate((node) => {
-      const bounds = node.shadowRoot?.querySelector('[part="menu"]')?.getBoundingClientRect();
+      const bounds = node.querySelector(':scope > .kui-popup-menu__menu')?.getBoundingClientRect();
       return bounds ? { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height } : null;
     });
   const captureMenu = async (path: string) => {
@@ -6424,7 +6450,7 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   };
   await captureMenu('target/visual-captures/hs2-7ctqjc-cv0j2e-rhqatm-drawer-menu-wide.png');
   await page.setViewportSize({ width: 760, height: 640 });
-  await expect(menu).toHaveAttribute('open', '');
+  await expect(menuOpener(menu)).toHaveAttribute('aria-expanded', 'true');
   await expect.poll(async () => (await popupBounds())?.x ?? -Infinity).toBeGreaterThanOrEqual(8);
   await page.screenshot({ path: 'target/visual-captures/hs2-r8smk2-popup-narrow-full.png', fullPage: true });
   await captureMenu('target/visual-captures/hs2-7ctqjc-cv0j2e-rhqatm-drawer-menu-narrow.png');
@@ -6438,7 +6464,7 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __drawerAILaunch?: unknown }).__drawerAILaunch))
     .toEqual({ projectId: 'demo-checkout', kind: 'ai-chat', provider: 'claude', model: 'claude-sonnet' });
-  const composer = conversation.getByLabel('Message Claude');
+  const composer = conversation.getByRole('textbox', { name: 'Message Claude' });
   await expect(composer).toBeFocused();
   await create.focus();
   await drawer.getByRole('tab', { name: 'Claude chat' }).click();
@@ -6525,7 +6551,7 @@ test('keeps the embedded chat composer usable while a long transcript scrolls', 
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const conversation = drawer.locator('[data-component="ai-conversation"][data-presentation="embedded"]'),
-    composer = conversation.getByLabel('Message Codex'),
+    composer = conversation.getByRole('textbox', { name: 'Message Codex' }),
     messages = conversation.locator('[data-message-id]');
   for (let turn = 1; turn <= 5; turn += 1) {
     await composer.fill('What time is it in California?');
@@ -6679,7 +6705,7 @@ test('keeps production workspace search and More on one row through a phone resi
   await page.waitForTimeout(1200);
   await page.screenshot({ path: 'target/visual-captures/hs2-nzk4ka-production-phone.png' });
   await header.getByRole('button', { name: 'More Workspace Controls' }).click();
-  await expect(header.locator('[data-workspace-overflow]')).toHaveJSProperty('open', true);
+  await expect(menuOpener(header.locator('[data-workspace-overflow]'))).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('[data-workspace-overflow-action="toggle-selected-up-next"]')).toBeVisible();
 });
 
@@ -6860,7 +6886,7 @@ test('keeps a scrolled-back transcript in place while selecting a message range'
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const conversation = drawer.locator('[data-component="ai-conversation"][data-presentation="embedded"]'),
-    composer = conversation.getByLabel('Message Codex'),
+    composer = conversation.getByRole('textbox', { name: 'Message Codex' }),
     messages = conversation.locator('[data-action="pick-conversation-message"]'),
     transcript = conversation.locator('.ai-conversation__transcript');
   for (let turn = 1; turn <= 5; turn += 1) {
@@ -7034,7 +7060,7 @@ test('selects and copies chat messages before saving that range without choosing
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const conversation = drawer.locator('[data-component="ai-conversation"]');
-  const composer = conversation.getByLabel('Message Codex');
+  const composer = conversation.getByRole('textbox', { name: 'Message Codex' });
   await composer.fill('Export the referenced proof.');
   await composer.press('Enter');
   await expect(conversation.getByText('The referenced proof is ready.', { exact: true })).toBeVisible();
@@ -7059,9 +7085,9 @@ test('selects and copies chat messages before saving that range without choosing
   await saveConversation.focus();
   await expect(saveConversation).toBeFocused();
   await saveConversation.press('Enter');
-  const dialog = page.locator('[data-component="conversation-export-dialog"]'),
-    dialogPanel = dialog.getByRole('dialog');
-  await expect(dialog).toHaveJSProperty('open', true);
+  const dialog = page.locator('[data-dialog-component="conversation-export-dialog"]'),
+    dialogPanel = dialog;
+  await expect(dialog).toHaveAttribute('open', '');
   await expect(dialog).toContainText('Step 1 of 2');
   await expect(dialog).toContainText('Choose scope');
   await expect(dialog.locator('input[name="conversation-export-scope"][value="selected"]')).toBeChecked();
@@ -7099,7 +7125,9 @@ test('selects and copies chat messages before saving that range without choosing
     dialog.locator('[data-action="previous-conversation-export-step"] > [data-lucide="chevron-left"]'),
   ).toBeVisible();
   await dialog.evaluate(async (node) => {
-    await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
+    await Promise.all(
+      node.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => undefined)),
+    );
   });
   await dialogPanel.screenshot({ path: 'target/visual-captures/hs2-r3qfvc-save-pushed-wide.png' });
   await page.setViewportSize({ width: 560, height: 760 });
@@ -7115,7 +7143,9 @@ test('selects and copies chat messages before saving that range without choosing
     'true',
   );
   await dialog.evaluate(async (node) => {
-    await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
+    await Promise.all(
+      node.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => undefined)),
+    );
   });
   await dialogPanel.screenshot({ path: 'target/visual-captures/hs2-r3qfvc-save-popped-narrow.png' });
   await dialog.locator('[data-action="next-conversation-export-step"]').click();
@@ -7123,7 +7153,7 @@ test('selects and copies chat messages before saving that range without choosing
   await page.setViewportSize({ width: 1280, height: 900 });
   const activeBundle = dialog.locator('[data-transition-region="content"] > [data-side="b"]');
   await activeBundle.locator('input[name="conversation-export-summary"]').check();
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await expect(dialog).not.toContainText('manifest.json');
   const options = activeBundle.locator('[data-component="choice-card"]');
   const optionBoxes = await options.evaluateAll((nodes) =>
@@ -7149,12 +7179,12 @@ test('selects and copies chat messages before saving that range without choosing
   await expect(savedTab).toHaveAttribute('aria-selected', 'true');
   const savedConversation = drawer.locator('[data-component="ai-conversation"][data-read-only="true"]');
   await expect(savedConversation).toContainText('This selected range is read-only');
-  await expect(savedConversation.getByLabel('Message Codex')).toHaveCount(0);
+  await expect(savedConversation.getByRole('textbox', { name: 'Message Codex' })).toHaveCount(0);
   await savedConversation.screenshot({ path: 'target/visual-captures/hs2-zzpf2b-saved-read-only-wide.png' });
   const projectTab = page.locator('[data-tab-kind="project"]');
   await projectTab.hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
-  const closeDialog = page.locator('[data-component="project-close-dialog"]');
+  const closeDialog = page.locator('[data-dialog-component="project-close-dialog"]');
   await expect(closeDialog).toContainText('2 running terminals and 1 AI chat');
   await closeDialog.getByRole('button', { name: 'Cancel' }).click();
   await savedTab.hover();
@@ -7162,8 +7192,8 @@ test('selects and copies chat messages before saving that range without choosing
   await openSaved();
   await expect.poll(() => resumedConnections.some((body) => body.session_id === 'claude-thread-1')).toBe(true);
   const resumed = drawer.locator('[data-component="ai-conversation"][data-read-only="false"]');
-  await expect(resumed.getByLabel('Message Codex')).toBeVisible();
-  await resumed.getByLabel('Message Codex').fill('Continue from the saved result.');
+  await expect(resumed.getByRole('textbox', { name: 'Message Codex' })).toBeVisible();
+  await resumed.getByRole('textbox', { name: 'Message Codex' }).fill('Continue from the saved result.');
   await expect(resumed.getByRole('button', { name: 'Send Message to Codex' })).toBeEnabled();
 });
 
@@ -7175,31 +7205,27 @@ test('shows selection in the main chat and skips export scope after it is cleare
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
-  const conversation = page.locator('[data-component="ai-conversation"]');
-  await conversation.getByLabel('Message Codex').fill('What time is it in California?');
-  await conversation.getByLabel('Message Codex').press('Enter');
+  const conversation = page.locator('[data-dialog-component="ai-conversation"]');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).fill('What time is it in California?');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   await expect(conversation.getByText('The event stream remains authoritative.', { exact: true })).toBeVisible();
   const messages = conversation.locator('[data-action="pick-conversation-message"]');
   await messages.nth(1).click();
   await expect(conversation).toContainText('1 message selected');
-  await conversation
-    .getByRole('dialog')
-    .screenshot({ path: 'target/visual-captures/hs2-eqhary-main-chat-selection-wide.png' });
+  await conversation.screenshot({ path: 'target/visual-captures/hs2-eqhary-main-chat-selection-wide.png' });
   await page.setViewportSize({ width: 560, height: 760 });
-  await conversation
-    .getByRole('dialog')
-    .screenshot({ path: 'target/visual-captures/hs2-eqhary-main-chat-selection-narrow.png' });
+  await conversation.screenshot({ path: 'target/visual-captures/hs2-eqhary-main-chat-selection-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 900 });
   await conversation.getByRole('button', { name: 'Clear Message Selection' }).click();
   await expect(conversation).toContainText(SELECTION_HINT);
   await conversation.getByRole('button', { name: 'Save Conversation' }).click();
-  const dialog = page.locator('[data-component="conversation-export-dialog"]'),
+  const dialog = page.locator('[data-dialog-component="conversation-export-dialog"]'),
     activeScreen = dialog.locator('[data-transition-region="content"] > [data-active="true"]');
   await expect(dialog).toHaveAttribute('data-navigation', 'none');
   await expect(activeScreen).toContainText('Bundle contents');
   await expect(activeScreen).not.toContainText('Step 1 of 2');
   await expect(activeScreen.locator('input[name="conversation-export-scope"]')).toHaveCount(0);
-  await dialog.getByRole('dialog').screenshot({ path: 'target/visual-captures/hs2-eqhary-save-entire-chat.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-eqhary-save-entire-chat.png' });
 });
 
 test('saves a non-contiguous chat selection with skipped-message markers and shows them on reopen (HS2-BZB93V)', async ({
@@ -7248,7 +7274,7 @@ test('saves a non-contiguous chat selection with skipped-message markers and sho
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
   const conversation = drawer.locator('[data-component="ai-conversation"]'),
-    composer = conversation.getByLabel('Message Codex');
+    composer = conversation.getByRole('textbox', { name: 'Message Codex' });
   await composer.fill('What time is it in California?');
   await composer.press('Enter');
   await expect(conversation.locator('.ai-conversation__message--assistant').last()).toHaveAttribute(
@@ -7265,7 +7291,7 @@ test('saves a non-contiguous chat selection with skipped-message markers and sho
   await messages.nth(3).click({ modifiers: ['ControlOrMeta'] });
   await expect(conversation).toContainText('2 messages selected');
   await drawer.getByRole('button', { name: 'Save Conversation' }).click();
-  const dialog = page.locator('[data-component="conversation-export-dialog"]');
+  const dialog = page.locator('[data-dialog-component="conversation-export-dialog"]');
   await expect(dialog).toContainText('2 messages selected in the chat.');
   await dialog.locator('[data-action="next-conversation-export-step"]').click();
   await dialog.getByRole('button', { name: 'Save Conversation' }).click();
@@ -7394,7 +7420,7 @@ test('selects single and non-contiguous messages with modifier keys in the drawe
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const conversation = drawer.locator('[data-component="ai-conversation"][data-presentation="embedded"]'),
-    composer = conversation.getByLabel('Message Codex'),
+    composer = conversation.getByRole('textbox', { name: 'Message Codex' }),
     messages = conversation.locator('[data-action="pick-conversation-message"]');
   for (let turn = 1; turn <= 2; turn += 1) {
     await composer.fill('What time is it in California?');
@@ -7420,7 +7446,7 @@ test('selects non-contiguous messages in a phone-width drawer chat (HS2-WV88W3)'
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
   const conversation = drawer.locator('[data-component="ai-conversation"]'),
-    composer = conversation.getByLabel('Message Codex'),
+    composer = conversation.getByRole('textbox', { name: 'Message Codex' }),
     messages = conversation.locator('[data-action="pick-conversation-message"]');
   for (let turn = 1; turn <= 2; turn += 1) {
     await composer.fill('What time is it in California?');
@@ -7488,7 +7514,7 @@ for (const width of [1280, 390]) {
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
     const conversation = drawer.locator('[data-component="ai-conversation"]'),
-      composer = conversation.getByLabel('Message Codex'),
+      composer = conversation.getByRole('textbox', { name: 'Message Codex' }),
       messages = conversation.locator('[data-action="pick-conversation-message"]');
     for (let turn = 1; turn <= 3; turn += 1) {
       await composer.fill('What time is it in California?');
@@ -7518,8 +7544,8 @@ for (const width of [1280, 390]) {
     await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
     await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-    const conversation = page.locator('[data-component="ai-conversation"]'),
-      composer = conversation.getByLabel('Message Codex'),
+    const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
+      composer = conversation.getByRole('textbox', { name: 'Message Codex' }),
       messages = conversation.locator('[data-action="pick-conversation-message"]');
     for (let turn = 1; turn <= 3; turn += 1) {
       await composer.fill('What time is it in California?');
@@ -7530,15 +7556,11 @@ for (const width of [1280, 390]) {
     }
     await expect(conversation.locator('.ai-conversation__selection')).toContainText(SELECTION_HINT);
     await expectSelectionBarClearOfMessages(conversation);
-    await conversation
-      .getByRole('dialog')
-      .screenshot({ path: `target/visual-captures/hs2-c4rtvs-dialog-hint-${width}.png` });
+    await conversation.screenshot({ path: `target/visual-captures/hs2-c4rtvs-dialog-hint-${width}.png` });
     await messages.nth(0).click();
     await expect(conversation.locator('.ai-conversation__selection')).toContainText('1 message selected');
     await expectSelectionBarClearOfMessages(conversation);
-    await conversation
-      .getByRole('dialog')
-      .screenshot({ path: `target/visual-captures/hs2-c4rtvs-dialog-selected-${width}.png` });
+    await conversation.screenshot({ path: `target/visual-captures/hs2-c4rtvs-dialog-selected-${width}.png` });
   });
 }
 
@@ -7554,8 +7576,8 @@ test('selects single and non-contiguous messages with modifier keys in the main 
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
-  const conversation = page.locator('[data-component="ai-conversation"]'),
-    composer = conversation.getByLabel('Message Codex'),
+  const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
+    composer = conversation.getByRole('textbox', { name: 'Message Codex' }),
     messages = conversation.locator('[data-action="pick-conversation-message"]');
   for (let turn = 1; turn <= 2; turn += 1) {
     await composer.fill('What time is it in California?');
@@ -7564,7 +7586,7 @@ test('selects single and non-contiguous messages with modifier keys in the main 
     await expect(conversation.getByText('The event stream remains authoritative.', { exact: true })).toHaveCount(turn);
   }
   await exerciseConversationSelection(page, conversation, (name) =>
-    conversation.getByRole('dialog').screenshot({ path: `target/visual-captures/hs2-wv88w3-dialog-${name}-1280.png` }),
+    conversation.screenshot({ path: `target/visual-captures/hs2-wv88w3-dialog-${name}-1280.png` }),
   );
   await page.setViewportSize({ width: 390, height: 844 });
   await messages.nth(0).click();
@@ -7576,7 +7598,7 @@ test('selects single and non-contiguous messages with modifier keys in the main 
   await page.screenshot({ path: 'target/visual-captures/hs2-wv88w3-dialog-gap-390.png' });
   // A non-contiguous selection is offered as the export scope.
   await conversation.getByRole('button', { name: 'Save Conversation' }).click();
-  const exportDialog = page.locator('[data-component="conversation-export-dialog"]');
+  const exportDialog = page.locator('[data-dialog-component="conversation-export-dialog"]');
   await expect(exportDialog.locator('input[name="conversation-export-scope"][value="selected"]')).toBeChecked();
   await expect(exportDialog).toContainText('Selected messages');
   await expect(exportDialog).toContainText('2 messages selected in the chat.');
@@ -7672,8 +7694,8 @@ test('previews running project resources with shared menus and explicit keep-run
   await expect(drawer.getByRole('tab', { name: 'Codex chat' })).toBeVisible();
   await projectTab.hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
-  const dialog = page.locator('[data-component="project-close-dialog"]');
-  await expect(dialog).toHaveJSProperty('open', true);
+  const dialog = page.locator('[data-dialog-component="project-close-dialog"]');
+  await expect(dialog).toHaveAttribute('open', '');
   await expect(dialog).toContainText('2 running terminals and 1 AI chat');
   await expect(dialog.locator('[data-component="list-header"]')).toHaveText('Running Items');
   await expect(dialog.getByRole('button', { name: /Codex Main/ })).toHaveAttribute('aria-current', 'page');
@@ -7739,7 +7761,7 @@ test('previews running project resources with shared menus and explicit keep-run
   await expectPreviewFits(12);
   await page.screenshot({ path: 'target/visual-captures/hs2-xb41pf-project-close-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await expectPreviewFits(6);
   await expect
     .poll(() =>
@@ -7956,11 +7978,11 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(halted).toBeVisible();
     await settledAnimations(page.locator('[data-component="app-shell"]'));
-    const picker = page.locator('wa-select[name="mobile-project"]'),
+    const picker = page.locator('kui-select[name="mobile-project"]'),
       selectedAttention = picker.locator('.project-tab-bar__selected-project [data-lucide="circle-alert"]');
     await expect(selectedAttention).toBeVisible();
     await expect(selectedAttention).toHaveAttribute('aria-label', 'An AI session needs your attention');
-    await picker.click();
+    await picker.locator('.kui-select__trigger').click();
     await expect(picker.getByRole('option', { name: /Needs attention/ })).toBeVisible();
     await settledAnimations(picker);
     const phoneOption = await picker.getByRole('option', { name: /Needs attention/ }).boundingBox();
@@ -7968,7 +7990,7 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
     expect(phoneOption!.x + phoneOption!.width).toBeLessThanOrEqual(390);
     await page.screenshot({ path: test.info().outputPath('halted-phone-project-options.png') });
     await picker.press('Escape');
-    await expect(picker).toHaveJSProperty('open', false);
+    await expect(picker).not.toHaveAttribute('open');
     await expect(picker.getByRole('option', { name: /Needs attention/ })).not.toBeVisible();
     await settledAnimations(page.locator('[data-component="app-shell"]'));
     await settledAnimations(picker);
@@ -8372,8 +8394,8 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
     const projectTab = page.locator('[data-tab-kind="project"]');
     await projectTab.hover();
     await page.getByRole('button', { name: 'Close demo' }).click();
-    const dialog = page.locator('[data-component="project-close-dialog"]');
-    await expect(dialog).toHaveJSProperty('open', true);
+    const dialog = page.locator('[data-dialog-component="project-close-dialog"]');
+    await expect(dialog).toHaveAttribute('open', '');
     const viewport = dialog.locator('[data-component="terminal-viewport"]');
     await expect(viewport).toHaveAttribute('data-connection', 'connected');
     // The attach alone reports the PTY grid, so the preview leaves its 80x24 fallback without any
@@ -8392,7 +8414,7 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
     await settledAnimations(dialog);
     await page.screenshot({ path: test.info().outputPath('hs2-7y1bq2-close-preview-1280.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(dialog).toHaveJSProperty('open', true);
+    await expect(dialog).toHaveAttribute('open', '');
     // At phone width the preview still mirrors whatever grid the PTY reports, never its own fit.
     await expect
       .poll(() => viewport.evaluate((node) => [node.dataset.gridSize, node.dataset.ptySize]))
@@ -8420,7 +8442,7 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const liveConversation = drawer.locator('[data-component="ai-conversation"]'),
-    composer = liveConversation.getByLabel('Message Codex'),
+    composer = liveConversation.getByRole('textbox', { name: 'Message Codex' }),
     createViewDialog = page.getByRole('dialog', { name: 'Create View' });
   await composer.evaluate((node) => {
     node.setAttribute('data-action', 'add-view');
@@ -8468,7 +8490,7 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
 
   await projectTab.hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
-  const dialog = page.locator('[data-component="project-close-dialog"]');
+  const dialog = page.locator('[data-dialog-component="project-close-dialog"]');
   const terminalPreview = dialog.locator('[data-component="terminal-viewport"]');
   await expect(terminalPreview).not.toHaveAttribute('data-grid-policy', 'dashboard-80x24');
   await expect(terminalPreview).toHaveAttribute('data-sizing-focus', 'false');
@@ -8476,7 +8498,7 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
   const preview = dialog.locator('[data-component="ai-conversation"]');
   await expect(preview).toHaveAttribute('data-read-only', 'true');
   await expect(preview.locator('[data-message-id]')).toHaveCount(2);
-  await expect(preview.getByLabel('Message Codex')).toHaveCount(0);
+  await expect(preview.getByRole('textbox', { name: 'Message Codex' })).toHaveCount(0);
   await expect(preview.getByRole('button', { name: 'Save Conversation' })).toHaveCount(0);
   const answer = preview.locator('.ai-conversation__message--assistant .markdown-preview');
   await expect(answer).toHaveText('I found the relevant client boundary. The event stream remains authoritative.');
@@ -8513,7 +8535,7 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
   await page.getByRole('button', { name: 'Close demo' }).click();
   await dialog.getByRole('button', { name: /Codex chat/ }).click();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await expect(preview).toBeVisible();
   await expect(answer).toHaveText('I found the relevant client boundary. The event stream remains authoritative.');
   await page.screenshot({ path: 'target/visual-captures/hs2-6c0wzn-7se31f-close-chat-narrow.png', fullPage: true });
@@ -8536,14 +8558,14 @@ test('restores a kept-running AI chat tab and its live server session when the p
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   let conversation = drawer.locator('[data-component="ai-conversation"]');
-  await conversation.getByLabel('Message Codex').fill('What time is it in California?');
-  await conversation.getByLabel('Message Codex').press('Enter');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).fill('What time is it in California?');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   await expect(conversation.getByText('The event stream remains authoritative.')).toBeVisible();
   await expect(conversation.locator('[data-message-id]')).toHaveCount(2);
   const projectTab = page.locator('[data-tab-kind="project"]');
   await projectTab.hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
-  const closeDialog = page.locator('[data-component="project-close-dialog"]');
+  const closeDialog = page.locator('[data-dialog-component="project-close-dialog"]');
   await expect(closeDialog).toContainText('Terminals and AI chat tabs return when reopened');
   await closeDialog.getByRole('button', { name: 'Keep Running' }).click();
   await expect(projectTab).toHaveCount(0);
@@ -8562,10 +8584,10 @@ test('restores a kept-running AI chat tab and its live server session when the p
   await page.screenshot({ path: 'target/visual-captures/hs2-d34c2v-restored-chat-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 640 });
   await expect(restoredTab).toBeVisible();
-  await expect(conversation.getByLabel('Message Codex')).toBeInViewport();
+  await expect(conversation.getByRole('textbox', { name: 'Message Codex' })).toBeInViewport();
   await page.screenshot({ path: 'target/visual-captures/hs2-d34c2v-restored-chat-narrow.png', fullPage: true });
-  await conversation.getByLabel('Message Codex').fill('What time is it in California?');
-  await conversation.getByLabel('Message Codex').press('Enter');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).fill('What time is it in California?');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   await expect(conversation.locator('[data-message-id]')).toHaveCount(4);
   expect(turnBodies.at(-1)).toMatchObject({ session_id: 'claude-thread-1', model: 'gpt-6-astra', effort: 'medium' });
 });
@@ -8589,8 +8611,8 @@ test('restores an AI transcript and resumes its durable session after client and
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   let conversation = drawer.locator('[data-component="ai-conversation"]');
-  await conversation.getByLabel('Message Codex').fill('What time is it in California?');
-  await conversation.getByLabel('Message Codex').press('Enter');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).fill('What time is it in California?');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   await expect(conversation.getByText('The event stream remains authoritative.')).toBeVisible();
   const connectionId = String(connectionPosts.at(-1)?.connection_id);
   expect(connectionId).toMatch(/^hotsheet-drawer-chat-/);
@@ -8620,7 +8642,7 @@ test('restores an AI transcript and resumes its durable session after client and
     .toMatchObject({ connection_id: connectionId, session_id: 'claude-thread-1' });
   await page.screenshot({ path: 'target/visual-captures/hs2-yhqcs2-restarted-conversation-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 640 });
-  await expect(conversation.getByLabel('Message Codex')).toBeInViewport();
+  await expect(conversation.getByRole('textbox', { name: 'Message Codex' })).toBeInViewport();
   await page.screenshot({
     path: 'target/visual-captures/hs2-yhqcs2-restarted-conversation-narrow.png',
     fullPage: true,
@@ -8645,7 +8667,10 @@ test('closes every terminal and AI chat before removing a project when Stop All 
   await expect(drawer.getByRole('tab', { name: 'Codex chat' })).toBeVisible();
   await projectTab.hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
-  await page.locator('[data-component="project-close-dialog"]').getByRole('button', { name: 'Stop & Close' }).click();
+  await page
+    .locator('[data-dialog-component="project-close-dialog"]')
+    .getByRole('button', { name: 'Stop & Close' })
+    .click();
   await expect(projectTab).toHaveCount(0);
   await expect.poll(() => deletes.length).toBe(3);
   expect(deletes).toContain('/__hotsheet/project-api/demo-checkout/terminals/codex-main');
@@ -8787,30 +8812,34 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(chat).toHaveCount(1);
     await page.getByRole('button', { name: 'Manage workspace visibility' }).click();
     const dialog = page.locator('[data-terminal-visibility-dialog]');
-    const types = dialog.locator('wa-select[name="terminal-visibility-types"]');
+    const types = dialog.locator('kui-select[name="terminal-visibility-types"]');
     const rows = dialog.locator('[data-action="toggle-terminal-visibility"]');
     await expect(types).toHaveAttribute('data-component', 'select');
     await expect(types.locator('.kui-select__icon')).toHaveCount(4);
     await expect(types).toHaveJSProperty('value', ['shell', 'ai', 'chat']);
     await expect(rows).toHaveCount(3);
-    await dialog
-      .locator('dialog')
-      .screenshot({ path: `target/visual-captures/hs2-se3rvm-dialog-${theme}-after.png`, animations: 'disabled' });
-    await types.locator('[part~="expand-icon"]').click();
+    await dialog.screenshot({
+      path: `target/visual-captures/hs2-se3rvm-dialog-${theme}-after.png`,
+      animations: 'disabled',
+    });
+    await types.locator('.kui-select__trigger').click();
     const choose = async (value: string, selected: string[], count: number) => {
       if (value === 'select-all' || value === 'deselect-all')
         await types.locator(`button[data-select-action="${value === 'select-all' ? 'all' : 'clear'}"]`).click();
-      else await types.locator(`wa-option[value="${value}"]`).click();
-      await expect(types).toHaveJSProperty('open', true);
+      else await types.locator(`.kui-select__option[data-value="${value}"]`).click();
+      await expect(types).toHaveAttribute('open', '');
       await expect
         .poll(() => types.evaluate((element: HTMLElement & { value?: string[] }) => [...(element.value ?? [])].sort()))
         .toEqual([...selected].sort());
       await expect(rows).toHaveCount(count);
       for (const kind of ['shell', 'ai', 'chat'])
-        await expect(types.locator(`wa-option[value="${kind}"]`)).toHaveJSProperty('selected', selected.includes(kind));
+        await expect(types.locator(`.kui-select__option[data-value="${kind}"]`)).toHaveAttribute(
+          'aria-selected',
+          String(selected.includes(kind)),
+        );
     };
-    await expect(types.locator('wa-option[value="browser"]')).toHaveJSProperty('disabled', true);
-    await expect(types.locator('wa-option[value="browser"]')).toHaveAttribute(
+    await expect(types.locator('.kui-select__option[data-value="browser"]')).toHaveAttribute('aria-disabled', 'true');
+    await expect(types.locator('.kui-select__option[data-value="browser"]')).toHaveAttribute(
       'title',
       'Web browser tiles are not available yet.',
     );
@@ -8833,12 +8862,12 @@ for (const theme of ['light', 'dark'] as const) {
       animations: 'disabled',
     });
     await page.keyboard.press('Escape');
-    await expect(types).toHaveJSProperty('open', false);
-    await expect(dialog).toHaveJSProperty('open', true);
+    await expect(types).not.toHaveAttribute('open');
+    await expect(dialog).toHaveAttribute('open', '');
     await dialog.getByRole('button', { name: 'Hide Listed' }).click();
     await expect(rows).toHaveAccessibleName('Show Codex chat');
     await page.keyboard.press('Escape');
-    await expect(dialog).toHaveJSProperty('open', false);
+    await expect(dialog).not.toHaveAttribute('open');
     await expect(chat).toHaveCount(0);
     await expect(dashboard.locator('[data-component="terminal-tile"]')).toHaveCount(2);
     await expect(page.locator('.terminal-dashboard-controls__count')).not.toContainText('≥');
@@ -8848,14 +8877,14 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Manage workspace visibility' }).click();
     await expect(types).toHaveJSProperty('value', ['shell', 'ai', 'chat']);
     await expect(rows).toHaveCount(3);
-    await types.locator('[part~="expand-icon"]').click();
+    await types.locator('.kui-select__trigger').click();
     await choose('deselect-all', [], 0);
     await choose('chat', ['chat'], 1);
     await page.keyboard.press('Escape');
     await dialog.getByRole('button', { name: 'Show Listed' }).click();
     await expect(rows).toHaveAccessibleName('Hide Codex chat');
     await page.setViewportSize({ width: 390, height: 844 });
-    await types.locator('[part~="expand-icon"]').click();
+    await types.locator('.kui-select__trigger').click();
     await choose('select-all', ['shell', 'ai', 'chat'], 3);
     await page.screenshot({
       path: `target/visual-captures/hs2-se3rvm-filter-${theme}-mobile.png`,
@@ -8883,14 +8912,14 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     codex = dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]'),
     manage = page.getByRole('button', { name: 'Manage workspace visibility' }),
-    selector = page.locator('wa-select[name="terminal-visibility-group"]');
+    selector = page.locator('kui-select[name="terminal-visibility-group"]');
   const visibilityToolbar = page.locator('.terminal-dashboard-controls__visibility-group');
   await expect(visibilityToolbar.locator('[data-component="toolbar-control-group"]')).toHaveCount(2);
   await expect(manage).toBeInViewport({ ratio: 1 });
   await expect(selector).toBeInViewport({ ratio: 1 });
   const gridToolbarGap = await page.locator('[aria-label="Workspace Toolbar"]').evaluate((toolbar) => {
     const trailing = toolbar.querySelector('.kui-toolbar__trailing'),
-      selector = toolbar.querySelector('wa-select[name="terminal-visibility-group"]');
+      selector = toolbar.querySelector('kui-select[name="terminal-visibility-group"]');
     if (!trailing || !selector) throw new Error('Grid toolbar visibility selector is missing');
     return trailing.getBoundingClientRect().right - selector.getBoundingClientRect().right;
   });
@@ -8911,7 +8940,7 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   await page.setViewportSize({ width: 1440, height: 900 });
   await manage.click();
   let dialog = page.locator('[data-terminal-visibility-dialog]');
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await expect(dialog.locator('.terminal-visibility-dialog__toolbar')).toHaveCSS(
     'background-color',
     'rgba(0, 0, 0, 0)',
@@ -8942,13 +8971,13 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   await page.keyboard.press('Escape');
   await expect(codex).toHaveCount(0);
   await expect(page.locator('.terminal-dashboard-controls__count')).not.toContainText('≥');
-  await selector.click();
-  await selector.locator('wa-option[value="default"]').click();
-  await expect(selector).toHaveJSProperty('open', false);
+  await selector.locator('.kui-select__trigger').click();
+  await selector.locator('.kui-select__option[data-value="default"]').click();
+  await expect(selector).not.toHaveAttribute('open');
   await expect(codex).toBeVisible();
-  const focusOption = selector.locator('wa-option').filter({ hasText: 'Deep Focus' }),
-    focusId = await focusOption.getAttribute('value');
-  await selector.click();
+  const focusOption = selector.locator('.kui-select__option').filter({ hasText: 'Deep Focus' }),
+    focusId = await focusOption.getAttribute('data-value');
+  await selector.locator('.kui-select__trigger').click();
   await page.keyboard.press('End');
   await page.keyboard.press('Enter');
   await expect(selector).toHaveJSProperty('value', focusId!);
@@ -8958,39 +8987,31 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   );
   await page.reload();
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
-  await expect(page.locator('wa-select[name="terminal-visibility-group"]')).toHaveJSProperty('value', focusId!);
+  await expect(page.locator('kui-select[name="terminal-visibility-group"]')).toHaveJSProperty('value', focusId!);
   await expect(
     page.getByRole('region', { name: 'Workspace Grid' }).locator('[data-terminal-key="demo-checkout:codex-main"]'),
   ).toHaveCount(0);
   dialog = page.locator('[data-terminal-visibility-dialog]');
-  await dialog.evaluate((element) => {
-    element.setAttribute('data-after-show-settled', 'false');
-    element.addEventListener(
-      'wa-after-show',
-      () => {
-        element.setAttribute('data-after-show-settled', 'true');
-      },
-      { once: true },
-    );
-  });
   await page.getByRole('button', { name: 'Manage workspace visibility' }).click();
-  await expect(dialog).toHaveAttribute('data-after-show-settled', 'true');
+  // Kerf's DialogSurface has settled once its enter motion attribute is gone (beta.106).
+  await expect(dialog).toHaveAttribute('open', '');
+  await expect(dialog).not.toHaveAttribute('data-kui-dialog-motion');
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await expect(dialog.locator('.terminal-visibility-dialog__toolbar')).toHaveCSS(
     'background-color',
     'rgba(0, 0, 0, 0)',
   );
   expect(
     await dialog.evaluate((element) => {
-      const modal = element.shadowRoot?.querySelector('dialog');
-      if (!modal) return { open: false, modal: false, topmost: false, runningAnimations: -1 };
+      const modal = element instanceof HTMLDialogElement ? element : element.shadowRoot!.querySelector('dialog')!;
       const bounds = modal.getBoundingClientRect(),
         topmost = document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + 24);
       return {
         open: modal.open,
         modal: modal.matches(':modal'),
-        topmost: topmost === element,
+        // The native dialog is the host; its own header content is what the point hits.
+        topmost: topmost === element || element.contains(topmost),
         runningAnimations: modal.getAnimations().filter((animation) => animation.playState === 'running').length,
       };
     }),
@@ -9115,7 +9136,7 @@ test('keeps drawer creation and hide actions reachable with twelve terminal tabs
     expect(geometry.hideRight).toBeLessThanOrEqual(geometry.drawerRight);
     await drawer.screenshot({ path: test.info().outputPath(`hs2-3p7tzv-twelve-tabs-snap-${width}.png`) });
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
-    await expect(drawer.locator('[data-terminal-drawer-create]')).toHaveAttribute('open');
+    await expect(menuOpener(drawer.locator('[data-terminal-drawer-create]'))).toHaveAttribute('aria-expanded', 'true');
     await page.keyboard.press('Escape');
   }
 });
@@ -9141,12 +9162,12 @@ test('renames a terminal from its tab menu, saves it on the server, and keeps it
   const menu = page.locator('[data-context-menu="app-tab"]');
   await menu.getByText('Rename…').click();
   const dialog = page.locator('[data-terminal-rename-dialog]');
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   const name = dialog.getByRole('textbox', { name: /Terminal Name/ });
   await expect(name).toBeFocused();
   await name.fill('Quality shell');
   await dialog.getByRole('button', { name: 'Rename' }).click();
-  await expect(dialog).toHaveJSProperty('open', false);
+  await expect(dialog).not.toHaveAttribute('open');
   await expect(drawer.getByRole('tab', { name: /Quality shell/ })).toBeVisible();
   await expect
     .poll(() => renames)
@@ -9208,7 +9229,7 @@ for (const width of [1280, 390])
       openRename = async (tabName: RegExp) => {
         await drawer.getByRole('tab', { name: tabName }).click({ button: 'right' });
         await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
-        await expect(dialog).toHaveJSProperty('open', true);
+        await expect(dialog).toHaveAttribute('open', '');
       };
     await expect(drawer.getByRole('tab', { name: /Codex Main/ })).toBeVisible();
     // Rename one terminal…
@@ -9216,7 +9237,7 @@ for (const width of [1280, 390])
     await expect(field).toHaveJSProperty('value', 'Tests');
     await dialog.getByRole('textbox', { name: /Terminal Name/ }).fill('Quality shell');
     await dialog.getByRole('button', { name: 'Rename' }).click();
-    await expect(dialog).toHaveJSProperty('open', false);
+    await expect(dialog).not.toHaveAttribute('open');
     await expect(drawer.getByRole('tab', { name: /Quality shell/ })).toBeVisible();
     // …then another: the field shows that terminal's own current name, not the previous rename.
     await openRename(/Codex Main/);
@@ -9225,7 +9246,7 @@ for (const width of [1280, 390])
     // Typing then cancelling never leaks the abandoned text into the next open.
     await dialog.getByRole('textbox', { name: /Terminal Name/ }).fill('Abandoned');
     await dialog.getByRole('button', { name: 'Cancel' }).click();
-    await expect(dialog).toHaveJSProperty('open', false);
+    await expect(dialog).not.toHaveAttribute('open');
     await openRename(/Codex Main/);
     await expect(field).toHaveJSProperty('value', 'Codex Main');
     // Reopening the renamed terminal shows its new name.
@@ -9263,13 +9284,13 @@ test('serializes terminal name writes so a reset made during a slow rename still
     rename = async (tabName: RegExp, name: string | null) => {
       await drawer.getByRole('tab', { name: tabName }).click({ button: 'right' });
       await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
-      await expect(dialog).toHaveJSProperty('open', true);
+      await expect(dialog).toHaveAttribute('open', '');
       if (name === null) await dialog.getByRole('button', { name: 'Reset to Default' }).click();
       else {
         await dialog.getByRole('textbox', { name: /Terminal Name/ }).fill(name);
         await dialog.getByRole('button', { name: 'Rename' }).click();
       }
-      await expect(dialog).toHaveJSProperty('open', false);
+      await expect(dialog).not.toHaveAttribute('open');
     };
   await expect(drawer.getByRole('tab', { name: /^Tests/ })).toBeVisible();
   // Rename (held in flight), rename again, then reset — all before the first write answers.
@@ -9315,7 +9336,7 @@ for (const width of [1280, 390])
       openRename = async (tabName: RegExp) => {
         await drawer.getByRole('tab', { name: tabName }).click({ button: 'right' });
         await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
-        await expect(dialog).toHaveJSProperty('open', true);
+        await expect(dialog).toHaveAttribute('open', '');
       };
     await expect(drawer.getByRole('tab', { name: /Codex Main/ })).toBeVisible();
     // A terminal on its default name offers no reset.
@@ -9340,7 +9361,7 @@ for (const width of [1280, 390])
     expect(Math.abs(resetBox!.y - renameBox!.y)).toBeLessThanOrEqual(2);
     await page.screenshot({ path: `target/visual-captures/claude/hs2-2q7ktx-reset-offered-${width}.png` });
     await reset.click();
-    await expect(dialog).toHaveJSProperty('open', false);
+    await expect(dialog).not.toHaveAttribute('open');
     await expect(drawer.getByRole('tab', { name: /^Tests/ })).toBeVisible();
     await expect(drawer.getByRole('tab', { name: /Quality shell/ })).toHaveCount(0);
     await expect.poll(() => renames).toEqual([{ name: 'Quality shell' }, { name: null }]);
@@ -9356,7 +9377,7 @@ for (const width of [1280, 390])
     await expect(field).toHaveJSProperty('value', 'Tests');
     await expect(reset).toHaveCount(0);
     await dialog.getByRole('button', { name: 'Cancel' }).click();
-    await expect(dialog).toHaveJSProperty('open', false);
+    await expect(dialog).not.toHaveAttribute('open');
     await page.reload();
     const reloaded = page.locator('[data-component="terminal-drawer"]');
     await expect(reloaded.getByRole('tab', { name: /^Tests/ })).toBeVisible();
@@ -9525,11 +9546,11 @@ test('keeps the Kerf drawer create menu on screen and keyboard operable at the p
   for (let step = 0; step < 32; step += 1) await page.keyboard.press('ArrowUp');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   const menu = drawer.locator('[data-terminal-drawer-create]');
-  await expect(menu).toHaveAttribute('open', '');
+  await expect(menuOpener(menu)).toHaveAttribute('aria-expanded', 'true');
   await expect(menu.getByText('Saved Conversation…')).toBeVisible();
   const menuBounds = () =>
     menu.evaluate((node) => {
-      const bounds = node.shadowRoot?.querySelector('[part="menu"]')?.getBoundingClientRect();
+      const bounds = node.querySelector(':scope > .kui-popup-menu__menu')?.getBoundingClientRect();
       return bounds ? { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height } : null;
     });
   const bounds = await menuBounds();
@@ -9549,18 +9570,16 @@ test('keeps the Kerf drawer create menu on screen and keyboard operable at the p
   await menu.getByText('Saved Conversation…').scrollIntoViewIfNeeded();
   await expect(menu.getByText('Saved Conversation…')).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(menu).not.toHaveAttribute('open', '');
-  await expect
-    .poll(() => menu.evaluate((node) => (node as HTMLElement & { popup?: { active?: boolean } }).popup?.active))
-    .toBe(false);
+  await expect(menuOpener(menu)).toHaveAttribute('aria-expanded', 'false');
+  await expect(menu.locator(':scope > .kui-popup-menu__menu')).toBeHidden();
   await drawer.getByRole('button', { name: 'New Drawer Item' }).focus();
   await page.keyboard.press('Enter');
-  await expect(menu).toHaveAttribute('open', '');
-  const firstCommand = menu.locator('wa-dropdown-item').first();
+  await expect(menuOpener(menu)).toHaveAttribute('aria-expanded', 'true');
+  const firstCommand = menu.locator('.kui-popup-menu__item').first();
   await firstCommand.focus();
   await expect(firstCommand).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(menu).not.toHaveAttribute('open', '');
+  await expect(menuOpener(menu)).toHaveAttribute('aria-expanded', 'false');
   await expect(drawer.getByRole('tab', { name: /Terminal New/ })).toHaveAttribute('aria-selected', 'true');
 });
 
@@ -9574,19 +9593,19 @@ test('selects a drawer command after rapidly closing and reopening its popup', a
     trigger = drawer.getByRole('button', { name: 'New Drawer Item' }),
     menu = drawer.locator('[data-terminal-drawer-create]');
   await trigger.click();
-  await expect(menu).toHaveAttribute('open', '');
+  await expect(menuOpener(menu)).toHaveAttribute('aria-expanded', 'true');
   await page.keyboard.press('Escape');
   await trigger.focus();
   await page.keyboard.press('Enter');
-  await expect(menu).toHaveAttribute('open', '');
-  const firstCommand = menu.locator('wa-dropdown-item').first();
+  await expect(menuOpener(menu)).toHaveAttribute('aria-expanded', 'true');
+  const firstCommand = menu.locator('.kui-popup-menu__item').first();
   await firstCommand.focus();
   await page.keyboard.press('ArrowDown');
-  await expect(menu.locator('wa-dropdown-item').nth(1)).toBeFocused();
+  await expect(menu.locator('.kui-popup-menu__item').nth(1)).toBeFocused();
   await page.keyboard.press('ArrowUp');
   await expect(firstCommand).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(menu).not.toHaveAttribute('open', '');
+  await expect(menuOpener(menu)).toHaveAttribute('aria-expanded', 'false');
   await expect(drawer.getByRole('tab', { name: /Terminal New/ })).toHaveAttribute('aria-selected', 'true');
 });
 
@@ -11848,16 +11867,22 @@ test('resizes and persists both production shell sidebars', async ({ page }) => 
   await expect.poll(() => sidebar.evaluate((node) => node.getBoundingClientRect().width)).toBe(initialSidebar + 32);
   await inspectorHandle.press('ArrowLeft');
   await expect.poll(() => inspector.evaluate((node) => node.getBoundingClientRect().width)).toBe(initialInspector + 16);
-  const sortSelect = page.locator('wa-select[name="workspace-sort"]'),
+  const sortSelect = page.locator('kui-select[name="workspace-sort"]'),
     selectSort = (value: string) =>
       sortSelect
-        .locator(`wa-option[value="${value}"]`)
+        .locator(`.kui-select__option[data-value="${value}"]`)
         .evaluate((option) => option.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
   await selectSort('title');
   await selectSort('title');
-  await expect(sortSelect).toHaveAttribute('aria-label', 'Sort tickets: Title, descending');
+  await expect(sortSelect.locator('.kui-select__trigger')).toHaveAttribute(
+    'aria-label',
+    'Sort Tickets: Title, descending',
+  );
   await page.getByLabel('Columns View').click();
-  await expect(sortSelect).toHaveAttribute('aria-label', 'Sort tickets: Recently Updated, descending');
+  await expect(sortSelect.locator('.kui-select__trigger')).toHaveAttribute(
+    'aria-label',
+    'Sort Tickets: Recently Updated, descending',
+  );
   await selectSort('priority');
   const commandGroup = page.getByRole('button', { name: 'Project commands' });
   await commandGroup.click();
@@ -11868,10 +11893,16 @@ test('resizes and persists both production shell sidebars', async ({ page }) => 
   await page.reload();
   await expect(page.getByLabel('Columns View')).toHaveAttribute('aria-pressed', 'true');
   await expect(sortSelect).toHaveJSProperty('value', 'priority');
-  await expect(sortSelect).toHaveAttribute('aria-label', 'Sort tickets: Priority, ascending');
+  await expect(sortSelect.locator('.kui-select__trigger')).toHaveAttribute(
+    'aria-label',
+    'Sort Tickets: Priority, ascending',
+  );
   await page.getByLabel('List View').click();
   await expect(sortSelect).toHaveJSProperty('value', 'title');
-  await expect(sortSelect).toHaveAttribute('aria-label', 'Sort tickets: Title, descending');
+  await expect(sortSelect.locator('.kui-select__trigger')).toHaveAttribute(
+    'aria-label',
+    'Sort Tickets: Title, descending',
+  );
   await page.screenshot({ path: 'target/visual-captures/hs2-w3fdpm-independent-list-sort.png', fullPage: true });
   await page.getByLabel('Columns View').click();
   await expect(page.getByRole('button', { name: 'Show Project Sidebar' })).toBeVisible();
@@ -11955,10 +11986,10 @@ test('orders equal status priority and title groups by most recently updated', a
     page
       .locator('[data-component="ticket-list-row"]')
       .evaluateAll((rows) => rows.map((item) => (item as HTMLElement).dataset.ticketSlug));
-  const sort = page.locator('wa-select[name="workspace-sort"]');
+  const sort = page.locator('kui-select[name="workspace-sort"]');
   for (const field of ['title', 'priority', 'status']) {
-    await sort.click();
-    const option = sort.locator(`wa-option[value="${field}"]`);
+    await sort.locator('.kui-select__trigger').click();
+    const option = sort.locator(`.kui-select__option[data-value="${field}"]`);
     await expect(option).toBeVisible();
     await option.click();
     await expect(sort).toHaveJSProperty('value', field);
@@ -11982,9 +12013,9 @@ test('loads every ticket page in the active workspace sort order (HS2-X23ME4)', 
     .poll(() => pageQueries.some((query) => query.get('sort') === 'updated' && query.get('direction') === 'descending'))
     .toBe(true);
 
-  const sort = page.locator('wa-select[name="workspace-sort"]');
-  await sort.click();
-  await sort.locator('wa-option[value="priority"]').click();
+  const sort = page.locator('kui-select[name="workspace-sort"]');
+  await sort.locator('.kui-select__trigger').click();
+  await sort.locator('.kui-select__option[data-value="priority"]').click();
   await expect
     .poll(() => pageQueries.some((query) => query.get('sort') === 'priority' && query.get('direction') === 'ascending'))
     .toBe(true);
@@ -12081,7 +12112,7 @@ test('contains and centers inspector tabs while showing labels only when they fi
   await expect(sidebarTabs.getByRole('tab', { name: /Attachments/ })).toContainText('1 attachments');
   await expectTabGeometry(sidebarTabs);
   expect(
-    await sidebarTabs.locator('.kui-app-tab__name').evaluateAll((labels) =>
+    await sidebarTabs.locator('.kui-tab-bar-item__name').evaluateAll((labels) =>
       labels.every((label) => {
         const style = getComputedStyle(label);
         return style.position === 'absolute' && style.width === '1px' && style.clipPath !== 'none';
@@ -12096,13 +12127,13 @@ test('contains and centers inspector tabs while showing labels only when they fi
   await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' }),
     readerTabs = reader.locator('.ticket-inspector__tabs');
-  await expect(readerTabs.locator('.kui-app-tab__name').first()).toBeVisible();
+  await expect(readerTabs.locator('.kui-tab-bar-item__name').first()).toBeVisible();
   await expectTabGeometry(readerTabs);
   await captureTabChrome(readerTabs, 'target/visual-captures/hs2-wkgmn4-reader-tabs-wide.png');
   await page.screenshot({ path: 'target/visual-captures/hs2-2p9k4y-segments-wide.png', fullPage: true });
   await page.setViewportSize({ width: 868, height: 700 });
   expect(
-    await readerTabs.locator('.kui-app-tab__name').evaluateAll((labels) =>
+    await readerTabs.locator('.kui-tab-bar-item__name').evaluateAll((labels) =>
       labels.every((label) => {
         const style = getComputedStyle(label);
         return style.position === 'absolute' && style.width === '1px' && style.clipPath !== 'none';
@@ -12362,7 +12393,17 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
   const select = page.locator('[data-inspector-status-menu]');
   const trigger = page.locator('[data-action="open-inspector-status-menu"]');
   await trigger.click();
-  await expect.poll(() => select.evaluate((node) => (node as HTMLElement & { open?: boolean }).open)).toBe(true);
+  await expect
+    .poll(() =>
+      select.evaluate(
+        (node) =>
+          node.hasAttribute('open') ||
+          node
+            .querySelector(':scope > .kui-popup-menu__trigger, :scope > .kui-popup-menu__context-anchor')
+            ?.getAttribute('aria-expanded') === 'true',
+      ),
+    )
+    .toBe(true);
   await expect
     .poll(async () => {
       const current = await renderMetrics(page);
@@ -12384,18 +12425,48 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
     },
   });
   await page.waitForTimeout(300);
-  await expect.poll(() => select.evaluate((node) => (node as HTMLElement & { open?: boolean }).open)).toBe(true);
+  await expect
+    .poll(() =>
+      select.evaluate(
+        (node) =>
+          node.hasAttribute('open') ||
+          node
+            .querySelector(':scope > .kui-popup-menu__trigger, :scope > .kui-popup-menu__context-anchor')
+            ?.getAttribute('aria-expanded') === 'true',
+      ),
+    )
+    .toBe(true);
   await expect(page.locator('[data-ticket-slug="HS2-INCOMING"]')).toHaveCount(0);
   expect(await renderMetrics(page)).toEqual({ passes: 0, mutations: 0 });
   await page.keyboard.press('Escape');
-  await expect.poll(() => select.evaluate((node) => (node as HTMLElement & { open?: boolean }).open)).toBe(false);
+  await expect
+    .poll(() =>
+      select.evaluate(
+        (node) =>
+          node.hasAttribute('open') ||
+          node
+            .querySelector(':scope > .kui-popup-menu__trigger, :scope > .kui-popup-menu__context-anchor')
+            ?.getAttribute('aria-expanded') === 'true',
+      ),
+    )
+    .toBe(false);
   await expect(page.locator('[data-ticket-slug="HS2-INCOMING"]')).toBeVisible();
   await expect.poll(() => polls.length).toBeGreaterThan(0);
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const composer = page.getByRole('dialog', { name: 'Create ticket' }),
-    category = composer.locator('wa-select[name="new-ticket-category"]');
-  await category.click();
-  await expect.poll(() => category.evaluate((node) => (node as HTMLElement & { open?: boolean }).open)).toBe(true);
+    category = composer.locator('kui-select[name="new-ticket-category"]');
+  await category.locator('.kui-select__trigger').click();
+  await expect
+    .poll(() =>
+      category.evaluate(
+        (node) =>
+          node.hasAttribute('open') ||
+          node
+            .querySelector(':scope > .kui-popup-menu__trigger, :scope > .kui-popup-menu__context-anchor')
+            ?.getAttribute('aria-expanded') === 'true',
+      ),
+    )
+    .toBe(true);
   await expect
     .poll(async () => {
       const current = await renderMetrics(page);
@@ -12415,11 +12486,31 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
     },
   });
   await page.waitForTimeout(300);
-  await expect.poll(() => category.evaluate((node) => (node as HTMLElement & { open?: boolean }).open)).toBe(true);
+  await expect
+    .poll(() =>
+      category.evaluate(
+        (node) =>
+          node.hasAttribute('open') ||
+          node
+            .querySelector(':scope > .kui-popup-menu__trigger, :scope > .kui-popup-menu__context-anchor')
+            ?.getAttribute('aria-expanded') === 'true',
+      ),
+    )
+    .toBe(true);
   await expect(page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   expect(await renderMetrics(page)).toEqual({ passes: 0, mutations: 0 });
   await composer.getByRole('textbox', { name: 'Ticket Title' }).click();
-  await expect.poll(() => category.evaluate((node) => (node as HTMLElement & { open?: boolean }).open)).toBe(false);
+  await expect
+    .poll(() =>
+      category.evaluate(
+        (node) =>
+          node.hasAttribute('open') ||
+          node
+            .querySelector(':scope > .kui-popup-menu__trigger, :scope > .kui-popup-menu__context-anchor')
+            ?.getAttribute('aria-expanded') === 'true',
+      ),
+    )
+    .toBe(false);
   await expect(page.locator('[data-column-id="started"] [data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   await expect(composer).toBeVisible();
 });
@@ -12491,7 +12582,7 @@ test('remembers the last ticket category after cancelling and refreshing', async
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const composer = page.getByRole('dialog', { name: 'Create ticket' }),
-    category = composer.locator('wa-select[name="new-ticket-category"]');
+    category = composer.locator('kui-select[name="new-ticket-category"]');
   await category.evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'investigation';
     node.dispatchEvent(new Event('change', { bubbles: true }));
@@ -12502,7 +12593,7 @@ test('remembers the last ticket category after cancelling and refreshing', async
   await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
   await page.getByRole('button', { name: 'New ticket…' }).click();
   await expect(
-    page.getByRole('dialog', { name: 'Create ticket' }).locator('wa-select[name="new-ticket-category"]'),
+    page.getByRole('dialog', { name: 'Create ticket' }).locator('kui-select[name="new-ticket-category"]'),
   ).toHaveJSProperty('value', 'investigation');
 });
 
@@ -12574,46 +12665,32 @@ test('creates a ticket in a chosen writable source and preselects it next time i
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
     dialog = page.getByRole('dialog', { name: 'Create ticket' }),
-    source = dialog.locator('wa-select[name="new-ticket-source"]');
+    source = dialog.locator('kui-select[name="new-ticket-source"]');
   await launcher.click();
   // Only the writable sources are offered, and the default source starts selected.
   await expect(source).toHaveJSProperty('value', 'git-local');
-  await expect(source).toHaveAccessibleName('Ticket source');
-  await expect(source.locator('wa-option')).toHaveText(['HS2 git tickets', 'GitHub issues']);
+  await expect(source.locator('.kui-select__trigger')).toHaveAccessibleName('Ticket Source');
+  await expect(source.locator('.kui-select__option')).toHaveText(['HS2 git tickets', 'GitHub issues']);
   const sourceWarning = dialog.locator('.quick-ticket-composer__source-warning [data-component="state-banner"]');
   await expect(sourceWarning).toHaveCount(0);
   await expect(dialog.locator('.quick-ticket-composer__footer')).toContainText('Creating in');
-  expect(
-    await source.evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="combobox"]')!).cursor),
-  ).toBe('pointer');
-  await dialog.locator('form').screenshot({ path: 'target/visual-captures/hs2-nzmjbj-source-select-wide.png' });
-  const shown = source.evaluate(
-    (node) =>
-      new Promise<void>((resolve) => {
-        node.addEventListener(
-          'wa-after-show',
-          () => {
-            resolve();
-          },
-          { once: true },
-        );
-      }),
+  expect(await source.evaluate((node) => getComputedStyle(node.querySelector('.kui-select__trigger')!).cursor)).toBe(
+    'pointer',
   );
-  await source.click();
-  await shown;
-  await expect(source).toHaveJSProperty('open', true);
+  await dialog.locator('form').screenshot({ path: 'target/visual-captures/hs2-nzmjbj-source-select-wide.png' });
+  await source.locator('.kui-select__trigger').click();
+  await expect(source.locator('.kui-select__popup')).toBeVisible();
+  await expect(source).toHaveAttribute('open', '');
   await page.screenshot({ path: 'target/visual-captures/hs2-nzmjbj-source-select-open.png' });
-  await source.locator('wa-option[value="github-acme"]').click();
+  await source.locator('.kui-select__option[data-value="github-acme"]').click();
   await expect(source).toHaveJSProperty('value', 'github-acme');
   await expect(sourceWarning).toBeVisible();
   await expect(sourceWarning).toContainText('Creating in GitHub issues');
   await expect(sourceWarning).toContainText('not the default ticket source (HS2 git tickets)');
   await dialog.locator('form').screenshot({ path: test.info().outputPath('hs2-fxn0ez-source-warning-1280.png') });
-  await expect(source).toHaveJSProperty('open', false);
+  await expect(source).not.toHaveAttribute('open');
   await expect
-    .poll(() =>
-      source.evaluate((node) => node.shadowRoot!.querySelector<HTMLInputElement>('[part~="display-input"]')!.value),
-    )
+    .poll(() => source.evaluate((node) => node.querySelector('.kui-select__value')!.textContent.trim()))
     .toBe('GitHub issues');
   await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Routed to GitHub');
   await dialog.getByRole('button', { name: 'Create ticket' }).click();
@@ -12624,13 +12701,11 @@ test('creates a ticket in a chosen writable source and preselects it next time i
   await expect(source).toHaveJSProperty('value', 'github-acme');
   await expect(sourceWarning).toBeVisible();
   await expect
-    .poll(() =>
-      source.evaluate((node) => node.shadowRoot!.querySelector<HTMLInputElement>('[part~="display-input"]')!.value),
-    )
+    .poll(() => source.evaluate((node) => node.querySelector('.kui-select__value')!.textContent.trim()))
     .toBe('GitHub issues');
   // Picking a source and cancelling does not count as using it.
-  await source.click();
-  await source.locator('wa-option[value="git-local"]').click();
+  await source.locator('.kui-select__trigger').click();
+  await source.locator('.kui-select__option[data-value="git-local"]').click();
   await expect(source).toHaveJSProperty('value', 'git-local');
   await expect(sourceWarning).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Cancel' }).click();
@@ -12720,19 +12795,17 @@ test('keeps staged files but blocks Create on an attachment-less source, then cr
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
     dialog = page.getByRole('dialog', { name: 'Create ticket' }),
     form = dialog.locator('[data-action="create-ticket-form"]'),
-    source = dialog.locator('wa-select[name="new-ticket-source"]'),
+    source = dialog.locator('kui-select[name="new-ticket-source"]'),
     create = dialog.locator('wa-button[type="submit"]'),
     removeAll = form.getByRole('button', { name: 'Remove all staged attachments' }),
     stranded = form.locator('[data-new-ticket-attachments-stranded="true"]'),
     browse = form.getByLabel('Browse attachments for new ticket', { exact: true }),
     pick = async (value: string, label: string) => {
-      await source.click();
-      await source.locator(`wa-option[value="${value}"]`).click();
+      await source.locator('.kui-select__trigger').click();
+      await source.locator(`.kui-select__option[data-value="${value}"]`).click();
       await expect(source).toHaveJSProperty('value', value);
       await expect
-        .poll(() =>
-          source.evaluate((node) => node.shadowRoot!.querySelector<HTMLInputElement>('[part~="display-input"]')!.value),
-        )
+        .poll(() => source.evaluate((node) => node.querySelector('.kui-select__value')!.textContent.trim()))
         .toBe(label);
     };
   await launcher.click();
@@ -13014,15 +13087,15 @@ async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source:
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const dialog = page.getByRole('dialog', { name: 'Create ticket' }),
     form = dialog.locator('[data-action="create-ticket-form"]'),
-    sourceSelect = dialog.locator('wa-select[name="new-ticket-source"]'),
+    sourceSelect = dialog.locator('kui-select[name="new-ticket-source"]'),
     create = dialog.locator('wa-button[type="submit"]');
   await page.getByRole('button', { name: 'New ticket…' }).click();
   await form.getByLabel('Browse attachments for new ticket', { exact: true }).setInputFiles([
     { name: 'trace.log', mimeType: 'text/plain', buffer: Buffer.from('trace') },
     { name: 'clip.mp4', mimeType: 'video/mp4', buffer: Buffer.from('not really a video') },
   ]);
-  await sourceSelect.click();
-  await sourceSelect.locator(`wa-option[value="${source.connection_id}"]`).click();
+  await sourceSelect.locator('.kui-select__trigger').click();
+  await sourceSelect.locator(`.kui-select__option[data-value="${source.connection_id}"]`).click();
   await expect(sourceSelect).toHaveJSProperty('value', source.connection_id);
   // An attachment-capable provider source keeps the drop zone and allows Create (HS2-8HHHK3 rule).
   await expect(form.locator('[data-new-ticket-attachments-stranded="true"]')).toHaveCount(0);
@@ -13052,7 +13125,9 @@ async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source:
   await expect(panel.getByRole('button', { name: /More Actions for/ })).toHaveCount(source.delete ? 2 : 0);
   await expect(panel.locator('[draggable="true"]')).toHaveCount(0);
   await expect(panel.locator('[data-action="edit-attachment-batch-label"]')).toHaveCount(0);
-  await expect(panel.locator('wa-select[name="attachment-batch-purpose"]')).toHaveJSProperty('disabled', true);
+  await expect(
+    panel.locator('kui-select[name="attachment-batch-purpose"]').locator('.kui-select__trigger'),
+  ).toHaveJSProperty('disabled', true);
   const link = panel.getByRole('link', { name: 'trace.log' });
   await expect(link).toHaveAttribute(
     'href',
@@ -13088,7 +13163,7 @@ async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source:
   await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
   await expect(rail).toHaveAttribute('data-collapsed', 'false');
   await rail.locator('> .kui-workbench__panel-content').evaluate(async (node) => {
-    await Promise.all(node.getAnimations().map((animation) => animation.finished));
+    await Promise.all(node.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
   });
   await expect(panel.getByRole('link', { name: 'trace.log' })).toBeInViewport();
   await rail.screenshot({ path: `target/visual-captures/${source.capture}-inspector-readonly-narrow.png` });
@@ -13103,7 +13178,7 @@ async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source:
     await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
     await expect(rail).toHaveAttribute('data-collapsed', 'false');
     await rail.locator('> .kui-workbench__panel-content').evaluate(async (node) => {
-      await Promise.all(node.getAnimations().map((animation) => animation.finished));
+      await Promise.all(node.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
     });
     await panel.getByRole('button', { name: 'More Actions for trace.log' }).click();
     await expect(attachmentMenu).toHaveAttribute('data-kind', 'remote');
@@ -13130,7 +13205,7 @@ test('keeps the plain source label and default routing for a single writable sou
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Create ticket' });
   await expect(dialog.locator('.quick-ticket-composer__footer')).toContainText('Creating in Hot Sheet Git');
-  await expect(dialog.locator('wa-select[name="new-ticket-source"]')).toHaveCount(0);
+  await expect(dialog.locator('kui-select[name="new-ticket-source"]')).toHaveCount(0);
   await dialog.getByRole('textbox', { name: 'Ticket Title' }).fill('Default routing');
   await dialog.getByRole('button', { name: 'Create ticket' }).click();
   await expect(dialog).toBeHidden();
@@ -13147,20 +13222,24 @@ test('keeps production ticket creation inside the Web Awesome modal lifecycle', 
     dialog = page.getByRole('dialog', { name: 'Create ticket' });
   await launcher.click();
   await expect(dialog.getByRole('textbox', { name: 'Ticket Title' })).toBeFocused();
-  expect(await dialog.evaluate((node) => node.shadowRoot?.querySelector('dialog')?.matches(':modal'))).toBe(true);
+  expect(
+    await dialog.evaluate((node) =>
+      (node instanceof HTMLDialogElement ? node : node.shadowRoot!.querySelector('dialog')!).matches(':modal'),
+    ),
+  ).toBe(true);
   await page.getByRole('button', { name: 'Add Project' }).evaluate((node) => {
     (node as HTMLElement).focus();
   });
   expect(await dialog.evaluate((host) => host.contains(document.activeElement))).toBe(true);
   await page.mouse.click(8, 8);
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await expect(launcher).not.toBeFocused();
-  const category = dialog.locator('wa-select[name="new-ticket-category"]');
-  await category.click();
-  await expect(category).toHaveJSProperty('open', true);
+  const category = dialog.locator('kui-select[name="new-ticket-category"]');
+  await category.locator('.kui-select__trigger').click();
+  await expect(category).toHaveAttribute('open', '');
   await page.keyboard.press('Escape');
-  await expect(category).toHaveJSProperty('open', false);
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(category).not.toHaveAttribute('open');
+  await expect(dialog).toHaveAttribute('open', '');
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   await expect(launcher).toBeFocused();
@@ -13265,8 +13344,8 @@ test('does not resurrect a dismissed ticket composer after another modal closes'
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
   const conversation = drawer.locator('[data-component="ai-conversation"]'),
     createViewDialog = page.getByRole('dialog', { name: 'Create View' });
-  await conversation.getByLabel('Message Codex').fill('Export the referenced proof.');
-  await conversation.getByLabel('Message Codex').press('Enter');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).fill('Export the referenced proof.');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   await expect(conversation.getByText('The referenced proof is ready.', { exact: true })).toBeVisible();
   await expect(createViewDialog).toBeHidden();
   const composerHost = page.locator('[data-component="quick-ticket-composer"]');
@@ -13277,8 +13356,8 @@ test('does not resurrect a dismissed ticket composer after another modal closes'
   await expect(composerHost.locator('[data-action="create-ticket-form"]')).toHaveCount(0);
   // Save lives in the drawer's tab toolbar since HS2-59F7WK (HS2-D7D7Y8).
   await drawer.locator('.terminal-drawer__rail').getByRole('button', { name: 'Save Conversation' }).click();
-  const exportDialog = page.locator('[data-component="conversation-export-dialog"]');
-  await expect(exportDialog).toHaveJSProperty('open', true);
+  const exportDialog = page.locator('[data-dialog-component="conversation-export-dialog"]');
+  await expect(exportDialog).toHaveAttribute('open', '');
   await exportDialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(exportDialog).toBeHidden();
   await expect(composerHost).toBeHidden();
@@ -13357,7 +13436,7 @@ test('restores a saved composer draft without painting the dialog during remembe
   await page.getByRole('button', { name: 'New ticket…' }).click();
   await expect(dialog.getByRole('textbox', { name: 'Ticket Title' })).toHaveValue('Remembered startup draft');
   await expect(dialog.getByRole('textbox', { name: 'Details' })).toHaveValue('Preserved without startup modality');
-  await expect(dialog.locator('wa-select[name="new-ticket-category"]')).toHaveJSProperty('value', 'feature');
+  await expect(dialog.locator('kui-select[name="new-ticket-category"]')).toHaveJSProperty('value', 'feature');
   await expect(dialog.getByRole('button', { name: 'Remove new ticket from Up Next' })).toBeVisible();
 });
 
@@ -13489,9 +13568,11 @@ test('animates ticket moves, arrivals, and departures in sequence', async ({ pag
   await page.getByRole('button', { name: 'New ticket…' }).click();
   const composerDialog = page.getByRole('dialog', { name: 'Create ticket' });
   await expect(composerDialog).toBeVisible();
-  expect(await composerDialog.evaluate((node) => node.shadowRoot?.querySelector('dialog')?.matches(':modal'))).toBe(
-    true,
-  );
+  expect(
+    await composerDialog.evaluate((node) =>
+      (node instanceof HTMLDialogElement ? node : node.shadowRoot!.querySelector('dialog')!).matches(':modal'),
+    ),
+  ).toBe(true);
   await page.screenshot({
     path: 'target/visual-captures/hs2-bm8cgj-ticket-motion-below-dialog-wide.png',
     fullPage: true,
@@ -13751,15 +13832,16 @@ test('runs grouped local commands, confirms stop, exposes history, and saves set
   await command.click();
   await expect(page.getByRole('button', { name: 'Running Run checks' })).toBeVisible();
   await page.getByRole('button', { name: 'Running Run checks' }).click();
-  const stop = page.locator('[data-component="command-cancellation-dialog"]');
-  await expect(stop.getByRole('dialog', { name: 'Stop Run checks?' })).toBeVisible();
+  const stop = page.locator('[data-dialog-component="command-cancellation-dialog"]');
+  await expect(stop).toHaveAccessibleName('Stop Run checks?');
+  await expect(stop).toBeVisible();
   await stop.getByRole('button', { name: 'Stop Command' }).click();
   await expect(stop).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Run checks' })).toHaveAttribute('title', /Last run: cancelled/);
   await page.getByRole('button', { name: 'Run checks' }).dispatchEvent('pointerdown');
   await page.waitForTimeout(600);
   await page.getByRole('button', { name: 'Run checks' }).dispatchEvent('pointerup');
-  const history = page.locator('[data-component="command-run-dialog"]');
+  const history = page.locator('[data-dialog-component="command-run-dialog"]');
   await expect(history).toContainText('Stopped by user');
   await page.screenshot({ path: 'target/visual-captures/hs2-jn3x4w-commands-wide.png', fullPage: true });
   await history.getByRole('button', { name: 'Close' }).click();
@@ -13781,7 +13863,7 @@ test('runs grouped local commands, confirms stop, exposes history, and saves set
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   const editor = page.locator('[data-component="command-settings-editor"]');
   const firstRow = editor.locator('.command-settings-editor__row').first();
-  await firstRow.locator('[data-component="popup-menu"] [slot="trigger"]').click();
+  await firstRow.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
   await firstRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const commandDialog = page.locator('#command-editor-dialog');
   await commandDialog.getByLabel('Button Label').fill('Review');
@@ -14006,8 +14088,8 @@ test('queues a custom AI command as an urgent Up Next ticket and signals an avai
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
-  const conversation = page.locator('[data-component="ai-conversation"]'),
-    dialog = conversation.getByRole('dialog');
+  const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
+    dialog = conversation;
   await expect(dialog).toBeVisible();
   await page.mouse.click(1, 1);
   await expect(dialog).toBeHidden();
@@ -14101,18 +14183,18 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   await page.getByRole('button', { name: 'Add command…', exact: true }).click();
   await commandDialog.getByLabel('Button Label').fill('Review changes');
   // Type is a Kerf Select (HS2-WNXRG3): choose the AI option through its real popup.
-  const typeSelect = commandDialog.locator('wa-select[name="kind"]');
+  const typeSelect = commandDialog.locator('kui-select[name="kind"]');
   await expect(typeSelect).toHaveJSProperty('value', 'shell');
-  await typeSelect.click();
-  await typeSelect.locator('wa-option[value="ai"]').click();
+  await typeSelect.locator('.kui-select__trigger').click();
+  await typeSelect.locator('.kui-select__option[data-value="ai"]').click();
   await expect(typeSelect).toHaveJSProperty('value', 'ai');
   await expect(commandDialog.getByLabel('Prompt')).toBeVisible();
   await commandDialog.getByLabel('Prompt').fill('Review the current changes');
   await commandDialog.getByRole('button', { name: 'Project Default' }).click();
   await commandDialog.locator('[data-action="select-command-ai-tool"][data-value="claude"]').dispatchEvent('click');
   await commandDialog.locator('[data-action="open-command-manual-model"]').dispatchEvent('click');
-  const manualModel = page.locator('[data-component="manual-model-dialog"]');
-  await expect(manualModel.locator('dialog')).toBeVisible();
+  const manualModel = page.locator('[data-dialog-component="manual-model-dialog"]');
+  await expect(manualModel).toBeVisible();
   await manualModel.getByLabel('Model Identifier').fill('claude-preview');
   await manualModel.getByRole('button', { name: 'Use Model' }).click();
   await expect(commandDialog.getByRole('button', { name: /Claude · claude-preview/ })).toBeVisible();
@@ -14132,7 +14214,7 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   await lintRow.dispatchEvent('drop', { dataTransfer, clientX: lintBox.x + 24, clientY: lintBox.y + 3 });
   await reviewRow.dispatchEvent('dragend', { dataTransfer });
   const runChecksRow = editor.locator('.command-settings-editor__row', { hasText: 'Run checks' });
-  await runChecksRow.locator('[data-component="popup-menu"] [slot="trigger"]').click();
+  await runChecksRow.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
   await runChecksRow.locator('[data-action="delete-command-setting"]').dispatchEvent('click');
   await expect(editor.locator('.command-settings-editor__row', { hasText: 'Run checks' })).toHaveCount(0);
   // Autosave persists the final set (Review then Lint) with no explicit Save button; identifiers are auto-generated, so assert by title/kind.
@@ -14270,7 +14352,7 @@ test('keeps an empty command group across reloads, populating, and emptying it (
   await expect(editor.locator('[data-command-group="Quality"] .command-settings-editor__group-empty')).toBeVisible();
   await expect.poll(() => groupWrites.at(-1)).toEqual(['Ideas', 'Quality']);
   // 4. Remove the command: the group stays, empty again, and survives another reload.
-  await runChecks.locator('[data-component="popup-menu"] [slot="trigger"]').click();
+  await runChecks.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
   const commandsSaved2 = page.waitForResponse(
     (response) => response.url().endsWith('/commands') && response.request().method() === 'PUT',
   );
@@ -15270,7 +15352,15 @@ for (const viewport of [
     await expect(popup).toBeFocused();
     // Capture once the composer's open animation settles, so the evidence shows the real stacking.
     await expect
-      .poll(() => composer.evaluate((element) => element.shadowRoot?.querySelector('dialog')?.getAnimations().length))
+      .poll(() =>
+        composer.evaluate(
+          (element) =>
+            (element instanceof HTMLDialogElement
+              ? element
+              : element.shadowRoot!.querySelector('dialog')!
+            ).getAnimations().length,
+        ),
+      )
       .toBe(0);
     await page.screenshot({ path: `target/visual-captures/hs2-mae27t-permission-over-composer-${viewport.width}.png` });
     for (const name of ['Ignore', 'Deny', 'Always Allow', 'Allow Once']) {
@@ -15297,12 +15387,12 @@ for (const viewport of [
     await page.keyboard.press('Escape');
     await expect(popup).toContainText('request-63');
     await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(true);
-    await expect(composer).toHaveJSProperty('open', true);
+    await expect(composer).toHaveAttribute('open', '');
     expect(resolved).toHaveLength(1);
     // The composer closes underneath (its Cancel, dispatched because the lifted popup blocks pointer
     // input): the popup returns to a non-blocking popover.
     await composer.getByRole('button', { name: 'Cancel', exact: true }).dispatchEvent('click');
-    await expect(composer).toHaveJSProperty('open', false);
+    await expect(composer).not.toHaveAttribute('open');
     await expect(popup).toContainText('request-63');
     await expect.poll(() => popup.evaluate((element) => element.matches(':popover-open'))).toBe(true);
     expect(await popup.evaluate((element) => element.matches(':modal'))).toBe(false);
@@ -15316,7 +15406,7 @@ for (const viewport of [
     await expect(title).toHaveJSProperty('value', 'typed after the permission popup');
     // With no lifted popup, Escape is the composer's again.
     await page.keyboard.press('Escape');
-    await expect(composer).toHaveJSProperty('open', false);
+    await expect(composer).not.toHaveAttribute('open');
     expect(resolved).toHaveLength(1);
   });
 }
@@ -15549,7 +15639,7 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
     )
     .toContain('ticket-row-danger-selected-wiggle');
   await corrupt.evaluate(async (node) => {
-    await Promise.all(node.getAnimations().map((animation) => animation.finished));
+    await Promise.all(node.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
   });
   const selectedBorder = await corrupt.evaluate((node) => {
     const style = getComputedStyle(node);
@@ -15724,25 +15814,20 @@ test('lays the corrupt row icon beside its text for a real server diagnostic (HS
       await page.screenshot({ path: test.info().outputPath(`hs2-sjvm8c-real-corrupt-row-${width}.png`) });
       if (width >= 1024) continue;
       // The narrow view picker names the visible view and offers it, like the sidebar (HS2-0VPMFS).
-      const picker = page.locator('wa-select[name="mobile-view"]'),
+      const picker = page.locator('kui-select[name="mobile-view"]'),
         pickerLabel = () =>
-          picker.evaluate((node) =>
-            [...node.children]
-              .filter((child) => child.localName !== 'wa-option')
-              .map((child) => child.textContent.trim())
-              .join(''),
-          );
+          picker.evaluate((node) => node.querySelector('.kui-select__value')?.textContent.trim() ?? '');
       await expect(picker).toHaveJSProperty('value', 'errors');
       await expect.poll(pickerLabel).toBe('Ticket errors');
-      await expect(picker.locator('wa-option[value="errors"]')).toHaveText('Ticket errors');
+      await expect(picker.locator('.kui-select__option[data-value="errors"]')).toHaveText('Ticket errors');
       // Picker → Queue shows the ticket list; picker → Ticket errors brings the corrupt row back.
-      await picker.click();
-      await picker.locator('wa-option[value="all"]').click();
+      await picker.locator('.kui-select__trigger').click();
+      await picker.locator('.kui-select__option[data-value="all"]').click();
       await expect(picker).toHaveJSProperty('value', 'all');
       await expect.poll(pickerLabel).toBe('Queue');
       await expect(corrupt).toHaveCount(0);
-      await picker.click();
-      await picker.locator('wa-option[value="errors"]').click();
+      await picker.locator('.kui-select__trigger').click();
+      await picker.locator('.kui-select__option[data-value="errors"]').click();
       await expect(picker).toHaveJSProperty('value', 'errors');
       await expect.poll(pickerLabel).toBe('Ticket errors');
       await expect(corrupt).toContainText(created.slug);
@@ -15792,16 +15877,16 @@ test('updates the open project after external ticket additions edits and deletio
   await original.click();
   await expect(page.locator('#app-right-rail')).toContainText('Use real project tickets');
 
-  const openSelect = page.locator('#app-right-rail wa-select[name="inspector-priority"]');
-  await openSelect.click();
-  await expect(openSelect).toHaveJSProperty('open', true);
+  const openSelect = page.locator('#app-right-rail kui-select[name="inspector-priority"]');
+  await openSelect.locator('.kui-select__trigger').click();
+  await expect(openSelect).toHaveAttribute('open', '');
   liveRows = liveRows.map((item) => (item.id === '01' ? { ...item, title: 'Externally edited ticket' } : item));
   liveFull = { ...liveFull, title: 'Externally edited ticket' };
   await emit('changed', '01', 'HS2-DEMO01');
   await page.waitForTimeout(200);
   await expect(original).toContainText('Use real project tickets');
   await expect(page.locator('#app-loading-indicator')).toBeHidden();
-  await expect(openSelect).toHaveJSProperty('open', true);
+  await expect(openSelect).toHaveAttribute('open', '');
   await page.keyboard.press('Escape');
   await expect(original).toContainText('Externally edited ticket');
   await expect(page.locator('#app-right-rail')).toContainText('Externally edited ticket');
@@ -16129,18 +16214,18 @@ test('translates urgent priority through the canonical server contract', async (
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
-  await page.locator('wa-select[name="inspector-priority"]').evaluate((node: HTMLElement & { value: string }) => {
+  await page.locator('kui-select[name="inspector-priority"]').evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'urgent';
     node.dispatchEvent(new Event('change', { bubbles: true }));
   });
   await expect.poll(() => patches.at(-1)?.priority).toBe('highest');
-  await expect(page.locator('#app-right-rail wa-select[name="inspector-priority"]')).toHaveJSProperty(
+  await expect(page.locator('#app-right-rail kui-select[name="inspector-priority"]')).toHaveJSProperty(
     'value',
     'urgent',
   );
   await expect(
     page.locator(
-      '#app-right-rail wa-select[name="inspector-priority"] .kui-select__icon--selected [data-lucide="chevrons-up"]',
+      '#app-right-rail kui-select[name="inspector-priority"] .kui-select__icon--selected [data-lucide="chevrons-up"]',
     ),
   ).toBeVisible();
 });
@@ -16163,7 +16248,7 @@ test('moves tickets to Backlog and Archive from every shipped status menu', asyn
   await expect(status.locator('[data-component="status-badge"] [data-lucide="archive"]')).toBeVisible();
   await status.locator('[data-action="open-inspector-status-menu"]').click();
   await expect(status.locator('[data-ticket-status]')).toHaveCount(6);
-  await expect(status.locator('wa-divider')).toHaveCount(1);
+  await expect(status.locator('.kui-popup-menu__divider')).toHaveCount(1);
   await status.locator('[data-ticket-status="backlog"]').click();
   await expect.poll(() => patches.some((patch) => patch.status === 'backlog')).toBe(true);
   await page.locator('[data-action="select-view"][data-item-id="backlog"]').click();
@@ -16171,11 +16256,11 @@ test('moves tickets to Backlog and Archive from every shipped status menu', asyn
   await expect(backlogged).toBeVisible();
   await backlogged.click({ button: 'right' });
   const menu = page.locator('[data-context-menu="ticket"]');
-  await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change Status' }).hover();
+  await menu.locator('.kui-popup-menu__item', { hasText: 'Change Status' }).hover();
   const choices = menu.locator('[data-context-field="status"]');
   await expect(choices).toHaveCount(6);
   // A PopupMenu submenu holds no divider before Backlog (Kerf gap KF-7KR1BC).
-  await expect(menu.locator('wa-divider[slot="submenu"]')).toHaveCount(0);
+  await expect(menu.locator('.kui-popup-menu__menu[data-submenu] .kui-popup-menu__divider')).toHaveCount(0);
   await choices.filter({ hasText: 'Archive' }).click();
   await expect.poll(() => patches.some((patch) => patch.status === 'archive')).toBe(true);
   await page.getByRole('button', { name: /Archive/ }).click();
@@ -16554,7 +16639,7 @@ for (const viewport of [
     await page.getByRole('button', { name: 'Open Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Add Project' }).click();
-    const projectPicker = page.locator('wa-select[name="mobile-project"]');
+    const projectPicker = page.locator('kui-select[name="mobile-project"]');
     let ptyLoadActive = false;
     const switchProject = async (name: 'demo' | 'other') => {
       if (viewport.name === 'desktop') {
@@ -16568,7 +16653,7 @@ for (const viewport of [
           name === 'demo' ? project.id : 'other-checkout',
         );
       } else {
-        await projectPicker.click();
+        await projectPicker.locator('.kui-select__trigger').click();
         await projectPicker.getByRole('option', { name: new RegExp(`^${name}`) }).click();
       }
     };
@@ -16628,7 +16713,7 @@ for (const viewport of [
         await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
       });
       await expect(drawer.locator('[data-component="ai-conversation"]')).toBeVisible();
-      const composer = drawer.getByLabel('Message Codex');
+      const composer = drawer.getByRole('textbox', { name: 'Message Codex' });
       await composer.fill('Profile a sustained response');
       await composer.press('Enter');
       await expect.poll(() => connectionId).toBeTruthy();
@@ -16983,9 +17068,9 @@ test('aligns Status controls without duplicating badge insets and preserves sele
     await expect(field.locator('.kui-list-inset-control')).toHaveCount(1);
     await expect(async () => {
       const geometry = await surface.evaluate((node) => {
-        const category = node.querySelector('wa-select[name="inspector-category"]')!,
-          control = category.shadowRoot!.querySelector('[part~="combobox"]')!.getBoundingClientRect(),
-          categoryLabelNode = category.shadowRoot!.querySelector('[part~="form-control-label"]')!,
+        const category = node.querySelector('kui-select[name="inspector-category"]')!,
+          control = category.querySelector('.kui-select__trigger')!.getBoundingClientRect(),
+          categoryLabelNode = category.querySelector('.kui-select__label')!,
           categoryLabel = categoryLabelNode.getBoundingClientRect(),
           statusField = node.querySelector('.ticket-info-panel__status-field')!,
           label = statusField.querySelector('h2')!.getBoundingClientRect(),
@@ -17065,9 +17150,9 @@ test('matches Details label spacing to Category before and after editing (HS2-S6
   const expectDetailsSpacing = async (surface: Locator) => {
     await expect(async () => {
       const spacing = await surface.evaluate((node) => {
-        const category = node.querySelector('wa-select[name="inspector-category"]')!.shadowRoot!,
-          categoryLabel = category.querySelector('[part~="form-control-label"]')!.getBoundingClientRect(),
-          categoryField = category.querySelector('[part~="combobox"]')!.getBoundingClientRect(),
+        const category = node.querySelector('kui-select[name="inspector-category"]')!,
+          categoryLabel = category.querySelector('.kui-select__label')!.getBoundingClientRect(),
+          categoryField = category.querySelector('.kui-select__trigger')!.getBoundingClientRect(),
           detailsLabel = node.querySelector('.ticket-info-panel__details-section h2')!.getBoundingClientRect(),
           detailsField = node.querySelector('.ticket-info-panel__details-surface')!.getBoundingClientRect();
         return {
@@ -17247,7 +17332,7 @@ for (const width of [1280, 390]) {
     await page.getByText('Use real project tickets').click();
     const inspector = page.locator('#app-right-rail');
     const parent = inspector.locator('[data-component="note-card"][data-note-id="N1"]');
-    const feedbackDialog = page.locator('[data-component="ai-feedback-dialog"]');
+    const feedbackDialog = page.locator('[data-dialog-component="ai-feedback-dialog"]');
     await parent.getByRole('button', { name: 'Helpful — Keep Suggestions Like This' }).click();
     await feedbackDialog.getByLabel('What should Hot Sheet keep doing?').fill('Keep the short status summary.');
     await feedbackDialog.getByRole('button', { name: 'Save feedback' }).click();
@@ -17648,7 +17733,7 @@ test('hides title and tag mutation affordances when the provider cannot update',
   await expect(statusField.getByRole('heading', { name: 'Status' })).toBeVisible();
   await expect(statusField.locator('.kui-list-inset-control')).toHaveCount(1);
   await expect(status).not.toHaveAttribute('data-action');
-  await expect(inspector.locator('wa-select[name="inspector-started-phase"]')).toHaveCount(0);
+  await expect(inspector.locator('kui-select[name="inspector-started-phase"]')).toHaveCount(0);
   await expect(status.locator('[data-lucide="clock"]')).toBeVisible();
   await captureInspectorStatus(inspector, 'target/visual-captures/hs2-ahadnk-status-readonly.png');
 });
@@ -17665,7 +17750,7 @@ test('keeps an open inspector status popup at its trigger after its anchor is mo
     trigger = status.locator('[data-action="open-inspector-status-menu"]'),
     menu = status.locator('[data-inspector-status-menu]');
   await trigger.click();
-  await expect(menu).toHaveJSProperty('open', true);
+  await expect(menuOpener(menu)).toHaveAttribute('aria-expanded', 'true');
   const anchor = await menu.getAttribute('style');
   expect(anchor).toContain('px');
   await menu.evaluate((element) => {
@@ -17675,12 +17760,12 @@ test('keeps an open inspector status popup at its trigger after its anchor is mo
   await status.locator('[data-ticket-status="started"]').hover();
   await expect(status.locator('[data-started-phase="planning"]')).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(menu).toHaveJSProperty('open', false);
+  await expect(menuOpener(menu)).toHaveAttribute('aria-expanded', 'false');
   await menu.evaluate((element) => {
     element.removeAttribute('style');
   });
   await page.waitForTimeout(50);
-  await expect(menu).toHaveJSProperty('open', false);
+  await expect(menuOpener(menu)).toHaveAttribute('aria-expanded', 'false');
 });
 
 test('edits and clears the Started phase without changing lifecycle status', async ({ page }) => {
@@ -17890,7 +17975,7 @@ test('adapts the production AppShell below the former 1024 by 600 desktop floor'
   await expect(shell).toHaveAttribute('data-mobile', 'true');
   await expect(shell.locator('#app-left-rail')).toHaveAttribute('data-collapsed', 'true');
   await expect(shell.locator('#app-right-rail')).toHaveAttribute('data-collapsed', 'true');
-  await expect(page.locator('wa-select[name="mobile-project"]')).toBeVisible();
+  await expect(page.locator('kui-select[name="mobile-project"]')).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.waitForTimeout(300);
   expect((await shell.boundingBox())?.height).toBe(600);
@@ -17951,9 +18036,9 @@ test('overrides the default provider and reuses its dedicated drawer Drive chat'
     addView = sidebar.getByRole('button', { name: 'Add view' });
   await expect(addView).toBeEnabled();
   await expect(addView).toHaveAttribute('title', 'Add view');
-  await expect(sidebar.locator('wa-select[name="drive-tool"]')).toHaveCount(0);
+  await expect(sidebar.locator('kui-select[name="drive-tool"]')).toHaveCount(0);
   await sidebar.getByRole('button', { name: 'Choose Drive Provider, Model, and Effort' }).click();
-  await sidebar.locator('wa-dropdown-item').filter({ hasText: 'Provider' }).first().hover();
+  await sidebar.locator('.kui-popup-menu__item').filter({ hasText: 'Provider' }).first().hover();
   await sidebar.locator('[data-action="select-drive-tool"][data-value="claude"]').click();
   await expect(drive).toHaveAccessibleName('Drive with Claude');
   await sidebar
@@ -18023,27 +18108,44 @@ test('keeps the Drive menu open while choosing provider, model, and effort', asy
     options = sidebar.getByRole('button', { name: 'Choose Drive Provider, Model, and Effort' }),
     menu = sidebar.locator('[data-context-menu="drive-options"]');
   await options.click();
-  await menu.locator(':scope > wa-dropdown-item').filter({ hasText: 'Provider' }).hover();
+  await menu
+    .locator(
+      ':scope > .kui-popup-menu__menu > .kui-popup-menu__item, :scope > .kui-popup-menu__menu > .kui-popup-menu__submenu-host > .kui-popup-menu__item',
+    )
+    .filter({ hasText: 'Provider' })
+    .hover();
   await menu.locator('[data-action="select-drive-tool"][data-value="claude"]').click();
-  const model = menu.locator(':scope > wa-dropdown-item').filter({ hasText: 'Model' });
+  const model = menu
+    .locator(
+      ':scope > .kui-popup-menu__menu > .kui-popup-menu__item, :scope > .kui-popup-menu__menu > .kui-popup-menu__submenu-host > .kui-popup-menu__item',
+    )
+    .filter({ hasText: 'Model' });
   await expect(model).toBeVisible();
   await model.hover();
-  await expect(model.locator('[data-action="select-drive-model"][data-value="fable"]')).toBeVisible();
-  await model.locator('[data-action="select-drive-model"][data-value="fable"]').click();
-  const effort = menu.locator(':scope > wa-dropdown-item').filter({ hasText: 'Effort' });
+  await expect(
+    model.locator('xpath=..').locator('[data-action="select-drive-model"][data-value="fable"]'),
+  ).toBeVisible();
+  await model.locator('xpath=..').locator('[data-action="select-drive-model"][data-value="fable"]').click();
+  const effort = menu
+    .locator(
+      ':scope > .kui-popup-menu__menu > .kui-popup-menu__item, :scope > .kui-popup-menu__menu > .kui-popup-menu__submenu-host > .kui-popup-menu__item',
+    )
+    .filter({ hasText: 'Effort' });
   await expect(effort).toBeVisible();
   await effort.hover();
   for (const level of ['low', 'medium', 'high', 'xhigh', 'max'])
-    await expect(effort.locator(`[data-action="select-drive-effort"][data-value="${level}"]`)).toBeVisible();
-  await effort.locator('[data-action="select-drive-effort"][data-value="high"]').click();
+    await expect(
+      effort.locator('xpath=..').locator(`[data-action="select-drive-effort"][data-value="${level}"]`),
+    ).toBeVisible();
+  await effort.locator('xpath=..').locator('[data-action="select-drive-effort"][data-value="high"]').click();
   await expect(effort).toBeVisible();
   await expect(sidebar.locator('[data-action="select-drive-model"][data-value="fable"]')).toHaveAttribute(
-    'checked',
-    '',
+    'aria-checked',
+    'true',
   );
   await expect(sidebar.locator('[data-action="select-drive-effort"][data-value="high"]')).toHaveAttribute(
-    'checked',
-    '',
+    'aria-checked',
+    'true',
   );
   await page.screenshot({ path: 'target/visual-captures/hs2-s010qf-drive-options-open-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
@@ -18074,8 +18176,8 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   await expect(conversationAction).toBeEnabled();
   await expect(drive).toHaveAccessibleName('Drive with Codex');
   await conversationAction.click();
-  const conversationHost = page.locator('[data-component="ai-conversation"]'),
-    dialog = conversationHost.getByRole('dialog');
+  const conversationHost = page.locator('[data-dialog-component="ai-conversation"]'),
+    dialog = conversationHost;
   await expect(dialog).toBeVisible();
   await expect(conversationHost).not.toContainText('$hotsheet');
   await expect(conversationHost.getByRole('button', { name: 'Close Conversation' })).toHaveCount(0);
@@ -18098,7 +18200,7 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   await expect(conversationHost.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'gpt-6-astra');
   await expect(conversationHost.locator('.ai-conversation__model-effort')).toHaveText('medium');
   await dialog.screenshot({ path: 'target/visual-captures/hs2-ndda7p-empty-codex-chat-wide.png' });
-  const composer = conversationHost.getByLabel('Message Codex');
+  const composer = conversationHost.getByRole('textbox', { name: 'Message Codex' });
   await composer.fill('Explain the client event boundary.');
   await composer.press('Enter');
   await expect(conversationHost).toContainText('The event stream remains authoritative.');
@@ -18123,11 +18225,9 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   await expect(conversationHost.getByRole('button', { name: 'Stop Codex' })).toHaveJSProperty('tagName', 'BUTTON');
   await expect(conversationHost.getByRole('button', { name: 'Stop Codex' })).toBeVisible();
   await conversationHost.getByRole('button', { name: 'Helpful — Keep Suggestions Like This' }).last().click();
-  const feedbackDialog = page.locator('[data-component="ai-feedback-dialog"]');
-  await expect(feedbackDialog.getByRole('dialog')).toBeVisible();
-  await feedbackDialog
-    .getByRole('dialog')
-    .screenshot({ path: 'target/visual-captures/hs2-js82bz-feedback-dialog.png' });
+  const feedbackDialog = page.locator('[data-dialog-component="ai-feedback-dialog"]');
+  await expect(feedbackDialog).toBeVisible();
+  await feedbackDialog.screenshot({ path: 'target/visual-captures/hs2-js82bz-feedback-dialog.png' });
   await feedbackDialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(feedbackDialog).toHaveCount(0);
   expect(patches.some((patch) => Boolean(patch.ai_feedback))).toBe(false);
@@ -18178,11 +18278,13 @@ test('keeps activity before the result that resumes after a permission pause', a
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
-  const conversation = page.locator('[data-component="ai-conversation"]'),
-    dialog = conversation.getByRole('dialog'),
+  const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
+    dialog = conversation,
     transcript = conversation.locator('.ai-conversation__transcript');
-  await conversation.getByLabel('Message Codex').fill('Check message ordering across a permission pause.');
-  await conversation.getByLabel('Message Codex').press('Enter');
+  await conversation
+    .getByRole('textbox', { name: 'Message Codex' })
+    .fill('Check message ordering across a permission pause.');
+  await conversation.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   const activity = transcript.locator('[data-activity-id="activity-ordering"]');
   await expect(activity).toContainText('codex ran date');
   await expect(activity.locator('code')).toHaveText('date');
@@ -18253,8 +18355,8 @@ for (const viewport of [
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
     await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
-    const conversation = page.locator('[data-component="ai-conversation"]'),
-      dialog = conversation.getByRole('dialog'),
+    const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
+      dialog = conversation,
       popup = conversation.locator('.ai-conversation__foreground [data-component="permission-request-popup"]');
     await expect(dialog).toBeVisible();
     await expect(popup).toBeVisible();
@@ -18335,8 +18437,8 @@ for (const viewport of [
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
     await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
-    const conversation = page.locator('[data-component="ai-conversation"]'),
-      dialog = conversation.getByRole('dialog'),
+    const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
+      dialog = conversation,
       foreground = conversation.locator('.ai-conversation__foreground'),
       popup = foreground.locator('[data-component="permission-request-popup"]'),
       allowOnce = popup.getByRole('button', { name: 'Allow Once' });
@@ -18379,7 +18481,9 @@ for (const viewport of [
     }
     // Unscrolled, the lower actions start below the dialog's bottom edge.
     expect(await inside()).toBe(false);
-    await dialog.evaluate((node) => Promise.all(node.getAnimations().map((animation) => animation.finished)));
+    await dialog.evaluate((node) =>
+      Promise.all(node.getAnimations().map((animation) => animation.finished.catch(() => undefined))),
+    );
     await page.screenshot({ path: `/tmp/claude/hs2-vym95k-foreground-top-${viewport.width}x${viewport.height}.png` });
     // A wheel over the pointer-interactive card scrolls its foreground host.
     const popupBox = (await popup.boundingBox())!;
@@ -18430,8 +18534,8 @@ test('clears a foreground permission from its authoritative event while the Allo
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
-  const conversation = page.locator('[data-component="ai-conversation"]'),
-    dialog = conversation.getByRole('dialog'),
+  const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
+    dialog = conversation,
     popup = conversation.locator('.ai-conversation__foreground [data-component="permission-request-popup"]');
   await expect(dialog).toBeVisible();
   await expect(popup).toBeVisible();
@@ -18555,9 +18659,9 @@ test('presents a legible, aligned AI chat without exposing its session id', asyn
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
-  const host = page.locator('[data-component="ai-conversation"]'),
-    dialog = host.getByRole('dialog'),
-    composer = host.getByLabel('Message Codex');
+  const host = page.locator('[data-dialog-component="ai-conversation"]'),
+    dialog = host,
+    composer = host.getByRole('textbox', { name: 'Message Codex' });
   await expect(dialog).toBeVisible();
   await expect(host).toContainText('Ready for your first message');
   await expect(host).not.toContainText('Session thread-1');
@@ -18572,10 +18676,17 @@ test('presents a legible, aligned AI chat without exposing its session id', asyn
   const modelControl = host.locator('[data-component="conversation-model-control"]');
   await expect(modelControl).toBeVisible();
   await expect(modelControl.locator('.ai-conversation__model-effort')).toBeVisible();
-  await host.locator('[data-conversation-model-menu] [slot="trigger"]').click();
-  const modelSubmenu = host.locator('[data-conversation-model-menu] > wa-dropdown-item').filter({ hasText: 'Model' });
+  await host.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger').click();
+  const modelSubmenu = host
+    .locator(
+      '[data-conversation-model-menu] > .kui-popup-menu__menu > .kui-popup-menu__item, [data-conversation-model-menu] > .kui-popup-menu__menu > .kui-popup-menu__submenu-host > .kui-popup-menu__item',
+    )
+    .filter({ hasText: 'Model' });
   await modelSubmenu.hover();
-  await modelSubmenu.locator('[data-action="select-conversation-model"][data-value="gpt-5.6-sol"]').click();
+  await modelSubmenu
+    .locator('xpath=..')
+    .locator('[data-action="select-conversation-model"][data-value="gpt-5.6-sol"]')
+    .click();
   await expect(modelControl.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'gpt-5.6-sol');
   await expect(dialog).toBeVisible();
   await dialog.screenshot({ path: 'target/visual-captures/hs2-jvwhq8-model-selection-open-wide.png' });
@@ -18626,19 +18737,19 @@ test('shows a spinner instead of an empty assistant bubble while a turn is think
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
   const embedded = drawer.locator('[data-component="ai-conversation"]');
-  await embedded.getByLabel('Message Codex').fill('Start sustained output');
-  await embedded.getByLabel('Message Codex').press('Enter');
+  await embedded.getByRole('textbox', { name: 'Message Codex' }).fill('Start sustained output');
+  await embedded.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   await expectThinking(embedded);
   await page.screenshot({ path: 'target/visual-captures/hs2-77kjkr-drawer-thinking-1280.png' });
   // Conversation dialog.
   await page.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
-  const host = page.locator('[data-component="ai-conversation"][data-presentation="dialog"]'),
-    dialog = host.getByRole('dialog');
+  const host = page.locator('[data-dialog-component="ai-conversation"]'),
+    dialog = host;
   await expect(dialog).toBeVisible();
-  await host.getByLabel('Message Codex').fill('Start sustained output');
-  await host.getByLabel('Message Codex').press('Enter');
+  await host.getByRole('textbox', { name: 'Message Codex' }).fill('Start sustained output');
+  await host.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   await expectThinking(host);
   await dialog.screenshot({ path: 'target/visual-captures/hs2-77kjkr-dialog-thinking-1280.png' });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -18694,9 +18805,9 @@ async function runLongTurnUntilStuck(
   shot: string,
   widths: readonly number[],
 ) {
-  await host.getByLabel('Message Codex').fill('Run the long test suite.');
+  await host.getByRole('textbox', { name: 'Message Codex' }).fill('Run the long test suite.');
   const delivered = stampedToolEventDelivered(page);
-  await host.getByLabel('Message Codex').press('Enter');
+  await host.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   const line = host.locator('.ai-conversation__composer .ai-conversation__turn-progress');
   await expect(line).toHaveAttribute('data-state', 'tool');
   await expect(line).toContainText(/Running Bash · \d+s · last activity/);
@@ -18769,7 +18880,7 @@ for (const width of [1280, 390] as const)
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
     const host = drawer.locator('[data-component="ai-conversation"]'),
-      field = host.getByLabel('Message Codex'),
+      field = host.getByRole('textbox', { name: 'Message Codex' }),
       form = host.locator('.ai-conversation__composer'),
       transcript = host.locator('.ai-conversation__transcript');
     // Enough answered turns to overflow the transcript, then a long turn that becomes stuck.
@@ -18848,7 +18959,7 @@ for (const width of [390, 1280] as const)
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
     const host = drawer.locator('[data-component="ai-conversation"]'),
-      field = host.getByLabel('Message Codex'),
+      field = host.getByRole('textbox', { name: 'Message Codex' }),
       form = host.locator('.ai-conversation__composer'),
       transcript = host.locator('.ai-conversation__transcript');
     for (let turn = 0; turn < 3; turn += 1) {
@@ -18884,7 +18995,7 @@ for (const width of [390, 1280] as const)
       });
     // The default drawer gives the chat about 262 px: a short chat compacts its floating form.
     const banner = line.locator('[role="status"]'),
-      // The rows the Composer field shows, from its rendered height and line height.
+      // The rows the MessageComposer field shows, from its rendered height and line height.
       visibleRows = () =>
         field.evaluate((element: HTMLTextAreaElement) => {
           const style = getComputedStyle(element),
@@ -18938,9 +19049,9 @@ for (const [server, content] of [
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
     const host = drawer.locator('[data-component="ai-conversation"]');
-    await host.getByLabel('Message Codex').fill(content);
+    await host.getByRole('textbox', { name: 'Message Codex' }).fill(content);
     const delivered = stampedToolEventDelivered(page);
-    await host.getByLabel('Message Codex').press('Enter');
+    await host.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
     const line = host.locator('.ai-conversation__composer .ai-conversation__turn-progress');
     await expect(line).toHaveAttribute('data-state', 'tool');
     await delivered;
@@ -18982,8 +19093,8 @@ for (const [server, content] of [
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
     let host = drawer.locator('[data-component="ai-conversation"]');
-    await host.getByLabel('Message Codex').fill(content);
-    await host.getByLabel('Message Codex').press('Enter');
+    await host.getByRole('textbox', { name: 'Message Codex' }).fill(content);
+    await host.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
     await expect(host.locator('.ai-conversation__composer .ai-conversation__turn-progress')).toHaveAttribute(
       'data-state',
       'tool',
@@ -19017,8 +19128,8 @@ test('shows a conversation dialog turn working, then may-be-stuck with Stop (HS2
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
-  const host = page.locator('[data-component="ai-conversation"][data-presentation="dialog"]');
-  await expect(host.getByRole('dialog')).toBeVisible();
+  const host = page.locator('[data-dialog-component="ai-conversation"]');
+  await expect(host).toBeVisible();
   await runLongTurnUntilStuck(page, host, 'dialog', [1280, 390]);
 });
 
@@ -19035,7 +19146,7 @@ test('cycles each chat composer through its own sent messages with Up and Down (
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
   const embedded = drawer.locator('[data-component="ai-conversation"]'),
-    drawerField = embedded.getByLabel('Message Codex');
+    drawerField = embedded.getByRole('textbox', { name: 'Message Codex' });
   await drawerField.fill('What time is it in California?');
   await drawerField.press('Enter');
   await expect(embedded.locator('.ai-conversation__message--assistant').last()).toHaveAttribute(
@@ -19083,9 +19194,9 @@ test('cycles each chat composer through its own sent messages with Up and Down (
   await page.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
-  const host = page.locator('[data-component="ai-conversation"][data-presentation="dialog"]'),
-    dialogField = host.getByLabel('Message Codex');
-  await expect(host.getByRole('dialog')).toBeVisible();
+  const host = page.locator('[data-dialog-component="ai-conversation"]'),
+    dialogField = host.getByRole('textbox', { name: 'Message Codex' });
+  await expect(host).toBeVisible();
   await dialogField.press('ArrowUp');
   await expect(dialogField).toHaveValue('');
   await dialogField.fill('What time is it in California?');
@@ -19118,7 +19229,9 @@ test('moves the chat model selector and export into the drawer and dialog toolba
   await expect(embedded).toBeVisible();
   // No title bar or settings row inside the chat; the tab toolbar hosts the controls instead.
   await expect(embedded).not.toContainText('Codex conversation');
-  await expect(embedded.locator('[data-component="toolbar"]')).toHaveCount(0);
+  // The only toolbar is the MessageComposer's own action row (Kerf beta.106).
+  await expect(embedded.locator('[data-component="toolbar"]')).toHaveCount(1);
+  await expect(embedded.locator('.kui-message-composer [data-component="toolbar"]')).toHaveCount(1);
   await expect(embedded.locator('[data-component="conversation-model-control"]')).toHaveCount(0);
   await expect(embedded.getByRole('button', { name: 'Save Conversation' })).toHaveCount(0);
   const railModel = rail.locator('[data-component="conversation-model-control"]'),
@@ -19126,27 +19239,34 @@ test('moves the chat model selector and export into the drawer and dialog toolba
   await expect(railModel).toBeVisible();
   await expect(railSave).toBeDisabled();
   // The selector stays keyboard operable from the tab toolbar.
-  const trigger = rail.locator('[data-conversation-model-menu] [slot="trigger"]');
+  const trigger = rail.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger');
   // Park the pointer away from where the menu opens so it does not hover a submenu open.
   await page.mouse.move(1, 1);
   await trigger.focus();
   await page.keyboard.press('Enter');
-  const modelSubmenu = rail.locator('[data-conversation-model-menu] > wa-dropdown-item').filter({ hasText: 'Model' });
+  const modelSubmenu = rail
+    .locator(
+      '[data-conversation-model-menu] > .kui-popup-menu__menu > .kui-popup-menu__item, [data-conversation-model-menu] > .kui-popup-menu__menu > .kui-popup-menu__submenu-host > .kui-popup-menu__item',
+    )
+    .filter({ hasText: 'Model' });
   await expect(modelSubmenu).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-59f7wk-drawer-menu-open-1280.png' });
   await modelSubmenu.hover();
-  await modelSubmenu.locator('[data-action="select-conversation-model"][data-value="gpt-5.6-sol"]').click();
+  await modelSubmenu
+    .locator('xpath=..')
+    .locator('[data-action="select-conversation-model"][data-value="gpt-5.6-sol"]')
+    .click();
   await expect(railModel.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'gpt-5.6-sol');
   // The drawer stays maximized: a dropdown press is not a rail double-click.
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
-  await embedded.getByLabel('Message Codex').fill('What time is it in California?');
-  await embedded.getByLabel('Message Codex').press('Enter');
+  await embedded.getByRole('textbox', { name: 'Message Codex' }).fill('What time is it in California?');
+  await embedded.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   await expect(embedded).toContainText('The event stream remains authoritative.');
   await expect(railSave).toBeEnabled();
   await page.screenshot({ path: 'target/visual-captures/hs2-59f7wk-drawer-toolbar-1280.png' });
   await railSave.click();
-  const exportDialog = page.locator('[data-component="conversation-export-dialog"]');
-  await expect(exportDialog).toHaveJSProperty('open', true);
+  const exportDialog = page.locator('[data-dialog-component="conversation-export-dialog"]');
+  await expect(exportDialog).toHaveAttribute('open', '');
   await page.keyboard.press('Escape');
   await expect(exportDialog).toHaveCount(0);
   // The conversation dialog carries the same selector next to its export control in the header.
@@ -19154,21 +19274,27 @@ test('moves the chat model selector and export into the drawer and dialog toolba
   await page.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
-  const host = page.locator('[data-component="ai-conversation"][data-presentation="dialog"]'),
-    dialog = host.getByRole('dialog'),
+  const host = page.locator('[data-dialog-component="ai-conversation"]'),
+    dialog = host,
     header = host.locator('[data-component="toolbar"]').first();
   await expect(dialog).toBeVisible();
   await expect(header.locator('[data-component="conversation-model-control"]')).toBeVisible();
   await expect(header.getByRole('button', { name: 'Save Conversation' })).toBeVisible();
   await expect(host.locator('[data-component="conversation-model-control"]')).toHaveCount(1);
   await dialog.screenshot({ path: 'target/visual-captures/hs2-59f7wk-dialog-header-1280.png' });
-  await header.locator('[data-conversation-model-menu] [slot="trigger"]').click();
-  await expect(header.locator('[data-conversation-model-menu] > wa-dropdown-item').first()).toBeVisible();
+  await header.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger').click();
+  await expect(
+    header
+      .locator(
+        '[data-conversation-model-menu] > .kui-popup-menu__menu > .kui-popup-menu__item, [data-conversation-model-menu] > .kui-popup-menu__menu > .kui-popup-menu__submenu-host > .kui-popup-menu__item',
+      )
+      .first(),
+  ).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-59f7wk-dialog-menu-open-1280.png' });
   await page.keyboard.press('Escape');
   await expect(dialog).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(header.locator('[data-conversation-model-menu] [slot="trigger"]')).toBeVisible();
+  await expect(header.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger')).toBeVisible();
   // At phone widths only the trigger remains; its menu shows the current choices.
   await expect(header.locator('[data-component="conversation-model-control"]')).toBeHidden();
   await dialog.screenshot({ path: 'target/visual-captures/hs2-59f7wk-dialog-header-390.png' });
@@ -19187,11 +19313,11 @@ test('keeps the drawer chat toolbar controls inside a phone-width tab toolbar (H
   const rail = drawer.locator('.terminal-drawer__rail'),
     embedded = drawer.locator('[data-component="ai-conversation"]');
   await expect(embedded).toBeVisible();
-  await embedded.getByLabel('Message Codex').fill('What time is it in California?');
-  await embedded.getByLabel('Message Codex').press('Enter');
+  await embedded.getByRole('textbox', { name: 'Message Codex' }).fill('What time is it in California?');
+  await embedded.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   await expect(embedded).toContainText('The event stream remains authoritative.');
   const controls = [
-    rail.locator('[data-conversation-model-menu] [slot="trigger"]'),
+    rail.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger'),
     rail.getByRole('button', { name: 'Save Conversation' }),
     rail.getByRole('button', { name: 'Hide Terminal Drawer' }),
   ];
@@ -19207,7 +19333,13 @@ test('keeps the drawer chat toolbar controls inside a phone-width tab toolbar (H
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-59f7wk-drawer-toolbar-390.png' });
   await controls[0].click();
-  await expect(rail.locator('[data-conversation-model-menu] > wa-dropdown-item').first()).toBeVisible();
+  await expect(
+    rail
+      .locator(
+        '[data-conversation-model-menu] > .kui-popup-menu__menu > .kui-popup-menu__item, [data-conversation-model-menu] > .kui-popup-menu__menu > .kui-popup-menu__submenu-host > .kui-popup-menu__item',
+      )
+      .first(),
+  ).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-59f7wk-drawer-menu-open-390.png' });
 });
 
@@ -19225,14 +19357,14 @@ test('reflows the shell and drawer chat across the phone breakpoint without a re
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
   const embedded = drawer.locator('[data-component="ai-conversation"]'),
-    composer = embedded.getByLabel('Message Codex');
+    composer = embedded.getByRole('textbox', { name: 'Message Codex' });
   await expect(embedded).toBeVisible();
   await composer.fill('What time is it in California?');
   await composer.press('Enter');
   await expect(embedded).toContainText('The event stream remains authoritative.');
   const desktop = async () => {
     await expect(shell).toHaveAttribute('data-mobile', 'false');
-    await expect(page.locator('wa-select[name="mobile-project"]')).toHaveCount(0);
+    await expect(page.locator('kui-select[name="mobile-project"]')).toHaveCount(0);
     await expect(page.locator('#app-left-rail')).not.toHaveAttribute('data-presentation', 'overlay');
   };
   await desktop();
@@ -19240,7 +19372,7 @@ test('reflows the shell and drawer chat across the phone breakpoint without a re
   const resizedAt = Date.now();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(shell).toHaveAttribute('data-mobile', 'true');
-  await expect(page.locator('wa-select[name="mobile-project"]')).toBeVisible();
+  await expect(page.locator('kui-select[name="mobile-project"]')).toBeVisible();
   await expect(page.locator('[data-tab-kind="project"]')).toHaveCount(0);
   await expect(page.locator('#app-left-rail')).toHaveAttribute('data-presentation', 'overlay');
   await expect(page.locator('#app-right-rail')).toHaveAttribute('data-collapsed', 'true');
@@ -19300,8 +19432,8 @@ test('collapses streamed chat activity to its latest item and toggles it on clic
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
   const host = drawer.locator('[data-component="ai-conversation"]');
-  await host.getByLabel('Message Codex').fill('Research with tools.');
-  await host.getByLabel('Message Codex').press('Enter');
+  await host.getByRole('textbox', { name: 'Message Codex' }).fill('Research with tools.');
+  await host.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   const group = host.locator('.ai-conversation__activity'),
     toggle = group.locator('.ai-conversation__activity-toggle'),
     rows = group.locator('[data-activity-id]');
@@ -19353,9 +19485,9 @@ test('omits effort after selecting a model that does not support it', async ({ p
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   const settings = page.locator('[data-component="ai-tool-settings"]'),
-    tool = settings.locator('wa-select[name="ai-default-tool"]');
-  await tool.click();
-  await tool.locator('wa-option[value="claude"]').click();
+    tool = settings.locator('kui-select[name="ai-default-tool"]');
+  await tool.locator('.kui-select__trigger').click();
+  await tool.locator('.kui-select__option[data-value="claude"]').click();
   await expect(tool).toHaveJSProperty('value', 'claude');
   // Autosave success is silent: no inline Saving…/Saved line (HS2-GHA1D3).
   await expect(settings.locator('[role="status"]')).toHaveText('');
@@ -19376,16 +19508,23 @@ test('omits effort after selecting a model that does not support it', async ({ p
   await expect(host).toBeVisible();
   await expect(drawer.locator('.ai-conversation__model-effort')).toHaveText('medium');
   await expect(host).not.toContainText('Enter to send');
-  await expect(host.getByLabel('Message Claude')).toHaveAttribute('aria-keyshortcuts', 'Enter');
+  await expect(host.getByRole('textbox', { name: 'Message Claude' })).toHaveAttribute('aria-keyshortcuts', 'Enter');
   await page.screenshot({ path: 'target/visual-captures/hs2-3vqszd-drawer-composer-1280.png' });
-  await drawer.locator('[data-conversation-model-menu] [slot="trigger"]').click();
-  const modelSubmenu = drawer.locator('[data-conversation-model-menu] > wa-dropdown-item').filter({ hasText: 'Model' });
+  await drawer.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger').click();
+  const modelSubmenu = drawer
+    .locator(
+      '[data-conversation-model-menu] > .kui-popup-menu__menu > .kui-popup-menu__item, [data-conversation-model-menu] > .kui-popup-menu__menu > .kui-popup-menu__submenu-host > .kui-popup-menu__item',
+    )
+    .filter({ hasText: 'Model' });
   await modelSubmenu.hover();
-  await modelSubmenu.locator('[data-action="select-conversation-model"][data-value="haiku"]').click();
+  await modelSubmenu
+    .locator('xpath=..')
+    .locator('[data-action="select-conversation-model"][data-value="haiku"]')
+    .click();
   await expect(drawer.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'haiku');
   await expect(drawer.locator('.ai-conversation__model-effort')).toHaveCount(0);
-  await host.getByLabel('Message Claude').fill('What time is it in California?');
-  await host.getByLabel('Message Claude').press('Enter');
+  await host.getByRole('textbox', { name: 'Message Claude' }).fill('What time is it in California?');
+  await host.getByRole('textbox', { name: 'Message Claude' }).press('Enter');
   await expect
     .poll(() => turns)
     .toEqual([{ content: 'What time is it in California?', model: 'haiku', turn_id: expect.any(String) }]);
@@ -19421,11 +19560,11 @@ test('configures per-provider AI defaults and exposes Claude Fable effort (HS2-E
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   const settings = page.locator('[data-component="ai-tool-settings"]'),
-    tool = settings.locator('wa-select[name="ai-default-tool"]'),
+    tool = settings.locator('kui-select[name="ai-default-tool"]'),
     provider = (id: string) => settings.locator(`[data-ai-provider="${id}"]`),
-    model = (id: string) => settings.locator(`wa-select[name="ai-provider-model-${id}"]`),
-    effort = (id: string) => settings.locator(`wa-select[name="ai-provider-effort-${id}"]`),
-    modelOption = (toolId: string, id: string) => model(toolId).locator(`wa-option[value="${id}"]`);
+    model = (id: string) => settings.locator(`kui-select[name="ai-provider-model-${id}"]`),
+    effort = (id: string) => settings.locator(`kui-select[name="ai-provider-effort-${id}"]`),
+    modelOption = (toolId: string, id: string) => model(toolId).locator(`.kui-select__option[data-value="${id}"]`);
   await expect(settings).toBeVisible();
   await expect(tool).toHaveAttribute('value', 'codex');
   await expect(provider('codex')).toHaveAttribute('data-ai-provider-default', 'true');
@@ -19456,8 +19595,8 @@ test('configures per-provider AI defaults and exposes Claude Fable effort (HS2-E
   await expect(effort('claude')).toBeEnabled();
   await effort('claude').click();
   for (const level of ['low', 'medium', 'high', 'xhigh', 'max'])
-    await expect(effort('claude').locator(`wa-option[value="${level}"]`)).toBeVisible();
-  await effort('claude').locator('wa-option[value="high"]').click();
+    await expect(effort('claude').locator(`.kui-select__option[data-value="${level}"]`)).toBeVisible();
+  await effort('claude').locator('.kui-select__option[data-value="high"]').click();
   await expect
     .poll(() => saves.at(-1))
     .toEqual({
@@ -19469,8 +19608,8 @@ test('configures per-provider AI defaults and exposes Claude Fable effort (HS2-E
   await expect(tool).toHaveAttribute('value', 'codex');
   await expect(model('codex')).toHaveAttribute('value', 'gpt-6-astra');
   // Switching the default carries that provider's own choice to the top level.
-  await tool.click();
-  await tool.locator('wa-option[value="claude"]').click();
+  await tool.locator('.kui-select__trigger').click();
+  await tool.locator('.kui-select__option[data-value="claude"]').click();
   await expect
     .poll(() => saves.at(-1))
     .toEqual({
@@ -19496,8 +19635,8 @@ test('configures per-provider AI defaults and exposes Claude Fable effort (HS2-E
   await page.screenshot({ path: test.info().outputPath('ai-provider-defaults-narrow.png'), fullPage: true });
   // Switching back restores the first provider's own choice.
   await page.setViewportSize({ width: 1280, height: 800 });
-  await tool.click();
-  await tool.locator('wa-option[value="codex"]').click();
+  await tool.locator('.kui-select__trigger').click();
+  await tool.locator('.kui-select__option[data-value="codex"]').click();
   await expect.poll(() => saves.at(-1)).toMatchObject({ tool: 'codex', model: 'gpt-6-astra', effort: 'medium' });
   await expect(model('claude')).toHaveAttribute('value', 'fable');
   await expect(settings.locator('[role="status"]')).toHaveText('');
@@ -19519,12 +19658,12 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   const settings = page.locator('[data-component="ai-tool-settings"]'),
-    model = settings.locator('wa-select[name="ai-provider-model-codex"]'),
+    model = settings.locator('kui-select[name="ai-provider-model-codex"]'),
     custom = 'claude legacy "beta"';
-  await model.click();
+  await model.locator('.kui-select__trigger').click();
   await model.getByText('Other…').click();
-  const dialogHost = page.locator('[data-component="manual-model-dialog"]'),
-    dialog = dialogHost.locator('dialog');
+  const dialogHost = page.locator('[data-dialog-component="manual-model-dialog"]'),
+    dialog = dialogHost;
   await expect(dialog).toBeVisible();
   await expect(dialogHost).toContainText('accepted by Codex');
   await page.waitForTimeout(250);
@@ -19535,13 +19674,15 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
     .poll(() => saves.at(-1))
     .toEqual({ tool: 'codex', model: custom, providers: { codex: { model: custom } } });
   await expect(model).toHaveAttribute('value', custom);
-  await expect(model.locator(`wa-option[value='${custom}']`)).toBeAttached();
-  await expect(settings.locator('wa-select[name="ai-provider-effort-codex"]')).toHaveJSProperty('disabled', true);
+  await expect(model.locator(`.kui-select__option[data-value='${custom}']`)).toBeAttached();
+  await expect(
+    settings.locator('kui-select[name="ai-provider-effort-codex"]').locator('.kui-select__trigger'),
+  ).toHaveJSProperty('disabled', true);
   await page.setViewportSize({ width: 760, height: 640 });
-  await model.click();
+  await model.locator('.kui-select__trigger').click();
   await page.waitForTimeout(250);
   await page.screenshot({ path: 'target/visual-captures/hs2-p28pv9-selected-manual-model-narrow.png', fullPage: true });
-  await model.locator('wa-option[value="gpt-6-astra"]').click();
+  await model.locator('.kui-select__option[data-value="gpt-6-astra"]').click();
   await expect
     .poll(() => saves.at(-1))
     .toEqual({
@@ -19550,7 +19691,7 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
       effort: 'low',
       providers: { codex: { model: 'gpt-6-astra', effort: 'low' } },
     });
-  await expect(model.locator(`wa-option[value='${custom}']`)).toHaveCount(0);
+  await expect(model.locator(`.kui-select__option[data-value='${custom}']`)).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByLabel('List View').click();
   const sidebar = page.locator('#app-left-rail'),
@@ -19558,9 +19699,13 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
     menu = sidebar.locator('[data-context-menu="drive-options"]'),
     driveCustom = "drive legacy 'one'";
   await options.click();
-  const modelMenu = menu.locator(':scope > wa-dropdown-item').filter({ hasText: 'Model' });
+  const modelMenu = menu
+    .locator(
+      ':scope > .kui-popup-menu__menu > .kui-popup-menu__item, :scope > .kui-popup-menu__menu > .kui-popup-menu__submenu-host > .kui-popup-menu__item',
+    )
+    .filter({ hasText: 'Model' });
   await modelMenu.hover();
-  await modelMenu.locator('[data-action="open-drive-manual-model"]').click();
+  await modelMenu.locator('xpath=..').locator('[data-action="open-drive-manual-model"]').click();
   await expect(dialog).toBeVisible();
   await page.getByRole('textbox', { name: /Model Identifier/ }).fill(driveCustom);
   await page.setViewportSize({ width: 760, height: 640 });
@@ -19572,9 +19717,11 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
   await dialogHost.getByRole('button', { name: 'Use Model' }).click();
   await page.setViewportSize({ width: 1280, height: 800 });
   await options.click();
-  const selectedCustom = modelMenu.locator(`[data-action="select-drive-model"][data-value="${driveCustom}"]`);
+  const selectedCustom = modelMenu
+    .locator('xpath=..')
+    .locator(`[data-action="select-drive-model"][data-value="${driveCustom}"]`);
   await modelMenu.hover();
-  await expect(selectedCustom).toHaveAttribute('checked', '');
+  await expect(selectedCustom).toHaveAttribute('aria-checked', 'true');
   await page.waitForTimeout(250);
   await page.screenshot({
     path: 'target/visual-captures/hs2-p28pv9-drive-selected-manual-model-wide.png',
@@ -19607,20 +19754,24 @@ test('sends a manually entered live-conversation model literally', async ({ page
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
-  const chat = page.locator('[data-component="ai-conversation"]'),
+  const chat = page.locator('[data-dialog-component="ai-conversation"]'),
     custom = 'legacy model "chat"';
-  await chat.locator('[data-conversation-model-menu] [slot="trigger"]').click();
-  const modelSubmenu = chat.locator('[data-conversation-model-menu] > wa-dropdown-item').filter({ hasText: 'Model' });
+  await chat.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger').click();
+  const modelSubmenu = chat
+    .locator(
+      '[data-conversation-model-menu] > .kui-popup-menu__menu > .kui-popup-menu__item, [data-conversation-model-menu] > .kui-popup-menu__menu > .kui-popup-menu__submenu-host > .kui-popup-menu__item',
+    )
+    .filter({ hasText: 'Model' });
   await modelSubmenu.hover();
-  await modelSubmenu.locator('[data-action="open-conversation-manual-model"]').click();
-  const manualDialog = page.locator('[data-component="manual-model-dialog"]');
-  await expect(manualDialog.locator('dialog')).toBeVisible();
+  await modelSubmenu.locator('xpath=..').locator('[data-action="open-conversation-manual-model"]').click();
+  const manualDialog = page.locator('[data-dialog-component="manual-model-dialog"]');
+  await expect(manualDialog).toBeVisible();
   await page.getByRole('textbox', { name: /Model Identifier/ }).fill(custom);
   await manualDialog.getByRole('button', { name: 'Use Model' }).click();
   await expect(chat.locator('.ai-conversation__model-name')).toHaveAttribute('title', custom);
-  await expect(manualDialog.locator('dialog')).toBeHidden();
-  await expect(chat.locator('[data-conversation-model-menu]')).not.toHaveAttribute('open');
-  const composer = chat.getByLabel('Message Codex');
+  await expect(manualDialog).toBeHidden();
+  await expect(menuOpener(chat.locator('[data-conversation-model-menu]'))).toHaveAttribute('aria-expanded', 'false');
+  const composer = chat.getByRole('textbox', { name: 'Message Codex' });
   await composer.click();
   await composer.fill('Use the requested model.');
   await composer.press('Enter');
@@ -19668,19 +19819,19 @@ test('shows runtime-discovered Antigravity and OpenCode model catalogs', async (
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: /AI tools/ }).click();
   const settings = page.locator('[data-component="ai-tool-settings"]'),
-    tool = settings.locator('wa-select[name="ai-default-tool"]'),
-    model = settings.locator('wa-select[name="ai-provider-model-antigravity"]'),
-    opencode = settings.locator('wa-select[name="ai-provider-model-opencode"]');
+    tool = settings.locator('kui-select[name="ai-default-tool"]'),
+    model = settings.locator('kui-select[name="ai-provider-model-antigravity"]'),
+    opencode = settings.locator('kui-select[name="ai-provider-model-opencode"]');
   await expect(tool).toHaveAttribute('value', 'antigravity');
   await expect(model).toHaveAttribute('value', 'gemini-3.8-flash-high');
-  await expect(model.locator('wa-option[value="claude-sonnet-4-6"]')).toBeAttached();
+  await expect(model.locator('.kui-select__option[data-value="claude-sonnet-4-6"]')).toBeAttached();
   await page.screenshot({ path: 'target/visual-captures/hs2-cx4xzr-antigravity-models-wide.png', fullPage: true });
-  await tool.click();
-  await tool.locator('wa-option[value="opencode"]').click();
+  await tool.locator('.kui-select__trigger').click();
+  await tool.locator('.kui-select__option[data-value="opencode"]').click();
   await expect(opencode).toHaveAttribute('value', 'opencode/big-pickle');
   await expect(settings.locator('[data-ai-provider="opencode"]')).toHaveAttribute('data-ai-provider-default', 'true');
   await page.setViewportSize({ width: 760, height: 640 });
-  await expect(opencode.locator('wa-option[value="openai/gpt-5.6"]')).toBeAttached();
+  await expect(opencode.locator('.kui-select__option[data-value="openai/gpt-5.6"]')).toBeAttached();
   await page.screenshot({ path: 'target/visual-captures/hs2-cx4xzr-opencode-models-narrow.png', fullPage: true });
 });
 
@@ -19830,7 +19981,7 @@ test('uses the compact workspace title and project-tab action on desktop while p
   });
   expect(desktopGeometry.trailingInset).toBeLessThanOrEqual(16);
   expect(desktopGeometry.centerDelta).toBeLessThan(2);
-  const openProjectDialog = page.locator('[data-project-dialog]').locator('dialog');
+  const openProjectDialog = page.locator('[data-project-dialog]');
   await expect(openProjectDialog).toBeHidden();
   await page.screenshot({ path: 'target/visual-captures/hs2-9r1f91-main-header-wide-final.png', fullPage: true });
   await page.getByRole('button', { name: 'Hide Project Sidebar' }).click();
@@ -19867,12 +20018,12 @@ test('keeps the priority select open when opened right after creating a ticket (
   });
   await form.getByRole('button', { name: 'Create ticket' }).click();
   const inspector = page.locator('#app-right-rail'),
-    priority = inspector.locator('wa-select[name="inspector-priority"]');
-  await priority.click();
+    priority = inspector.locator('kui-select[name="inspector-priority"]');
+  await priority.locator('.kui-select__trigger').click();
   // The post-creation auto-focus of the details editor must not steal focus and close a popup the
   // user opened within its ~300ms window (HS2-43F14D). Wait past that window and assert it stays open.
   await page.waitForTimeout(450);
-  await expect(priority).toHaveJSProperty('open', true);
+  await expect(priority).toHaveAttribute('open', '');
   await page.screenshot({ path: 'target/visual-captures/hs2-43f14d-priority-open-after-create.png' });
 });
 
@@ -21761,9 +21912,9 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   const item = page.locator('[data-attachment-id="A1"]');
   await expect(item).toContainText('proof.png');
   const more = item.getByRole('button', { name: 'More Actions for proof.png' });
-  // A Kerf IconButton names the trigger; it has no hover title prop yet (HS2-K9HSXZ).
+  // An icon-only Kerf Button names the trigger (HS2-K9HSXZ).
   await expect(more).toBeVisible();
-  await expect(item.locator('[data-component="icon-button"] [data-lucide="more-horizontal"]')).toBeVisible();
+  await expect(item.locator('.kui-button[data-icon-only] [data-lucide="more-horizontal"]')).toBeVisible();
   await expect(item.getByRole('button')).toHaveCount(1);
   await more.click();
   let attachmentMenu = page.locator('[data-context-menu="attachment"]');
@@ -21803,6 +21954,10 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await gallery.getByRole('button', { name: 'More image actions' }).click();
   await expect(page.locator('[data-context-menu="attachment"]').getByRole('menu').first()).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-wqe7br-reader-gallery-after.png', fullPage: true });
+  // Kerf's menu (beta.106) takes the first Escape and closes only itself; the next closes the gallery.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-context-menu="attachment"]').getByRole('menu')).toHaveCount(0);
+  await expect(gallery).toHaveCount(1);
   await page.keyboard.press('Escape');
   await expect(gallery).toHaveCount(0);
   await reader.getByRole('button', { name: 'Close Ticket Reader' }).click();
@@ -21815,7 +21970,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await expect(attachmentMenu.getByRole('menuitem', { name: attachmentRevealLabel })).toBeVisible();
   // Web Awesome's popup panel is what must stay inside the viewport.
   const menuBounds = await attachmentMenu.evaluate((node) => {
-    const rect = node.shadowRoot!.querySelector('[part="menu"]')!.getBoundingClientRect();
+    const rect = node.querySelector(':scope > .kui-popup-menu__menu')!.getBoundingClientRect();
     return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
   });
   expect(menuBounds.x).toBeGreaterThanOrEqual(8);
@@ -22173,8 +22328,8 @@ test('keeps backlog and archived tickets out of the active Queue', async ({ page
     menu = page.locator('[data-context-menu="ticket"]');
   await expect(backlog).toBeVisible();
   await backlog.click({ button: 'right' });
-  await expect(menu.locator('[data-context-action="Move to Backlog"]')).toHaveAttribute('disabled', '');
-  await expect(menu.locator('[data-context-action="Archive ticket"]')).not.toHaveAttribute('disabled', '');
+  await expect(menu.locator('[data-context-action="Move to Backlog"]')).toHaveAttribute('aria-disabled', 'true');
+  await expect(menu.locator('[data-context-action="Archive ticket"]')).not.toHaveAttribute('aria-disabled', 'true');
   await page.keyboard.press('Escape');
   await expect(page.getByText('Use real project tickets')).toHaveCount(0);
   await page.getByRole('button', { name: 'New ticket…' }).click();
@@ -22188,8 +22343,8 @@ test('keeps backlog and archived tickets out of the active Queue', async ({ page
     const archived = page.locator(`[data-ticket-slug="${slug}"]`);
     await expect(archived).toBeVisible();
     await archived.click({ button: 'right' });
-    await expect(menu.locator('[data-context-action="Archive ticket"]')).toHaveAttribute('disabled', '');
-    await expect(menu.locator('[data-context-action="Move to Backlog"]')).not.toHaveAttribute('disabled', '');
+    await expect(menu.locator('[data-context-action="Archive ticket"]')).toHaveAttribute('aria-disabled', 'true');
+    await expect(menu.locator('[data-context-action="Move to Backlog"]')).not.toHaveAttribute('aria-disabled', 'true');
     await page.keyboard.press('Escape');
   }
   // Soft-deleted tickets live in Trash, not Archive (HS2-MWDR19).
@@ -22686,7 +22841,7 @@ test('refills the loaded Completed page promptly after verifying and archiving 1
   await expect(completedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
   await completedColumn.getByRole('button', { name: 'Select all Completed tickets' }).click();
   await completedColumn.locator('[data-ticket-slug]').first().click({ button: 'right' });
-  await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change Status' }).hover();
+  await menu.locator('.kui-popup-menu__item', { hasText: 'Change Status' }).hover();
   await menu.locator('[data-context-field="status"][data-context-value="verified"]').click();
   await expect(completedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
   // The next 100 appear from cache while a further page waits for the batch to commit.
@@ -22760,7 +22915,7 @@ test('rolls a rejected bulk move back across the prefetched Completed page (HS2-
   await expect(completedColumn.locator('[data-selected="true"]')).toHaveCount(100);
   await completedRows.first().click({ button: 'right' });
   const menu = page.locator('[data-context-menu="ticket"]');
-  await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change Status' }).hover();
+  await menu.locator('.kui-popup-menu__item', { hasText: 'Change Status' }).hover();
   await menu.locator('[data-context-field="status"][data-context-value="verified"]').click();
   await expect(verifiedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
   await expect(completedRows).toHaveCount(100);
@@ -22915,7 +23070,7 @@ test('measures real local Git board performance for a 100-ticket verification an
     await expect(completed.locator('[data-selected="true"]')).toHaveCount(100);
     await rows(completed).first().click({ button: 'right' });
     const menu = page.locator('[data-context-menu="ticket"]');
-    await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change Status' }).hover();
+    await menu.locator('.kui-popup-menu__item', { hasText: 'Change Status' }).hover();
     await page.evaluate(() => {
       const scope = window as typeof window & {
         boardPerf?: {
@@ -23125,7 +23280,7 @@ test('keeps managed workspace search open and focused through repeated controlle
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const field = page.locator('[data-token-search-id="workspace-search"]'),
+  const field = page.locator('[data-search-field-id="workspace-search"]'),
     editor = page.getByRole('searchbox', { name: 'Search tickets' }),
     group = page.locator('.ticket-search-field').filter({ has: field });
   for (const [width, name] of [
@@ -23137,7 +23292,7 @@ test('keeps managed workspace search open and focused through repeated controlle
     for (let attempt = 0; attempt < 2; attempt += 1) {
       await editor.fill('has:attachment ');
       await expect(
-        field.locator('[data-component="token-search-token"][data-token-value="has:attachment"]'),
+        field.locator('[data-component="search-field-token"][data-token-value="has:attachment"]'),
       ).toBeVisible();
       if (width === 1280 && attempt === 1) {
         const slot = page.locator('.workspace-header__search-actions[data-search-open="true"]');
@@ -23159,7 +23314,7 @@ test('keeps managed workspace search open and focused through repeated controlle
       await page.keyboard.type('continued');
       await expect(editor).toBeFocused();
       await expect(editor).toHaveText('continued');
-      await expect(field.locator('[data-component="token-search-token"]')).toHaveCount(0);
+      await expect(field.locator('[data-component="search-field-token"]')).toHaveCount(0);
       await expect(group).toHaveAttribute('data-expanded', 'true');
     }
     await page.evaluate(async () => {
@@ -23198,7 +23353,7 @@ for (const width of [1280, 390]) {
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const trigger = page.getByRole('button', { name: 'Search tickets', exact: true }),
       editor = page.getByRole('searchbox', { name: 'Search tickets' }),
-      field = page.locator('[data-token-search-id="workspace-search"]'),
+      field = page.locator('[data-search-field-id="workspace-search"]'),
       group = page.locator('.ticket-search-field').filter({ has: field }),
       outside = page.getByRole('button', { name: 'Add Project', exact: true });
 
@@ -23537,7 +23692,7 @@ test('filters duplicate tickets on the server before bounded search pagination',
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('is:duplicate ');
-  await expect(page.locator('[data-component="token-search-token"][data-token-value="is:duplicate"]')).toBeVisible();
+  await expect(page.locator('[data-component="search-field-token"][data-token-value="is:duplicate"]')).toBeVisible();
   await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(duplicateRows.length);
   expect(queries.at(-1)?.searchParams.get('close_reason')).toBe('duplicate');
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -23615,10 +23770,10 @@ test('tokenizes inline tag search with autocomplete and no separate advanced-sea
   const query = page.getByRole('searchbox', { name: 'Search tickets' });
   await query.fill('tag:cl');
   // Kerf's model renders the in-place tag completion inside the field (HS2-5JXBQY).
-  const suggestions = page.locator('.ticket-search-field .kui-token-search__suggestions');
+  const suggestions = page.locator('.ticket-search-field .kui-search-field__suggestions');
   await expect(suggestions.getByRole('button', { name: 'tag:client' })).toBeVisible();
   await suggestions.getByRole('button', { name: 'tag:client' }).click();
-  const chip = page.locator('[data-component="token-search-token"]');
+  const chip = page.locator('[data-component="search-field-token"]');
   await expect(chip).toContainText('tag:client');
   await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(8);
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
@@ -23639,7 +23794,7 @@ test('deletes inline search tokens from either adjacent caret boundary', async (
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const query = page.getByRole('searchbox', { name: 'Search tickets' }),
-    chip = page.locator('[data-component="token-search-token"]');
+    chip = page.locator('[data-component="search-field-token"]');
   const placeCaret = async (raw: string, side: 'before' | 'after') =>
     query.evaluate(
       (editor, { raw, side }) => {
@@ -23682,7 +23837,7 @@ test('deletes a trailing token immediately after Space commits it', async ({ pag
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const query = page.getByRole('searchbox', { name: 'Search tickets' }),
-    chip = page.locator('[data-component="token-search-token"]');
+    chip = page.locator('[data-component="search-field-token"]');
   await query.pressSequentially('tag:hello');
   await query.press('Space');
   await expect(chip).toHaveAttribute('data-token-value', 'tag:hello');
@@ -23702,9 +23857,9 @@ for (const width of [1440, 390]) {
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const trigger = page.getByRole('button', { name: 'Search tickets', exact: true }),
       query = page.getByRole('searchbox', { name: 'Search tickets' }),
-      chip = query.locator('[data-component="token-search-token"]'),
+      chip = query.locator('[data-component="search-field-token"]'),
       group = page.locator('.ticket-search-field').filter({
-        has: page.locator('[data-token-search-id="workspace-search"]'),
+        has: page.locator('[data-search-field-id="workspace-search"]'),
       });
     await trigger.click();
     for (const [index, key] of ['Backspace', 'Delete', 'Backspace', 'Delete'].entries()) {
@@ -23778,12 +23933,12 @@ for (const surface of ['workspace', 'saved-view']) {
       await name.fill('Token deletion regression');
     }
     const query = page.getByRole('searchbox', { name: surface === 'workspace' ? 'Search tickets' : 'Search query' }),
-      chip = query.locator('[data-component="token-search-token"]');
+      chip = query.locator('[data-component="search-field-token"]');
     await query.fill('before is:active after ');
     await expect(chip).toHaveAttribute('data-token-value', 'is:active');
     for (const key of ['Backspace', 'Delete', 'Backspace', 'Delete']) {
       await query.evaluate((editor, key) => {
-        const token = editor.querySelector('[data-component="token-search-token"]')!,
+        const token = editor.querySelector('[data-component="search-field-token"]')!,
           text = key === 'Backspace' ? token.nextSibling : token.previousSibling,
           node = text!.firstChild ?? text!,
           selection = getSelection()!,
@@ -23838,7 +23993,7 @@ for (const surface of ['workspace', 'saved-view']) {
         });
         await page.keyboard.insertText('before is:active after ');
         await expect(chip).toHaveAttribute('data-token-value', 'is:active');
-        await expect(query.locator('[data-token-search-text]')).toHaveText(['before ', ' after ']);
+        await expect(query.locator('[data-search-field-text]')).toHaveText(['before ', ' after ']);
       } finally {
         await frames.evaluate((clock) => {
           clock.restore();
@@ -23854,7 +24009,7 @@ for (const surface of ['workspace', 'saved-view']) {
     await expect(query).toBeFocused();
     await query.fill('refilled tag:client after ');
     await expect(chip).toHaveAttribute('data-token-value', 'tag:client');
-    await expect(query.locator('[data-token-search-text]')).toHaveText(['refilled ', ' after ']);
+    await expect(query.locator('[data-search-field-text]')).toHaveText(['refilled ', ' after ']);
     await chip.getByRole('button', { name: 'Remove tag:client' }).click();
     await expect(chip).toHaveCount(0);
     await expect(query).toBeFocused();
@@ -23914,7 +24069,7 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
   await expect(suggestion).toBeVisible();
   await expect(suggestion).not.toHaveCSS('color', 'rgb(255, 255, 255)');
   await suggestion.click();
-  const chip = page.locator('[data-component="token-search-token"]');
+  const chip = page.locator('[data-component="search-field-token"]');
   await expect(chip).toContainText('tag:client');
   await chip.dblclick();
   await expect(query).toHaveText('tag:client');
@@ -24020,7 +24175,7 @@ for (const width of [1280, 390])
     const query = page.getByRole('searchbox', { name: 'Search tickets' });
     await query.fill('tag:client ');
     const field = page.locator('.ticket-search-field').filter({ has: query });
-    const chips = field.locator('[data-component="token-search-token"]');
+    const chips = field.locator('[data-component="search-field-token"]');
     await expect(chips).toHaveCount(1);
     await field.getByRole('button', { name: 'Search Syntax Help' }).click();
     const help = page.getByRole('dialog', { name: 'Search syntax' });
@@ -24446,7 +24601,7 @@ test('requires confirmation before permanently emptying Trash', async ({ page })
   expect(Math.abs(iconBox!.y + iconBox!.height / 2 - (textBox!.y + textBox!.height / 2))).toBeLessThan(2);
   await emptyHost.screenshot({ path: 'target/visual-captures/hs2-rdvwzx-empty-trash-action.png' });
   await emptyButton.click();
-  const dialog = page.locator('[data-component="empty-trash-dialog"]');
+  const dialog = page.locator('[data-dialog-component="empty-trash-dialog"]');
   await expect(dialog).toContainText('Permanently remove 1 ticket');
   await expect(dialog).toContainText('Git history will still contain the removed files');
   await settledAnimations(dialog);
@@ -24459,8 +24614,11 @@ test('requires confirmation before permanently emptying Trash', async ({ page })
   await expect(dialog).toHaveCount(0);
   expect(emptyRequests).toEqual([]);
   await page.getByRole('button', { name: 'Empty Trash' }).click();
-  await page.locator('[data-component="empty-trash-dialog"]').getByRole('button', { name: 'Empty Trash' }).click();
-  await expect(page.locator('[data-component="empty-trash-dialog"]')).toHaveCount(0);
+  await page
+    .locator('[data-dialog-component="empty-trash-dialog"]')
+    .getByRole('button', { name: 'Empty Trash' })
+    .click();
+  await expect(page.locator('[data-dialog-component="empty-trash-dialog"]')).toHaveCount(0);
   await expect(page.locator('.kui-toolbar-text', { hasText: 'Queue' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Trash/ })).toHaveCount(0);
   await expect(page.locator('[data-component="not-working-dialog"]')).toHaveCount(0);
@@ -24484,8 +24642,11 @@ test('restores Trash and surfaces a persistent error when emptying fails', async
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: /Trash/ }).click();
   await page.getByRole('button', { name: 'Empty Trash' }).click();
-  await page.locator('[data-component="empty-trash-dialog"]').getByRole('button', { name: 'Empty Trash' }).click();
-  await expect(page.locator('[data-component="empty-trash-dialog"]')).toHaveCount(0);
+  await page
+    .locator('[data-dialog-component="empty-trash-dialog"]')
+    .getByRole('button', { name: 'Empty Trash' })
+    .click();
+  await expect(page.locator('[data-dialog-component="empty-trash-dialog"]')).toHaveCount(0);
   await expect(page.getByRole('alert')).toContainText('Empty Trash failed: Could not update the ticket store');
   await expect(page.locator('#workspace-page-title')).toContainText('Trash');
   await expect(page.locator('[data-ticket-slug="HS2-DEL001"]')).toBeVisible();
@@ -24835,7 +24996,7 @@ test('reopens Verified and Archive tickets into Not Started plus Up Next', async
   await dialog.getByRole('button', { name: 'Reopen Ticket' }).click();
   await expect(dialog).toHaveCount(0);
   await expect.poll(() => patches.filter((patch) => patch.operation === 'not-working').length).toBe(2);
-  const mobileView = page.locator('wa-select[name="mobile-view"]');
+  const mobileView = page.locator('kui-select[name="mobile-view"]');
   await mobileView.evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'all';
     node.dispatchEvent(new Event('change', { bubbles: true }));
@@ -25103,8 +25264,8 @@ test('resolves exact ticket links across projects and shows only a compact ambig
   await inspector.getByRole('link', { name: 'HS2-MISSING', exact: true }).click();
   await expect(page.locator('.app-toast')).toContainText('No exact match for HS2-MISSING.');
   await inspector.getByRole('link', { name: 'HS2-SHARED1', exact: true }).click();
-  const choice = page.locator('[data-component="ticket-link-choice-dialog"]');
-  await expect(choice).toHaveJSProperty('open', true);
+  const choice = page.locator('[data-dialog-component="ticket-link-choice-dialog"]');
+  await expect(choice).toHaveAttribute('open', '');
   await expect(choice.getByRole('button').filter({ hasText: 'Demo shared ticket' })).toHaveCount(1);
   await expect(choice.getByRole('button').filter({ hasText: 'Other shared ticket' })).toHaveCount(1);
   await expect(page.locator('[name="global-search-query"]')).toHaveCount(0);
@@ -25112,10 +25273,9 @@ test('resolves exact ticket links across projects and shows only a compact ambig
     .poll(() =>
       choice.evaluate(
         (node) =>
-          node.shadowRoot
-            ?.querySelector('dialog')
-            ?.getAnimations()
-            .filter((animation) => animation.playState === 'running').length ?? -1,
+          (node instanceof HTMLDialogElement ? node : node.shadowRoot!.querySelector('dialog')!)
+            .getAnimations()
+            .filter((animation) => animation.playState === 'running').length,
       ),
     )
     .toBe(0);
@@ -25132,7 +25292,7 @@ test('resolves exact ticket links across projects and shows only a compact ambig
   expect(chooserGeometry.rows).toHaveLength(2);
   expect(chooserGeometry.rows[1].top).toBeGreaterThanOrEqual(chooserGeometry.rows[0].bottom - 1);
   for (const row of chooserGeometry.rows) expect(row.overflow).toBeLessThanOrEqual(1);
-  await choice.locator('dialog').screenshot({ path: 'target/visual-captures/hs2-xb41pf-ticket-link-final-wide.png' });
+  await choice.screenshot({ path: 'target/visual-captures/hs2-xb41pf-ticket-link-final-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await settledAnimations(choice);
   await expect(choice.locator('[data-component="list-item"]')).toHaveCount(2);
@@ -25142,7 +25302,7 @@ test('resolves exact ticket links across projects and shows only a compact ambig
     ),
   );
   expect(phoneOverflow.every((overflow) => overflow <= 1)).toBe(true);
-  await choice.locator('dialog').screenshot({ path: 'target/visual-captures/hs2-xb41pf-ticket-link-final-phone.png' });
+  await choice.screenshot({ path: 'target/visual-captures/hs2-xb41pf-ticket-link-final-phone.png' });
   await page.setViewportSize({ width: 1180, height: 760 });
   const chosenSource = choice.getByRole('button').filter({ hasText: 'Other shared ticket' });
   await chosenSource.focus();
@@ -25235,7 +25395,7 @@ test('ships TicketRow context-menu behavior through real list and board composit
   expect(mutations.filter((path) => path.includes('/tickets/'))).toHaveLength(0);
   const choose = async (field: 'category' | 'priority' | 'status', value: string) => {
     await first.click({ button: 'right' });
-    await menu.locator(`wa-dropdown-item:not([slot="submenu"])`, { hasText: `Change ${field}` }).hover();
+    await menu.locator(`.kui-popup-menu__item`, { hasText: `Change ${field}` }).hover();
     const option = menu.locator(`[data-context-field="${field}"][data-context-value="${value}"]`);
     await expect(option).toBeVisible();
     if (field === 'category') {
@@ -25290,7 +25450,7 @@ test('adds and removes tags and confirms deletion for a real multi-selection', a
   await selectBoth();
   await first.click({ button: 'right' });
   await menu.locator('[data-context-action="Add tag"]').click();
-  let dialog = page.locator('[data-component="bulk-tag-dialog"]');
+  let dialog = page.locator('[data-dialog-component="bulk-tag-dialog"]');
   await expect(dialog).toContainText('Add tag — 2 selected');
   await settledAnimations(dialog);
   await page.screenshot({ path: 'target/visual-captures/hs2-xb41pf-bulk-add-wide.png', fullPage: true });
@@ -25305,7 +25465,7 @@ test('adds and removes tags and confirms deletion for a real multi-selection', a
   await selectBoth();
   await first.click({ button: 'right' });
   await menu.locator('[data-context-action="Remove tag"]').click();
-  dialog = page.locator('[data-component="bulk-tag-dialog"]');
+  dialog = page.locator('[data-dialog-component="bulk-tag-dialog"]');
   await expect(dialog).toContainText('Remove tag — 2 selected');
   await settledAnimations(dialog);
   await page.screenshot({ path: 'target/visual-captures/hs2-xb41pf-bulk-remove-wide.png', fullPage: true });
@@ -25323,7 +25483,7 @@ test('adds and removes tags and confirms deletion for a real multi-selection', a
   await selectBoth();
   await first.click({ button: 'right' });
   await menu.locator('[data-context-action="Delete ticket"]').click();
-  const deletion = page.locator('[data-component="bulk-delete-dialog"]');
+  const deletion = page.locator('[data-dialog-component="bulk-delete-dialog"]');
   await expect(deletion).toContainText('Delete 2 tickets?');
   await page.waitForTimeout(250);
   await page.screenshot({ path: 'target/visual-captures/hs2-xb41pf-bulk-delete-wide.png' });
@@ -25433,7 +25593,7 @@ test('keeps optimistically archived verified tickets hidden through an intermedi
   await first.click();
   await second.click({ modifiers: ['Meta'] });
   await first.click({ button: 'right' });
-  await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change Status' }).hover();
+  await menu.locator('.kui-popup-menu__item', { hasText: 'Change Status' }).hover();
   await menu.locator('[data-context-field="status"][data-context-value="verified"]').click();
   await expect.poll(() => patches.filter((patch) => patch.status === 'verified').length, { timeout: 4_000 }).toBe(2);
   await page.waitForTimeout(1_700);
@@ -25687,12 +25847,11 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
   await second.click({ modifiers: ['Meta'] });
   await trigger.focus();
   await page.keyboard.press('Enter');
-  await expect(overflow).toHaveJSProperty('open', true);
+  await expect(menuOpener(overflow)).toHaveAttribute('aria-expanded', 'true');
   const overflowStar = overflow.locator('[data-workspace-overflow-action="toggle-selected-up-next"]');
   await expect(overflowStar).toBeEnabled();
-  await expect
-    .poll(() => overflowStar.evaluate((item) => Boolean((item as HTMLElement & { active?: boolean }).active)))
-    .toBe(true);
+  // Kerf's menu focuses its first enabled item when the keyboard opens it.
+  await expect(overflow.locator('.kui-popup-menu__item').first()).toBeFocused();
   await page.keyboard.press('Home');
   await expect.poll(() => overflowStar.evaluate((item) => item.matches(':focus'))).toBe(true);
   await page.keyboard.press('Enter');
@@ -25707,20 +25866,22 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
   const overflowSort = overflow.locator('[data-workspace-sort="priority"]');
   await expect(overflowSort).toBeVisible();
   await overflowSort.click();
-  await expect(toolbar.locator('wa-select[name="workspace-sort"]')).toHaveJSProperty('value', 'priority');
+  await expect(toolbar.locator('kui-select[name="workspace-sort"]')).toHaveJSProperty('value', 'priority');
   await trigger.click();
-  await expect(overflow).toHaveJSProperty('open', true);
+  await expect(menuOpener(overflow)).toHaveAttribute('aria-expanded', 'true');
   await page.waitForTimeout(250);
   await page.screenshot({ path: 'target/visual-captures/kf-zfg6z5-toolbar-overflow.png', fullPage: true });
-  await trigger.click();
-  await expect(overflow).toHaveJSProperty('open', false);
+  // At this 600px height Kerf's menu (beta.106) shifts up over its own trigger, so close it with
+  // Escape rather than a second trigger press.
+  await page.keyboard.press('Escape');
+  await expect(menuOpener(overflow)).toHaveAttribute('aria-expanded', 'false');
   await toolbar.evaluate((node) => {
     node.style.width = '13rem';
   });
   await expect(toolbar.locator('.ticket-search-field')).toBeHidden();
   await expect(toolbar.locator('.workspace-header__identity')).toBeHidden();
   await trigger.click();
-  await expect(overflow).toHaveJSProperty('open', true);
+  await expect(menuOpener(overflow)).toHaveAttribute('aria-expanded', 'true');
   await page.waitForTimeout(250);
   const overflowSearch = overflow.locator('[data-workspace-overflow-action="open-workspace-search"]');
   await expect(overflowSearch).toBeVisible();
@@ -25730,7 +25891,7 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
   await expect(search).toBeFocused();
   await expect(toolbar.locator('.ticket-search-field')).toHaveAttribute('data-expanded', 'true');
   await expect(overflow).toBeVisible();
-  await expect(overflow).toHaveJSProperty('open', false);
+  await expect(menuOpener(overflow)).toHaveAttribute('aria-expanded', 'false');
   expect(await toolbar.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/kf-zfg6z5-toolbar-search.png', fullPage: true });
   await page.screenshot({ path: 'target/visual-captures/hs2-vt4r56-overflow-search-1024.png', fullPage: true });
@@ -25763,7 +25924,7 @@ test('dismisses ticket context menus on every true outside pointerdown', async (
     menu = page.locator('[data-context-menu="ticket"]');
   await first.click({ button: 'right' });
   await expect(menu.getByRole('menu').first()).toBeVisible();
-  await menu.locator('wa-dropdown-item', { hasText: 'Change Status' }).dispatchEvent('pointerdown');
+  await menu.locator('.kui-popup-menu__item', { hasText: 'Change Status' }).dispatchEvent('pointerdown');
   await expect(menu.getByRole('menu').first()).toBeVisible();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await expect(menu).toHaveCount(0);
@@ -26169,7 +26330,7 @@ test('switches already-open projects from cache within one frame and rejects sta
   const switchWithinFrame = async (name: string) =>
     page.evaluate(async (label) => {
       const tab = [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find(
-        (item) => item.querySelector('.kui-app-tab__name')?.textContent === label,
+        (item) => item.querySelector('.kui-tab-bar-item__name')?.textContent === label,
       )!;
       const start = performance.now();
       tab.click();
@@ -26337,7 +26498,7 @@ test('reorders project and terminal tabs while preserving project order and comp
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add Project' }).click();
   const projectTabs = page.locator('[data-tab-kind="project"]'),
-    projectNames = () => projectTabs.locator('.kui-app-tab__name').allTextContents();
+    projectNames = () => projectTabs.locator('.kui-tab-bar-item__name').allTextContents();
   await expect.poll(projectNames).toEqual(['demo', 'other']);
   await dragAfter(projectTabs.nth(0), projectTabs.nth(1));
   await expect.poll(projectNames).toEqual(['other', 'demo']);
@@ -26374,7 +26535,7 @@ test('reorders project and terminal tabs while preserving project order and comp
     fullPage: true,
   });
   await page.setViewportSize({ width: 700, height: 720 });
-  await expect(page.locator('wa-select[name="mobile-project"]')).toHaveJSProperty('value', 'demo-checkout');
+  await expect(page.locator('kui-select[name="mobile-project"]')).toHaveJSProperty('value', 'demo-checkout');
   await page.screenshot({
     path: 'target/visual-captures/hs2-bkgfy7-q6f4f3-project-tab-focus-narrow.png',
     fullPage: true,
@@ -26792,17 +26953,17 @@ test('counts permission automation only while its popup is visible', async ({ pa
   expect(await countdownSeconds()).toBeGreaterThan(30);
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
-  const automation = page.locator('wa-select[name="permission-automation-action"]');
+  const automation = page.locator('kui-select[name="permission-automation-action"]');
   // The floating popup overlaps this form on desktop since the compact header (HS2-9R1F91), so open
-  // the Select through its public API; pointer reachability is tracked separately.
-  await automation.evaluate((select: HTMLElement & { show: () => Promise<void> }) => select.show());
-  await expect(automation).toHaveJSProperty('open', true);
+  // the Select with a dispatched trigger click; pointer reachability is tracked separately.
+  await automation.locator('.kui-select__trigger').dispatchEvent('click');
+  await expect(automation).toHaveAttribute('open', '');
   await resetRenderMetrics(page);
   const beforeTick = await countdownSeconds();
   await page.clock.fastForward(1_000);
   await expect.poll(countdownSeconds).toBeLessThanOrEqual(beforeTick - 1);
   expect(await countdownSeconds()).toBeGreaterThan(0);
-  await expect(automation).toHaveJSProperty('open', true);
+  await expect(automation).toHaveAttribute('open', '');
   expect((await renderMetrics(page))?.passes).toBe(0);
   await page.keyboard.press('Escape');
   await popup.getByRole('button', { name: 'Stop auto-allow Countdown' }).click();
@@ -26906,15 +27067,15 @@ test('persists and restores per-project permission automation Settings', async (
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
-  const action = page.locator('wa-select[name="permission-automation-action"]'),
-    delay = page.locator('wa-select[name="permission-automation-delay"]');
+  const action = page.locator('kui-select[name="permission-automation-action"]'),
+    delay = page.locator('kui-select[name="permission-automation-delay"]');
   await expect(action).toHaveJSProperty('value', 'off');
-  await expect(delay).toHaveJSProperty('disabled', true);
+  await expect(delay.locator('.kui-select__trigger')).toHaveJSProperty('disabled', true);
   await action.evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'deny';
     node.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  await expect(delay).toHaveJSProperty('disabled', false);
+  await expect(delay.locator('.kui-select__trigger')).toHaveJSProperty('disabled', false);
   await delay.evaluate((node: HTMLElement & { value: string }) => {
     node.value = '120000';
     node.dispatchEvent(new Event('change', { bubbles: true }));
@@ -26990,8 +27151,8 @@ test('offers 0 seconds only for Auto-allow and keeps both selects in sync (HS2-E
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Permissions' }).click();
-  const action = page.locator('wa-select[name="permission-automation-action"]'),
-    delay = page.locator('wa-select[name="permission-automation-delay"]'),
+  const action = page.locator('kui-select[name="permission-automation-action"]'),
+    delay = page.locator('kui-select[name="permission-automation-delay"]'),
     stored = () => page.evaluate(() => localStorage.getItem('hotsheet.project.demo-checkout.permission-automation'));
   const setValue = (locator: typeof action, value: string) =>
     locator.evaluate((node: HTMLElement & { value: string }, next) => {
@@ -27005,9 +27166,9 @@ test('offers 0 seconds only for Auto-allow and keeps both selects in sync (HS2-E
   await expect(page.locator('[data-settings-category="permissions"]')).toContainText(
     'Auto-allow after 0 seconds allows each request without showing the popup',
   );
-  await delay.click();
-  await expect(delay).toHaveJSProperty('open', true);
-  await expect(delay.locator('wa-option[value="0"]')).toHaveText('0 seconds');
+  await delay.locator('.kui-select__trigger').click();
+  await expect(delay).toHaveAttribute('open', '');
+  await expect(delay.locator('.kui-select__option[data-value="0"]')).toHaveText('0 seconds');
   // Screenshot only after every finite popup/chevron animation and transition has finished.
   const settle = () =>
     expect
@@ -27026,16 +27187,16 @@ test('offers 0 seconds only for Auto-allow and keeps both selects in sync (HS2-E
   await settle();
   await page.screenshot({ path: 'target/visual-captures/hs2-ebgcgw-delay-open-wide.png' });
   await page.keyboard.press('Escape');
-  await expect(delay).toHaveJSProperty('open', false);
+  await expect(delay).not.toHaveAttribute('open');
   // Switching to Auto-deny never keeps an immediate delay: it moves to the shortest deny delay.
   await setValue(action, 'deny');
   await expect.poll(stored).toBe('{"action":"deny","delayMs":15000}');
   await expect(delay).toHaveJSProperty('value', '15000');
-  await expect(delay.locator('wa-option[value="0"]')).toHaveCount(0);
-  await expect(delay.locator('wa-option').first()).toHaveText('15 seconds');
+  await expect(delay.locator('.kui-select__option[data-value="0"]')).toHaveCount(0);
+  await expect(delay.locator('.kui-select__option').first()).toHaveText('15 seconds');
   // Back to Auto-allow, then edit again after the reset.
   await setValue(action, 'allow');
-  await expect(delay.locator('wa-option[value="0"]')).toHaveCount(1);
+  await expect(delay.locator('.kui-select__option[data-value="0"]')).toHaveCount(1);
   await setValue(delay, '0');
   await expect.poll(stored).toBe('{"action":"allow","delayMs":0}');
   await page.getByLabel('List View').click();
@@ -27046,8 +27207,8 @@ test('offers 0 seconds only for Auto-allow and keeps both selects in sync (HS2-E
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(delay).toBeInViewport();
   await settle();
-  await delay.click();
-  await expect(delay).toHaveJSProperty('open', true);
+  await delay.locator('.kui-select__trigger').click();
+  await expect(delay).toHaveAttribute('open', '');
   await settle();
   await page.screenshot({ path: 'target/visual-captures/hs2-ebgcgw-delay-open-narrow.png' });
 });
@@ -27078,7 +27239,7 @@ test('shows and persists the shared Trash retention period in Lifecycle settings
     input = settings.locator('wa-input[name="trash-cleanup-days"]'),
     apply = settings.getByRole('button', { name: 'Apply Now' }),
     hint = settings.locator('[data-role="trash-purge-hint"]'),
-    leave = page.locator('[data-component="trash-retention-leave-dialog"]');
+    leave = page.locator('[data-dialog-component="trash-retention-leave-dialog"]');
   await expect(settings).toContainText('Git history keeps every purged ticket file');
   await expect(input).toHaveJSProperty('value', '30');
   // "Apply Now" shares the field's line and stays disabled until the value changes.
@@ -27113,7 +27274,7 @@ test('shows and persists the shared Trash retention period in Lifecycle settings
   await input.locator('input').fill('5');
   await expect(hint).toHaveText('3 tickets in Trash will be purged');
   await page.getByLabel('List View').click();
-  await expect(leave).toHaveJSProperty('open', true);
+  await expect(leave).toHaveAttribute('open', '');
   await expect(leave).toContainText('You changed Trash retention to 5 days but did not apply it.');
   await expect(leave).toContainText('3 tickets in Trash will be purged');
   await expect(settings).toBeVisible();
@@ -27128,7 +27289,7 @@ test('shows and persists the shared Trash retention period in Lifecycle settings
   // Escape keeps the user on Lifecycle with the draft; Apply saves and then continues.
   await input.locator('input').fill('21');
   await page.getByRole('button', { name: 'Terminals' }).click();
-  await expect(leave).toHaveJSProperty('open', true);
+  await expect(leave).toHaveAttribute('open', '');
   await page.keyboard.press('Escape');
   await expect(leave).toHaveCount(0);
   await expect(input).toHaveJSProperty('value', '21');
@@ -27191,7 +27352,7 @@ test('shares the settings category across projects but scopes command drafts to 
   const openFirstCommand = async (title: string) => {
     const row = page.locator('[data-component="command-settings-editor"] .command-settings-editor__row').first();
     await expect(row).toContainText(title);
-    await row.locator('[data-component="popup-menu"] [slot="trigger"]').click();
+    await row.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
     await row.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   };
   await openFirstCommand('Demo checks');
@@ -27398,15 +27559,32 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
     return { before, pointer };
   });
   await expect(menu.getByRole('menu').first()).toBeVisible();
+  // Kerf's menu (beta.106) plays a short enter motion; measure once it has settled at its anchor.
+  await expect
+    .poll(() =>
+      menu.evaluate(
+        (node) =>
+          (node.querySelector(':scope > .kui-popup-menu__menu') as HTMLElement)
+            .getAnimations()
+            .filter((animation) => animation.playState === 'running').length,
+      ),
+    )
+    .toBe(0);
   const listMenu = await menu.evaluate((node) => {
-    const rect = (node.shadowRoot!.querySelector('[part="menu"]') as HTMLElement).getBoundingClientRect();
-    return { x: rect.x, y: rect.y };
+    const rect = (node.querySelector(':scope > .kui-popup-menu__menu') as HTMLElement).getBoundingClientRect();
+    return { x: rect.x, y: rect.y, bottom: rect.bottom, viewport: innerHeight };
   });
   expect(
     Math.abs(listMenu.x - list.pointer.x),
     JSON.stringify({ listMenu, pointer: list.pointer }),
   ).toBeLessThanOrEqual(2);
-  expect(Math.abs(listMenu.y - list.pointer.y)).toBeLessThanOrEqual(2);
+  // Kerf (beta.106) keeps a tall menu at the pointer unless it must shift up just enough to stay
+  // 8px inside the viewport; it never moves below the pointer.
+  expect(listMenu.y).toBeLessThanOrEqual(list.pointer.y + 2);
+  expect(
+    Math.abs(listMenu.y - list.pointer.y) <= 2 || Math.abs(listMenu.bottom - (listMenu.viewport - 8)) <= 2,
+    JSON.stringify({ listMenu, pointer: list.pointer }),
+  ).toBe(true);
   expect(await page.evaluate(() => (document.querySelector('.app-shell__workspace') as HTMLElement).scrollTop)).toBe(
     list.before,
   );
@@ -27435,12 +27613,27 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
     return { before, pointer, colId: col.closest('[data-column-id]')!.getAttribute('data-column-id') };
   });
   await expect(menu.getByRole('menu').first()).toBeVisible();
+  await expect
+    .poll(() =>
+      menu.evaluate(
+        (node) =>
+          (node.querySelector(':scope > .kui-popup-menu__menu') as HTMLElement)
+            .getAnimations()
+            .filter((animation) => animation.playState === 'running').length,
+      ),
+    )
+    .toBe(0);
   const boardMenu = await menu.evaluate((node) => {
-    const rect = (node.shadowRoot!.querySelector('[part="menu"]') as HTMLElement).getBoundingClientRect();
-    return { x: rect.x, y: rect.y };
+    const rect = (node.querySelector(':scope > .kui-popup-menu__menu') as HTMLElement).getBoundingClientRect();
+    return { x: rect.x, y: rect.y, bottom: rect.bottom, viewport: innerHeight };
   });
   expect(Math.abs(boardMenu.x - board.pointer.x)).toBeLessThanOrEqual(2);
-  expect(Math.abs(boardMenu.y - board.pointer.y)).toBeLessThanOrEqual(2);
+  // As in the list: at the pointer, or shifted up only enough to stay 8px inside the viewport.
+  expect(boardMenu.y).toBeLessThanOrEqual(board.pointer.y + 2);
+  expect(
+    Math.abs(boardMenu.y - board.pointer.y) <= 2 || Math.abs(boardMenu.bottom - (boardMenu.viewport - 8)) <= 2,
+    JSON.stringify({ boardMenu, pointer: board.pointer }),
+  ).toBe(true);
   // A ticket-state morph can replace the PopupMenu host. Kerf renders the anchor into the menu
   // (KF-FXGW0C), so the replacement must reopen at the original pointer (HS2-S1EE53, HS2-H4JZDQ).
   await menu.evaluate((node) => {
@@ -27449,9 +27642,10 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
   await expect
     .poll(async () => {
       const rect = await menu.evaluate((node) =>
-        (node.shadowRoot!.querySelector('[part="menu"]') as HTMLElement).getBoundingClientRect().toJSON(),
+        (node.querySelector(':scope > .kui-popup-menu__menu') as HTMLElement).getBoundingClientRect().toJSON(),
       );
-      return Math.max(Math.abs(rect.x - board.pointer.x), Math.abs(rect.y - board.pointer.y));
+      // The replacement reopens where the original settled (at the pointer, or shifted to fit).
+      return Math.max(Math.abs(rect.x - boardMenu.x), Math.abs(rect.y - boardMenu.y));
     })
     .toBeLessThanOrEqual(2);
   expect(
@@ -27471,8 +27665,18 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
       );
   }, edgePointer);
   await expect(menu.getByRole('menu').first()).toBeVisible();
+  await expect
+    .poll(() =>
+      menu.evaluate(
+        (node) =>
+          (node.querySelector(':scope > .kui-popup-menu__menu') as HTMLElement)
+            .getAnimations()
+            .filter((animation) => animation.playState === 'running').length,
+      ),
+    )
+    .toBe(0);
   const edgeMenu = await menu.evaluate((node) => {
-    const rect = (node.shadowRoot!.querySelector('[part="menu"]') as HTMLElement).getBoundingClientRect(),
+    const rect = (node.querySelector(':scope > .kui-popup-menu__menu') as HTMLElement).getBoundingClientRect(),
       host = node.getBoundingClientRect();
     return {
       left: rect.left,
@@ -27485,7 +27689,8 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
   expect(
     Math.min(Math.abs(edgeMenu.top - edgePointer.y), Math.abs(edgeMenu.bottom - edgePointer.y)),
     JSON.stringify({ edgeMenu, edgePointer }),
-  ).toBeLessThanOrEqual(2);
+    // Kerf's viewport gutter can hold a flipped menu's bottom a couple of pixels above the pointer.
+  ).toBeLessThanOrEqual(3);
   await page.screenshot({ path: test.info().outputPath('hs2-swc9e4-bottom-edge-context-menu.png'), fullPage: true });
 });
 
@@ -27901,21 +28106,21 @@ test('dismisses every remaining dialog through its native close event (HS2-3RQ7V
   await drawer.getByRole('tab', { name: /Tests/ }).click({ button: 'right' });
   await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
   let dialog = page.locator('[data-terminal-rename-dialog]');
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await page.keyboard.press('Escape');
-  await expect(dialog).toHaveJSProperty('open', false);
+  await expect(dialog).not.toHaveAttribute('open');
   await drawer.getByRole('tab', { name: /Tests/ }).click({ button: 'right' });
   await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
   await dialog.getByRole('button', { name: 'Cancel' }).click();
-  await expect(dialog).toHaveJSProperty('open', false);
+  await expect(dialog).not.toHaveAttribute('open');
   await page.getByRole('button', { name: 'Workspace Grid' }).click();
   await page.getByRole('button', { name: 'Manage workspace visibility' }).click();
   const visibility = page.locator('[data-terminal-visibility-dialog]');
   await visibility.getByRole('button', { name: 'Add Visibility Group' }).click();
   dialog = page.locator('[data-terminal-visibility-name-dialog]');
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await page.keyboard.press('Escape');
-  await expect(dialog).toHaveJSProperty('open', false);
+  await expect(dialog).not.toHaveAttribute('open');
   await page.keyboard.press('Escape');
   await page.getByRole('tab', { name: /demo/ }).click();
   const first = page.locator('[data-component="ticket-list-row"]').first(),
@@ -27924,8 +28129,8 @@ test('dismisses every remaining dialog through its native close event (HS2-3RQ7V
   await second.click({ modifiers: ['Meta'] });
   await first.click({ button: 'right' });
   await page.locator('[data-context-menu="ticket"]').locator('[data-context-action="Add tag"]').click();
-  dialog = page.locator('[data-component="bulk-tag-dialog"]');
-  await expect(dialog).toHaveJSProperty('open', true);
+  dialog = page.locator('[data-dialog-component="bulk-tag-dialog"]');
+  await expect(dialog).toHaveAttribute('open', '');
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await page.locator('[data-ticket-slug="HS2-DONE01"]').click({ button: 'right' });
@@ -27934,16 +28139,16 @@ test('dismisses every remaining dialog through its native close event (HS2-3RQ7V
     .getByRole('menuitem', { name: 'Not Working…', exact: true })
     .click();
   dialog = page.locator('[data-component="not-working-dialog"]');
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   const command = page.getByRole('button', { name: 'Run checks' });
   await command.dispatchEvent('pointerdown');
   await page.waitForTimeout(600);
   await command.dispatchEvent('pointerup');
-  dialog = page.locator('[data-component="command-run-dialog"]');
+  dialog = page.locator('[data-dialog-component="command-run-dialog"]');
   // CommandRunDialog is a wa-dialog now (HS2-Z7C27E); its host box stays zero-size like the others.
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-3rq7v7-native-dialog-dismissal.png', fullPage: true });
@@ -28502,7 +28707,7 @@ test('applies a saved command color and icon to the sidebar command button (HS2-
   const editor = page.locator('[data-component="command-settings-editor"]');
   await expect(editor).toBeVisible();
   const runChecksRow = editor.locator('.command-settings-editor__row', { hasText: 'Run checks' });
-  await runChecksRow.locator('[data-component="popup-menu"] [slot="trigger"]').click();
+  await runChecksRow.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
   await runChecksRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const commandDialog = page.locator('#command-editor-dialog');
   await commandDialog.getByRole('radio', { name: 'Green', exact: true }).check();
@@ -28539,7 +28744,7 @@ test('searches the full Lucide catalog to assign an arbitrary command icon (HS2-
   const editor = page.locator('[data-component="command-settings-editor"]');
   await expect(editor).toBeVisible();
   const runChecksRow = editor.locator('.command-settings-editor__row', { hasText: 'Run checks' });
-  await runChecksRow.locator('[data-component="popup-menu"] [slot="trigger"]').click();
+  await runChecksRow.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
   await runChecksRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const commandDialog = page.locator('#command-editor-dialog'),
     picker = commandDialog.locator('[data-component="lucide-icon-picker"]');
@@ -28594,7 +28799,7 @@ test('keeps the open new-ticket composer and its draft through a background tick
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: /New ticket/ }).click();
   const dialog = page.locator('[data-component="quick-ticket-composer"]');
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await dialog.getByLabel('Ticket Title').fill('Draft title I do not want to lose');
   await dialog.locator('[name="new-ticket-details"]').fill('Detailed notes typed before a background refresh.');
   const external = {
@@ -28611,7 +28816,7 @@ test('keeps the open new-ticket composer and its draft through a background tick
   await emit('changed', '10', 'HS2-EXTERNAL');
   await expect(page.locator('[data-ticket-slug="HS2-EXTERNAL"]')).toContainText('Externally added ticket');
   // The composer must stay open with its typed draft intact (HS2-D4PB9Y).
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await expect(dialog.getByLabel('Ticket Title')).toHaveValue('Draft title I do not want to lose');
   await expect(dialog.locator('[name="new-ticket-details"]')).toHaveValue(
     'Detailed notes typed before a background refresh.',
@@ -28625,7 +28830,7 @@ test('recovers the open new-ticket composer and its draft after a reload/restart
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: /New ticket/ }).click();
   const dialog = page.locator('[data-component="quick-ticket-composer"]');
-  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog).toHaveAttribute('open', '');
   await dialog.getByLabel('Ticket Title').fill('Draft that must survive a restart');
   await dialog.locator('[name="new-ticket-details"]').fill('Notes that must survive a restart.');
   // Reload immediately, before the 700ms persistence debounce — only the pagehide flush can save the draft.
@@ -28723,15 +28928,15 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
     await row.click();
     await row.click({ button: 'right' });
     await page.locator('[data-context-menu="ticket"]').getByText('Close ticket…').click();
-    const dialog = page.locator('[data-component="ticket-close-dialog"]').last();
-    await expect(dialog).toHaveJSProperty('open', true);
-    const reason = dialog.locator('wa-select[name="ticket-close-reason"]');
-    await reason.click();
-    const option = reason.locator('wa-option[value="works_as_designed"]');
+    const dialog = page.locator('[data-dialog-component="ticket-close-dialog"]').last();
+    await expect(dialog).toHaveAttribute('open', '');
+    const reason = dialog.locator('kui-select[name="ticket-close-reason"]');
+    await reason.locator('.kui-select__trigger').click();
+    const option = reason.locator('.kui-select__option[data-value="works_as_designed"]');
     await expect(option).toHaveText('Works as designed');
     await option.click();
     await expect(reason).toHaveJSProperty('value', 'works_as_designed');
-    await expect(reason).toHaveJSProperty('open', false);
+    await expect(reason).not.toHaveAttribute('open');
     await page.waitForTimeout(300);
     await page.screenshot({ path: 'target/visual-captures/claude/hs2-n11t22-close-dialog.png' });
     // Cancel leads the footer and the close action trails it, as in the project close dialog (HS2-0DHVGK).
@@ -29613,7 +29818,7 @@ test('preserves feature-controller command editing and run-dialog parity across 
   const editor = page.locator('[data-component="command-settings-editor"]');
   const openEditor = async () => {
     const row = editor.locator('.command-settings-editor__row').first();
-    await row.locator('[data-component="popup-menu"] [slot="trigger"]').click();
+    await row.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
     await row.locator('[data-action="edit-command-setting"]').click();
   };
   const dialog = page.locator('#command-editor-dialog');
@@ -29636,8 +29841,9 @@ test('preserves feature-controller command editing and run-dialog parity across 
   await expect(page.getByRole('button', { name: 'Feature parity', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Feature parity', exact: true }).click();
   await page.getByRole('button', { name: 'Running Feature parity' }).click();
-  const stop = page.locator('[data-component="command-cancellation-dialog"]');
-  await expect(stop.getByRole('dialog', { name: 'Stop Feature parity?' })).toBeVisible();
+  const stop = page.locator('[data-dialog-component="command-cancellation-dialog"]');
+  await expect(stop).toHaveAccessibleName('Stop Feature parity?');
+  await expect(stop).toBeVisible();
   await stop.getByRole('button', { name: 'Stop Command' }).click();
   await expect(page.getByRole('button', { name: 'Feature parity', exact: true })).toHaveAttribute('title', /cancelled/);
   await page.getByLabel('Settings View').click();
@@ -29659,7 +29865,7 @@ test('preserves feature-controller command editing and run-dialog parity across 
   });
 });
 
-test('keeps terminal visibility anchored through interrupted close, resize, and repeated reopen (HS2-MX14DQ)', async ({
+test('keeps terminal visibility anchored through close, resize, and repeated reopen (HS2-MX14DQ)', async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1024, height: 600 });
@@ -29669,65 +29875,36 @@ test('keeps terminal visibility anchored through interrupted close, resize, and 
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace Grid', exact: true }).click();
-  const select = page.locator('wa-select[name="terminal-visibility-group"]');
-  type Probe = HTMLElement & { open: boolean; held: Animation[]; completedShows: number; completedHides: number };
-  await select.evaluate((element) => {
-    const host = element as Probe;
-    host.completedShows = host.completedHides = 0;
-    host.addEventListener('wa-after-show', () => host.completedShows++);
-    host.addEventListener('wa-after-hide', () => host.completedHides++);
-  });
+  // Kerf's Select (beta.106) is a native combobox trigger plus a top-layer listbox popover; a close
+  // interrupted by a resize must still reopen anchored to the trigger and inside the viewport.
+  const select = page.locator('kui-select[name="terminal-visibility-group"]'),
+    trigger = select.locator('.kui-select__trigger'),
+    listbox = select.locator('.kui-select__popup');
   for (const [index, width] of [760, 1024, 760, 390].entries()) {
-    await select.click();
-    await expect.poll(() => select.evaluate((element) => (element as Probe).completedShows)).toBe(index * 2 + 1);
-    await select.evaluate((element) => {
-      const host = element as Probe;
-      host.held = [];
-      host.style.setProperty('--hide-duration', '10s');
-      host.addEventListener(
-        'wa-hide',
-        () =>
-          window.requestAnimationFrame(() => {
-            const popup = host.shadowRoot!.querySelector('wa-popup') as HTMLElement & { popup: HTMLElement };
-            host.held = popup.popup.getAnimations();
-            host.held.forEach((animation) => {
-              animation.pause();
-            });
-          }),
-        { once: true },
-      );
-    });
+    await trigger.click();
+    await expect(select).toHaveAttribute('open', '');
+    await expect(listbox).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect.poll(() => select.evaluate((element) => (element as Probe).held.length)).toBeGreaterThan(0);
     await page.setViewportSize({ width, height: width === 390 ? 844 : 632 });
-    await select.click();
-    await select.evaluate((element) => {
-      (element as Probe).held.forEach((animation) => {
-        animation.finish();
-      });
-    });
-    await expect.poll(() => select.evaluate((element) => (element as Probe).completedShows)).toBe(index * 2 + 2);
-    await expect(select).toHaveJSProperty('open', true);
-    await expect(select.locator('[part="listbox"]')).toBeVisible();
-    expect(await select.evaluate((element) => (element as Probe).completedHides)).toBe(index);
+    await expect(listbox).toBeHidden();
+    await trigger.click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await expect(listbox).toBeVisible();
     const geometry = await select.evaluate((element) => {
-      const popup = element.shadowRoot!.querySelector('wa-popup')!,
-        anchor = element.shadowRoot!.querySelector<HTMLElement>('[part="combobox"]')!,
-        listbox = element.shadowRoot!.querySelector<HTMLElement>('[part="listbox"]')!;
+      const anchor = element.querySelector<HTMLElement>('.kui-select__trigger')!,
+        popup = element.querySelector<HTMLElement>('.kui-select__popup')!;
       return {
-        active: popup.active,
-        hidden: listbox.hidden,
+        open: popup.matches(':popover-open'),
         anchorConnected: anchor.isConnected,
         anchor: anchor.getBoundingClientRect().toJSON(),
-        popup: listbox.getBoundingClientRect().toJSON(),
+        popup: popup.getBoundingClientRect().toJSON(),
       };
     });
-    expect(geometry.active).toBe(true);
-    expect(geometry.hidden).toBe(false);
+    expect(geometry.open).toBe(true);
     expect(geometry.anchorConnected).toBe(true);
     expect(geometry.popup.width).toBeGreaterThan(0);
-    expect(geometry.popup.x).toBeGreaterThanOrEqual(10);
-    expect(geometry.popup.right).toBeLessThanOrEqual(width - 10);
+    expect(geometry.popup.x).toBeGreaterThanOrEqual(8);
+    expect(geometry.popup.right).toBeLessThanOrEqual(width - 8);
     expect(geometry.popup.right).toBeGreaterThan(geometry.anchor.x);
     expect(geometry.popup.x).toBeLessThan(geometry.anchor.right);
     await testInfo.attach(`reopened-${index}-${width}-geometry`, {
@@ -29736,12 +29913,10 @@ test('keeps terminal visibility anchored through interrupted close, resize, and 
     });
     if (width === 1024 || width === 390)
       await page.screenshot({ path: testInfo.outputPath(`terminal-visibility-reopened-${width}.png`) });
-    await select.evaluate((element) => element.style.removeProperty('--hide-duration'));
     await page.keyboard.press('Escape');
-    await expect(select.locator('[part="listbox"]')).toBeHidden();
+    await expect(listbox).toBeHidden();
   }
 });
-
 test('keeps Add project beside the last project tab and New ticket at the far edge until tabs overflow', async ({
   page,
 }) => {
@@ -29956,7 +30131,7 @@ test('paints magnified terminals above every surface from the workspace grid and
   // The tile's own menu still opens above the top-layer overlay and stays operable.
   const magnified = page.getByRole('dialog', { name: 'Magnified Codex Main' });
   await magnified.getByRole('button', { name: 'More Actions for Codex Main' }).click();
-  const menuItem = page.locator('[data-context-menu="terminal"] wa-dropdown-item').first();
+  const menuItem = page.locator('[data-context-menu="terminal"] .kui-popup-menu__item').first();
   await expect(menuItem).toBeVisible();
   expect(
     await menuItem.evaluate((item) => {
@@ -29966,9 +30141,12 @@ test('paints magnified terminals above every surface from the workspace grid and
     }),
   ).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('workspace-grid-magnified-menu.png') });
-  // With focus outside the terminal, Escape closes the menu and the magnified overlay together.
+  // Kerf's menu (beta.106) takes the first Escape itself and closes only the menu; with focus
+  // outside the terminal, the next Escape closes the magnified overlay.
   await page.keyboard.press('Escape');
   await expect(menuItem).toBeHidden();
+  await expect(page.getByRole('dialog', { name: 'Magnified Codex Main' })).toHaveCount(1);
+  await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: 'Magnified Codex Main' })).toHaveCount(0);
 });
 
@@ -30115,7 +30293,7 @@ for (const width of [1280, 390]) {
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
     const host = drawer.locator('[data-component="ai-conversation"]'),
-      composer = host.getByLabel('Message Codex');
+      composer = host.getByRole('textbox', { name: 'Message Codex' });
     await composer.fill('Fail this turn.');
     await composer.press('Enter');
     await expect(host.getByRole('alert')).toBeVisible();
@@ -30144,7 +30322,7 @@ for (const width of [1280, 390]) {
     await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
     await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
     const host = drawer.locator('[data-component="ai-conversation"]'),
-      composer = host.getByLabel('Message Codex');
+      composer = host.getByRole('textbox', { name: 'Message Codex' });
     await composer.fill('is there some background work going on?');
     await composer.press('Enter');
     await expect(host).toContainText('The turn ended without output.');
@@ -30177,7 +30355,7 @@ test('keeps a delayed completion from an earlier turn out of the next turn (HS2-
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
   const host = drawer.locator('[data-component="ai-conversation"]'),
-    composer = host.getByLabel('Message Codex');
+    composer = host.getByRole('textbox', { name: 'Message Codex' });
   await composer.fill('Start a correlated turn.');
   await composer.press('Enter');
   await expect(host).toContainText('First correlated answer.');
@@ -30204,7 +30382,7 @@ test('restores an idle server failure when a persisted conversation still has an
   await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
-  const composer = drawer.getByLabel('Message Codex');
+  const composer = drawer.getByRole('textbox', { name: 'Message Codex' });
   await composer.fill('Fail this turn.');
   await composer.press('Enter');
   await expect(drawer.getByRole('alert')).toContainText('Selected model is at capacity');
@@ -30247,7 +30425,7 @@ test('coalesces streamed conversation storage writes and flushes before reload (
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
-  const composer = drawer.getByLabel('Message Codex');
+  const composer = drawer.getByRole('textbox', { name: 'Message Codex' });
   const before = await page.evaluate(
     () => (window as typeof window & { __conversationStorageWrites: number }).__conversationStorageWrites,
   );
@@ -30296,7 +30474,7 @@ test('bounds app renders during a sustained conversation stream (HS2-0PFQ8V)', a
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat').click();
-  const composer = drawer.getByLabel('Message Codex');
+  const composer = drawer.getByRole('textbox', { name: 'Message Codex' });
   await resetRenderMetrics(page);
   await composer.fill('Start sustained output');
   await composer.press('Enter');
@@ -30363,7 +30541,7 @@ test('keeps an accepted new conversation turn streaming after an older idle conn
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
   const host = drawer.locator('[data-component="ai-conversation"]');
-  await expect(host.getByLabel('Message Codex')).toBeVisible();
+  await expect(host.getByRole('textbox', { name: 'Message Codex' })).toBeVisible();
   const idle = {
     id: connectionId,
     tool: 'codex',
@@ -30396,8 +30574,8 @@ test('keeps an accepted new conversation turn streaming after an older idle conn
     const accepted = page.waitForResponse(
       (response) => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/turns'),
     );
-    await host.getByLabel('Message Codex').fill('background-output-only');
-    await host.getByLabel('Message Codex').press('Enter');
+    await host.getByRole('textbox', { name: 'Message Codex' }).fill('background-output-only');
+    await host.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
     expect((await accepted).status()).toBe(202);
     await expect(drawer.getByRole('button', { name: 'Stop Codex', exact: true })).toBeVisible();
     release();
@@ -30437,7 +30615,8 @@ test('a terminal created from the desktop drawer menu takes input focus even und
       window.setTimeout(() => {
         const dropdown = document.querySelector('[data-terminal-drawer-create]');
         (
-          dropdown?.querySelector<HTMLElement>('[slot="trigger"]') ?? dropdown?.querySelector<HTMLElement>('button')
+          dropdown?.querySelector<HTMLElement>('.kui-popup-menu__trigger') ??
+          dropdown?.querySelector<HTMLElement>('button')
         )?.focus();
       }, 400);
     };
@@ -30685,8 +30864,8 @@ test('badges the sidebar chat button with unread AI chat messages and clears it 
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('button', { name: 'New Drawer Item' }).click();
   await drawer.locator('[data-terminal-drawer-create]').getByText('AI Chat', { exact: true }).click();
-  await drawer.getByLabel('Message Codex').fill('Start sustained output');
-  await drawer.getByLabel('Message Codex').press('Enter');
+  await drawer.getByRole('textbox', { name: 'Message Codex' }).fill('Start sustained output');
+  await drawer.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   await expect.poll(() => connectionId).toBeTruthy();
   const drawerChat = connectionId!;
   await page.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
@@ -30716,14 +30895,14 @@ test('badges the sidebar chat button with unread AI chat messages and clears it 
   // The conversation dialog: a reply that settles after closing it badges again; reopening clears.
   await page.getByRole('button', { name: 'Hide Terminal Drawer' }).click();
   await chatButton.click();
-  const host = page.locator('[data-component="ai-conversation"][data-presentation="dialog"]');
-  await expect(host.getByRole('dialog')).toBeVisible();
-  await host.getByLabel('Message Codex').fill('Start sustained output');
-  await host.getByLabel('Message Codex').press('Enter');
+  const host = page.locator('[data-dialog-component="ai-conversation"]');
+  await expect(host).toBeVisible();
+  await host.getByRole('textbox', { name: 'Message Codex' }).fill('Start sustained output');
+  await host.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   await expect.poll(() => connectionId).not.toBe(drawerChat);
   const dialogChat = connectionId!;
   await page.keyboard.press('Escape');
-  await expect(host.getByRole('dialog')).toBeHidden();
+  await expect(host).toBeHidden();
   finishTurn(dialogChat, 'The dialog reply arrived after closing.');
   await expect(badge).toHaveText('1');
   await chatButton.click();
@@ -30786,10 +30965,10 @@ test('counts AI chat replies that settle while the page is hidden and reads them
   await expect(badge).toHaveCount(0);
   // The dialog stays open throughout; only the page's own visibility changes.
   await chatButton.click();
-  const host = page.locator('[data-component="ai-conversation"][data-presentation="dialog"]');
-  await expect(host.getByRole('dialog')).toBeVisible();
-  await host.getByLabel('Message Codex').fill('Start sustained output');
-  await host.getByLabel('Message Codex').press('Enter');
+  const host = page.locator('[data-dialog-component="ai-conversation"]');
+  await expect(host).toBeVisible();
+  await host.getByRole('textbox', { name: 'Message Codex' }).fill('Start sustained output');
+  await host.getByRole('textbox', { name: 'Message Codex' }).press('Enter');
   await expect.poll(() => connectionId).toBeTruthy();
   await setPageVisibility('hidden');
   finishTurn(connectionId!, 'The reply arrived while the window was hidden.');

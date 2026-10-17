@@ -50,8 +50,8 @@ vi.mock('kerfjs', async (original) => {
 // Kerf's ContentItem keyboard wiring binds native listeners on its root; the fake document body has
 // none, and these transition tests cover the app's own delegated handlers.
 vi.mock('@kerfjs/ui/wire-content-items', () => ({ wireContentItems: () => () => undefined }));
-// Likewise Kerf's Composer wiring (HS2-T5JVY3) binds native listeners on the delegated root.
-vi.mock('@kerfjs/ui/wire-composers', () => ({ wireComposers: () => () => undefined }));
+// Likewise Kerf's MessageComposer wiring (HS2-T5JVY3) binds native listeners on the delegated root.
+vi.mock('@kerfjs/ui/wire-message-composers', () => ({ wireMessageComposers: () => () => undefined }));
 // And Kerf's FilePicker wiring, which TicketAttachments routes its Add trigger and drop zone through
 // (HS2-VHY325).
 vi.mock('@kerfjs/ui/wire-file-pickers', () => ({ wireFilePickers: () => () => undefined }));
@@ -112,7 +112,7 @@ describe('extracted handlers retain live application bindings', () => {
     expect(selected.value).toEqual(['c']);
   });
 
-  it('consumes a shared long-press flag once and preserves captured native dialog close', () => {
+  it('consumes a shared long-press flag once and preserves a captured Kerf dialog close request', () => {
     let fired = false;
     const run = vi.fn(async () => {}),
       dialog = signal<string | undefined>('command'),
@@ -140,16 +140,16 @@ describe('extracted handlers retain live application bindings', () => {
     click(new Event('click'), button);
     expect(run).toHaveBeenCalledExactlyOnceWith('check');
     const close = handler(
-      'wa-hide',
-      '[data-component="command-run-dialog"], [data-component="command-cancellation-dialog"]',
+      'kui-request-close',
+      '[data-dialog-component="command-run-dialog"], [data-dialog-component="command-cancellation-dialog"]',
       true,
     );
-    close(new Event('wa-hide'), button);
+    close(new Event('kui-request-close'), button);
     expect(dialog.value).toBeUndefined();
     expect(confirmation.value).toBe(false);
     dialog.value = 'reopened';
     confirmation.value = true;
-    close(new Event('wa-hide'), button);
+    close(new Event('kui-request-close'), button);
     expect(dialog.value).toBeUndefined();
     expect(confirmation.value).toBe(false);
   });
@@ -192,7 +192,7 @@ describe('extracted handlers retain live application bindings', () => {
     expect(showPopover).toHaveBeenCalledTimes(2);
   });
 
-  it('synchronizes repeated native project dismissal through the original signals', () => {
+  it('synchronizes repeated Kerf project dialog close requests through the original signals', () => {
     const opened = signal(true),
       recovery = signal<ProjectLifecycleInteractionsDependencies['unhealthyServerRecovery']['value']>({
         store: '/store',
@@ -202,17 +202,17 @@ describe('extracted handlers retain live application bindings', () => {
       projectDialogOpen: opened,
       unhealthyServerRecovery: recovery,
     } as ProjectLifecycleInteractionsDependencies);
-    const hide = handler('wa-hide', '[data-project-dialog]');
-    hide(new Event('wa-hide'), target({}));
+    const hide = handler('kui-request-close', '[data-project-dialog]');
+    hide(new Event('kui-request-close'), target({}));
     expect(opened.value).toBe(false);
     expect(recovery.value).toBeUndefined();
     opened.value = true;
     recovery.value = { store: '/new-store', expected: { pid: 8, url: 'http://localhost', started_at: '' } };
-    hide(new Event('wa-hide'), target({}));
+    hide(new Event('kui-request-close'), target({}));
     expect(opened.value).toBe(false);
     expect(recovery.value).toBeUndefined();
   });
-  it('keeps the saved-view name input separate through native dismissal, busy protection, and reset', () => {
+  it('keeps the saved-view name input separate through a Kerf close request, busy protection, and reset', () => {
     const opened = signal(true),
       busy = signal(false),
       name = signal(''),
@@ -233,7 +233,7 @@ describe('extracted handlers retain live application bindings', () => {
       ),
     ).toBe(false);
     const inputName = handler('input', '[name="saved-view-name"]');
-    const hide = handler('wa-hide', '[data-component="saved-view-dialog"]');
+    const hide = handler('kui-request-close', '[data-dialog-component="saved-view-dialog"]');
     inputName(new Event('input'), Object.assign(target({}), { value: 'Named later' }));
     // The stale error clears at once; the name publishes on the typing pause or blur (HS2-9CWDSB).
     expect(error.value).toBe('');
@@ -241,13 +241,13 @@ describe('extracted handlers retain live application bindings', () => {
     handler('focusout', '[name="saved-view-name"]')(new Event('focusout'), target({}));
     expect(name.value).toBe('Named later');
     busy.value = true;
-    const prevented = new Event('wa-hide', { cancelable: true });
+    const prevented = new Event('kui-request-close', { cancelable: true });
     hide(prevented, target({}));
     expect(prevented.defaultPrevented).toBe(true);
     expect(close).not.toHaveBeenCalled();
     expect(opened.value).toBe(true);
     busy.value = false;
-    hide(new Event('wa-hide'), target({}));
+    hide(new Event('kui-request-close'), target({}));
     expect(opened.value).toBe(false);
     opened.value = true;
     name.value = '';
@@ -601,7 +601,7 @@ describe('interaction group teardown (HS2-NZT3MT)', () => {
     expect(signals.every((item) => item && !item.aborted)).toBe(true);
 
     // Before teardown the delegated project-dialog dismissal reaches its handler.
-    dispatchDelegated(new Event('wa-hide'), '[data-project-dialog]', target({}));
+    dispatchDelegated(new Event('kui-request-close'), '[data-project-dialog]', target({}));
     expect(opened.value).toBe(false);
 
     teardown();
@@ -619,7 +619,7 @@ describe('interaction group teardown (HS2-NZT3MT)', () => {
     ]);
     // An event dispatched after teardown no longer reaches the handler.
     opened.value = true;
-    dispatchDelegated(new Event('wa-hide'), '[data-project-dialog]', target({}));
+    dispatchDelegated(new Event('kui-request-close'), '[data-project-dialog]', target({}));
     expect(opened.value).toBe(true);
 
     // Repeating the teardown is a no-op rather than a second removal pass.

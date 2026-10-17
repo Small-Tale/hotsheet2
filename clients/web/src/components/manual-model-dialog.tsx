@@ -1,7 +1,5 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
-import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
-import '@kerfjs/ui/surface-scaffold/register';
 
 import { remify } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
@@ -25,34 +23,34 @@ export function ManualModelDialog({ state }: { state?: ManualModelDialogState })
   if (!state) return <></>;
   return (
     <div data-key="manual-model-dialog">
-      <DialogSurface preferredWidth={remify(448)} viewportGutter={remify(16)}>
-        <wa-dialog
-          data-key="manual-model-dialog"
-          class="manual-model-dialog"
-          {...COMMANDS_AND_AI_TARGETS.manualModelDialog.attrs}
-          label="Other model"
-          aria-label="Other model"
-          open={Boolean(state) || undefined}
-          data-controlled-open={String(Boolean(state))}
-        >
-          <form {...COMMANDS_AND_AI_ACTIONS.submitManualModel.attrs}>
-            <List className="manual-model-dialog__form" gap="l">
-              <Text tone="quiet">Enter the exact model identifier accepted by {state.providerName}.</Text>
-              <wa-input name="manual-model" label="Model Identifier" value={state.value} required autofocus />
-              <footer>
-                <Row vAlign="middle" gap="xs">
-                  <Spacer flex />
-                  <wa-button appearance="plain" type="button" {...COMMANDS_AND_AI_ACTIONS.cancelManualModel.attrs}>
-                    Cancel
-                  </wa-button>
-                  <wa-button appearance="accent" type="submit">
-                    Use Model
-                  </wa-button>
-                </Row>
-              </footer>
-            </List>
-          </form>
-        </wa-dialog>
+      <DialogSurface
+        label="Other model"
+        preferredWidth={remify(448)}
+        viewportGutter={remify(16)}
+        className="manual-model-dialog"
+        rootAttributes={{
+          'data-key': 'manual-model-dialog',
+          ...COMMANDS_AND_AI_TARGETS.manualModelDialog.attrs,
+          'data-controlled-open': 'true',
+        }}
+      >
+        <form {...COMMANDS_AND_AI_ACTIONS.submitManualModel.attrs}>
+          <List className="manual-model-dialog__form" gap="l">
+            <Text tone="quiet">Enter the exact model identifier accepted by {state.providerName}.</Text>
+            <wa-input name="manual-model" label="Model Identifier" value={state.value} required autofocus />
+            <footer>
+              <Row vAlign="middle" gap="xs">
+                <Spacer flex />
+                <wa-button appearance="plain" type="button" {...COMMANDS_AND_AI_ACTIONS.cancelManualModel.attrs}>
+                  Cancel
+                </wa-button>
+                <wa-button appearance="accent" type="submit">
+                  Use Model
+                </wa-button>
+              </Row>
+            </footer>
+          </List>
+        </form>
       </DialogSurface>
     </div>
   );

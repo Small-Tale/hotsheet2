@@ -56,7 +56,7 @@ describe('ProjectCloseDialog', () => {
         state: { projectId: 'demo', projectName: 'Demo', resources, selectedKey: 'ai-chat:chat-one' },
       }),
     );
-    expect(markup).toContain('data-component="project-close-dialog"');
+    expect(markup).toContain('data-dialog-component="project-close-dialog"');
     expect(markup).toContain('label="Close Demo?"');
     expect(markup).toContain('2 running terminals and 1 AI chat will stay active unless you close them first.');
     expect(markup).toContain('aria-label="Running Terminals and AI Chats"');
@@ -167,10 +167,13 @@ describe('ProjectCloseDialog', () => {
     expect(markup).toContain('data-scrollable="true"');
     expect(markup).toContain('data-control-insets="trbl"');
     expect(markup).toContain('data-project-close-consequences');
-    expect(markup).toContain('slot="footer"');
+    // DialogSurface's `footer` prop renders its native footer (Kerf UI beta.106).
+    expect(markup).toContain('class="kui-dialog-surface__footer"');
     expect(markup).toContain('data-component="row"');
     // Cancel leads the footer, a flexible Kerf Spacer follows, then Keep Running and Stop & Close (HS2-0DHVGK).
-    const footer = markup.slice(markup.indexOf('slot="footer"')),
+    const footer = markup.slice(
+        markup.indexOf('class="kui-dialog-surface__footer"') + 'class="kui-dialog-surface__footer">'.length,
+      ),
       cancel = footer.indexOf('Cancel'),
       spacer = footer.indexOf('kui-spacer'),
       keep = footer.indexOf('Keep Running'),

@@ -89,7 +89,7 @@ export const demoCatalog: DemoCategory[] = [
         'notification-center',
       ]),
       cataloged('search-scope-toolbar', ['floating-toolbar', 'toolbar-control-group']),
-      cataloged('project-tab', ['app-tab']),
+      cataloged('project-tab', ['tab-bar-item']),
       cataloged('project-tabs', ['project-tab', 'select']),
       demo('resizable-region', 'ResizableRegion', 'Accessible horizontal and vertical shell splitters.'),
       cataloged('connection-state-banner'),
@@ -134,7 +134,7 @@ export const demoCatalog: DemoCategory[] = [
             'toolbar',
             'toolbar-text',
             'toolbar-control-group',
-            'app-tab',
+            'tab-bar-item',
             'ticket-info-panel',
             'ticket-timeline',
             'ticket-code-review',
@@ -223,7 +223,7 @@ export const demoCatalog: DemoCategory[] = [
     id: 'terminal',
     name: 'Drawer and terminals',
     demos: [
-      cataloged('terminal-drawer', ['app-tab', 'list-item', 'list-header', 'ai-conversation', 'terminal-key-bar']),
+      cataloged('terminal-drawer', ['tab-bar-item', 'list-item', 'list-header', 'ai-conversation', 'terminal-key-bar']),
       cataloged('terminal-dashboard', [
         'fixed-aspect-terminal-card',
         'floating-toolbar',
@@ -257,7 +257,7 @@ export const demoCatalog: DemoCategory[] = [
       cataloged('app-empty-state'),
       cataloged('app-error', ['state-banner']),
       cataloged('content-transition'),
-      demo('app-tab', 'AppTab', 'Shared project and terminal tab geometry, state, and close action.'),
+      demo('tab-bar-item', 'TabBarItem', 'Shared project and terminal tab geometry, state, and close action.'),
       demo('select', 'Select', 'Compact icon-bearing single-value selection control.'),
       demo('toolbar', 'Toolbar', 'Shared leading, center, and trailing toolbar geometry.', [
         'toolbar-text',

@@ -741,7 +741,7 @@ export function AttachmentGallery({
                   return ChoiceChips<string>({
                     name: 'gallery-intents',
                     label: 'Annotation intents',
-                    multiple: true,
+                    multiple: 'toggle',
                     size: 'compact',
                     action: ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryIntent.value,
                     value: implicit ? [fallback] : (selectedEditableAnnotation.intents ?? []),

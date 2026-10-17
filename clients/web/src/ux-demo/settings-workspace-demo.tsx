@@ -46,7 +46,7 @@ export function SettingsWorkspaceSettings() {
       />
       <Select
         name="workspace-permission-action"
-        label="Permission automation"
+        label="Permission Automation"
         hint="Applies to the Permissions category: any decision other than Off enables the delay."
         value={settingsWorkspaceSettings.permissionAction.value}
         choices={[

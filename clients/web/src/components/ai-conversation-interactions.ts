@@ -1,4 +1,4 @@
-import { wireComposers } from '@kerfjs/ui/wire-composers';
+import { wireMessageComposers } from '@kerfjs/ui/wire-message-composers';
 import { delegate, delegateCapture } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -50,9 +50,14 @@ function pickedMessage(target: Element) {
 export function wireAiConversation(root: HTMLElement, bindings: AiConversationBindings): () => void {
   const lifetime = createScope();
   lifetime.add(
-    delegateCapture(root, 'wa-hide', COMMANDS_AND_AI_TARGETS.aiConversation.selector, (event, target) => {
-      if (isConversationSurfaceLifecycleEvent(event, target)) bindings.onHidden();
-    }),
+    delegateCapture(
+      root,
+      'kui-request-close',
+      COMMANDS_AND_AI_TARGETS.aiConversationDialog.selector,
+      (event, target) => {
+        if (isConversationSurfaceLifecycleEvent(event, target)) bindings.onHidden();
+      },
+    ),
   );
   lifetime.add(
     delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.saveConversation.selector, () => {
@@ -122,8 +127,8 @@ export function wireAiConversation(root: HTMLElement, bindings: AiConversationBi
       field.setSelectionRange(value.length, value.length);
     }),
   );
-  // Kerf owns Enter-to-send (IME, empty, and auto-repeat guards) for the submitOnEnter Composer.
-  lifetime.add(wireComposers(root));
+  // Kerf owns Enter-to-send (IME, empty, and auto-repeat guards) for the submitOnEnter MessageComposer.
+  lifetime.add(wireMessageComposers(root));
   // The drawer chat's transcript clears its floating composer by the measured height (HS2-W0KJVQ).
   lifetime.add(wireEmbeddedComposerClearance(root));
   lifetime.add(

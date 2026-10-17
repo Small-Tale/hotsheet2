@@ -130,7 +130,7 @@ test('gives a focused mobile terminal the visual viewport until explicit exit (H
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const shell = page.locator('[data-component="app-shell"]'),
     drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-app-tab__select').click();
+  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-tab-bar-item__select').click();
   const terminalInput = drawer.locator('.terminal-session:not([hidden]) .xterm-helper-textarea');
   await terminalInput.focus();
   await expect(terminalInput).toBeFocused();
@@ -162,7 +162,7 @@ test('gives a focused mobile terminal the visual viewport until explicit exit (H
   await expect(drawer).toHaveAttribute('data-focus-mode', 'false');
   await expect(drawer.locator('.terminal-drawer__rail')).toBeVisible();
   await expect(
-    drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-app-tab__select'),
+    drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-tab-bar-item__select'),
   ).toBeFocused();
   await terminalInput.focus();
   await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
@@ -187,7 +187,7 @@ test('exposes the phone text-size control in drawer focus mode, cycling with a t
   await openDemoProject(page, true);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-app-tab__select').click();
+  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-tab-bar-item__select').click();
   await drawer.locator('.terminal-session:not([hidden]) .xterm-helper-textarea').focus();
   await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
   // The drawer focus mode now offers the same text-size control as the magnified terminal (HS2-ZSFAHF).
@@ -573,8 +573,9 @@ test('tapping a ticket auto-opens the inspector overlay, and tap-away returns to
   await expect(scrim).toBeVisible();
   await expect(page.locator('#app-right-rail')).toBeVisible();
   // Ordinary Select content retains its name and selected text alongside the custom project control.
-  await expect(inspector.getByRole('combobox', { name: 'Category', exact: true })).toHaveValue('Bug');
-  await expect(inspector.locator('wa-select[name="inspector-category"]')).toHaveJSProperty('value', 'bug');
+  // Kerf's Select trigger is a native combobox button that shows the chosen label.
+  await expect(inspector.getByRole('combobox', { name: 'Category', exact: true })).toContainText('Bug');
+  await expect(inspector.locator('kui-select[name="inspector-category"]')).toHaveJSProperty('value', 'bug');
 
   // Tap-away on the scrim returns to the list; the selection persists so tapping reopens it.
   await scrim.click({ position: { x: 10, y: 400 } });
@@ -659,22 +660,22 @@ test('mobile replaces the project tabs and view title with select controls (HS2-
   await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
 
   // The horizontal project tab strip is replaced by a project Select; no project tabs render.
-  const projectSelect = page.locator('wa-select[name="mobile-project"]');
+  const projectSelect = page.locator('kui-select[name="mobile-project"]');
   await expect(projectSelect).toBeVisible();
   await expect(projectSelect).toHaveAttribute('value', 'demo-checkout');
   const projectCombobox = page.getByRole('combobox', { name: 'Project', exact: true });
-  await expect(projectCombobox).toHaveValue('demo');
+  await expect(projectCombobox).toContainText('demo');
   await expect(projectCombobox).toHaveAccessibleName('Project');
   await expect(page.locator('[data-tab-kind="project"]')).toHaveCount(0);
   await expect(page.locator('.project-tab-bar--mobile')).toBeVisible();
 
   // The page-header view title is replaced by a view Select that switches ticket views.
-  const viewSelect = page.locator('wa-select[name="mobile-view"]');
+  const viewSelect = page.locator('kui-select[name="mobile-view"]');
   await expect(viewSelect).toBeVisible();
   await expect(viewSelect.locator('xpath=..')).toHaveAttribute('data-component', 'toolbar-control-group');
   await expect(viewSelect).toHaveAttribute('value', 'all');
-  await viewSelect.click();
-  await viewSelect.locator('wa-option[value="backlog"]').click();
+  await viewSelect.locator('.kui-select__trigger').click();
+  await viewSelect.locator('.kui-select__option[data-value="backlog"]').click();
   await expect(viewSelect).toHaveJSProperty('value', 'backlog');
   // Programmatic state → live control (bidirectional binding).
   await viewSelect.evaluate((node: HTMLElement & { value: string }) => {
@@ -686,19 +687,19 @@ test('mobile replaces the project tabs and view title with select controls (HS2-
   // Adding a project opens and activates it; the project Select then switches the active project.
   await page.locator('.project-tab-bar--mobile').getByRole('button', { name: 'Add Project' }).click();
   await expect(projectSelect).toHaveAttribute('value', 'other-checkout');
-  await expect(projectCombobox).toHaveValue('other');
+  await expect(projectCombobox).toContainText('other');
   await expect(projectSelect.locator('.project-tab-bar__selected-project')).toHaveText('other');
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toBeVisible();
-  await projectSelect.click();
-  await projectSelect.locator('wa-option[value="demo-checkout"]').click();
+  await projectSelect.locator('.kui-select__trigger').click();
+  await projectSelect.locator('.kui-select__option[data-value="demo-checkout"]').click();
   await expect(projectSelect).toHaveJSProperty('value', 'demo-checkout');
   await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
   await expect(projectCombobox).toHaveAccessibleName('Project');
-  await expect(projectCombobox).toHaveValue('demo');
+  await expect(projectCombobox).toContainText('demo');
   await expect(projectSelect.locator('.project-tab-bar__selected-project')).toHaveText('demo');
   const projectGeometry = await projectSelect.evaluate((element) => ({
     host: element.getBoundingClientRect().height,
-    control: element.shadowRoot!.querySelector('[part~="combobox"]')!.getBoundingClientRect().height,
+    control: element.querySelector(':scope > .kui-select__trigger')!.getBoundingClientRect().height,
   }));
   expect(Math.abs(projectGeometry.host - projectGeometry.control)).toBeLessThan(1);
   await page.screenshot({ path: testInfo.outputPath('q6-beta28-mobile-project-accessible-name.png') });
@@ -718,13 +719,13 @@ test('mobile toolbar drops the project name, uses borderless content-fit selects
   await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
   // 1. The project name is gone from the main toolbar (the mobile project Select carries it instead).
   await expect(page.locator('.workspace-header__identity')).toHaveCount(0);
-  // 2 & 3. The project and view selects are borderless (their combobox part has no border).
-  // Kerf's toolbar-borderless Select presentation keeps a transparent 1px border in the combobox
-  // part, so "borderless" means no visible border, not a zero border width.
+  // 2 & 3. The project and view selects are borderless (their combobox trigger has no border).
+  // Kerf's toolbar-borderless Select presentation may keep a transparent 1px border on the trigger,
+  // so "borderless" means no visible border, not a zero border width.
   const comboBorderless = (name: string) =>
-    page.locator(`wa-select[name="${name}"]`).evaluate((node) => {
-      const part = (node as HTMLElement).shadowRoot?.querySelector('[part~="combobox"]');
-      if (!part) return 'no-part';
+    page.locator(`kui-select[name="${name}"]`).evaluate((node) => {
+      const part = node.querySelector(':scope > .kui-select__trigger');
+      if (!part) return 'no-trigger';
       const style = getComputedStyle(part);
       return style.borderTopWidth === '0px' || style.borderTopColor === 'rgba(0, 0, 0, 0)';
     });
@@ -732,7 +733,7 @@ test('mobile toolbar drops the project name, uses borderless content-fit selects
   expect(await comboBorderless('mobile-view')).toBe(true);
   // ...and sized to the selected label rather than stretching to fill the bar.
   const [selectBox, barBox] = await Promise.all([
-    page.locator('wa-select[name="mobile-project"]').boundingBox(),
+    page.locator('kui-select[name="mobile-project"]').boundingBox(),
     page.locator('.project-tab-bar--mobile').boundingBox(),
   ]);
   expect(selectBox!.width).toBeLessThan(barBox!.width * 0.5);
@@ -820,7 +821,7 @@ for (const initialWidth of [390, 1280]) {
     await openDemoProject(page);
     const shell = page.locator('[data-component="app-shell"]'),
       editor = page.getByRole('searchbox', { name: 'Search tickets' }),
-      field = page.locator('[data-token-search-id="workspace-search"]'),
+      field = page.locator('[data-search-field-id="workspace-search"]'),
       group = page.locator('.ticket-search-field').filter({ has: field });
     const expectContained = async (mobile: boolean) => {
       await expect.poll(() => shell.evaluate((node) => node.scrollLeft)).toBe(0);
@@ -923,7 +924,7 @@ for (const initialWidth of [390, 1280]) {
     await page.setViewportSize({ width: initialWidth, height: 844 });
     await openDemoProject(page);
     const editor = page.getByRole('searchbox', { name: 'Search tickets' });
-    const field = page.locator('[data-token-search-id="workspace-search"]');
+    const field = page.locator('[data-search-field-id="workspace-search"]');
     const outside = page.getByRole('button', { name: 'Add Project', exact: true });
     // Input tasks may arrive before the next frame. Hold only frames scheduled by
     // the Clear click so Playwright's ordinary pointer actionability still runs.
@@ -970,7 +971,7 @@ for (const initialWidth of [390, 1280]) {
       await expect(editor).toBeFocused();
       for (let attempt = 0; attempt < 2; attempt += 1) {
         await editor.fill('has:attachment ');
-        await expect(editor.locator('[data-component="token-search-token"]')).toHaveCount(1);
+        await expect(editor.locator('[data-component="search-field-token"]')).toHaveCount(1);
         await page.getByRole('button', { name: 'Clear search', exact: true }).click();
         // Never refocus or wait for focus before typing: c is also the page's create shortcut.
         await page.keyboard.type('continued');
@@ -1019,7 +1020,7 @@ test('blacks out the app behind a focused drawer terminal so nothing shows aroun
   await openDemoProject(page, true);
   await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
-  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-app-tab__select').click();
+  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-tab-bar-item__select').click();
   await drawer.locator('.terminal-session:not([hidden]) .xterm-helper-textarea').focus();
   await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
   // Shrink the focused terminal to a sub-viewport box (as the iOS keyboard does), leaving a gap below.
@@ -1060,11 +1061,11 @@ test('opens the drawer grid tile More actions menu from a phone tap, in front of
   await more.tap();
   const menu = page.locator('[data-context-menu="terminal"]');
   await expect(menu.getByRole('menu', { name: 'Terminal Actions' })).toBeVisible();
-  await expect(menu.locator('wa-dropdown-item')).toHaveCount(1);
+  await expect(menu.locator('.kui-popup-menu__item')).toHaveCount(1);
   await expect(menu.getByText('Hide Terminal')).toHaveCount(0);
   // The menu must be painted in front of the terminal grid, not merely present in the DOM.
   const inFront = await menu.evaluate((node) => {
-    const box = node.shadowRoot!.querySelector('[part="menu"]')!.getBoundingClientRect(),
+    const box = node.querySelector(':scope > .kui-popup-menu__menu')!.getBoundingClientRect(),
       hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
     return Boolean(hit && (hit === node || node.contains(hit)));
   });
@@ -1088,7 +1089,7 @@ test('opens the drawer grid tile More actions menu from a phone tap, in front of
   await expect(menu.getByRole('menu').first()).toBeVisible();
   // The magnified terminal is a top-layer popover (HS2-Z9PQSC); the menu's own popup opens in the top
   // layer after it, so probe the visible menu item rather than the wrapper's positioning anchor.
-  const item = menu.locator('wa-dropdown-item').first();
+  const item = menu.locator('.kui-popup-menu__item').first();
   await expect(item).toBeVisible();
   expect(
     await item.evaluate((node) => {
@@ -1158,7 +1159,10 @@ test('keeps overflowing phone drawer tabs and actions reachable with whole-tab s
   await expect.poll(() => strip.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
   await strip.screenshot({ path: testInfo.outputPath('hs2-6y8hsh-strip-after-reveal-390.png') });
   await drawer.getByRole('button', { name: 'New Drawer Item' }).tap();
-  await expect(drawer.locator('[data-terminal-drawer-create]')).toHaveAttribute('open');
+  await expect(drawer.locator('[data-terminal-drawer-create] > .kui-popup-menu__trigger')).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
   await page.keyboard.press('Escape');
   await gridTab.tap();
   await expect(drawer).toHaveAttribute('data-mode', 'grid');
@@ -1178,7 +1182,7 @@ test('resizing the phone drawer never focuses its terminal, only a tap does (HS2
     drawer = page.locator('[data-component="terminal-drawer"]'),
     terminalInput = drawer.locator('.terminal-session:not([hidden]) .xterm-helper-textarea');
   // Opening a terminal tab on a phone does not auto-focus it either.
-  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-app-tab__select').tap();
+  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-tab-bar-item__select').tap();
   await expect(drawer.locator('.terminal-session:not([hidden]) [data-geometry-ready="true"]')).toHaveCount(1);
   await expect(terminalInput).not.toBeFocused();
   await expect(shell).toHaveAttribute('data-terminal-focus-mode', 'false');
@@ -1251,7 +1255,7 @@ test('phone terminal drawer keeps the home-indicator inset below every content v
     .toBe(true);
   await page.screenshot({ path: testInfo.outputPath('drawer-grid-one-row.png'), animations: 'disabled' });
   // A single terminal view ends above the inset too.
-  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-app-tab__select').click();
+  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"] .kui-tab-bar-item__select').click();
   await expect(drawer.locator('.terminal-session:not([hidden]) [data-geometry-ready="true"]')).toHaveCount(1);
   await expect.poll(() => gap('[data-component="terminal-drawer"] .terminal-session:not([hidden])')).toEqual([34]);
   await page.screenshot({ path: testInfo.outputPath('drawer-single-terminal.png'), animations: 'disabled' });

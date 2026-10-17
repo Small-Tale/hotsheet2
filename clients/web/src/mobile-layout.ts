@@ -45,6 +45,8 @@ export function shouldAutoOpenInspectorOnTap(input: {
  * backdrop and the main column never match, so a tap there still closes the panel.
  */
 export const SIDE_PANEL_PORTAL_SELECTOR = [
+  // A Kerf DialogSurface is a native <dialog> with an implicit (not attribute) dialog role (beta.106).
+  'dialog',
   'wa-dialog',
   'wa-drawer',
   '[role="dialog"]',

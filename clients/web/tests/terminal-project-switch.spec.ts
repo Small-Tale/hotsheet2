@@ -152,12 +152,12 @@ const narrow = (page: Page) => page.viewportSize()!.width <= 1024;
 // Wide layouts switch projects with tabs; phones use the project Select.
 async function switchTo(page: Page, id: string) {
   if (!narrow(page)) return tab(page, id).click();
-  const select = page.locator('wa-select[name="mobile-project"]');
+  const select = page.locator('kui-select[name="mobile-project"]');
   await select.click();
-  await select.locator(`wa-option[value="${id}"]`).click();
+  await select.locator(`.kui-select__option[data-value="${id}"]`).click();
 }
 async function expectActive(page: Page, id: string) {
-  if (narrow(page)) await expect(page.locator('wa-select[name="mobile-project"]')).toHaveJSProperty('value', id);
+  if (narrow(page)) await expect(page.locator('kui-select[name="mobile-project"]')).toHaveJSProperty('value', id);
   else await expect(tab(page, id)).toHaveAttribute('aria-selected', 'true');
 }
 const dedicated = (page: Page, id: string) =>
@@ -239,7 +239,7 @@ for (const [width, height] of [
     if (width <= 1024) return; // phones switch projects through a picker without tab close buttons
     await tab(page, 'b').hover();
     await page.getByRole('button', { name: 'Close Project B' }).click();
-    const dialog = page.locator('[data-component="project-close-dialog"]');
+    const dialog = page.locator('[data-dialog-component="project-close-dialog"]');
     await expect(dialog).toHaveJSProperty('open', true);
     // The production presenter opens the dialog on its safe Cancel action (HS2-9YGNMX).
     await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();

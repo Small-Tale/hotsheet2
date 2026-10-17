@@ -45,10 +45,10 @@ describe('wireBulkTicketDialog (HS2-RWY78R)', () => {
     expect(input.focus).toHaveBeenCalled();
   });
 
-  it('dismisses on cancel and on the dialog’s own wa-hide, not a nested popup’s', () => {
+  it('dismisses on cancel and on the dialog’s own close request, not a nested element’s', () => {
     handler('click', '[data-action="cancel-bulk-ticket-action"]')(new Event('click'), {} as Element);
     const dialog = {} as Element,
-      hide = handler('wa-hide', '[data-component="bulk-tag-dialog"]');
+      hide = handler('kui-request-close', '[data-dialog-component="bulk-tag-dialog"]');
     hide({ target: {} } as unknown as Event, dialog);
     hide({ target: dialog } as unknown as Event, dialog);
     expect(bindings.dismiss.mock.calls).toEqual([['cancel'], ['hide']]);

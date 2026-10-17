@@ -63,11 +63,11 @@ export const TERMINALS_ACTIONS = {
 export const TERMINALS_TARGETS = {
   terminalTile: attr('data-component', 'terminal-tile'),
   terminalKeyBar: attr('data-component', 'terminal-key-bar'),
-  terminalCopyDialog: attr('data-component', 'terminal-copy-dialog'),
-  terminalPasteDialog: attr('data-component', 'terminal-paste-dialog'),
+  terminalCopyDialog: attr('data-dialog-component', 'terminal-copy-dialog'),
+  terminalPasteDialog: attr('data-dialog-component', 'terminal-paste-dialog'),
   terminalEditMenu: attr('data-context-menu', 'terminal-edit'),
   terminalViewport: attr('data-component', 'terminal-viewport'),
   terminalVisibilityGroupField: attr('name', 'terminal-visibility-group'),
   workspaceChatTile: attr('data-component', 'workspace-chat-tile'),
-  projectCloseDialog: attr('data-component', 'project-close-dialog'),
+  projectCloseDialog: attr('data-dialog-component', 'project-close-dialog'),
 } as const;

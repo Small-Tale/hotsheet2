@@ -2,7 +2,7 @@
  * Publish the drawer chat's floating composer clearance (HS2-W0KJVQ).
  *
  * The embedded conversation floats its composer form (the running-turn pill or may-be-stuck banner
- * plus the Kerf Composer) over the bottom of its transcript. Instead of reserving a fixed padding,
+ * plus the Kerf MessageComposer) over the bottom of its transcript. Instead of reserving a fixed padding,
  * this wiring measures how far the form covers the conversation's block end and publishes it on the
  * conversation root as Kerf's inherited `--kui-scroll-clearance-block-end` context. The transcript is
  * a Kerf `List` with `scrollClearance="block-end"`, so it adds exactly that clearance inside its own

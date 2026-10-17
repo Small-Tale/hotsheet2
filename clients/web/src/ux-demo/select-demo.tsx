@@ -26,7 +26,7 @@ const choices = [
 export function SelectDemo() {
   return (
     <CatalogExample label="Interactive" viewport={{ width: 'control' }}>
-      <Select name="example-select" label="Ticket type" value="feature" choices={choices} />
+      <Select name="example-select" label="Ticket Type" value="feature" choices={choices} />
     </CatalogExample>
   );
 }

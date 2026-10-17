@@ -114,7 +114,7 @@ export function wireProjectDialogDemo(root: HTMLElement): () => void {
     ),
   );
   listeners.add(
-    delegate(root, 'wa-hide', `${scope} wa-dialog`, () => {
+    delegate(root, 'kui-request-close', `${scope} dialog.kui-dialog-surface`, () => {
       open.value = false;
     }),
   );

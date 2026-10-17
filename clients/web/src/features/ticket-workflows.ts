@@ -115,6 +115,7 @@ import {
   type TicketView,
 } from '../ticket-views';
 import { ensureVideoPoster } from '../video-posters';
+import { quietWebAwesomeNativeDialog } from '../wa-dialog-semantics';
 import { deleteDraftFiles, saveDraftFile } from '../workspace-session';
 
 interface TicketWorkflowMutableState {
@@ -1525,7 +1526,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         (target) =>
           target instanceof HTMLElement &&
           (target.matches(
-            'input, textarea, select, wa-input, wa-textarea, wa-select, [role="textbox"], [contenteditable]:not([contenteditable="false"])',
+            'input, textarea, select, wa-input, wa-textarea, kui-select, [role="textbox"], [contenteditable]:not([contenteditable="false"])',
           ) ||
             Boolean(target.closest('wa-dialog[open]'))),
       );
@@ -1917,7 +1918,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         const dialog = document.querySelector<Control>('[data-component="not-working-dialog"]'),
-          native = dialog?.shadowRoot?.querySelector<HTMLDialogElement>('dialog');
+          // The host is the one exposed dialog; Web Awesome 3.14 would also label the shadow dialog.
+          native = dialog ? quietWebAwesomeNativeDialog(dialog) : null;
         if (!native?.open) dialog?.show?.();
         dialog?.querySelector<HTMLTextAreaElement>('[name="not-working-note"]')?.focus();
       }),

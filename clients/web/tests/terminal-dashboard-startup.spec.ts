@@ -206,14 +206,14 @@ test('reveals a restored terminal workspace atomically and separates All Project
       );
   await expect(drawer).toBeVisible();
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
-  await expect(drawer.locator('[data-component="app-tab"][data-tab-id="demo-shell"]')).toHaveCount(1);
-  await expect(drawer.locator('[data-component="app-tab"][data-tab-id="other-shell"]')).toHaveCount(0);
+  await expect(drawer.locator('[data-component="tab-bar-item"][data-tab-id="demo-shell"]')).toHaveCount(1);
+  await expect(drawer.locator('[data-component="tab-bar-item"][data-tab-id="other-shell"]')).toHaveCount(0);
   await expect.poll(() => claimsFor('demo-shell')).not.toEqual([]);
   expect(await claimsFor('demo-shell')).not.toContainEqual(expect.objectContaining({ cols: 80, rows: 24 }));
   await page.getByRole('tab', { name: /other/ }).click();
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
-  await expect(drawer.locator('[data-component="app-tab"][data-tab-id="demo-shell"]')).toHaveCount(0);
-  await expect(drawer.locator('[data-component="app-tab"][data-tab-id="other-shell"]')).toHaveCount(1);
+  await expect(drawer.locator('[data-component="tab-bar-item"][data-tab-id="demo-shell"]')).toHaveCount(0);
+  await expect(drawer.locator('[data-component="tab-bar-item"][data-tab-id="other-shell"]')).toHaveCount(1);
   await expect.poll(() => claimsFor('other-shell')).not.toEqual([]);
   expect(await claimsFor('other-shell')).not.toContainEqual(expect.objectContaining({ cols: 80, rows: 24 }));
   await page.screenshot({ path: 'target/visual-captures/hs2-a0ykmh-project-switch-dedicated.png', fullPage: true });

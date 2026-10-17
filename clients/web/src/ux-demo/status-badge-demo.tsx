@@ -66,7 +66,7 @@ export function StatusBadgeSettings() {
       />
       <Select
         name="started-phase"
-        label="Started phase"
+        label="Started Phase"
         value={statusBadgeSettings.startedPhase.value}
         choices={[
           { value: '', label: 'None' },

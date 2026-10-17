@@ -278,7 +278,7 @@ p.ai-conversation__turn-progress > span {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The embedded drawer positions the app's composer form over its transcript; Kerf Composer owns the
+/* The embedded drawer positions the app's composer form over its transcript; Kerf MessageComposer owns the
    frame inside it (KF-S5EG5K). */
 .ai-conversation--embedded > .ai-conversation__composer {
   position: absolute;

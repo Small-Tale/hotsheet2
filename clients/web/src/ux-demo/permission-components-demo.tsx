@@ -247,7 +247,7 @@ export function PermissionRequestSettings() {
       />
       <Select
         name="variant"
-        label="State or outcome"
+        label="State or Outcome"
         value={permissionRequestSettings.variant.value}
         choices={[
           { value: 'pending', label: 'Pending' },
@@ -261,7 +261,7 @@ export function PermissionRequestSettings() {
       />
       <Select
         name="request"
-        label="Request type"
+        label="Request Type"
         value={permissionRequestSettings.request.value}
         choices={[
           { value: 'command', label: 'Run Command' },
@@ -272,7 +272,7 @@ export function PermissionRequestSettings() {
       />
       <Select
         name="automation"
-        label="Automatic decision"
+        label="Automatic Decision"
         value={permissionRequestSettings.automation.value}
         choices={[
           { value: 'none', label: 'None' },

@@ -1,10 +1,10 @@
 import './project-tab.css';
 
-import { AppTab } from '@kerfjs/ui/app-tab';
 import { uiColor } from '@kerfjs/ui/css-values';
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
+import { TabBarItem } from '@kerfjs/ui/tab-bar-item';
 import { ArchiveRestore, Bell, CircleAlert, Cloud, WifiOff, X } from 'lucide';
 
 export type ProjectTabLocation = 'local' | 'remote';
@@ -25,7 +25,7 @@ export interface ProjectTabProps {
   restoreFailure?: boolean;
   /**
    * A remembered project that is still opening in the background after startup revealed the active
-   * one (HS2-2BEJXD): Kerf's named `pending` AppTab (HS2-XGSSK1) keeps the dimmed name as the visible and
+   * one (HS2-2BEJXD): Kerf's named `pending` TabBarItem (HS2-XGSSK1) keeps the dimmed name as the visible and
    * accessible name with a decorative opening spinner; it stays selectable (the app shows an opening panel)
    * while close and drag are off.
    */
@@ -167,7 +167,7 @@ export function ProjectTab({
     attentionIcon
   ) : undefined;
   return (
-    <AppTab
+    <TabBarItem
       id={id}
       name={name}
       selected={selected}
@@ -208,7 +208,7 @@ export function ProjectTab({
         'data-busy': String(busy),
         'data-disconnected': String(disconnected),
         'data-restore-failure': String(restoreFailure),
-        // Kerf's AppTab owns `data-pending` (its named-pending state); the project's opening state is app-owned.
+        // Kerf's TabBarItem owns `data-pending` (its named-pending state); the project's opening state is app-owned.
         'data-project-pending': String(pending),
       }}
     />

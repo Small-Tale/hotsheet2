@@ -36,7 +36,7 @@ describe('ConversationExportDialog', () => {
     const markup = String(
       ConversationExportDialog({ state: { source, messages, draft: defaultConversationExportDraft(), step: 2 } }),
     );
-    expect(markup).toContain('data-component="conversation-export-dialog"');
+    expect(markup).toContain('data-dialog-component="conversation-export-dialog"');
     expect(markup).toContain('data-step="2"');
     expect(markup).toContain('data-navigation="none"');
     expect(markup).toContain('data-active-side="b"');

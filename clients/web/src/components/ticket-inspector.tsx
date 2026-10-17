@@ -3,7 +3,6 @@ import '@awesome.me/webawesome/dist/styles/utilities/visually-hidden.css';
 import '@kerfjs/ui/tab-bar.css';
 import './ticket-inspector.css';
 
-import { AppTab } from '@kerfjs/ui/app-tab';
 import { Badge } from '@kerfjs/ui/badge';
 import { foregroundColorVar, pct, rem } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -11,6 +10,7 @@ import { Row } from '@kerfjs/ui/row';
 import { Skeleton } from '@kerfjs/ui/skeleton';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { TabBar } from '@kerfjs/ui/tab-bar';
+import { TabBarItem } from '@kerfjs/ui/tab-bar-item';
 import { Text } from '@kerfjs/ui/text';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -411,7 +411,7 @@ export function ticketInspectorPanel({
           iconOnlyAt={presentation === 'reader' ? 'wide' : undefined}
         >
           {tabs.map((tab) => (
-            <AppTab
+            <TabBarItem
               id={tab.id}
               name={tab.label}
               selected={activeTab === tab.id}
@@ -661,7 +661,7 @@ export function ticketInspectorSkeletonPanel({ slug }: { slug?: string } = {}): 
             presentation="inspector"
           >
             {tabs.map((tab) => (
-              <AppTab
+              <TabBarItem
                 id={tab.id}
                 name={tab.label}
                 selected={tab.id === 'info'}

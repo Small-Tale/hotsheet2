@@ -40,7 +40,6 @@ function fakeRoot() {
 const press = (...matching: string[]) => ({
   composedPath: () => [{ matches: (selector: string) => selector.split(', ').some((part) => matching.includes(part)) }],
 });
-const element = (surface: string) => ({ dataset: { contextMenu: surface } }) as unknown as Element;
 
 function menu(surface: string, options: Partial<DismissibleContextMenu> = {}) {
   const state = { open: true };
@@ -95,34 +94,57 @@ describe('wireContextMenuDismissal (HS2-AFCWNG)', () => {
     expect(visibility.menu.close).not.toHaveBeenCalled();
   });
 
-  it('defers Web Awesome hide dismissal for opted-in menus only, and skips bubbled hides', () => {
-    const root = fakeRoot(),
-      hiding = menu('attachment', { hide: true }),
-      plain = menu('ticket');
-    wireContextMenuDismissal(root as unknown as HTMLElement, [hiding.menu, plain.menu]);
-    const hide = registrations.find((item) => item.event === 'wa-hide')!.handle;
-    const attachmentMenu = element('attachment');
-    hide({ target: element('attachment') } as unknown as Event, attachmentMenu);
-    hide({ target: attachmentMenu } as unknown as Event, element('ticket'));
-    vi.runAllTimers();
-    expect(hiding.menu.close).not.toHaveBeenCalled();
-    expect(plain.menu.close).not.toHaveBeenCalled();
-    hide({ target: attachmentMenu } as unknown as Event, attachmentMenu);
-    // An item's click handler still reads the open state before the deferred close.
-    expect(hiding.menu.close).not.toHaveBeenCalled();
-    vi.runAllTimers();
-    expect(hiding.menu.close).toHaveBeenCalledTimes(1);
-    // A hide after something else already closed it is a no-op.
-    hide({ target: attachmentMenu } as unknown as Event, attachmentMenu);
-    vi.runAllTimers();
-    expect(hiding.menu.close).toHaveBeenCalledTimes(1);
+  it('defers a Kerf menu close dismissal for opted-in menus only, and skips submenus and openings', () => {
+    // A Kerf PopupMenu closes its top-level `.kui-popup-menu__menu` popover, whose `toggle` reports
+    // `newState: "closed"` (Kerf UI beta.106); nested submenus are menus too, inside an item.
+    class FakeElement {
+      constructor(
+        readonly classes: string[],
+        readonly parentElement: FakeElement | null = null,
+        readonly dataset: Record<string, string> = {},
+      ) {}
+      matches(selector: string) {
+        return selector.split(', ').some((part) => this.classes.includes(part.replace(/^\./, '')));
+      }
+    }
+    vi.stubGlobal('HTMLElement', FakeElement);
+    try {
+      const root = fakeRoot(),
+        hiding = menu('attachment', { hide: true }),
+        plain = menu('ticket');
+      wireContextMenuDismissal(root as unknown as HTMLElement, [hiding.menu, plain.menu]);
+      const menuRoot = (surface: string) => new FakeElement(['kui-popup-menu'], null, { contextMenu: surface }),
+        panelOf = (host: FakeElement) => new FakeElement(['kui-popup-menu__menu'], host),
+        toggle = (target: FakeElement, newState: 'open' | 'closed') => {
+          root.dispatch('toggle', { type: 'toggle', newState, target });
+        },
+        attachmentPanel = panelOf(menuRoot('attachment'));
+      // An opening, a submenu closing inside an item, and another surface's menu do not dismiss it.
+      toggle(attachmentPanel, 'open');
+      toggle(panelOf(new FakeElement(['kui-popup-menu__item'], menuRoot('attachment'))), 'closed');
+      toggle(panelOf(menuRoot('ticket')), 'closed');
+      vi.runAllTimers();
+      expect(hiding.menu.close).not.toHaveBeenCalled();
+      expect(plain.menu.close).not.toHaveBeenCalled();
+      toggle(attachmentPanel, 'closed');
+      // An item's click handler still reads the open state before the deferred close.
+      expect(hiding.menu.close).not.toHaveBeenCalled();
+      vi.runAllTimers();
+      expect(hiding.menu.close).toHaveBeenCalledTimes(1);
+      // A close after something else already closed it is a no-op.
+      toggle(attachmentPanel, 'closed');
+      vi.runAllTimers();
+      expect(hiding.menu.close).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
-  it('registers no hide delegate without opted-in menus and removes every listener on dispose', () => {
+  it('registers no close listener without opted-in menus and removes every listener on dispose', () => {
     const root = fakeRoot(),
       ticket = menu('ticket');
     const dispose = wireContextMenuDismissal(root as unknown as HTMLElement, [ticket.menu]);
-    expect(registrations.some((item) => item.event === 'wa-hide')).toBe(false);
+    expect(root.listeners.get('toggle')?.size ?? 0).toBe(0);
     dispose();
     root.dispatch('pointerdown', press());
     root.dispatch('keydown', { key: 'Escape' });

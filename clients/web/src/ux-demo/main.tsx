@@ -2,7 +2,6 @@ import '@kerfjs/ui/foundation.css';
 import '@kerfjs/ui/webawesome.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
-import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 // Kerf's Catalog composes a Workbench of Panes, Toolbars, and Lists and owns only its stage CSS, so
 // the demo loads each composed primitive's stylesheet (Kerf 5.0.0-beta.55).
@@ -20,11 +19,15 @@ import '@kerfjs/ui/floating-toolbar.css';
 import '@kerfjs/ui/tab-bar.css';
 import '@kerfjs/ui/select/register';
 import '@kerfjs/ui/popup-menu/register';
+// DialogSurface close requests and chrome measurement, from the browser entry only: the register
+// touches the document as it loads (Kerf UI 5.0.0-beta.106), which node-environment unit tests lack.
+import '@kerfjs/ui/surface-scaffold/register';
 import '@kerfjs/ui/document.css';
 import '../hot-sheet-tokens.css';
 import './style.css';
 
 import { revealCatalogEntry, wireCatalog } from '@kerfjs/ui/wire-catalog';
+import { wireChoiceChips } from '@kerfjs/ui/wire-choice-chips';
 import { wireToolbarVisibility } from '@kerfjs/ui/wire-toolbar-visibility';
 import { delegate, mount } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -32,6 +35,7 @@ import { createScope } from 'kerfjs/scope';
 import { eventTargetsContextMenu } from '../components/ticket-row-context-menu';
 import { type ContextPopupMenuElement, openContextPopupMenu } from '../context-menu-position';
 import { withControlledOpen } from '../controlled-open';
+import { closedPopupMenuRoot, isPopupMenuOpen } from '../popup-menu-state';
 import { wireTopLayerOverlays } from '../top-layer-overlay';
 import { wireTicketRailToolbarVisibility, wireWorkspaceToolbarVisibility } from '../workspace-toolbar-visibility';
 import { DemoApp } from './components/demo-app';
@@ -62,6 +66,7 @@ const demoListeners = createScope();
 applyDisplayPreferences();
 mount(root, withControlledOpen(root, DemoApp));
 demoListeners.add(wireToolbarVisibility(root));
+demoListeners.add(wireChoiceChips(root));
 demoListeners.add(wireWorkspaceToolbarVisibility(root));
 demoListeners.add(wireTicketRailToolbarVisibility(root));
 // Every demo module installs its own interactions, in their original registration order.
@@ -70,26 +75,32 @@ demoListeners.add(wireDemoModules(root));
 // the menu itself (the app opens them from its own signals, HS2-2EHD8R).
 const openStagedContextMenus = () => {
   for (const menu of root.querySelectorAll<ContextPopupMenuElement>('[data-context-menu]'))
-    if (!menu.open) openContextPopupMenu(menu);
+    if (!isPopupMenuOpen(menu)) openContextPopupMenu(menu);
 };
 new MutationObserver(openStagedContextMenus).observe(root, { childList: true, subtree: true });
 // Magnified terminals are manual popovers in the top layer, as in the app (HS2-Z9PQSC).
 wireTopLayerOverlays(root);
 openStagedContextMenus();
 // The app clears its menu signals through capture-phase Escape and outside-press listeners; the
-// demo's bubble-phase handlers run after Web Awesome has consumed the key, so mirror Web Awesome's
-// own close (`wa-hide` on the menu root itself, not on a closing submenu) into the demo state.
+// demo's bubble-phase handlers run after Kerf's menu has consumed the key, so mirror the menu's own
+// close (its top-level panel's popover `toggle`, not a closing submenu) into the demo state.
 demoListeners.add(
-  delegate(root, 'wa-hide', '[data-context-menu]', (event, target) => {
-    if (event.target !== target) return;
-    const surface = (target as HTMLElement).dataset.contextMenu;
-    // A selection hides the menu before its item click reaches the delegated handlers (microtasks flush
-    // between listeners), so clear the state in a later task, after that click has finished dispatching.
-    window.setTimeout(() => {
-      if (surface === 'ticket') contextMenu.value = undefined;
-      else if (surface === 'app-tab') tabContextMenu.value = undefined;
-    }, 0);
-  }),
+  listen(
+    root,
+    'toggle',
+    (event) => {
+      const surface = closedPopupMenuRoot(event)?.dataset.contextMenu;
+      if (!surface) return;
+      // A selection hides the menu before its item click reaches the delegated handlers (microtasks flush
+      // between listeners), so clear the state in a later task, after that click has finished dispatching.
+      window.setTimeout(() => {
+        if (surface === 'ticket') contextMenu.value = undefined;
+        else if (surface === 'app-tab') tabContextMenu.value = undefined;
+      }, 0);
+    },
+    // A popover's `toggle` does not bubble.
+    { capture: true },
+  ),
 );
 // Kerf owns the catalog chrome: selection with `?component=` mirrored through replaceState, the sidebar
 // (a transient overlay on a small screen through the app-owned `collapsed` flag), and the theme,

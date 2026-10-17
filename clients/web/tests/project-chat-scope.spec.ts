@@ -177,7 +177,7 @@ test('a project restores only its own AI chats from the machine-wide connection 
   // The close dialog for the demo project lists only its own chat, never the other project's running one.
   await page.getByRole('tab', { name: 'demo' }).hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
-  const dialog = page.locator('[data-component="project-close-dialog"]');
+  const dialog = page.locator('[data-dialog-component="project-close-dialog"]');
   await expect(dialog).toHaveJSProperty('open', true);
   await expect(dialog).toContainText('1 AI chat');
   await expect(dialog).not.toContainText('2 AI chats');

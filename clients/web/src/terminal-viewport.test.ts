@@ -219,11 +219,11 @@ describe('focusYieldsToNewTerminal (HS2-FB4DKM)', () => {
         isConnected,
         closest: (selector: string) => (inside && selector.includes(inside) ? {} : null),
       }) as unknown as Element;
-  it('yields from nothing, the body, a detached holder, or the creating menu or dropdown', () => {
+  it('yields from nothing, the body, a detached holder, or the creating Kerf PopupMenu or its items', () => {
     expect(focusYieldsToNewTerminal(null, doc)).toBe(true);
     expect(focusYieldsToNewTerminal(body, doc)).toBe(true);
     expect(focusYieldsToNewTerminal(held(undefined, false), doc)).toBe(true);
-    for (const owner of ['wa-dropdown', 'wa-dropdown-item', '[role="menu"]', '[role="menuitem"]'])
+    for (const owner of ['.kui-popup-menu', '[role="menu"]', '[role="menuitem"]'])
       expect(focusYieldsToNewTerminal(held(owner), doc)).toBe(true);
   });
   it('keeps focus in a real field the user moved to', () => {

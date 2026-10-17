@@ -458,9 +458,9 @@ covers anything past the button's end. The demo's Unread chat messages setting s
     transcript order for this connection and uses the same global decision handlers/history
   - composer: multiline free-form input plus an explicit Send action; Enter sends while
     Shift+Enter inserts a line break; sending is disabled for blank input and while the same
-    connection is busy, with the reason exposed accessibly. Kerf `Composer` (KF-S5EG5K) owns the
+    connection is busy, with the reason exposed accessibly. Kerf `MessageComposer` (KF-S5EG5K) owns the
     raised frame, focus-within border, auto-growing borderless field, and action row, and
-    `submitOnEnter` with `wireComposers` owns Enter-to-send (IME, empty, and auto-repeat guards).
+    `submitOnEnter` with `wireMessageComposers` owns Enter-to-send (IME, empty, and auto-repeat guards).
     No presentation shows an "Enter to send" hint; the field's `aria-keyshortcuts="Enter"` keeps
     the shortcut available to assistive technology (HS2-3VQSZD). Up/Down on the field's first/last
     line recall the conversation's sent messages through the `recallHistory` binding, preserving the
@@ -619,7 +619,7 @@ without network requests (HS2-Y70MJY).
   giving a pressed single-button group the shared dark background, matching border, and
   inverse icon treatment. The demo covers resting and pressed push controls plus dark groups.
 
-These generic primitives, plus `LucideIcon`, `ListItem`, `ListHeader`, `AppTab`,
+These generic primitives, plus `LucideIcon`, `ListItem`, `ListHeader`, `TabBarItem`,
 `ResizableRegion`, `Select`, `StateBanner`, `EmptyState`, `LoadingSpinner`, `Toolbar`,
 and `ValueTable` use direct explicit-subpath imports from `@kerfjs/ui`. Hot Sheet keeps
 only product compositions that translate domain state or actions into that shared anatomy;
@@ -630,7 +630,7 @@ integration requirements: Select adapters
 choose one accessible-name branch, while ListHeader compositions choose a complete
 passive or action branch. This keeps disabled/read-only surfaces semantically passive
 rather than emitting incomplete hidden actions. The production shell and UX catalog also
-adopt the package-owned `wireTokenSearchFields.onEdit` path so beta 22 remains the sole
+adopt the package-owned `wireSearchFields.onEdit` path so beta 22 remains the sole
 owner of editor normalization before the controlled query state rerenders (HS2-HJ585K).
 
 - `ProjectHeading`
@@ -722,7 +722,7 @@ owner of editor normalization before the controlled query state rerenders (HS2-H
     HS2-CJC0MX).
 
   Each `ProjectTab` sets Kerf's attention-color token
-  on its own AppTab root (`[data-tab-kind='project']`). It keeps Kerf's own drop-target treatment.
+  on its own TabBarItem root (`[data-tab-kind='project']`). It keeps Kerf's own drop-target treatment.
 
 - `ProjectTabContextMenu` — **built** with Lucide icons for Close Tab, Close Other
   Tabs, Close Tabs to the Right, and Close All Tabs.
@@ -1002,16 +1002,16 @@ the ordinary toolbar search rather than a separate launcher and dialog. The earl
 and saved-view handoff components were removed: they duplicated this simpler primary flow
 without a clear place in the product.
 
-The editor chrome itself is now kerf UI's `TokenSearchField` + `wireTokenSearchFields`
+The editor chrome itself is now kerf UI's `SearchField` + `wireSearchFields`
 (HS2-88P90P), not a hand-rolled contenteditable. Kerf renders the editor, atomic chips
-(`data-component="token-search-token"`, `data-token-value`), leading icon, clear, and
+(`data-component="search-field-token"`, `data-token-value`), leading icon, clear, and
 `role="searchbox"`, and its wire helper owns Enter-submit, caret preservation across
 controlled token deletion, and the opt-in adjacent-chip keyboard (Backspace/Delete removes
 the neighbouring chip; ArrowRight steps past a trailing chip). The app keeps ownership of the
 token model (`clients/web/src/inline-search.ts`, adapted to kerf via `toTokenSearchToken` /
 `fromTokenSearchTokens` keyed on each token's canonical `raw`), the whitespace-commit input
 gating (reported by the helper's `onEdit` callback), the suggestions/date/help popovers
-(marked `data-token-search-keep-open`), and the
+(marked `data-search-field-keep-open`), and the
 persisted `searchOpen` signal. The workspace field enables Kerf's managed collapsible mode
 and adopts that signal, so Kerf owns its canonical magnifier trigger, reveal/focus transfer,
 empty-field blur collapse, and Escape collapse while the app's responsive header continues
@@ -1021,8 +1021,8 @@ focus move, while a query containing non-whitespace text or a filter chip stays 
 
 Every ticket-search surface composes the app-owned **`TicketSearchField`**
 (`clients/web/src/components/ticket-search-field.tsx`, HS2-N5G6JS): Kerf's grouped
-`TokenSearchField` inside a `content="search"` `ToolbarControlGroup`, driven by a Kerf-managed
-`TokenSearchModel` (HS2-5JXBQY), plus the Hot Sheet helper surfaces that used to live only in the
+`SearchField` inside a `content="search"` `ToolbarControlGroup`, driven by a Kerf-managed
+`SearchFieldModel` (HS2-5JXBQY), plus the Hot Sheet helper surfaces that used to live only in the
 workspace header — the lifecycle date/time helper derived from the query's trailing filter and
 the syntax-help button and popover. The model comes from `createTicketSearchModel`
 (`clients/web/src/ticket-search-model.ts`): its rules express the whole grammar (`tag`, `is`,
@@ -1031,7 +1031,7 @@ the app's own `tokenFromRaw`, the `tag` rule's `suggest(input, state)` serves th
 completion from the project's tags minus the chips already committed (capped at eight), and the
 documented relative syntax `updated-after:4h ago` is quoted (`updated-after:"4h ago"`, the chip's
 canonical value) before Kerf's whitespace-delimited grammar sees it. Kerf owns parsing, chips,
-the anchored suggestion popover rows (in flow before beta.63; beta.64 adopted) (`kui-token-search__suggestion`, inside the field itself), chip
+the anchored suggestion popover rows (in flow before beta.63; beta.64 adopted) (`kui-search-field__suggestion`, inside the field itself), chip
 edit/remove, clear, Enter, and the keyboard; the app projects `model.state` into its
 `searchQuery`/`searchTokens` signals (`inlineSearchTokens`) and reseeds the editor through
 `model.replace` (`replaceTicketSearch` for a restored session or a seeded saved-view query). The
@@ -1078,8 +1078,8 @@ form field alike. Kerf resolves its token defaults at their use sites, so the ba
 one generic name (`edit-ticket-search-token`, `remove-ticket-search-token`,
 `clear-ticket-search`, `toggle-ticket-search-help`, `apply-ticket-search-date`); the shared
 `wireTicketSearchFields` helper (`clients/web/src/interactions/ticket-search-field.ts`) resolves
-the owning field through its `data-token-search-id` and routes each callback by that id. It is
-wired before `wireTokenSearchFields({ models })`, so the chip edit/remove callbacks can read a
+the owning field through its `data-search-field-id` and routes each callback by that id. It is
+wired before `wireSearchFields({ models })`, so the chip edit/remove callbacks can read a
 chip's position and restore the caret a frame after Kerf has rebuilt the editor; the date helper
 commits through `model.commit` for the active prefix; Enter inside the date helper applies the
 date instead of submitting an enclosing form. Every path to a lifecycle date chip — the date
@@ -1096,14 +1096,14 @@ the field's model in the app and the UX demo alike (HS2-FR1Y70). The date helper
 date prefix, help open), and `wireTicketSearchFields` keeps one surface per field and kind in sync
 with it through a `MutationObserver` on its root. The surfaces anchor to the field's group (end
 edge; start edge at phone widths), open with `initialFocus: false` so typing stays in the editor,
-and carry `data-token-search-keep-open` so pressing inside one never collapses the field. The date
+and carry `data-search-field-keep-open` so pressing inside one never collapses the field. The date
 helper follows the query (Apply or Enter commits it, and the owner refocuses the editor); help also
 closes on Escape or an outside press (the field's own controls and its date helper are
 `outsideIgnore`d) through `toggleHelp`. Inside a `wa-dialog` Kerf hosts them in the dialog's
 interactive slot (`KF-F52T5D`), so there is no longer an in-flow "external" variant. Kerf does
 not clamp a surface's height, so the help body keeps short-viewport `max-height` clamps.
 In a form, the sibling `TicketSearchFormField` (same module) renders Kerf's
-`TokenSearchField presentation="form-field"`: a visible label, hint, and required marker with the
+`SearchField presentation="form-field"`: a visible label, hint, and required marker with the
 same inset, typography, and edges as a neighboring `wa-input`, no Toolbar, and the same anchored
 helper surfaces, anchored to an app-owned `.ticket-search-form-field` wrapper that carries the
 field id for the shared wiring. Its chips keep Kerf's default tint (see above). The saved-view dialog uses it
@@ -1113,8 +1113,8 @@ radius and required-marker color differences from `wa-input` are Kerf's (`KF-6P4
 `@kerfjs/ui:toolbar-control-group`), loaded via `.kerf-ui-profile.json` `catalogs`, so a
 Toolbar zone accepts it as the group it renders.
 
-**Managed `TokenSearchModel` evaluation (HS2-HHRYP9, Kerf 5.0.0-beta.59).** Kerf's opt-in
-`createTokenSearchModel` expresses the whole ticket search grammar: `tag`, `is`, `has`, and
+**Managed `SearchFieldModel` evaluation (HS2-HHRYP9, Kerf 5.0.0-beta.59).** Kerf's opt-in
+`createSearchFieldModel` expresses the whole ticket search grammar: `tag`, `is`, `has`, and
 `attachment` are plain rules with `parse`/`label`; the twelve lifecycle date filters are
 hyphenated rule names (`created-after`, `updated-before`, …) whose `parse` is
 `parseSearchDate`; quoted values, boolean words, and parentheses behave exactly as the
@@ -1160,7 +1160,7 @@ cover repeated Backspace/Delete, replacement, clear/refill, and continued typing
 (HS2-PR5TNA).
 
 For the collapsible toolbar composition, Kerf's `ToolbarControlGroup` owns the enclosing
-border, padding, and focus ring while the child `TokenSearchField` avoids a duplicate
+border, padding, and focus ring while the child `SearchField` avoids a duplicate
 border. Hot Sheet only sizes and places that composition; expansion must not strip the
 group's chrome in either the workspace header or workspace-grid ticket rail. The rail
 demo binds the same search signals for expansion, query filtering, help, and clearing,
@@ -1268,7 +1268,7 @@ overrides this per composition (the rail passes `center`). GitHub Issues display
 actions). When Safari refuses the Clipboard API inside the click, the helper copies
 through a temporary selection in the same gesture and restores focus and
 selection, so a copy never fails intermittently (HS2-1A2BQR). The section strip uses Kerf
-`TabBar`/`AppTab` with automatic keyboard activation and one selected, roving-focus tab.
+`TabBar`/`TabBarItem` with automatic keyboard activation and one selected, roving-focus tab.
 The inspector owns one 8px outer inset and removes the TabBar toolbar padding; its auto
 width includes those margins within the available space. The rail keeps a 4px inset,
 and each equal-width segment has a full-width selection target with its icon, responsive
@@ -1341,7 +1341,7 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   `TicketInfoPanel placeholder` variant, which in turn composes `TicketNotes placeholder`. Both
   variants keep the real chrome and draw the unknown values as Kerf `Skeleton` blocks, inert and
   hidden from assistive technology. The skeleton's tab strip uses the loaded sidebar inspector's
-  icon-only `AppTab`/`TabBar` props, so all four tabs fit at phone width (HS2-MYS1MR). The column no longer restyles descendant `h2`/`p`, so Markdown
+  icon-only `TabBarItem`/`TabBar` props, so all four tabs fit at phone width (HS2-MYS1MR). The column no longer restyles descendant `h2`/`p`, so Markdown
   headings, paragraphs, quotations, and activity-note text inside the inspector use their own
   component typography; the Details editor aligns to its surface through `MarkdownEditor`
   `inset="flush"` instead of a padding override, and the reader's card-free chrome and title size are
@@ -1788,9 +1788,9 @@ capability-aware sections when their underlying features and data contracts land
   `wa-dialog` inside Kerf `DialogSurface size="small"` (comfortable body and footer insets), each
   keyed separately so a morph never reuses one dialog's host for the other (HS2-Z7C27E). The app
   mounts the dialog while a command dialog is selected; there is no `showModal` call. The run
-  output dialog is dismissed through Web Awesome's header close or Escape; the stop confirmation
-  carries a footer `Row` with Keep running and Stop command. A captured `wa-hide` clears the
-  command dialog state. Completion and stop changes arrive through the existing long poll; the
+  output dialog is dismissed through the Kerf header close or Escape; the stop confirmation
+  carries a footer `Row` with Keep running and Stop command. A captured `kui-request-close` clears
+  the command dialog state (HS2-BH7NZ4). Completion and stop changes arrive through the existing long poll; the
   client never interval-polls. The component CSS owns only the bounded, scrolling
   `command-run-dialog__output` log, and action icons are sized through the `LucideIcon` `size`
   prop (HS2-29Q3XG). The `/ux-demo` entry exposes both presentations through a Presentation
@@ -1874,7 +1874,7 @@ notification model.
 ### 6.1 `BottomDrawer` — production built
 
 - `DrawerTabBar`
-- `AppTab` / `DrawerTab` — shared with project tabs; close action precedes the label,
+- `TabBarItem` / `DrawerTab` — shared with project tabs; close action precedes the label,
   supports leading/trailing icons, participates in sequential Tab order whether selected or
   not, supports arrow/Home/End navigation and Delete/Backspace closing, and exposes the same
   close/others/directional/all menu
@@ -1947,10 +1947,10 @@ Styling ownership (HS2-DR549A):
   group-owned focus ring. A Kerf `Row` hosts the visibility controls beside the workspace header
   actions (HS2-1Q6GER). The Select's width bound and the hidden-item corner count stay app-owned
   until Kerf ships `KF-DQANHZ` and `KF-WT2EMZ`.
-- **Empty, loading, and message copy.** A filled, centered Kerf `List` wraps an inner `List` of
-  `Text` (HS2-1Q6GER). It has no icon slot, so a short (about 100px) drawer grid never clips the
-  title. Loading and message copy is a polite status region. The `/ux-demo` entry exposes the
-  empty, loading, message, and short-drawer states. The nesting works around `KF-3ZJ9PF`.
+- **Empty, loading, and message copy.** A filled, centered Kerf `List` of `Text` (HS2-1Q6GER)
+  gathers the title and copy in its middle (`KF-3ZJ9PF`, HS2-BH7NZ4). It has no icon slot, so a
+  short (about 100px) drawer grid never clips the title. Loading and message copy is a polite
+  status region. The `/ux-demo` entry exposes the empty, loading, message, and short-drawer states.
 - **`TerminalSession`.** `TerminalDashboard` renders and styles it; `TerminalDrawer` composes it
   with props only (HS2-YNW0B3). `mobile` (the app's phone layout) clips its scaled xterm, and
   `focus` (drawer focus mode) drops the viewport's `--kui-space-xs` inset so the terminal fills
@@ -2145,7 +2145,7 @@ earlier app-owned grid (HS2-K9KWJJ, superseding the 4px connected top inset from
 - `LoadingSkeleton`
 - `RelativeTime`
 - `CountBadge`
-- `IconButton`
+- Icon-only `Button`
 - `MarkdownSurface`
 - `ProviderCapabilityNotice`
 
@@ -2242,7 +2242,7 @@ selected entry into `?component=` with `replaceState` (selection does not add Ba
 history; HS2-HMVBZW). The nested Hot
 Sheet inventory is flattened into path-labelled Kerf sections; phase, implementation,
 and dependency metadata remain visible as tags and native related menus. Kerf beta.82
-keeps the `TokenSearchField` filter in the fixed sidebar header while entries scroll;
+keeps the `SearchField` filter in the fixed sidebar header while entries scroll;
 its conditional Clear filter button clears the query and returns focus to the field.
 Filtering still matches entry and section names without regard to case, and rerenders
 retain the query. The app retains
@@ -2347,6 +2347,36 @@ The first review should settle these before visual polish:
 - Whether the terminal drawer is part of the initial feature-floor demo or the first
   follow-on desktop slice.
 
+### Kerf beta.106 adoption
+
+Beta.106 (HS2-BH7NZ4) removed Hot Sheet's remaining dependence on Web Awesome inside Kerf components:
+
+- **Renames.** `AppTab` is `TabBarItem`, `TokenSearchField` is `SearchField` (with `kui-search-field*`
+  classes and `data-search-field-*` attributes), and `Composer` is `MessageComposer`, whose action
+  row is a Kerf `Toolbar` taking the Send button as `trailing`. `IconButton`/`IconToggleButton` are
+  one `Button`; the attachment rows' icon-only actions are compact plain Kerf `Button`s.
+- **`DialogSurface` is the native `<dialog>`.** Every Kerf dialog passes its title as `label`, its
+  buttons as `footer`, and its identity (`data-key`, `data-dialog-component`, `data-controlled-open`)
+  as `rootAttributes`; the surface's own `data-component` is protected, so app targets use
+  `data-dialog-component`. `controlled-open.ts` opens and closes them with `openDialog`/`closeDialog`,
+  and close handlers listen for `kui-request-close` (or `close` after the exit motion). The dialog
+  takes initial focus on its panel unless an element has `autofocus`. Raw Web Awesome dialogs
+  (quick ticket composer, ticket reader, Not Working, ticket source setup, terminal rename, HS1
+  migration) are unchanged.
+- **`PopupMenu` and `Select` are Kerf popovers.** Code reads a menu's state from its opener
+  (`src/popup-menu-state.ts`), opens one with `openPopupMenu`, and follows its close through the
+  panel `toggle` event; a Select is a `kui-select` whose `value` and bubbling `change` are unchanged.
+  The Web Awesome keyboard and reopen workarounds (`wireWorkspaceOverflowKeyboard`,
+  `allowInterruptedDrawerPopupShow`) are gone, since Kerf's menus own keyboard opening and focus.
+- **Alignment.** `List vAlign="middle"` gathers several children (`KF-3ZJ9PF`), so the terminal
+  dashboard feedback copy is one `List`.
+- **Doctor.** Select labels follow title case (`KUI-D040`); `ChoiceChips` is wired at both entries
+  and the attachment intent picker keeps independent checkboxes with `multiple: 'toggle'`. Kerf now
+  discourages `wa-button`, `wa-input`, `wa-textarea`, `wa-checkbox`, and `wa-progress-ring`;
+  `.kerf-ui-profile.json` keeps them allowed until HS2-TQ88K4 and HS2-SKD293 adopt Kerf `Button`,
+  `TextField`, `Checkbox`, and `ProgressRing`. One `KUI-L203` exception covers Kerf's stale
+  `MessageComposer` composition zone (KF-Z00DKT).
+
 ### Kerf beta.24 layout adoption
 
 Settings and notification navigation, command rows, connected provider rows,
@@ -2370,10 +2400,10 @@ their Toolbar parent directly in `clients/web/kerf.components.json`
 (HS2-N0R5W0). Its composition catalog still omits the FloatingToolbar → ToolbarControlGroup
 edge, so the version-pinned adapter in `clients/web/scripts/check-kerf-ui-doctor.mjs` now
 covers beta.58 and beta.59 (HS2-10KEHN remains the upstream tracker). Beta.59 also adds an
-opt-in managed `TokenSearchModel` (grammar, suggestions, evaluation) for `TokenSearchField`
+opt-in managed `SearchFieldModel` (grammar, suggestions, evaluation) for `SearchField`
 and extends `PopupMenu` for nested and context actions; Hot Sheet kept its app-owned
 `TicketSearchField` suggestions until beta.62 closed the model's API gaps (the
-`TokenSearchModel` evaluation below, `HS2-HHRYP9` and `HS2-06Q4MG`; adoption in `HS2-5JXBQY`). HS2-CSRJ9Y moved every button-triggered command menu onto
+`SearchFieldModel` evaluation below, `HS2-HHRYP9` and `HS2-06Q4MG`; adoption in `HS2-5JXBQY`). HS2-CSRJ9Y moved every button-triggered command menu onto
 `PopupMenu`: the workspace overflow menu (`WorkspaceOverflowControls`, `data-workspace-overflow`
 root, items carrying `data-workspace-overflow-kind`/`-action`/`-state`), the command editor's
 per-row Edit/Delete menu and its AI configuration menu, and the in-conversation model menu
@@ -2451,7 +2481,7 @@ Beta.52–56 (HS2-QCSPDH) changed several things Hot Sheet depends on:
 - **Floating toolbar inset.** Kerf reads `--kui-floating-toolbar-inset` as an optional override, so
   app `calc()`s spell out its default; a ResizableRegion restore corner owns the inset for a restore
   toolbar composed there.
-- **`AppTab` owns `data-pending`.** Project tabs publish their opening state as the app-owned
+- **`TabBarItem` owns `data-pending`.** Project tabs publish their opening state as the app-owned
   `data-project-pending`.
 - **Visual tokens.** Light-mode brand and danger fills darkened for WCAG AA contrast, and
   Web Awesome reflected defaults (for example a divider's `role="separator"`) render in Select
@@ -2478,7 +2508,7 @@ Beta.51 (HS2-KMDJRH) changed four things Hot Sheet depends on:
   `Badge`, and a header action is centered on the shared trailing toolbar-action axis (KF-NRB76K),
   so the sidebar's Add view action lines up under the sidebar toolbar control.
 - **Explicit grouped search.** The token-search groups now declare `content="search"` and
-  `focusRing="halo"`, and their `TokenSearchField` uses `presentation="toolbar-group"`; beta.51
+  `focusRing="halo"`, and their `SearchField` uses `presentation="toolbar-group"`; beta.51
   replaced the implicit `:has()` detection, without which the field drew a second border and lost
   its focus halo.
 - **Pane edges are safe-area aware (KF-CZ3CBS).** The pane owns its header/content/footer inline
@@ -2556,18 +2586,18 @@ writing the override.
 The residual is gated on Kerf releases rather than on app work: every Kerf API request
 from HS2-G5K1V0 (`KF-XNRXCK` Toolbar zone layout, `KF-9K8PTV` Select trigger width and
 selected typography, `KF-8SD2EP` ListItem/ListHeader geometry and per-part color,
-`KF-E47GAW` AppTab/TabBar names and strip geometry, `KF-96T4HM` StateBanner layout,
-`KF-FT9R9M` ResizableRegion/FloatingToolbar placement, `KF-GC3RKN` TokenSearchField, Text,
+`KF-E47GAW` TabBarItem/TabBar names and strip geometry, `KF-96T4HM` StateBanner layout,
+`KF-FT9R9M` ResizableRegion/FloatingToolbar placement, `KF-GC3RKN` SearchField, Text,
 ValueTable, ToolbarText, and app-root tokens) is completed in the Kerf store and awaits the
 next `@kerfjs/ui` release after 5.0.0-beta.59, when `HS2-PKPGGZ` replaces the corresponding
 rules. The remaining `wa-*` subjects wait on `KF-PDPAVF` (tag chip), except the cursor policy
 rules, which are deliberate (the drive-options submenu rules went with HS2-2EHD8R). `KUI-L022` is
 at zero: HS2-3J2PX3 retired the visibility Toolbar's class by moving its configuration onto its app
 wrapper through Kerf beta.62's `--kui-toolbar-inset` token (`KF-3EZ92R`), HS2-WF3W6A retired the
-drawer grid tab's class with Kerf's `pinned` AppTab (`KF-DTFQSC`), and HS2-T67Z3N retired the project
+drawer grid tab's class with Kerf's `pinned` TabBarItem (`KF-DTFQSC`), and HS2-T67Z3N retired the project
 tab's class with Kerf's `dropTarget` and `nameOverflow` props (`KF-373HYM`): the drag handler marks
 `data-drop-target` on a tab it hovers, and the strip sets the attention, drop-target, and
-disconnected colors through the public `--kui-app-tab-*` tokens.
+disconnected colors through the public `--kui-tab-bar-item-*` tokens.
 
 The web package checks in a workspace-scoped `.kerf-ui-profile.json` and
 `.kerf-ui-doctor.json`. The profile contains exact `KUI-L011` exceptions only for the
@@ -2742,7 +2772,7 @@ The check reports five kinds of finding:
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `kerf`            | `.kui-*` classes or `[data-component]` anywhere in a selector.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `foreign-class`   | Another component's block anywhere in the selector, including inside `:has()`. This covers blocks whose name differs from their file (`.ticket-list-row*`) and blocks of components without a stylesheet.                                                                                                                                                                                                                                                                                                                                                                                             |
-| `hook-descendant` | An element below a class the component places on another component's root, for example `.terminal-drawer__rail .terminal-tab i` on Kerf `AppTab`. It counts even when that element is content this component projected into the child's slots.                                                                                                                                                                                                                                                                                                                                                        |
+| `hook-descendant` | An element below a class the component places on another component's root, for example `.terminal-drawer__rail .terminal-tab i` on Kerf `TabBarItem`. It counts even when that element is content this component projected into the child's slots.                                                                                                                                                                                                                                                                                                                                                    |
 | `foreign-element` | A classless element subject that also reaches markup another component renders. The JSX tree below the nearest own classed element decides. A descendant combinator over a subtree containing another component (`.ai-conversation__activity svg` over `AIContentLabel`) is a finding. So is a child-combinator element the component never authors, such as the root of `LoadingSpinner`.                                                                                                                                                                                                            |
 | `borrowed-markup` | The markup direction (HS2-TM6K9V): a module writes another component's class block into the DOM, so it borrows that component's styles with no cross-component selector at all. Class positions are JSX `class`/`className` (including hook classes on child components), raw HTML `class="…"` strings, `classList` calls, `className` assignments, and `setAttribute('class', …)`. Any `kui-*` class counts too, except the classes Kerf's composition catalog lists as `placeableClasses` (`kui-app-root`). The finding's file is the `.tsx`/`.ts` module and its selector is the class as `.name`. |
 
@@ -2763,7 +2793,7 @@ is Kerf markup like any other child component's, so `.x svg` and `.x > svg` over
 - **Size** an icon with its `size` prop: a named step (`xs` 12, `s` 16, `m` 20, `l` 24, `xl` 32) or
   positive pixels such as `size={14.4}`. The prop's `[data-lucide][data-size]` rule outranks
   ordinary app and Kerf slot selectors. Where a Kerf slot already sizes a projected icon, such as
-  the `TokenSearchField` trailing help button, leave `size` off so the slot keeps its size.
+  the `SearchField` trailing help button, leave `size` off so the slot keeps its size.
 - **Tint, offset, place, spin, or chip** an icon through an own wrapper element, such as
   `<span class="x__icon">` with `display: flex`. Examples include color, a `margin-top` that aligns
   the icon with text, a `grid-area`, a rotation, or a padded tinted chip. `color` reaches the glyph
@@ -2925,7 +2955,7 @@ command editor's `.command-settings-editor__grid label` and `input` rules had le
 `LucideIconPicker`, forcing its search field to a grid layout with semibold text. The picker now
 lays out as its own stylesheet declares, at the editor's 14px regular field text.
 
-HS2-K9KWJJ then dropped the terminal rail's `.kui-token-search` width override (88), since the
+HS2-K9KWJJ then dropped the terminal rail's `.kui-search-field` width override (88), since the
 rail's controls Toolbar now sizes the expanded search itself. HS2-402AXQ replaced the project
 tab strip's Add-project `wa-button` (and a stale `wa-dropdown` rule) with an app-styled native
 `.project-tab-bar__action` button (86): the strip sits beside Kerf's `TabBar`, whose trailing zone
@@ -2940,13 +2970,13 @@ API groups below, and adopted the first two: the workspace header Toolbar takes
 `responsive="trailing-priority"` (an expanded search moves to a full second row under the
 identity once the toolbar is narrower than Kerf's `narrow` breakpoint, so the app's stacked
 grid rules are gone) and `ProjectTab` passes Kerf's `attention` prop, tinting the name through
-the public `--kui-app-tab-attention-color` token (78). `HS2-PKPGGZ` adopts the rest. The
+the public `--kui-tab-bar-item-attention-color` token (78). `HS2-PKPGGZ` adopts the rest. The
 current workspace header uses inline search and keeps it on the first row (HS2-NZK4KA).
 FloatingToolbar parent gap (`HS2-10KEHN`) persists in beta.60, so the doctor adapter accepts
 that version too. HS2-PKPGGZ then adopted the rest of beta.60 and took `KUI-L019` from 78 to 10:
 region surfaces and the focus-mode popup layer are `--kui-resizable-region-background` /
 `--kui-resizable-region-popup-z` tokens, the drawer restore control is a `placement="inline"`
-FloatingToolbar in Kerf's own corner, sidebar and rail inspector tabs use AppTab's `icon-only`
+FloatingToolbar in Kerf's own corner, sidebar and rail inspector tabs use TabBarItem's `icon-only`
 presentation (fill allocation centers them; the icon gap is `--kui-layout-item-gap`), and the
 inspector scopes `--kui-layout-pill-radius` to Kerf's small radius so icon-only tab corners match
 the rectangular track (HS2-1H2KNN); the project
@@ -2977,20 +3007,20 @@ their clipping while a Web Awesome dropdown is open (`KF-J55CGB`), so the termin
 `:has([open])` rules are gone. Only the three Web Awesome rules remain (3). The FloatingToolbar
 parent gap (`HS2-10KEHN`) persists in beta.62. Beta.62 also ships the removable `Chip`
 (`HS2-2GYQ6C`), ListItem tones and the caret-free Select trigger (`HS2-1QQGH4`), the
-TokenSearchModel additions (`HS2-06Q4MG`), and the scoped Workbench selectors that `HS2-P289N2`
+SearchFieldModel additions (`HS2-06Q4MG`), and the scoped Workbench selectors that `HS2-P289N2`
 waits on (`KF-JTVA2F`).
 HS2-MM9XKW upgraded all three packages to 5.0.0-beta.64 (beta.63 was skipped: its Workbench
 overlay `:has()` rules restyled the whole work area on every DOM change and failed the 138-ticket
 paint budget, fixed upstream as `KF-FN91ET`). The doctor baseline is unchanged (3 errors); the
 FloatingToolbar parent gap (`HS2-10KEHN`) still persists, so beta.63 and beta.64 join the adapter's
-version list. TokenSearchField suggestions are now an anchored popover with a rounded (not pill)
+version list. SearchField suggestions are now an anchored popover with a rounded (not pill)
 radius and leading-aligned rows (`KF-EZRBXH`, `KF-94A4J3`, `KF-3XSD7K`, `KF-KMR9HJ`). The release
 also ships the APIs several tickets wait on: the guarded post-commit caret (`KF-DNVMQE`,
 `HS2-TNE7V7`) and removal/clear focus restoration (`KF-Q2G9QS`, `HS2-45F8WW`), Workbench
 `keepOpenOn` (`KF-5D6T81`, `HS2-5APX20`), the Workbench panel `header` (`KF-ZBW7MS`, `HS2-QQW6CT`),
 the PopupMenu submenu race fix (`KF-A388BJ`, `HS2-ZKMCVW`), phone submenus placed outside their
 parent menu (`KF-5PZ768`, `HS2-282GTZ`), ListItem tone inheritance (`KF-XD6YH1`, `HS2-C3SPM6`), and
-TokenSearchField's own deferred blur collapse through a pointer click (`KF-64W0RN`).
+SearchField's own deferred blur collapse through a pointer click (`KF-64W0RN`).
 HS2-10KEHN removed the doctor's FloatingToolbar adapter: beta.67's composition catalog lists
 FloatingToolbar as a ToolbarControlGroup parent (`KF-QMRNQC`), so the documented composition passes
 `KUI-L201` directly and the gate reads the raw doctor report.
@@ -3034,9 +3064,9 @@ scrolled beneath it, and each footer its top divider (`t`) only while content co
 HS2-8R25B6 upgraded to 5.0.0-beta.66: `WorkbenchPanel` is now a union of a static panel and a
 `navStack` navigation panel (`KF-WW33YJ`), so the shell's rails are typed `WorkbenchStaticPanel`. It
 also ships `KF-SCS4RH` (Toolbar zone focus rings stay unclipped) and `KF-6P4NAV` (the form-field
-TokenSearchField matches Web Awesome's control radius and required marker). The FloatingToolbar
+SearchField matches Web Awesome's control radius and required marker). The FloatingToolbar
 parent gap persists, so beta.66 joins the adapter list.
-HS2-DQBAC4 upgraded to 5.0.0-beta.65, which adds `TokenSearchField presentation="form-field"`
+HS2-DQBAC4 upgraded to 5.0.0-beta.65, which adds `SearchField presentation="form-field"`
 (`KF-9QHWR1`, used by the saved-view dialog in HS2-E40KC0). The doctor baseline is unchanged and
 the FloatingToolbar parent gap persists, so beta.65 joins the adapter list. `KF-WW33YJ` (Workbench
 panel navigation stacks, HS2-FY06N4) and `KF-SCS4RH` (Toolbar zone focus rings) are committed
@@ -3052,10 +3082,10 @@ attribute they did not need. Every remaining rule needs Kerf API that does not e
 and is requested upstream, grouped by component in the kerf store: `KF-XNRXCK` (Toolbar
 zone layout and a trailing-priority responsive policy), `KF-9K8PTV` (Select trigger width
 and selected-content typography), `KF-8SD2EP` (ListItem/ListHeader geometry, per-part
-color, multi-line labels), `KF-E47GAW` (AppTab/TabBar icon-only names, truncation, strip
+color, multi-line labels), `KF-E47GAW` (TabBarItem/TabBar icon-only names, truncation, strip
 geometry), `KF-96T4HM` (StateBanner copy layout and action placement), `KF-FT9R9M`
 (ResizableRegion/FloatingToolbar background, popup overflow, restore placement, inset),
-and `KF-GC3RKN` (TokenSearchField, Text, ValueTable, ToolbarText, app-root tokens). The
+and `KF-GC3RKN` (SearchField, Text, ValueTable, ToolbarText, app-root tokens). The
 Web Awesome element rules that remain (tab-bar action buttons, drive-options submenu
 items, the tag chip) resolve by composing through Kerf components instead
 (`HS2-CSRJ9Y` for menus; `HS2-402AXQ` for the rest). Adoption of the upstream APIs is
@@ -3158,7 +3188,7 @@ HS2-90B8WH composes ticket-view selects through ToolbarControlGroup in Toolbar l
 and uses ToolbarText's placeholder for the loading inspector's center zone. Its one
 remaining `KUI-L202` finding was TabBar trailing composition.
 HS2-GX51F7 uses TabBar's adjacent trailing and far-edge end zones for terminal drawer
-creation and hide actions, and gives the AppTab catalog example a TabBar parent. It also
+creation and hide actions, and gives the TabBarItem catalog example a TabBar parent. It also
 removes a consumer rule targeting TabBar's trailing internals; all `KUI-L202` and
 `KUI-L203` findings are now cleared.
 

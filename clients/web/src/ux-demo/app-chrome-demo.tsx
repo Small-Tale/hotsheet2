@@ -1,8 +1,8 @@
-import { AppTab } from '@kerfjs/ui/app-tab';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { TabBar } from '@kerfjs/ui/tab-bar';
+import { TabBarItem } from '@kerfjs/ui/tab-bar-item';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -58,7 +58,7 @@ export function AppTabDemo() {
       viewport={{ width: 'full', layout: 'flex', frame: 'solid', surface: 'lowered' }}
     >
       <TabBar id="app-tab-demo" label="Shared Application Tab Demo">
-        <AppTab
+        <TabBarItem
           id="project"
           name="Project tab"
           selected
@@ -66,7 +66,7 @@ export function AppTabDemo() {
           rootAttributes={{ 'data-tab-kind': 'project', 'data-project-id': 'project' }}
           leading={<LucideIcon icon={FolderGit2} name="folder-git-2" />}
         />
-        <AppTab
+        <TabBarItem
           id="terminal"
           name="Terminal tab"
           className="terminal-tab"
@@ -214,7 +214,7 @@ function wireAppChromeDemo(root: HTMLElement): () => void {
 export const demoModule: DemoModule = {
   entries: {
     'floating-toolbar': { catalogExamples: true, Demo: FloatingToolbarDemo },
-    'app-tab': { catalogExamples: true, Demo: AppTabDemo },
+    'tab-bar-item': { catalogExamples: true, Demo: AppTabDemo },
     'codex-hooks-notice-banner': { catalogExamples: true, Demo: CodexHooksNoticeBannerDemo },
     'shell-banner': { catalogExamples: true, Demo: ShellBannerDemo },
     'project-setup-warning-banner': { catalogExamples: true, Demo: ProjectSetupWarningBannerDemo },

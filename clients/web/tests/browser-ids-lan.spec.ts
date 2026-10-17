@@ -204,7 +204,7 @@ for (const width of [390, 1280]) {
         await create.click();
         await drawer.getByRole('menuitem', { name: 'AI Chat' }).click();
         const chat = drawer.locator('[data-component="ai-conversation"]');
-        await chat.getByLabel('Message Codex').fill(`LAN turn ${index + 1}`);
+        await chat.getByLabel('Message Codex', { exact: true }).fill(`LAN turn ${index + 1}`);
         await chat.getByRole('button', { name: 'Send Message to Codex' }).click();
         await expect(chat).toContainText('Test tool is offline');
         await expect(chat).toContainText(`LAN turn ${index + 1}`);
@@ -221,7 +221,7 @@ for (const width of [390, 1280]) {
       // HS2-TYS5SS). The insecure-context saved-chat id path stays covered by browser-id unit tests.
       await create.click();
       const saved = drawer.getByRole('menuitem', { name: 'Saved Conversation…' });
-      await expect(saved).toHaveAttribute('disabled', /.*/);
+      await expect(saved).toHaveAttribute('aria-disabled', 'true');
       await expect(saved).toHaveAttribute(
         'title',
         "Opening a saved conversation happens on the computer running Hot Sheet, so it isn't available from this device.",
@@ -249,6 +249,8 @@ for (const width of [390, 1280]) {
           nodes.map((node) => node.getAttribute('data-visibility-group-id')).filter((id) => id !== 'default'),
         );
       expect(new Set(groupIds).size).toBe(2);
+      // The name dialog's exit motion keeps it the top modal briefly; Escape then belongs to the visibility dialog.
+      await expect(nameDialog).toHaveJSProperty('open', false);
       await page.keyboard.press('Escape');
       await expect(visibility).toBeHidden();
       await page.reload();

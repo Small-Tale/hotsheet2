@@ -1,4 +1,4 @@
-import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
+import type { SearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import type { Signal } from 'kerfjs';
@@ -175,7 +175,7 @@ export interface HotSheetShellDependencies {
   ticketViewTitle: (view: TicketScope) => string;
   viewMode: Signal<WorkspaceViewMode>;
   viewportMobile: Signal<boolean>;
-  workspaceSearchModel: TokenSearchModel;
+  workspaceSearchModel: SearchFieldModel;
   workspaceSurfaceProps: () => WorkspaceSurfaceProps;
   /** The search's scope and whether it may switch into All Tickets (HS2-4J6764). */
   searchScope: () => TicketScope;

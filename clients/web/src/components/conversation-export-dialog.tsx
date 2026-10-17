@@ -1,5 +1,4 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
-import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/tag/tag.js';
 import './conversation-export-dialog.css';
 
@@ -219,26 +218,20 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
   );
 
   return (
-    <div data-key="conversation-export-dialog">
-      <DialogSurface preferredWidth={remify(624)} viewportGutter={remify(16)} maxHeight={remify(704)}>
-        <wa-dialog
-          data-key="conversation-export-dialog"
-          class="conversation-export-dialog"
-          {...COMMANDS_AND_AI_TARGETS.conversationExportDialog.attrs}
-          data-step={step}
-          data-navigation={navigation}
-          label="Save Conversation"
-          open
-          with-footer
-        >
-          <ContentTransition
-            active={active}
-            style={transitionStyle}
-            direction={direction}
-            label="Save Conversation Navigation"
-            a={scopeScreen}
-            b={bundleScreen}
-          />
+    <div class="conversation-export-dialog" data-key="conversation-export-dialog">
+      <DialogSurface
+        label="Save Conversation"
+        preferredWidth={remify(624)}
+        viewportGutter={remify(16)}
+        maxHeight={remify(704)}
+        rootAttributes={{
+          'data-key': 'conversation-export-dialog',
+          ...COMMANDS_AND_AI_TARGETS.conversationExportDialog.attrs,
+          'data-step': String(step),
+          'data-navigation': navigation,
+          'data-controlled-open': 'true',
+        }}
+        footer={
           <ContentTransition
             active={active}
             style="crossfade"
@@ -249,7 +242,16 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
             a={scopeActions}
             b={bundleActions}
           />
-        </wa-dialog>
+        }
+      >
+        <ContentTransition
+          active={active}
+          style={transitionStyle}
+          direction={direction}
+          label="Save Conversation Navigation"
+          a={scopeScreen}
+          b={bundleScreen}
+        />
       </DialogSurface>
     </div>
   );

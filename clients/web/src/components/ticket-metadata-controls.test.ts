@@ -122,12 +122,12 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(
       String(TicketPrioritySelect({ name: 'priority', value: 'urgent', ariaLabel: 'Compact priority' })),
     ).toContain('aria-label="Compact priority"');
-    // Ordinary Select content must name Web Awesome's actual shadow combobox too (HS2-Q6EM0B).
+    // Ordinary Select content must name Kerf's native combobox trigger too (HS2-Q6EM0B).
     expect(String(TicketCategorySelect({ name: 'category', value: 'bug', ariaLabel: 'Compact category' }))).toMatch(
-      /<wa-select\b[^>]*\slabel="Compact category"/,
+      /class="kui-select__trigger" role="combobox"[^>]*aria-label="Compact category"/,
     );
     expect(String(TicketPrioritySelect({ name: 'priority', value: 'urgent', ariaLabel: 'Compact priority' }))).toMatch(
-      /<wa-select\b[^>]*\slabel="Compact priority"/,
+      /class="kui-select__trigger" role="combobox"[^>]*aria-label="Compact priority"/,
     );
     const status = String(TicketStatusMenu({ value: 'completed' }));
     expect(status).toContain('aria-label="Change Status, Completed"');
@@ -136,10 +136,11 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(status).toContain('class="status-badge" data-component="status-badge" data-status="completed"');
     expect(status).toContain('data-inspector-status-menu="true"');
     expect(status).toContain('data-ticket-status="verified"');
-    expect(status).toContain('<wa-divider');
+    expect(status).toContain('class="kui-popup-menu__divider" role="separator"');
     expect(status).toContain('data-ticket-status="archive"');
     expect(status).toContain('data-lucide="badge-check"');
-    expect(status.match(/data-lucide=/g)).toHaveLength(7);
+    // One icon per status (and the badge); Kerf adds its own check marks to the checkable items.
+    expect(status.match(/data-lucide="(?!check")/g)).toHaveLength(7);
     // The app-owned badge is the trigger; Kerf PopupMenu provides the nested actions.
     expect(status).toContain('data-action="open-inspector-status-menu"');
     expect(status).toContain('aria-haspopup="menu"');
@@ -157,8 +158,12 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(info).toContain('data-font="default" data-border="none">Status</h2>');
     expect(info).toContain('class="kui-list-inset-control"');
     expect(info).toContain('data-status-line="true"');
-    expect(info).toContain('name="inspector-category" label="Category"');
-    expect(info).toContain('name="inspector-priority" label="Priority"');
+    expect(info).toMatch(
+      /<kui-select[^>]*name="inspector-category"[^>]*><span class="kui-select__label"[^>]*>Category</,
+    );
+    expect(info).toMatch(
+      /<kui-select[^>]*name="inspector-priority"[^>]*><span class="kui-select__label"[^>]*>Priority</,
+    );
     expect(info).toContain('data-font="default" data-border="none">Details</h2>');
     expect(info).toContain('data-font="default" data-border="none">Tags</h2>');
     expect(info).toMatch(
@@ -257,11 +262,13 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(css).toMatch(/ticket-attachments__image-grid button \{[^}]*max-width: remify\(220px\)/);
     expect(css).toMatchSource(/ticket-attachments__image-grid :is\(img,video\) \{[^}]*object-fit: contain/);
     expect(css).not.toContain('ticket-attachments__count');
-    // Kerf ContentItem, Text, and IconButton own the row chrome inside the app-owned wrapper (HS2-K9HSXZ).
+    // Kerf ContentItem, Text, and icon-only Button own the row chrome inside the app-owned wrapper (HS2-K9HSXZ).
     expect(attachments).toMatch(
       /data-component="ticket-attachment-item"[^>]*>\s*<div[^>]*data-component="content-item"[^>]*data-appearance="neutral"/u,
     );
-    expect(attachments).toMatch(/data-component="icon-button"[^>]*data-action="open-attachment-menu"/u);
+    expect(attachments).toMatch(
+      /data-component="button"[^>]*data-icon-only=""[^>]*data-action="open-attachment-menu"/u,
+    );
     expect(attachments).toContain('More Actions for one.png');
     expect(attachments).toContain('title="one.png — double-click to open"');
     expect(attachments).toContain('data-lucide="more-horizontal"');
@@ -296,7 +303,7 @@ describe('ticket metadata controls and inspector panels', () => {
     // No regroup targets: neither group drop targets nor the New group zone (HS2-0RTH3J).
     expect(appendOnly).not.toContain('data-attachment-group-drop-target');
     expect(appendOnly).not.toContain('data-attachment-new-group-drop-target');
-    expect(appendOnly).toMatch(/<wa-select[^>]*name="attachment-batch-purpose"[^>]*disabled/u);
+    expect(appendOnly).toMatch(/<kui-select[^>]*name="attachment-batch-purpose"[^>]*disabled/u);
     expect(appendOnly).toContain('Purpose for Legacy / Uncategorized');
     expect(appendOnly).toContain(
       '<a href="/attachment/two" target="_blank" rel="noopener" title="Open log.txt">log.txt</a>',
@@ -355,7 +362,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(markup).not.toContain('data-attachment-group-drop-target');
     expect(markup).not.toContain('data-drag-attachment-id');
     expect(markup).toMatch(/<wa-input[^>]*name="attachment-batch-label"[^>]* disabled/u);
-    expect(markup).toMatch(/<wa-select[^>]*name="attachment-batch-purpose"[^>]*disabled/u);
+    expect(markup).toMatch(/<kui-select[^>]*name="attachment-batch-purpose"[^>]*disabled/u);
     expect(markup).toContain('Attachments are view-only in linked ticket readers.');
     expect(markup).not.toContain('This provider does not support');
   });
@@ -429,7 +436,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(markup).toContain('data-attachment-batch-title="true"');
     expect(markup).toContain('Edit Batch Label AI · Round 1 · Correctness evidence');
     expect(markup).toMatch(/<wa-input[^>]*name="attachment-batch-label"[^>]*hidden/u);
-    expect(markup).toMatch(/<wa-select[^>]*name="attachment-batch-purpose"/u);
+    expect(markup).toMatch(/<kui-select[^>]*name="attachment-batch-purpose"/u);
     // Uncategorized carries a sentinel value; Web Awesome treats an empty option value as no choice.
     expect(markup).toContain('value="uncategorized"');
   });
@@ -452,7 +459,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(css).toContainSource(
       ':is(.ticket-attachments__batch, .ticket-attachments__new-group)[data-drag-over="true"] { outline: var(--wa-focus-ring)',
     );
-    // Kerf ContentItem, IconButton, ListHeader, wa-input, and Select own the former row, menu, title,
+    // Kerf ContentItem, icon-only Button, ListHeader, wa-input, and Select own the former row, menu, title,
     // editor, and purpose pill chrome.
     for (const removed of ['ticket-attachments__item-menu', 'batch-title-editor', 'header select', 'field-sizing'])
       expect(css).not.toContain(removed);

@@ -92,7 +92,7 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
         event.preventDefault();
         target
           .closest<HTMLElement>('[data-tab-kind]')
-          ?.querySelector<HTMLButtonElement>('.kui-app-tab__close')
+          ?.querySelector<HTMLButtonElement>('.kui-tab-bar-item__close')
           ?.click();
         return;
       }
@@ -146,17 +146,17 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', 'wa-select[name="terminal-rail-project"]', (_event, target) => {
+    delegate(document.body, 'change', 'kui-select[name="terminal-rail-project"]', (_event, target) => {
       selectTerminalRailProject((target as Control).value);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', 'wa-select[name="terminal-rail-view"]', (_event, target) => {
+    delegate(document.body, 'change', 'kui-select[name="terminal-rail-view"]', (_event, target) => {
       selectTicketView((target as Control).value as TicketView);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', 'wa-select[name="mobile-view"]', (_event, target) => {
+    delegate(document.body, 'change', 'kui-select[name="mobile-view"]', (_event, target) => {
       selectTicketView((target as Control).value as TicketView);
     }),
   );
@@ -175,7 +175,7 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', 'wa-select[name="mobile-project"]', (_event, target) => {
+    delegate(document.body, 'change', 'kui-select[name="mobile-project"]', (_event, target) => {
       selectProjectTab((target as Control).value);
     }),
   );

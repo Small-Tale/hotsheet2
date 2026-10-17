@@ -82,7 +82,7 @@ All paths are repository-relative. **Current** means the primary's active scope;
 | `clients/web/src/components/project-summary.css`              | HS2-H0THQW: domain chart CSS, every rule justified; counts use Kerf Text; compact size is one rule.                                                                                                                                                                             | Shell/project; retain chart                        |
 | `clients/web/src/components/project-tab-bar.css`              | HS2-VMHN64: 4 justified strip rules (public TabBar tokens, surface/divider variants, mobile centering); selected-value layout uses Kerf Row/Text.                                                                                                                               | Shell/project                                      |
 | `clients/web/src/components/project-tab-context-menu.css`     | One-pixel pointer anchor only; check PopupMenu context API.                                                                                                                                                                                                                     | Shell/project                                      |
-| `clients/web/src/components/project-tab.css`                  | HS2-TNC9QK: indicator cluster uses Kerf Row; remaining rules are justified app-owned indicators (activity ring, counts, operation) and AppTab public tokens.                                                                                                                    | Shell/project/metadata                             |
+| `clients/web/src/components/project-tab.css`                  | HS2-TNC9QK: indicator cluster uses Kerf Row; remaining rules are justified app-owned indicators (activity ring, counts, operation) and TabBarItem public tokens.                                                                                                                | Shell/project/metadata                             |
 | `clients/web/src/components/provider-icon.css`                | Exact external provider brand SVG dimensions justify branded-media adapter CSS; Lucide does not replace provider logos.                                                                                                                                                         | Retain                                             |
 | `clients/web/src/components/provider-setup-form.css`          | Device auth/reuse/accounts/permissions are owned; form stacks/labels/controls/account rows/notices/actions are generic.                                                                                                                                                         | Settings/forms                                     |
 | `clients/web/src/components/quick-ticket-composer.css`        | Ticket creation/drop state/details autosize are owned; dialog/form/buttons/metadata/attachment rows/status/footer are generic.                                                                                                                                                  | Dialogs; attachments/notes overlap                 |
@@ -266,7 +266,7 @@ frame` insets its rows. Also retained are the phrasing-only copy grids inside ro
   unstyled wrapper. The `KUI-L004` profile exception for its options half is gone.
 - The project work summary is centered Kerf `Text` (`align="center"`), so its CSS rule is gone.
   The test hook is now `data-work-summary`.
-- The project sidebar chat toggle stays an app-owned native button: Kerf `IconToggleButton` shows
+- The project sidebar chat toggle stays an app-owned native button: Kerf's pressed `Button` (formerly `IconToggleButton`) shows
   the default cursor while disabled, not this app's not-allowed cursor (`KF-HJD6XB`; `HS2-Q5ZZFF`
   adopts it).
 - Retained: the ProjectSummary chart tile (bar geometry), the project tab, tab bar, and close or
@@ -278,7 +278,8 @@ frame` insets its rows. Also retained are the phrasing-only copy grids inside ro
 - `TerminalDashboard` empty, loading, and message copy now composes Kerf `List` and `Text`. The
   `.terminal-dashboard__empty` rules are gone, and the `/ux-demo` entry exposes all three states plus
   a short drawer grid. The controls wrapper is a Kerf `Row`, so `.terminal-dashboard-controls` is
-  removed. The inner `List` works around `KF-3ZJ9PF` (`vAlign="middle"` spreads several children).
+  removed. Since Kerf beta.106 (`KF-3ZJ9PF`) one filled `List` gathers the title and copy in its
+  middle, so the former inner `List` workaround is gone (HS2-BH7NZ4).
 - Retained with exact upstream requests: the visibility Select and ticket-rail view-title width
   bounds (`KF-DQANHZ`), the hidden-item corner count (`KF-WT2EMZ`), and the drawer tab
   status-icon wrappers that carry a hover title (`KF-2V9XJQ`). `HS2-9J6MYJ` adopts those

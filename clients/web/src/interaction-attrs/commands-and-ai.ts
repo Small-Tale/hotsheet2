@@ -97,13 +97,15 @@ export const COMMANDS_AND_AI_ACTIONS = {
  */
 export const COMMANDS_AND_AI_TARGETS = {
   aiConversation: attr('data-component', 'ai-conversation'),
-  conversationExportDialog: attr('data-component', 'conversation-export-dialog'),
+  /** The dialog presentation's root, a Kerf DialogSurface whose own `data-component` is protected. */
+  aiConversationDialog: attr('data-dialog-component', 'ai-conversation'),
+  conversationExportDialog: attr('data-dialog-component', 'conversation-export-dialog'),
   conversationDraftField: attr('name', 'conversation-draft'),
   commandIconSearchField: attr('name', 'command-icon-search'),
-  manualModelDialog: attr('data-component', 'manual-model-dialog'),
-  aiFeedbackDialog: attr('data-component', 'ai-feedback-dialog'),
+  manualModelDialog: attr('data-dialog-component', 'manual-model-dialog'),
+  aiFeedbackDialog: attr('data-dialog-component', 'ai-feedback-dialog'),
   trashRetentionDaysField: attr('name', 'trash-cleanup-days'),
-  trashRetentionLeaveDialog: attr('data-component', 'trash-retention-leave-dialog'),
+  trashRetentionLeaveDialog: attr('data-dialog-component', 'trash-retention-leave-dialog'),
 } as const;
 
 /**
@@ -112,4 +114,4 @@ export const COMMANDS_AND_AI_TARGETS = {
  * ChoiceChips color radios by their action (HS2-EBY4E3).
  */
 export const COMMAND_FIELD_SELECTOR =
-  '[data-command-field], [data-command-editor-dialog] wa-select[name="kind"], [data-action="select-command-color"]';
+  '[data-command-field], [data-command-editor-dialog] kui-select[name="kind"], [data-action="select-command-color"]';

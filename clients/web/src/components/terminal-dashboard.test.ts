@@ -277,7 +277,7 @@ describe('TerminalDashboard', () => {
     );
     expect(markup).toContain('data-action="open-terminal-context-menu"');
     expect(markup).toContain('data-context-menu="terminal"');
-    expect(markup.match(/<wa-dropdown-item/g)).toHaveLength(2);
+    expect(markup.match(/class="kui-popup-menu__item"/g)).toHaveLength(2);
     expect(markup).toContain('data-action="open-terminal-project"');
     expect(markup).toContain('data-action="hide-dashboard-terminal"');
     const openOnly = String(
@@ -291,7 +291,7 @@ describe('TerminalDashboard', () => {
         contextMenuActions: ['open'],
       }),
     );
-    expect(openOnly.match(/<wa-dropdown-item/g)).toHaveLength(1);
+    expect(openOnly.match(/class="kui-popup-menu__item"/g)).toHaveLength(1);
     expect(openOnly).not.toContain('data-action="hide-dashboard-terminal"');
     expect(
       String(
@@ -322,13 +322,15 @@ describe('TerminalDashboard', () => {
     expect(markup).toMatch(/<div class="kui-toolbar__trailing"><div class="kui-toolbar-control-group"/);
     expect(markup).not.toContain('visibility-toolbar');
     // The group Select is wrapped by the app; its root carries no app class (KUI-L022).
-    expect(markup).toContain('<div class="terminal-dashboard-controls__visibility-select"><wa-select');
+    expect(markup).toContain(
+      '<div class="terminal-dashboard-controls__visibility-select"><kui-select class="kui-select kui-select--custom-selected"',
+    );
     expect(markup).toContain('>2</span>');
     expect(markup).toContain('name="terminal-visibility-group"');
     expect(markup).toContain(
       'class="kui-select__custom-selected"><span class="kui-select__custom-selected-content"><span>Focus</span>',
     );
-    expect(markup).toContain('<wa-option value="focus"');
+    expect(markup).toMatch(/class="kui-select__option"[^>]*data-value="focus"/);
     expect(markup).not.toContain('kui-select--fit-menu');
     expect(markup).not.toContain('name="terminal-grouping"');
   });

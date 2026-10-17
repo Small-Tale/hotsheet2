@@ -216,7 +216,7 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
   // The bare `c` must NOT fire while a text field is focused: open search, type into it, and confirm
   // the composer stays closed (the character is typed, not consumed as a shortcut).
   await page.getByRole('button', { name: 'Search tickets' }).click();
-  const search = page.locator('[data-token-search-editor="workspace-search"]');
+  const search = page.locator('[data-search-field-editor="workspace-search"]');
   await expect(search).toBeFocused();
   await page.keyboard.press('c');
   await expect(composer).toBeHidden();

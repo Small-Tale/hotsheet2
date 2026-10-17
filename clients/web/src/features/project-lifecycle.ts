@@ -241,7 +241,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       hs1MigrationProject.value = migrationTarget;
       ticketSourceSetupProject.value = setupTarget;
     };
-    if (waitForProjectDialog) openingDialog!.addEventListener('wa-after-hide', presentSetup, { once: true });
+    if (waitForProjectDialog) openingDialog!.addEventListener('close', presentSetup, { once: true });
     projectDialogOpen.value = false;
     if (!waitForProjectDialog) presentSetup();
     else {

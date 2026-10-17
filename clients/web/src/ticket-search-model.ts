@@ -1,10 +1,10 @@
-import type { TokenSearchFieldValue } from '@kerfjs/ui/token-search-field';
+import type { SearchFieldValue } from '@kerfjs/ui/search-field';
 import {
-  createTokenSearchModel,
-  type TokenSearchModel,
-  type TokenSearchRule,
-  type TokenSearchState,
-} from '@kerfjs/ui/token-search-model';
+  createSearchFieldModel,
+  type SearchFieldModel,
+  type SearchFieldRule,
+  type SearchFieldState,
+} from '@kerfjs/ui/search-field-model';
 
 import {
   consumeSearchTokens,
@@ -18,7 +18,7 @@ import {
 } from './inline-search';
 
 /**
- * The ticket search grammar as Kerf `TokenSearchModel` rules (HS2-5JXBQY, evaluated in
+ * The ticket search grammar as Kerf `SearchFieldModel` rules (HS2-5JXBQY, evaluated in
  * HS2-HHRYP9 / HS2-06Q4MG): `tag`, `is`, `has`, and `attachment`, plus the twelve lifecycle date
  * filters as hyphenated rule names. Every rule parses through the app's own `tokenFromRaw`, so a
  * chip Kerf commits is exactly a chip the app parser would have produced, and the `tag` rule's
@@ -45,13 +45,13 @@ const parseAs = (kind: InlineSearchToken['kind'], name: string) => (input: strin
 export interface TicketSearchModelOptions {
   /** Every tag the project offers, canonical casing, read lazily when a `tag:` prefix is typed. */
   readonly tags: () => readonly string[];
-  readonly initial?: TokenSearchFieldValue;
+  readonly initial?: SearchFieldValue;
   /** Runs after Kerf's managed clear, for app state that belongs to the field (open help, errors). */
   readonly onClear?: () => void;
 }
 
 /** The grammar rules for one ticket search model. */
-export function ticketSearchRules(tags: () => readonly string[]): TokenSearchRule[] {
+export function ticketSearchRules(tags: () => readonly string[]): SearchFieldRule[] {
   return [
     {
       name: 'tag',
@@ -77,7 +77,7 @@ export function ticketSearchRules(tags: () => readonly string[]): TokenSearchRul
     },
     { name: 'attachment', parse: parseAs('attachment', 'attachment') },
     ...TICKET_SEARCH_DATE_FIELDS.flatMap((field) =>
-      DATE_DIRECTIONS.map((direction): TokenSearchRule => ({
+      DATE_DIRECTIONS.map((direction): SearchFieldRule => ({
         name: `${field}-${direction}`,
         parse: (input) => parseSearchDate(input),
         label: (_value, input) => searchDateLabel(field, direction, input),
@@ -90,9 +90,9 @@ export function ticketSearchRules(tags: () => readonly string[]): TokenSearchRul
  * A Kerf-managed ticket search model: parsing, chips, suggestions, edit/remove/clear/commit/replace
  * all belong to Kerf; the app projects `state` into its own signals and reacts to clears.
  */
-export function createTicketSearchModel({ tags, initial, onClear }: TicketSearchModelOptions): TokenSearchModel {
-  const model = createTokenSearchModel({ rules: ticketSearchRules(tags), initial });
-  const normalized = (value: TokenSearchFieldValue): TokenSearchFieldValue => ({
+export function createTicketSearchModel({ tags, initial, onClear }: TicketSearchModelOptions): SearchFieldModel {
+  const model = createSearchFieldModel({ rules: ticketSearchRules(tags), initial });
+  const normalized = (value: SearchFieldValue): SearchFieldValue => ({
     ...value,
     query: quoteRelativeDates(value.query),
   });
@@ -127,7 +127,7 @@ export function quoteRelativeDates(query: string): string {
 }
 
 /** The model's committed chips as the app's structured tokens (parsed values, raw, label, offset). */
-export function inlineSearchTokens(state: TokenSearchState): InlineSearchToken[] {
+export function inlineSearchTokens(state: SearchFieldState): InlineSearchToken[] {
   return state.tokens.flatMap((token) => {
     const parsed = tokenFromRaw(token.value);
     return parsed ? [{ ...parsed, offset: token.offset }] : [];
@@ -138,7 +138,7 @@ export function inlineSearchTokens(state: TokenSearchState): InlineSearchToken[]
  * Replace a model's query from plain text (a restored session, a seeded saved-view query): complete
  * filters in the text become chips, through the app parser so a trailing filter commits too.
  */
-export function replaceTicketSearch(model: TokenSearchModel, text: string): void {
+export function replaceTicketSearch(model: SearchFieldModel, text: string): void {
   const parsed = consumeSearchTokens(text, true);
   model.replace({ query: parsed.text, tokens: parsed.tokens.map(toTokenSearchToken) });
 }

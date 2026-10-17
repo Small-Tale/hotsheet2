@@ -36,12 +36,12 @@ describe('AiToolSettings (HS2-SW5S13, HS2-EK24KF)', () => {
       }),
     );
     expect(selectValue(markup, 'ai-default-tool')).toBe('codex');
-    expect(markup).toContain('label="Default AI provider"');
+    expect(markup).toContain('label="Default AI Provider"');
     // The default provider keeps its custom model; Claude shows its own saved choice.
     expect(selectValue(markup, 'ai-provider-model-codex')).toBe('legacy model');
     expect(selectValue(markup, 'ai-provider-model-claude')).toBe('opus');
     expect(selectValue(markup, 'ai-provider-effort-claude')).toBe('high');
-    expect(markup).toContain('<wa-option value="legacy model"');
+    expect(markup).toMatch(/class="kui-select__option"[^>]*data-value="legacy model"/);
     expect(markup).toContain('data-ai-provider="codex" data-ai-provider-default="true"');
     expect(markup).toContain('data-ai-provider="claude" data-ai-provider-default="false"');
     expect(markup).toContain('Codex (default)');
@@ -101,7 +101,7 @@ describe('AiToolSettings permission modes (HS2-NHRDMW)', () => {
   it('offers each declared mode, explains the selected one, and warns for a risky one', () => {
     const plain = String(AiToolSettings({ tools: moded, selection: { tool: 'claude', model: 'sonnet' } }));
     expect(selectValue(plain, 'ai-provider-permission-mode-claude')).toBe('acceptEdits');
-    expect(plain).toContain('label="Chat permissions"');
+    expect(plain).toContain('label="Chat Permissions"');
     expect(plain).toContain('Edits run without asking.');
     expect(plain).toContain('data-permission-mode="acceptEdits"');
     // A provider without declared modes has no permission field.

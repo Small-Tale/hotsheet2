@@ -217,11 +217,11 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
   await page.getByRole('tab', { name: 'Kerf' }).click();
   await page.locator('[data-ticket-slug="KF-1AAYP9"]').click({ button: 'right' });
   await page.locator('[data-context-menu="ticket"]').getByText('Close ticket…').click();
-  const dialog = page.locator('[data-component="ticket-close-dialog"]').last();
+  const dialog = page.locator('[data-dialog-component="ticket-close-dialog"]').last();
   await expect(dialog).toHaveJSProperty('open', true);
-  const reason = dialog.locator('wa-select[name="ticket-close-reason"]');
+  const reason = dialog.locator('kui-select[name="ticket-close-reason"]');
   await reason.click();
-  await reason.locator('wa-option[value="duplicate"]').click();
+  await reason.locator('.kui-select__option[data-value="duplicate"]').click();
   const search = dialog.getByRole('textbox', { name: 'Existing Ticket' });
   await search.fill('HS2-1S6DS9');
   const candidate = dialog.getByRole('button', { name: /HS2-1S6DS9.*Hot Sheet 2.*Canonical checkout registry repair/ });

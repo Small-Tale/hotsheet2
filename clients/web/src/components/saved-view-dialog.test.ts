@@ -26,7 +26,7 @@ describe('SavedViewDialog', () => {
     expect(field).toContain('data-ticket-search-for="saved-view-query"');
     expect(markup).toContain('data-presentation="form-field"');
     expect(markup).toMatch(
-      /<div class="kui-token-search__field-label" id="saved-view-query-label"[^>]*>Search query<span class="kui-token-search__field-required" aria-hidden="true">\*<\/span>/,
+      /<div class="kui-search-field__field-label" id="saved-view-query-label"[^>]*>Search query<span class="kui-search-field__field-required" aria-hidden="true">\*<\/span>/,
     );
     expect(markup).toContain('aria-labelledby="saved-view-query-label"');
     expect(markup).toContain('aria-describedby="saved-view-query-hint"');
@@ -42,7 +42,7 @@ describe('SavedViewDialog', () => {
         helpOpen: true,
       }),
     );
-    expect(markup).toContain('data-component="saved-view-dialog"');
+    expect(markup).toContain('data-dialog-component="saved-view-dialog"');
     // The shared ticket search brings tag completion and syntax help into the dialog (HS2-N5G6JS).
     expect(markup).not.toContain('workspace-header__search-group');
     expect(markup).toContain('aria-label="Search Syntax Help"');
@@ -53,15 +53,15 @@ describe('SavedViewDialog', () => {
       '<span hidden data-ticket-search-surface-state data-ticket-search-for="saved-view-query" data-surfaces-open="true" data-date-prefix="" data-help-open="true">',
     );
     // Kerf's tag completion excludes the committed chip (HS2-5JXBQY).
-    expect(markup).toContain('data-token-search-suggestion="tag:design"');
-    expect(markup).not.toContain('data-token-search-suggestion="tag:docs"');
-    expect(markup).not.toContain('data-token-search-suggestion="tag:server"');
+    expect(markup).toContain('data-search-field-suggestion="tag:design"');
+    expect(markup).not.toContain('data-search-field-suggestion="tag:docs"');
+    expect(markup).not.toContain('data-search-field-suggestion="tag:server"');
     expect(markup).toContain('data-action="clear-ticket-search"');
     expect(markup).toContain('aria-label="Clear search query"');
     expect(markup).toContain('name="saved-view-name"');
     expect(markup).toContain('name="saved-view-query"');
-    expect(markup).toContain('data-token-search-editor="saved-view-query"');
-    expect(markup).toContain('data-component="token-search-token"');
+    expect(markup).toContain('data-search-field-editor="saved-view-query"');
+    expect(markup).toContain('data-component="search-field-token"');
     expect(markup).toContain('data-token-value="tag:docs"');
     expect(markup).toContain('Everyone using this ticket store will see it.');
     expect(markup).toContain('data-action="save-saved-view"');
@@ -117,17 +117,20 @@ describe('SavedViewDialog', () => {
       const markup = String(SavedViewDialog(state));
       expect(markup.match(/autofocus/g)).toHaveLength(1);
       expect(markup).toMatch(/<wa-input[^>]*name="saved-view-name"[^>]*autofocus/);
-      const dialogStart = markup.indexOf('<wa-dialog'),
+      // The native Kerf dialog declares its state; the controlled-open pass opens it modally, so the
+      // template never sets the non-modal `open` attribute itself (HS2-BH7NZ4).
+      const dialogStart = markup.indexOf('<dialog'),
         host = markup.slice(dialogStart, markup.indexOf('>', dialogStart) + 1);
-      expect(/\sopen(?:[\s=>])/.test(host)).toBe(state.open);
+      expect(host).toContain(`data-controlled-open="${String(state.open)}"`);
+      expect(/\sopen(?:[\s=>])/.test(host)).toBe(false);
       expect(markup).toContain(`value="${state.name}"`);
-      expect(markup).toContain('data-token-search-editor="saved-view-query"');
+      expect(markup).toContain('data-search-field-editor="saved-view-query"');
     }
   });
 
   it('confirms shared deletion without implying tickets are removed', () => {
     const markup = String(SavedViewDeleteDialog({ open: true, name: 'Needs docs' }));
-    expect(markup).toContain('data-component="saved-view-delete-dialog"');
+    expect(markup).toContain('data-dialog-component="saved-view-delete-dialog"');
     expect(markup).toContain('Tickets are not affected.');
     expect(markup).toContain('data-action="confirm-delete-saved-view"');
     expect(markup).toContain('data-component="list"');

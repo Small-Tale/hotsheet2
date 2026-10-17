@@ -202,7 +202,8 @@ describe('CommandSettingsEditor', () => {
         aiDefaults: { tool: 'codex', model: 'gpt-6', effort: 'high' },
       }),
     );
-    expect(inherited).toContain('<span>Project Default</span>');
+    // The menu trigger's visible summary text (Kerf PopupMenu `text`).
+    expect(inherited).toContain('<span class="kui-popup-menu__text">Project Default</span>');
     expect(inherited).toContain('data-action="select-command-ai-default"');
     const ai = String(
       CommandSettingsEditor({
@@ -223,7 +224,7 @@ describe('CommandSettingsEditor', () => {
       }),
     );
     expect(ai).toContain('name="prompt"');
-    expect(ai).toContain('<span>Claude · Sonnet · high</span>');
+    expect(ai).toContain('<span class="kui-popup-menu__text">Claude · Sonnet · high</span>');
     expect(ai).toContain('data-action="select-command-ai-tool"');
     expect(ai).toContain('data-action="select-command-ai-model"');
     expect(ai).toContain('data-action="select-command-ai-effort"');
@@ -243,7 +244,7 @@ describe('CommandSettingsEditor', () => {
     expect(program).toMatch(/<wa-input label="Program" name="program"/);
     expect(program).toMatch(/<wa-textarea label="Arguments" name="args"[^>]*hint="One exact argument per line\."/);
     expect(program).toContain('wa-input label="Confirmation Message" name="confirmation"');
-    expect(program).toMatch(/<wa-select[^>]*name="kind"/);
+    expect(program).toMatch(/<kui-select[^>]*name="kind"/);
     expect(program).toContain('data-component="grid"');
     // Every command field is a Web Awesome control; only Kerf ChoiceChips' color radios are native.
     const nativeFields = [...program.matchAll(/<(input|textarea|select)[\s>][^>]*/g)]

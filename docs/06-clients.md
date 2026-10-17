@@ -656,7 +656,7 @@ preview/download, server directory browser) are separate design work.
   projection at a typing pause and then searches at once, while committing or removing a chip
   and the search becoming empty or non-empty publish immediately; opening the saved-view
   dialog and restoring a saved view flush pending text first. The field's render reads only
-  Kerf's structural `TokenSearchModel.structure`, and the typed date-filter prefix reaches the
+  Kerf's structural `SearchFieldModel.structure`, and the typed date-filter prefix reaches the
   date helper through a bound attribute, so keystrokes do not re-render the workspace
   (HS2-X72PD6).
   Text fields (details, title, blocked reason, notes, in the inspector, the reader, and
@@ -1002,7 +1002,7 @@ preview/download, server directory browser) are separate design work.
   remembered roots are deduplicated and their project-open/metadata requests run concurrently.
   When the remembered active root opens on its first attempt, it is registered and activated
   immediately and the shell is revealed without waiting for the other projects. Each other
-  remembered project shows Kerf's named `pending` `AppTab` at its remembered position until its open
+  remembered project shows Kerf's named `pending` `TabBarItem` at its remembered position until its open
   succeeds (it then registers at once, replacing the pending tab in place, without waiting for
   slower projects) or fails its bounded retry (it then becomes the usual error tab). The pending tab
   keeps the project name visible (dimmed) as its accessible name, is busy, has close and drag off,
@@ -1241,7 +1241,7 @@ preview/download, server directory browser) are separate design work.
   bookkeeping; populated searches and marked suggestion/date/help surfaces remain open. A
   pointer press that blurs the empty search collapses it only after that press's click, so the
   collapsing row cannot shift the project tabs or tickets out from under the pointer and swallow
-  the click (HS2-YVBGW3); Kerf's TokenSearchField owns that deferral since 5.0.0-beta.64
+  the click (HS2-YVBGW3); Kerf's SearchField owns that deferral since 5.0.0-beta.64
   (KF-64W0RN, HS2-Z4VB11).
   Notifications and Settings hide and disable search while active, then restore an open,
   populated editor on returning to a ticket view; its query remains available for editing.
@@ -1338,7 +1338,7 @@ preview/download, server directory browser) are separate design work.
   instead of passing partial optional action props. The browser test runtime is kept at
   the package's Playwright 1.63 peer floor so package and application browser checks use
   one compatible installation. Token-search input state is consumed through beta 22's
-  `wireTokenSearchFields.onEdit` callback in both the application and UX catalog rather
+  `wireSearchFields.onEdit` callback in both the application and UX catalog rather
   than through a second competing delegated input listener (HS2-HJ585K).
   Managed token search owns clear-action focus across controlled editor replacement:
   clearing chips keeps the current editor open for immediate continued typing, while
@@ -1527,6 +1527,14 @@ preview/download, server directory browser) are separate design work.
   custom-element `open` that a re-render omits (so unrelated renders no longer close a user-opened
   popup), which means a controlled dialog would otherwise open but never close. Uncontrolled popups
   carry no marker and keep that protection (HS2-KMDJRH).
+  Since Kerf 5.0.0-beta.106 a Kerf `DialogSurface` is itself a native `<dialog>`: the same pass opens
+  a marked one with Kerf's `openDialog` (modal, top layer) and closes it with `closeDialog`, never by
+  toggling `open`. A user's close request (close button, `data-dialog-close`, Escape, light dismiss)
+  arrives as the cancelable `kui-request-close`, whose handler clears the app state in the same turn;
+  work that must wait for the exit motion listens for the native `close` event. Kerf `PopupMenu` and
+  `Select` are Kerf's own popovers rather than `wa-dropdown`/`wa-select`: a menu's open state is its
+  opener's `aria-expanded` and a closing menu fires its panel's `toggle` (`src/popup-menu-state.ts`),
+  while a Select is a form-associated `kui-select` (HS2-BH7NZ4).
   Since Kerf 5.0.0-beta.56 (KF-KQWZ8M) the morph likewise leaves a custom element's host `role` and
   `aria-*` alone when a template omits them, so conditional ARIA on a Web Awesome host always renders
   an explicit value (for example `aria-hidden={open ? 'false' : 'true'}`) (HS2-QCSPDH).
@@ -1628,7 +1636,7 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   (same warning tone, icon, and Stop), the "Click to select" hint row steps aside while a turn's
   progress shows (it returns when the turn ends, and the selection bar still appears once messages
   are selected), and the draft grows to 3 rows; below
-  320 px it grows to 2 rows. A longer draft scrolls inside the Composer. A taller or maximized
+  320 px it grows to 2 rows. A longer draft scrolls inside the MessageComposer. A taller or maximized
   drawer and the dialog keep the full banner, the hint, and six rows. The drawer passes its measured
   content height as `AIConversationProps.availableHeight` (`embeddedComposerLayout`). A turn
   another client started is
@@ -2778,7 +2786,7 @@ advanced search surface and state as the main workspace, including chips,
 tag completion, attachment/presence filters, relative or local dates, and syntax help: the
 rail, the workspace header, and the saved-view dialog's query field (as the form-field
 variant `TicketSearchFormField`, aligned with the View name input, HS2-E40KC0) all render the one
-shared `TicketSearchField` module over a Kerf-managed `TokenSearchModel` (HS2-5JXBQY), so
+shared `TicketSearchField` module over a Kerf-managed `SearchFieldModel` (HS2-5JXBQY), so
 tag completion (Kerf's anchored suggestion popover), the date helper, and syntax help are
 available wherever tickets are searched (HS2-N5G6JS). Every syntax-help example, including the
 combined-filter example, is an activatable Kerf action `Chip` (a native button, so pointer,
@@ -3117,7 +3125,7 @@ explain that MCP connectivity is separate, and point to the read-only
 
 Project tabs reorder among projects; terminal and AI-chat tabs reorder together in
 one mixed drawer strip by dragging across either kind. Both strips use Kerf's controlled
-`TabBar`/`AppTab` composition and one `wireTabBars` delegation. Both use manual activation:
+`TabBar`/`TabBarItem` composition and one `wireTabBars` delegation. Both use manual activation:
 Left/Right/Home/End move focus without replacing the focused controlled tab node, and
 Enter/Space explicitly selects the project or live drawer surface. Project order is stored with the
 open-project roots and restored without changing the remembered active project. Each
@@ -3141,7 +3149,7 @@ order. The horizontally scrolling tab strips reserve a canonical 4 px inset on e
 and focus rings remain complete at either end. The project strip places the dashboard-mode
 buttons in `TabBar`'s leading slot and the add-project action in its trailing slot. The drawer
 strip keeps its Project grid tab pinned at the start of the shared horizontal scroller (Kerf's
-`pinned` AppTab, HS2-WF3W6A) and places create/hide actions in the trailing slot. A dedicated terminal uses a canonical 8 px inset and shares
+`pinned` TabBarItem, HS2-WF3W6A) and places create/hide actions in the trailing slot. A dedicated terminal uses a canonical 8 px inset and shares
 one domain background token between its session container, viewport, and xterm theme, so
 the edge area is symmetric and visually continuous with the terminal canvas.
 Double-clicking the rail, grid tab, or any terminal tab toggles drawer maximization while
@@ -4109,7 +4117,7 @@ The sidebar inspector and reader each own and persist their selected tab for the
 Changing one surface's tab never changes the other; reopening or restoring the project
 returns each surface to its own last selection. Feedback-response entry intentionally
 opens the reader's Info tab without disturbing the sidebar selection. The Info, Timeline,
-Code Review, and Attachments panels use Kerf's controlled `TabBar`/`AppTab` composition in
+Code Review, and Attachments panels use Kerf's controlled `TabBar`/`TabBarItem` composition in
 the sidebar, reader, and terminal ticket rail. Exactly one tab is selected and keyboard
 focusable; Arrow, Home, and End keys move focus and activate the corresponding panel, while
 narrow inspectors retain the same accessible tab names when their visible labels collapse

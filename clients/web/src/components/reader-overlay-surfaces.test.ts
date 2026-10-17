@@ -75,7 +75,8 @@ describe('reader and overlay composition surfaces', () => {
           conversation: { open: true, tool: 'Codex', messages: [], draft: '', busy: false, interruptible: false },
         }),
       ),
-    ).toContain('data-component="ai-conversation"');
+      // The dialog presentation is a Kerf DialogSurface, whose own `data-component` is protected.
+    ).toContain('data-dialog-component="ai-conversation"');
     expect(
       String(
         GallerySurface({

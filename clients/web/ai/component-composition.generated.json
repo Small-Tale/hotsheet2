@@ -249,10 +249,10 @@
       "wiring": {
         "required": true,
         "helpers": [
-          "wireComposers"
+          "wireMessageComposers"
         ],
         "obligations": [
-          "The submitOnEnter Composer needs wireComposers on the conversation root for Enter-to-send."
+          "The submitOnEnter MessageComposer needs wireMessageComposers on the conversation root for Enter-to-send."
         ]
       },
       "responsive": {
@@ -6816,7 +6816,7 @@
       "wiring": {
         "required": true,
         "helpers": [
-          "wireTokenSearchFields",
+          "wireSearchFields",
           "wireTicketSearchFields"
         ],
         "sources": [
@@ -6826,7 +6826,7 @@
           }
         ],
         "obligations": [
-          "Wire Kerf's wireTokenSearchFields for editor chrome, submit, and collapsible behavior.",
+          "Wire Kerf's wireSearchFields for editor chrome, submit, and collapsible behavior.",
           "Wire wireTicketSearchFields once per root and route every callback by the field id it receives."
         ]
       },
@@ -7387,18 +7387,13 @@
       "wiring": {
         "required": true,
         "helpers": [
-          "wireTokenSearchFields",
-          "wireTicketSearchFields",
-          "wireWorkspaceOverflowKeyboard"
+          "wireSearchFields",
+          "wireTicketSearchFields"
         ],
         "sources": [
           {
             "export": "wireTicketSearchFields",
             "source": "src/interactions/ticket-search-field.ts"
-          },
-          {
-            "export": "wireWorkspaceOverflowKeyboard",
-            "source": "src/components/workspace-controls.tsx"
           }
         ],
         "obligations": [

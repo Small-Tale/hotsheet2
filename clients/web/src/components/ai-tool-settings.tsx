@@ -74,7 +74,7 @@ function ProviderDefaults({
           {permissionMode && (
             <Select
               name={aiProviderPermissionModeName(tool.id)}
-              label="Chat permissions"
+              label="Chat Permissions"
               value={permissionMode.id}
               hint={permissionMode.warning ? `Warning: ${permissionMode.warning}` : permissionMode.description}
               choices={permissionModes.map((mode) => ({
@@ -135,7 +135,7 @@ export function AiToolSettings({
         <Grid minColumnWidth={FIELD_COLUMN} autoFill className="ai-tool-settings__default">
           <Select
             name="ai-default-tool"
-            label="Default AI provider"
+            label="Default AI Provider"
             hint="Used by Drive, AI shells, and AI chat unless you pick another provider."
             value={active.id}
             choices={tools.map((tool) => ({ value: tool.id, label: tool.display_name, icon: Bot, iconName: 'bot' }))}

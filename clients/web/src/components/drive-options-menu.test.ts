@@ -25,20 +25,19 @@ describe('DriveOptionsMenu', () => {
       }),
     );
     expect(markup).toContain('aria-label="Drive Provider, Model, and Effort Options"');
-    expect(markup).toContain('data-action="select-drive-default" type="checkbox"');
-    expect(markup).toContain(
-      'data-value="claude" slot="submenu" data-action="select-drive-tool" value="claude" type="checkbox"',
-    );
-    expect(markup).toContain(
-      'data-value="gpt-5.6" slot="submenu" data-action="select-drive-model" value="gpt-5.6" type="checkbox"',
-    );
-    expect(markup).toContain(
-      'data-value="legacy model" slot="submenu" data-action="select-drive-model" value="legacy model" type="checkbox" checked',
-    );
+    // Kerf menu checkbox items (`role="menuitemcheckbox"`), the choices inside `data-submenu` menus.
+    const submenuItem = (value: string, action: string, checked: boolean) =>
+      new RegExp(
+        `data-submenu=""[\\s\\S]*data-value="${value}"[^>]*role="menuitemcheckbox"[^>]*data-action="${action}" value="${value}" aria-checked="${String(checked)}"`,
+      );
+    expect(markup).toMatch(/role="menuitemcheckbox"[^>]*data-action="select-drive-default"/);
+    expect(markup).toMatch(submenuItem('claude', 'select-drive-tool', false));
+    expect(markup).toMatch(submenuItem('gpt-5.6', 'select-drive-model', false));
+    expect(markup).toMatch(submenuItem('legacy model', 'select-drive-model', true));
     expect(markup).toContain('data-action="open-drive-manual-model"');
     expect(markup).not.toContain('name="drive-model"');
     // The current provider and the ephemeral custom model are checked PopupMenu choices (HS2-2EHD8R).
-    expect(markup.match(/type="checkbox" checked/g)).toHaveLength(2);
+    expect(markup.match(/aria-checked="true"/g)).toHaveLength(2);
   });
   it('keeps Other available while disabling effort when a plugin exposes no models', () => {
     const markup = String(
@@ -74,7 +73,7 @@ describe('DriveOptionsMenu', () => {
     expect(markup.match(/data-lucide="brain"/g)).toHaveLength(2);
     expect(markup.match(/data-lucide="gauge"/g)).toHaveLength(3);
     expect(
-      markup.match(/slot="submenu" data-action="select-drive-[a-z]+" value="[^"]+" type="checkbox"/g)?.length,
+      markup.match(/role="menuitemcheckbox" tabindex="-1" data-action="select-drive-[a-z]+" value="[^"]+"/g)?.length,
     ).toBeGreaterThan(0);
     // Kerf's context PopupMenu renders its own anchor (KF-FXGW0C, HS2-H4JZDQ); the menu has no stylesheet.
     expect(markup).toContain('data-context-menu="drive-options"');

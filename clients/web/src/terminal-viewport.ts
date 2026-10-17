@@ -168,7 +168,7 @@ export const TERMINAL_FOCUS_RETRY_MS = 120;
  * menu that created it (Web Awesome returns focus to the dropdown trigger as it closes — HS2-FB4DKM).
  */
 export const TERMINAL_INITIAL_FOCUS_WINDOW_MS = 1_000;
-const TRANSIENT_FOCUS_OWNERS = 'wa-dropdown, wa-dropdown-item, [role="menu"], [role="menuitem"]';
+const TRANSIENT_FOCUS_OWNERS = '.kui-popup-menu, [role="menu"], [role="menuitem"]';
 
 /**
  * Whether the element holding focus may yield it to a terminal that requested initial focus: nothing

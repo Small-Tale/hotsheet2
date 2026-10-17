@@ -1,4 +1,3 @@
-import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@kerfjs/ui/floating-toolbar.css';
 import './terminal-dashboard.css';
 
@@ -195,7 +194,7 @@ export function TerminalVisibilityControls({
               <div class="terminal-dashboard-controls__visibility-select">
                 <Select
                   name="terminal-visibility-group"
-                  ariaLabel="Terminal visibility group"
+                  ariaLabel="Terminal Visibility Group"
                   // The control group paints the pill chrome and focus ring around the trigger.
                   presentation="toolbar-borderless"
                   size="compact"
@@ -710,25 +709,23 @@ function DashboardFeedback({
   status?: boolean;
   children: string;
 }) {
-  // The filled outer List centers one child: its `middle` alignment distributes several children
-  // (space-around, KF-3ZJ9PF), so the inner List keeps the title and copy together.
+  // The filled List gathers the title and copy in its middle with its gap (KF-3ZJ9PF, Kerf beta.106).
   return (
     <List
       fill
+      gap="2xs"
       hAlign="center"
       vAlign="middle"
       rootAttributes={{ 'data-terminal-dashboard-feedback': 'true', ...(status ? { role: 'status' as const } : {}) }}
     >
-      <List gap="2xs" hAlign="center">
-        {title ? (
-          <Text variant="p" align="center" flush>
-            <strong>{title}</strong>
-          </Text>
-        ) : undefined}
-        <Text variant="p" tone="quiet" align="center" flush>
-          {children}
+      {title ? (
+        <Text variant="p" align="center" flush>
+          <strong>{title}</strong>
         </Text>
-      </List>
+      ) : undefined}
+      <Text variant="p" tone="quiet" align="center" flush>
+        {children}
+      </Text>
     </List>
   );
 }

@@ -1,9 +1,9 @@
-import { createTokenSearchModel, type TokenSearchRule, type TokenSearchState } from '@kerfjs/ui/token-search-model';
+import { createSearchFieldModel, type SearchFieldRule, type SearchFieldState } from '@kerfjs/ui/search-field-model';
 import { describe, expect, it } from 'vitest';
 
 import { parseSearchDate, tokenFromRaw } from './inline-search';
 
-// HS2-HHRYP9: does Kerf's managed TokenSearchModel express the ticket search grammar that
+// HS2-HHRYP9: does Kerf's managed SearchFieldModel express the ticket search grammar that
 // TicketSearchField parses itself today? These tests are the evaluation record: the grammar fits,
 // and the three beta.59 API gaps recorded in docs/ux-components.md are closed in beta.62
 // (HS2-06Q4MG), so the migration (HS2-5JXBQY) has every model action it needs.
@@ -23,7 +23,7 @@ const lifecycle = [
 ];
 const dateFields = ['created', 'completed', 'started', 'verified', 'archived', 'updated'];
 const tags = ['client', 'needs design', 'server'];
-const rules: TokenSearchRule[] = [
+const rules: SearchFieldRule[] = [
   {
     name: 'tag',
     parse: (input) => tags.find((tag) => tag.toLowerCase() === input.toLowerCase()) ?? input,
@@ -38,7 +38,7 @@ const rules: TokenSearchRule[] = [
   },
   { name: 'attachment' },
   ...dateFields.flatMap((field) =>
-    (['before', 'after'] as const).map((direction): TokenSearchRule => ({
+    (['before', 'after'] as const).map((direction): SearchFieldRule => ({
       name: `${field}-${direction}`,
       parse: (input) => parseSearchDate(input),
       label: (_value, input) => `${field} ${direction} ${input}`,
@@ -46,9 +46,9 @@ const rules: TokenSearchRule[] = [
   ),
 ];
 
-describe('Kerf TokenSearchModel against the ticket search grammar (HS2-HHRYP9)', () => {
+describe('Kerf SearchFieldModel against the ticket search grammar (HS2-HHRYP9)', () => {
   it('commits every ticket token kind, keeps boolean text and parentheses as text, and matches the app parser', () => {
-    const model = createTokenSearchModel({ rules });
+    const model = createSearchFieldModel({ rules });
     model.edit({
       query: '(client OR server) AND NOT is:archived tag:"needs design" has:commit attachment:*.png ',
       tokens: [],
@@ -71,7 +71,7 @@ describe('Kerf TokenSearchModel against the ticket search grammar (HS2-HHRYP9)',
   });
 
   it('expresses the compound lifecycle date prefixes as hyphenated rule names', () => {
-    const model = createTokenSearchModel({ rules });
+    const model = createSearchFieldModel({ rules });
     model.edit({ query: 'updated-after:2026-09-01T11:05 ', tokens: [] });
     const [token] = model.state.value.tokens;
     expect(token.kind).toBe('updated-after');
@@ -84,7 +84,7 @@ describe('Kerf TokenSearchModel against the ticket search grammar (HS2-HHRYP9)',
   });
 
   it('serves tag suggestions for the trailing tag: prefix and commits the chosen chip', () => {
-    const model = createTokenSearchModel({ rules });
+    const model = createSearchFieldModel({ rules });
     model.edit({ query: 'parser tag:ne', tokens: [] });
     expect(model.suggestions.value).toEqual([{ value: 'tag:"needs design"', label: 'tag:needs design' }]);
     model.choose('tag:"needs design"');
@@ -93,14 +93,14 @@ describe('Kerf TokenSearchModel against the ticket search grammar (HS2-HHRYP9)',
   });
 
   it('confirms beta.62 closed the three API gaps recorded against beta.59 (HS2-06Q4MG)', () => {
-    const model = createTokenSearchModel({
+    const model = createSearchFieldModel({
       rules: rules.map((rule) =>
         rule.name === 'tag'
           ? {
               ...rule,
               // KF-YBJ27D: `suggest` now receives the committed tokens, so a tag that is already a
               // chip is excluded exactly as the app's former suggestion helper excludes it.
-              suggest: (input: string, state: TokenSearchState) =>
+              suggest: (input: string, state: SearchFieldState) =>
                 tags
                   .filter((tag) => tag.toLowerCase().startsWith(input.toLowerCase()))
                   .filter((tag) => !state.tokens.some((token) => token.kind === 'tag' && token.parsedValue === tag)),

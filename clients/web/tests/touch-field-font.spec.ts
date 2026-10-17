@@ -357,7 +357,7 @@ async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
     }
     if (category === 'AI tools') {
       const settings = page.locator('[data-component="ai-tool-settings"]'),
-        model = settings.locator('wa-select[name="ai-provider-model-codex"]');
+        model = settings.locator('kui-select[name="ai-provider-model-codex"]');
       await expect(model).toHaveAttribute('value', 'gpt-6-astra');
       await shot('ai-tools');
       await model.click();
@@ -369,13 +369,16 @@ async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
       // Let the dialog's open transition settle so the screenshot shows the finished state.
       await page.waitForTimeout(400);
       await shot('ai-other-model');
-      await page.locator('[data-component="manual-model-dialog"]').getByRole('button', { name: 'Cancel' }).click();
+      await page
+        .locator('[data-dialog-component="manual-model-dialog"]')
+        .getByRole('button', { name: 'Cancel' })
+        .click();
       await expect.poll(() => page.locator('dialog[open]').count()).toBe(0);
     }
     if (category === 'Commands') {
       await expect(page.getByRole('list', { name: 'Custom commands' })).toContainText('Run tests');
       const row = page.locator('[data-component="command-settings-editor"] .command-settings-editor__row').first();
-      await row.locator('[data-component="popup-menu"] [slot="trigger"]').click();
+      await row.locator('[data-component="popup-menu"] > .kui-popup-menu__trigger').click();
       await row.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
       await expect(page.locator('#command-editor-dialog').getByLabel('Button Label')).toHaveValue('Run tests');
       await audit('command editor');

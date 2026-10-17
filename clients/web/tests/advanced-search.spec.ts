@@ -185,7 +185,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
           sort: rect('[data-component="toolbar"][aria-label="Workspace Toolbar"] .workspace-header__sort-group'),
           toolbar: rect('[data-component="toolbar"][aria-label="Workspace Toolbar"]'),
           tabs: rect('.app-shell__main > .project-tab-bar'),
-          radius: getComputedStyle(group.querySelector<HTMLElement>('.kui-token-search')!).borderRadius,
+          radius: getComputedStyle(group.querySelector<HTMLElement>('.kui-search-field')!).borderRadius,
         };
       });
   await searchGroup.evaluate(async (node) => {
@@ -196,21 +196,21 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await page.screenshot({ path: 'target/visual-captures/hs2-z4t3j0-single-line-search-wide.png', fullPage: true });
   await page.screenshot({ path: 'target/visual-captures/hs2-0094cq-inline-search-wide.png', fullPage: true });
   await search.pressSequentially('tag:h', { delay: 30 });
-  await expect(page.locator('[data-component="token-search-token"]')).toHaveCount(0);
+  await expect(page.locator('[data-component="search-field-token"]')).toHaveCount(0);
   await expect(search).toContainText('tag:h');
   await search.pressSequentially('ello ');
-  const hello = page.locator('[data-component="token-search-token"][data-token-value="tag:hello"]');
+  const hello = page.locator('[data-component="search-field-token"][data-token-value="tag:hello"]');
   await expect(hello).toBeVisible();
   expect(Math.abs((await geometry()).group.height - single.group.height)).toBeLessThanOrEqual(0.5);
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.pressSequentially('tag:"hello ');
-  await expect(page.locator('[data-component="token-search-token"]')).toHaveCount(0);
+  await expect(page.locator('[data-component="search-field-token"]')).toHaveCount(0);
   await expect(search).toContainText('tag:"hello ');
   await search.pressSequentially('world" ');
   await expect(page.getByRole('button', { name: 'Edit tag:hello world' })).toBeVisible();
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.pressSequentially('tag:client ');
-  const trailingChip = page.locator('[data-component="token-search-token"][data-token-value="tag:client"]');
+  const trailingChip = page.locator('[data-component="search-field-token"][data-token-value="tag:client"]');
   await expect(trailingChip).toBeVisible();
   await trailingChip.evaluate((node) => {
     const text = node.querySelector('button')!.firstChild!,
@@ -230,7 +230,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
         container &&
         node.contains(container) &&
         !(container instanceof Element ? container : container.parentElement)?.closest(
-          '[data-component="token-search-token"]',
+          '[data-component="search-field-token"]',
         ),
       );
     }),
@@ -240,7 +240,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
     await search.evaluate((node) =>
       Array.from(node.childNodes)
         .map((child) =>
-          child instanceof HTMLElement && child.matches('[data-component="token-search-token"]')
+          child instanceof HTMLElement && child.matches('[data-component="search-field-token"]')
             ? `[${child.dataset.tokenValue}]`
             : child.textContent,
         )
@@ -257,7 +257,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
     await search.evaluate((node) =>
       Array.from(node.childNodes)
         .map((child) =>
-          child instanceof HTMLElement && child.matches('[data-component="token-search-token"]')
+          child instanceof HTMLElement && child.matches('[data-component="search-field-token"]')
             ? `[${child.dataset.tokenValue}]`
             : child.textContent,
         )
@@ -273,11 +273,11 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await searchGroup.screenshot({ path: 'target/visual-captures/hs2-4rd940-search-chip-caret-wide.png' });
   await page.setViewportSize({ width: 1800, height: 800 });
   await page.getByRole('button', { name: 'Clear search' }).click();
-  await expect(page.locator('[data-component="token-search-token"]')).toHaveCount(0);
+  await expect(page.locator('[data-component="search-field-token"]')).toHaveCount(0);
   await expect(search).toHaveText('');
   await search.pressSequentially('NOT tag:client');
   await search.press('Enter');
-  const inlineTag = page.locator('[data-component="token-search-token"][data-token-value="tag:client"]');
+  const inlineTag = page.locator('[data-component="search-field-token"][data-token-value="tag:client"]');
   await expect(search).toHaveAttribute('data-token-count', '1');
   await expect(inlineTag).toBeVisible();
   await search.pressSequentially(' AND parser');
@@ -286,7 +286,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
     await search.evaluate((node) =>
       Array.from(node.childNodes)
         .map((child) =>
-          child instanceof HTMLElement && child.matches('[data-component="token-search-token"]')
+          child instanceof HTMLElement && child.matches('[data-component="search-field-token"]')
             ? `[${child.dataset.tokenValue}]`
             : child.textContent,
         )
@@ -329,30 +329,30 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await page.setViewportSize({ width: 1800, height: 800 });
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.fill('is:up-next ');
-  await expect(page.locator('[data-component="token-search-token"][data-token-value="is:up-next"]')).toBeVisible();
+  await expect(page.locator('[data-component="search-field-token"][data-token-value="is:up-next"]')).toBeVisible();
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.fill('is:active');
   await page.getByRole('button', { name: 'Search Syntax Help' }).click();
-  await expect(page.locator('[data-component="token-search-token"][data-token-value="is:active"]')).toHaveCount(0);
+  await expect(page.locator('[data-component="search-field-token"][data-token-value="is:active"]')).toHaveCount(0);
   await search.press('Enter');
-  await expect(page.locator('[data-component="token-search-token"][data-token-value="is:active"]')).toBeVisible();
+  await expect(page.locator('[data-component="search-field-token"][data-token-value="is:active"]')).toBeVisible();
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.fill('updated-after:4h ago ');
   await expect(
-    page.locator('[data-component="token-search-token"][data-token-value=\'updated-after:"4h ago"\']'),
+    page.locator('[data-component="search-field-token"][data-token-value=\'updated-after:"4h ago"\']'),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.fill('updated-after:2026/09/07');
   await page.getByRole('button', { name: 'Columns View' }).focus();
   await expect(
-    page.locator('[data-component="token-search-token"][data-token-value="updated-after:2026/09/07"]'),
+    page.locator('[data-component="search-field-token"][data-token-value="updated-after:2026/09/07"]'),
   ).toHaveCount(0);
   await search.press('Enter');
   await expect(
-    page.locator('[data-component="token-search-token"][data-token-value="updated-after:2026/09/07"]'),
+    page.locator('[data-component="search-field-token"][data-token-value="updated-after:2026/09/07"]'),
   ).toBeVisible();
   await search.fill('is:active ');
-  await expect(page.locator('[data-component="token-search-token"][data-token-value="is:active"]')).toBeVisible();
+  await expect(page.locator('[data-component="search-field-token"][data-token-value="is:active"]')).toBeVisible();
   await expect(page.getByText('Searching tickets')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-vx1v88-search-token-chips-wide.png', fullPage: true });
   await page.setViewportSize({ width: 680, height: 720 });
@@ -368,13 +368,13 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await expect(page.locator('[data-ticket-slug="HS2-ARCHIVE"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-BACKLOG"]')).toBeVisible();
   await search.fill('is:open ');
-  await expect(page.locator('[data-component="token-search-token"][data-token-value="is:open"]')).toBeVisible();
+  await expect(page.locator('[data-component="search-field-token"][data-token-value="is:open"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-DONE"]')).toHaveCount(0);
   await expect(page.locator('[data-ticket-slug="HS2-VERIFIED"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.fill('is:closed ');
-  await expect(page.locator('[data-component="token-search-token"][data-token-value="is:closed"]')).toBeVisible();
+  await expect(page.locator('[data-component="search-field-token"][data-token-value="is:closed"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toHaveCount(0);
   for (const slug of ['HS2-DONE', 'HS2-VERIFIED', 'HS2-ARCHIVE', 'HS2-DUPLICATE'])
     await expect(page.locator(`[data-ticket-slug="${slug}"]`)).toBeVisible();
@@ -382,7 +382,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await page.screenshot({ path: 'target/visual-captures/hs2-m2zxjc-0y96fm-closed-wide.png', fullPage: true });
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.fill('is:duplicate ');
-  await expect(page.locator('[data-component="token-search-token"][data-token-value="is:duplicate"]')).toBeVisible();
+  await expect(page.locator('[data-component="search-field-token"][data-token-value="is:duplicate"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-DUPLICATE"]')).toBeVisible();
   for (const slug of ['HS2-ACTIVE', 'HS2-DONE', 'HS2-VERIFIED', 'HS2-ARCHIVE'])
     await expect(page.locator(`[data-ticket-slug="${slug}"]`)).toHaveCount(0);
@@ -499,7 +499,7 @@ test('keeps the project identity readable beside expanded search at 680px', asyn
       trailing = toolbar.querySelector<HTMLElement>('.kui-toolbar__trailing')!,
       search = toolbar.querySelector<HTMLElement>('.ticket-search-field')!,
       projectBar = document.querySelector<HTMLElement>('.app-shell__main > [data-component="project-tab-bar"]')!,
-      identity = projectBar.querySelector<HTMLElement>('wa-select[name="mobile-project"]')!;
+      identity = projectBar.querySelector<HTMLElement>('kui-select[name="mobile-project"]')!;
     return {
       toolbar: bounds(toolbar),
       trailing: bounds(trailing),

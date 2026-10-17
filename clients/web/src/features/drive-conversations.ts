@@ -10,6 +10,7 @@ import {
 } from '../ai-conversation';
 import { type AiToolDefaults, Api, type ToolConnection } from '../api';
 import { browserRandomId } from '../browser-id';
+import { syncControlledOpen } from '../controlled-open';
 import {
   type ConversationHistoryCursor,
   type ConversationHistoryDirection,
@@ -23,7 +24,7 @@ import {
 } from '../conversation-persistence';
 import { createConversationRenderScheduler } from '../conversation-render-scheduler';
 import { syncConversationScroll } from '../conversation-scroll';
-import type { Control, Project } from '../interactions/types';
+import type { Project } from '../interactions/types';
 import {
   type DrawerAIChat,
   prepareProjectConversation,
@@ -298,7 +299,8 @@ export function createDriveConversationsController(dependencies: DriveConversati
       conversationConnectionId.value = prepared.id;
       conversationOpen.value = true;
       queueMicrotask(() => {
-        document.querySelector<Control>('[data-component="ai-conversation"]')?.show?.();
+        // Open a dialog-presented conversation now so its draft can take focus.
+        syncControlledOpen(document);
         syncConversationScroll(document, true);
         document.querySelector<HTMLTextAreaElement>('[name="conversation-draft"]')?.focus();
       });

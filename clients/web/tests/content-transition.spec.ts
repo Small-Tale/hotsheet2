@@ -70,7 +70,7 @@ test('demonstrates adjacent full-width A-B push/pop with chrome crossfades and r
     ['transition-style', 'crossfade'],
     ['transition-side', 'b'],
   ] as const)
-    await page.locator(`wa-select[name="${name}"]`).evaluate((node: HTMLElement & { value: string }, next) => {
+    await page.locator(`kui-select[name="${name}"]`).evaluate((node: HTMLElement & { value: string }, next) => {
       node.value = next;
       node.dispatchEvent(new Event('change', { bubbles: true }));
     }, value);
@@ -102,7 +102,7 @@ test('lays out dialog footers through the ContentTransition action-row variant (
     },
     selectScenario = (dialog: Locator, value: string) =>
       dialog
-        .locator('[data-demo-ticket-source-scenario] wa-select')
+        .locator('[data-demo-ticket-source-scenario] kui-select')
         .evaluate((node: HTMLElement & { value: string }, next) => {
           node.value = next;
           node.dispatchEvent(new Event('change', { bubbles: true }));
@@ -137,8 +137,13 @@ test('lays out dialog footers through the ContentTransition action-row variant (
     expect(await right(editSide.getByRole('button', { name: 'Save changes' }))).toBeCloseTo(await right(editSide), 0);
 
     await page.goto('/ux-demo?component=conversation-export-dialog');
+    // The Kerf dialog scales in; measure once its enter motion has finished.
+    await expect(page.locator('dialog[data-dialog-component="conversation-export-dialog"]')).not.toHaveAttribute(
+      'data-kui-dialog-motion',
+      /.*/,
+    );
     const exportSide = await actionRow(
-      page.locator('[data-component="conversation-export-dialog"] [data-transition-region="footer"]'),
+      page.locator('[data-dialog-component="conversation-export-dialog"] [data-transition-region="footer"]'),
     );
     const submit = exportSide.getByRole('button', { name: 'Save Conversation' });
     expect(await right(submit)).toBeCloseTo(await right(exportSide), 0);

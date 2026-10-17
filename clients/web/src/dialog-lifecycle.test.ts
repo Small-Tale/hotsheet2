@@ -34,9 +34,9 @@ describe('dialog lifecycle event contracts', () => {
     );
   });
 
-  it('clears command dialog state on a captured wa-hide (HS2-Z7C27E)', () => {
+  it('clears command dialog state on a captured Kerf close request (HS2-Z7C27E, HS2-BH7NZ4)', () => {
     expect(source).toMatchSource(
-      /delegateCapture\(document\.body,'wa-hide','\[data-component="command-run-dialog"\], \[data-component="command-cancellation-dialog"\]'/,
+      /delegateCapture\(document\.body,'kui-request-close','\[data-dialog-component="command-run-dialog"\], \[data-dialog-component="command-cancellation-dialog"\]'/,
     );
     expect(source).not.toMatch(/wa-request-close[^\n]*command-run-dialog/);
     expect(source).not.toContain("'wa-request-close'");
@@ -85,7 +85,9 @@ describe('dialog lifecycle event contracts', () => {
     expect(opening).not.toMatch(/requestAnimationFrame|setTimeout|\.show\(|\.focus\(/);
     const component = readFileSync(new URL('./components/saved-view-dialog.tsx', import.meta.url), 'utf8');
     expect(component).toMatch(/name="saved-view-name"[\s\S]*?autofocus/);
-    expect(component).toContain('open={open || undefined}');
+    // The Kerf DialogSurface opens through the controlled-open pass (`openDialog`), not an `open` attribute.
+    expect(component).toContain("'data-controlled-open': String(open)");
+    expect(component).not.toContain('open={open');
   });
 
   it('does not mount a dormant Not Working dialog host without a ticket target', () => {
