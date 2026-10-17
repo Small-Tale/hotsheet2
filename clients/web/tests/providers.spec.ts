@@ -2817,6 +2817,7 @@ test('always confirms before closing a project without running resources', async
   await page.getByRole('button', { name: 'Close demo' }).click();
   const dialog = page.locator('[data-dialog-component="project-close-dialog"]');
   await expect(dialog).toHaveAttribute('open', '');
+  await expect(dialog).not.toHaveAttribute('aria-describedby');
   await expect(dialog).not.toContainText('No terminals or AI chats are currently running');
   await expect(dialog.locator('[data-component="state-banner"]')).toHaveCount(0);
   await expect(dialog.getByRole('button', { name: 'Close Project' })).toBeVisible();
@@ -7705,6 +7706,9 @@ test('previews running project resources with shared menus and explicit keep-run
   await page.getByRole('button', { name: 'Close demo' }).click();
   const dialog = page.locator('[data-dialog-component="project-close-dialog"]');
   await expect(dialog).toHaveAttribute('open', '');
+  await expect(dialog).toHaveAttribute('aria-describedby', 'project-close-dialog-summary');
+  await expect(dialog.locator('#project-close-dialog-summary')).toContainText('2 running terminals and 1 AI chat');
+  await expect(dialog).toHaveAccessibleDescription(/2 running terminals and 1 AI chat/);
   await expect(dialog).toContainText('2 running terminals and 1 AI chat');
   await expect(dialog.locator('[data-component="list-header"]')).toHaveText('Running Items');
   await expect(dialog.getByRole('button', { name: /Codex Main/ })).toHaveAttribute('aria-current', 'page');

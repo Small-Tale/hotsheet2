@@ -3273,6 +3273,7 @@ Trash busy/error state, and native modal dismissal stay application-owned. Neith
 `List`/`ListHeader`/`ListItem`, consequences and errors through `Text`, and its footer through wrapping
 `Row`. Kerf beta.88 `DialogSurface` owns its 832px resource and 480px empty-state preferred widths,
 16px desktop and 8px phone viewport gutters, zero body inset, and the phone dynamic-viewport height
-cap (`KF-E2J9ND`, `HS2-FXAAA6`). Its remaining stylesheet owns the asymmetric resource/preview tracks
-and the terminal preview's public canvas aspect/inset contract. The read-only `AIConversation` and
-`TerminalPreview` keep their own rendering and styles.
+cap (`KF-E2J9ND`, `HS2-FXAAA6`). Kerf beta.107 `describedBy` links the running-resource summary
+to the dialog only when it exists (`KF-JNV47V`, `HS2-1E6HE7`). The remaining stylesheet owns the
+asymmetric resource/preview tracks and the terminal preview's public canvas aspect/inset contract.
+The read-only `AIConversation` and `TerminalPreview` keep their own rendering and styles.

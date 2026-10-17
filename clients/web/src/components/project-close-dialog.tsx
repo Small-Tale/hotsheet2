@@ -158,6 +158,7 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
         maxHeight={phone ? 'viewport' : undefined}
         bodyInset="none"
         label={`Close ${state.projectName}?`}
+        describedBy={hasResources ? 'project-close-dialog-summary' : undefined}
         rootAttributes={{
           'data-key': 'project-close-dialog',
           ...TERMINALS_TARGETS.projectCloseDialog.attrs,

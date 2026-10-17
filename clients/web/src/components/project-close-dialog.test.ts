@@ -133,6 +133,7 @@ describe('ProjectCloseDialog', () => {
   it('asks for a compact explicit confirmation when nothing is running', () => {
     const markup = String(ProjectCloseDialog({ state: { projectId: 'demo', projectName: 'Demo', resources: [] } }));
     expect(markup).toContain('data-has-resources="false"');
+    expect(markup).not.toContain('aria-describedby=');
     expect(markup).toContain('Close this project tab? You can reopen it later.');
     expect(markup).toContain('Close Project');
     expect(markup).not.toContain('No terminals or AI chats');
@@ -164,6 +165,7 @@ describe('ProjectCloseDialog', () => {
     expect(markup).toContain('data-component="state-banner"');
     expect(markup).toContain('data-tone="warning"');
     expect(markup).toContain('id="project-close-dialog-summary"');
+    expect(markup).toContain('aria-describedby="project-close-dialog-summary"');
     expect(markup).toContain('data-scrollable="true"');
     expect(markup).toContain('data-control-insets="trbl"');
     expect(markup).toContain('data-project-close-consequences');

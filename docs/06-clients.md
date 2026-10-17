@@ -2584,6 +2584,8 @@ view layer is new work.
 Closing a project tab always requires confirmation, including when no live resources are
 running; the empty-resource form is compact, names the destructive action directly, and
 does not present the absence of running resources as a warning.
+When resources are running, the dialog's warning summary is its accessible description;
+the empty-resource confirmation has no description reference (HS2-1E6HE7).
 Once the project closes, the client tells the server with `POST …/close?client=<tab id>`, the
 same per-tab id that tags its change stream. The server can then stop hosting stores that no
 open project needs ([04-core-server-cli.md](04-core-server-cli.md), HS2-ARJ9J1). The call is
