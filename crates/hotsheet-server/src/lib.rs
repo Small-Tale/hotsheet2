@@ -269,6 +269,9 @@ pub struct AppState {
     /// only while its terminal lives and only for tools whose manifest declares a supported
     /// `[session_push]` mechanism.
     session_pushes: routes::session_messages::SessionPushes,
+    /// Per-tool binary overrides for hook-reported session-push adapters (`codex queue`);
+    /// empty resolves each plugin's `[launch] program` on `PATH` (HS2-FKM97G).
+    session_push_programs: Arc<std::collections::HashMap<String, std::path::PathBuf>>,
     /// The in-process PTY manager (HS2-10) exposed over HTTP (HS2-A6R5QV): open/list/input/
     /// read/kill terminals. Lazy — a terminal spawns on first `POST /terminals`. Used unless
     /// the detached broker is enabled.
@@ -518,6 +521,7 @@ impl AppState {
                 60_000,
             ))),
             session_pushes: Arc::default(),
+            session_push_programs: Arc::default(),
             terminals: Arc::new(hotsheet_terminals::TerminalManager::new()),
             terminal_broker: None,
             plugin_dirs: Arc::new(hotsheet_plugins::default_dirs()),
@@ -967,6 +971,13 @@ impl AppState {
     /// Point terminal ops at an explicit already-running broker (tests).
     pub fn with_terminal_broker_at(mut self, broker: terminal_broker::TerminalBroker) -> Self {
         self.terminal_broker = Some(broker);
+        self
+    }
+
+    /// Run `tool`'s hook-reported session-push adapter through `program` instead of its
+    /// launch program on `PATH` (hermetic tests use a fake `codex`; HS2-FKM97G).
+    pub fn with_session_push_program(mut self, tool: &str, program: std::path::PathBuf) -> Self {
+        Arc::make_mut(&mut self.session_push_programs).insert(tool.to_string(), program);
         self
     }
 

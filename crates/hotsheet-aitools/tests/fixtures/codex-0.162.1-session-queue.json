@@ -1,0 +1,33 @@
+{
+  "captured": "HS2-FKM97G live run, codex-cli 0.162.1 (shared daemon self-updated to 0.163.0), 2026-10-17",
+  "session_start_hook_stdin": {
+    "session_id": "00000000-0000-7000-8000-000000000001",
+    "transcript_path": "<codex-home>/sessions/2026/10/17/rollout-2026-10-17T00-00-00-00000000-0000-7000-8000-000000000001.jsonl",
+    "cwd": "<project>",
+    "hook_event_name": "SessionStart",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "default",
+    "source": "startup"
+  },
+  "queued_user_prompt_submit_hook_stdin": {
+    "session_id": "00000000-0000-7000-8000-000000000001",
+    "turn_id": "00000000-0000-7000-8000-000000000003",
+    "transcript_path": "<codex-home>/sessions/2026/10/17/rollout-2026-10-17T00-00-00-00000000-0000-7000-8000-000000000001.jsonl",
+    "cwd": "<project>",
+    "hook_event_name": "UserPromptSubmit",
+    "model": "gpt-5.6-luna",
+    "permission_mode": "default",
+    "prompt": "Reply with just the word queued."
+  },
+  "queue_argv": ["codex", "queue", "--thread", "00000000-0000-7000-8000-000000000001", "--message", "Reply with just the word queued."],
+  "queue_success": {
+    "exit": 0,
+    "stdout": "Queued message 00000000-0000-7000-8000-000000000002 for thread 00000000-0000-7000-8000-000000000001.\n",
+    "stderr": "WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)\n"
+  },
+  "queue_unknown_thread": {
+    "exit": 1,
+    "stdout": "",
+    "stderr": "WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)\nError: failed to queue session message: thread/queue/add failed: failed to read thread: invalid thread-store request: no rollout found for thread id 00000000-0000-7000-8000-00000000dead (code -32603)\n"
+  }
+}

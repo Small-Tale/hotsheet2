@@ -44,6 +44,10 @@ pub(crate) fn prepare_session_push(
     let Some(spec) = plugin.manifest.session_push.as_ref() else {
         return Ok(None);
     };
+    // A reported mechanism (Codex) registers when its SessionStart hook reports the address.
+    if session_push::is_reported(spec) {
+        return Ok(None);
+    }
     if !session_push::is_supported(spec) {
         tracing::warn!(
             tool = plugin.id(),
@@ -91,6 +95,73 @@ pub(crate) fn register(state: &AppState, terminal_id: &str, adapter: Arc<dyn Ses
         .session_pushes
         .lock_or_recover()
         .insert(terminal_id.to_string(), adapter);
+}
+
+/// Register (or replace) the adapter for a session whose `SessionStart` hook reported its
+/// address after launch (HS2-FKM97G): the shared registration path for reported mechanisms.
+/// The terminal's earlier reported adapter is dropped first; a launch-wired adapter (OpenCode)
+/// is never replaced. A tool without a reported mechanism, or a report without a usable
+/// address, registers nothing.
+pub(crate) fn register_reported(
+    state: &AppState,
+    terminal_id: &str,
+    agent: Option<&str>,
+    reported: &session_push::ReportedSession,
+) {
+    unregister_reported(state, terminal_id);
+    let Some(plugin) = agent.and_then(|agent| hotsheet_plugins::find_in(agent, &state.plugin_dirs))
+    else {
+        return;
+    };
+    let Some(spec) = plugin
+        .manifest
+        .session_push
+        .as_ref()
+        .filter(|spec| session_push::is_reported(spec))
+    else {
+        return;
+    };
+    let program = match state.session_push_programs.get(plugin.id()) {
+        Some(program) => program.clone(),
+        None => {
+            let declared = plugin
+                .manifest
+                .launch
+                .as_ref()
+                .map(|launch| launch.program.clone())
+                .unwrap_or_else(|| plugin.id().to_string());
+            match hotsheet_aitools::launch_safety::resolve_program(&declared) {
+                Ok(program) => program,
+                Err(error) => {
+                    tracing::warn!(tool = plugin.id(), %error, "session push program not found");
+                    return;
+                }
+            }
+        }
+    };
+    let Some(adapter) = session_push::adapter_for_reported(spec, reported, &program) else {
+        return;
+    };
+    let mut pushes = state.session_pushes.lock_or_recover();
+    // Never displace a launch-wired adapter registered for this terminal.
+    if pushes
+        .get(terminal_id)
+        .is_none_or(|current| session_push::is_reported_mechanism(current.mechanism()))
+    {
+        pushes.insert(terminal_id.to_string(), adapter);
+    }
+}
+
+/// Drop the terminal's hook-reported adapter (SessionEnd, kill, shell exit, or a newer
+/// report); a launch-wired adapter stays until its terminal exits.
+pub(crate) fn unregister_reported(state: &AppState, terminal_id: &str) {
+    let mut pushes = state.session_pushes.lock_or_recover();
+    if pushes
+        .get(terminal_id)
+        .is_some_and(|current| session_push::is_reported_mechanism(current.mechanism()))
+    {
+        pushes.remove(terminal_id);
+    }
 }
 
 /// Drop an ended terminal's adapter.

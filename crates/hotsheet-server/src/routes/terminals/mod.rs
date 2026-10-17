@@ -368,6 +368,24 @@ pub struct TerminalAiConnection {
     codex_home: Option<String>,
 }
 
+/// The address a connection's hook reported, for a reported session-push mechanism
+/// (HS2-FKM97G). Add each tool's hook-reported fields here; adapters read them by name.
+pub(crate) fn reported_session(
+    connection: &TerminalAiConnection,
+) -> hotsheet_aitools::session_push::ReportedSession {
+    let mut fields = std::collections::BTreeMap::new();
+    if let Some(home) = &connection.codex_home {
+        fields.insert(
+            hotsheet_aitools::session_push::CODEX_HOME_FIELD.to_string(),
+            home.clone(),
+        );
+    }
+    hotsheet_aitools::session_push::ReportedSession {
+        session_id: connection.session_id.clone(),
+        fields,
+    }
+}
+
 /// Why a terminal's AI session stopped: the tool's error category and message (for example
 /// Claude Code's `StopFailure` `overloaded` / "Selected model is at capacity").
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -216,3 +216,37 @@ fn synthetic_claude_subagent_stream_maps_results_and_attributes_sub_agent_work()
         ]
     );
 }
+
+#[test]
+fn recorded_codex_01621_session_queue_matches_the_push_adapter() {
+    // HS2-FKM97G: the SessionStart hook's `session_id` is the thread id `codex queue` takes.
+    use hotsheet_aitools::session_push::{codex_error_line, queued_message_id};
+    let cassette: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/codex-0.162.1-session-queue.json")).unwrap();
+    let thread = cassette["session_start_hook_stdin"]["session_id"]
+        .as_str()
+        .unwrap();
+    assert_eq!(cassette["queue_argv"][3], thread);
+    // A queued message arrives as an ordinary user turn, so UserPromptSubmit clears a halt.
+    assert_eq!(
+        cassette["queued_user_prompt_submit_hook_stdin"]["hook_event_name"],
+        "UserPromptSubmit"
+    );
+    assert_eq!(
+        queued_message_id(cassette["queue_success"]["stdout"].as_str().unwrap()).as_deref(),
+        Some("00000000-0000-7000-8000-000000000002")
+    );
+    let rejected = &cassette["queue_unknown_thread"];
+    let reason = codex_error_line(
+        rejected["stderr"].as_str().unwrap(),
+        rejected["stdout"].as_str().unwrap(),
+    );
+    assert!(
+        reason.starts_with("failed to queue session message"),
+        "{reason}"
+    );
+    assert!(
+        reason.contains("no rollout found for thread id"),
+        "{reason}"
+    );
+}

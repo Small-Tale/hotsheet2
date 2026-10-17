@@ -424,8 +424,8 @@ one unavailable provider cannot hide another resumable conversation (HS2-YHQCS2)
 
 ## 13.12 Messaging a live interactive session (session push, HS2-PEJ962)
 
-**Status: Partial** — the operation and the OpenCode adapter are shipped; the Claude inbox
-socket (HS2-M15CHN) and `codex queue` (HS2-FKM97G) adapters are separate tickets.
+**Status: Partial**. Shipped: the operation, the OpenCode adapter, and the `codex queue` adapter
+(HS2-FKM97G). The Claude inbox-socket adapter (HS2-M15CHN) is a separate ticket.
 
 Hot Sheet can push a message into an _interactive_ AI session that one of its terminals
 launched (Connect / `POST /terminals {connect}`), so an attached agent hears about a new note or
@@ -484,10 +484,45 @@ sanitized capture is `crates/hotsheet-aitools/tests/fixtures/opencode-1.17.18-se
   process takes it first the tool fails to bind and the push reports `session_unreachable`
   (the per-session password keeps it from reaching another process's API).
 
-### Merge point with the other adapters
+### Codex (`codex-queue`, a reported mechanism)
 
-The Claude (HS2-M15CHN) and Codex (HS2-FKM97G) tickets implement the same operation. They add
-an adapter behind `SessionPush`, a mechanism name in `session_push::is_supported` /
-`adapter_for` / `launch_wiring`, and the `[session_push]` section in their manifest; the route,
-error codes, and connection action are shared. Mechanisms whose address is learned after launch
-(a hook-reported socket or thread id) need a registration path into the same per-terminal map.
+Pinned against codex 0.162.1 by a live TUI spike and a live Hot Sheet run; the sanitized
+capture is `crates/hotsheet-aitools/tests/fixtures/codex-0.162.1-session-queue.json`.
+
+- **Address.** The address is reported, not launch-wired: no port, no password, no launch
+  adapter. The Codex `SessionStart` hook reports `session_id`, which is the thread id, and
+  `codex_home` when `CODEX_HOME` is set (unset means the user's default home).
+- **When it is known.** `SessionStart` fires lazily, on the first submitted prompt. A freshly
+  opened TUI therefore has no adapter until its first turn (HS2-8R7SN0).
+- **Prompt.** `codex queue --thread=<id> --message=<text>` runs without a shell, under the
+  reported home, with a 20 s timeout. It exits 0 with `Queued message <id> for thread <id>.`
+  (`confirmed: true`). An idle session starts a turn; a busy one takes it as its next user turn.
+  Either way the TUI fires `UserPromptSubmit`. Codex has no banner, so `banner` is ignored.
+- **Command.** Not supported (`422 session_push_unsupported`).
+- **Reach.** The queue is stored per `CODEX_HOME`, so a TUI started with `--no-daemon` under the
+  same home is still reached. A thread the home does not know exits 1 with
+  `no rollout found for thread id`, reported as `502 session_unreachable`.
+
+### Reported mechanisms: the shared registration path
+
+A mechanism whose address is learned after launch is **reported**
+(`session_push::is_reported`). Codex is one; the Claude inbox socket is another. Such a
+mechanism has no launch wiring, so `prepare_session_push` skips it. Registration then works
+like this:
+
+1. **Report.** Each `POST /terminals/{id}/ai-connection` from the tool's hook stores the
+   address on the terminal's internal connection.
+2. **Build.** `routes::terminals::reported_session` turns it into a
+   `session_push::ReportedSession {session_id, fields}`. Each tool's hook-reported fields
+   (`codex_home`, and later the Claude socket and token) are added in that function.
+3. **Register.** `routes::session_messages::register_reported` builds the adapter with
+   `session_push::adapter_for_reported(spec, reported, program)` and puts it in the same
+   per-terminal map. The program is the plugin's `[launch] program`, resolved on `PATH`.
+   - A newer report replaces it.
+   - A launch-wired adapter is never displaced.
+4. **Unregister.** `unregister_reported` drops only reported adapters, on `SessionEnd`,
+   terminal kill, or shell exit.
+
+The route, error codes, and connection action stay shared. A new reported adapter needs its
+mechanism in `is_reported_mechanism` and `adapter_for_reported`, plus a `[session_push]`
+section in its manifest.

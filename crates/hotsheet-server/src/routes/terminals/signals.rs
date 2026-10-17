@@ -486,6 +486,7 @@ pub(crate) async fn connect_terminal_ai(
         .insert(id.clone(), connection.clone());
     let (watch_session, watch_home) =
         (connection.session_id.clone(), connection.codex_home.clone());
+    let reported = super::reported_session(&connection);
     let changed = state
         .terminal_ai_connections
         .lock_or_recover()
@@ -499,6 +500,8 @@ pub(crate) async fn connect_terminal_ai(
         watch_session.as_deref(),
         watch_home.as_deref(),
     );
+    // Make the session reachable by `POST /connections/{id}/message` (HS2-FKM97G).
+    crate::routes::session_messages::register_reported(&state, &id, agent.as_deref(), &reported);
     state.emit(ChangeEvent {
         cursor: None,
         store: String::new(),
@@ -568,6 +571,7 @@ fn watch_shell_ai_session_exit(state: &AppState, id: String, reported_at: String
             };
             if removed {
                 super::codex_watch::stop_codex_thread_watch(&state, &id);
+                crate::routes::session_messages::unregister_reported(&state, &id);
                 if forget_terminal_halt(&state, &id) {
                     emit_terminal_halted(&state, &id, None);
                 }
@@ -631,6 +635,7 @@ fn forget_terminal_ai_connection_if(
     let removed = connections.remove(id).is_some();
     drop(connections);
     super::codex_watch::stop_codex_thread_watch(state, id);
+    crate::routes::session_messages::unregister_reported(state, id);
     Some(removed)
 }
 

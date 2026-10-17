@@ -36,3 +36,7 @@ sanitized live capture (and note any shape differences) when the creds-gated cap
 HS2-MN865E adds `codex-0.162.1-thread-rejoin-failure.json`: what a read-only `thread/resume` rejoin of a
 Codex TUI thread received when the TUI turn failed on an invalid model (`turn/started`, `error
 {willRetry: false}`, `turn/completed` failed). Ids and paths are synthetic; the resume response is truncated.
+
+HS2-FKM97G adds `codex-0.162.1-session-queue.json`: the Codex `SessionStart` and queued
+`UserPromptSubmit` hook stdin, and `codex queue` success and unknown-thread output. Ids and paths
+are synthetic. It pins that the hook `session_id` is the thread id `codex queue --thread` accepts.

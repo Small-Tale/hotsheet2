@@ -71,6 +71,12 @@ args = []
 model_args = ["--model", "{model}"]
 effort_args = ["--config", "model_reasoning_effort=\"{effort}\""]
 
+[session_push]
+# A running Codex session is messaged with `codex queue --thread <id> --message <text>`
+# (docs/13 §13.12, HS2-FKM97G). The address is reported, not launch-wired: the SessionStart
+# hook reports the thread id and CODEX_HOME, and the host registers the adapter then.
+mechanism = "codex-queue"
+
 [metrics]
 # Codex reports token usage on its `turn/completed` notification; the host maps it to a
 # UsageEvent (docs/14, HS2-8PSAFE). `source` selects the `codex_turn_usage` parser.

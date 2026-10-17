@@ -387,3 +387,133 @@ async fn an_unreachable_session_api_is_a_502() {
     assert_eq!(json["code"], "session_unreachable");
     let _ = send(&router, "DELETE", "/terminals/push-down", None).await;
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_hook_reported_codex_thread_receives_prompts_through_codex_queue() {
+    // HS2-FKM97G: the Codex SessionStart hook reports the thread id and CODEX_HOME; the server
+    // registers the built-in `codex-queue` adapter for that terminal, and the shared operation
+    // runs `codex queue` (a fake binary here) for exactly that thread and home.
+    use std::os::unix::fs::PermissionsExt;
+    const THREAD: &str = "01a14736-2ae1-7e92-8da0-5f8db11b19b0";
+    let store_dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let bin = tempfile::tempdir().unwrap();
+    let log = bin.path().join("argv");
+    let codex = bin.path().join("codex");
+    let script = |body: &str| {
+        std::fs::write(&codex, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&codex, std::fs::Permissions::from_mode(0o755)).unwrap();
+    };
+    script(&format!(
+        "printf '%s\\n' \"$CODEX_HOME\" \"$@\" > '{}'\necho 'WARNING: noise' >&2\necho 'Queued message m-7 for thread {THREAD}.'",
+        log.display()
+    ));
+    // No daemon socket under either home, so Codex halt detection stays idle.
+    let home = bin.path().join("codex-home");
+    let router = app(AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_session_push_program("codex", codex.clone())
+        .with_default_codex_home(bin.path().join("no-default-home")));
+    let prompt = r#"{"text":"A human answered your FEEDBACK NEEDED note on HS-1."}"#;
+    let message = |router: axum::Router, body: &'static str| async move {
+        send(&router, "POST", "/connections/codexing/message", Some(body)).await
+    };
+
+    let (status, _) = send(
+        &router,
+        "POST",
+        "/terminals",
+        Some(r#"{"command":"cat","id":"codexing"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    // Nothing reported yet: no adapter.
+    let (status, body) = message(router.clone(), prompt).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+
+    let connect = serde_json::json!({
+        "agent": "codex",
+        "session_id": THREAD,
+        "codex_home": home,
+    })
+    .to_string();
+    let report = |body: String| {
+        let router = router.clone();
+        async move {
+            send(
+                &router,
+                "POST",
+                "/terminals/codexing/ai-connection",
+                Some(&body),
+            )
+            .await
+            .0
+        }
+    };
+    assert_eq!(report(connect.clone()).await, StatusCode::NO_CONTENT);
+    let (status, body) = message(router.clone(), prompt).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["delivered"], true);
+    assert_eq!(body["mechanism"], "codex-queue");
+    assert_eq!(body["session_id"], THREAD);
+    assert_eq!(body["confirmed"], true);
+    assert_eq!(
+        std::fs::read_to_string(&log).unwrap(),
+        format!(
+            "{}\nqueue\n--thread={THREAD}\n--message=A human answered your FEEDBACK NEEDED note on HS-1.\n",
+            home.display()
+        )
+    );
+
+    // A permission ask from the same session keeps the reported home.
+    std::fs::remove_file(&log).unwrap();
+    let ask = serde_json::json!({ "agent": "codex", "session_id": THREAD, "source": "permission_request" });
+    assert_eq!(report(ask.to_string()).await, StatusCode::NO_CONTENT);
+    assert_eq!(message(router.clone(), prompt).await.0, StatusCode::OK);
+    assert!(
+        std::fs::read_to_string(&log)
+            .unwrap()
+            .starts_with(&format!("{}\n", home.display()))
+    );
+
+    // Codex has no UI-command channel.
+    let (status, body) = message(router.clone(), r#"{"command":"agent_cycle"}"#).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["code"], "session_push_unsupported");
+
+    // Codex refusing the thread (for example, under a different CODEX_HOME) is unreachable.
+    script(
+        "echo 'Error: failed to queue session message: no rollout found for thread id x' >&2\nexit 1",
+    );
+    let (status, body) = message(router.clone(), prompt).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(body["code"], "session_unreachable");
+    assert!(
+        body["error"].as_str().unwrap().contains("no rollout found"),
+        "{body}"
+    );
+
+    // A report without a thread id leaves nothing to message; a new report re-registers.
+    assert_eq!(
+        report(r#"{"agent":"codex"}"#.into()).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        message(router.clone(), prompt).await.0,
+        StatusCode::NOT_FOUND
+    );
+    report(connect).await;
+    assert_eq!(
+        message(router.clone(), prompt).await.0,
+        StatusCode::BAD_GATEWAY
+    );
+
+    // SessionEnd drops the adapter.
+    send(&router, "DELETE", "/terminals/codexing/ai-connection", None).await;
+    assert_eq!(
+        message(router.clone(), prompt).await.0,
+        StatusCode::NOT_FOUND
+    );
+    let _ = send(&router, "DELETE", "/terminals/codexing", None).await;
+}

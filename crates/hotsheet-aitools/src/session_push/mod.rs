@@ -11,15 +11,24 @@
 //! | Mechanism | Adapter | Launch wiring |
 //! | --- | --- | --- |
 //! | `opencode-http` | [`OpenCodeHttpPush`] — the TUI's own HTTP server | `--port {port}` + a random `OPENCODE_SERVER_PASSWORD` |
+//! | `codex-queue` | [`CodexQueuePush`] — `codex queue --thread <id>` | none: the `SessionStart` hook reports the thread id and `CODEX_HOME` |
 //!
-//! The Claude inbox-socket (HS2-M15CHN) and `codex queue` (HS2-FKM97G) adapters implement
-//! the same trait.
+//! A **reported** mechanism ([`is_reported`]) learns its address after launch from the tool's
+//! `SessionStart` hook; the host builds its adapter with [`adapter_for_reported`] from a
+//! [`ReportedSession`] and registers it in the same per-terminal map. The Claude inbox-socket
+//! adapter (HS2-M15CHN) is reported the same way.
 
+mod codex;
 mod http;
 mod opencode;
 
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+pub use codex::{
+    CODEX_HOME_FIELD, CodexQueuePush, MECHANISM as CODEX_QUEUE, codex_error_line, queued_message_id,
+};
 pub use http::{HttpPort, HttpRequest, HttpResponse, UreqHttp, basic_auth_header, query_escape};
 pub use opencode::{MECHANISM as OPENCODE_HTTP, OpenCodeHttpPush};
 
@@ -102,7 +111,47 @@ pub struct LaunchWiring {
 
 /// Whether this host has an adapter for the manifest's mechanism.
 pub fn is_supported(spec: &hotsheet_plugins::SessionPushSpec) -> bool {
-    spec.mechanism == OPENCODE_HTTP
+    spec.mechanism == OPENCODE_HTTP || is_reported(spec)
+}
+
+/// Whether the mechanism's address is reported by the tool's `SessionStart` hook after
+/// launch, rather than wired into the launch (no port, no password, no launch adapter).
+pub fn is_reported(spec: &hotsheet_plugins::SessionPushSpec) -> bool {
+    is_reported_mechanism(&spec.mechanism)
+}
+
+/// [`is_reported`] by mechanism name, for an already-built adapter.
+pub fn is_reported_mechanism(mechanism: &str) -> bool {
+    mechanism == CODEX_QUEUE
+}
+
+/// A session address a tool's `SessionStart` hook reported (HS2-FKM97G): the tool-native
+/// session id plus mechanism-specific fields (`codex_home` for `codex-queue`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ReportedSession {
+    pub session_id: Option<String>,
+    pub fields: BTreeMap<String, String>,
+}
+
+/// Build the adapter for a hook-reported session, or `None` when the mechanism is not a
+/// reported one or the report lacks a usable address. `program` is the tool's resolved
+/// binary (the plugin's `[launch] program`).
+pub fn adapter_for_reported(
+    spec: &hotsheet_plugins::SessionPushSpec,
+    reported: &ReportedSession,
+    program: &Path,
+) -> Option<Arc<dyn SessionPush>> {
+    if spec.mechanism == CODEX_QUEUE {
+        let thread = reported.session_id.as_deref()?;
+        let home = reported
+            .fields
+            .get(CODEX_HOME_FIELD)
+            .filter(|home| !home.trim().is_empty())
+            .map(PathBuf::from);
+        return CodexQueuePush::new(program, thread, home)
+            .map(|push| Arc::new(push) as Arc<dyn SessionPush>);
+    }
+    None
 }
 
 /// The launch arguments/environment that make the session reachable, or `None` when the
@@ -111,7 +160,7 @@ pub fn launch_wiring(
     spec: &hotsheet_plugins::SessionPushSpec,
     launch: &PushLaunch,
 ) -> Option<LaunchWiring> {
-    if !is_supported(spec) {
+    if !is_supported(spec) || is_reported(spec) {
         return None;
     }
     let port = launch.port.to_string();
