@@ -1392,8 +1392,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     (HS2-4APEJP).
   - `TicketAttachments` — **demo built**: attachment rows with a subtle count badge beside
     the aligned section heading, plus Kerf `FilePickerTrigger` (Add) and `FileDropZone`
-    entry points routed through the shared `routeFilePicker` (HS2-VHY325); a drop elsewhere on
-    the surface still attaches, and files dragged over the surface highlight the zone. No
+    entry points routed through the shared `routeFilePicker` (HS2-VHY325). The zone's Kerf
+    `dropScope` covers the full attachments surface: file drags highlight it and a drop anywhere
+    there attaches once; attachment regroup drags leave it unhighlighted (HS2-P413MB). The app
+    handles inspector rail drops outside that surface. No
     redundant total line is rendered below the collection.
     Each row is a neutral Kerf `ContentItem` holding a Kerf `Row`, a truncating `Text` name,
     and a plain Kerf `IconButton` More Actions trigger, inside an unstyled app-owned wrapper that

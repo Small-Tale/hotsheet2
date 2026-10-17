@@ -79,40 +79,31 @@ describe('wireTicketAttachmentActions (HS2-1KM6MB)', () => {
     expect(bindings.addFiles.mock.calls).toEqual([[files, picker]]);
   });
 
-  it('highlights the surface and its Kerf zone, and adds dropped files on either target once', () => {
-    const zone = { dataset: {} as Record<string, string> };
-    const dropzone = { dataset: {} as Record<string, string>, matches: () => true, querySelector: () => zone };
-    const rail = { dataset: {} as Record<string, string>, matches: () => false, querySelector: () => null };
-    const withFiles = cancelable({ dataTransfer: { types: ['Files'] } });
-    expect(registrations.find((item) => item.event === 'dragover')!.selector).toContain('#rail');
-    // A non-file drag (an attachment being regrouped) flags the surface but not the file zone.
-    handler('dragover', 'drop-target="true"')(cancelable({ dataTransfer: { types: ['text/plain'] } }), dropzone);
-    expect(dropzone.dataset.draggingAttachment).toBe('true');
-    expect(zone.dataset.dragging).toBeUndefined();
-    handler('dragover', 'drop-target="true"')(withFiles, dropzone);
-    handler('dragover', 'drop-target="true"')(withFiles, rail);
-    expect(withFiles.preventDefault).toHaveBeenCalledTimes(2);
-    expect(zone.dataset.dragging).toBe('true');
-    expect(rail.dataset.draggingAttachment).toBeUndefined();
-    handler('dragleave', 'drop-target="true"')({}, dropzone);
-    expect(dropzone.dataset.draggingAttachment).toBeUndefined();
-    expect(zone.dataset.dragging).toBeUndefined();
+  it('leaves surface and zone drops to Kerf while accepting rail drops outside the surface once', () => {
     const files = { length: 2 } as FileList,
+      rail = {} as HTMLElement,
       outside = { closest: () => null },
-      onZone = { closest: () => zone };
+      inside = { closest: () => ({ id: 'surface' }) };
+    expect(registrations.filter((item) => item.event === 'dragleave' && item.selector === '#rail')).toHaveLength(0);
+    expect(registrations.find((item) => item.event === 'dragover' && item.selector === '#rail')).toBeDefined();
+    const railHover = cancelable({ target: outside });
+    handler('dragover', '#rail')(railHover, rail);
+    expect(railHover.preventDefault).toHaveBeenCalledOnce();
+    const surfaceHover = cancelable({ target: inside });
+    handler('dragover', '#rail')(surfaceHover, rail);
+    expect(surfaceHover.preventDefault).not.toHaveBeenCalled();
+
     bindings.addFiles.mockClear();
-    handler('drop', 'drop-target="true"')(cancelable({ target: outside, dataTransfer: { files } }), rail);
-    handler('drop', 'drop-target="true"')(
-      cancelable({ target: outside, dataTransfer: { files: { length: 0 } } }),
-      dropzone,
-    );
-    // Kerf reports a drop on its zone through the route; the surface handler must not add it again.
-    zone.dataset.dragging = 'true';
-    const zoneDrop = cancelable({ target: onZone, dataTransfer: { files } });
-    handler('drop', 'drop-target="true"')(zoneDrop, dropzone);
-    expect(zoneDrop.preventDefault).toHaveBeenCalled();
-    expect(zone.dataset.dragging).toBeUndefined();
+    const surfaceDrop = cancelable({ target: inside, dataTransfer: { files } });
+    handler('drop', '#rail')(surfaceDrop, rail);
+    expect(surfaceDrop.preventDefault).not.toHaveBeenCalled();
+    expect(bindings.addFiles).not.toHaveBeenCalled();
+    const railDrop = cancelable({ target: outside, dataTransfer: { files } });
+    handler('drop', '#rail')(railDrop, rail);
+    expect(railDrop.preventDefault).toHaveBeenCalledOnce();
     expect(bindings.addFiles.mock.calls).toEqual([[files, rail]]);
+    handler('drop', '#rail')(cancelable({ target: outside, dataTransfer: { files: { length: 0 } } }), rail);
+    expect(bindings.addFiles).toHaveBeenCalledTimes(1);
   });
 
   it('reports purpose changes for a batch with ids only', () => {

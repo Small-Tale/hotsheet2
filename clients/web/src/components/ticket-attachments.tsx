@@ -413,6 +413,7 @@ export function TicketAttachments({
             multiple
             name="ticket-attachments"
             pickerId={TICKET_ATTACHMENTS_PICKER}
+            dropScope="[data-component='ticket-attachments']"
           />
         ) : (
           <Text variant="p" tone="quiet" size="compact" flush>

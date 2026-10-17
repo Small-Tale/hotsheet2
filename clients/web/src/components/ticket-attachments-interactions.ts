@@ -14,10 +14,6 @@ const GROUP_DROP_TARGETS = '[data-attachment-group-drop-target], [data-attachmen
 /** The batch heading Kerf ListHeader renders for an editable batch (HS2-K9HSXZ). */
 const BATCH_TITLE = '[data-attachment-batch-title]';
 const LABEL_FIELD = ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchLabelField.selector;
-/** Kerf's FileDropZone root; its own drops arrive through `wireFilePickers`. */
-const FILE_DROP_ZONE = '[data-component="file-drop-zone"]';
-const dropZoneIn = (surface: Element) => surface.querySelector<HTMLElement>(FILE_DROP_ZONE);
-const carriesFiles = (event: DragEvent) => [...(event.dataTransfer?.types ?? [])].includes('Files');
 
 /**
  * Side effects for TicketAttachments' add, drop, batch-label, purpose, and regroup gestures (HS2-1KM6MB).
@@ -42,48 +38,31 @@ export interface TicketAttachmentActionBindings {
 
 /** Wire the attachment gestures of every TicketAttachments surface and drop target under `root`. */
 export function wireTicketAttachmentActions(root: HTMLElement, bindings: TicketAttachmentActionBindings): () => void {
-  const lifetime = createScope(),
-    dropTargets = bindings.extraDropTargets
-      ? `${ATTACHMENT_DROP_TARGET}, ${bindings.extraDropTargets}`
-      : ATTACHMENT_DROP_TARGET;
-  // Kerf's FilePickerTrigger and FileDropZone report browsed files and zone drops through the shared
-  // `wireFilePickers` route (HS2-VHY325); the surface-wide drop below covers the rest of the panel.
+  const lifetime = createScope();
+  // Kerf's scoped FileDropZone reports browsed files and drops anywhere on the attachments surface.
   lifetime.add(
     routeFilePicker(root, TICKET_ATTACHMENTS_PICKER, (files, selection) => {
       bindings.addFiles(files, selection.picker);
     }),
   );
-  lifetime.add(
-    delegate(root, 'dragover', dropTargets, (event, target) => {
-      event.preventDefault();
-      if (!target.matches(ATTACHMENT_DROP_TARGET)) return;
-      (target as HTMLElement).dataset.draggingAttachment = 'true';
-      // Files over any part of the surface highlight its drop zone through the zone's documented
-      // `data-dragging` wiring state, as before the Kerf migration (interim until KF-HNRWM9).
-      const zone = dropZoneIn(target);
-      if (zone && carriesFiles(event as DragEvent)) zone.dataset.dragging = 'true';
-    }),
-  );
-  lifetime.add(
-    delegate(root, 'dragleave', ATTACHMENT_DROP_TARGET, (_event, target) => {
-      delete (target as HTMLElement).dataset.draggingAttachment;
-      const zone = dropZoneIn(target);
-      if (zone) delete zone.dataset.dragging;
-    }),
-  );
-  lifetime.add(
-    delegate(root, 'drop', dropTargets, (event, target) => {
-      event.preventDefault();
-      const element = target as HTMLElement,
-        files = (event as DragEvent).dataTransfer?.files;
-      delete element.dataset.draggingAttachment;
-      const zone = dropZoneIn(element);
-      if (zone) delete zone.dataset.dragging;
-      // A drop on the Kerf zone itself is already reported through `routeFilePicker`.
-      if ((event.target as Element).closest(FILE_DROP_ZONE)) return;
-      if (files?.length) bindings.addFiles(files, element);
-    }),
-  );
+  if (bindings.extraDropTargets) {
+    // The inspector rail also accepts drops outside the attachments panel. A drop inside the panel
+    // bubbles through the rail, but Kerf has already reported it through the scoped zone.
+    const railDrop = bindings.extraDropTargets;
+    lifetime.add(
+      delegate(root, 'dragover', railDrop, (event) => {
+        if (!(event.target as Element).closest(ATTACHMENT_DROP_TARGET)) event.preventDefault();
+      }),
+    );
+    lifetime.add(
+      delegate(root, 'drop', railDrop, (event, target) => {
+        if ((event.target as Element).closest(ATTACHMENT_DROP_TARGET)) return;
+        event.preventDefault();
+        const files = (event as DragEvent).dataTransfer?.files;
+        if (files?.length) bindings.addFiles(files, target as HTMLElement);
+      }),
+    );
+  }
   if (bindings.changePurpose) {
     const changePurpose = bindings.changePurpose;
     lifetime.add(
