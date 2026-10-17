@@ -208,6 +208,7 @@ test('follows two projects through the shared change-stream worker during switch
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.addInitScript(() => {
     localStorage.setItem('hotsheet.change-stream-worker', 'true');
+    localStorage.setItem('hotsheet.change-stream-shared-worker', 'false');
   });
   const workers: string[] = [];
   page.on('worker', (worker) => workers.push(worker.url()));
@@ -288,6 +289,7 @@ const streamWorkers = (workers: Worker[]) => workers.filter((worker) => worker.u
 const enableWorker = (page: Page) =>
   page.addInitScript(() => {
     localStorage.setItem('hotsheet.change-stream-worker', 'true');
+    localStorage.setItem('hotsheet.change-stream-shared-worker', 'false');
   });
 
 test('a crashed worker restarts and replays from the last applied cursor without duplicates', async ({ page }) => {

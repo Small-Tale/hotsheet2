@@ -30,6 +30,8 @@ export interface ChangePollMultiplexerOptions {
   /** The bridge's multiplexed poll URL. */
   endpoint: string;
   clientId: string;
+  /** SharedWorker v2: several tab clients may poll the same project in one browser request. */
+  sharedAcrossClients?: boolean;
   parse(value: unknown): PollResponse;
   fetch?: typeof fetch;
   now?: () => number;
@@ -39,7 +41,9 @@ export interface ChangePollMultiplexerOptions {
 }
 
 interface Pending {
+  key: string;
   project: string;
+  client: string;
   since?: number;
   deadline: number;
   signal?: AbortSignal;
@@ -66,12 +70,21 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /** Whether a bridge answer is a valid multiplexed response of this wire version. */
-const muxResults = (value: unknown): Array<{ project: string; status: number; body: unknown }> | undefined => {
-  if (!isRecord(value) || value.version !== CHANGE_MUX_VERSION || !Array.isArray(value.results)) return undefined;
-  const results: Array<{ project: string; status: number; body: unknown }> = [];
+const muxResults = (
+  value: unknown,
+  version: 1 | 2,
+): Array<{ project: string; client?: string; status: number; body: unknown }> | undefined => {
+  if (!isRecord(value) || value.version !== version || !Array.isArray(value.results)) return undefined;
+  const results: Array<{ project: string; client?: string; status: number; body: unknown }> = [];
   for (const item of value.results as unknown[]) {
     if (!isRecord(item) || typeof item.project !== 'string' || typeof item.status !== 'number') return undefined;
-    results.push({ project: item.project, status: item.status, body: item.body });
+    if (version === 2 && typeof item.client !== 'string') return undefined;
+    results.push({
+      project: item.project,
+      ...(version === 2 ? { client: item.client as string } : {}),
+      status: item.status,
+      body: item.body,
+    });
   }
   return results;
 };
@@ -97,17 +110,21 @@ export class ChangePollMultiplexer {
     return this.modeValue;
   }
 
+  private key(project: string, client: string): string {
+    return this.options.sharedAcrossClients ? `${client}\u0000${project}` : project;
+  }
+
   /** Projects with a poll waiting for an answer. */
   waiting(): string[] {
     return [...this.pending.keys()];
   }
 
   /** A change client for `project` whose polls ride this multiplexer. */
-  client<T extends { pollEvents: ChangePollFn }>(project: string, direct: T): T {
+  client<T extends { pollEvents: ChangePollFn }>(project: string, direct: T, clientId = this.options.clientId): T {
     const directPoll: ChangePollFn = (since, signal, timeoutMs) => direct.pollEvents(since, signal, timeoutMs);
     return Object.assign(Object.create(direct) as T, {
       pollEvents: (since?: number, signal?: AbortSignal, timeoutMs?: number) =>
-        this.poll(project, directPoll, since, signal, timeoutMs),
+        this.poll(project, directPoll, since, signal, timeoutMs, clientId),
     });
   }
 
@@ -118,25 +135,29 @@ export class ChangePollMultiplexer {
     since?: number,
     signal?: AbortSignal,
     timeoutMs = DEFAULT_TIMEOUT_MS,
+    clientId = this.options.clientId,
   ): Promise<PollResponse> {
     if (signal?.aborted) return Promise.reject(abortError());
     if (this.modeValue === 'direct') return direct(since, signal, timeoutMs);
     return new Promise<PollResponse>((resolve, reject) => {
+      const key = this.key(project, clientId);
       // A transport polls sequentially, so a second poll for a project supersedes the first.
-      const previous = this.pending.get(project);
+      const previous = this.pending.get(key);
       if (previous)
         this.settle(previous, () => {
           previous.reject(new Error('Superseded by a newer change poll.'));
         });
       const onAbort = () => {
-        if (this.pending.get(project) !== entry) return;
+        if (this.pending.get(key) !== entry) return;
         this.settle(entry, () => {
           entry.reject(abortError());
         });
-        if (this.inflight?.members.get(project) === entry) this.schedule();
+        if (this.inflight?.members.get(key) === entry) this.schedule();
       };
       const entry: Pending = {
+        key,
         project,
+        client: clientId,
         ...(since === undefined ? {} : { since }),
         deadline: this.now() + Math.max(0, timeoutMs),
         ...(signal ? { signal } : {}),
@@ -146,14 +167,14 @@ export class ChangePollMultiplexer {
         detach: () => signal?.removeEventListener('abort', onAbort),
       };
       signal?.addEventListener('abort', onAbort, { once: true });
-      this.pending.set(project, entry);
+      this.pending.set(key, entry);
       this.schedule();
     });
   }
 
   /** Drop `entry` from the pending set, then run its outcome. */
   private settle(entry: Pending, outcome: () => void) {
-    if (this.pending.get(entry.project) === entry) this.pending.delete(entry.project);
+    if (this.pending.get(entry.key) === entry) this.pending.delete(entry.key);
     entry.detach();
     outcome();
   }
@@ -196,6 +217,7 @@ export class ChangePollMultiplexer {
     const now = this.now();
     const polls: ChangeMuxPoll[] = [...members.values()].map((entry) => ({
       project: entry.project,
+      ...(this.options.sharedAcrossClients ? { client: entry.client } : {}),
       ...(entry.since === undefined ? {} : { since: entry.since }),
       timeout_ms: Math.max(0, Math.ceil(entry.deadline - now)),
     }));
@@ -206,7 +228,11 @@ export class ChangePollMultiplexer {
         response = await this.fetcher(this.options.endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ version: CHANGE_MUX_VERSION, client: this.options.clientId, polls }),
+          body: JSON.stringify({
+            version: this.options.sharedAcrossClients ? 2 : CHANGE_MUX_VERSION,
+            client: this.options.clientId,
+            polls,
+          }),
           signal: controller.signal,
         });
       } catch (reason) {
@@ -234,7 +260,7 @@ export class ChangePollMultiplexer {
         return;
       }
       if (aborted()) return;
-      const results = muxResults(body);
+      const results = muxResults(body, this.options.sharedAcrossClients ? 2 : CHANGE_MUX_VERSION);
       // A valid answer always carries at least one result; an empty one would otherwise make
       // every reissue return at once.
       if (!results || results.length === 0) {
@@ -243,8 +269,9 @@ export class ChangePollMultiplexer {
       }
       if (this.inflight === inflight) this.inflight = undefined;
       for (const result of results) {
-        const entry = members.get(result.project);
-        if (!entry || this.pending.get(result.project) !== entry) continue;
+        const key = this.key(result.project, result.client ?? this.options.clientId);
+        const entry = members.get(key);
+        if (!entry || this.pending.get(key) !== entry) continue;
         if (result.status >= 200 && result.status < 300) {
           let page: PollResponse;
           try {
@@ -271,7 +298,7 @@ export class ChangePollMultiplexer {
   private fail(inflight: InFlight, reason: unknown) {
     if (this.inflight === inflight) this.inflight = undefined;
     for (const entry of inflight.members.values())
-      if (this.pending.get(entry.project) === entry)
+      if (this.pending.get(entry.key) === entry)
         this.settle(entry, () => {
           entry.reject(reason);
         });
@@ -321,7 +348,7 @@ export function createChangePollMultiplexers(
 ): (endpoint: string, clientId: string) => ChangePollMultiplexer {
   const byEndpoint = new Map<string, ChangePollMultiplexer>();
   return (endpoint, clientId) => {
-    const key = `${clientId}\n${endpoint}`;
+    const key = options.sharedAcrossClients ? endpoint : `${clientId}\n${endpoint}`;
     let mux = byEndpoint.get(key);
     if (!mux) {
       mux = new ChangePollMultiplexer({ ...options, endpoint, clientId });

@@ -371,10 +371,24 @@ describe('change-stream worker runtime (HS2-SH9179)', () => {
     a.addEventListener('message', (event) => seen.push(`a:${JSON.parse(event.data as string).cursor}`));
     b.addEventListener('message', (event) => seen.push(`b:${JSON.parse(event.data as string).cursor}`));
     sockets[0].open();
-    sockets[0].message({ version: 1, type: 'subscribed', project: 'a', subscription: 1 });
-    sockets[0].message({ version: 1, type: 'subscribed', project: 'b', subscription: 2 });
-    sockets[0].message({ version: 1, type: 'event', project: 'b', subscription: 2, data: '{"cursor":20}' });
-    sockets[0].message({ version: 1, type: 'event', project: 'a', subscription: 1, data: '{"cursor":8}' });
+    sockets[0].message({ version: 2, type: 'subscribed', client: 'tab-1', project: 'a', subscription: 1 });
+    sockets[0].message({ version: 2, type: 'subscribed', client: 'tab-1', project: 'b', subscription: 2 });
+    sockets[0].message({
+      version: 2,
+      type: 'event',
+      client: 'tab-1',
+      project: 'b',
+      subscription: 2,
+      data: '{"cursor":20}',
+    });
+    sockets[0].message({
+      version: 2,
+      type: 'event',
+      client: 'tab-1',
+      project: 'a',
+      subscription: 1,
+      data: '{"cursor":8}',
+    });
     expect(seen).toEqual(['b:20', 'a:8']);
     runtime.handle({ type: 'close', project: 'a', generation: 1 });
     a.close();

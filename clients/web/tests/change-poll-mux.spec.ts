@@ -94,6 +94,7 @@ async function installBridge(page: Page, liveSockets = false) {
   let bridgeSocket: WebSocketRoute | undefined;
   let bridgeSocketCount = 0;
   const subscriptions = new Map<string, number>();
+  const subscriptionClients = new Map<string, string>();
   const eventsAfter = (project: string, since: number) =>
     (log.get(project) ?? []).filter((item) => item.cursor > since);
   // The original flow rejects every upgrade; the live flow serves one versioned bridge socket.
@@ -105,22 +106,32 @@ async function installBridge(page: Page, liveSockets = false) {
     bridgeSocket = socket;
     bridgeSocketCount += 1;
     socket.onMessage((raw) => {
-      const command = JSON.parse(String(raw)) as { type: string; project: string; subscription: number };
+      const command = JSON.parse(String(raw)) as {
+        type: string;
+        client: string;
+        project: string;
+        subscription: number;
+      };
       if (command.type === 'subscribe') {
         subscriptions.set(command.project, command.subscription);
+        subscriptionClients.set(command.project, command.client);
         socket.send(
           JSON.stringify({
-            version: 1,
+            version: 2,
             type: 'subscribed',
+            client: command.client,
             project: command.project,
             subscription: command.subscription,
           }),
         );
-      } else if (command.type === 'unsubscribe' && subscriptions.get(command.project) === command.subscription)
+      } else if (command.type === 'unsubscribe' && subscriptions.get(command.project) === command.subscription) {
         subscriptions.delete(command.project);
+        subscriptionClients.delete(command.project);
+      }
     });
     socket.onClose(() => {
       subscriptions.clear();
+      subscriptionClients.clear();
     });
   });
   await page.route('**/*', async (route) => {
@@ -236,8 +247,9 @@ async function installBridge(page: Page, liveSockets = false) {
     if (liveSockets && subscriptions.has(project))
       bridgeSocket?.send(
         JSON.stringify({
-          version: 1,
+          version: 2,
           type: 'event',
+          client: subscriptionClients.get(project),
           project,
           subscription: subscriptions.get(project),
           data: JSON.stringify(log.get(project)!.at(-1)),
@@ -310,6 +322,7 @@ for (const mode of ['main thread', 'worker'] as const)
     if (mode === 'worker')
       await page.addInitScript(() => {
         localStorage.setItem('hotsheet.change-stream-worker', 'true');
+        localStorage.setItem('hotsheet.change-stream-shared-worker', 'false');
       });
     const bridge = await installBridge(page);
     await openAllProjects(page);

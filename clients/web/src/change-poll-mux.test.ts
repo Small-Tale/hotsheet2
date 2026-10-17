@@ -12,9 +12,13 @@ import { type ProjectChangeSink, runProjectChangePollTransport } from './project
 import { parsePollResponse } from './server-response-parsers';
 
 interface MuxCall {
-  body: { version: number; client: string; polls: Array<{ project: string; since?: number; timeout_ms: number }> };
+  body: {
+    version: number;
+    client: string;
+    polls: Array<{ project: string; client?: string; since?: number; timeout_ms: number }>;
+  };
   signal: AbortSignal;
-  respond(results: Array<{ project: string; status?: number; body?: unknown }>): void;
+  respond(results: Array<{ project: string; client?: string; status?: number; body?: unknown }>): void;
   respondRaw(response: Response): void;
   fail(reason: unknown): void;
 }
@@ -30,6 +34,7 @@ function fakeBridge() {
   const calls: MuxCall[] = [];
   const fetcher = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
     const signal = init!.signal!;
+    const body = JSON.parse(init!.body as string) as MuxCall['body'];
     return new Promise<Response>((resolve, reject) => {
       signal.addEventListener('abort', () => {
         const error = new Error('aborted');
@@ -37,14 +42,15 @@ function fakeBridge() {
         reject(error);
       });
       calls.push({
-        body: JSON.parse(init!.body as string) as MuxCall['body'],
+        body,
         signal,
         respond: (results) => {
           resolve(
             Response.json({
-              version: 1,
+              version: body.version,
               results: results.map((result) => ({
                 project: result.project,
+                ...(result.client === undefined ? {} : { client: result.client }),
                 status: result.status ?? 200,
                 body: result.body ?? page(1),
               })),
@@ -76,6 +82,43 @@ function mux(fetcher: typeof fetch, extra: Partial<ConstructorParameters<typeof 
 const neverDirect: ChangePollFn = () => Promise.reject(new Error('direct poll used'));
 
 describe('ChangePollMultiplexer', () => {
+  it('shares one request for two tabs on the same project and routes answers by client', async () => {
+    const bridge = fakeBridge();
+    const m = mux(bridge.fetcher, { sharedAcrossClients: true });
+    const a = m.poll('same', neverDirect, 1, undefined, 25_000, 'tab-a');
+    const b = m.poll('same', neverDirect, 2, undefined, 25_000, 'tab-b');
+    await tick();
+    expect(bridge.calls).toHaveLength(1);
+    expect(bridge.calls[0].body).toMatchObject({
+      version: 2,
+      polls: [
+        { project: 'same', client: 'tab-a', since: 1 },
+        { project: 'same', client: 'tab-b', since: 2 },
+      ],
+    });
+    bridge.calls[0].respond([
+      { project: 'same', client: 'tab-b', body: page(3) },
+      { project: 'same', client: 'tab-a', body: page(4) },
+    ]);
+    await expect(a).resolves.toEqual(page(4));
+    await expect(b).resolves.toEqual(page(3));
+  });
+
+  it('keeps the other tab polling when one tab closes the same project', async () => {
+    const bridge = fakeBridge();
+    const m = mux(bridge.fetcher, { sharedAcrossClients: true });
+    const closing = new AbortController();
+    const a = m.poll('same', neverDirect, 1, closing.signal, 25_000, 'tab-a');
+    const b = m.poll('same', neverDirect, 2, undefined, 25_000, 'tab-b');
+    await tick();
+    closing.abort();
+    await expect(a).rejects.toMatchObject({ name: 'AbortError' });
+    await tick();
+    expect(bridge.calls[0].signal.aborted).toBe(true);
+    expect(bridge.calls[1].body.polls).toEqual([{ project: 'same', client: 'tab-b', since: 2, timeout_ms: 25_000 }]);
+    bridge.calls[1].respond([{ project: 'same', client: 'tab-b', body: page(3) }]);
+    await expect(b).resolves.toEqual(page(3));
+  });
   it('coalesces concurrent project polls into one request and fans results out by project', async () => {
     const bridge = fakeBridge();
     const m = mux(bridge.fetcher);

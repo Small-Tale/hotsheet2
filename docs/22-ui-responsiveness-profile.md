@@ -393,3 +393,25 @@ the bottleneck the worker was meant to relieve. **Decision:** the worker stays
 off by default (opt in with `hotsheet.change-stream-worker`). Revisit only if a
 profile of heavier concurrent AI output shows main-thread change processing
 dominating click-to-paint.
+
+### Cross-tab SharedWorker measurement (HS2-NP7R42)
+
+When the worker setting is enabled, supported browsers now use a SharedWorker
+across same-origin tabs. Two Chromium pages opening the same project through a
+real SharedWorker and a local bridge fixture held **one browser WebSocket**;
+each tab received only its own client-tagged events, and closing one tab left
+the other's stream open. The long-poll fallback similarly used one version 2
+browser request for both tabs, with separate per-tab answers. The dedicated
+worker mode would use one socket or long poll per tab. Client ids remain
+separate at the bridge, so presence does not become one shared tab.
+
+The real-server profile script now counts `shared_worker` targets and their
+heap. A short sanity run (two visible changes and two tab clicks in each of
+two runs per mode) found one 0.37–0.45 MB SharedWorker isolate and no
+long-poll fallback. Its worker delivery-lag p95 was 124–126 ms versus
+73–98 ms on the main thread; click-to-paint p95 was 56–88 ms versus
+48–80 ms. The tiny sample does not establish a latency benefit and did not
+exercise two real app tabs. The measurable cross-tab benefit is connection
+count under the per-origin HTTP/1.1 cap; the existing default-off worker
+setting remains the adoption gate. Unsupported SharedWorker contexts keep
+the dedicated worker path.

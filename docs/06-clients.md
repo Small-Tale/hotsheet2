@@ -1731,10 +1731,19 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   multiplexed upgrade falls back to the existing direct project WebSockets. A dropped shared socket
   closes each virtual project socket, so each transport replays from its own cursor before
   subscribing again. Cross-project delivery and cursors remain isolated.
-  Cross-tab sharing remains separate (`HS2-NP7R42`).
-  With the off-by-default `hotsheet.change-stream-worker` local setting, one dedicated
-  worker runs these transports for every open project and posts only validated, ordered,
-  coalesced change events. The main thread applies them through the same consumer. A
+  With the off-by-default `hotsheet.change-stream-worker` local setting, a SharedWorker
+  runs the transports for every open project across tabs of one origin when supported
+  (`HS2-NP7R42`). Each tab has its own port, transport state, cursor, delivery queue, and
+  client id. The tabs share one bridge WebSocket per endpoint; its version 2 frames identify
+  both client and project, while the bridge keeps separate upstream presence per client.
+  When WebSockets fail, version 2 change-mux polls carry a client id for every project poll,
+  so even two tabs watching the same project share one browser long-poll request without
+  merging presence or answers. Closing one tab only drops that tab's subscriptions. The
+  SharedWorker disposes ports that stop sending heartbeats; a stale port restarts from its
+  last applied cursor. Where SharedWorker is unavailable, a dedicated worker runs the tab's
+  transports; `hotsheet.change-stream-shared-worker=false` also selects this mode.
+  The worker posts only validated, ordered, coalesced change events. The main thread applies
+  them through the same consumer. A
   version mismatch, an unavailable worker, or repeated crashes fall back to this
   main-thread stream; a crash restart replays from the last applied cursor
   ([22](22-ui-responsiveness-profile.md#shared-change-stream-worker-prototype)).

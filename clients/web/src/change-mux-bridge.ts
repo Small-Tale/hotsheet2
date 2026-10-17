@@ -25,6 +25,8 @@ const MAX_TIMEOUT_MS = 30_000;
 
 export interface ChangeMuxPoll {
   project: string;
+  /** Required in v2 so several tabs can poll the same project in one request. */
+  client?: string;
   since?: number;
   timeout_ms: number;
 }
@@ -37,6 +39,7 @@ export interface ChangeMuxRequest {
 
 export interface ChangeMuxResult {
   project: string;
+  client?: string;
   status: number;
   body: unknown;
 }
@@ -55,7 +58,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 /** Validate a browser request body; returns an error message for a malformed one. */
 export function parseChangeMuxRequest(value: unknown): ChangeMuxRequest | string {
   if (!isRecord(value)) return 'Expected a JSON object.';
-  if (value.version !== CHANGE_MUX_VERSION) return `Unsupported change multiplex version ${String(value.version)}.`;
+  if (value.version !== CHANGE_MUX_VERSION && value.version !== 2)
+    return `Unsupported change multiplex version ${String(value.version)}.`;
   if (typeof value.client !== 'string') return 'Expected a client id.';
   if (!Array.isArray(value.polls) || value.polls.length === 0) return 'Expected at least one poll.';
   if (value.polls.length > CHANGE_MUX_MAX_POLLS) return `At most ${CHANGE_MUX_MAX_POLLS} polls per request.`;
@@ -63,18 +67,22 @@ export function parseChangeMuxRequest(value: unknown): ChangeMuxRequest | string
   const polls: ChangeMuxPoll[] = [];
   for (const poll of value.polls as unknown[]) {
     if (!isRecord(poll) || typeof poll.project !== 'string' || poll.project === '') return 'Invalid poll entry.';
-    if (seen.has(poll.project)) return `Duplicate poll for project ${poll.project}.`;
-    seen.add(poll.project);
+    if (value.version === 2 && typeof poll.client !== 'string') return 'Expected a poll client id.';
+    const client = value.version === 2 ? (poll.client as string) : value.client;
+    const key = `${client}\u0000${poll.project}`;
+    if (seen.has(key)) return `Duplicate poll for project ${poll.project}.`;
+    seen.add(key);
     if (poll.since !== undefined && (!Number.isSafeInteger(poll.since) || (poll.since as number) < 0))
       return 'Invalid poll cursor.';
     if (!Number.isSafeInteger(poll.timeout_ms) || (poll.timeout_ms as number) < 0) return 'Invalid poll timeout.';
     polls.push({
       project: poll.project,
+      ...(value.version === 2 ? { client } : {}),
       ...(poll.since === undefined ? {} : { since: poll.since as number }),
       timeout_ms: Math.min(poll.timeout_ms as number, MAX_TIMEOUT_MS),
     });
   }
-  return { version: CHANGE_MUX_VERSION, client: value.client, polls };
+  return { version: value.version, client: value.client, polls };
 }
 
 /** The project-relative upstream path for one poll; the project proxy adds presence. */
@@ -116,12 +124,22 @@ export async function multiplexChangePolls(
   const settled = request.polls.map(async (poll) => {
     let result: ChangeMuxResult;
     try {
-      const response = await forward(poll.project, changeMuxPollPath(poll, request.client), controller.signal);
-      result = { project: poll.project, status: response.status, body: await settleBody(response) };
+      const response = await forward(
+        poll.project,
+        changeMuxPollPath(poll, poll.client ?? request.client),
+        controller.signal,
+      );
+      result = {
+        project: poll.project,
+        ...(request.version === 2 ? { client: poll.client } : {}),
+        status: response.status,
+        body: await settleBody(response),
+      };
     } catch (error) {
       if (controller.signal.aborted) return;
       result = {
         project: poll.project,
+        ...(request.version === 2 ? { client: poll.client } : {}),
         status: 502,
         body: { error: error instanceof Error ? error.message : 'Project change poll failed.' },
       };
@@ -157,5 +175,5 @@ export async function multiplexChangePolls(
   const answered = results.slice();
   signal.removeEventListener('abort', abortAll);
   abortAll();
-  return { version: CHANGE_MUX_VERSION, results: answered };
+  return { version: request.version, results: answered };
 }

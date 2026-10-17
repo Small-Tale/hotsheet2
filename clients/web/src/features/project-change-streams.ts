@@ -65,6 +65,7 @@ export interface ProjectChangeStreamsDependencies {
 
 /** Local setting that opts this browser into the shared change-stream worker (HS2-SH9179). */
 export const CHANGE_STREAM_WORKER_SETTING = 'hotsheet.change-stream-worker';
+export const CHANGE_STREAM_SHARED_WORKER_SETTING = 'hotsheet.change-stream-shared-worker';
 
 export function changeStreamWorkerEnabled(): boolean {
   try {
@@ -74,13 +75,71 @@ export function changeStreamWorkerEnabled(): boolean {
   }
 }
 
-const createBundledChangeStreamWorker = (): ChangeStreamWorkerLike | undefined =>
-  typeof Worker === 'undefined'
+/** Opt a worker-enabled tab out of cross-tab sharing for diagnosis or an incompatible context. */
+export function changeStreamSharedWorkerEnabled(): boolean {
+  try {
+    return localStorage.getItem(CHANGE_STREAM_SHARED_WORKER_SETTING) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+const createBundledChangeStreamWorker = (): ChangeStreamWorkerLike | undefined => {
+  if (changeStreamSharedWorkerEnabled() && typeof SharedWorker !== 'undefined') {
+    try {
+      const shared = new SharedWorker(new URL('../change-stream.shared-worker.ts', import.meta.url), {
+        type: 'module',
+        name: 'hotsheet-change-stream',
+      });
+      shared.port.start();
+      let lastHeartbeat = Date.now();
+      let stopped = false;
+      const errors = new Set<(event: Event) => void>();
+      shared.port.addEventListener('message', (event) => {
+        if ((event.data as { type?: unknown } | null)?.type === 'heartbeat') lastHeartbeat = Date.now();
+      });
+      const heartbeat = globalThis.setInterval(() => {
+        if (Date.now() - lastHeartbeat > 90_000) {
+          for (const listener of errors) listener(new Event('error', { cancelable: true }));
+          return;
+        }
+        shared.port.postMessage({ type: 'heartbeat' });
+      }, 20_000);
+      const terminate = () => {
+        if (stopped) return;
+        stopped = true;
+        globalThis.clearInterval(heartbeat);
+        window.removeEventListener('pagehide', onPageHide);
+        shared.port.postMessage({ type: 'dispose' });
+        shared.port.close();
+      };
+      const onPageHide = (event: PageTransitionEvent) => {
+        if (!event.persisted) terminate();
+      };
+      window.addEventListener('pagehide', onPageHide);
+      return {
+        postMessage: (message) => {
+          shared.port.postMessage(message);
+        },
+        addEventListener: (type, listener) => {
+          if (type === 'error') {
+            errors.add(listener);
+            shared.addEventListener('error', listener);
+          } else shared.port.addEventListener(type, listener);
+        },
+        terminate,
+      };
+    } catch {
+      // Older WebKit/Tauri contexts may expose SharedWorker but refuse a module worker.
+    }
+  }
+  return typeof Worker === 'undefined'
     ? undefined
     : new Worker(new URL('../change-stream.worker.ts', import.meta.url), {
         type: 'module',
         name: 'hotsheet-change-stream',
       });
+};
 
 /**
  * Owns one live change stream per open project (WebSocket or long poll, never a polling timer)
@@ -134,7 +193,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             directOptions.client,
           ),
           openWebSocket: (url: string) =>
-            webSocketMultiplexerFor(muxUrl, CHANGE_STREAM_CLIENT_ID).open(current.id, url),
+            webSocketMultiplexerFor(muxUrl, CHANGE_STREAM_CLIENT_ID).open(current.id, url, CHANGE_STREAM_CLIENT_ID),
         }
       : directOptions;
     if (!useWorker) return startProjectChangeStream(streamOptions);

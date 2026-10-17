@@ -20,6 +20,10 @@ export interface ChangeStreamWorkerRuntimeOptions {
   /** Injected for tests; defaults to the real WebSocket-first transport. */
   runTransport?: typeof runProjectChangeTransport;
   openWebSocket?: (url: string) => WebSocket;
+  /** Shared across SharedWorker ports so their long polls occupy one browser request. */
+  pollMultiplexerFor?: ReturnType<typeof createChangePollMultiplexers>;
+  /** Shared across SharedWorker ports so their project sockets use one browser bridge socket. */
+  webSocketMultiplexerFor?: ReturnType<typeof createChangeWebSocketMultiplexers>;
   maxQueuedEvents?: number;
 }
 
@@ -51,16 +55,19 @@ export function createChangeStreamWorkerRuntime(options: ChangeStreamWorkerRunti
   const fetcher = options.fetch ?? ((input, init) => fetch(input, init));
   const run = options.runTransport ?? runProjectChangeTransport;
   // One shared long-poll per bridge for every project it serves (HS2-6W1NNF).
-  const multiplexerFor = createChangePollMultiplexers({
-    parse: parsePollResponse,
-    fetch: fetcher,
-  });
-  const webSocketMultiplexerFor = createChangeWebSocketMultiplexers(options.openWebSocket);
+  const multiplexerFor =
+    options.pollMultiplexerFor ??
+    createChangePollMultiplexers({
+      parse: parsePollResponse,
+      fetch: fetcher,
+    });
+  const webSocketMultiplexerFor =
+    options.webSocketMultiplexerFor ?? createChangeWebSocketMultiplexers(options.openWebSocket);
   const changeClient = (message: ChangeStreamWorkerOpen): ChangeClient => {
     const direct = createWorkerChangeClient(message, fetcher);
     if (!message.changeMuxUrl) return direct;
     const project = changeMuxTarget(new URL(message.apiUrl).pathname, '')?.project ?? message.project;
-    return multiplexerFor(message.changeMuxUrl, message.clientId).client(project, direct);
+    return multiplexerFor(message.changeMuxUrl, message.clientId).client(project, direct, message.clientId);
   };
   const subscriptions = new Map<
     string,
@@ -91,7 +98,11 @@ export function createChangeStreamWorkerRuntime(options: ChangeStreamWorkerRunti
         ...(message.changeMuxUrl && message.webSocketUrl
           ? {
               openWebSocket: (url: string) =>
-                webSocketMultiplexerFor(message.changeMuxUrl!, message.clientId).open(message.project, url),
+                webSocketMultiplexerFor(message.changeMuxUrl!, message.clientId).open(
+                  message.project,
+                  url,
+                  message.clientId,
+                ),
             }
           : options.openWebSocket
             ? { openWebSocket: options.openWebSocket }

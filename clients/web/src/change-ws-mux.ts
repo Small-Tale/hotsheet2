@@ -1,17 +1,17 @@
-/** One bridge WebSocket carries live changes for all projects in a tab (HS2-QJR1K6). */
+/** One bridge WebSocket carries live changes for all project/client pairs (HS2-QJR1K6, HS2-NP7R42). */
 export const CHANGE_WS_MUX_PATH = '/__hotsheet/change-mux/ws';
-export const CHANGE_WS_MUX_VERSION = 1;
+export const CHANGE_WS_MUX_VERSION = 2;
 
 export type ChangeWsCommand = {
-  version: 1;
+  version: 2;
   type: 'subscribe' | 'unsubscribe';
   project: string;
   client: string;
   subscription: number;
 };
 export type ChangeWsMessage =
-  | { version: 1; type: 'subscribed' | 'closed'; project: string; subscription: number }
-  | { version: 1; type: 'event'; project: string; subscription: number; data: string };
+  | { version: 2; type: 'subscribed' | 'closed'; client: string; project: string; subscription: number }
+  | { version: 2; type: 'event'; client: string; project: string; subscription: number; data: string };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -23,7 +23,7 @@ export function parseChangeWsCommand(value: unknown): ChangeWsCommand | undefine
   if (typeof value.project !== 'string' || !value.project || typeof value.client !== 'string') return undefined;
   if (!isSubscription(value.subscription)) return undefined;
   return {
-    version: 1,
+    version: 2,
     type: value.type,
     project: value.project,
     client: value.client,
@@ -33,12 +33,25 @@ export function parseChangeWsCommand(value: unknown): ChangeWsCommand | undefine
 
 export function parseChangeWsMessage(value: unknown): ChangeWsMessage | undefined {
   if (!isRecord(value) || value.version !== CHANGE_WS_MUX_VERSION) return undefined;
-  if (typeof value.project !== 'string' || !value.project) return undefined;
+  if (typeof value.project !== 'string' || !value.project || typeof value.client !== 'string') return undefined;
   if (!isSubscription(value.subscription)) return undefined;
   if (value.type === 'subscribed' || value.type === 'closed')
-    return { version: 1, type: value.type, project: value.project, subscription: value.subscription };
+    return {
+      version: 2,
+      type: value.type,
+      client: value.client,
+      project: value.project,
+      subscription: value.subscription,
+    };
   if (value.type === 'event' && typeof value.data === 'string')
-    return { version: 1, type: 'event', project: value.project, subscription: value.subscription, data: value.data };
+    return {
+      version: 2,
+      type: 'event',
+      client: value.client,
+      project: value.project,
+      subscription: value.subscription,
+      data: value.data,
+    };
   return undefined;
 }
 
@@ -55,6 +68,7 @@ class ProjectSocket extends EventTarget {
   readyState = 0;
   private direct: WebSocket | undefined;
   constructor(
+    readonly client: string,
     readonly project: string,
     readonly directUrl: string,
     readonly subscription: number,
@@ -123,11 +137,16 @@ export class ChangeWebSocketMultiplexer {
     private readonly openTimeoutMs = 1_500,
   ) {}
 
-  open(project: string, directUrl: string): WebSocket {
-    const old = this.projects.get(project);
+  private key(client: string, project: string): string {
+    return `${client}\u0000${project}`;
+  }
+
+  open(project: string, directUrl: string, client = this.client): WebSocket {
+    const key = this.key(client, project);
+    const old = this.projects.get(key);
     old?.close();
-    const virtual = new ProjectSocket(project, directUrl, this.nextSubscription++, this);
-    this.projects.set(project, virtual);
+    const virtual = new ProjectSocket(client, project, directUrl, this.nextSubscription++, this);
+    this.projects.set(key, virtual);
     if (this.unavailable) virtual.useDirect(this.openSocket);
     else if (this.bridge?.readyState === 1) this.send('subscribe', virtual);
     else this.connect();
@@ -135,8 +154,9 @@ export class ChangeWebSocketMultiplexer {
   }
 
   remove(socket: ProjectSocket): void {
-    if (this.projects.get(socket.project) !== socket) return;
-    this.projects.delete(socket.project);
+    const key = this.key(socket.client, socket.project);
+    if (this.projects.get(key) !== socket) return;
+    this.projects.delete(key);
     if (this.bridge?.readyState === 1) this.send('unsubscribe', socket);
     if (!this.projects.size) {
       this.bridge?.close();
@@ -147,10 +167,10 @@ export class ChangeWebSocketMultiplexer {
   private send(type: ChangeWsCommand['type'], socket: ProjectSocket): void {
     this.bridge?.send(
       JSON.stringify({
-        version: 1,
+        version: 2,
         type,
         project: socket.project,
-        client: this.client,
+        client: socket.client,
         subscription: socket.subscription,
       } satisfies ChangeWsCommand),
     );
@@ -166,7 +186,8 @@ export class ChangeWebSocketMultiplexer {
       return;
     }
     this.bridge = bridge;
-    let bridgeOpened = false;
+    let bridgeOpened = false,
+      contractSeen = false;
     const openTimer = globalThis.setTimeout(() => {
       if (this.bridge === bridge && bridge.readyState === 0) this.fallback();
     }, this.openTimeoutMs);
@@ -174,7 +195,6 @@ export class ChangeWebSocketMultiplexer {
       globalThis.clearTimeout(openTimer);
       if (this.bridge !== bridge) return;
       bridgeOpened = true;
-      this.supported = true;
       for (const socket of this.projects.values()) this.send('subscribe', socket);
     });
     bridge.addEventListener('message', (event) => {
@@ -189,7 +209,9 @@ export class ChangeWebSocketMultiplexer {
         this.fallback();
         return;
       }
-      const socket = this.projects.get(message.project);
+      contractSeen = true;
+      this.supported = true;
+      const socket = this.projects.get(this.key(message.client, message.project));
       if (socket?.subscription !== message.subscription) return;
       if (message.type === 'subscribed') socket.opened();
       else if (message.type === 'event') socket.message(message.data);
@@ -202,7 +224,7 @@ export class ChangeWebSocketMultiplexer {
       globalThis.clearTimeout(openTimer);
       if (this.bridge !== bridge) return;
       this.bridge = undefined;
-      if (!bridgeOpened) this.fallback();
+      if (!bridgeOpened || !contractSeen) this.fallback();
       else {
         const sockets = [...this.projects.values()];
         this.projects.clear();
@@ -228,7 +250,7 @@ export function createChangeWebSocketMultiplexers(openSocket?: OpenSocket) {
   const byEndpoint = new Map<string, ChangeWebSocketMultiplexer>();
   return (pollMuxUrl: string, client: string): ChangeWebSocketMultiplexer => {
     const url = changeWsMuxUrl(pollMuxUrl);
-    const key = `${url}\n${client}`;
+    const key = url;
     let mux = byEndpoint.get(key);
     if (!mux) {
       mux = new ChangeWebSocketMultiplexer(url, client, openSocket);

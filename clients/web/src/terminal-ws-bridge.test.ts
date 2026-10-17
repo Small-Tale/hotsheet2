@@ -229,8 +229,8 @@ describe('terminal WebSocket bridge', () => {
       frames: ChangeWsMessage[] = [];
     browser.on('message', (data) => frames.push(JSON.parse(webSocketRawText(data)) as ChangeWsMessage));
     await once(browser, 'open');
-    browser.send(JSON.stringify({ version: 1, type: 'subscribe', project: 'a', client: 'tab', subscription: 1 }));
-    browser.send(JSON.stringify({ version: 1, type: 'subscribe', project: 'b', client: 'tab', subscription: 2 }));
+    browser.send(JSON.stringify({ version: 2, type: 'subscribe', project: 'a', client: 'tab', subscription: 1 }));
+    browser.send(JSON.stringify({ version: 2, type: 'subscribe', project: 'b', client: 'tab', subscription: 2 }));
     await vi.waitFor(() => {
       expect(frames.filter((frame) => frame.type === 'subscribed')).toHaveLength(2);
     });
@@ -266,7 +266,7 @@ describe('terminal WebSocket bridge', () => {
         .map((frame) => frame.subscription)
         .sort(),
     ).toEqual([1, 2]);
-    browser.send(JSON.stringify({ version: 1, type: 'unsubscribe', project: 'a', client: 'tab', subscription: 1 }));
+    browser.send(JSON.stringify({ version: 2, type: 'unsubscribe', project: 'a', client: 'tab', subscription: 1 }));
     await vi.waitFor(() => {
       expect([...upstreams].some((socket) => socket !== shared)).toBe(true);
     });
@@ -323,11 +323,11 @@ describe('terminal WebSocket bridge', () => {
       frames.push(JSON.parse(webSocketRawText(data)) as ChangeWsMessage);
     });
     await once(browser, 'open');
-    browser.send(JSON.stringify({ version: 1, type: 'subscribe', project: 'a', client: 'tab', subscription: 1 }));
+    browser.send(JSON.stringify({ version: 2, type: 'subscribe', project: 'a', client: 'tab', subscription: 1 }));
     await vi.waitFor(() => {
       expect(frames.some((frame) => frame.type === 'subscribed' && frame.project === 'a')).toBe(true);
     });
-    browser.send(JSON.stringify({ version: 1, type: 'subscribe', project: 'b', client: 'tab', subscription: 2 }));
+    browser.send(JSON.stringify({ version: 2, type: 'subscribe', project: 'b', client: 'tab', subscription: 2 }));
     await vi.waitFor(() => {
       expect(frames.filter((frame) => frame.type === 'subscribed')).toHaveLength(2);
     });
@@ -339,6 +339,65 @@ describe('terminal WebSocket bridge', () => {
     await vi.waitFor(() => {
       expect(frames.some((frame) => frame.type === 'event' && frame.project === 'b')).toBe(true);
     });
+    browser.close();
+    await once(browser, 'close');
+  });
+
+  it('keeps two tabs of the same project present behind one browser socket', async () => {
+    const upstreamHttp = createServer(),
+      upstream = new WebSocketServer({ server: upstreamHttp });
+    servers.push(upstream, upstreamHttp);
+    const upstreams = new Map<string, WebSocket>();
+    upstream.on('connection', (socket, request) => {
+      const client = new URL(request.url ?? '/', 'http://localhost').searchParams.get('client') ?? '';
+      upstreams.set(client, socket);
+      socket.on('close', () => {
+        if (upstreams.get(client) === socket) upstreams.delete(client);
+      });
+    });
+    const upstreamPort = await listen(upstreamHttp),
+      bridgeHttp = createServer();
+    servers.push(bridgeHttp);
+    installProjectWebSocketBridge(
+      { httpServer: bridgeHttp },
+      () => undefined,
+      (project, client) => `ws://127.0.0.1:${upstreamPort}/ws/sync?secret=private&checkout=${project}&client=${client}`,
+    );
+    const bridgePort = await listen(bridgeHttp),
+      browser = new WebSocket(`ws://127.0.0.1:${bridgePort}${CHANGE_WS_MUX_PATH}`),
+      frames: ChangeWsMessage[] = [];
+    browser.on('message', (data) => {
+      frames.push(JSON.parse(webSocketRawText(data)) as ChangeWsMessage);
+    });
+    await once(browser, 'open');
+    browser.send(JSON.stringify({ version: 2, type: 'subscribe', project: 'same', client: 'tab-a', subscription: 1 }));
+    browser.send(JSON.stringify({ version: 2, type: 'subscribe', project: 'same', client: 'tab-b', subscription: 2 }));
+    await vi.waitFor(() => {
+      expect(frames.filter((frame) => frame.type === 'subscribed')).toHaveLength(2);
+    });
+    expect([...upstreams.keys()].sort()).toEqual(['tab-a', 'tab-b']);
+    upstreams.get('tab-a')!.send('{"cursor":1,"store":"same","kind":"created","id":"1","slug":"HS2-A"}');
+    upstreams.get('tab-b')!.send('{"cursor":2,"store":"same","kind":"created","id":"2","slug":"HS2-B"}');
+    await vi.waitFor(() => {
+      expect(frames.filter((frame) => frame.type === 'event')).toHaveLength(2);
+    });
+    expect(
+      frames
+        .filter((frame) => frame.type === 'event')
+        .map((frame) => frame.client)
+        .sort(),
+    ).toEqual(['tab-a', 'tab-b']);
+    browser.send(
+      JSON.stringify({ version: 2, type: 'unsubscribe', project: 'same', client: 'tab-a', subscription: 1 }),
+    );
+    await vi.waitFor(() => {
+      expect([...upstreams.keys()]).toEqual(['tab-b']);
+    });
+    upstreams.get('tab-b')!.send('{"cursor":3,"store":"same","kind":"changed","id":"2","slug":"HS2-B"}');
+    await vi.waitFor(() => {
+      expect(frames.filter((frame) => frame.type === 'event')).toHaveLength(3);
+    });
+    expect(frames.at(-1)).toMatchObject({ client: 'tab-b', project: 'same' });
     browser.close();
     await once(browser, 'close');
   });

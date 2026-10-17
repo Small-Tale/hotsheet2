@@ -63,7 +63,7 @@ const summarize = (values) => ({
   max: values.length ? Math.round(Math.max(...values)) : null,
 });
 
-/** Used heap after a forced GC in the page and in every dedicated worker isolate. */
+/** Used heap after a forced GC in the page and in each change-stream worker isolate. */
 async function collectedHeap(page) {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('HeapProfiler.collectGarbage');
@@ -82,14 +82,17 @@ async function collectedHeap(page) {
       void cdp.send('Target.sendMessageToTarget', { sessionId, message: JSON.stringify({ id, method, params }) });
     });
   const { targetInfos } = await cdp.send('Target.getTargets');
-  for (const target of targetInfos.filter((info) => info.type === 'worker' && info.url.includes('change-stream'))) {
+  const workerTargets = targetInfos.filter(
+    (info) => (info.type === 'worker' || info.type === 'shared_worker') && info.url.includes('change-stream'),
+  );
+  for (const target of workerTargets) {
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId: target.targetId, flatten: false });
     await sendTo(sessionId, 'HeapProfiler.collectGarbage');
     workerBytes += (await sendTo(sessionId, 'Runtime.getHeapUsage')).usedSize;
     await cdp.send('Target.detachFromTarget', { sessionId });
   }
   await cdp.detach();
-  return { pageBytes, workerBytes, totalBytes: pageBytes + workerBytes };
+  return { pageBytes, workerBytes, totalBytes: pageBytes + workerBytes, workerCount: workerTargets.length };
 }
 
 async function profileMode(browser, origin, projects, worker) {
@@ -176,7 +179,7 @@ async function profileMode(browser, origin, projects, worker) {
   await context.close();
   return {
     mode: worker ? 'worker' : 'main-thread',
-    changeStreamWorkers: workers.filter((url) => url.includes('change-stream')).length,
+    changeStreamWorkers: Math.max(workers.filter((url) => url.includes('change-stream')).length, heapAfter.workerCount),
     mainThreadSyncSockets: sockets,
     longPollRequests: longPolls,
     deliveryLagMs: summarize(lags),

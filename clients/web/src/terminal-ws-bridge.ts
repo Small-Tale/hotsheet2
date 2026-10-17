@@ -59,6 +59,7 @@ export function isProjectWebSocketPath(requestUrl: string | undefined): boolean 
 
 function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver, resolveStores: StoreResolver): void {
   type Subscription = {
+    client: string;
     project: string;
     subscription: number;
     target: string;
@@ -77,18 +78,25 @@ function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver, res
   const subscriptions = new Map<string, Subscription>();
   const pending = new Map<string, { token: symbol; subscription: number }>();
   const groups = new Map<string, Group>();
+  const keyOf = (client: string, project: string) => `${client}\u0000${project}`;
   const send = (message: ChangeWsMessage) => {
     if (browser.readyState === WebSocket.OPEN) browser.send(JSON.stringify(message));
   };
-  const groupBase = (target: string): string => {
+  const groupBase = (target: string, client: string): string => {
     const url = new URL(target);
     url.searchParams.delete('checkout');
-    return url.toString();
+    return `${client}\n${url.toString()}`;
   };
   const ack = (member: Subscription) => {
     if (member.acknowledged) return;
     member.acknowledged = true;
-    send({ version: 1, type: 'subscribed', project: member.project, subscription: member.subscription });
+    send({
+      version: 2,
+      type: 'subscribed',
+      client: member.client,
+      project: member.project,
+      subscription: member.subscription,
+    });
   };
   const deliver = (group: Group, raw: WebSocket.RawData) => {
     const data = webSocketRawText(raw);
@@ -104,7 +112,14 @@ function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver, res
     // Unknown or newly linked stores keep the old machine-wide delivery semantics.
     for (const member of matched.length ? matched : members)
       if (member.acknowledged)
-        send({ version: 1, type: 'event', project: member.project, subscription: member.subscription, data });
+        send({
+          version: 2,
+          type: 'event',
+          client: member.client,
+          project: member.project,
+          subscription: member.subscription,
+          data,
+        });
   };
   const reconcile = (group: Group) => {
     group.candidate?.close();
@@ -118,12 +133,13 @@ function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver, res
     if (group.legacy) {
       let waiting = 0;
       for (const member of group.members.values()) {
-        if (group.direct.has(member.project)) continue;
+        const key = keyOf(member.client, member.project);
+        if (group.direct.has(key)) continue;
         waiting += 1;
         const socket = new WebSocket(member.target);
-        group.direct.set(member.project, socket);
+        group.direct.set(key, socket);
         socket.on('open', () => {
-          if (group.direct.get(member.project) !== socket) return;
+          if (group.direct.get(key) !== socket) return;
           ack(member);
           waiting -= 1;
           if (waiting === 0) {
@@ -132,22 +148,29 @@ function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver, res
           }
         });
         socket.on('message', (data) => {
-          if (group.direct.get(member.project) === socket && member.acknowledged)
+          if (group.direct.get(key) === socket && member.acknowledged)
             send({
-              version: 1,
+              version: 2,
               type: 'event',
+              client: member.client,
               project: member.project,
               subscription: member.subscription,
               data: webSocketRawText(data),
             });
         });
         const closed = () => {
-          if (group.direct.get(member.project) !== socket) return;
-          group.direct.delete(member.project);
-          if (subscriptions.get(member.project) === member) {
-            group.members.delete(member.project);
-            subscriptions.delete(member.project);
-            send({ version: 1, type: 'closed', project: member.project, subscription: member.subscription });
+          if (group.direct.get(key) !== socket) return;
+          group.direct.delete(key);
+          if (subscriptions.get(key) === member) {
+            group.members.delete(key);
+            subscriptions.delete(key);
+            send({
+              version: 2,
+              type: 'closed',
+              client: member.client,
+              project: member.project,
+              subscription: member.subscription,
+            });
           }
         };
         socket.on('close', closed);
@@ -197,10 +220,17 @@ function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver, res
           reconcile(group);
         } else {
           const member = members[0];
-          if (group.members.get(member.project) === member) {
-            group.members.delete(member.project);
-            subscriptions.delete(member.project);
-            send({ version: 1, type: 'closed', project: member.project, subscription: member.subscription });
+          const key = keyOf(member.client, member.project);
+          if (group.members.get(key) === member) {
+            group.members.delete(key);
+            subscriptions.delete(key);
+            send({
+              version: 2,
+              type: 'closed',
+              client: member.client,
+              project: member.project,
+              subscription: member.subscription,
+            });
           }
         }
       } else if (group.active === candidate) {
@@ -208,8 +238,14 @@ function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver, res
         group.candidate?.close();
         group.candidate = undefined;
         for (const member of group.members.values()) {
-          subscriptions.delete(member.project);
-          send({ version: 1, type: 'closed', project: member.project, subscription: member.subscription });
+          subscriptions.delete(keyOf(member.client, member.project));
+          send({
+            version: 2,
+            type: 'closed',
+            client: member.client,
+            project: member.project,
+            subscription: member.subscription,
+          });
         }
         group.members.clear();
         groups.delete(group.base);
@@ -219,12 +255,13 @@ function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver, res
     candidate.on('error', closed);
   };
   const remove = (member: Subscription) => {
-    const group = groups.get(groupBase(member.target));
-    if (!group || group.members.get(member.project) !== member) return;
-    group.members.delete(member.project);
-    subscriptions.delete(member.project);
-    group.direct.get(member.project)?.close();
-    group.direct.delete(member.project);
+    const group = groups.get(groupBase(member.target, member.client));
+    const key = keyOf(member.client, member.project);
+    if (!group || group.members.get(key) !== member) return;
+    group.members.delete(key);
+    subscriptions.delete(key);
+    group.direct.get(key)?.close();
+    group.direct.delete(key);
     reconcile(group);
   };
   browser.on('message', (raw) => {
@@ -239,56 +276,58 @@ function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver, res
       browser.close(1008, 'Invalid change mux command');
       return;
     }
-    const { project } = command;
+    const { project, client } = command;
+    const key = keyOf(client, project);
     if (command.type === 'unsubscribe') {
-      if (pending.get(project)?.subscription === command.subscription) pending.delete(project);
-      if (subscriptions.get(project)?.subscription === command.subscription) {
-        remove(subscriptions.get(project)!);
+      if (pending.get(key)?.subscription === command.subscription) pending.delete(key);
+      if (subscriptions.get(key)?.subscription === command.subscription) {
+        remove(subscriptions.get(key)!);
       }
       return;
     }
-    const existing = subscriptions.get(project);
+    const existing = subscriptions.get(key);
     if (existing) {
       if (existing.subscription === command.subscription) {
         if (existing.acknowledged)
-          send({ version: 1, type: 'subscribed', project, subscription: command.subscription });
+          send({ version: 2, type: 'subscribed', client, project, subscription: command.subscription });
         return;
       }
       remove(existing);
     }
-    if (pending.get(project)?.subscription === command.subscription) return;
+    if (pending.get(key)?.subscription === command.subscription) return;
     const token = Symbol(project);
-    pending.set(project, { token, subscription: command.subscription });
+    pending.set(key, { token, subscription: command.subscription });
     void Promise.resolve()
       .then(() => resolveSync(project, command.client))
       .then((target) => {
-        if (pending.get(project)?.token !== token) return;
-        pending.delete(project);
+        if (pending.get(key)?.token !== token) return;
+        pending.delete(key);
         if (!target || browser.readyState !== WebSocket.OPEN) {
-          send({ version: 1, type: 'closed', project, subscription: command.subscription });
+          send({ version: 2, type: 'closed', client, project, subscription: command.subscription });
           return;
         }
         const member: Subscription = {
+          client,
           project,
           subscription: command.subscription,
           target,
           stores: resolveStores(project),
           acknowledged: false,
         };
-        subscriptions.set(project, member);
-        const base = groupBase(target);
+        subscriptions.set(key, member);
+        const base = groupBase(target, client);
         let group = groups.get(base);
         if (!group) {
           group = { base, members: new Map(), activeProjects: '', legacy: false, direct: new Map() };
           groups.set(base, group);
         }
-        group.members.set(project, member);
+        group.members.set(key, member);
         reconcile(group);
       })
       .catch(() => {
-        if (pending.get(project)?.token !== token) return;
-        pending.delete(project);
-        send({ version: 1, type: 'closed', project, subscription: command.subscription });
+        if (pending.get(key)?.token !== token) return;
+        pending.delete(key);
+        send({ version: 2, type: 'closed', client, project, subscription: command.subscription });
       });
   });
   browser.on('close', () => {

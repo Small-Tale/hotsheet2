@@ -49,7 +49,7 @@ describe('parseChangeMuxRequest', () => {
 
   it.each([
     ['not an object', []],
-    ['another version', { version: 2, client: 't', polls: [{ project: 'a', timeout_ms: 0 }] }],
+    ['another version', { version: 3, client: 't', polls: [{ project: 'a', timeout_ms: 0 }] }],
     ['no client', { version: 1, polls: [{ project: 'a', timeout_ms: 0 }] }],
     ['no polls', { version: 1, client: 't', polls: [] }],
     [
@@ -83,6 +83,36 @@ describe('parseChangeMuxRequest', () => {
       '/ws/poll?timeout_ms=25000&since=4&client=tab%201',
     );
     expect(changeMuxPollPath({ project: 'a', timeout_ms: 0 }, 't')).toBe('/ws/poll?timeout_ms=0&client=t');
+  });
+
+  it('accepts two tabs polling the same project in version 2 and returns each client identity', async () => {
+    const parsed = parseChangeMuxRequest({
+      version: 2,
+      client: '',
+      polls: [
+        { project: 'same', client: 'tab-a', timeout_ms: 0 },
+        { project: 'same', client: 'tab-b', timeout_ms: 0 },
+      ],
+    });
+    expect(typeof parsed).toBe('object');
+    if (typeof parsed === 'string') throw new Error(parsed);
+    const paths: string[] = [];
+    const response = await multiplexChangePolls(
+      parsed,
+      async (_project, path) => {
+        paths.push(path);
+        return page(1);
+      },
+      new AbortController().signal,
+    );
+    expect(paths.sort()).toEqual(['/ws/poll?timeout_ms=0&client=tab-a', '/ws/poll?timeout_ms=0&client=tab-b']);
+    expect(response).toMatchObject({
+      version: 2,
+      results: expect.arrayContaining([
+        expect.objectContaining({ project: 'same', client: 'tab-a', status: 200 }),
+        expect.objectContaining({ project: 'same', client: 'tab-b', status: 200 }),
+      ]),
+    });
   });
 });
 
