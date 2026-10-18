@@ -3570,7 +3570,7 @@ test('keeps inverse inline code legible on the brand fill in the demo and the AI
 
 test('keeps feedback Markdown list spacing compact', async ({ page }) => {
   await page.goto('/ux-demo?component=note-card');
-  const feedbackNote = page.locator('[data-component="note-card"][data-kind="feedback_needed"]');
+  const feedbackNote = page.locator('[data-component="note-card"][data-note-id="feedback"]');
   const feedbackItems = feedbackNote.locator('li');
   await expect(feedbackItems).toHaveCount(3);
   const itemGaps = await feedbackItems.evaluateAll((items) =>
