@@ -90,7 +90,13 @@ test('uses one disclosure and aligned icon-label choices at wide and narrow size
   const effortChoices = menu
     .getByRole('menu', { name: 'Effort', exact: true })
     .locator(':scope > .kui-popup-menu__item');
-  await expect(effortChoices).toHaveCount(3);
+  expect(await effortChoices.evaluateAll((items) => items.map((item) => item.getAttribute('value')))).toEqual([
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'max',
+  ]);
   await expect(effortChoices.and(page.locator('[value="high"]'))).toHaveAttribute('aria-checked', 'true');
   const effortGeometry = await settledChoiceGeometry(effortChoices.first());
   expect(Math.abs(effortGeometry.iconInset - modelGeometry.iconInset)).toBeLessThan(1);
