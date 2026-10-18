@@ -601,12 +601,12 @@ test('shows completed driven failures, preserves indicators on dismissal, and su
   await expect(popup).toContainText('Selected model is at capacity');
   await page.screenshot({ path: test.info().outputPath('hs2-e6kawy-driven-failure.png') });
   await popup.getByRole('button', { name: 'Dismiss', exact: true }).click();
-  await expect(drawer.locator('[title="Stopped: Selected model is at capacity"]')).toBeVisible();
+  await expect(drawer.getByRole('img', { name: 'Stopped: Selected model is at capacity' })).toBeVisible();
   await composer.fill('Retry successfully.');
   await composer.press('Enter');
   await expect(host).toContainText('Retry completed successfully.');
   await expect(popup).toHaveCount(0);
-  await expect(drawer.locator('[title="Stopped: Selected model is at capacity"]')).toHaveCount(0);
+  await expect(drawer.getByRole('img', { name: 'Stopped: Selected model is at capacity' })).toHaveCount(0);
 });
 
 test('opens a halted session in its originating project and follows another window acknowledgment while deferred (HS2-E6KAWY)', async ({
@@ -30485,12 +30485,12 @@ for (const width of [1280, 390]) {
     await composer.press('Enter');
     await expect(host.getByRole('alert')).toBeVisible();
     await expect(host.getByRole('alert')).toContainText('Selected model is at capacity');
-    await expect(drawer.locator('[title="Stopped: Selected model is at capacity"]')).toBeVisible();
+    await expect(drawer.getByRole('img', { name: 'Stopped: Selected model is at capacity' })).toBeVisible();
     await page.screenshot({ path: test.info().outputPath(`hs2-azve3p-failed-${width}.png`) });
     await composer.fill('Retry successfully.');
     await composer.press('Enter');
     await expect(host).toContainText('Retry completed successfully.');
-    await expect(drawer.locator('[title="Stopped: Selected model is at capacity"]')).toHaveCount(0);
+    await expect(drawer.getByRole('img', { name: 'Stopped: Selected model is at capacity' })).toHaveCount(0);
     await expect(host).not.toContainText('Selected model is at capacity');
     await page.screenshot({ path: test.info().outputPath(`hs2-azve3p-recovered-${width}.png`) });
   });
@@ -30590,7 +30590,7 @@ test('restores an idle server failure when a persisted conversation still has an
   // Reopening after a missed terminal event must reconcile from GET /connections alone.
   await page.route(/\/ws\/poll(?:\?|$)/, (route) => route.fulfill({ json: { events: [], cursor: 0 } }));
   await page.reload();
-  await expect(drawer.locator('[title="Stopped: Selected model is at capacity"]')).toBeVisible();
+  await expect(drawer.getByRole('img', { name: 'Stopped: Selected model is at capacity' })).toBeVisible();
   await expect(drawer.getByRole('alert')).toContainText('Selected model is at capacity');
 });
 
