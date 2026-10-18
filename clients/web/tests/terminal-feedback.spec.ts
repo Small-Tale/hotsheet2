@@ -764,8 +764,7 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
   expect(dashboardFrames.slice(firstDashboardFrame, readyDashboardFrame).every((frame) => frame?.hidden)).toBe(true);
   const dashboard = page.getByRole('region', { name: 'Workspace Grid' }),
     tile = dashboard.locator('[data-terminal-key="terminal-feedback:terminal-new"]'),
-    // The tile shows the drawer's own instance (HS2-EYD24K): it mirrors the PTY's current size rather
-    // than resizing it to 80x24, and its claims never drive the size.
+    // This small tile keeps the drawer's own instance (HS2-EYD24K) as a non-driving mirror.
     assertTiled = async (viewport: typeof dedicated) => {
       await expect(viewport).toHaveAttribute('data-presentation', 'tile');
       await expect

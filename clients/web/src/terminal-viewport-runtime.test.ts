@@ -1415,9 +1415,9 @@ describe('one emulator moves between the drawer and a grid tile (HS2-EYD24K)', (
     const flush = () => {
       for (const callback of frames.splice(0)) callback();
     };
-    const size = (cols: number, rows: number) =>
+    const size = (cols: number, rows: number, drivenBy = 'other') =>
       socket.dispatchEvent(
-        new MessageEvent('message', { data: JSON.stringify({ pty_size: { cols, rows }, driven_by: 'other' }) }),
+        new MessageEvent('message', { data: JSON.stringify({ pty_size: { cols, rows }, driven_by: drivenBy }) }),
       );
     const claims = () =>
       sent
@@ -1426,10 +1426,10 @@ describe('one emulator moves between the drawer and a grid tile (HS2-EYD24K)', (
     return { viewport, terminal, dispose, fire, flush, size, sent, claims, screen, frame };
   }
 
-  it('keeps its socket in a tile, mirrors the PTY size there, scales to the frame, and never drives', async () => {
+  it('keeps its socket in a tile and claims a usable fitted grid', async () => {
     const view = mountMovable();
     view.flush();
-    view.size(120, 40);
+    view.size(120, 40, 'viewer');
     await Promise.resolve();
     const socketCount = sockets.length;
     view.sent.length = 0;
@@ -1439,14 +1439,14 @@ describe('one emulator moves between the drawer and a grid tile (HS2-EYD24K)', (
     expect(view.viewport.inert).toBe(true);
     expect(view.terminal.options.disableStdin).toBe(true);
     expect(view.terminal.blur).toHaveBeenCalled();
-    // A tile's claims keep the lease but report hidden and non-focused, so they never drive the PTY.
-    expect(view.claims().at(-1)).toMatchObject({ focus: false, visible: false, cols: 120, rows: 40 });
     view.flush();
-    // 800×480 screen in a 400×300 frame: half size, letterboxed vertically.
+    expect(view.claims().at(-1)).toMatchObject({ focus: true, visible: true, cols: 80, rows: 23 });
+    expect(view.terminal.resize).toHaveBeenCalledWith(80, 23);
+    // The screen mock has a fixed 800×480 footprint; the browser flow checks real cell geometry.
     expect(view.viewport.dataset.tileScale).toBe('0.5');
     expect(view.viewport.style.transform).toBe('translate(0px, 30px) scale(0.5)');
     expect(view.viewport.style.width).toBe('800px');
-    // Another device resizes the PTY: the tile follows its size instead of claiming its own.
+    // Another device can still take sizing authority; the tile follows its reported PTY size.
     view.size(100, 30);
     await Promise.resolve();
     expect([view.terminal.cols, view.terminal.rows]).toEqual([100, 30]);
@@ -1454,7 +1454,7 @@ describe('one emulator moves between the drawer and a grid tile (HS2-EYD24K)', (
     view.sent.length = 0;
     view.terminal.dataHandler!('ls\r');
     expect(view.sent).not.toContain('ls\r');
-    expect(view.claims().every((claim) => !claim.visible)).toBe(true);
+    expect(view.claims()).toHaveLength(0);
 
     view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: false });
     expect(view.viewport.dataset.presentation).toBeUndefined();
@@ -1468,6 +1468,19 @@ describe('one emulator moves between the drawer and a grid tile (HS2-EYD24K)', (
     expect(sockets).toHaveLength(socketCount);
     view.terminal.dataHandler!('pwd\r');
     expect(view.sent).toContain('pwd\r');
+    view.dispose();
+  });
+
+  it('keeps an unusably narrow tile as a scaled, non-driving mirror', async () => {
+    const view = mountMovable();
+    view.flush();
+    view.size(120, 40, 'viewer');
+    await Promise.resolve();
+    allocated.proposed = { cols: 20, rows: 10 };
+    view.fire(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { tile: true });
+    view.flush();
+    expect(view.claims().at(-1)).toMatchObject({ focus: false, visible: false, cols: 120, rows: 40 });
+    expect([view.terminal.cols, view.terminal.rows]).toEqual([120, 40]);
     view.dispose();
   });
 

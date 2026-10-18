@@ -461,8 +461,10 @@ function initializeTerminalViewport(
     // reconnect never drops what the user typed (HS2-A1R38J). Bounded like a paste.
     pendingInput = '',
     serverSize: { cols: number; rows: number } | undefined,
-    // Shown inside a grid tile rather than the drawer (HS2-EYD24K): mirrored, scaled, non-driving.
+    // Shown inside a grid tile rather than the drawer: fitted to the tile while sharing its socket.
     tiled = false,
+    tileGridSize: { cols: number; rows: number } | undefined,
+    tileCanClaim = false,
     tileWebglReleased = false;
   own(() => {
     disposed = true;
@@ -486,7 +488,7 @@ function initializeTerminalViewport(
   const fixedGridSize = () =>
     mirrorPtyGrid && serverSize ? serverSize : { cols: TERMINAL_DASHBOARD_COLS, rows: TERMINAL_DASHBOARD_ROWS };
   const proposed = () => {
-    if (tiled) return serverSize ?? { cols: terminal.cols, rows: terminal.rows };
+    if (tiled) return tileGridSize ?? serverSize ?? { cols: terminal.cols, rows: terminal.rows };
     if (mobile80xM()) return { cols: mobileCols(), rows: mobileGridRows };
     if (fixedGrid) return fixedGridSize();
     const dimensions = fit.proposeDimensions() ?? { cols: terminal.cols, rows: terminal.rows };
@@ -520,14 +522,14 @@ function initializeTerminalViewport(
   // must NOT advance the arbiter's recency, so one device's heartbeats can't steal size control
   // from the device the user last touched (HS2-3ZBQDG).
   const claim = () => {
-    // A tiled emulator keeps its lease like a parked one, but reports itself hidden so it never drives
-    // the PTY size: moving a terminal into the grid must not resize it (HS2-EYD24K).
-    const sizingFocus = claimsSizing() && !tiled,
-      claimVisible = visible && !tiled;
+    // The visible tile owns this viewport while the drawer is hidden. It claims its fitted grid
+    // through the same arbiter as a dedicated terminal, so the TUI can use the whole tile.
+    const sizingFocus = claimsSizing() && (!tiled || tileCanClaim),
+      claimVisible = visible && (!tiled || tileCanClaim);
     element.dataset.sizingFocus = String(sizingFocus);
     element.dataset.viewportVisible = String(claimVisible);
     if (socket?.readyState !== WebSocket.OPEN) return;
-    if (!tiled && !fixedGrid && !mobile80xM() && element.dataset.geometryReady !== 'true') return;
+    if (!fixedGrid && !mobile80xM() && element.dataset.geometryReady !== 'true') return;
     const size = claimDimensions();
     socket.send(terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, claimVisible, false));
   };
@@ -659,10 +661,14 @@ function initializeTerminalViewport(
       applyDashboardPhysicalFill();
     });
   };
-  // A tiled emulator mirrors the PTY's grid, then scales to its frame with letterboxing (HS2-EYD24K).
+  // A tiled emulator fits the PTY to its frame, then centers any remainder left by whole cells.
   const layoutTile = () => {
     if (!tiled || disposed || !terminal.element) return;
-    if (serverSize && (terminal.cols !== serverSize.cols || terminal.rows !== serverSize.rows))
+    if (
+      serverSize &&
+      (!tileCanClaim || element.dataset.driving === 'false') &&
+      (terminal.cols !== serverSize.cols || terminal.rows !== serverSize.rows)
+    )
       resizeTerminalPreservingScroll(terminal, serverSize.cols, serverSize.rows);
     const screen = terminal.element.querySelector<HTMLElement>('.xterm-screen'),
       frame = element.parentElement;
@@ -696,6 +702,21 @@ function initializeTerminalViewport(
   const applySettledGeometry = () => {
     if (disposed || element.closest('[hidden]')) return;
     if (tiled) {
+      const frame = element.parentElement;
+      if (!frame || !frame.clientWidth || !frame.clientHeight) return;
+      // FitAddon measures its terminal root's parent, which is this viewport. Give it the
+      // tile's actual size before restoring the screen-sized, centered presentation.
+      element.style.transform = '';
+      element.style.width = `${frame.clientWidth}px`;
+      element.style.height = `${frame.clientHeight}px`;
+      const size = fit.proposeDimensions();
+      if (!size) return;
+      // A very small tile cannot host a usable TUI grid; mirror the existing PTY there.
+      tileCanClaim = size.cols >= 40 && size.rows >= 12;
+      tileGridSize = tileCanClaim ? terminalDedicatedGridSize(size.cols, size.rows) : serverSize;
+      if (!tileGridSize) return;
+      resizeTerminalPreservingScroll(terminal, tileGridSize.cols, tileGridSize.rows);
+      element.dataset.geometryReady = 'true';
       layoutTile();
       claim();
       return;
@@ -998,7 +1019,7 @@ function initializeTerminalViewport(
     element.removeEventListener(TERMINAL_VIEWPORT_REPARENT_EVENT, reparent);
   });
   // One emulator per terminal (HS2-EYD24K): the owner moves this dedicated viewport into a grid tile and
-  // back. In a tile the emulator keeps its socket, scrollback, and grid; it is scaled to the frame.
+  // back. In a tile the emulator keeps its socket and scrollback, and fits its PTY grid to the frame.
   const tileStyles = ['inset', 'width', 'height', 'overflow', 'transform', 'transformOrigin'] as const;
   const present = (event: Event) => {
     const tile = Boolean((event as CustomEvent<TerminalViewportPresentationDetail | null>).detail?.tile);
@@ -1006,6 +1027,9 @@ function initializeTerminalViewport(
     if (tile !== tiled) {
       tiled = tile;
       if (tile) {
+        tileGridSize = undefined;
+        tileCanClaim = false;
+        element.dataset.geometryReady = 'false';
         if (fitFrame !== undefined) window.cancelAnimationFrame(fitFrame);
         fitFrame = undefined;
         // A tile never holds a WebGL context: grids can show more terminals than browsers allow.
@@ -1027,6 +1051,8 @@ function initializeTerminalViewport(
         element.style.overflow = 'hidden';
         element.style.transformOrigin = 'top left';
       } else {
+        tileGridSize = undefined;
+        tileCanClaim = false;
         for (const property of tileStyles) element.style[property] = '';
         element.inert = false;
         element.removeAttribute('aria-hidden');

@@ -201,6 +201,19 @@ for (const width of [1280, 390])
     const workspace = page.getByRole('region', { name: 'Workspace Grid' }),
       workspaceTile = workspace.locator('[data-component="terminal-tile"][data-terminal-key="demo-checkout:demo-one"]');
     await expect(workspaceTile.locator('[data-presentation="tile"] .xterm-rows')).toContainText('demo-one READY');
+    const workspaceFill = await workspaceTile.locator('[data-presentation="tile"]').evaluate((viewport) => {
+      const frame = viewport.parentElement!.getBoundingClientRect(),
+        screen = viewport.querySelector('.xterm-screen')!.getBoundingClientRect();
+      return { width: screen.width / frame.width, height: screen.height / frame.height };
+    });
+    if (width === 1280) {
+      // The spacious tile claims a fitted PTY grid instead of shrinking the drawer's wide grid.
+      expect(workspaceFill.width).toBeGreaterThan(0.8);
+      expect(workspaceFill.height).toBeGreaterThan(0.8);
+    } else {
+      // A phone tile cannot fit a usable TUI grid, so it keeps the legible scaled mirror.
+      expect(workspaceFill.width).toBeGreaterThan(0.95);
+    }
     expect(await emulatorOf(page, 'demo-one')).toEqual([
       { tag: opened.tag, inTile: true, inSession: false, presentation: 'tile', mode: 'interactive' },
     ]);
@@ -209,4 +222,11 @@ for (const width of [1280, 390])
       path: `target/visual-captures/hs2-eyd24k-workspace-grid-tile-${String(width)}.png`,
       animations: 'disabled',
     });
+    if (width === 1280) {
+      await workspace.getByRole('button', { name: 'Enter workspace grid full screen' }).click();
+      const zoomIn = workspace.getByRole('button', { name: /Zoom In, Fit Fewer Items/ });
+      for (let step = 0; step < 5 && (await zoomIn.isEnabled()); step += 1) await zoomIn.click();
+      await expect(workspaceTile.locator('[data-presentation="tile"] .xterm-rows')).toContainText('demo-one READY');
+    }
+    await workspaceTile.screenshot({ path: test.info().outputPath(`hs2-r1v4mj-workspace-tile-${String(width)}.png`) });
   });

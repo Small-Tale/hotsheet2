@@ -3358,15 +3358,17 @@ morph-skipped preview placeholder, so a re-render never clobbers it.
 
 The owner tells the instance where it is with `hs-terminal-viewport-presentation`. In a tile:
 
-- **Size:** the local grid mirrors the PTY's cols×rows. It is never refitted, and never resized to
-  80×24.
-- **Scale:** the emulator is CSS-scaled to the tile frame with letterboxing.
+- **Size:** a tile with room for at least 40 columns and 12 rows fits its own PTY grid and
+  claims that size; moving a wide drawer terminal into a tall Workspace Grid tile then lets
+  the TUI use the tile's height. Smaller tiles mirror the existing PTY grid instead.
+- **Scale:** the fitted emulator is uniformly scaled to the tile's whole-cell remainder;
+  small tiles keep the existing letterboxed mirror.
 - **Input and focus:** the instance is `inert`, input is disabled, and its scrollbar is hidden.
-- **Sizing:** its claims report `visible:false`, so moving a terminal into the grid never resizes
-  the PTY.
+- **Sizing:** a usable visible tile claims its fitted size through the normal sizing arbiter.
+  A tile too small for a usable grid reports `visible:false` and cannot resize the PTY.
 - **Resources:** it holds no WebGL context.
 
-Returning to the drawer refits the instance and lets it drive again. If the drawer and a tile both
+Returning to the drawer refits the instance. If the drawer and a tile both
 ask for the instance in one pass, the drawer wins. A tile still on screen while the drawer shows the
 terminal falls back to its lightweight preview. A tile that leaves the page parks the instance
 again.

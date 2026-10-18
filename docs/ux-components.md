@@ -2045,10 +2045,10 @@ vertically. Layout math treats a drawer narrower than 240 px as 240 px. During a
 splitter gesture, existing dedicated and grid terminal geometry remains frozen; xterm fit,
 tile recomputation, and PTY size claims happen once after pointer release.
 
-At every scale, dashboard tiles are keyboard-focusable, non-interactive previews: each live
-xterm retains a fixed 1280×768 natural geometry and the complete terminal is uniformly
-scaled into the tile instead of being refit to the tile. This keeps the PTY stable as grid
-zoom changes and keeps the preview, inset frame, and unused terminal area on the terminal
+At every scale, lightweight dashboard previews are keyboard-focusable and non-interactive: each
+xterm retains a fixed 1280×768 natural geometry and is uniformly scaled into the tile. A tile
+hosting the shared live drawer emulator instead fits and claims a usable PTY grid; very small
+tiles mirror the existing grid. This keeps the preview, inset frame, and unused terminal area on the terminal
 background color. Only the terminal viewport follows that 5:3 aspect; the borderless tile card adds its
 measured spacing-token inset and footer height outside the viewport. `FixedAspectTerminalCard`
 owns this structure for both grid-preview and magnified-interactive variants. Its footer is a Kerf
