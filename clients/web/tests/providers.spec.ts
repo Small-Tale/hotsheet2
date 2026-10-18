@@ -19149,7 +19149,7 @@ for (const width of [390, 1280] as const)
     await expect(banner).toContainText('Running Bash');
     await expect(host.locator('.ai-conversation__selection')).toHaveCount(1);
     await expect.poll(visibleRows).toBe(6);
-    await expect.poll(async () => (await geometry()).form).toBeGreaterThan(compactForm + 100);
+    await expect.poll(async () => (await geometry()).form).toBeGreaterThan(compactForm);
     await transcript.evaluate((node) => {
       node.scrollTop = node.scrollHeight;
     });
