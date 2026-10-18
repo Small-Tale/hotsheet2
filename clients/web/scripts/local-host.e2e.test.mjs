@@ -290,9 +290,13 @@ it.concurrent('serves the production client and the local bridge without Vite', 
             : '',
         setupVariables = serverEnvironment
           .split('\0')
-          .filter((entry) => /^(HOTSHEET_HOME|HOTSHEET_HOOK_CLI_BIN|HOTSHEET_LOCAL_HOST_SNAPSHOT)=/.test(entry));
+          .filter((entry) =>
+            /^(HOTSHEET_HOME|HOTSHEET_HOOK_CLI_BIN|HOTSHEET_LOCAL_HOST_SNAPSHOT|HOTSHEET_SERVER_BIN|HOTSHEET_CLI_BIN)=/.test(
+              entry,
+            ),
+          );
       throw new Error(
-        `Hook CLI mismatch: expected=${expectedHookCommand}; actual=${hookCommand}; marker=${marker}; serverSetupEnv=${JSON.stringify(setupVariables)}; hostLog=${log.slice(-500)}`,
+        `Hook CLI mismatch: expected=${expectedHookCommand}; actual=${hookCommand}; previous=${previousHookCli}; isPrevious=${snapshotCli === previousHookCli}; marker=${marker}; serverSetupEnv=${JSON.stringify(setupVariables)}; hostLog=${log.slice(-500)}`,
       );
     }
     expect((await run(stableHookCli, ['--help'])).stdout).toContain('permission-hook');
