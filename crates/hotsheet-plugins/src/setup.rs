@@ -1880,7 +1880,10 @@ fn resolve_hook_command(command: &str) -> String {
     let configured = std::env::var_os("HOTSHEET_HOOK_CLI_BIN").map(std::path::PathBuf::from);
     let home = std::env::var_os("HOTSHEET_HOME").map(std::path::PathBuf::from);
     let snapshot = std::env::var_os("HOTSHEET_LOCAL_HOST_SNAPSHOT").as_deref()
-        == Some(std::ffi::OsStr::new("1"));
+        == Some(std::ffi::OsStr::new("1"))
+        || std::env::current_exe()
+            .ok()
+            .is_some_and(|path| is_local_host_snapshot_binary(&path));
     let stable = stable_hook_cli(configured.as_deref(), snapshot, home.as_deref());
     resolve_hook_command_with(command, stable.as_deref())
 }
@@ -1890,14 +1893,25 @@ fn stable_hook_cli(
     snapshot: bool,
     home: Option<&Path>,
 ) -> Option<std::path::PathBuf> {
-    configured
-        .filter(|path| path.is_absolute() && path.is_file())
-        .map(Path::to_path_buf)
+    snapshot
+        .then(|| home.map(|home| home.join("bin/hotsheet-cli")))
+        .flatten()
+        .filter(|path| path.is_file())
         .or_else(|| {
-            snapshot
-                .then(|| home.map(|home| home.join("bin/hotsheet-cli")))
-                .flatten()
-                .filter(|path| path.is_file())
+            configured
+                .filter(|path| path.is_absolute() && path.is_file())
+                .map(Path::to_path_buf)
+        })
+}
+
+fn is_local_host_snapshot_binary(path: &Path) -> bool {
+    path.parent()
+        .and_then(Path::parent)
+        .and_then(Path::file_name)
+        .is_some_and(|part| {
+            let name = part.to_string_lossy();
+            name.starts_with("hotsheet-local-host-")
+                && !name.starts_with("hotsheet-local-host-home-")
         })
 }
 
@@ -2123,6 +2137,15 @@ mod tests {
                 stable_hook_cli(None, true, Some(home.path())).as_deref(),
             ),
             format!("{} permission-hook --agent codex", durable.display())
+        );
+        let snapshot = home.path().join("hotsheet-local-host-abc/bin/hotsheet-cli");
+        std::fs::create_dir_all(snapshot.parent().unwrap()).unwrap();
+        std::fs::write(&snapshot, b"snapshot").unwrap();
+        assert!(is_local_host_snapshot_binary(&snapshot));
+        assert!(!is_local_host_snapshot_binary(&durable));
+        assert_eq!(
+            stable_hook_cli(Some(&snapshot), true, Some(home.path())),
+            Some(durable)
         );
     }
 
