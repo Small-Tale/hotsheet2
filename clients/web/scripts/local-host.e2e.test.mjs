@@ -278,9 +278,23 @@ it.concurrent('serves the production client and the local bridge without Vite', 
     // hook command through the next host restart still needs an executable outside the snapshot.
     const stableHookCli = resolve(home, 'bin/hotsheet-cli'),
       codexHooks = JSON.parse(await readFile(resolve(project, '.codex/hooks.json'), 'utf8'));
-    expect(codexHooks.hooks.PermissionRequest[0].hooks[0].command).toBe(
-      `${stableHookCli} permission-hook --agent codex`,
-    );
+    const hookCommand = codexHooks.hooks.PermissionRequest[0].hooks[0].command,
+      expectedHookCommand = `${stableHookCli} permission-hook --agent codex`;
+    if (hookCommand !== expectedHookCommand) {
+      const snapshotCli = hookCommand.split(' ')[0],
+        marker = await readFile(resolve(dirname(snapshotCli), '.stable-hook-cli'), 'utf8').catch(() => '<missing>'),
+        server = await machineServer(home),
+        serverEnvironment =
+          process.platform === 'linux' && server?.pid
+            ? await readFile(`/proc/${server.pid}/environ`, 'utf8').catch(() => '')
+            : '',
+        setupVariables = serverEnvironment
+          .split('\0')
+          .filter((entry) => /^(HOTSHEET_HOME|HOTSHEET_HOOK_CLI_BIN|HOTSHEET_LOCAL_HOST_SNAPSHOT)=/.test(entry));
+      throw new Error(
+        `Hook CLI mismatch: expected=${expectedHookCommand}; actual=${hookCommand}; marker=${marker}; serverSetupEnv=${JSON.stringify(setupVariables)}; hostLog=${log.slice(-500)}`,
+      );
+    }
     expect((await run(stableHookCli, ['--help'])).stdout).toContain('permission-hook');
     expect((await run(previousHookCli, ['--help'])).stdout).toContain('permission-hook');
     const hostsProject = async () => (await (await fetch(`${api}/stores`)).json()).some((store) => store.prefix === 'LH');
