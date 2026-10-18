@@ -175,6 +175,10 @@ mod tests {
     use std::time::Duration;
     use tower::ServiceExt;
 
+    // Both saturation cases observe the process-global offload semaphore. Running them at
+    // once makes the parked-ask case see the other test's 256 held permits (HS2-SF0159).
+    static SATURATION_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
     #[test]
     fn streaming_routes_stay_on_the_async_workers() {
         for route in [
@@ -251,6 +255,7 @@ mod tests {
     /// request, and they are counted as long waits, not slots in use (HS2-V3S89Q).
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn pending_long_waits_never_take_api_slots() {
+        let _serial = SATURATION_TESTS.lock().await;
         let asks = MAX_OFFLOADED + 16;
         let app = Router::new()
             .route(
@@ -294,6 +299,7 @@ mod tests {
     /// response carries the wait so `request_timing` reports the saturation (HS2-V3S89Q).
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn a_request_that_waits_for_a_slot_reports_the_wait() {
+        let _serial = SATURATION_TESTS.lock().await;
         let (release, _) = tokio::sync::watch::channel(false);
         let gate = release.subscribe();
         let app = Router::new()
