@@ -115,20 +115,24 @@
 /* Feedback prompts split into clickable blocks with inline response textareas (HS2 feedback flow). */
 .note-card__feedback-prompt {
   display: grid;
+  min-width: 0;
   gap: var(--kui-space-2xs);
   font-size: calc(var(--hotsheet-reading-scale, 1) * 1em);
 }
 .note-card__feedback-section {
   display: grid;
+  min-width: 0;
   gap: var(--kui-space-2xs);
 }
 /* A `CHOICE: question` header's question (HS2-3MHSBS): aligned with the prose blocks' inset, but not
    a response target, since replies attach to prose. */
 .note-card__feedback-question {
+  min-width: 0;
   padding: var(--kui-space-2xs);
 }
 .note-card__feedback-block {
   position: relative;
+  min-width: 0;
   padding: var(--kui-space-2xs);
   border-radius: var(--wa-border-radius-s);
   cursor: text;

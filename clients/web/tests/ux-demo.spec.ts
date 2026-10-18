@@ -2954,8 +2954,8 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=note-card');
   const notes = page.locator('[data-component="note-card"]');
-  // Eight comfortable cards plus the compact-density pair that TicketNotes uses (HS2-7RY5GK).
-  await expect(notes).toHaveCount(10);
+  // Eight comfortable cards, the compact-density pair, and two long-code overflow fixtures.
+  await expect(notes).toHaveCount(12);
   for (const id of ['compact-regular', 'compact-activity']) {
     const compact = page.locator(`[data-component="note-card"][data-note-id="${id}"]`);
     await expect(compact).toHaveAttribute('data-density', 'compact');
@@ -3149,6 +3149,34 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await expect(editor.locator('[data-component="markdown-preview"]')).toContainText('Autosaved edit');
   await editor.getByRole('button', { name: 'Use inline editor' }).click();
   await expect(editor).toHaveAttribute('data-expanded', 'false');
+});
+
+test('keeps long regular and feedback code inside note cards with horizontal scrolling', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=note-card');
+    for (const id of ['long-regular', 'long-feedback']) {
+      const note = page.locator(`[data-component="note-card"][data-note-id="${id}"]`);
+      const code = note.locator('.markdown-preview pre').first();
+      const sizes = await code.evaluate((element) => {
+        const card = element.closest('[data-component="note-card"]')!;
+        const block = element.getBoundingClientRect();
+        const boundary = card.getBoundingClientRect();
+        return {
+          blockRight: block.right,
+          cardRight: boundary.right,
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth,
+        };
+      });
+      expect(sizes.blockRight).toBeLessThanOrEqual(sizes.cardRight + 1);
+      expect(sizes.scrollWidth).toBeGreaterThan(sizes.clientWidth);
+      await code.evaluate((element) => {
+        element.scrollLeft = element.scrollWidth;
+      });
+      expect(await code.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    }
+  }
 });
 
 test('switches the MarkdownEditor demo appearance and inset, then resets them (HS2-QBR5HC)', async ({ page }) => {

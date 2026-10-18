@@ -1403,6 +1403,8 @@ preview/download, server directory browser) are separate design work.
   in both compact inspector notes and the larger reader. Inspector typography is a
   low-specificity default: nested Markdown headings and paragraphs always retain the
   renderer's own spacing regardless of stylesheet evaluation order.
+  Long fenced code lines in regular notes and feedback prompts stay inside the ticket
+  column and scroll horizontally within their code block at desktop and phone widths.
   Blockquotes follow email-reply semantics: a compact neutral rail, smaller quiet text,
   and inherited heading size de-emphasize quoted context instead of presenting it as a
   literary pull quote.

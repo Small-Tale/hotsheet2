@@ -135,6 +135,7 @@ export function latestDemoConfidence(notes: readonly NoteCardProps[]): number | 
 }
 
 export function NoteCardDemo() {
+  const longCode = `\`\`\`text\n${'unbroken-path-segment/'.repeat(32)}\n\`\`\``;
   return (
     <>
       <CatalogExample label="Every Note Kind" viewport={{ layout: 'flex-column' }}>
@@ -156,6 +157,12 @@ export function NoteCardDemo() {
             .map((note) => (
               <NoteCard {...note} id={`compact-${note.id}`} density="compact" editable={false} deletable={false} />
             ))}
+        </List>
+      </CatalogExample>
+      <CatalogExample label="Long Note Code" viewport={{ layout: 'flex-column' }}>
+        <List gap="xs">
+          <NoteCard id="long-regular" kind="regular" author="Codex" time="Now" body={longCode} />
+          <NoteCard id="long-feedback" kind="feedback_needed" author="Codex" time="Now" body={longCode} readerMode />
         </List>
       </CatalogExample>
     </>

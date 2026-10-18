@@ -85,8 +85,10 @@
     monospace;
 }
 .markdown-preview pre {
+  max-width: 100%;
   padding: var(--kui-space-m);
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   border-radius: remify(8.8px);
   background: var(--wa-color-neutral-on-normal);
   color: var(--wa-color-neutral-on-loud);
