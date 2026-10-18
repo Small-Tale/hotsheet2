@@ -97,6 +97,9 @@ event = "PermissionRequest"
 additional_events = ["SessionStart", "SessionEnd"]
 command = "hotsheet-cli permission-hook --agent codex"
 timeout_seconds = 86430
+# Codex caps SessionEnd at 3 seconds; SessionStart only reports the local bridge and
+# should not hold startup open for the permission request's day-long allowance.
+event_timeout_seconds = { SessionStart = 30, SessionEnd = 3 }
 change_notice = "codex_hooks_changed"
 
 [activity]

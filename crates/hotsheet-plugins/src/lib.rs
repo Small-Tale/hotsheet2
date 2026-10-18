@@ -192,6 +192,11 @@ pub struct HooksSpec {
     /// timeout so the adapter can emit that terminal denial instead of being killed first.
     #[serde(default)]
     pub timeout_seconds: Option<u64>,
+    /// Optional handler timeout overrides by hook event. The shared timeout remains the
+    /// fallback, so lifecycle events can honor provider-specific limits without shortening
+    /// a permission request's safe-deny window.
+    #[serde(default)]
+    pub event_timeout_seconds: BTreeMap<String, u64>,
     /// Provider review required after a changed hook configuration (HS2-4AR09Z).
     #[serde(default)]
     pub change_notice: Option<HookChangeNotice>,

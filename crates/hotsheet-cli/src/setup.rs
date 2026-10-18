@@ -279,6 +279,8 @@ mod tests {
                 .is_some_and(|command| command.contains("permission-hook --agent codex"))
         );
         assert_eq!(requests[0]["hooks"][0]["timeout"], 86_430);
+        assert_eq!(codex["hooks"]["SessionStart"][0]["hooks"][0]["timeout"], 30);
+        assert_eq!(codex["hooks"]["SessionEnd"][0]["hooks"][0]["timeout"], 3);
     }
 
     #[test]

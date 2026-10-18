@@ -863,8 +863,12 @@ unreachable, the adapter emits no decision and Codex presents its normal native 
 An unanswered request that reaches the generic bridge uses its existing eventual safe-deny
 timeout and emits a removal event when it expires; the generated provider hook timeout is
 slightly longer so that denial can be returned rather than the hook process being killed
-first. Allow and deny use Codex's native
-result; retries remain independent.
+first. That 86,430-second allowance applies only to `PermissionRequest`. The generated
+Codex lifecycle handlers use 30 seconds for `SessionStart` and [Codex's supported
+3-second maximum](https://learn.chatgpt.com/docs/hooks) for `SessionEnd`. Setup and
+refresh migrate older lifecycle handlers that inherited the permission timeout, preserve
+unrelated hooks, and issue the changed-hooks notice for a new `/hooks` trust review. Allow
+and deny use Codex's native result; retries remain independent.
 
 The client applies a user's decision optimistically: the popup and its clickable actions
 disappear in the same render that begins the network request, preventing latency from

@@ -1818,10 +1818,6 @@ fn write_hooks(
     }
 
     // Our hook entry uses the provider-native matcher declared by the plugin.
-    let mut handler = serde_json::json!({ "type": "command", "command": command });
-    if let Some(timeout) = spec.timeout_seconds {
-        handler["timeout"] = serde_json::json!(timeout);
-    }
     let mut events = vec![spec.event.as_str()];
     for event in &spec.additional_events {
         if !events.contains(&event.as_str()) {
@@ -1829,6 +1825,15 @@ fn write_hooks(
         }
     }
     for event_name in events {
+        let mut handler = serde_json::json!({ "type": "command", "command": command });
+        if let Some(timeout) = spec
+            .event_timeout_seconds
+            .get(event_name)
+            .copied()
+            .or(spec.timeout_seconds)
+        {
+            handler["timeout"] = serde_json::json!(timeout);
+        }
         let entry = serde_json::json!({
             "matcher": spec.event_matchers.get(event_name).unwrap_or(&spec.matcher),
             "hooks": [handler],

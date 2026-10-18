@@ -1484,21 +1484,54 @@ fn setup_reports_changed_codex_hooks_for_review_and_omits_noop_notices() {
     let path = project.join(".codex/hooks.json");
     let mut hooks: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-    hooks["hooks"]["PermissionRequest"][0]["hooks"][0]["timeout"] = serde_json::json!(1);
+    let timeout = |hooks: &serde_json::Value, event: &str| {
+        hooks["hooks"][event][0]["hooks"][0]["timeout"].as_u64()
+    };
+    assert_eq!(timeout(&hooks, "PermissionRequest"), Some(86_430));
+    assert_eq!(timeout(&hooks, "SessionStart"), Some(30));
+    assert_eq!(timeout(&hooks, "SessionEnd"), Some(3));
+    // A previous setup gave every event the permission allowance. Refresh migrates those
+    // bytes and requires a new Codex /hooks trust review exactly once.
+    hooks["hooks"]["SessionStart"][0]["hooks"][0]["timeout"] = serde_json::json!(86_430);
+    hooks["hooks"]["SessionEnd"][0]["hooks"][0]["timeout"] = serde_json::json!(86_430);
     std::fs::write(&path, serde_json::to_vec(&hooks).unwrap()).unwrap();
     let changed = String::from_utf8(setup(false)).unwrap();
     assert!(changed.contains("Run /hooks in Codex for this checkout"));
+    let migrated: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(timeout(&migrated, "PermissionRequest"), Some(86_430));
+    assert_eq!(timeout(&migrated, "SessionStart"), Some(30));
+    assert_eq!(timeout(&migrated, "SessionEnd"), Some(3));
     assert!(!String::from_utf8(setup(false)).unwrap().contains("Notice:"));
-    let refresh = hs(&store)
-        .env("HOTSHEET_HOME", &home)
-        .args(["setup", "--refresh", "--json", "--project"])
-        .arg(&project)
-        .assert()
-        .success()
-        .get_output()
-        .stdout
-        .clone();
-    let refresh: serde_json::Value = serde_json::from_slice(&refresh).unwrap();
+    std::fs::write(
+        store.join("hotsheet-settings.json"),
+        r#"{"enabled_plugins":["codex"]}"#,
+    )
+    .unwrap();
+    let refresh = || {
+        let output = hs(&store)
+            .env("HOTSHEET_HOME", &home)
+            .args(["setup", "--refresh", "--json", "--project"])
+            .arg(&project)
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        serde_json::from_slice::<serde_json::Value>(&output).unwrap()
+    };
+    let mut old_lifecycle = migrated;
+    old_lifecycle["hooks"]["SessionEnd"][0]["hooks"][0]["timeout"] = serde_json::json!(86_430);
+    std::fs::write(&path, serde_json::to_vec(&old_lifecycle).unwrap()).unwrap();
+    let changed = refresh();
+    assert_eq!(
+        changed["set_up"][0]["notices"][0]["kind"],
+        "codex_hooks_changed"
+    );
+    let refreshed: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(timeout(&refreshed, "SessionEnd"), Some(3));
+    let refresh = refresh();
     assert!(
         refresh["set_up"]
             .as_array()

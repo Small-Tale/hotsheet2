@@ -292,6 +292,8 @@ fn codex_declares_its_project_local_skill() {
     assert_eq!(hooks.matcher, ".*");
     assert_eq!(hooks.event, "PermissionRequest");
     assert_eq!(hooks.timeout_seconds, Some(86_430));
+    assert_eq!(hooks.event_timeout_seconds.get("SessionStart"), Some(&30));
+    assert_eq!(hooks.event_timeout_seconds.get("SessionEnd"), Some(&3));
     assert!(hooks.event_matchers.is_empty());
 
     // Codex opts into the metrics capability (docs/14, HS2-8PSAFE): it reports usage the
