@@ -143,6 +143,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/conversation-export-bridge.ts # Trusted host folder chooser plus validated bundle filesystem read/write boundary
     src/components/conversation-export-dialog.tsx # Save scope/contents/collision dialog with shared push/pop navigation that reuses live AI-message selection
     src/components/choice-card.tsx       # Shared selectable option card around a native radio/checkbox (title, description, brand/danger/disabled; HS2-V7PCS6)
+    src/components/effort-gauge-icon.ts # Lucide Gauge arc with level-specific needle positions shared by Drive menus and AI-tool Settings
     src/components/native-textarea.css   # Shared native textarea chrome (border, radius, inset, focus, touch field-sizing) for note, composer, inline-reply, and Not Working fields (HS2-FXSMB4)
     src/components/app-combobox-wiring.ts # One Kerf Combobox wiring per root; routes Add tag commits to tag editing and retains provider repository choices (HS2-C32ERK)
     src/components/flow-back-button.tsx # Shared chevron back affordance for multi-screen dialog detail screens

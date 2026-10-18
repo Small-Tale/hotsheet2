@@ -18191,10 +18191,28 @@ test('keeps the Drive menu open while choosing provider, model, and effort', asy
     .filter({ hasText: 'Effort' });
   await expect(effort).toBeVisible();
   await effort.hover();
-  for (const level of ['low', 'medium', 'high', 'xhigh', 'max'])
-    await expect(
-      effort.locator('xpath=..').locator(`[data-action="select-drive-effort"][data-value="${level}"]`),
-    ).toBeVisible();
+  for (const [level, needle] of [
+    ['low', 'M12 14 8 10'],
+    ['medium', 'M12 14 10 9'],
+    ['high', 'M12 14 12 8'],
+    ['xhigh', 'M12 14 14 9'],
+    ['max', 'm12 14 4-4'],
+  ]) {
+    const row = effort.locator('xpath=..').locator(`[data-action="select-drive-effort"][data-value="${level}"]`);
+    await expect(row).toBeVisible();
+    await expect(row.locator('svg[data-lucide="gauge"] path').first()).toHaveAttribute('d', needle);
+  }
+  await page.screenshot({ path: 'target/visual-captures/hs2-nrqm6q-effort-menu-wide.png' });
+  await page.setViewportSize({ width: 390, height: 700 });
+  await expect(
+    effort.locator('xpath=..').locator('[data-action="select-drive-effort"][data-value="max"]'),
+  ).toBeVisible();
+  await effort
+    .locator('xpath=..')
+    .locator('[data-action="select-drive-effort"][data-value="low"]')
+    .locator('xpath=..')
+    .screenshot({ path: 'target/visual-captures/hs2-nrqm6q-effort-menu-narrow.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
   await effort.locator('xpath=..').locator('[data-action="select-drive-effort"][data-value="high"]').click();
   await expect(effort).toBeVisible();
   await expect(sidebar.locator('[data-action="select-drive-model"][data-value="fable"]')).toHaveAttribute(

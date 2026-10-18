@@ -2,6 +2,8 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import type { PopupMenuEntry, PopupMenuItem } from '@kerfjs/ui/popup-menu';
 import { Bot, Brain, Gauge, type IconNode, Pencil, Shield, ShieldAlert, ShieldCheck } from 'lucide';
 
+import { effortGaugeIcon } from './effort-gauge-icon';
+
 /** One id/label choice a submenu offers (a provider or a model). */
 export interface ProviderModelEffortChoice {
   id: string;
@@ -101,12 +103,13 @@ export function providerModelEffortEntries({
   if (effort)
     entries.push({
       label: 'Effort',
-      icon: <LucideIcon icon={Gauge} name="gauge" />,
+      icon: <LucideIcon icon={effortGaugeIcon(effort.current)} name="gauge" />,
       details: effort.current ? <>{effort.current}</> : undefined,
       disabled: !effort.efforts.length,
-      submenu: effort.efforts.map((value) =>
-        choice(actions.effort, value, value, value === effort.current, Gauge, 'gauge'),
-      ),
+      submenu: effort.efforts.map((value) => ({
+        ...choice(actions.effort, value, value, value === effort.current, Gauge, 'gauge'),
+        icon: <LucideIcon icon={effortGaugeIcon(value)} name="gauge" />,
+      })),
     });
   if (permission && actions.permissionMode && permission.modes.length) {
     const current = permission.modes.find((mode) => mode.id === permission.current);

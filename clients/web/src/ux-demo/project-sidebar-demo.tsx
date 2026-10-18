@@ -119,7 +119,7 @@ export const demoAiTools: AiToolDescriptor[] = [
   {
     id: 'codex',
     display_name: 'Codex',
-    models: [{ id: 'gpt-5.6', label: 'GPT-5.6', effort_levels: ['medium', 'high', 'xhigh'] }],
+    models: [{ id: 'gpt-5.6', label: 'GPT-5.6', effort_levels: ['low', 'medium', 'high', 'xhigh', 'max'] }],
     default_model: 'gpt-5.6',
     default_effort: 'high',
   },

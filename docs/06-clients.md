@@ -1494,7 +1494,8 @@ preview/download, server directory browser) are separate design work.
   discovery is pending or fails, the arrow reports active discovery or the bounded error and retries
   on its next opening instead of presenting a transient failure as a confirmed empty installation.
   Parent rows rely on the shared menu's single disclosure marker; child provider, model, and
-  effort choices use aligned semantic icons plus one highlighted current value with compact
+  effort choices use aligned gauge icons whose needles advance from left at low effort to right at
+  max effort, plus one highlighted current value with compact
   submenu insets, including at the supported narrow width. The menu floats 8 px above its Drive
   control anchor and separates connected submenu groups by 4 px (HS2-4Y6SM9). Choosing Default,
   provider, model, or effort keeps the menu open so related overrides can be set in sequence;

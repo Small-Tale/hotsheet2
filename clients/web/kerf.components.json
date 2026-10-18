@@ -714,7 +714,7 @@
       "id": "drive-options-menu",
       "name": "DriveOptionsMenu",
       "kind": "component",
-      "purpose": "Provider, model, and effort overrides for a driven session.",
+      "purpose": "Provider, model, and effort overrides for a driven session, with gauge needles showing effort from low through max.",
       "source": "src/components/drive-options-menu.tsx",
       "publicExports": [
         {

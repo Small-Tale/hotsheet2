@@ -5,11 +5,12 @@ import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
 import { Text } from '@kerfjs/ui/text';
-import { Bot, Brain, Gauge, Pencil, ShieldAlert, ShieldCheck } from 'lucide';
+import { Bot, Brain, Pencil, ShieldAlert, ShieldCheck } from 'lucide';
 
 import { providerSelection } from '../ai-provider-defaults';
 import type { AiToolDefaults } from '../api';
 import type { AiToolDescriptor } from './drive-options-menu';
+import { effortGaugeIcon } from './effort-gauge-icon';
 
 /** The Select names of one provider's model and effort fields (HS2-EK24KF). */
 export const aiProviderModelName = (tool: string) => `ai-provider-model-${tool}`;
@@ -69,7 +70,7 @@ function ProviderDefaults({
             label="Effort"
             value={selection.effort ?? efforts.at(0) ?? ''}
             disabled={!efforts.length}
-            choices={efforts.map((value) => ({ value, label: value, icon: Gauge, iconName: 'gauge' }))}
+            choices={efforts.map((value) => ({ value, label: value, icon: effortGaugeIcon(value), iconName: 'gauge' }))}
           />
           {permissionMode && (
             <Select
