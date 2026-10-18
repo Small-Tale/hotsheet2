@@ -696,9 +696,75 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       activeTicketSurface().querySelector<HTMLElement>(`[name="note-body"][data-note-id="${id}"]`)?.focus(),
     );
   }
+  const newNoteTimers = new Map<string, ReturnType<typeof setTimeout>>(),
+    creatingNotes = new Set<string>();
+  const composerKey = (target: HTMLElement) => {
+    const frame = linkedReaderFrame(target);
+    return frame
+      ? `frame:${frame.id}`
+      : selectedTicket.value
+        ? `workspace:${selectedTicket.value.qualified_id}`
+        : undefined;
+  };
+  function cancelNewNoteTimer(key: string | undefined) {
+    if (!key) return;
+    const timer = newNoteTimers.get(key);
+    if (timer) clearTimeout(timer);
+    newNoteTimers.delete(key);
+  }
+  function saveNewNote(key: string | undefined) {
+    if (key && creatingNotes.has(key)) {
+      cancelNewNoteTimer(key);
+      newNoteTimers.set(
+        key,
+        setTimeout(() => {
+          saveNewNote(key);
+        }, 1_000),
+      );
+      return;
+    }
+    cancelNewNoteTimer(key);
+    if (!key) return;
+    flushDraftInputs();
+    if (key.startsWith('frame:')) {
+      const frameId = key.slice('frame:'.length),
+        frame = linkedReaderStack.value.find((item) => item.id === frameId),
+        text = frame?.edit.newNoteDraft.trim();
+      if (!frame?.edit.composingNote || !frame.capabilities.notes || !text) return;
+      creatingNotes.add(key);
+      const save = linkedReaderSaves(frameId).respond(text);
+      setFrameComposer(frameId, false, '');
+      void save.then((saved) => {
+        creatingNotes.delete(key);
+        if (!saved && linkedReaderStack.value.some((item) => item.id === frameId && !item.edit.composingNote))
+          setFrameComposer(frameId, true, text);
+      });
+      return;
+    }
+    if (key !== `workspace:${selectedTicket.value?.qualified_id}` || !composingNote.value || !canAddNotes()) return;
+    const text = newNoteDraft.value.trim();
+    if (!text) return;
+    creatingNotes.add(key);
+    composingNote.value = false;
+    newNoteDraft.value = '';
+    scheduleProjectSessionPersistence();
+    void updateSelected({ note: text, note_kind: 'regular' }).then((saved) => {
+      creatingNotes.delete(key);
+      if (!saved && key === `workspace:${selectedTicket.value?.qualified_id}` && !composingNote.value) {
+        composingNote.value = true;
+        newNoteDraft.value = text;
+        scheduleProjectSessionPersistence();
+      }
+    });
+  }
+  lifetime.add(() => {
+    for (const timer of newNoteTimers.values()) clearTimeout(timer);
+    newNoteTimers.clear();
+  });
   lifetime.add(
     wireNoteComposer(document.body, {
       open: (target) => {
+        cancelNewNoteTimer(composerKey(target));
         const frame = linkedReaderFrame(target);
         if (frame) {
           // A linked reader frame owns its composer, so it never borrows the workspace draft (HS2-ANRXAE).
@@ -722,8 +788,18 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         const frame = linkedReaderFrame(target);
         if (frame) linkedNewNoteDraftInput.schedule({ frameId: frame.id, value });
         else newNoteDraftInput.schedule(value);
+        const key = composerKey(target);
+        cancelNewNoteTimer(key);
+        if (key && value.trim())
+          newNoteTimers.set(
+            key,
+            setTimeout(() => {
+              saveNewNote(key);
+            }, 10_000),
+          );
       },
       cancel: (target) => {
+        cancelNewNoteTimer(composerKey(target));
         flushDraftInputs();
         const frame = linkedReaderFrame(target);
         if (frame) {
@@ -735,28 +811,10 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         scheduleProjectSessionPersistence();
       },
       submit: (target) => {
-        flushDraftInputs();
-        const frame = linkedReaderFrame(target);
-        if (frame) {
-          const text = frame.edit.newNoteDraft.trim();
-          if (!text || !frame.capabilities.notes) return;
-          // The new note lands on the frame's own ticket through its owning project (HS2-ANRXAE).
-          void linkedReaderSaves(frame.id)
-            .respond(text)
-            .then((saved) => {
-              if (saved) setFrameComposer(frame.id, false, '');
-            });
-          return;
-        }
-        const text = newNoteDraft.value.trim();
-        if (!text || !canAddNotes()) return;
-        void updateSelected({ note: text, note_kind: 'regular' }).then((saved) => {
-          if (saved) {
-            composingNote.value = false;
-            newNoteDraft.value = '';
-            scheduleProjectSessionPersistence();
-          }
-        });
+        saveNewNote(composerKey(target));
+      },
+      finish: (target) => {
+        saveNewNote(composerKey(target));
       },
     }),
   );
@@ -975,6 +1033,22 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     scheduleProjectSessionPersistence();
   }
   lifetime.add(wireFeedbackChoices(document.body, { toggle: toggleFeedbackChoice }));
+  function deleteWorkspaceNote(noteId: string | undefined) {
+    const current = project(),
+      ticket = selectedTicket.value;
+    if (!current || !ticket || !noteId || !canDeleteNotes()) return;
+    void api()
+      .deleteCheckoutNote(current.id, ticket.qualified_id, noteId)
+      .then((result) => {
+        selectedTicket.value = result.ticket;
+        editingNoteId.value = undefined;
+        noteDraft.value = '';
+        return refreshProject();
+      })
+      .catch((reason: unknown) => {
+        error.value = reason instanceof Error ? reason.message : String(reason);
+      });
+  }
   lifetime.add(
     wireNoteEditor(document.body, {
       begin: (noteId, target) => {
@@ -1010,6 +1084,13 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         flushDraftInputs();
         const frame = linkedReaderFrame(field);
         if (frame) {
+          const id = frame.edit.editingNoteId ?? field.dataset.noteId,
+            note = frame.ticket.notes.find((item) => item.id === id);
+          if (note?.kind === 'regular' && frame.capabilities.note_delete && !field.value.trim()) {
+            linkedReaderSaves(frame.id).note.cancel();
+            deleteLinkedReaderNote(frame, id);
+            return;
+          }
           void linkedReaderSaves(frame.id)
             .note.flush()
             .then((saved) => {
@@ -1026,6 +1107,12 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
           draft = reader ? readerNoteDraft : noteDraft,
           autosave = reader ? readerNoteAutosave : noteAutosave;
         const finishedId = editing.value;
+        const note = selectedTicket.value?.notes.find((item) => item.id === finishedId);
+        if (note?.kind === 'regular' && canDeleteNotes() && !field.value.trim()) {
+          autosave.cancel();
+          deleteWorkspaceNote(finishedId);
+          return;
+        }
         void autosave.flush().then((saved) => {
           if (saved) {
             endFeedbackPromptEdit(finishedId);
@@ -1098,21 +1185,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         deleteLinkedReaderNote(frame, data(target).noteId);
         return;
       }
-      const current = project(),
-        ticket = selectedTicket.value,
-        noteId = data(target).noteId;
-      if (!current || !ticket || !noteId || !canDeleteNotes()) return;
-      void api()
-        .deleteCheckoutNote(current.id, ticket.qualified_id, noteId)
-        .then((result) => {
-          selectedTicket.value = result.ticket;
-          editingNoteId.value = undefined;
-          noteDraft.value = '';
-          return refreshProject();
-        })
-        .catch((reason: unknown) => {
-          error.value = reason instanceof Error ? reason.message : String(reason);
-        });
+      deleteWorkspaceNote(data(target).noteId);
     }),
   );
   lifetime.add(

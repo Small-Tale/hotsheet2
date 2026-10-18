@@ -18,6 +18,8 @@ export interface NoteComposerBindings {
   readonly open: (target: HTMLElement) => void;
   readonly setDraft: (value: string, target: HTMLElement) => void;
   readonly cancel: (target: HTMLElement) => void;
+  /** Focus left the composer for another surface. */
+  readonly finish?: (target: HTMLElement) => void;
   /** The composer form was submitted; the helper has already prevented navigation. */
   readonly submit: (target: HTMLElement) => void;
 }
@@ -35,6 +37,14 @@ export function wireNoteComposer(root: HTMLElement, bindings: NoteComposerBindin
       bindings.setDraft((target as HTMLTextAreaElement).value, target as HTMLElement);
     }),
   );
+  if (bindings.finish)
+    lifetime.add(
+      delegate(root, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.newNoteBodyField.selector, (event, target) => {
+        const next = (event as FocusEvent).relatedTarget;
+        if (next instanceof Node && target.closest('[data-component="note-composer"]')?.contains(next)) return;
+        bindings.finish?.(target as HTMLElement);
+      }),
+    );
   lifetime.add(
     delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.cancelNewNote.selector, (_event, target) => {
       bindings.cancel(target as HTMLElement);

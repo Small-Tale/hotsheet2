@@ -1022,20 +1022,22 @@ test('adds and deletes notes and records the started phase in a link-opened read
   await expect(composer).toBeFocused();
   await expect(page.locator('#app-right-rail [name="new-note-body"]')).toHaveCount(0);
   await composer.pressSequentially('Noted from a linked reader', { delay: 10 });
-  // A new note is a submission, never an autosave: typing alone writes nothing.
+  // Typing still leaves time to revise the draft before the quiet-period save.
   await page.waitForTimeout(300);
   expect(requests).toEqual([]);
   await page.screenshot({ path: 'target/visual-captures/hs2-anrxae-linked-composer-wide.png' });
-  await reader.getByRole('button', { name: 'Add Note' }).click();
+  await composer.blur();
   await expect
     .poll(() => requests.map((item) => [item.method, item.body?.note, item.body?.note_kind]))
     .toEqual([['PATCH', 'Noted from a linked reader', 'regular']]);
   const added = reader.locator('article[data-note-id="ADDED1"]');
   await expect(added).toContainText('Noted from a linked reader');
   await expect(reader.locator('[name="new-note-body"]')).toHaveCount(0);
-  // Delete the note through the frame's own checkout and qualified identity.
-  await added.hover();
-  await added.getByRole('button', { name: 'Delete Note' }).click();
+  // Clearing a regular note on blur deletes through the frame's own checkout and identity.
+  await added.locator('.note-card__body').click({ position: { x: 4, y: 4 } });
+  const noteEditor = reader.getByRole('textbox', { name: 'Note body' });
+  await noteEditor.fill('   ');
+  await noteEditor.blur();
   await expect(added).toHaveCount(0);
   expect(requests.at(-1)).toMatchObject({
     method: 'DELETE',

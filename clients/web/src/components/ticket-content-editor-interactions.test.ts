@@ -50,6 +50,19 @@ describe('ticket content editor wiring (HS2-KM3DNM)', () => {
     expect(bindings.submit).toHaveBeenCalledWith(form);
   });
 
+  it('finishes a note composer only when focus leaves the composer', () => {
+    vi.stubGlobal('Node', function Node() {});
+    const finish = vi.fn();
+    wireNoteComposer({} as HTMLElement, { open: vi.fn(), setDraft: vi.fn(), cancel: vi.fn(), submit: vi.fn(), finish });
+    const inside = new (globalThis as unknown as { Node: new () => object }).Node(),
+      outside = new (globalThis as unknown as { Node: new () => object }).Node(),
+      field = { closest: () => ({ contains: (node: unknown) => node === inside }) };
+    handler('focusout', 'new-note-body')({ relatedTarget: inside }, field);
+    handler('focusout', 'new-note-body')({ relatedTarget: outside }, field);
+    expect(finish).toHaveBeenCalledExactlyOnceWith(field);
+    vi.unstubAllGlobals();
+  });
+
   it('begins note edits only when the click or key qualifies and the note has an id', () => {
     const bindings = { begin: vi.fn(), beginPrompt: vi.fn(), input: vi.fn(), finish: vi.fn(), save: vi.fn() };
     wireNoteEditor({} as HTMLElement, bindings);

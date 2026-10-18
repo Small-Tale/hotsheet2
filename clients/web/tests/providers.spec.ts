@@ -17284,7 +17284,7 @@ test('creates, cancels, edits, and deletes notes through the shared inspector an
   await expect(composer).toHaveCount(0);
   await inspector.getByRole('button', { name: 'Add Note' }).first().click();
   await inspector.getByRole('textbox', { name: 'New note' }).fill('Created note');
-  await inspector.getByRole('button', { name: 'Add Note', exact: true }).last().click();
+  await inspector.getByRole('textbox', { name: 'New note' }).blur();
   await expect
     .poll(() => patches.some((patch) => patch.note === 'Created note' && patch.note_kind === 'regular'))
     .toBe(true);
@@ -17306,7 +17306,12 @@ test('creates, cancels, edits, and deletes notes through the shared inspector an
     .poll(() => patches.some((patch) => patch.note_id === 'N3' && patch.note === 'Edited lifecycle note'))
     .toBe(true);
   await expect(editor).toHaveCount(0);
-  await inspector.locator('[data-note-id="N3"]').getByRole('button', { name: 'Delete Note' }).click();
+  await noteSurface
+    .locator('p')
+    .first()
+    .click({ position: { x: 4, y: 4 } });
+  await inspector.getByRole('textbox', { name: 'Note body' }).fill('   ');
+  await inspector.getByRole('textbox', { name: 'Note body' }).blur();
   await expect(inspector.locator('[data-note-id="N3"]')).toHaveCount(0);
   await inspector.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog');
@@ -17328,6 +17333,33 @@ test('creates, cancels, edits, and deletes notes through the shared inspector an
       firstCard,
     ),
   ).toBe(true);
+});
+
+test('creates a regular note once after a typing pause', async ({ page }) => {
+  const patches = await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByText('Use real project tickets').click();
+  const inspector = page.locator('#app-right-rail');
+  await inspector.getByRole('button', { name: 'Add Note' }).first().click();
+  await inspector.getByRole('textbox', { name: 'New note' }).fill('Saved after quiet typing');
+  await expect
+    .poll(
+      () =>
+        patches.filter((patch) => patch.note === 'Saved after quiet typing' && patch.note_kind === 'regular').length,
+      {
+        timeout: 15_000,
+      },
+    )
+    .toBe(1);
+  await expect(inspector.locator('[data-component="note-composer"]')).toHaveCount(0);
+  await inspector.screenshot({ path: 'target/visual-captures/hs2-ymngrh-note-autosave-1280.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  if ((await inspector.getAttribute('data-collapsed')) === 'true')
+    await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
+  await expect(inspector).toBeInViewport({ ratio: 1 });
+  await inspector.screenshot({ path: 'target/visual-captures/hs2-ymngrh-note-autosave-390.png' });
 });
 
 for (const width of [1280, 390]) {

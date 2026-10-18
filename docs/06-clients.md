@@ -3836,6 +3836,11 @@ When the provider supports notes, the Notes section always presents a visible **
 note** action—even when the ticket has no existing notes. Creating the first note must
 not depend on recognizing an icon-only section-header shortcut. Activating it appends
 the focused composer after the existing note list, beside the bottom action that opened it.
+For a regular note, leaving that composer creates a nonempty draft. A 10-second typing pause
+does the same while the composer is still focused; **Add Note** saves immediately and **Cancel**
+discards it. Repeated blur, timer, and submit events create only one note. When the provider
+supports deletion, clearing an existing regular note and leaving its editor deletes it after trimming. Feedback replies and prompts
+keep their explicit actions (HS2-YMNGRH).
 
 **Five note kinds, one rendering rule.** A note's `kind` ([02](02-ticket-storage.md)
 §2.6 — `regular` / `activity` / `feedback_needed` / `feedback_draft` / `status`) determines how
