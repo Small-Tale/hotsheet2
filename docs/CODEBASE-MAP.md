@@ -717,3 +717,9 @@ for the inspector and reader (HS2-11F5F7); the rendered title and mobile cap are
 `clients/web/src/features/terminal-rail-surface.tsx` applies the workspace search scope to
 the terminal rail's list and paged board. `components/terminal-ticket-rail.tsx` renders the
 shared scope toolbar within the rail's root navigation view (HS2-5WXA6W).
+
+Live terminal session-message callers (HS2-NN6EXP) are in
+`clients/web/src/features/terminal-drawer.ts` and `components/terminal-drawer.tsx`, with the
+request/response parser in `clients/web/src/api.ts` and `server-response-parsers.ts`. The headless
+`hotsheet-cli terminal message` route is in `crates/hotsheet-cli/src/dispatch/server.rs`; both
+use the server's `POST /connections/{id}/message` operation.

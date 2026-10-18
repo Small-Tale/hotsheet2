@@ -11,7 +11,7 @@ mod dispatch;
 use dispatch::providers::{
     AccountCmd, FeedbackSynthesisCmd, GithubConnectArgs, KeyCmd, ProviderConnectArgs,
 };
-use dispatch::server::{CertCmd, CommandsCmd, LifecycleCmd, NotificationsCmd};
+use dispatch::server::{CertCmd, CommandsCmd, LifecycleCmd, NotificationsCmd, TerminalCmd};
 use dispatch::setup::{AiSettingsCmd, PluginCmd, SettingsCmd, TriggerArgs, WorkArgs};
 use dispatch::store::CheckoutCmd;
 use dispatch::tickets::{AttachArgs, LsFilters, NewArgs, PeopleCmd, TicketEditArgs};
@@ -398,6 +398,11 @@ enum Cmd {
     Commands {
         #[command(subcommand)]
         cmd: CommandsCmd,
+    },
+    /// Send a message to a live terminal AI session through the local server.
+    Terminal {
+        #[command(subcommand)]
+        cmd: TerminalCmd,
     },
     /// Inspect or request a safe restart of the store's running local server.
     Lifecycle {

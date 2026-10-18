@@ -413,6 +413,17 @@ export function TerminalDrawer({
                     appearance="borderless"
                     single={!railClipboard}
                   >
+                    {selectedSession?.canMessage && (
+                      <button
+                        type="button"
+                        {...TERMINALS_ACTIONS.messageTerminalSession.attrs}
+                        data-terminal-id={selectedSession.id}
+                        aria-label="Message AI Session"
+                        title="Message AI session"
+                      >
+                        <LucideIcon icon={MessageSquare} name="message-square" />
+                      </button>
+                    )}
                     {railClipboard && (
                       <button
                         type="button"

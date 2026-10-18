@@ -88,6 +88,7 @@ export interface TerminalInteractionsDependencies {
   readonly terminalVisibilityNamePrompt: Signal<TerminalVisibilityNamePrompt | undefined>;
   readonly terminalKeysForVisibilityDialog: () => string[];
   readonly openGridAIChat: (projectId: string, chatId: string) => void;
+  readonly messageTerminalSession: (id: string, text: string) => Promise<void>;
   readonly setTerminalDrawerVisible: (visible: boolean, refresh?: boolean) => void;
   readonly terminalDrawerVisible: Signal<boolean>;
   readonly toggleTerminalDrawerMaximized: () => void;
@@ -175,6 +176,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     terminalVisibilityNamePrompt,
     terminalKeysForVisibilityDialog,
     openGridAIChat,
+    messageTerminalSession,
     setTerminalDrawerVisible,
     terminalDrawerVisible,
     toggleTerminalDrawerMaximized,
@@ -715,6 +717,14 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   lifetime.add(
     delegate(document.body, 'click', TERMINALS_ACTIONS.toggleTerminalDrawer.selector, () => {
       setTerminalDrawerVisible(!terminalDrawerVisible.value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.messageTerminalSession.selector, (_event, target) => {
+      const id = data(target).terminalId;
+      if (!id) return;
+      const text = window.prompt('Message AI session')?.trim();
+      if (text) void messageTerminalSession(id, text);
     }),
   );
   lifetime.add(

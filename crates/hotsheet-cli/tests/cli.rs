@@ -397,6 +397,105 @@ fn saved_commands_cli_uses_checkout_scoped_authenticated_server_routes() {
 }
 
 #[test]
+fn terminal_message_cli_uses_authenticated_session_push_route() {
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::TcpListener;
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let store = root.path().join("tickets");
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let instance = hotsheet_cli::external_launch::instance_path(&home, &store);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        instance,
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": format!("http://{}", listener.local_addr().unwrap()),
+            "secret": "message-test-secret",
+            "store_path": store.canonicalize().unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let server = std::thread::spawn(move || {
+        for (expected_text, status, body) in [
+            (
+                "Continue work",
+                200,
+                r#"{"delivered":true,"mechanism":"claude-inbox","confirmed":false}"#,
+            ),
+            (
+                "Try again",
+                422,
+                r#"{"error":"session cannot be messaged","code":"session_push_unsupported"}"#,
+            ),
+        ] {
+            let (stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            let mut reader = BufReader::new(stream);
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            assert_eq!(line.trim_end(), "POST /connections/t%2F1/message HTTP/1.1");
+            let mut secret = None;
+            let mut content_length = 0;
+            loop {
+                line.clear();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+                let lower = line.to_ascii_lowercase();
+                if let Some(value) = lower.strip_prefix("x-hotsheet-secret:") {
+                    secret = Some(value.trim().to_owned());
+                }
+                if let Some(value) = lower.strip_prefix("content-length:") {
+                    content_length = value.trim().parse().unwrap();
+                }
+            }
+            assert_eq!(secret.as_deref(), Some("message-test-secret"));
+            let mut request_body = vec![0; content_length];
+            reader.read_exact(&mut request_body).unwrap();
+            let request: serde_json::Value = serde_json::from_slice(&request_body).unwrap();
+            assert_eq!(request, serde_json::json!({ "text": expected_text }));
+            write!(reader.get_mut(), "HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+        }
+    });
+    let cli = |text: &str| {
+        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        command.env("HOTSHEET_HOME", &home).args([
+            "-C",
+            store.to_str().unwrap(),
+            "terminal",
+            "message",
+            "t/1",
+            "--text",
+            text,
+        ]);
+        command.output().unwrap()
+    };
+    let delivered = cli("Continue work");
+    assert!(
+        delivered.status.success(),
+        "{}",
+        String::from_utf8_lossy(&delivered.stderr)
+    );
+    assert!(String::from_utf8_lossy(&delivered.stdout).contains("claude-inbox"));
+    let unsupported = cli("Try again");
+    assert!(!unsupported.status.success());
+    assert!(String::from_utf8_lossy(&unsupported.stderr).contains("session cannot be messaged"));
+    let empty = cli("  ");
+    assert!(!empty.status.success());
+    assert!(String::from_utf8_lossy(&empty.stderr).contains("message text must not be empty"));
+    server.join().unwrap();
+}
+
+#[test]
 fn headless_flow_activity_and_notifications_preserve_filters_ack_and_errors() {
     use std::io::{BufRead, BufReader, Write};
     use std::net::TcpListener;

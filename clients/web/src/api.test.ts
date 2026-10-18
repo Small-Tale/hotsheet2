@@ -372,6 +372,20 @@ describe('change polling transport', () => {
 });
 
 describe('client-owned AI drive transport', () => {
+  it('messages a terminal connection through the shipped session-push route', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ delivered: true, mechanism: 'claude-inbox', confirmed: false }), { status: 200 }),
+      );
+    const receipt = await new Api('/api').messageToolConnection('terminal/1', 'Continue this ticket');
+    expect(receipt).toEqual({ delivered: true, mechanism: 'claude-inbox', confirmed: false });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/connections/terminal%2F1/message',
+      expect.objectContaining({ method: 'POST', body: '{"text":"Continue this ticket"}' }),
+    );
+    fetchMock.mockRestore();
+  });
   it('starts, drives, interrupts, and closes a checkout-scoped connection', async () => {
     const connection = {
       id: 'main/1',

@@ -102,6 +102,7 @@ impl Cmd {
             | Account { .. } => Group::Providers,
             ClaimNext { .. } | Claim { .. } | Release { .. } | Renew { .. } => Group::Claims,
             Commands { .. }
+            | Terminal { .. }
             | Lifecycle { .. }
             | TicketFlow
             | Activity { .. }
@@ -145,6 +146,7 @@ impl Cmd {
                 | Cmd::Link { .. }
                 | Cmd::Checkout { .. }
                 | Cmd::Commands { .. }
+                | Cmd::Terminal { .. }
                 | Cmd::Lifecycle { .. }
                 | Cmd::TicketFlow
                 | Cmd::Activity { .. }

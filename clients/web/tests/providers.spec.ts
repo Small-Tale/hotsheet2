@@ -19021,6 +19021,49 @@ for (const width of [1280, 390] as const)
   });
 
 for (const width of [390, 1280] as const)
+  test(`messages a capable terminal AI session from the drawer at ${width}px (HS2-NN6EXP)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width < 640 ? 844 : 800 });
+    await mockProject(page);
+    const messages: Array<{ text: string }> = [];
+    await page.route('**/*', (route) => {
+      const request = route.request(),
+        path = new URL(request.url()).pathname;
+      if (path.endsWith('/connections') && request.method() === 'GET')
+        return route.fulfill({
+          json: [
+            {
+              id: 'codex-main',
+              tool: 'codex',
+              project: '/work/demo',
+              role: 'main',
+              busy: false,
+              actions: ['message'],
+            },
+          ],
+        });
+      if (path.endsWith('/connections/codex-main/message') && request.method() === 'POST') {
+        messages.push(request.postDataJSON() as { text: string });
+        return route.fulfill({ json: { delivered: true, mechanism: 'codex-queue', confirmed: false } });
+      }
+      return route.fallback();
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]');
+    await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"]').click();
+    const message = drawer.getByRole('button', { name: 'Message AI Session' });
+    await expect(message).toBeVisible();
+    await expect(message).toBeInViewport({ ratio: 1 });
+    await page.screenshot({ path: `target/visual-captures/hs2-nn6exp-message-action-${width}.png` });
+    page.once('dialog', (dialog) => void dialog.accept('Continue this ticket'));
+    await message.click();
+    await expect.poll(() => messages).toEqual([{ text: 'Continue this ticket' }]);
+    await expect(page.locator('.app-toast').getByText('Message delivered to the AI session.')).toBeVisible();
+  });
+
+for (const width of [390, 1280] as const)
   test(`keeps the last message visible in a default-height drawer chat with a stuck banner and six-row draft at ${width}px (HS2-SZZGC6)`, async ({
     page,
   }) => {

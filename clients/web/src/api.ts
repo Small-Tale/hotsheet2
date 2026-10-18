@@ -25,6 +25,7 @@ import {
   parseGitHubAuthStart,
   parseGitHubAuthStatus,
   parseGitHubRepositoryAccess,
+  parseMessageConnectionReceipt,
   parsePermissionDecision,
   parsePermissionRequest,
   parsePermissionRule,
@@ -691,7 +692,7 @@ export interface ToolConnection {
   source?: string;
   role: 'main' | 'worker' | 'drivespawned';
   busy: boolean;
-  actions?: Array<'send_turn' | 'interrupt' | 'close'>;
+  actions?: Array<'send_turn' | 'interrupt' | 'close' | 'message'>;
   session_id?: string;
   last_error?: string;
   model?: string;
@@ -706,6 +707,12 @@ export interface ToolConnection {
   last_event_at_ms?: number;
   /** The longest-running open tool call of the running turn, while busy. */
   in_flight_tool?: InFlightTool;
+}
+export interface MessageConnectionReceipt {
+  delivered: boolean;
+  mechanism: string;
+  session_id?: string;
+  confirmed: boolean;
 }
 /** A running turn's oldest open tool call and the number of open calls (HS2-XV1VCR). */
 export interface InFlightTool {
@@ -1457,6 +1464,11 @@ export class Api {
   /** `onResponse` sees the response before its body is parsed (its `Date` samples the server clock). */
   activeToolConnections = (onResponse?: (response: Response) => void) =>
     this.parsed(parseToolConnection.list, '/connections', {}, true, onResponse);
+  messageToolConnection = (id: string, text: string) =>
+    this.parsed(parseMessageConnectionReceipt, `/connections/${encodeURIComponent(id)}/message`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
   aiTools = (refresh = false) => this.parsed(parseAiToolDescriptor.list, `/ai-tools${refresh ? '?refresh=true' : ''}`);
   aiSettings = () => this.parsed(parseAiToolDefaults, '/ai-settings');
   saveAiSettings = (value: AiToolDefaults) =>

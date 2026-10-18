@@ -75,6 +75,8 @@ export interface TerminalDashboardSession {
   mcp_connected?: boolean;
   /** Whether the terminal's AI session reaches Hot Sheet, derived by `deriveAiConnectionStates`. */
   aiConnection?: AiConnectionState;
+  /** The server advertises session push for this live terminal connection. */
+  canMessage?: boolean;
   scrollback: string;
 }
 

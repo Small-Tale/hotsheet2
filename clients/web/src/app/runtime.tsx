@@ -1511,6 +1511,7 @@ export async function startHotSheetWebClient() {
     terminalContextMenu,
     appTabContextMenu,
     error,
+    showToast,
     project: () => project(),
     conversationConnectionId,
     driveConnectionsByProject,
@@ -1546,6 +1547,7 @@ export async function startHotSheetWebClient() {
     closeDrawerTabIds,
     closeTerminalIds,
     closeDrawerAIChat,
+    messageTerminalSession,
   } = terminalDrawer;
   const {
     requestProjectClose,
@@ -4269,6 +4271,7 @@ export async function startHotSheetWebClient() {
     closeAllProjectResources,
     closeTerminalIds,
     closeDrawerAIChat,
+    messageTerminalSession,
     appTabContextMenu,
     terminalGroups,
     terminalRename,

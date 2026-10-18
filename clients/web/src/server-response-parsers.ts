@@ -17,6 +17,7 @@ import type {
   GitHubAuthStart,
   GitHubAuthStatus,
   GitHubRepositoryAccess,
+  MessageConnectionReceipt,
   PermissionRequest,
   PollResponse,
   ProviderAccount,
@@ -507,6 +508,12 @@ export const parseToolConnection = shape<ToolConnection>(
     last_event_at_ms: isNumber,
     in_flight_tool: isObject,
   },
+);
+
+export const parseMessageConnectionReceipt = shape<MessageConnectionReceipt>(
+  'session message receipt',
+  { delivered: isBoolean, mechanism: isString, confirmed: isBoolean },
+  { session_id: isString },
 );
 
 export const parseAiToolDescriptor = shape<AiToolDescriptor>(

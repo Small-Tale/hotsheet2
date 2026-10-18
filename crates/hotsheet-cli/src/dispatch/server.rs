@@ -14,6 +14,7 @@ pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
     let path = &ctx.path;
     match cmd {
         Cmd::Commands { cmd } => cmd_commands(path, cmd),
+        Cmd::Terminal { cmd } => cmd_terminal(path, cmd),
         Cmd::Lifecycle { cmd } => match cmd {
             LifecycleCmd::Status => print_local_server_json(path, "GET", "lifecycle/quiescence"),
             LifecycleCmd::Restart => print_local_server_json(path, "POST", "lifecycle/restart"),
@@ -213,6 +214,21 @@ pub(crate) fn cmd_commands(store: &Path, cmd: CommandsCmd) -> Result<()> {
     print_local_server_json(store, method, &route)
 }
 
+pub(crate) fn cmd_terminal(store: &Path, cmd: TerminalCmd) -> Result<()> {
+    match cmd {
+        TerminalCmd::Message { id, text } => {
+            if text.trim().is_empty() {
+                bail!("message text must not be empty");
+            }
+            let route = format!("connections/{}/message", urlencoding_component(&id));
+            let body = serde_json::json!({ "text": text });
+            let result = local_server_json_with_body(store, "POST", &route, Some(&body))?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+            Ok(())
+        }
+    }
+}
+
 pub(crate) fn cmd_activity(
     store: &Path,
     ticket: Option<String>,
@@ -302,6 +318,18 @@ pub(crate) enum CommandsCmd {
     },
     /// Cancel an active run in this checkout.
     Cancel { checkout: String, id: String },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum TerminalCmd {
+    /// Deliver a prompt to a live terminal AI session.
+    Message {
+        /// Terminal connection id.
+        id: String,
+        /// Message text to deliver; quote it to preserve spaces.
+        #[arg(long)]
+        text: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -681,6 +709,15 @@ pub(crate) fn local_server_json(
     method: &str,
     route: &str,
 ) -> Result<serde_json::Value> {
+    local_server_json_with_body(store, method, route, None)
+}
+
+fn local_server_json_with_body(
+    store: &Path,
+    method: &str,
+    route: &str,
+    body: Option<&serde_json::Value>,
+) -> Result<serde_json::Value> {
     let server = hotsheet_cli::external_launch::discover_running_server(
         store,
         &hotsheet_plugins::hotsheet_home(),
@@ -689,7 +726,13 @@ pub(crate) fn local_server_json(
     let request = ureq::request(method, &endpoint)
         .set("X-Hotsheet-Secret", &server.secret)
         .timeout(std::time::Duration::from_secs(10));
-    let response = match request.call() {
+    let result = match body {
+        Some(body) => request
+            .set("Content-Type", "application/json")
+            .send_string(&serde_json::to_string(body)?),
+        None => request.call(),
+    };
+    let response = match result {
         Ok(response) => response,
         Err(ureq::Error::Status(status, response)) => {
             let body = response.into_string().unwrap_or_default();

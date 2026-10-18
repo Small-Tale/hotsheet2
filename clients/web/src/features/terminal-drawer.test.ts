@@ -70,6 +70,7 @@ function owner() {
       observeTerminalDrawer: vi.fn(),
       disconnectTerminalDrawerSize: vi.fn(),
       exitMobileTerminalFocus: vi.fn(),
+      showToast: vi.fn(),
     };
   const drawer = createTerminalDrawerController({
     ...bindings,
@@ -88,6 +89,53 @@ function owner() {
 }
 
 describe('terminal drawer owner (HS2-BSSWGV)', () => {
+  it('messages only a live, capable connection in the selected project and explains delivery failures', async () => {
+    const { drawer, bindings, calls } = owner();
+    bindings.terminalGroups.value = [{ projectId: 'a', sessions: [{ id: 't1' }] } as unknown as TerminalDashboardGroup];
+    const connection = {
+      id: 't1',
+      tool: 'claude',
+      project: project.root,
+      role: 'main',
+      busy: false,
+      actions: ['message'],
+    };
+    fetchMock.mockImplementation(async (input) =>
+      (typeof input === 'string' ? input : input instanceof URL ? input.href : input.url).endsWith('/connections')
+        ? new Response(JSON.stringify([connection]), { status: 200 })
+        : new Response(JSON.stringify({ delivered: true, mechanism: 'claude-inbox', confirmed: false }), {
+            status: 200,
+          }),
+    );
+    await drawer.messageTerminalSession('t1', 'Continue');
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/a/connections/t1/message',
+      expect.objectContaining({ method: 'POST', body: '{"text":"Continue"}' }),
+    );
+    expect(calls.showToast).toHaveBeenLastCalledWith('Message delivered to the AI session.');
+
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify([{ ...connection, project: '/other' }]), { status: 200 }),
+    );
+    await drawer.messageTerminalSession('t1', 'Wrong project');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(calls.showToast).toHaveBeenLastCalledWith('This AI session cannot receive messages right now.');
+
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([connection]), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'unsupported' }), { status: 422 }));
+    await drawer.messageTerminalSession('t1', 'Retry');
+    expect(calls.showToast).toHaveBeenLastCalledWith('This AI tool or session cannot receive messages yet.');
+
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([connection]), { status: 200 }));
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'no_session_inbox' }), { status: 409 }));
+    await drawer.messageTerminalSession('t1', 'Retry');
+    expect(calls.showToast).toHaveBeenLastCalledWith(
+      'This AI session has no message inbox. Restart the session and try again.',
+    );
+  });
   it('opens, mounts, and remembers the drawer, then unmounts it after the close transition', () => {
     const { drawer, bindings, calls } = owner();
     drawer.setTerminalDrawerVisible(true);

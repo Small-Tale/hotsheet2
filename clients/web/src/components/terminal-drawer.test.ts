@@ -41,6 +41,24 @@ const render = (selectedId: string = 'grid') =>
     }),
   );
 describe('TerminalDrawer', () => {
+  it('offers session messaging only on a selected terminal with server capability', () => {
+    expect(render('one')).not.toContain('Message AI Session');
+    const markup = String(
+      TerminalDrawer({
+        projectId: 'project',
+        projectName: 'Project',
+        sessions: [{ ...sessions[0], canMessage: true }],
+        width: 900,
+        height: 320,
+        fitAcross: 2,
+        fitHigh: 2,
+        selectedId: 'one',
+      }),
+    );
+    expect(markup).toContain('aria-label="Message AI Session"');
+    expect(markup).toContain('data-action="message-terminal-session"');
+    expect(markup).toContain('data-terminal-id="one"');
+  });
   it('keeps the grid tab fixed while the shared tab strip overflows', () => {
     // Kerf's pinned TabBarItem owns the sticky treatment; the app adds no rule or class (HS2-WF3W6A).
     const css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8');

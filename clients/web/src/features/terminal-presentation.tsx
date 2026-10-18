@@ -210,6 +210,11 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     if (!current) return;
     const conversations = conversationStates.peek(),
       group = terminalGroups.value.find((item) => item.projectId === current.id),
+      messageable = new Set(
+        (driveConnectionsByProject.value[current.id] ?? [])
+          .filter((connection) => connection.actions?.includes('message'))
+          .map((connection) => connection.id),
+      ),
       chatTabs: TerminalDrawerChatTab[] = (terminalDrawerChatsByProject.value[current.id] ?? []).map((chat) => {
         const connection = (driveConnectionsByProject.value[current.id] ?? []).find(
             (item) => item.id === chat.connectionId,
@@ -280,7 +285,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     return {
       projectId: current.id,
       projectName: current.name,
-      sessions: group?.sessions ?? [],
+      sessions: (group?.sessions ?? []).map((session) => ({ ...session, canMessage: messageable.has(session.id) })),
       chatTabs,
       tabOrder: drawerTabOrder(current.id),
       width: terminalDrawerBounds.value.width,

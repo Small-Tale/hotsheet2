@@ -1,6 +1,6 @@
 import type { Signal } from 'kerfjs';
 
-import { type AiToolDefaults, Api, type CommandDefinition, type ToolConnection } from '../api';
+import { type AiToolDefaults, Api, ApiHttpError, type CommandDefinition, type ToolConnection } from '../api';
 import { browserRandomId } from '../browser-id';
 import type { AppTabKind } from '../components/project-tab-context-menu';
 import type { TerminalDashboardGroup } from '../components/terminal-dashboard';
@@ -12,7 +12,7 @@ import {
 } from '../drawer-tab-order';
 import type { Project } from '../interactions/types';
 import { automaticInputFocusAllowed } from '../mobile-layout';
-import type { DrawerAIChat } from '../project-drive';
+import { type DrawerAIChat, projectConnections } from '../project-drive';
 import type { TerminalFocusRequest } from '../terminal-viewport';
 import { hideNewTerminalInNamedGroups, type parseTerminalVisibilityState } from '../terminal-visibility';
 
@@ -37,6 +37,7 @@ export interface TerminalDrawerDependencies {
     { x: number; y: number; kind: AppTabKind; id: string; direction: 'left' | 'right' } | undefined
   >;
   error: Signal<string>;
+  showToast: (message: string) => void;
   project: () => Project | undefined;
   conversationConnectionId: Signal<string | undefined>;
   driveConnectionsByProject: Signal<Record<string, ToolConnection[]>>;
@@ -77,6 +78,7 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
     terminalDrawerChatsByProject,
     terminalDashboardLoading,
     terminalDashboardMessage,
+    showToast,
     terminalVisibility,
     terminalContextMenu,
     appTabContextMenu,
@@ -389,6 +391,28 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
   function closeDrawerAIChat(id: string) {
     void closeDrawerTabIds([id]);
   }
+  async function messageTerminalSession(id: string, text: string) {
+    const current = project();
+    if (
+      !current ||
+      !terminalGroups.value.find((group) => group.projectId === current.id)?.sessions.some((item) => item.id === id)
+    ) {
+      showToast('This terminal is no longer open in this project.');
+      return;
+    }
+    try {
+      const client = new Api(current.apiPath),
+        connections = projectConnections(await client.activeToolConnections(), current);
+      if (!connections.some((connection) => connection.id === id && connection.actions?.includes('message'))) {
+        showToast('This AI session cannot receive messages right now.');
+        return;
+      }
+      await client.messageToolConnection(id, text);
+      showToast('Message delivered to the AI session.');
+    } catch (reason) {
+      showToast(terminalSessionMessageError(reason));
+    }
+  }
   return {
     /** The terminal the next viewport mount focuses, consumed by the terminal viewport owner. */
     get pendingTerminalFocus() {
@@ -410,5 +434,16 @@ export function createTerminalDrawerController(dependencies: TerminalDrawerDepen
     closeDrawerTabIds,
     closeTerminalIds,
     closeDrawerAIChat,
+    messageTerminalSession,
   };
+}
+
+export function terminalSessionMessageError(reason: unknown): string {
+  if (reason instanceof ApiHttpError) {
+    if (reason.status === 404) return 'This AI session is no longer connected. Reopen it and try again.';
+    if (reason.status === 409) return 'This AI session has no message inbox. Restart the session and try again.';
+    if (reason.status === 422) return 'This AI tool or session cannot receive messages yet.';
+    if (reason.status === 502) return 'The AI session could not be reached. Check that it is still running.';
+  }
+  return reason instanceof Error ? reason.message : 'The message could not be delivered.';
 }
