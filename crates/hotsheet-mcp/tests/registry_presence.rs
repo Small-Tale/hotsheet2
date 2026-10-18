@@ -152,10 +152,9 @@ fn a_stale_terminal_route_back_falls_back_to_the_registry_server() {
     let home = tempfile::tempdir().unwrap();
     let store_dir = tempfile::tempdir().unwrap();
     FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
-    let dead = {
-        let probe = TcpListener::bind("127.0.0.1:0").unwrap();
-        format!("http://{}", probe.local_addr().unwrap())
-    }; // dropped: nothing listens there any more
+    // Connecting to port zero always fails. A released ephemeral port could be reused by
+    // another parallel test's fake server, making the stale route appear live in CI.
+    let dead = "http://127.0.0.1:0";
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     let (tx, rx) = mpsc::channel();
