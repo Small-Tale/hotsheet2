@@ -1121,6 +1121,12 @@ the current registered server URL and secret for `HOTSHEET_PROJECT` on each perm
 request. Launch-time route-back variables remain a fallback when no instance record is
 available. A retained Codex or Claude session can therefore send a new approval request
 to the replacement server without restarting the terminal (HS2-39S586).
+The production local host keeps the CLI named by generated Codex hooks in its machine-home
+`bin/hotsheet-cli`, separate from the host's temporary build snapshot. Open Codex sessions retain
+their hook command across an HS2 host restart, so removing the old snapshot does not strand
+their later permission requests. On shutdown the host leaves a small alias from its old snapshot
+CLI path to the durable CLI. On the first upgrade restart, opening a project also restores an
+alias for its pre-upgrade hook path before setup replaces the saved command (HS2-86VAAG).
 
 **Interactive questions (HS2-KP9K85, HS2-SWY32A).** Claude's `PreToolUse` hook for
 `AskUserQuestion` POSTs the complete question input and `tool_use_id` to

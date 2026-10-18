@@ -162,6 +162,7 @@ it.concurrent('serves the production client and the local bridge without Vite', 
     child,
     other,
     otherBuildRoot,
+    legacySnapshot,
     browser;
   // Everything that can fail runs inside the try, so the host and its machine server are always
   // stopped: a browser that failed to launch used to leave both running (HS2-WQ65KT).
@@ -240,6 +241,16 @@ it.concurrent('serves the production client and the local bridge without Vite', 
     await run(workingTreeBinaries.HOTSHEET_CLI_BIN, ['-C', ticketStore, 'init', '--prefix', 'LH'], {
       env: { ...process.env, HOTSHEET_HOME: home },
     });
+    // Simulate the first upgrade restart: an existing Codex session retains the previous
+    // host's hook command after that host has already removed its disposable snapshot.
+    legacySnapshot = await mkdtemp(resolve(tmpdir(), 'hotsheet-local-host-'));
+    const previousHookCli = resolve(legacySnapshot, 'bin/hotsheet-cli');
+    await mkdir(resolve(project, '.codex'));
+    await writeFile(
+      resolve(project, '.codex/hooks.json'),
+      JSON.stringify({ hooks: { PermissionRequest: [{ hooks: [{ command: `${previousHookCli} permission-hook --agent codex` }] }] } }),
+    );
+    await rm(legacySnapshot, { recursive: true });
     const opened = await fetch(`${origin}/__hotsheet/projects/open`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -248,6 +259,15 @@ it.concurrent('serves the production client and the local bridge without Vite', 
     expect(opened.status).toBe(201);
     const openedBody = await opened.json();
     expect(openedBody.setupWarning).toBeUndefined();
+    // The host has already removed its working CLI build. A Codex process that keeps this
+    // hook command through the next host restart still needs an executable outside the snapshot.
+    const stableHookCli = resolve(home, 'bin/hotsheet-cli'),
+      codexHooks = JSON.parse(await readFile(resolve(project, '.codex/hooks.json'), 'utf8'));
+    expect(codexHooks.hooks.PermissionRequest[0].hooks[0].command).toBe(
+      `${stableHookCli} permission-hook --agent codex`,
+    );
+    expect((await run(stableHookCli, ['--help'])).stdout).toContain('permission-hook');
+    expect((await run(previousHookCli, ['--help'])).stdout).toContain('permission-hook');
     const { id, apiPath } = openedBody,
       api = `${origin}${apiPath}`,
       hostsProject = async () => (await (await fetch(`${api}/stores`)).json()).some((store) => store.prefix === 'LH');
@@ -408,6 +428,7 @@ it.concurrent('serves the production client and the local bridge without Vite', 
     await stopMachineServer(home);
     const survivors = await processesUsing(home);
     await rm(home, { recursive: true, force: true });
+    if (legacySnapshot) await rm(legacySnapshot, { recursive: true, force: true });
     if (otherBuildRoot) await rm(otherBuildRoot, { recursive: true, force: true });
     // Nothing the test started may outlive it: not the host, not its supervised machine server.
     expect(survivors).toEqual([]);

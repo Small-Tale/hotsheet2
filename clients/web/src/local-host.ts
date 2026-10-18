@@ -7,9 +7,20 @@
  * `npm run dev`. The development-only surfaces, the `/ux-demo` catalog and its
  * modification feed, are not served; the production bundle already omits their client code.
  */
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from 'node:fs';
+import {
+  chmodSync,
+  copyFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+} from 'node:fs';
 import { createServer, type Server } from 'node:http';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -139,10 +150,30 @@ export function mcpBinaryEnvironment(
 export function snapshotLocalHostArtifacts(
   distRoot: string,
   binaryEnvironment: Record<string, string>,
+  machineHome: string,
 ): { distRoot: string; environment: Record<string, string>; dispose: () => void } {
   const snapshotRoot = mkdtempSync(resolve(tmpdir(), 'hotsheet-local-host-')),
     environment = { ...binaryEnvironment },
     dispose = () => {
+      const stable = environment.HOTSHEET_HOOK_CLI_BIN,
+        pinnedCli = resolve(snapshotRoot, 'bin/hotsheet-cli');
+      if (stable && existsSync(stable) && existsSync(pinnedCli)) {
+        // Sessions opened before a setup refresh may still hold this snapshot path. Leave a
+        // small alias so their next hook continues working after the host has exited.
+        const alias = resolve(snapshotRoot, 'bin/.hook-cli-alias');
+        try {
+          symlinkSync(stable, alias);
+          renameSync(alias, pinnedCli);
+        } catch {
+          rmSync(alias, { force: true });
+          // Keep the copied CLI if this platform cannot replace an open executable.
+        }
+        rmSync(resolve(snapshotRoot, 'dist'), { recursive: true, force: true });
+        for (const name of Object.values(HOST_BINARIES)) {
+          if (name !== 'hotsheet-cli') rmSync(resolve(snapshotRoot, 'bin', name), { force: true });
+        }
+        return;
+      }
       rmSync(snapshotRoot, { recursive: true, force: true });
     };
   try {
@@ -155,6 +186,23 @@ export function snapshotLocalHostArtifacts(
       const pinned = resolve(snapshotRoot, 'bin', name);
       copyFileSync(source, pinned);
       chmodSync(pinned, statSync(source).mode & 0o777);
+      // Codex retains its hook command while its TUI stays open. Keep a separate CLI
+      // outside the temporary host snapshot so that command survives a host restart.
+      if (variable === 'HOTSHEET_CLI_BIN') {
+        const stableDir = resolve(machineHome, 'bin');
+        mkdirSync(stableDir, { recursive: true });
+        const staging = mkdtempSync(resolve(stableDir, '.hook-cli-'));
+        try {
+          const staged = resolve(staging, name),
+            stable = resolve(stableDir, name);
+          copyFileSync(source, staged);
+          chmodSync(staged, statSync(source).mode & 0o777);
+          renameSync(staged, stable);
+          environment.HOTSHEET_HOOK_CLI_BIN = stable;
+        } finally {
+          rmSync(staging, { recursive: true, force: true });
+        }
+      }
       environment[variable] = pinned;
     }
     environment[LOCAL_HOST_SNAPSHOT_ENV] = '1';
@@ -240,7 +288,11 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   for (const variable of Object.keys(HOST_BINARIES)) {
     if (process.env[variable]) selected[variable] = process.env[variable];
   }
-  const snapshot = snapshotLocalHostArtifacts(fileURLToPath(new URL('../dist', import.meta.url)), selected);
+  const snapshot = snapshotLocalHostArtifacts(
+    fileURLToPath(new URL('../dist', import.meta.url)),
+    selected,
+    process.env.HOTSHEET_HOME || resolve(homedir(), '.hotsheet2'),
+  );
   Object.assign(
     process.env,
     snapshot.environment,

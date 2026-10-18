@@ -168,6 +168,7 @@ describe('pinned production artifacts (HS2-6VQ5RV)', () => {
     const root = await mkdtemp(resolve(tmpdir(), 'hs-local-host-source-'));
     const dist = resolve(root, 'dist');
     const server = resolve(root, 'hotsheet-server');
+    const cli = resolve(root, 'hotsheet-cli');
     let snapshot: ReturnType<typeof snapshotLocalHostArtifacts> | undefined;
     try {
       await mkdir(resolve(dist, 'assets'), { recursive: true });
@@ -175,11 +176,20 @@ describe('pinned production artifacts (HS2-6VQ5RV)', () => {
       await writeFile(resolve(dist, 'assets', 'app.js'), 'selected build');
       await writeFile(server, 'selected server');
       await chmod(server, 0o755);
-      snapshot = snapshotLocalHostArtifacts(dist, {
-        HOTSHEET_SERVER_BIN: server,
-        HOT_SHEET_BUILD_REVISION: 'selected',
-      });
+      await writeFile(cli, 'stable hook cli');
+      await chmod(cli, 0o755);
+      snapshot = snapshotLocalHostArtifacts(
+        dist,
+        {
+          HOTSHEET_SERVER_BIN: server,
+          HOTSHEET_CLI_BIN: cli,
+          HOT_SHEET_BUILD_REVISION: 'selected',
+        },
+        resolve(root, 'home'),
+      );
       const pinnedServer = snapshot.environment.HOTSHEET_SERVER_BIN;
+      expect(snapshot.environment.HOTSHEET_CLI_BIN).not.toBe(cli);
+      expect(snapshot.environment.HOTSHEET_HOOK_CLI_BIN).toBe(resolve(root, 'home/bin/hotsheet-cli'));
       const host = createLocalHostApp(snapshot.distRoot, new Hono());
 
       await writeFile(resolve(dist, 'index.html'), '<title>new build</title>');
@@ -194,13 +204,48 @@ describe('pinned production artifacts (HS2-6VQ5RV)', () => {
 
       await rm(dist, { recursive: true });
       await rm(server);
+      await rm(cli);
       expect(await (await host.request('/')).text()).toContain('selected');
       expect(await (await host.request('/assets/app.js')).text()).toBe('selected build');
       expect(readFileSync(pinnedServer, 'utf8')).toBe('selected server');
+      expect(readFileSync(snapshot.environment.HOTSHEET_HOOK_CLI_BIN, 'utf8')).toBe('stable hook cli');
     } finally {
-      const pinnedRoot = snapshot?.distRoot;
+      const pinnedRoot = snapshot?.distRoot,
+        pinnedCli = snapshot?.environment.HOTSHEET_CLI_BIN;
       snapshot?.dispose();
       if (pinnedRoot) expect(existsSync(pinnedRoot)).toBe(false);
+      if (pinnedCli) expect(readFileSync(pinnedCli, 'utf8')).toBe('stable hook cli');
+      if (snapshot) expect(readFileSync(snapshot.environment.HOTSHEET_HOOK_CLI_BIN, 'utf8')).toBe('stable hook cli');
+      if (pinnedRoot) await rm(resolve(pinnedRoot, '..'), { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps an old Codex hook command usable through a host restart', async () => {
+    const root = await mkdtemp(resolve(tmpdir(), 'hs-hook-restart-')),
+      dist = resolve(root, 'dist'),
+      cli = resolve(root, 'hotsheet-cli'),
+      home = resolve(root, 'home');
+    let first: ReturnType<typeof snapshotLocalHostArtifacts> | undefined,
+      second: ReturnType<typeof snapshotLocalHostArtifacts> | undefined;
+    try {
+      await mkdir(dist);
+      await writeFile(resolve(dist, 'index.html'), 'host');
+      await writeFile(cli, 'first cli');
+      first = snapshotLocalHostArtifacts(dist, { HOTSHEET_CLI_BIN: cli }, home);
+      const oldCommand = first.environment.HOTSHEET_CLI_BIN;
+      first.dispose();
+      expect(readFileSync(oldCommand, 'utf8')).toBe('first cli');
+
+      await writeFile(cli, 'second cli');
+      second = snapshotLocalHostArtifacts(dist, { HOTSHEET_CLI_BIN: cli }, home);
+      expect(second.environment.HOTSHEET_HOOK_CLI_BIN).toBe(first.environment.HOTSHEET_HOOK_CLI_BIN);
+      expect(readFileSync(oldCommand, 'utf8')).toBe('second cli');
+    } finally {
+      second?.dispose();
+      for (const snapshot of [first, second]) {
+        if (snapshot) await rm(resolve(snapshot.distRoot, '..'), { recursive: true, force: true });
+      }
       await rm(root, { recursive: true, force: true });
     }
   });

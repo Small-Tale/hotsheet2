@@ -7,6 +7,7 @@ import { basename, dirname, resolve } from 'node:path';
 import type { Checkout } from './api';
 import { CHANGE_MUX_PATH } from './change-mux-bridge';
 import { spawn } from './child-process';
+import { restoreLegacyCodexHookCli } from './codex-hook-compat';
 import { assessCompatibility, type CompatibilityAssessment, type ServerCompatibility } from './compatibility';
 import {
   type BackupGit,
@@ -467,6 +468,7 @@ export async function refreshLocalProjectSetup(
     if (error instanceof SetupTemplatesChangedSinceHostStartError) return {};
     throw error;
   }
+  await restoreLegacyCodexHookCli(root, process.env.HOTSHEET_HOOK_CLI_BIN);
   const output = await runner(
     toolBinary(),
     ['-C', store, 'setup', '--refresh', '--project', root, '--json'],

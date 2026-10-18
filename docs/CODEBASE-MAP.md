@@ -723,3 +723,10 @@ Live terminal session-message callers (HS2-NN6EXP) are in
 request/response parser in `clients/web/src/api.ts` and `server-response-parsers.ts`. The headless
 `hotsheet-cli terminal message` route is in `crates/hotsheet-cli/src/dispatch/server.rs`; both
 use the server's `POST /connections/{id}/message` operation.
+
+The production host in `clients/web/src/local-host.ts` pins its own binaries to a disposable
+snapshot and keeps a separate durable hook CLI under the machine home. The setup resolver in
+`crates/hotsheet-plugins/src/setup.rs` writes that durable CLI into generated Codex hooks
+and the host leaves an alias for older open sessions on shutdown (HS2-86VAAG).
+`clients/web/src/codex-hook-compat.ts` restores a removed pre-upgrade snapshot hook path
+on the first project open after upgrade, before the setup refresh writes the durable path.

@@ -1868,18 +1868,32 @@ fn is_hotsheet_hook(entry: &serde_json::Value) -> bool {
         })
 }
 
-/// Resolve a hook command's binary (its first token) to the absolute sibling next to the
-/// running binary when present (no PATH reliance, HS2-103), keeping the rest of the args.
+/// Resolve a hook command's binary (its first token) to a stable CLI path when the local host
+/// runs a temporary snapshot. Otherwise use the absolute sibling next to the running binary
+/// (no PATH reliance, HS2-103), keeping the rest of the args.
 fn resolve_hook_command(command: &str) -> String {
+    let stable = std::env::var_os("HOTSHEET_HOOK_CLI_BIN").map(std::path::PathBuf::from);
+    resolve_hook_command_with(command, stable.as_deref())
+}
+
+fn resolve_hook_command_with(command: &str, stable: Option<&Path>) -> String {
     let mut parts = command.split_whitespace();
     let Some(bin) = parts.next() else {
         return command.to_string();
     };
-    let resolved = std::env::current_exe()
-        .ok()
-        .as_deref()
-        .and_then(Path::parent)
-        .map(|d| d.join(bin))
+    let stable = (bin == "hotsheet-cli")
+        .then_some(stable)
+        .flatten()
+        .filter(|path| path.is_absolute() && path.is_file());
+    let resolved = stable
+        .map(Path::to_path_buf)
+        .or_else(|| {
+            std::env::current_exe()
+                .ok()
+                .as_deref()
+                .and_then(Path::parent)
+                .map(|d| d.join(bin))
+        })
         .filter(|pth| pth.is_file())
         .map(|pth| pth.to_string_lossy().into_owned())
         .unwrap_or_else(|| bin.to_string());
@@ -2042,6 +2056,30 @@ fn write_file(path: &Path, contents: &str) -> Result<(), SetupError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn codex_hook_command_uses_cli_that_outlives_a_host_snapshot() {
+        let root = tempfile::tempdir().unwrap();
+        let stable = root.path().join("stable/hotsheet-cli");
+        let snapshot = root.path().join("snapshot/hotsheet-cli");
+        std::fs::create_dir_all(stable.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(snapshot.parent().unwrap()).unwrap();
+        std::fs::write(&stable, b"stable").unwrap();
+        std::fs::write(&snapshot, b"snapshot").unwrap();
+
+        let command =
+            resolve_hook_command_with("hotsheet-cli permission-hook --agent codex", Some(&stable));
+        std::fs::remove_dir_all(snapshot.parent().unwrap()).unwrap();
+        assert_eq!(
+            command,
+            format!("{} permission-hook --agent codex", stable.display())
+        );
+        assert!(stable.is_file());
+        assert_eq!(
+            resolve_hook_command_with("other-hook --flag", Some(&stable)),
+            "other-hook --flag"
+        );
+    }
 
     fn fixture_plugin(root: &Path, instructions: &str) {
         fixture_plugin_version(root, instructions, 1);
