@@ -184,7 +184,7 @@ jobs:
         run: |
           npm run lint
           npm run typecheck
-          npm run test:unit -- --reporter=default --reporter=json --outputFile.json=target/vitest-report.json
+          HOTSHEET_VITEST_BUILD=always npm run test:unit -- --reporter=default --reporter=json --outputFile.json=target/vitest-report.json
           npm run build
 
       - name: Slowest web unit tests
