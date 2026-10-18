@@ -259,6 +259,21 @@ it.concurrent('serves the production client and the local bridge without Vite', 
     expect(opened.status).toBe(201);
     const openedBody = await opened.json();
     expect(openedBody.setupWarning).toBeUndefined();
+    const { id, apiPath } = openedBody,
+      api = `${origin}${apiPath}`;
+    // /projects/open schedules a second setup refresh in the server. Check the hook only
+    // after that writer has finished, so this proves the final command survives both paths.
+    await expect
+      .poll(
+        async () => {
+          const response = await fetch(`${api}/lifecycle/quiescence`);
+          expect(response.status).toBe(200);
+          const { report } = await response.json();
+          return report.blockers.some((blocker) => blocker.kind === 'setup_refreshes');
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(false);
     // The host has already removed its working CLI build. A Codex process that keeps this
     // hook command through the next host restart still needs an executable outside the snapshot.
     const stableHookCli = resolve(home, 'bin/hotsheet-cli'),
@@ -268,9 +283,7 @@ it.concurrent('serves the production client and the local bridge without Vite', 
     );
     expect((await run(stableHookCli, ['--help'])).stdout).toContain('permission-hook');
     expect((await run(previousHookCli, ['--help'])).stdout).toContain('permission-hook');
-    const { id, apiPath } = openedBody,
-      api = `${origin}${apiPath}`,
-      hostsProject = async () => (await (await fetch(`${api}/stores`)).json()).some((store) => store.prefix === 'LH');
+    const hostsProject = async () => (await (await fetch(`${api}/stores`)).json()).some((store) => store.prefix === 'LH');
     expect((await fetch(`${api}/ws/poll?timeout_ms=0&since=0&client=e2e-tab`)).status).toBe(200);
     expect(await hostsProject()).toBe(true);
     expect((await fetch(`${api}/close?client=e2e-tab`, { method: 'POST' })).status).toBe(204);
