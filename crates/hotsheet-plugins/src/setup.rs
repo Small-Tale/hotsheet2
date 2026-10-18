@@ -1907,7 +1907,11 @@ fn stable_hook_cli(
         .filter(|path| path.is_file())
         .or_else(|| {
             configured
-                .filter(|path| path.is_absolute() && path.is_file())
+                .filter(|path| {
+                    path.is_absolute()
+                        && path.is_file()
+                        && !(snapshot && is_local_host_snapshot_binary(path))
+                })
                 .map(Path::to_path_buf)
         })
 }
@@ -2163,6 +2167,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(snapshot_hook_cli(&snapshot), Some(durable.clone()));
+        assert_eq!(stable_hook_cli(Some(&snapshot), true, None), None);
         assert_eq!(
             stable_hook_cli(Some(&snapshot), true, Some(home.path())),
             Some(durable)
