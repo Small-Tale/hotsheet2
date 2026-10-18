@@ -179,7 +179,7 @@ fn a_stale_terminal_route_back_falls_back_to_the_registry_server() {
         .arg("--path")
         .arg(store_dir.path())
         .env("HOTSHEET_HOME", home.path())
-        .env("HOTSHEET_SERVER", &dead)
+        .env("HOTSHEET_SERVER", dead)
         .env("HOTSHEET_SECRET", "dead-secret")
         .env("HOTSHEET_TERMINAL_ID", "term-1")
         .stdin(Stdio::piped())
