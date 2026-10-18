@@ -55,7 +55,9 @@ Freshness uses the same ownership boundary (HS2-40HZMB): the headless
 `hotsheet setup --refresh` command and the server's non-blocking project-open hook both
 invoke the core merge-safe writers. They migrate only settings files that already exist
 and refresh detected or previously managed enabled plugins, which repairs stale or
-partial setup without opting a clean project into an absent tool. Identical output is a
+partial setup without opting a clean project into an absent tool. A Hot Sheet hook by itself
+counts as managed, so an undetected tool's pre-upgrade hook is refreshed on project open.
+Identical output is a
 byte-level no-op, and managed instruction markers remain the boundary around content
 Hot Sheet may replace.
 

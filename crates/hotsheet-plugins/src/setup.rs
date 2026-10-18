@@ -947,6 +947,11 @@ fn has_managed_setup(fs: &PlanFs, project_dir: &Path, plugin: &Plugin) -> bool {
         || plugin
             .skill()
             .is_some_and(|(target, _)| fs.is_file(&project_dir.join(target)))
+        || plugin
+            .manifest
+            .hooks
+            .as_ref()
+            .is_some_and(|spec| has_hotsheet_hooks(fs, &project_dir.join(&spec.target)))
 }
 
 fn has_tool_instructions(fs: &PlanFs, project_dir: &Path, plugin: &Plugin) -> bool {
@@ -3037,6 +3042,51 @@ timeout_seconds = 30
         assert_eq!(refresh.set_up[0].notices, created[0].notices);
         fixture.write("AGENTS.md", "user instructions\n");
         assert!(fixture.refresh(&["codex"]).set_up[0].notices.is_empty());
+    }
+
+    #[test]
+    fn refresh_repairs_an_undetected_tool_with_only_a_legacy_hook() {
+        let fixture = Sharing::new();
+        custom_tool(
+            fixture.plugins.path(),
+            "orphan",
+            false,
+            r#"
+[skills]
+target = ".orphan/skills/hotsheet/SKILL.md"
+source = "SKILL.md"
+[mcp]
+target = ".orphan/config.toml"
+format = "codex-toml"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = []
+[hooks]
+target = ".orphan/hooks.json"
+format = "lifecycle-json"
+event = "PermissionRequest"
+command = "hotsheet-cli permission-hook --agent codex"
+"#,
+        );
+        fixture.write(
+            ".orphan/hooks.json",
+            r#"{"hooks":{"PermissionRequest":[{"hooks":[{"command":"/tmp/hotsheet-local-host-old/bin/hotsheet-cli permission-hook --agent codex"}]}]}}"#,
+        );
+
+        let refreshed = fixture.refresh(&["orphan"]);
+        assert_eq!(refreshed.set_up.len(), 1);
+        assert_eq!(refreshed.set_up[0].tool, "orphan tool");
+        let hooks = fixture.read(".orphan/hooks.json").unwrap();
+        assert!(!hooks.contains("hotsheet-local-host-old"), "{hooks}");
+        assert!(hooks.contains("permission-hook --agent codex"), "{hooks}");
+        assert!(
+            fixture
+                .read("AGENTS.md")
+                .unwrap()
+                .contains("orphan instructions")
+        );
+        assert!(fixture.path(".orphan/skills/hotsheet/SKILL.md").is_file());
+        assert!(fixture.refresh(&["orphan"]).set_up[0].notices.is_empty());
     }
 
     #[test]
