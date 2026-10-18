@@ -227,7 +227,9 @@ describe('terminal WebSocket bridge', () => {
     const bridgePort = await listen(bridgeHttp),
       browser = new WebSocket(`ws://127.0.0.1:${bridgePort}${CHANGE_WS_MUX_PATH}`),
       frames: ChangeWsMessage[] = [];
-    browser.on('message', (data) => frames.push(JSON.parse(webSocketRawText(data)) as ChangeWsMessage));
+    browser.on('message', (data) => {
+      frames.push(JSON.parse(webSocketRawText(data)) as ChangeWsMessage);
+    });
     await once(browser, 'open');
     browser.send(JSON.stringify({ version: 2, type: 'subscribe', project: 'a', client: 'tab', subscription: 1 }));
     browser.send(JSON.stringify({ version: 2, type: 'subscribe', project: 'b', client: 'tab', subscription: 2 }));
@@ -280,6 +282,70 @@ describe('terminal WebSocket bridge', () => {
       expect(frames.filter((frame) => frame.type === 'event')).toHaveLength(3);
     });
     expect(frames.at(-1)).toMatchObject({ project: 'b', type: 'event' });
+    browser.close();
+    await once(browser, 'close');
+  });
+
+  it('uses current store memberships for live add, relink, remove, and shared-store delivery', async () => {
+    const upstreamHttp = createServer(),
+      upstream = new WebSocketServer({ server: upstreamHttp });
+    servers.push(upstream, upstreamHttp);
+    const upstreams = new Set<WebSocket>();
+    upstream.on('connection', (socket) => upstreams.add(socket));
+    const upstreamPort = await listen(upstreamHttp),
+      bridgeHttp = createServer(),
+      memberships = new Map<string, string[] | undefined>([
+        ['a', ['old']],
+        ['b', ['shared']],
+      ]);
+    servers.push(bridgeHttp);
+    installProjectWebSocketBridge(
+      { httpServer: bridgeHttp },
+      () => undefined,
+      (project, client) =>
+        `ws://127.0.0.1:${upstreamPort}/ws/sync?secret=server-only&checkout=${project}&client=${client}`,
+      (project) => memberships.get(project),
+    );
+    const bridgePort = await listen(bridgeHttp),
+      browser = new WebSocket(`ws://127.0.0.1:${bridgePort}${CHANGE_WS_MUX_PATH}`),
+      frames: ChangeWsMessage[] = [];
+    browser.on('message', (data) => {
+      frames.push(JSON.parse(webSocketRawText(data)) as ChangeWsMessage);
+    });
+    await once(browser, 'open');
+    browser.send(JSON.stringify({ version: 2, type: 'subscribe', project: 'a', client: 'tab', subscription: 1 }));
+    browser.send(JSON.stringify({ version: 2, type: 'subscribe', project: 'b', client: 'tab', subscription: 2 }));
+    await vi.waitFor(() => {
+      expect(upstreams.size).toBe(1);
+    });
+    await vi.waitFor(() => {
+      expect(frames.filter((frame) => frame.type === 'subscribed')).toHaveLength(2);
+    });
+    const [socket] = upstreams,
+      deliver = async (store: string, expected: string[]) => {
+        const before = frames.filter((frame) => frame.type === 'event').length;
+        socket.send(JSON.stringify({ cursor: before + 1, store, kind: 'changed', id: '1', slug: 'HS2-ONE' }));
+        await vi.waitFor(() => {
+          expect(frames.filter((frame) => frame.type === 'event')).toHaveLength(before + expected.length);
+        });
+        expect(
+          frames
+            .filter((frame) => frame.type === 'event')
+            .slice(before)
+            .map((frame) => frame.project)
+            .sort(),
+        ).toEqual(expected);
+      };
+    await deliver('old', ['a']);
+    memberships.set('a', ['old', 'shared']);
+    await deliver('shared', ['a', 'b']);
+    memberships.set('a', undefined);
+    memberships.set('b', ['new']);
+    await deliver('new', ['a', 'b']);
+    memberships.set('a', ['new']);
+    await deliver('new', ['a', 'b']);
+    memberships.set('a', []);
+    await deliver('new', ['b']);
     browser.close();
     await once(browser, 'close');
   });

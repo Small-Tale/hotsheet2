@@ -1734,8 +1734,10 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   token, so a late frame from a replaced subscription is ignored. The bridge groups projects
   by authenticated server instance and tab, opens one upstream `/ws/sync` with repeated
   `checkout=` values, and routes store-tagged events to the projects that use that store.
-  An unknown store is sent to every project. A source linked while its project stays open
-  can leave the bridge's store map stale until that project reopens (`HS2-NWKJ08`).
+  Successful source add, remove, and relink requests refresh the open projects' store ids;
+  each event uses current membership rather than the ids copied when a tab subscribed.
+  An unknown store, or a project whose membership is being refreshed, receives safe broad
+  delivery until its map is current (`HS2-NWKJ08`).
   Adding or removing a project opens the replacement upstream before closing the old one;
   the overlapping interval preserves continuity, and each project discards duplicate cursors.
   If an older server rejects repeated checkouts, the bridge uses individual upstream sockets

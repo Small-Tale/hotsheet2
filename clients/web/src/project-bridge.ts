@@ -81,6 +81,7 @@ interface SessionTarget {
   serverStore?: string;
   ticketStore?: string;
   storeIds?: string[];
+  storeRefresh?: number;
 }
 interface CorruptDiagnostic {
   path: string;
@@ -1537,14 +1538,7 @@ async function openPreparedLocalProject(
     registrationRepairAvailable =
       !hs1DataPresent && backedUp ? await hasHs1Registrations(root).catch(() => true) : false,
     hs1PostgresVersion = hs1DataPresent ? (await readFile(hs1MarkerPath, 'utf8').catch(() => '')).trim() : '';
-  const storeIds = await Promise.all(
-    opened.checkout.stores.map(async (store) =>
-      createHash('sha256')
-        .update(await realpath(store).catch(() => store))
-        .digest('hex')
-        .slice(0, 16),
-    ),
-  );
+  const storeIds = await changeStoreIds(opened.checkout.stores);
   sessions.set(opened.checkout.id, { ...target, ticketStore: activeStore, storeIds });
   return {
     id: opened.checkout.id,
@@ -1594,6 +1588,41 @@ export async function listServerCheckouts(
   return checkouts.filter((_, index) => available[index]);
 }
 
+async function changeStoreIds(stores: string[]): Promise<string[]> {
+  return Promise.all(
+    stores.map(async (store) =>
+      createHash('sha256')
+        .update(await realpath(store).catch(() => store))
+        .digest('hex')
+        .slice(0, 16),
+    ),
+  );
+}
+
+/** Source mutations can change several open checkouts when a shared source is relinked. */
+async function refreshChangeStoreMembership(target: SessionTarget): Promise<void> {
+  const affected = [...sessions.entries()].filter(
+    ([, session]) => session.serverStore === target.serverStore && session.url === target.url,
+  );
+  // Unknown membership is safely fanned out by the WebSocket bridge during refresh or failure.
+  for (const [, session] of affected) {
+    session.storeIds = undefined;
+    session.storeRefresh = (session.storeRefresh ?? 0) + 1;
+  }
+  await Promise.all(
+    affected.map(async ([id, session]) => {
+      const revision = session.storeRefresh;
+      try {
+        const checkout = await serverRequest(target, `/checkouts/${encodeURIComponent(id)}`, parseCheckout);
+        const ids = await changeStoreIds(checkout.stores);
+        if (sessions.get(id) === session && session.storeRefresh === revision) session.storeIds = ids;
+      } catch {
+        // Keep safe fan-out until a later source mutation or project reopen refreshes it.
+      }
+    }),
+  );
+}
+
 export async function proxyProjectRequest(
   projectId: string,
   path: string,
@@ -1608,6 +1637,10 @@ export async function proxyProjectRequest(
   headers.delete('host');
   const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer();
   const serverPath = projectScopedServerPath(projectId, path);
+  const sourceMutation =
+    /\/checkouts\/[^/]+\/sources\/[^/]+(?:\/relink)?$/.test(serverPath.split('?')[0]) &&
+    (request.method === 'PUT' || request.method === 'DELETE' || request.method === 'PATCH') &&
+    !serverPath.split('?')[0].endsWith('/color');
   const forward = async () => {
     const response = await fetch(authenticatedServerUrl(target.url, serverPath, target.secret), {
       method: request.method,
@@ -1616,6 +1649,7 @@ export async function proxyProjectRequest(
       redirect: 'manual',
       ...(signal ? { signal } : {}),
     });
+    if (response.ok && sourceMutation) await refreshChangeStoreMembership(target);
     return new Response(response.body, { status: response.status, headers: response.headers });
   };
   try {
@@ -1788,6 +1822,7 @@ export async function runHs1MigrationJob(
       body: JSON.stringify({ provider: 'git', locator: result.ticketStore, make_default: true }),
     },
   );
+  await refreshChangeStoreMembership(target);
   await ownedRunner(toolBinary(), ['link', result.ticketStore], job.root);
   return { ...result, stores: checkout.stores };
 }

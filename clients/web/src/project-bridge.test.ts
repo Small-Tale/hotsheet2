@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { closeSync, writeSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -31,9 +32,11 @@ import {
   PINNED_SERVER_LAUNCHER,
   preserveHs1Entry,
   projectBootstrapArgs,
+  projectChangeStoreIds,
   projectScopedServerPath,
   projectServerPlan,
   projectSessionRegistry,
+  proxyProjectRequest,
   reconcileHs1Registrations,
   reconcileSelectedServerBuild,
   recoverUnhealthyServer,
@@ -80,6 +83,91 @@ describe('linked migration destination', () => {
 });
 
 describe('projectSessionRegistry', () => {
+  it('refreshes live store routing after source add, relink, and removal across shared checkouts', async () => {
+    const registry = projectSessionRegistry(),
+      server = 'http://127.0.0.1:19999',
+      stores = new Map([
+        ['routing-a', ['/old']],
+        ['routing-b', ['/shared']],
+      ]),
+      id = (store: string) => createHash('sha256').update(store).digest('hex').slice(0, 16),
+      fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+        const url = new URL(input instanceof Request ? input.url : input instanceof URL ? input.href : input);
+        if (url.pathname === '/checkouts/routing-a' || url.pathname === '/checkouts/routing-b') {
+          const checkout = url.pathname.split('/').at(-1)!;
+          return Response.json({ id: checkout, root: '/work', alias: checkout, stores: stores.get(checkout) });
+        }
+        return Response.json({ ok: true });
+      });
+    registry.set('routing-a', { url: server, secret: 'secret', storeIds: [id('/old')] });
+    registry.set('routing-b', { url: server, secret: 'secret', storeIds: [id('/shared')] });
+    const mutate = async (path: string, method: string) => {
+      const response = await proxyProjectRequest('routing-a', path, new Request(`${server}${path}`, { method }));
+      expect(response.ok).toBe(true);
+    };
+    try {
+      stores.set('routing-a', ['/old', '/shared']);
+      await mutate('/checkouts/routing-a/sources/source', 'PUT');
+      expect(projectChangeStoreIds('routing-a')).toEqual([id('/old'), id('/shared')]);
+      expect(projectChangeStoreIds('routing-b')).toEqual([id('/shared')]);
+
+      stores.set('routing-a', ['/new']);
+      stores.set('routing-b', ['/new']);
+      await mutate('/checkouts/routing-a/sources/source/relink', 'PATCH');
+      expect(projectChangeStoreIds('routing-a')).toEqual([id('/new')]);
+      expect(projectChangeStoreIds('routing-b')).toEqual([id('/new')]);
+
+      stores.set('routing-a', []);
+      await mutate('/checkouts/routing-a/sources/source', 'DELETE');
+      expect(projectChangeStoreIds('routing-a')).toEqual([]);
+      expect(projectChangeStoreIds('routing-b')).toEqual([id('/new')]);
+    } finally {
+      fetchMock.mockRestore();
+      registry.delete('routing-a');
+      registry.delete('routing-b');
+    }
+  });
+
+  it('keeps the newer membership when two source refreshes finish out of order', async () => {
+    const registry = projectSessionRegistry(),
+      server = 'http://127.0.0.1:19998',
+      id = (store: string) => createHash('sha256').update(store).digest('hex').slice(0, 16);
+    let finishOld: ((response: Response) => void) | undefined,
+      reads = 0;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const pathname = new URL(input instanceof Request ? input.url : input instanceof URL ? input.href : input)
+        .pathname;
+      if (pathname !== '/checkouts/routing-race') return Response.json({ ok: true });
+      reads += 1;
+      if (reads === 1)
+        return new Promise<Response>((resolve) => {
+          finishOld = resolve;
+        });
+      return Response.json({ id: 'routing-race', root: '/work', alias: 'race', stores: ['/new'] });
+    });
+    registry.set('routing-race', { url: server, secret: 'secret', storeIds: [id('/start')] });
+    const mutate = () =>
+      proxyProjectRequest(
+        'routing-race',
+        '/checkouts/routing-race/sources/source',
+        new Request(`${server}/checkouts/routing-race/sources/source`, { method: 'PUT' }),
+      );
+    try {
+      const first = mutate();
+      await vi.waitFor(() => {
+        expect(reads).toBe(1);
+      });
+      await mutate();
+      expect(projectChangeStoreIds('routing-race')).toEqual([id('/new')]);
+      finishOld!(Response.json({ id: 'routing-race', root: '/work', alias: 'race', stores: ['/old'] }));
+      await first;
+      expect(projectChangeStoreIds('routing-race')).toEqual([id('/new')]);
+    } finally {
+      fetchMock.mockRestore();
+      registry.delete('routing-race');
+    }
+  });
+
   it('shares project sessions across separately evaluated Vite module graphs', async () => {
     const moduleUrl = new URL('./project-bridge.ts', import.meta.url).href;
     const configGraph = await import(`${moduleUrl}?graph=config`),

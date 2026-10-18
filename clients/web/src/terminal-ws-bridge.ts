@@ -63,7 +63,6 @@ function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver, res
     project: string;
     subscription: number;
     target: string;
-    stores?: string[];
     acknowledged: boolean;
   };
   type Group = {
@@ -108,7 +107,14 @@ function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver, res
       // An older upstream frame has no routing metadata; preserve its broad delivery.
     }
     const members = [...group.members.values()];
-    const matched = store ? members.filter((member) => member.stores?.includes(store)) : [];
+    // Source links can change without replacing the browser subscription. Unknown membership
+    // receives the event until the project bridge refreshes its store ids.
+    const matched = store
+      ? members.filter((member) => {
+          const stores = resolveStores(member.project);
+          return !stores || stores.includes(store);
+        })
+      : [];
     // Unknown or newly linked stores keep the old machine-wide delivery semantics.
     for (const member of matched.length ? matched : members)
       if (member.acknowledged)
@@ -311,7 +317,6 @@ function serveChangeMux(browser: WebSocket, resolveSync: SyncTargetResolver, res
           project,
           subscription: command.subscription,
           target,
-          stores: resolveStores(project),
           acknowledged: false,
         };
         subscriptions.set(key, member);
