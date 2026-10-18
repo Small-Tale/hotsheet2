@@ -731,7 +731,9 @@ The production host in `clients/web/src/local-host.ts` pins its own binaries to 
 snapshot and keeps a separate durable hook CLI under the machine home. The setup resolver in
 `crates/hotsheet-plugins/src/setup.rs` writes that durable CLI into generated Codex hooks.
 For a production snapshot, detected from its environment or binary path, it prefers the
-machine-home binary even when the explicit override names the snapshot (HS2-G8P0W9). The host leaves an alias for older open sessions on shutdown
+machine-home binary even when the explicit override names the snapshot. A private
+`.stable-hook-cli` marker beside each snapshot binary supplies the durable path when a detached
+setup writer lacks the host's environment (HS2-G8P0W9). The host leaves an alias for older open sessions on shutdown
 (HS2-86VAAG).
 `clients/web/src/codex-hook-compat.ts` restores a removed pre-upgrade snapshot hook path
 on the first project open after upgrade, before the setup refresh writes the durable path.

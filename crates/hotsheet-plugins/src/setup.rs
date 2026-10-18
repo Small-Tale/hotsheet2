@@ -1884,7 +1884,15 @@ fn resolve_hook_command(command: &str) -> String {
         || std::env::current_exe()
             .ok()
             .is_some_and(|path| is_local_host_snapshot_binary(&path));
-    let stable = stable_hook_cli(configured.as_deref(), snapshot, home.as_deref());
+    let stable = stable_hook_cli(configured.as_deref(), snapshot, home.as_deref()).or_else(|| {
+        snapshot
+            .then(|| {
+                std::env::current_exe()
+                    .ok()
+                    .and_then(|exe| snapshot_hook_cli(&exe))
+            })
+            .flatten()
+    });
     resolve_hook_command_with(command, stable.as_deref())
 }
 
@@ -1913,6 +1921,12 @@ fn is_local_host_snapshot_binary(path: &Path) -> bool {
             name.starts_with("hotsheet-local-host-")
                 && !name.starts_with("hotsheet-local-host-home-")
         })
+}
+
+fn snapshot_hook_cli(exe: &Path) -> Option<std::path::PathBuf> {
+    let target = std::fs::read_to_string(exe.parent()?.join(".stable-hook-cli")).ok()?;
+    let target = Path::new(target.trim());
+    (target.is_absolute() && target.is_file()).then(|| target.to_path_buf())
 }
 
 fn resolve_hook_command_with(command: &str, stable: Option<&Path>) -> String {
@@ -2143,6 +2157,12 @@ mod tests {
         std::fs::write(&snapshot, b"snapshot").unwrap();
         assert!(is_local_host_snapshot_binary(&snapshot));
         assert!(!is_local_host_snapshot_binary(&durable));
+        std::fs::write(
+            snapshot.parent().unwrap().join(".stable-hook-cli"),
+            durable.to_string_lossy().as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(snapshot_hook_cli(&snapshot), Some(durable.clone()));
         assert_eq!(
             stable_hook_cli(Some(&snapshot), true, Some(home.path())),
             Some(durable)

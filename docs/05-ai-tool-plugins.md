@@ -1131,7 +1131,8 @@ their hook command across an HS2 host restart, so removing the old snapshot does
 their later permission requests. On shutdown the host leaves a small alias from its old snapshot
 CLI path to the durable CLI. Setup detects a production snapshot from its environment or binary
 path and prefers the machine-home CLI even if an explicit override still names the disposable
-snapshot (HS2-G8P0W9). On the first upgrade restart,
+snapshot. The snapshot also carries a private `.stable-hook-cli` pointer so a detached setup
+writer can recover the durable path from its binary directory (HS2-G8P0W9). On the first upgrade restart,
 opening a project also restores an alias for its pre-upgrade hook path before setup replaces
 the saved command (HS2-86VAAG).
 

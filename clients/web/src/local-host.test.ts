@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 import { Hono } from 'hono';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -190,6 +190,9 @@ describe('pinned production artifacts (HS2-6VQ5RV)', () => {
       const pinnedServer = snapshot.environment.HOTSHEET_SERVER_BIN;
       expect(snapshot.environment.HOTSHEET_CLI_BIN).not.toBe(cli);
       expect(snapshot.environment.HOTSHEET_HOOK_CLI_BIN).toBe(resolve(root, 'home/bin/hotsheet-cli'));
+      expect(readFileSync(resolve(dirname(pinnedServer), '.stable-hook-cli'), 'utf8')).toBe(
+        snapshot.environment.HOTSHEET_HOOK_CLI_BIN,
+      );
       const host = createLocalHostApp(snapshot.distRoot, new Hono());
 
       await writeFile(resolve(dist, 'index.html'), '<title>new build</title>');

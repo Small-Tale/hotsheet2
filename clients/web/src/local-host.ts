@@ -18,6 +18,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  writeFileSync,
 } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { homedir, tmpdir } from 'node:os';
@@ -199,6 +200,9 @@ export function snapshotLocalHostArtifacts(
           chmodSync(staged, statSync(source).mode & 0o777);
           renameSync(staged, stable);
           environment.HOTSHEET_HOOK_CLI_BIN = stable;
+          // A detached server may refresh setup independently of the host's environment.
+          // Let either snapshotted binary recover the durable path from its own directory.
+          writeFileSync(resolve(snapshotRoot, 'bin/.stable-hook-cli'), stable);
         } finally {
           rmSync(staging, { recursive: true, force: true });
         }
