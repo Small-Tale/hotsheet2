@@ -826,6 +826,17 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
             // Parse as JSON (numbers/bools/arrays/objects), else store the raw string.
             let parsed = serde_json::from_str(&value).unwrap_or(serde_json::Value::String(value));
             settings.set(&key, parsed, scope)?;
+            if matches!(
+                key.as_str(),
+                hotsheet_ticketing::terminal_limits::HISTORY_LINES_SETTING
+                    | hotsheet_ticketing::terminal_limits::REPLAY_BYTES_SETTING
+            ) {
+                if let Err(error) = notify_running_terminal_limits() {
+                    eprintln!(
+                        "warning: saved {key}, but running terminals were not resized: {error}"
+                    );
+                }
+            }
             let where_ = match scope {
                 Scope::Global => "global (machine-wide)",
                 Scope::Shared => "shared (committed)",
@@ -845,6 +856,54 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
                 println!("{k} = {}", render_value(v));
             }
         }
+    }
+    Ok(())
+}
+
+fn notify_running_terminal_limits() -> Result<()> {
+    let home = hotsheet_plugins::hotsheet_home();
+    let instances = home.join("instances");
+    if !instances.exists() {
+        return Ok(());
+    }
+    let mut failures = Vec::new();
+    for entry in std::fs::read_dir(instances)? {
+        let entry = entry?;
+        if entry
+            .path()
+            .extension()
+            .is_none_or(|extension| extension != "json")
+        {
+            continue;
+        }
+        let Ok(record) = std::fs::read(entry.path()) else {
+            continue;
+        };
+        let Ok(record) =
+            serde_json::from_slice::<hotsheet_cli::external_launch::ServerInstance>(&record)
+        else {
+            continue;
+        };
+        let Ok(server) = hotsheet_cli::external_launch::discover_running_server(
+            Path::new(&record.store_path),
+            &home,
+        ) else {
+            continue;
+        };
+        let endpoint = format!(
+            "{}/terminal-limits/reconcile",
+            server.url.trim_end_matches('/')
+        );
+        if let Err(error) = ureq::post(&endpoint)
+            .set("X-Hotsheet-Secret", &server.secret)
+            .timeout(std::time::Duration::from_secs(10))
+            .call()
+        {
+            failures.push(format!("{endpoint}: {error}"));
+        }
+    }
+    if !failures.is_empty() {
+        bail!("{}", failures.join("; "));
     }
     Ok(())
 }

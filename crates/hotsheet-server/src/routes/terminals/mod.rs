@@ -256,28 +256,49 @@ pub(crate) async fn put_terminal_limits(
     })
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
-    let replay_bytes = usize::try_from(view.effective.replay_bytes).unwrap_or(usize::MAX);
-    if let Some(broker) = &running.terminal_broker {
+    if let Err(error) = apply_live_replay_limit(&running, view.effective.replay_bytes).await {
+        tracing::warn!(%error, "running replay limit was not updated");
+    }
+    Ok(Json(view))
+}
+
+/// Reconcile running PTYs after a headless CLI write to the shared machine settings file.
+pub(crate) async fn reconcile_terminal_limits(
+    State(state): State<AppState>,
+) -> Result<Json<TerminalLimitsView>, ApiError> {
+    let reader = state.clone();
+    let view = tokio::task::spawn_blocking(move || read_terminal_limits(&reader))
+        .await
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
+    apply_live_replay_limit(&state, view.effective.replay_bytes)
+        .await
+        .map_err(|error| ApiError::new(StatusCode::SERVICE_UNAVAILABLE, error))?;
+    Ok(Json(view))
+}
+
+async fn apply_live_replay_limit(state: &AppState, bytes: u64) -> Result<(), String> {
+    if let Some(broker) = &state.terminal_broker {
         match broker
-            .call(hotsheet_terminals::BrokerRequest::ResizeReplay {
-                bytes: view.effective.replay_bytes,
-            })
+            .call(hotsheet_terminals::BrokerRequest::ResizeReplay { bytes })
             .await
         {
             Ok(hotsheet_terminals::BrokerResponse::Ok) => {}
             Ok(response) => {
-                tracing::warn!(?response, "running broker replay limit was not updated")
+                return Err(format!(
+                    "terminal broker rejected replay resize: {response:?}"
+                ));
             }
-            Err(error) => tracing::warn!(%error, "running broker replay limit was not updated"),
+            Err(error) => return Err(format!("terminal broker replay resize failed: {error}")),
         }
     } else {
-        for key in running.terminals.list() {
-            if let Some(term) = running.terminals.get(&key).filter(|term| term.is_alive()) {
+        let replay_bytes = usize::try_from(bytes).unwrap_or(usize::MAX);
+        for key in state.terminals.list() {
+            if let Some(term) = state.terminals.get(&key).filter(|term| term.is_alive()) {
                 term.resize_replay(replay_bytes);
             }
         }
     }
-    Ok(Json(view))
+    Ok(())
 }
 
 #[cfg(test)]
@@ -318,6 +339,32 @@ mod replay_limit_tests {
         term.kill().unwrap();
     }
 
+    #[tokio::test]
+    async fn reconciling_a_headless_history_change_resizes_a_direct_terminal() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(&dir);
+        let term = state
+            .terminals
+            .get_or_spawn(
+                ("project".into(), "live".into()),
+                hotsheet_terminals::TermSpec::new("cat"),
+            )
+            .unwrap();
+        machine_settings(&state)
+            .set(
+                hotsheet_ticketing::terminal_limits::HISTORY_LINES_SETTING,
+                serde_json::json!(1_000),
+                hotsheet_ticketing::Scope::Global,
+            )
+            .unwrap();
+        let view = reconcile_terminal_limits(State(state)).await.unwrap();
+        assert_eq!(
+            term.replay_capacity(),
+            view.0.effective.replay_bytes as usize
+        );
+        term.kill().unwrap();
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn saving_replay_limit_resizes_an_existing_broker_terminal() {
@@ -345,6 +392,85 @@ mod replay_limit_tests {
         assert_eq!(view.0.effective.replay_bytes, 128 * 1024);
         assert_eq!(term.replay_capacity(), 128 * 1024);
         term.kill().unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn reconciling_headless_replay_change_resizes_a_broker_terminal() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("broker.sock");
+        let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+        let manager = std::sync::Arc::new(hotsheet_terminals::TerminalManager::new());
+        let term = manager
+            .get_or_spawn(
+                ("project".into(), "live".into()),
+                hotsheet_terminals::TermSpec::new("cat"),
+            )
+            .unwrap();
+        tokio::spawn(hotsheet_terminals::serve_broker(
+            listener,
+            "project".into(),
+            manager,
+        ));
+        let state = test_state(&dir).with_terminal_broker_at(
+            crate::terminal_broker::TerminalBroker::at(&socket, "project"),
+        );
+        machine_settings(&state)
+            .set(
+                hotsheet_ticketing::terminal_limits::REPLAY_BYTES_SETTING,
+                serde_json::json!(128 * 1024),
+                hotsheet_ticketing::Scope::Global,
+            )
+            .unwrap();
+        let view = reconcile_terminal_limits(State(state)).await.unwrap();
+        assert_eq!(
+            term.replay_capacity(),
+            view.0.effective.replay_bytes as usize
+        );
+        term.kill().unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn older_broker_rejects_resize_without_blocking_the_saved_setting() {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("broker.sock");
+        let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+        let broker = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let (read, mut write) = stream.into_split();
+            let mut lines = tokio::io::BufReader::new(read);
+            let mut request = String::new();
+            lines.read_line(&mut request).await.unwrap();
+            assert!(request.contains("resize_replay"));
+            write
+                .write_all(b"{\"result\":\"err\",\"message\":\"bad request: unknown variant\"}\n")
+                .await
+                .unwrap();
+        });
+        let state = test_state(&dir).with_terminal_broker_at(
+            crate::terminal_broker::TerminalBroker::at(&socket, "project"),
+        );
+        machine_settings(&state)
+            .set(
+                hotsheet_ticketing::terminal_limits::REPLAY_BYTES_SETTING,
+                serde_json::json!(128 * 1024),
+                hotsheet_ticketing::Scope::Global,
+            )
+            .unwrap();
+        let error = reconcile_terminal_limits(State(state.clone()))
+            .await
+            .unwrap_err();
+        assert_eq!(error.status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            read_terminal_limits(&state)
+                .unwrap()
+                .configured
+                .replay_bytes,
+            Some(128 * 1024)
+        );
+        broker.await.unwrap();
     }
 }
 

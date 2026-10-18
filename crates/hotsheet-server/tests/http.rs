@@ -1521,6 +1521,29 @@ async fn terminal_history_opt_out_is_machine_local_and_round_trips() {
 }
 
 #[tokio::test]
+async fn terminal_limits_reconcile_route_reads_headless_settings() {
+    let (dir, state) = state();
+    let home = dir.path().join("machine-home");
+    let state = state.with_machine_home(&home);
+    hotsheet_ticketing::Settings::with_global_home(dir.path(), &home)
+        .set(
+            hotsheet_ticketing::terminal_limits::REPLAY_BYTES_SETTING,
+            serde_json::json!(128 * 1024),
+            hotsheet_ticketing::Scope::Global,
+        )
+        .unwrap();
+    let response = app(state)
+        .oneshot(authed("POST", "/terminal-limits/reconcile", None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(response).await["effective"]["replay_bytes"],
+        128 * 1024
+    );
+}
+
+#[tokio::test]
 async fn terminal_limits_are_machine_wide_memory_derived_and_explicit_settings_win() {
     let (dir, state) = state();
     let home = dir.path().join("machine-home");

@@ -6950,6 +6950,82 @@ fn worklist_is_not_written_into_a_ticket_store_backing_a_registered_checkout() {
 }
 
 #[test]
+fn headless_replay_and_history_changes_notify_all_running_servers() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("store");
+    let home = dir.path().join("home");
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let instance = hotsheet_cli::external_launch::instance_path(&home, &store);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        instance,
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": url,
+            "secret": "test-secret",
+            "store_path": store,
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let server = std::thread::spawn(move || {
+        (0..2)
+            .map(|_| capture_one_request(listener.try_clone().unwrap()))
+            .collect::<Vec<_>>()
+    });
+    let other_store = dir.path().join("other-store");
+    hotsheet_ticketing::FsStore::init(&other_store, &hotsheet_ticketing::StoreMetadata::new("OT"))
+        .unwrap();
+    let other_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let other_instance = hotsheet_cli::external_launch::instance_path(&home, &other_store);
+    std::fs::write(
+        other_instance,
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": format!("http://{}", other_listener.local_addr().unwrap()),
+            "secret": "other-secret",
+            "store_path": other_store,
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let other_server = std::thread::spawn(move || {
+        (0..2)
+            .map(|_| capture_one_request(other_listener.try_clone().unwrap()))
+            .collect::<Vec<_>>()
+    });
+    for (key, value) in [
+        ("terminal.replay_bytes", "131072"),
+        ("terminal.history_lines", "1000"),
+    ] {
+        hs(&store)
+            .env("HOTSHEET_HOME", &home)
+            .args(["settings", "set", key, value])
+            .assert()
+            .success()
+            .stderr(predicate::str::is_empty());
+    }
+    for (request, secret, body) in server.join().unwrap() {
+        assert_eq!(request, "POST /terminal-limits/reconcile HTTP/1.1");
+        assert_eq!(secret, "test-secret");
+        assert!(body.is_empty());
+    }
+    for (request, secret, body) in other_server.join().unwrap() {
+        assert_eq!(request, "POST /terminal-limits/reconcile HTTP/1.1");
+        assert_eq!(secret, "other-secret");
+        assert!(body.is_empty());
+    }
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["settings", "set", "terminal.warm_terminals", "4"])
+        .assert()
+        .success();
+}
+
+#[test]
 fn terminal_limits_are_set_headlessly_as_validated_machine_wide_settings() {
     // HS2-Y5DYC0 headless parity with App Settings → Terminal memory.
     let dir = tempfile::tempdir().unwrap();

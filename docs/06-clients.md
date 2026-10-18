@@ -3789,6 +3789,11 @@ to `--scope global`, refuse a project scope, and are range-checked. The server r
 A `PUT` replaces all three limits, and an out-of-range value is refused with 422. The client
 loads the limits once per server origin, not once per project tab, so switching between open
 projects never refetches them ahead of the cached switch's first paint (HS2-8YHY6V).
+After a headless replay or history change, the CLI calls each discovered running server's
+`POST /terminal-limits/reconcile` route, which rereads the global file and resizes live PTYs.
+Without a running server the saved setting applies at the next launch. If a live broker rejects
+the resize, the CLI warns while retaining the saved setting; its existing PTYs keep their old
+buffers until that broker restarts (HS2-1HYDSY).
 
 **Memory-aware defaults.** Browsers expose no usable memory signal: Safari has none, and
 Chromium's `navigator.deviceMemory` is rounded and capped at 8 GB. The server therefore
