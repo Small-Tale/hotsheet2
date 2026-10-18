@@ -181,11 +181,18 @@ impl Ring {
                 safe_start,
             });
             self.ansi = self.ansi.advance(b);
-            if self.buf.len() > self.cap {
+            self.trim();
+        }
+    }
+    fn resize(&mut self, cap: usize) {
+        self.cap = cap;
+        self.trim();
+    }
+    fn trim(&mut self) {
+        while self.buf.len() > self.cap {
+            self.buf.pop_front();
+            while self.buf.front().is_some_and(|front| !front.safe_start) {
                 self.buf.pop_front();
-                while self.buf.front().is_some_and(|front| !front.safe_start) {
-                    self.buf.pop_front();
-                }
             }
         }
     }
@@ -220,6 +227,12 @@ impl OutputReplay {
 
     fn snapshot(&self) -> Vec<u8> {
         self.ring.lock_or_recover().snapshot()
+    }
+
+    fn resize(&self, bytes: usize) {
+        self.ring
+            .lock_or_recover()
+            .resize(clamp_replay_bytes(bytes));
     }
 
     fn subscribe_with_snapshot(&self) -> (Vec<u8>, broadcast::Receiver<Vec<u8>>) {
@@ -642,6 +655,12 @@ impl Terminal {
         self.output.ring.lock_or_recover().cap
     }
 
+    /// Apply a new replay limit to this running PTY. Shrinking evicts old bytes at a safe
+    /// parser boundary; growing retains future output without inventing discarded history.
+    pub fn resize_replay(&self, bytes: usize) {
+        self.output.resize(bytes);
+    }
+
     /// The inferred busy/idle activity from the output stream.
     pub fn activity(&self) -> Activity {
         self.busy.with_lock(|d| d.activity())
@@ -710,6 +729,21 @@ mod tests {
         let mut utf8 = Ring::new(2);
         utf8.push("A€B".as_bytes());
         assert_eq!(utf8.snapshot(), b"B");
+    }
+
+    #[test]
+    fn replay_resize_trims_at_safe_boundaries_and_retains_new_output_after_growth() {
+        let mut ring = Ring::new(64);
+        ring.push(b"old\x1b[38;5;61mOK");
+        ring.resize(3);
+        assert_eq!(ring.snapshot(), b"OK");
+        ring.resize(64);
+        ring.push(b"-new");
+        assert_eq!(ring.snapshot(), b"OK-new");
+        ring.resize(2);
+        assert_eq!(ring.snapshot(), b"ew");
+        ring.push("€!".as_bytes());
+        assert_eq!(ring.snapshot(), b"!");
     }
 
     #[test]
@@ -927,6 +961,8 @@ mod tests {
         let mut spec = TermSpec::new("printf");
         spec.args = vec!["hello-pty".into()];
         let term = Terminal::spawn(spec).expect("spawn");
+        term.resize_replay(128 * 1024);
+        assert_eq!(term.replay_capacity(), 128 * 1024);
 
         // Output lands in the scrollback ring.
         assert!(

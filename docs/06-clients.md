@@ -3813,9 +3813,13 @@ without the route, clients keep the 5,000-line and 12-terminal values.
 line, clamped to 256 KiB–8 MiB. A reconnect therefore restores about what the client keeps,
 where the old fixed 256 KiB restored far fewer lines of a redraw-heavy TUI. A new terminal
 takes the replay size at spawn; the detached broker receives it on `open`, and an older
-peer that omits it keeps 256 KiB. A running terminal keeps the buffer it was spawned with,
-and an emulator keeps the history it mounted with, so changes apply to terminals opened
-afterward. Lowering the warm-terminal limit evicts extra parked terminals immediately.
+peer that omits it keeps 256 KiB. Saving a new limit through `/terminal-limits` also resizes
+each running PTY's replay buffer, including broker-hosted terminals. Shrinking evicts old
+output at a parser-safe boundary; growing retains future output without recovering bytes
+already discarded. An older detached broker that does not recognize the resize operation
+keeps its current running buffers until restarted. An emulator keeps the history it mounted
+with, so its history change applies to terminals opened afterward. Lowering the warm-terminal
+limit evicts extra parked terminals immediately.
 
 ## 6.8 Notes, reader mode & editing
 

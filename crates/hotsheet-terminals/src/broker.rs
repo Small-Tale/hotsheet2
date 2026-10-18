@@ -83,6 +83,9 @@ pub enum Request {
     /// two of those a second per terminal kept the broker and server busy while idle. Brokers
     /// that predate it answer `Err { "bad request: …" }`, which callers treat as "use `list`".
     Info { id: String },
+    /// Resize replay retention for every running PTY in this broker. Older brokers reject this
+    /// unknown op without losing their terminals, so a newer server may safely fall back.
+    ResizeReplay { bytes: u64 },
     /// Write input bytes to the terminal's PTY. Input is small keystroke data, so it stays a
     /// number array that every broker parses.
     Input { id: String, data: Vec<u8> },
@@ -592,6 +595,15 @@ async fn handle_request(
             },
             None => Response::NotFound,
         },
+        Request::ResizeReplay { bytes } => {
+            let bytes = usize::try_from(bytes).unwrap_or(usize::MAX);
+            for key in manager.list() {
+                if let Some(term) = manager.get(&key).filter(|term| term.is_alive()) {
+                    term.resize_replay(bytes);
+                }
+            }
+            Response::Ok
+        }
         Request::Read { id, bytes } => match manager.get(&key(&id)) {
             Some(term) => Response::Read {
                 info: info_of(&term, &id),
@@ -946,7 +958,7 @@ mod tests {
     }
 
     #[test]
-    fn replay_size_is_optional_on_the_wire_and_reaches_the_spawned_terminal() {
+    fn replay_size_is_optional_on_open_and_live_resize_reaches_the_terminal() {
         // HS2-Y5DYC0: an older server omits the size (the broker keeps 256 KiB); a newer one
         // omits it only when unset, so an older broker never sees an unknown field.
         let legacy: Request =
@@ -992,6 +1004,21 @@ mod tests {
         assert!(matches!(response, Response::Terminal { .. }));
         let term = manager.get(&("proj".into(), "sized".into())).unwrap();
         assert_eq!(term.replay_capacity(), 512 * 1024);
+        let resize: Request =
+            serde_json::from_str(r#"{"op":"resize_replay","bytes":65536}"#).unwrap();
+        assert_eq!(serde_json::to_value(&resize).unwrap()["bytes"], 65536);
+        let response = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(handle_request(
+                "proj",
+                &manager,
+                &Arc::new(Mutex::new(std::collections::HashMap::new())),
+                resize,
+            ));
+        assert!(matches!(response, Response::Ok));
+        assert_eq!(term.replay_capacity(), 64 * 1024);
         term.kill().unwrap();
     }
 

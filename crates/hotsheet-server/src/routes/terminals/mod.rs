@@ -229,6 +229,7 @@ pub(crate) async fn put_terminal_limits(
     };
     hotsheet_ticketing::terminal_limits::validate_terminal_limits(&value)
         .map_err(|error| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, error.to_string()))?;
+    let running = state.clone();
     let view = tokio::task::spawn_blocking(move || {
         let settings = machine_settings(&state);
         for (key, limit) in [
@@ -255,7 +256,96 @@ pub(crate) async fn put_terminal_limits(
     })
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
+    let replay_bytes = usize::try_from(view.effective.replay_bytes).unwrap_or(usize::MAX);
+    if let Some(broker) = &running.terminal_broker {
+        match broker
+            .call(hotsheet_terminals::BrokerRequest::ResizeReplay {
+                bytes: view.effective.replay_bytes,
+            })
+            .await
+        {
+            Ok(hotsheet_terminals::BrokerResponse::Ok) => {}
+            Ok(response) => {
+                tracing::warn!(?response, "running broker replay limit was not updated")
+            }
+            Err(error) => tracing::warn!(%error, "running broker replay limit was not updated"),
+        }
+    } else {
+        for key in running.terminals.list() {
+            if let Some(term) = running.terminals.get(&key).filter(|term| term.is_alive()) {
+                term.resize_replay(replay_bytes);
+            }
+        }
+    }
     Ok(Json(view))
+}
+
+#[cfg(test)]
+mod replay_limit_tests {
+    use super::*;
+    use hotsheet_ticketing::{FsStore, StoreMetadata};
+
+    fn test_state(dir: &tempfile::TempDir) -> AppState {
+        let store = FsStore::init(dir.path().join("store"), &StoreMetadata::new("HS")).unwrap();
+        AppState::new(store, "secret".into())
+            .unwrap()
+            .with_machine_home(dir.path().join("home"))
+    }
+
+    fn replay_limit(bytes: u64) -> hotsheet_ticketing::terminal_limits::ConfiguredTerminalLimits {
+        hotsheet_ticketing::terminal_limits::ConfiguredTerminalLimits {
+            history_lines: None,
+            replay_bytes: Some(bytes),
+            warm_terminals: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn saving_replay_limit_resizes_an_existing_direct_terminal() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = test_state(&dir);
+        let key = ("project".to_string(), "live".to_string());
+        let term = state
+            .terminals
+            .get_or_spawn(key, hotsheet_terminals::TermSpec::new("cat"))
+            .unwrap();
+        assert_eq!(term.replay_capacity(), hotsheet_terminals::SCROLLBACK_BYTES);
+        let view = put_terminal_limits(State(state.clone()), Json(replay_limit(64 * 1024)))
+            .await
+            .unwrap();
+        assert_eq!(view.0.effective.replay_bytes, 64 * 1024);
+        assert_eq!(term.replay_capacity(), 64 * 1024);
+        term.kill().unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn saving_replay_limit_resizes_an_existing_broker_terminal() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("broker.sock");
+        let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+        let manager = std::sync::Arc::new(hotsheet_terminals::TerminalManager::new());
+        let term = manager
+            .get_or_spawn(
+                ("project".into(), "live".into()),
+                hotsheet_terminals::TermSpec::new("cat"),
+            )
+            .unwrap();
+        tokio::spawn(hotsheet_terminals::serve_broker(
+            listener,
+            "project".into(),
+            manager,
+        ));
+        let state = test_state(&dir).with_terminal_broker_at(
+            crate::terminal_broker::TerminalBroker::at(&socket, "project"),
+        );
+        let view = put_terminal_limits(State(state), Json(replay_limit(128 * 1024)))
+            .await
+            .unwrap();
+        assert_eq!(view.0.effective.replay_bytes, 128 * 1024);
+        assert_eq!(term.replay_capacity(), 128 * 1024);
+        term.kill().unwrap();
+    }
 }
 
 pub(crate) async fn get_checkout_trash_settings(
