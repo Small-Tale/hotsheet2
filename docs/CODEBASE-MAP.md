@@ -729,7 +729,9 @@ use the server's `POST /connections/{id}/message` operation.
 
 The production host in `clients/web/src/local-host.ts` pins its own binaries to a disposable
 snapshot and keeps a separate durable hook CLI under the machine home. The setup resolver in
-`crates/hotsheet-plugins/src/setup.rs` writes that durable CLI into generated Codex hooks
-and the host leaves an alias for older open sessions on shutdown (HS2-86VAAG).
+`crates/hotsheet-plugins/src/setup.rs` writes that durable CLI into generated Codex hooks.
+For a production snapshot, it falls back to the machine-home binary when the explicit override
+is absent (HS2-G8P0W9). The host leaves an alias for older open sessions on shutdown
+(HS2-86VAAG).
 `clients/web/src/codex-hook-compat.ts` restores a removed pre-upgrade snapshot hook path
 on the first project open after upgrade, before the setup refresh writes the durable path.

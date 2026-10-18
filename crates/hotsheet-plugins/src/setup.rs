@@ -1877,8 +1877,28 @@ fn is_hotsheet_hook(entry: &serde_json::Value) -> bool {
 /// runs a temporary snapshot. Otherwise use the absolute sibling next to the running binary
 /// (no PATH reliance, HS2-103), keeping the rest of the args.
 fn resolve_hook_command(command: &str) -> String {
-    let stable = std::env::var_os("HOTSHEET_HOOK_CLI_BIN").map(std::path::PathBuf::from);
+    let configured = std::env::var_os("HOTSHEET_HOOK_CLI_BIN").map(std::path::PathBuf::from);
+    let home = std::env::var_os("HOTSHEET_HOME").map(std::path::PathBuf::from);
+    let snapshot = std::env::var_os("HOTSHEET_LOCAL_HOST_SNAPSHOT").as_deref()
+        == Some(std::ffi::OsStr::new("1"));
+    let stable = stable_hook_cli(configured.as_deref(), snapshot, home.as_deref());
     resolve_hook_command_with(command, stable.as_deref())
+}
+
+fn stable_hook_cli(
+    configured: Option<&Path>,
+    snapshot: bool,
+    home: Option<&Path>,
+) -> Option<std::path::PathBuf> {
+    configured
+        .filter(|path| path.is_absolute() && path.is_file())
+        .map(Path::to_path_buf)
+        .or_else(|| {
+            snapshot
+                .then(|| home.map(|home| home.join("bin/hotsheet-cli")))
+                .flatten()
+                .filter(|path| path.is_file())
+        })
 }
 
 fn resolve_hook_command_with(command: &str, stable: Option<&Path>) -> String {
@@ -2083,6 +2103,26 @@ mod tests {
         assert_eq!(
             resolve_hook_command_with("other-hook --flag", Some(&stable)),
             "other-hook --flag"
+        );
+    }
+
+    #[test]
+    fn production_snapshot_finds_the_durable_hook_cli_when_the_override_is_missing() {
+        let home = tempfile::tempdir().unwrap();
+        let durable = home.path().join("bin/hotsheet-cli");
+        std::fs::create_dir_all(durable.parent().unwrap()).unwrap();
+        std::fs::write(&durable, b"durable").unwrap();
+        assert_eq!(
+            stable_hook_cli(None, true, Some(home.path())),
+            Some(durable.clone())
+        );
+        assert_eq!(stable_hook_cli(None, false, Some(home.path())), None);
+        assert_eq!(
+            resolve_hook_command_with(
+                "hotsheet-cli permission-hook --agent codex",
+                stable_hook_cli(None, true, Some(home.path())).as_deref(),
+            ),
+            format!("{} permission-hook --agent codex", durable.display())
         );
     }
 
