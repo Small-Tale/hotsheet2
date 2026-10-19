@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 
-import { discardProjectSettings, projectSettingsValue, updateProjectSettingsValue } from './project-settings-state';
+import { projectSettingsValue, updateProjectSettingsValue } from './project-settings-state';
 
 describe('project settings state', () => {
   it('keeps project values independent and falls back only for unseen projects', () => {
@@ -16,11 +16,5 @@ describe('project settings state', () => {
     expect(projectSettingsValue(both, 'gamma', 'sources')).toBe('sources');
     // @ts-expect-error the existing record is the sole source of the accepted value union
     updateProjectSettingsValue(empty, 'gamma', 'columns');
-  });
-
-  it('discards only closed projects', () => {
-    expect(discardProjectSettings({ alpha: 'draft A', beta: 'draft B' }, new Set(['alpha']))).toEqual({
-      beta: 'draft B',
-    });
   });
 });

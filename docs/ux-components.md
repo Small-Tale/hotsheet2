@@ -1029,8 +1029,8 @@ The editor chrome itself is now kerf UI's `SearchField` + `wireSearchFields`
 `role="searchbox"`, and its wire helper owns Enter-submit, caret preservation across
 controlled token deletion, and the opt-in adjacent-chip keyboard (Backspace/Delete removes
 the neighbouring chip; ArrowRight steps past a trailing chip). The app keeps ownership of the
-token model (`clients/web/src/inline-search.ts`, adapted to kerf via `toTokenSearchToken` /
-`fromTokenSearchTokens` keyed on each token's canonical `raw`), the whitespace-commit input
+token model (`clients/web/src/inline-search.ts`, adapted to kerf via `toTokenSearchToken`
+keyed on each token's canonical `raw`), the whitespace-commit input
 gating (reported by the helper's `onEdit` callback), the suggestions/date/help popovers
 (marked `data-search-field-keep-open`), and the
 persisted `searchOpen` signal. The workspace field enables Kerf's managed collapsible mode

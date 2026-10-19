@@ -7,7 +7,6 @@ import {
   hs1CleanupPromptDismissed,
   hs1MigrationPromptDismissed,
   loadProjectWorkspaceSession,
-  reconcileRememberedProjectRoots,
   saveActiveProjectRoot,
   saveProjectWorkspaceSession,
 } from './workspace-session';
@@ -100,11 +99,5 @@ describe('workspace session', () => {
     dismissHs1CleanupPrompt(storage, 'project', '/work/.hotsheet/db\u000017');
     expect(hs1CleanupPromptDismissed(storage, 'project', '/work/.hotsheet/db\u000017')).toBe(true);
     expect(hs1CleanupPromptDismissed(storage, 'project', '/work/.hotsheet/db\u000016')).toBe(false);
-  });
-  it('retains temporarily failed hidden roots for the next restore attempt', () => {
-    expect(reconcileRememberedProjectRoots(['/work/good', '/work/old'], ['/work/good'])).toEqual({
-      remembered: ['/work/good', '/work/old'],
-      failed: ['/work/old'],
-    });
   });
 });

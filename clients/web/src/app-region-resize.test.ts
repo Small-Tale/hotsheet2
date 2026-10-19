@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  isAppRegionId,
   loadAppRegionSize,
   normalizeAppRegionSize,
   saveAppRegionSize,
@@ -13,10 +12,6 @@ import {
 
 describe('production app region sizing', () => {
   it('recognizes only production shell regions and clamps their independent bounds', () => {
-    expect(isAppRegionId('app-left-rail')).toBe(true);
-    expect(isAppRegionId('app-right-rail')).toBe(true);
-    expect(isAppRegionId('app-bottom-drawer')).toBe(true);
-    expect(isAppRegionId('resize-demo-horizontal')).toBe(false);
     expect(normalizeAppRegionSize('app-left-rail', 100)).toBe(250);
     expect(normalizeAppRegionSize('app-left-rail', 900)).toBe(360);
     expect(normalizeAppRegionSize('app-right-rail', 100)).toBe(280);

@@ -102,4 +102,16 @@ describe('ticket search model (HS2-5JXBQY)', () => {
     expect(model.state.value).toEqual({ query: '', tokens: [] });
     expect(model.editorRevision.value).toBe(2);
   });
+
+  it('accepts repeated empty and refill edits through the live controlled model (HS2-GRAQ2K)', () => {
+    const model = createTicketSearchModel({ tags: () => tags });
+    for (const raw of ['tag:server', 'is:started', 'tag:client', 'is:active']) {
+      model.edit({ query: '', tokens: [] });
+      expect(model.state.value).toEqual({ query: '', tokens: [] });
+      model.edit({ query: '', tokens: [] });
+      model.edit({ query: `refilled ${raw} `, tokens: [] });
+      expect(model.state.value.query).toBe('refilled ');
+      expect(inlineSearchTokens(model.state.value).map((token) => token.raw)).toEqual([raw]);
+    }
+  });
 });

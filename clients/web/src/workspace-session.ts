@@ -157,10 +157,6 @@ export function activeProjectRoot(storage: Pick<Storage, 'getItem'>) {
 export function saveActiveProjectRoot(storage: Pick<Storage, 'setItem'>, root: string) {
   storage.setItem(ACTIVE_ROOT, root);
 }
-export function reconcileRememberedProjectRoots(requested: readonly string[], opened: readonly string[]) {
-  const available = new Set(opened);
-  return { remembered: [...requested], failed: requested.filter((root) => !available.has(root)) };
-}
 export function hs1MigrationPromptDismissed(
   storage: Pick<Storage, 'getItem'>,
   projectId: string,

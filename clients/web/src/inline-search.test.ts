@@ -5,7 +5,6 @@ import {
   consumeSearchTokens,
   dateTokenFromInput,
   effectiveSearch,
-  fromTokenSearchTokens,
   inlineSearchParts,
   orderedSearchText,
   parseSearchDate,
@@ -173,45 +172,5 @@ describe('inline advanced-search tokens', () => {
       label: 'has media annotation',
       accessibleLabel: 'has media annotation',
     });
-  });
-
-  it('round-trips kerf TokenSearchTokens back to inline tokens, preferring current parsed values', () => {
-    const current = [tokenFromRaw('tag:client')!, dateTokenFromInput('updated-after', '2026-09-01')!];
-    const read = [
-      { value: 'tag:client', label: 'tag:client', offset: 5 },
-      { value: current[1].raw, label: current[1].label, offset: 9 },
-    ];
-    const back = fromTokenSearchTokens(read, current);
-    expect(back).toHaveLength(2);
-    expect(back[0]).toMatchObject({ kind: 'tag', value: 'client', raw: 'tag:client', offset: 5 });
-    // The date token keeps the current parsed ISO value rather than being re-parsed from raw.
-    expect(back[1]).toMatchObject({ kind: 'date', value: current[1].value, offset: 9 });
-  });
-
-  it('reconstructs an unknown chip from its raw and drops an unparseable one', () => {
-    const back = fromTokenSearchTokens(
-      [
-        { value: 'is:started', label: 'is:started', offset: 0 },
-        { value: 'not-a-token', label: 'x', offset: 4 },
-      ],
-      [],
-    );
-    expect(back).toHaveLength(1);
-    expect(back[0]).toMatchObject({ kind: 'is', value: 'started', raw: 'is:started', offset: 0 });
-  });
-
-  it('drops every controlled token on Select All deletion and accepts repeated refills (HS2-GRAQ2K)', () => {
-    let current = consumeSearchTokens('before is:active tag:client after ').tokens;
-    for (const raw of ['tag:server ', 'is:started ', 'tag:client ', 'is:active ']) {
-      const emptied = fromTokenSearchTokens([], current);
-      expect(emptied).toEqual([]);
-      expect(effectiveSearch('', emptied)).toEqual({ text: '', tokens: [] });
-      expect(fromTokenSearchTokens([], emptied)).toEqual([]);
-      const refill = consumeSearchTokens(`refilled ${raw}`);
-      current = fromTokenSearchTokens(refill.tokens.map(toTokenSearchToken), emptied);
-      expect(current).toEqual(refill.tokens);
-      expect(current).toHaveLength(1);
-      expect(orderedSearchText(refill.text, current)).toBe(`refilled ${raw.trim()}`);
-    }
   });
 });

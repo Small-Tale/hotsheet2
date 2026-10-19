@@ -8,7 +8,6 @@ import {
   attachmentLabelEditScope,
   beginAttachmentLabelEdit,
   createAttachmentLabelEditor,
-  endAttachmentLabelEdit,
   INSPECTOR_ATTACHMENT_LABEL_SCOPE,
   restoreAttachmentLabelEdit,
 } from './attachment-label-editing';
@@ -45,12 +44,11 @@ describe('attachment label editing state (HS2-SG0AZY)', () => {
     expect(attachmentLabelEditingKey(undefined, INSPECTOR_ATTACHMENT_LABEL_SCOPE)).toBeUndefined();
   });
 
-  it('walks begin, replace, foreign end, restore, and end across surfaces', () => {
+  it('walks begin, replace, and restore across surfaces', () => {
     const editing = signal<AttachmentLabelEditing | undefined>(undefined),
       inspector = batchIn(undefined, 'batch-1', 'Before'),
       reader = batchIn('workspace-reader', '__legacy__', '');
-    // Ending or restoring with nothing open is a no-op.
-    endAttachmentLabelEdit(inspector.input, editing);
+    // Restoring with nothing open is a no-op.
     restoreAttachmentLabelEdit(inspector.input, editing);
     expect(editing.value).toBeUndefined();
     expect(inspector.input.value).toBe('Before');
@@ -70,25 +68,18 @@ describe('attachment label editing state (HS2-SG0AZY)', () => {
     expect(editing.value).toBe(open);
     inspector.input.value = 'Before';
 
-    // The reader opens its own edit; the inspector's blur no longer closes it.
+    // The reader opens its own edit; restoring through the inspector leaves it alone.
     beginAttachmentLabelEdit(reader.title, editing);
     expect(editing.value).toMatchObject({ scope: 'workspace-reader', key: '__legacy__', original: '' });
-    endAttachmentLabelEdit(inspector.input, editing);
     restoreAttachmentLabelEdit(inspector.input, editing);
     expect(editing.value?.scope).toBe('workspace-reader');
     expect(inspector.input.value).toBe('Before');
 
-    // Escape restores the edit-start label; blur closes the edit.
+    // Escape restores the edit-start label.
     reader.input.value = 'Discard me';
     restoreAttachmentLabelEdit(reader.input, editing);
     expect(reader.input.value).toBe('');
-    endAttachmentLabelEdit(reader.input, editing);
-    expect(editing.value).toBeUndefined();
-
-    // Empty, then refill: a fresh edit starts from the current label.
-    reader.input.value = 'Renamed';
-    beginAttachmentLabelEdit(reader.title, editing);
-    expect(editing.value?.original).toBe('Renamed');
+    expect(editing.value?.draft).toBe('');
   });
 
   it('ignores read-only and unkeyed batches', () => {

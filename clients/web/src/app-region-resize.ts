@@ -22,10 +22,6 @@ const LEGACY_STORAGE_KEYS: Record<AppRegionId, string> = {
   'app-bottom-drawer': 'hotsheet.layout.app-terminal-drawer.size',
 };
 
-export function isAppRegionId(value: string | undefined): value is AppRegionId {
-  return value === 'app-left-rail' || value === 'app-right-rail' || value === 'app-bottom-drawer';
-}
-
 export function normalizeAppRegionSize(id: AppRegionId, size: number): number {
   const bounds = APP_REGION_BOUNDS[id];
   return clampRegionSize(size, bounds.min, bounds.max);

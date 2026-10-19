@@ -95,14 +95,6 @@ export function restoreAttachmentLabelEdit(
   editing.value = { ...current, draft: current.original };
 }
 
-/**
- * Close the editor owning `input` (blur). A scope edits one label at a time, so this also clears
- * an edit whose batch key a rename just replaced; another surface's edit is left alone.
- */
-export function endAttachmentLabelEdit(input: Element, editing: Signal<AttachmentLabelEditing | undefined>): void {
-  if (editing.value?.scope === attachmentLabelEditScope(input)) editing.value = undefined;
-}
-
 type DraftStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 export interface AttachmentLabelEditorOptions {

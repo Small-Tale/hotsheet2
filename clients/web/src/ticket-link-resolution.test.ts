@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import type { TicketRow } from './api';
 import {
-  formatTicketLinkReference,
   parseTicketLinkReference,
   resolveTicketLink,
   ticketLinkMatchKey,
@@ -37,9 +36,7 @@ describe('ticket link resolution', () => {
       projectId: 'beta-02',
       slug: 'HS2-REMOTE1',
     });
-    expect(formatTicketLinkReference('HS2-REMOTE1', 'beta-02')).toBe('@beta-02/HS2-REMOTE1');
     expect(parseTicketLinkReference('@Beta project/HS2-REMOTE1')).toBeUndefined();
-    expect(() => formatTicketLinkReference('not a slug', 'beta-02')).toThrow();
     expect('See HS2-LOCAL1 and @beta-02/HS2-REMOTE1.'.match(ticketReferencePattern())).toEqual([
       'HS2-LOCAL1',
       '@beta-02/HS2-REMOTE1',

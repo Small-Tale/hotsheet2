@@ -47,12 +47,6 @@ export function parseTicketLinkReference(value: string): TicketLinkReference | u
   return { raw, slug: match[2], ...(match[1] ? { projectId: match[1] } : {}) };
 }
 
-export function formatTicketLinkReference(slug: string, projectId?: string): string {
-  const raw = projectId ? `@${projectId}/${slug}` : slug;
-  if (!parseTicketLinkReference(raw)) throw new Error('Ticket references require a valid project ID and ticket slug.');
-  return raw;
-}
-
 function ticketLinkMatch(project: TicketLinkProject, ticket: TicketRow): TicketLinkMatch {
   return {
     projectId: project.id,

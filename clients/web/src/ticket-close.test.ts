@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  duplicateOutcomeLabel,
   duplicateReference,
   duplicateTargetKey,
   parseDuplicateReference,
@@ -105,8 +104,6 @@ describe('structured ticket close outcomes', () => {
     };
     const resolved = await resolveDuplicateReferenceTarget('@beta/git-beta:target', projects, load);
     expect(resolved).toMatchObject(target);
-    expect(duplicateOutcomeLabel(resolved!, 'alpha')).toBe('HS2-TARGET · Beta');
-    expect(duplicateOutcomeLabel(resolved!, 'beta')).toBe('HS2-TARGET');
     await expect(resolveDuplicateReferenceTarget('@missing/git:target', projects, load)).resolves.toBeUndefined();
   });
 

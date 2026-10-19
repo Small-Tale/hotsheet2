@@ -98,10 +98,6 @@ export async function resolveDuplicateReferenceTarget(
   return matches.length === 1 ? matches[0] : undefined;
 }
 
-export function duplicateOutcomeLabel(target: DuplicateTarget, sourceProjectId: string): string {
-  return `${target.slug}${target.projectId === sourceProjectId ? '' : ` · ${target.projectName}`}`;
-}
-
 export function validateTicketClose(
   reason: TicketCloseReason,
   source: DuplicateTarget,

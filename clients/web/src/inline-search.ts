@@ -35,8 +35,7 @@ export interface TokenSearchTokenLike {
 
 /**
  * Adapt an app `InlineSearchToken` to kerf's flat `SearchFieldToken`. Kerf keys chips on
- * `value`, so we key on the token's canonical `raw` — that lets `readSearchField`
- * round-trip the raw back to us, which `tokenFromRaw` reconstructs into an `InlineSearchToken`.
+ * `value`, so we key on the token's canonical `raw` for the controlled search model.
  */
 export function toTokenSearchToken(token: InlineSearchToken): TokenSearchTokenLike {
   return {
@@ -45,23 +44,6 @@ export function toTokenSearchToken(token: InlineSearchToken): TokenSearchTokenLi
     offset: token.offset,
     accessibleLabel: token.label.replace(/^tag:/, 'tag '),
   };
-}
-
-/**
- * Rebuild `InlineSearchToken`s from the `SearchFieldToken`s kerf's `readSearchField`
- * returns. Prefer the matching current token (keeps parsed values such as a date's ISO
- * timestamp stable) and fall back to `tokenFromRaw` for chips the caller has not seen yet.
- */
-export function fromTokenSearchTokens(
-  tokens: readonly TokenSearchTokenLike[],
-  current: readonly InlineSearchToken[],
-): InlineSearchToken[] {
-  const result: InlineSearchToken[] = [];
-  for (const token of tokens) {
-    const known = current.find((value) => value.raw === token.value) ?? tokenFromRaw(token.value);
-    if (known) result.push({ ...known, offset: token.offset });
-  }
-  return result;
 }
 
 /** Compare the editor-owned search state without object-identity sensitivity. */

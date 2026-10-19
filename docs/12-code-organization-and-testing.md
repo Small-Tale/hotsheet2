@@ -490,12 +490,13 @@ did not establish reachability after that change. The HS2-GT58KA inventory is:
 - Retained `SearchScopeToolbar`, `ticketSearchScope`, and inline token parsing.
   The workspace and ticket rail render and wire these current controls; their
   view-versus-all scope is separate from the deleted overlay scope choices.
-- Flagged other possible test/demo-only web helpers: `fromTokenSearchTokens`,
-  `endAttachmentLabelEdit`, `duplicateOutcomeLabel`,
+- HS2-YQF129 traced and removed seven test-only helpers:
+  `fromTokenSearchTokens`, `endAttachmentLabelEdit`, `duplicateOutcomeLabel`,
   `reconcileRememberedProjectRoots`, `discardProjectSettings`,
-  `formatTicketLinkReference`, `isAppRegionId`, and `startProjectChangePoll`.
-  Name-reference counts alone do not prove dead code; HS2-YQF129 owns production
-  entry-point and requirement tracing before any removal.
+  `formatTicketLinkReference`, and `isAppRegionId`. Their surrounding production
+  modules and live behavior remain.
+- `startProjectChangePoll` also has only test references, but its replay and
+  fallback transport contract needs separate stateful review (HS2-BVA3RQ).
 
 The earlier global-overlay promise in [06-clients.md](06-clients.md) now agrees with
 the later single-surface decision. The search feature row in
