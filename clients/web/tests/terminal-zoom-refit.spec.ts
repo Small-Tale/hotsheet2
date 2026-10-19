@@ -34,7 +34,7 @@ test('a zoomed Workspace Grid terminal refits the real PTY across zoom, unzoom, 
       cwd: server.store,
     });
     await rememberProject(page);
-    await installTerminalFixture(page, false, false, { nativeSocket: true });
+    await installTerminalFixture(page, false, false, { nativeSocket: true, warmLimit: 0 });
     await page.route('**/__hotsheet/projects/open', (route) =>
       route.fulfill({ status: 201, json: { ...project, root: server.store } }),
     );

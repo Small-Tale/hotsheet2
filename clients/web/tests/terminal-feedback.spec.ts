@@ -244,7 +244,7 @@ test('opens ticket references from interactive terminals without linking scaled 
 
 test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicated row contained', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1100 });
-  await installTerminalFixture(page);
+  await installTerminalFixture(page, false, false, { warmLimit: 0 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
@@ -452,7 +452,7 @@ test('releases magnified terminal resources and bounds duplicated scrollback', a
     if (/\/terminals\/[^/]+$/.test(new URL(request.url()).pathname)) detailRequests.push(request.url());
   });
   await page.setViewportSize({ width: 1180, height: 760 });
-  await installTerminalFixture(page);
+  await installTerminalFixture(page, false, false, { warmLimit: 0 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
@@ -517,7 +517,7 @@ test('keeps a scrolled terminal anchored while animated output and size heartbea
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await installTerminalFixture(page);
+  await installTerminalFixture(page, false, false, { warmLimit: 0 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
@@ -901,7 +901,7 @@ test('a zoomed Workspace Grid terminal takes over PTY sizing at its fitted grid 
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   // A real server round trip: the zoom focuses the terminal before its socket opens.
-  await installTerminalFixture(page, false, false, { openDelayMs: 300 });
+  await installTerminalFixture(page, false, false, { openDelayMs: 300, warmLimit: 0 });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();

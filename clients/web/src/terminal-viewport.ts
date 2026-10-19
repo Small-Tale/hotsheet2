@@ -308,6 +308,8 @@ export interface TerminalViewportOptions {
   url: string;
   viewerId?: string;
   autoFocus?: boolean;
+  /** A cold grid tile starts inert and uses the DOM renderer before its first socket claim. */
+  initialTilePresentation?: boolean;
   onTicketReference?: (reference: string) => void;
   /** Column count for a phone-width interactive terminal (80xM policy); defaults to 80. */
   mobileColumns?: () => number;
@@ -317,7 +319,15 @@ export interface TerminalViewportOptions {
 
 export function mountTerminalViewport(
   element: HTMLElement,
-  { url, viewerId, autoFocus = false, onTicketReference, mobileColumns, modifiers }: TerminalViewportOptions,
+  {
+    url,
+    viewerId,
+    autoFocus = false,
+    initialTilePresentation = false,
+    onTicketReference,
+    mobileColumns,
+    modifiers,
+  }: TerminalViewportOptions,
 ): () => void {
   return mountTerminalRuntime(element, async () => {
     const { mountTerminalViewportRuntime } = await import('./terminal-viewport-runtime');
@@ -326,6 +336,11 @@ export function mountTerminalViewport(
         url,
         viewerId: viewerId ?? browserRandomId(),
         autoFocus,
+        // The owner can move a cold tile into the drawer while this module is loading.
+        // The first runtime presentation must follow its current host, not its old mount site.
+        initialTilePresentation: element.isConnected
+          ? element.closest('[data-hosting-instance="true"]') !== null
+          : initialTilePresentation,
         onTicketReference,
         mobileColumns,
         modifiers,
@@ -335,7 +350,12 @@ export function mountTerminalViewport(
 
 function mountTerminalRuntime(element: HTMLElement, load: () => Promise<() => () => void>): () => void {
   let disposed = false,
-    disposeRuntime: (() => void) | undefined;
+    disposeRuntime: (() => void) | undefined,
+    pendingResumeFocus = false;
+  const rememberResume = (event: Event) => {
+    pendingResumeFocus ||= Boolean((event as CustomEvent<{ focus?: boolean } | null>).detail?.focus);
+  };
+  element.addEventListener(TERMINAL_VIEWPORT_RESUME_EVENT, rememberResume);
   if (element.dataset.connection === 'error') {
     element.querySelector('[data-terminal-viewport-error]')?.remove();
     if (element.dataset.displayMode === 'scaled-preview') element.setAttribute('aria-hidden', 'true');
@@ -343,12 +363,20 @@ function mountTerminalRuntime(element: HTMLElement, load: () => Promise<() => ()
   element.dataset.connection = 'loading';
   void load()
     .then((mount) => {
-      if (!disposed) disposeRuntime = mount();
+      if (disposed) return;
+      disposeRuntime = mount();
+      element.removeEventListener(TERMINAL_VIEWPORT_RESUME_EVENT, rememberResume);
+      if (element.dataset.parked === 'true') element.dispatchEvent(new CustomEvent(TERMINAL_VIEWPORT_PARK_EVENT));
+      else if (pendingResumeFocus)
+        element.dispatchEvent(new CustomEvent(TERMINAL_VIEWPORT_RESUME_EVENT, { detail: { focus: true } }));
     })
     .catch(() => {
       if (disposed) return;
+      element.removeEventListener(TERMINAL_VIEWPORT_RESUME_EVENT, rememberResume);
       element.dataset.connection = 'error';
       element.removeAttribute('aria-hidden');
+      if (element.parentElement?.dataset.hostingInstance === 'true')
+        element.parentElement.removeAttribute('aria-hidden');
       element.style.width = '';
       element.style.height = '';
       element.style.transform = '';
@@ -371,6 +399,7 @@ function mountTerminalRuntime(element: HTMLElement, load: () => Promise<() => ()
   return () => {
     if (disposed) return;
     disposed = true;
+    element.removeEventListener(TERMINAL_VIEWPORT_RESUME_EVENT, rememberResume);
     disposeRuntime?.();
   };
 }

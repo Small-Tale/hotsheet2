@@ -585,6 +585,24 @@ export function TerminalSession({
   );
 }
 
+/** The grid can cold-create a dedicated viewport before its drawer session has ever rendered. */
+export function createDedicatedTerminalTileViewport(projectId: string, terminalId: string): HTMLElement {
+  const element = document.createElement('div');
+  element.className = 'terminal-viewport terminal-viewport--dedicated';
+  element.dataset.key = `dedicated-viewport:${projectId}:${terminalId}`;
+  element.setAttribute('data-morph-skip', '');
+  element.dataset.component = 'terminal-viewport';
+  element.dataset.projectId = projectId;
+  element.dataset.terminalId = terminalId;
+  element.dataset.displayMode = 'interactive';
+  element.dataset.mountPolicy = 'keep-alive';
+  element.dataset.geometryReady = 'false';
+  element.inert = true;
+  element.setAttribute('aria-hidden', 'true');
+  element.setAttribute('aria-label', `${terminalId} interactive terminal`);
+  return element;
+}
+
 export function WorkspaceGridChatCard({ chat, previewScale = 1 }: { chat: WorkspaceGridChat; previewScale?: number }) {
   const key = chatKeyFor(chat),
     state = chat.busy ? 'Working' : 'Ready',

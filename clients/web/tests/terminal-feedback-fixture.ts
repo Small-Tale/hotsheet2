@@ -37,10 +37,13 @@ export async function installTerminalFixture(
   {
     nativeSocket = false,
     openDelayMs = 0,
+    warmLimit,
   }: {
     nativeSocket?: boolean;
     /** Delay before a fake socket opens, like a real server round trip (HS2-6179FV). */
     openDelayMs?: number;
+    /** Force the lightweight overflow preview for tests of that presentation. */
+    warmLimit?: number;
   } = {},
 ) {
   await page.addInitScript(
@@ -143,6 +146,15 @@ export async function installTerminalFixture(
       url = new URL(request.url()),
       path = url.pathname;
     if (path === '/__hotsheet/projects/open') return route.fulfill({ status: 201, json: project });
+    if (path.endsWith('/terminal-limits') && warmLimit !== undefined)
+      return route.fulfill({
+        json: {
+          defaults: { history_lines: 5000, replay_bytes: 2097152, warm_terminals: 12 },
+          configured: { history_lines: null, replay_bytes: null, warm_terminals: warmLimit },
+          effective: { history_lines: 5000, replay_bytes: 2097152, warm_terminals: warmLimit },
+          physical_memory_bytes: 17179869184,
+        },
+      });
     if (path.endsWith('/providers'))
       return route.fulfill({
         json: [

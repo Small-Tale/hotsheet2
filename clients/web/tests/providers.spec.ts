@@ -4409,10 +4409,24 @@ test('expands the workspace grid and exits full screen on project navigation (HS
   });
 });
 
+async function useLightweightTerminalPreviews(page: import('@playwright/test').Page) {
+  await page.route('**/terminal-limits', (route) =>
+    route.fulfill({
+      json: {
+        defaults: { history_lines: 5000, replay_bytes: 2097152, warm_terminals: 12 },
+        configured: { history_lines: null, replay_bytes: null, warm_terminals: 0 },
+        effective: { history_lines: 5000, replay_bytes: 2097152, warm_terminals: 0 },
+        physical_memory_bytes: 17179869184,
+      },
+    }),
+  );
+}
+
 test('uses independent width and height terminal dashboard zoom scales', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1100 });
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
+  await useLightweightTerminalPreviews(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
@@ -5242,6 +5256,7 @@ test('streams ANSI terminal output, input, viewport leases, driver state, and re
 }, testInfo) => {
   await installFakeTerminalSockets(page);
   await mockProject(page);
+  await useLightweightTerminalPreviews(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
@@ -5409,6 +5424,7 @@ test('keeps dashboard terminals inset and scaled through aggressive viewport res
   await page.setViewportSize({ width: 1440, height: 1100 });
   await installFakeTerminalSockets(page, true);
   await mockProject(page);
+  await useLightweightTerminalPreviews(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
