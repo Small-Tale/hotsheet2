@@ -28477,10 +28477,12 @@ test('remembers scroll per project, mode and view through delayed loading and sh
     return {
       contentVisibility: getComputedStyle(wrapper).contentVisibility,
       intrinsicSize: getComputedStyle(wrapper).containIntrinsicSize,
+      listComponent: wrapper.parentElement?.getAttribute('data-component'),
       listDisplay: getComputedStyle(wrapper.parentElement!).display,
     };
   });
-  expect(rowLayout.listDisplay).toBe('block');
+  expect(rowLayout.listComponent).toBe('list');
+  expect(rowLayout.listDisplay).toBe('flex');
   // WebKit restores the deep destination only after progressive contained rows settle.
   // Rows always render; WebKit painted content-visibility rows late while scrolling (HS2-S3RGM8).
   expect(rowLayout.contentVisibility).toBe('visible');
