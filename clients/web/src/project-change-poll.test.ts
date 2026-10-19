@@ -5,7 +5,6 @@ import {
   containsRepositoryChange,
   containsRepositorySizeChange,
   containsTicketChange,
-  startProjectChangePoll,
   startProjectChangeStream,
 } from './project-change-poll';
 
@@ -79,7 +78,7 @@ describe('project change long polling', () => {
       .mockResolvedValueOnce(response(520, undefined, true))
       .mockReturnValueOnce(pending.promise);
     const refresh = vi.fn().mockResolvedValue(undefined);
-    const stop = startProjectChangePoll({ client: { pollEvents }, refresh });
+    const stop = startProjectChangeStream({ client: { pollEvents }, refresh });
     await vi.waitFor(() => {
       expect(pollEvents).toHaveBeenCalledTimes(5);
     });
@@ -100,7 +99,7 @@ describe('project change long polling', () => {
     const refresh = vi.fn().mockResolvedValue(undefined);
     const wait = vi.fn().mockResolvedValue(undefined);
     const onError = vi.fn();
-    const stop = startProjectChangePoll({ client: { pollEvents }, refresh, wait, onError });
+    const stop = startProjectChangeStream({ client: { pollEvents }, refresh, wait, onError });
     await vi.waitFor(() => {
       expect(pollEvents).toHaveBeenCalledTimes(4);
     });
@@ -115,7 +114,7 @@ describe('project change long polling', () => {
   it('does not refresh from a response that arrives after stop', async () => {
     const pending = deferred<PollResponse>();
     const refresh = vi.fn().mockResolvedValue(undefined);
-    const stop = startProjectChangePoll({ client: { pollEvents: vi.fn(() => pending.promise) }, refresh });
+    const stop = startProjectChangeStream({ client: { pollEvents: vi.fn(() => pending.promise) }, refresh });
     stop();
     pending.resolve(response(1, 'changed'));
     await Promise.resolve();
@@ -132,7 +131,7 @@ describe('project change long polling', () => {
       .mockReturnValueOnce(pending.promise);
     const refresh = vi.fn().mockResolvedValue(undefined);
     const onEvents = vi.fn().mockResolvedValue(undefined);
-    const stop = startProjectChangePoll({ client: { pollEvents }, refresh, onEvents });
+    const stop = startProjectChangeStream({ client: { pollEvents }, refresh, onEvents });
     await vi.waitFor(() => {
       expect(pollEvents).toHaveBeenCalledTimes(3);
     });
@@ -152,7 +151,7 @@ describe('project change long polling', () => {
       .mockReturnValueOnce(pendingPoll.promise);
     const refresh = vi.fn().mockResolvedValue(undefined);
     const beforeRefresh = vi.fn(() => projection.promise);
-    const stop = startProjectChangePoll({ client: { pollEvents }, refresh, beforeRefresh });
+    const stop = startProjectChangeStream({ client: { pollEvents }, refresh, beforeRefresh });
     await vi.waitFor(() => {
       expect(beforeRefresh).toHaveBeenCalledTimes(1);
     });
@@ -176,7 +175,7 @@ describe('project change long polling', () => {
       .mockResolvedValueOnce(response(9, 'updated'))
       .mockReturnValueOnce(pendingPoll.promise);
     const refresh = vi.fn().mockResolvedValue(undefined);
-    const stop = startProjectChangePoll({
+    const stop = startProjectChangeStream({
       client: { pollEvents },
       refresh,
       beforeRefresh: () => projection.promise,
@@ -204,7 +203,7 @@ describe('project change long polling', () => {
       .mockReturnValueOnce(pending.promise);
     const refresh = vi.fn().mockResolvedValue(undefined);
     const wait = vi.fn().mockResolvedValue(undefined);
-    const stop = startProjectChangePoll({ client: { pollEvents }, refresh, wait });
+    const stop = startProjectChangeStream({ client: { pollEvents }, refresh, wait });
     await vi.waitFor(() => {
       expect(pollEvents).toHaveBeenCalledTimes(3);
     });
@@ -534,7 +533,7 @@ describe('project change resync (HS2-NKCXW4)', () => {
     const onResync = vi.fn().mockResolvedValue(undefined),
       onEvents = vi.fn().mockResolvedValue(undefined),
       wait = vi.fn().mockResolvedValue(undefined);
-    const stop = startProjectChangePoll({
+    const stop = startProjectChangeStream({
       client: { pollEvents },
       refresh: vi.fn().mockResolvedValue(undefined),
       onEvents,
@@ -558,7 +557,7 @@ describe('project change resync (HS2-NKCXW4)', () => {
     const pollEvents = vi.fn().mockResolvedValueOnce(response(1)).mockReturnValueOnce(pending.promise);
     const onError = vi.fn(),
       onResync = vi.fn().mockRejectedValue(new Error('permissions offline'));
-    const stop = startProjectChangePoll({
+    const stop = startProjectChangeStream({
       client: { pollEvents },
       refresh: vi.fn().mockResolvedValue(undefined),
       onResync,

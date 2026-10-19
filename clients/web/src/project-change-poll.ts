@@ -193,20 +193,6 @@ export function runProjectChangePollTransport(options: ProjectChangeTransportOpt
   })();
 }
 
-/** Start one replay-safe long-poll loop. The returned function aborts it permanently. */
-export function startProjectChangePoll(
-  options: ProjectChangePollOptions & Pick<ProjectChangeTransportOptions, 'resume'>,
-): () => void {
-  const controller = new AbortController();
-  runProjectChangePollTransport(
-    { ...options, sink: createProjectChangeConsumer(options, controller.signal) },
-    controller.signal,
-  );
-  return () => {
-    controller.abort();
-  };
-}
-
 const changeEventFromMessage = async (data: unknown): Promise<ChangeEvent> => {
   const text =
     typeof data === 'string'

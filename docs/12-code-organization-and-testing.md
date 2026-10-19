@@ -495,8 +495,10 @@ did not establish reachability after that change. The HS2-GT58KA inventory is:
   `reconcileRememberedProjectRoots`, `discardProjectSettings`,
   `formatTicketLinkReference`, and `isAppRegionId`. Their surrounding production
   modules and live behavior remain.
-- `startProjectChangePoll` also has only test references, but its replay and
-  fallback transport contract needs separate stateful review (HS2-BVA3RQ).
+- HS2-BVA3RQ removed the test-only `startProjectChangePoll` wrapper after moving
+  its long-poll transition tests to the shipped `startProjectChangeStream` fallback.
+  `runProjectChangePollTransport` remains the shared transport for the main
+  thread and worker paths.
 
 The earlier global-overlay promise in [06-clients.md](06-clients.md) now agrees with
 the later single-surface decision. The search feature row in
