@@ -2,11 +2,12 @@ import { expect, type Page, test } from '@playwright/test';
 
 import { ticketsJson } from './ticket-page-fixture';
 
-// HS2-EYD24K / HS2-QV814W: a tile can cold-mount a full instance within the warm cap. A drawer visit
-// moves that same emulator and socket between the grid and the session without replay.
+// HS2-EYD24K: a terminal opened in the drawer is one emulator and one socket. Switching the drawer to its
+// project grid, or showing the Workspace Grid, moves that instance into the terminal's tile (scaled,
+// non-interactive) instead of mounting a second emulator, and returning moves it back without a replay.
 const TERMINALS = ['one', 'two', 'three'].map((name) => `demo-${name}`);
 
-async function openProject(page: Page, width: number, terminals = TERMINALS, warmLimit?: number) {
+async function openProject(page: Page, width: number) {
   await page.setViewportSize({ width, height: 900 });
   await page.addInitScript(() => {
     localStorage.setItem('hotsheet.open-projects', JSON.stringify(['/work/demo']));
@@ -76,16 +77,7 @@ async function openProject(page: Page, width: number, terminals = TERMINALS, war
       });
     if (path.endsWith('/tickets')) return route.fulfill({ json: ticketsJson(request, []) });
     if (path.endsWith('/terminals'))
-      return route.fulfill({ json: terminals.map((id) => ({ id, alive: true, busy: false, cwd: '/work/demo' })) });
-    if (path.endsWith('/terminal-limits') && warmLimit !== undefined)
-      return route.fulfill({
-        json: {
-          defaults: { history_lines: 5000, replay_bytes: 2097152, warm_terminals: 12 },
-          configured: { history_lines: null, replay_bytes: null, warm_terminals: warmLimit },
-          effective: { history_lines: 5000, replay_bytes: 2097152, warm_terminals: warmLimit },
-          physical_memory_bytes: 17179869184,
-        },
-      });
+      return route.fulfill({ json: TERMINALS.map((id) => ({ id, alive: true, busy: false, cwd: '/work/demo' })) });
     if (
       path.endsWith('/permissions') ||
       path.endsWith('/connections') ||
@@ -239,50 +231,4 @@ for (const width of [1280, 390])
       await expect(workspaceTile.locator('[data-presentation="tile"] .xterm-rows')).toContainText('demo-one READY');
     }
     await workspaceTile.screenshot({ path: test.info().outputPath(`hs2-r1v4mj-workspace-tile-${String(width)}.png`) });
-  });
-
-for (const width of [1280, 390])
-  test(`cold grid tiles use full instances only within the warm cap at ${String(width)}px`, async ({ page }) => {
-    const terminals = ['one', 'two', 'three', 'four', 'five'].map((name) => `demo-${name}`);
-    await openProject(page, width, terminals, 2);
-    const drawer = page.locator('[data-component="terminal-drawer"]');
-    await expect(drawer).toHaveAttribute('data-mode', 'grid');
-    const tiles = drawer.locator('[data-component="terminal-tile"]');
-    await expect(tiles).toHaveCount(5);
-    for (const id of terminals) {
-      const tile = drawer.locator(`[data-component="terminal-tile"][data-terminal-key="demo-checkout:${id}"]`);
-      await tile.scrollIntoViewIfNeeded();
-      await expect(tile.locator('.xterm-rows')).toContainText(`${id} READY`);
-    }
-    const full = drawer.locator('[data-component="terminal-tile"] [data-presentation="tile"]');
-    await expect(full).toHaveCount(2);
-    expect(await socketsFor(page, 'demo-one')).toBe(1);
-    expect(await socketsFor(page, 'demo-three')).toBe(1);
-    const first = (await emulatorOf(page, 'demo-one'))[0];
-    expect(first).toMatchObject({ inTile: true, presentation: 'tile', mode: 'interactive' });
-    const overflow = drawer.locator('[data-terminal-id="demo-three"][data-display-mode="scaled-preview"]');
-    await expect(overflow).toHaveCount(1);
-    await tiles.first().scrollIntoViewIfNeeded();
-    await page.screenshot({
-      path: `target/visual-captures/hs2-qv814w-cold-grid-${String(width)}.png`,
-      animations: 'disabled',
-    });
-
-    await drawer.getByRole('tab', { name: 'Demo One', exact: true }).click();
-    const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="demo-one"]');
-    await expect(dedicated).toHaveAttribute('data-connection', 'connected');
-    await expect(dedicated).toHaveAttribute('aria-label', 'demo-one interactive terminal');
-    expect(await emulatorOf(page, 'demo-one')).toEqual([
-      { ...first, inTile: false, inSession: true, presentation: 'drawer' },
-    ]);
-    expect(await socketsFor(page, 'demo-one')).toBe(1);
-    await drawer.getByRole('tab', { name: 'Project grid' }).click();
-    await expect(drawer.locator('[data-terminal-key="demo-checkout:demo-one"] [data-presentation="tile"]')).toHaveCount(
-      1,
-    );
-    await drawer.getByRole('tab', { name: 'Demo One', exact: true }).click();
-    expect(await emulatorOf(page, 'demo-one')).toEqual([
-      { ...first, inTile: false, inSession: true, presentation: 'drawer' },
-    ]);
-    expect(await socketsFor(page, 'demo-one')).toBe(1);
   });

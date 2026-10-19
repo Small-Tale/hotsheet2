@@ -19,19 +19,6 @@ the scroll offsets; this visual review checks the rendered transition.
 2. Release the claim, run another turn, and confirm that turn stays in project metrics without increasing the ticket total. Repeat with two simultaneous claims; neither ticket should receive the ambiguous turn.
 3. Repeat with `--no-daemon` to confirm the timeline makes no unsupported usage claim. The protocol cassette covers the watcher, but CI cannot reliably exercise an installed interactive Codex TUI and its daemon together.
 
-### Full-history grid tile resource profile (HS2-QV814W)
-
-On a representative desktop and physical phone, create more running terminals than the
-configured warm-terminal limit. Fill each with several thousand history lines, then open
-the project grid and Workspace Grid. Record browser process memory and CPU at idle and
-while output is streaming, first with warm terminals set to zero and then with a small
-nonzero cap (for example four). Include the browser, device, history size, tile count,
-cap, and sampling interval. Confirm no more than the cap have full instances, the other
-tiles remain readable previews, and scrolling or opening a capped tile in the drawer is
-responsive. Repeat after lowering and raising the cap. CI asserts instance counts and
-handoffs; its synthetic socket load and browser memory APIs cannot give dependable
-cross-browser process memory or CPU measurements.
-
 ### Development latency monitor (HS2-ZGBQ5Q)
 
 Automation runs with `navigator.webdriver`, where the monitor is off unless opted in, so

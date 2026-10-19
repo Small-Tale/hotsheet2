@@ -3383,13 +3383,11 @@ the old project cannot hold the destination's first frame during PTY output
   deferred input-focus frames, so the newly selected tab keeps focus through repeated Delete
   presses (HS2-DAXSH5).
 
-**One instance in the drawer and the grid (HS2-EYD24K, HS2-QV814W).** A visible grid tile can
-mount a never-opened terminal as a full dedicated instance, with its normal scrollback, while
-there is room under the warm-terminal limit. A terminal already opened in the drawer uses that
-same instance in the drawer's project grid and in the Workspace Grid. The instance moves between
-places by reparenting; it is never re-mounted, reconnected, or replayed. It sits inside the tile's
-morph-skipped preview placeholder, so a re-render never clobbers it. Only visible and near-visible
-tiles cold-mount, at the existing progressive pace of two per turn.
+**One instance in the drawer and the grid (HS2-EYD24K).** A terminal with a warm drawer instance
+shows that same instance in its grid tile, in the drawer's project grid and in the Workspace Grid,
+instead of mounting a second emulator and socket. The instance moves between places by
+reparenting; it is never re-mounted, reconnected, or replayed. It sits inside the tile's
+morph-skipped preview placeholder, so a re-render never clobbers it.
 
 The owner tells the instance where it is with `hs-terminal-viewport-presentation`. In a tile:
 
@@ -3408,12 +3406,10 @@ ask for the instance in one pass, the drawer wins. A tile still on screen while 
 terminal falls back to its lightweight preview. A tile that leaves the page parks the instance
 again.
 
-Tile-hosted and parked instances share the warm-terminal limit. Beyond it, new tiles use the
-lightweight preview. Lowering the limit evicts the oldest warm instance and returns its tile to
-the lightweight preview. When room becomes available, a visible overflow preview can promote to
-a full instance. Tile presentation always uses the DOM renderer and has inert input; on a later
-drawer visit, Firefox may restore WebGL. A magnified card still mounts its own interactive viewer
-(HS2-SA08XA).
+Tile-hosted and parked instances share the warm-terminal limit. Beyond it, the oldest tile returns
+to its lightweight preview, so memory stays bounded. Tiles of terminals never opened in the drawer
+keep the lightweight preview (HS2-QV814W), and a magnified card still mounts its own interactive
+viewer (HS2-SA08XA).
 
 Renderer choice follows real PTY measurements and browser compatibility.
 Full-size dedicated drawer terminals use xterm's DOM renderer on Chromium

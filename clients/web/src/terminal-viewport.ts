@@ -308,8 +308,6 @@ export interface TerminalViewportOptions {
   url: string;
   viewerId?: string;
   autoFocus?: boolean;
-  /** A cold grid tile starts inert and uses the DOM renderer before its first socket claim. */
-  initialTilePresentation?: boolean;
   onTicketReference?: (reference: string) => void;
   /** Column count for a phone-width interactive terminal (80xM policy); defaults to 80. */
   mobileColumns?: () => number;
@@ -319,15 +317,7 @@ export interface TerminalViewportOptions {
 
 export function mountTerminalViewport(
   element: HTMLElement,
-  {
-    url,
-    viewerId,
-    autoFocus = false,
-    initialTilePresentation = false,
-    onTicketReference,
-    mobileColumns,
-    modifiers,
-  }: TerminalViewportOptions,
+  { url, viewerId, autoFocus = false, onTicketReference, mobileColumns, modifiers }: TerminalViewportOptions,
 ): () => void {
   return mountTerminalRuntime(element, async () => {
     const { mountTerminalViewportRuntime } = await import('./terminal-viewport-runtime');
@@ -336,7 +326,6 @@ export function mountTerminalViewport(
         url,
         viewerId: viewerId ?? browserRandomId(),
         autoFocus,
-        initialTilePresentation,
         onTicketReference,
         mobileColumns,
         modifiers,
