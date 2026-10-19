@@ -1,5 +1,11 @@
 # Feature Coverage Matrix
 
+HS2-DX3EWW covers project statistics scrolling. The app-owned stats workspace
+bounds the Kerf Pane so its content slot is the sole vertical scroll owner;
+`clients/web/tests/mobile-layout.spec.ts` exercises wheel scrolling and reaches the
+lower repository-size entry at phone, wide, and capture-matching wide viewports,
+with rendered screenshots of the top and bottom states.
+
 HS2-QCBEQF covers the read-only CI batch-gate helper: `scripts/ci-gate.test.mjs`
 checks recorded GitHub runs, branch/workflow filtering, ancestry, unknown local
 commits, and explicit `final_testing` markers. A live `status --covers` call verifies

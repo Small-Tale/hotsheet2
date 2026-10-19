@@ -1555,6 +1555,52 @@ test('opening project statistics on a phone leaves the UI interactive, with no s
           { slug: 'HS2-YMG48C', completed_at: '2026-10-11T06:00:00Z', confidence: 78, outcome: 'pending' },
           { slug: 'HS2-79TVFH', completed_at: '2026-10-11T05:00:00Z', confidence: 78, outcome: 'pending' },
           { slug: 'HS2-Q1WCCY', completed_at: '2026-10-10T05:00:00Z', confidence: 92, outcome: 'verified' },
+          ...Array.from({ length: 5 }, (_, index) => ({
+            slug: `HS2-STAT${index}`,
+            completed_at: `2026-10-0${index + 1}T05:00:00Z`,
+            confidence: 88,
+            outcome: 'verified',
+          })),
+        ],
+      },
+    }),
+  );
+  const git = (totalBytes: number) => ({
+    loose_objects: 0,
+    loose_bytes: 0,
+    packed_objects: 9,
+    packs: 1,
+    packed_bytes: totalBytes,
+    total_bytes: totalBytes,
+  });
+  await page.route('**/checkouts/demo-checkout/repository/size', (route) =>
+    route.fulfill({
+      json: {
+        checkout_id: 'demo-checkout',
+        thresholds: { warning_bytes: 5_000_000_000, critical_bytes: 10_000_000_000 },
+        level: 'ok',
+        entries: [
+          {
+            kind: 'code',
+            label: 'demo',
+            locator: '/work/demo',
+            status: 'measured',
+            git: git(94_000_000),
+            shared_with_code: false,
+            level: 'ok',
+          },
+          {
+            kind: 'ticket_store',
+            connection_id: 'local',
+            provider: 'git',
+            label: 'demo.hs2',
+            locator: '/work/demo.hs2',
+            status: 'measured',
+            git: git(794_000_000),
+            attachments: { bytes: 80_000_000, files: 112, truncated: false },
+            shared_with_code: false,
+            level: 'ok',
+          },
         ],
       },
     }),
@@ -1581,9 +1627,19 @@ test('opening project statistics on a phone leaves the UI interactive, with no s
   expect(hit).toBe(true);
   await expect(calibration).toHaveAttribute('data-state', 'ready');
   await expect(calibration).toContainText('1880 completions, 559 scored');
-  await page.screenshot({ path: test.info().outputPath('hs2-s2xqp8-phone-stats.png') });
-  // The scrolled stats page stays interactive: its table can be scrolled and reached by touch.
+  const statsContent = page.getByRole('region', { name: 'demo Project Statistics' }).locator('> .kui-pane__content');
+  await expect.poll(() => statsContent.evaluate((node) => node.scrollHeight - node.clientHeight)).toBeGreaterThan(0);
+  await statsContent.hover();
   await page.mouse.wheel(0, 400);
+  await expect.poll(() => statsContent.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+  await statsContent.evaluate((node) => {
+    node.scrollTo({ top: node.scrollHeight });
+  });
+  await expect(page.getByRole('heading', { name: 'Ticket store: demo.hs2' })).toBeInViewport();
+  await page.screenshot({ path: test.info().outputPath('hs2-s2xqp8-phone-stats.png') });
+  await page.screenshot({ path: 'target/visual-captures/hs2-dx3eww-project-stats-phone.png' });
+  // The Pane remains the sole scroll owner while the phone stats page stays interactive.
+  await expect(page.locator('.app-shell__workspace')).toHaveJSProperty('scrollTop', 0);
   await expect(scrim).toHaveCount(0);
   // The project Select returns to the project, where the scrim follows the remembered rail again.
   const strip = page.locator('.project-tab-bar');
@@ -1607,5 +1663,19 @@ test('opening project statistics on a phone leaves the UI interactive, with no s
   await strip.getByRole('tab', { name: 'demo' }).click();
   await page.locator('[data-component="project-summary"]').click();
   await expect(calibration).toHaveAttribute('data-state', 'ready');
+  await expect.poll(() => statsContent.evaluate((node) => node.scrollHeight - node.clientHeight)).toBeGreaterThan(0);
+  await statsContent.hover();
+  await page.mouse.wheel(0, 400);
+  await expect.poll(() => statsContent.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
   await page.screenshot({ path: test.info().outputPath('hs2-s2xqp8-wide-stats.png') });
+  await page.setViewportSize({ width: 2048, height: 1128 });
+  await statsContent.evaluate((node) => {
+    node.scrollTo({ top: 0 });
+  });
+  await page.screenshot({ path: 'target/visual-captures/hs2-dx3eww-project-stats-wide-top.png' });
+  await statsContent.hover();
+  await page.mouse.wheel(0, 2000);
+  await expect.poll(() => statsContent.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+  await expect(page.getByRole('heading', { name: 'Ticket store: demo.hs2' })).toBeInViewport();
+  await page.screenshot({ path: 'target/visual-captures/hs2-dx3eww-project-stats-wide-bottom.png' });
 });

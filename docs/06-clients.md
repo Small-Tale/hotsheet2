@@ -3990,6 +3990,9 @@ backlog`, `Re-enqueued`) while retaining the full durable note text and using th
 **Project statistics (HS2-Q1WCCY).** Opening a project's statistics (the sidebar
 completion summary) shows its completion-confidence calibration:
 
+- **Scrolling:** the center statistics Pane owns vertical scrolling within the work area,
+  so long reports remain reachable while the project strip and side rails stay in place.
+  The outer ticket workspace does not scroll this Pane (HS2-DX3EWW).
 - **Per-band table:** completions, verified, reopened, pending, a reopen-rate bar (shown once
   a band has a resolved completion), and the mean score.
 - **Recent completions:** up to eight, each with its score pill and outcome.

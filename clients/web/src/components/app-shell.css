@@ -134,6 +134,13 @@
   overflow-anchor: none;
   flex: 1;
 }
+/* Project statistics uses its Kerf Pane as the sole scroll owner. Bound that Pane to the
+   work-area height so its content slot scrolls instead of an outer workspace scroller. */
+.app-shell[data-mode='stats'] .app-shell__workspace {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
 /* Edge-to-edge presentations (the column board) own their own inline insets and scrolling. */
 .app-shell__workspace[data-presentation='edge-to-edge'] {
   padding: remify(16px) 0 0;
