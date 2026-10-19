@@ -1547,7 +1547,7 @@
       "kind": "component",
       "purpose": "One category-selected project or app settings surface.",
       "useWhen": [
-        "Hot Sheet needs one category-selected project or app settings surface."
+        "Hot Sheet needs one category-selected project or app settings surface with a centered Kerf List page column."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific SettingsWorkspace behavior."

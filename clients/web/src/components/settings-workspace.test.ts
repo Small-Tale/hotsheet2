@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-
 import { describe, expect, it } from 'vitest';
 
 import type { SettingsWorkspaceProps } from './settings-workspace';
@@ -82,13 +80,11 @@ describe('SettingsWorkspace', () => {
     expect(sources).toContain('/work/demo.hs2');
   });
 
-  it('composes Web Awesome checkboxes and Kerf layout, owning only the page column (HS2-3TVKXG)', () => {
-    const global = readFileSync(new URL('../style.css', import.meta.url), 'utf8'),
-      owned = readFileSync(new URL('./settings-workspace.css', import.meta.url), 'utf8');
-    expect(global).not.toContain('.settings-workspace');
-    expect(owned).toContain('.settings-workspace {');
-    expect(owned).not.toContain('.project-settings');
+  it('composes Web Awesome checkboxes and a Kerf page column (HS2-0ZF0KS)', () => {
     const general = String(SettingsWorkspace(props));
+    expect(general).toContain('data-content-width="wide"');
+    expect(general).toContain('data-content-align="center"');
+    expect(general).toContain('data-inset="document"');
     expect(general).toMatch(/<wa-checkbox data-action="toggle-loading-activity" checked hint="Shows a small label/);
     expect(general).not.toContain('type="checkbox"');
     const permissions = String(SettingsWorkspace({ ...props, category: 'permissions' }));

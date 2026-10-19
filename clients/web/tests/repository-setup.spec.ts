@@ -193,6 +193,9 @@ test('recovers a project folder without Git and optionally connects origin', asy
 
   await dialog.getByRole('button', { name: 'Initialize Git repository' }).click();
   await expect(dialog.getByText('Git is ready', { exact: true })).toBeVisible();
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-0zf0ks-remote-narrow.png' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-0zf0ks-remote-wide.png' });
   expect(initBody).toBeNull();
   await dialog.getByRole('textbox', { name: 'Remote URL' }).fill('git@example.com:team/project.git');
   await dialog.getByRole('button', { name: 'Add origin' }).click();

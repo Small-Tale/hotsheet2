@@ -854,9 +854,12 @@ preview/download, server directory browser) are separate design work.
 
   The settings workspace and ticket-source setup flow are component-owned surfaces:
   `components/settings-workspace.tsx`, `ticket-sources-settings.tsx`,
-  `ticket-source-setup-dialog.tsx`, and `provider-setup-form.tsx` own their markup and
-  colocated styles. The application root retains reactive signals, API mutations, and
-  delegated event wiring and passes typed render data into those surfaces (HS2-HTB5RR).
+  `ticket-source-setup-dialog.tsx`, and `provider-setup-form.tsx` own their markup.
+  `SettingsWorkspace` uses Kerf `List` for its centered, inset page column; it needs no
+  application stylesheet. `RepositorySetup` uses the compact Kerf page column, with
+  app CSS only for its branded icon disc (HS2-0ZF0KS). The application root retains
+  reactive signals, API mutations, and delegated event wiring and passes typed render
+  data into those surfaces (HS2-HTB5RR).
   The workspace toolbar (or the mobile page header) titles the selected settings category, so
   settings pages never repeat that title as an in-page heading (HS2-FV538C, HS2-QEQ1YB,
   HS2-MF9D1K). The mobile page header belongs to the header area and sits on its default

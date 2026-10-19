@@ -16,10 +16,10 @@ describe('global stylesheet ownership', () => {
       ],
       ['provider setup', 'provider-setup-form.css', ['.provider-setup-form']],
       ['ticket-source Settings', 'ticket-sources-settings.css', ['.ticket-provider-settings']],
-      ['settings workspace', 'settings-workspace.css', ['.settings-workspace']],
     ] as const;
     // TicketPageMore composes a pill `wa-button` with no stylesheet at all (HS2-TCM7WC).
     expect(global).not.toContain('.ticket-page-more');
+    expect(global).not.toContain('.settings-workspace');
     for (const [name, file, selectors] of ownership) {
       const owned = read(`./components/${file}`);
       for (const selector of selectors) {

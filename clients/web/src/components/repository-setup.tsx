@@ -30,52 +30,66 @@ export function RepositorySetup({
         data-step="remote"
         {...REPOSITORY_ACTIONS.connectRepositoryRemote.attrs}
       >
-        <Row gap="m" vAlign="top">
-          <span class="repository-setup__icon">
-            <LucideIcon size="m" icon={CircleCheck} name="circle-check" color={uiColor('brand-on-quiet')} />
-          </span>
-          <List gap="xs" flex>
-            <Text variant="h2" size="large" flush lineHeight="tight">
-              Git is ready
-            </Text>
-            <Text tone="quiet" flush>
-              Add an <code>origin</code> remote now, or skip this step and configure one later. Hot Sheet will not
-              stage, commit, or push project files.
-            </Text>
-          </List>
-        </Row>
-        <wa-input
-          name="repository-remote"
-          type="text"
-          label="Remote URL"
-          placeholder="git@github.com:you/project.git"
-          required
-          autofocus
-        />
-        {error && <StateBanner tone="danger" urgency="alert" title={error} />}
-        <Row hAlign="right" gap="xs" wrap>
-          <Button emphasis="plain" type="button" action={REPOSITORY_ACTIONS.skipRepositoryRemote.value} disabled={busy}>
-            Skip for Now
-          </Button>
-          <Button emphasis="primary" type="submit" disabled={busy}>
-            {busy ? 'Adding origin…' : 'Add origin'}
-          </Button>
-        </Row>
+        <List contentWidth="compact" inset="document" gap="l">
+          <Row gap="m" vAlign="top">
+            <span class="repository-setup__icon">
+              <LucideIcon size="m" icon={CircleCheck} name="circle-check" color={uiColor('brand-on-quiet')} />
+            </span>
+            <List gap="xs" flex>
+              <Text variant="h2" size="large" flush lineHeight="tight">
+                Git is ready
+              </Text>
+              <Text tone="quiet" flush>
+                Add an <code>origin</code> remote now, or skip this step and configure one later. Hot Sheet will not
+                stage, commit, or push project files.
+              </Text>
+            </List>
+          </Row>
+          <wa-input
+            name="repository-remote"
+            type="text"
+            label="Remote URL"
+            placeholder="git@github.com:you/project.git"
+            required
+            autofocus
+          />
+          {error ? <StateBanner tone="danger" urgency="alert" title={error} /> : undefined}
+          <Row hAlign="right" gap="xs" wrap>
+            <Button
+              emphasis="plain"
+              type="button"
+              action={REPOSITORY_ACTIONS.skipRepositoryRemote.value}
+              disabled={busy}
+            >
+              Skip for Now
+            </Button>
+            <Button emphasis="primary" type="submit" disabled={busy}>
+              {busy ? 'Adding origin…' : 'Add origin'}
+            </Button>
+          </Row>
+        </List>
       </form>
     );
 
   return (
     <div class="repository-setup" data-component="repository-setup" data-step="initialize">
-      <Text tone="quiet" align="center" flush>
-        Initialize Git here to enable branch, change, and commit status. Existing project files will remain untracked;
-        Hot Sheet will not stage or commit them.
-      </Text>
-      {error && <StateBanner tone="danger" urgency="alert" title={error} />}
-      <Row hAlign="center">
-        <Button emphasis="primary" type="button" action={REPOSITORY_ACTIONS.initializeRepository.value} disabled={busy}>
-          {busy ? 'Initializing…' : 'Initialize Git repository'}
-        </Button>
-      </Row>
+      <List contentWidth="compact" inset="document" gap="l">
+        <Text tone="quiet" align="center" flush>
+          Initialize Git here to enable branch, change, and commit status. Existing project files will remain untracked;
+          Hot Sheet will not stage or commit them.
+        </Text>
+        {error ? <StateBanner tone="danger" urgency="alert" title={error} /> : undefined}
+        <Row hAlign="center">
+          <Button
+            emphasis="primary"
+            type="button"
+            action={REPOSITORY_ACTIONS.initializeRepository.value}
+            disabled={busy}
+          >
+            {busy ? 'Initializing…' : 'Initialize Git repository'}
+          </Button>
+        </Row>
+      </List>
     </div>
   );
 }

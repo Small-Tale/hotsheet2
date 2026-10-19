@@ -1,15 +1,5 @@
-/* The bounded setup panel centered in the repository popover's empty state (no Kerf page-column
-   width yet: KF-P3069N, HS2-0ZF0KS). */
-.repository-setup {
-  display: grid;
-  width: min(remify(480px), 100%);
-  margin: auto;
-  padding: var(--kui-space-l);
-  box-sizing: border-box;
-  gap: var(--kui-space-l);
-}
 /* The brand-tinted circle behind the ready icon; no Kerf icon presentation draws a filled disc. */
-.repository-setup__icon {
+.repository-setup .repository-setup__icon {
   display: grid;
   flex: none;
   width: remify(40px);

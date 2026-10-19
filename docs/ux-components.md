@@ -346,8 +346,9 @@ covers anything past the button's end. The demo's Unread chat messages setting s
     and the A/B comparison prompt and Open action remain visible at 390px (HS2-B2MD8Z).
 - `RepositorySetup` — **production built**: initialize a project folder's Git repository and
   optionally connect its origin without staging, committing, or pushing project files. Its major
-  surface and section rhythm use the canonical 24 px step, with 16 px between the icon/message
-  columns and 8 px inside error and action groups (HS2-4Y6SM9).
+  surface uses Kerf `List`'s compact centered page column and document inset. Its section
+  rhythm uses the canonical 24 px step, with 16 px between the icon/message columns and
+  8 px inside error and action groups (HS2-4Y6SM9).
 - `ChangeEvidenceDialog` — **production built**: the actionable Code Review evidence
   summary opens a repository-style master/detail dialog: a Kerf `SplitView` whose Docs, Tests,
   Source, and Other views reuse `ListItem`, with the same `ListActionRow` file rows,
@@ -2240,6 +2241,7 @@ so every setup dialog has one back affordance (HS2-WJ4JDW).
 - `SettingsWindow`
 - `SettingsNavigation`
 - `SettingsWorkspace` — **demo built**: one category-selected settings surface. The
+  centered page column and reading inset come from Kerf `List` (HS2-0ZF0KS). The
   `settings-workspace` UX demo's Category setting covers all ten categories, including the
   permission grid and its note, terminals, column view, and general. Its Permission automation
   setting (Off, Auto-allow, Auto-deny) shows the delay select disabled and enabled, and Reset
