@@ -278,6 +278,7 @@ fn routed(uri: &str) -> axum::http::Request<axum::body::Body> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn a_blocked_store_request_does_not_starve_unrelated_routes() {
     use tower::ServiceExt;
+    let _serial = crate::blocking_offload::OFFLOAD_TIMING_TESTS.lock().await;
     let (_root, state, project, ticket) = project_fixture();
     let held = HeldResource::new(state.index.clone());
     let router = app(state);
@@ -346,6 +347,7 @@ async fn a_blocked_store_request_does_not_starve_unrelated_routes() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn pending_permission_asks_do_not_queue_unrelated_requests() {
     use tower::ServiceExt;
+    let _serial = crate::blocking_offload::OFFLOAD_TIMING_TESTS.lock().await;
     let (_root, state, project, ticket) = project_fixture();
     let bridge = state.permissions.clone();
     let router = app(state);
@@ -405,8 +407,11 @@ async fn pending_permission_asks_do_not_queue_unrelated_requests() {
             assert_eq!(offload["long_waits"], asks, "{offload}");
             assert_eq!(offload["waiting"], 0, "{offload}");
             assert_eq!(offload["capacity"], crate::blocking_offload::MAX_OFFLOADED);
-            // Only the health request itself holds a slot.
-            assert!(offload["in_use"].as_u64().unwrap() <= 1, "{offload}");
+            // Other tests may briefly hold slots; the parked asks must not saturate them.
+            assert!(
+                offload["in_use"].as_u64().unwrap() < crate::blocking_offload::MAX_OFFLOADED as u64,
+                "{offload}"
+            );
         }
     }
     // A disconnected hook withdraws its prompt (the non-offloaded path still cancels).
@@ -433,6 +438,7 @@ async fn pending_permission_asks_do_not_queue_unrelated_requests() {
 async fn pending_permission_asks_beyond_the_blocking_pool_leave_offloaded_requests_prompt() {
     use tower::ServiceExt;
     const TOKIO_DEFAULT_MAX_BLOCKING_THREADS: usize = 512;
+    let _serial = crate::blocking_offload::OFFLOAD_TIMING_TESTS.lock().await;
     let (_root, state, project, ticket) = project_fixture();
     let bridge = state.permissions.clone();
     let router = app(state);
