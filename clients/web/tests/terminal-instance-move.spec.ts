@@ -330,7 +330,7 @@ for (const width of [1280, 390])
     await drawer.getByRole('tab', { name: 'Demo One', exact: true }).click();
     const dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="demo-one"]');
     await expect(dedicated).toHaveAttribute('data-connection', 'connected');
-    await expect(dedicated).toHaveAttribute('aria-label', 'demo-one interactive terminal');
+    await expect(dedicated).toHaveAttribute('aria-label', 'Demo One interactive terminal');
     expect(await emulatorOf(page, 'demo-one')).toEqual([
       { ...first, inTile: false, inSession: true, presentation: 'drawer' },
     ]);
