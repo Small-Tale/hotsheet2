@@ -245,6 +245,20 @@ for (const width of [1280, 390])
       { tag: opened.tag, inTile: true, inSession: false, presentation: 'tile', mode: 'interactive' },
     ]);
     expect(await socketsFor(page, 'demo-one')).toBe(sockets);
+    await workspaceTile.click();
+    const magnified = page.getByRole('dialog', { name: /Magnified Demo One/i }),
+      magnifiedViewport = magnified.locator('[data-terminal-id="demo-one"][data-display-mode="interactive"]');
+    await expect(magnifiedViewport).toHaveAttribute('data-connection', 'connected');
+    await expect(magnifiedViewport).toHaveAttribute('data-geometry-ready', 'true');
+    expect(await magnifiedViewport.locator('.xterm').getAttribute('data-move-tag')).toBe(opened.tag);
+    expect(await socketsFor(page, 'demo-one')).toBe(sockets);
+    await magnified.screenshot({ path: `target/visual-captures/hs2-sa08xa-workspace-magnified-${String(width)}.png` });
+    if (width === 390) await magnified.getByRole('button', { name: 'Close Demo One' }).click();
+    else await magnified.click({ position: { x: 2, y: 2 } });
+    await expect(magnified).toBeHidden();
+    await expect(workspaceTile.locator('[data-presentation="tile"]')).toHaveCount(1);
+    expect((await emulatorOf(page, 'demo-one'))[0].tag).toBe(opened.tag);
+    expect(await socketsFor(page, 'demo-one')).toBe(sockets);
     await page.screenshot({
       path: `target/visual-captures/hs2-eyd24k-workspace-grid-tile-${String(width)}.png`,
       animations: 'disabled',
@@ -277,6 +291,34 @@ for (const width of [1280, 390])
     expect(await socketsFor(page, 'demo-three')).toBe(1);
     const first = (await emulatorOf(page, 'demo-one'))[0];
     expect(first).toMatchObject({ inTile: true, presentation: 'tile', mode: 'interactive' });
+    const firstSockets = await socketsFor(page, 'demo-one');
+    const firstTile = drawer.locator('[data-terminal-key="demo-checkout:demo-one"]');
+    await firstTile.click();
+    const magnified = page.getByRole('dialog', { name: /Magnified Demo One/i }),
+      magnifiedViewport = magnified.locator('[data-terminal-id="demo-one"][data-display-mode="interactive"]');
+    await expect(magnifiedViewport).toHaveAttribute('data-connection', 'connected');
+    await expect(magnifiedViewport).toHaveAttribute('data-geometry-ready', 'true');
+    expect(await magnifiedViewport.locator('.xterm').getAttribute('data-move-tag')).toBe(first.tag);
+    expect(await socketsFor(page, 'demo-one')).toBe(firstSockets);
+    await magnified.screenshot({ path: `target/visual-captures/hs2-sa08xa-drawer-magnified-${String(width)}.png` });
+    if (width === 390) await magnified.getByRole('button', { name: 'Close Demo One' }).click();
+    else await magnified.click({ position: { x: 2, y: 2 } });
+    await expect(magnified).toBeHidden();
+    await expect(firstTile.locator('[data-presentation="tile"]')).toHaveCount(1);
+    expect((await emulatorOf(page, 'demo-one'))[0].tag).toBe(first.tag);
+    expect(await socketsFor(page, 'demo-one')).toBe(firstSockets);
+    await firstTile.click();
+    const reopened = page.getByRole('dialog', { name: /Magnified Demo One/i });
+    if (width === 390) {
+      await reopened.getByRole('button', { name: 'More Actions for Demo One' }).click();
+      await page.locator('[data-context-menu="terminal"]').getByText('Open', { exact: true }).click();
+    } else await reopened.getByRole('button', { name: 'Open Demo One in Project Terminal Drawer' }).click();
+    const fromMagnified = drawer.locator('[data-component="terminal-session"] [data-terminal-id="demo-one"]');
+    await expect(fromMagnified).toHaveAttribute('data-connection', 'connected');
+    expect((await emulatorOf(page, 'demo-one'))[0].tag).toBe(first.tag);
+    expect(await socketsFor(page, 'demo-one')).toBe(firstSockets);
+    await drawer.getByRole('tab', { name: 'Project grid' }).click();
+    await expect(firstTile.locator('[data-presentation="tile"]')).toHaveCount(1);
     const overflow = drawer.locator('[data-terminal-id="demo-three"][data-display-mode="scaled-preview"]');
     await expect(overflow).toHaveCount(1);
     await tiles.first().scrollIntoViewIfNeeded();

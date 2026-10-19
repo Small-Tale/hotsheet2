@@ -358,7 +358,7 @@ function initializeTerminalViewport(
   const autoFocus = requestedAutoFocus && !initialTilePresentation && automaticInputFocusAllowed(window.innerWidth);
   const scaledPreview = element.dataset.displayMode === 'scaled-preview',
     fixedDashboardGrid = element.dataset.gridPolicy === 'dashboard-80x24',
-    magnified = Boolean(element.closest('[data-fixed-aspect-terminal-card="magnified"]')),
+    insideMagnified = () => Boolean(element.closest('[data-fixed-aspect-terminal-card="magnified"]')),
     settledResize = element.classList.contains('terminal-viewport--dedicated'),
     // Live, because a reparented viewport can leave or enter the drawer (HS2-AMNNBR).
     insideDrawer = () => Boolean(element.closest('[data-region-id="app-bottom-drawer"]')),
@@ -372,12 +372,12 @@ function initializeTerminalViewport(
     element.style.height = `${TERMINAL_PREVIEW_NATURAL_HEIGHT}px`;
     element.dataset.naturalSize = `${TERMINAL_PREVIEW_NATURAL_WIDTH}x${TERMINAL_PREVIEW_NATURAL_HEIGHT}`;
   }
-  const scrollback = terminalScrollbackLimit(element.dataset.displayMode, fixedDashboardGrid || magnified);
+  const scrollback = terminalScrollbackLimit(element.dataset.displayMode, fixedDashboardGrid || insideMagnified());
   element.dataset.scrollbackLimit = String(scrollback);
   // A magnified terminal stays unpainted until its first geometry pass: under a busy main thread its
   // first frames could otherwise show the emulator at its constructor size (HS2-MHPHZB). Dedicated
   // drawer terminals stay paintable (and focusable) from mount.
-  if (magnified && element.dataset.geometryReady !== 'true') element.dataset.geometryReady = 'false';
+  if (insideMagnified() && element.dataset.geometryReady !== 'true') element.dataset.geometryReady = 'false';
   if (fixedGrid) {
     element.dataset.geometryReady = 'false';
     element.dataset.fontSize = String(TERMINAL_DASHBOARD_FONT_SIZE);
@@ -401,7 +401,12 @@ function initializeTerminalViewport(
     terminal.dispose();
   });
   own(followTerminalTheme(element, terminal));
-  own(followTerminalScrollback(element, terminal, fixedDashboardGrid || magnified));
+  const refreshScrollback = () => {
+    const limit = terminalScrollbackLimit(element.dataset.displayMode, fixedDashboardGrid || insideMagnified());
+    if (terminal.options.scrollback !== limit) terminal.options.scrollback = limit;
+    element.dataset.scrollbackLimit = String(limit);
+  };
+  own(onTerminalLimitsChange(refreshScrollback));
   terminal.loadAddon(fit);
   terminal.open(element);
   const ticketLinks =
@@ -414,7 +419,7 @@ function initializeTerminalViewport(
   const mobile80xM = () =>
     terminalUsesMobile80xM(
       isMobileViewport(window.innerWidth),
-      fixedDashboardGrid || element.dataset.mobileGridPolicy === '80xm',
+      fixedDashboardGrid || element.dataset.mobileGridPolicy === '80xm' || insideMagnified(),
       scaledPreview,
       settledResize && insideDrawer(),
     );
@@ -755,7 +760,7 @@ function initializeTerminalViewport(
         }
         element.dataset.geometryReady = 'true';
         // A focus requested while the unfitted terminal was still hidden could not land; retry it now.
-        if (autoFocus && focusRequested && magnified) terminal.focus();
+        if (focusRequested && insideMagnified()) terminal.focus();
       }
     } catch {
       /* layout can be transiently zero-sized */
@@ -908,7 +913,7 @@ function initializeTerminalViewport(
         let bytes = new Uint8Array(value);
         if (initialReplay) {
           initialReplay = false;
-          if (fixedGrid || magnified || tiled) bytes = stripLeadingZshPromptEolMark(bytes);
+          if (fixedGrid || insideMagnified() || tiled) bytes = stripLeadingZshPromptEolMark(bytes);
         }
         if (replacementReplayPending) {
           replacementReplayPending = false;
@@ -1039,8 +1044,9 @@ function initializeTerminalViewport(
   const tileStyles = ['inset', 'width', 'height', 'overflow', 'transform', 'transformOrigin'] as const;
   const present = (event: Event) => {
     const tile = Boolean((event as CustomEvent<TerminalViewportPresentationDetail | null>).detail?.tile);
+    const changed = tile !== tiled;
     parked = false;
-    if (tile !== tiled) {
+    if (changed) {
       tiled = tile;
       if (tile) {
         tileGridSize = undefined;
@@ -1076,16 +1082,18 @@ function initializeTerminalViewport(
         delete element.dataset.tileScale;
         terminal.options.disableStdin = false;
         terminal.options.cursorBlink = true;
-        if (tileWebglReleased || initialTilePresentation) {
-          tileWebglReleased = false;
-          resumeFrame = window.requestAnimationFrame(() => {
-            resumeFrame = undefined;
-            if (!disposed && !parked && !tiled && !webgl) loadWebgl();
-          });
-        }
       }
     }
+    if (!tile && insideMagnified()) tileWebglReleased = releaseWebgl() || tileWebglReleased;
+    if (!tile && !insideMagnified() && (tileWebglReleased || initialTilePresentation)) {
+      tileWebglReleased = false;
+      resumeFrame = window.requestAnimationFrame(() => {
+        resumeFrame = undefined;
+        if (!disposed && !parked && !tiled && !webgl) loadWebgl();
+      });
+    }
     reparent();
+    refreshScrollback();
     claim();
   };
   element.addEventListener(TERMINAL_VIEWPORT_PRESENTATION_EVENT, present);

@@ -2935,10 +2935,11 @@ changing rows, columns, or glyph proportions. Magnified interactive terminals fi
 metrics and row/column count to the available modal frame. Magnifying a grid tile therefore
 leaves the grid-only 80×24 contract and becomes an available-space interactive terminal. While
 that terminal is magnified, its matching grid card replaces the live preview with a solid
-terminal-background placeholder and disposes the preview viewer. Dismissing the magnified view
-remounts the grid preview at 80×24. This keeps exactly one local sizing claimant for that terminal
-through the transition instead of letting the preview and magnified viewport resize the PTY back
-and forth. Fixed grid previews and the magnified terminal never paint their emulator before the
+terminal-background placeholder. A live tile instance moves into the magnified card, refits there,
+then returns to the grid on dismissal without reconnecting. When no live instance exists, the card
+mounts its own viewer and the grid preview remounts on dismissal. This keeps exactly one local sizing
+claimant for that terminal through the transition. Fixed grid previews and the magnified terminal
+never paint their emulator before the
 first geometry pass. Each starts with `data-geometry-ready="false"` (hidden), so a busy main thread
 cannot expose an unfitted constructor-size frame. Once fitted, the magnified terminal re-applies any
 focus that was requested while it was hidden. Dedicated drawer terminals stay paintable and
@@ -3420,8 +3421,11 @@ Tile-hosted and parked instances share the warm-terminal limit. Beyond it, new t
 lightweight preview. Lowering the limit evicts the oldest warm instance and returns its tile to
 the lightweight preview. When room becomes available, a visible overflow preview can promote to
 a full instance. Tile presentation always uses the DOM renderer and has inert input; on a later
-drawer visit, Firefox may restore WebGL. A magnified card still mounts its own interactive viewer
-(HS2-SA08XA).
+drawer visit, Firefox may restore WebGL. A magnified card adopts a tile-hosted or parked live
+instance, refits it to the card, and returns it to the tile or parking on dismissal. It mounts a
+separate interactive viewer only when no live instance is available. A just-active instance parked
+during an intermediate render keeps its warm slot ahead of older tiles, so a phone drawer/grid
+transition does not discard it before its destination appears (HS2-SA08XA).
 
 Renderer choice follows real PTY measurements and browser compatibility.
 Full-size dedicated drawer terminals use xterm's DOM renderer on Chromium

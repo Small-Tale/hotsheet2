@@ -660,7 +660,7 @@ describe('one live instance moves between the drawer and grid tiles (HS2-EYD24K)
       root.append(session);
       return { session, dedicated };
     };
-    /** A grid tile's progressive preview placeholder for `id`, optionally in a magnified card. */
+    /** A grid preview or its interactive magnified-card placeholder for `id`. */
     const tile = (id: string, magnified = false) => {
       const card = new FakeNode({
           component: 'terminal-tile',
@@ -671,13 +671,13 @@ describe('one live instance moves between the drawer and grid tiles (HS2-EYD24K)
           component: 'terminal-viewport',
           projectId: 'a',
           terminalId: id,
-          displayMode: 'scaled-preview',
-          mountPolicy: 'visible-progressive',
+          displayMode: magnified ? 'interactive' : 'scaled-preview',
+          mountPolicy: magnified ? 'immediate' : 'visible-progressive',
         });
       frame.append(preview);
       card.append(frame);
       root.append(card);
-      return { card, preview };
+      return { card, frame, preview };
     };
     const sync = () => {
       owner.syncTerminalViewportMounts();
@@ -829,7 +829,7 @@ describe('one live instance moves between the drawer and grid tiles (HS2-EYD24K)
     expect(grid.preview.dataset.hostingInstance).toBeUndefined();
   });
 
-  it('parks a hosted instance when its tile leaves, and never hosts in a magnified card', async () => {
+  it('moves a hosted instance through parking into a magnified card and back to the tile', async () => {
     const view = setup(),
       first = view.drawer('x');
     view.sync();
@@ -843,9 +843,135 @@ describe('one live instance moves between the drawer and grid tiles (HS2-EYD24K)
     expect(instance.dataset.parked).toBe('true');
     const magnified = view.tile('x', true);
     view.sync();
-    expect(instance.parentElement).toBe(view.holder);
+    expect(instance.parentElement).toBe(magnified.frame);
+    expect(instance.dataset.parked).toBeUndefined();
+    expect(instance.events.slice(-2)).toEqual([
+      'hs-terminal-viewport-presentation:false',
+      'hs-terminal-viewport-resume',
+    ]);
+    magnified.card.remove();
+    const back = view.tile('x');
+    view.sync();
+    expect(instance.parentElement).toBe(back.preview);
+    expect(instance.events.at(-1)).toBe('hs-terminal-viewport-presentation:true');
     await paint();
-    expect(mount.mock.calls.at(-1)?.[0]).toBe(asElement(magnified.preview));
+    expect(mount).toHaveBeenCalledTimes(1);
+    expect(view.disposals.get(asElement(instance))).not.toHaveBeenCalled();
+  });
+
+  it('gives a magnified card priority over a still-visible tile and keeps fallback for a cold card', async () => {
+    const view = setup({ value: 1 }),
+      grid = view.tile('x');
+    view.sync();
+    await paint();
+    const instance = grid.preview.children[0];
+    const magnified = view.tile('x', true);
+    view.sync();
+    expect(instance.parentElement).toBe(magnified.frame);
+    expect(grid.preview.dataset.hostingInstance).toBeUndefined();
+    await paint();
+    expect(mount.mock.calls.at(-1)?.[0]).toBe(asElement(grid.preview));
+    expect(view.disposals.get(asElement(instance))).not.toHaveBeenCalled();
+
+    const cold = setup({ value: 0 }),
+      coldCard = cold.tile('y', true);
+    cold.sync();
+    expect(mount.mock.calls.at(-1)?.[0]).toBe(asElement(coldCard.preview));
+  });
+
+  it('keeps the just-magnified instance when other tiles fill the warm cap before dismissal', async () => {
+    const view = setup({ value: 2 }),
+      x = view.tile('x'),
+      y = view.tile('y');
+    view.sync();
+    await paint();
+    const instanceX = x.preview.children[0],
+      instanceY = y.preview.children[0];
+    x.card.remove();
+    const magnified = view.tile('x', true);
+    view.sync();
+    expect(instanceX.parentElement).toBe(magnified.frame);
+    const z = view.tile('z');
+    view.sync();
+    await paint();
+    expect(z.preview.children).toHaveLength(1);
+
+    magnified.card.remove();
+    const back = view.tile('x');
+    view.sync();
+    expect(instanceX.parentElement).toBe(back.preview);
+    expect(view.disposals.get(asElement(instanceX))).not.toHaveBeenCalled();
+    expect(view.disposals.get(asElement(instanceY))).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-presents an already interactive magnified instance when opening it in the drawer', async () => {
+    const view = setup({ value: 1 }),
+      grid = view.tile('x');
+    view.sync();
+    await paint();
+    const instance = grid.preview.children[0],
+      magnified = view.tile('x', true);
+    view.sync();
+    expect(instance.parentElement).toBe(magnified.frame);
+    magnified.card.remove();
+    const drawer = view.drawer('x');
+    view.sync();
+    expect(instance.parentElement).toBe(drawer.session);
+    expect(instance.events.filter((event) => event === 'hs-terminal-viewport-presentation:false')).toHaveLength(2);
+    expect(view.disposals.get(asElement(instance))).not.toHaveBeenCalled();
+  });
+
+  it('keeps an active instance across an empty drawer-to-grid render at a full cap', async () => {
+    const view = setup({ value: 2 }),
+      x = view.tile('x'),
+      y = view.tile('y');
+    view.sync();
+    await paint();
+    const instanceX = x.preview.children[0],
+      instanceY = y.preview.children[0];
+    x.card.remove();
+    const magnified = view.tile('x', true);
+    view.sync();
+    const z = view.tile('z');
+    view.sync();
+    await paint();
+    expect(z.preview.children).toHaveLength(1);
+
+    magnified.card.remove();
+    const drawer = view.drawer('x');
+    view.sync();
+    expect(instanceX.parentElement).toBe(drawer.session);
+    drawer.session.remove();
+    view.sync();
+    expect(instanceX.parentElement).toBe(view.holder);
+    expect(view.disposals.get(asElement(instanceX))).not.toHaveBeenCalled();
+    expect(view.disposals.get(asElement(instanceY))).toHaveBeenCalledTimes(1);
+    const refill = view.tile('x');
+    view.sync();
+    expect(instanceX.parentElement).toBe(refill.preview);
+  });
+
+  it('reserves the active instance when a grid replacement arrives at a full cap', async () => {
+    const view = setup({ value: 2 }),
+      x = view.tile('x'),
+      y = view.tile('y');
+    view.sync();
+    await paint();
+    const instanceX = x.preview.children[0],
+      instanceY = y.preview.children[0];
+    const drawer = view.drawer('x');
+    view.sync();
+    expect(instanceX.parentElement).toBe(drawer.session);
+    const z = view.tile('z');
+    view.sync();
+    await paint();
+    expect(z.preview.children).toHaveLength(1);
+
+    drawer.session.remove();
+    view.sync();
+    expect(instanceX.parentElement).toBe(x.preview);
+    expect(view.disposals.get(asElement(instanceX))).not.toHaveBeenCalled();
+    expect(view.disposals.get(asElement(instanceY))).toHaveBeenCalledTimes(1);
   });
 
   it('counts tile-hosted instances in the warm limit, returning the oldest tile to its preview', async () => {

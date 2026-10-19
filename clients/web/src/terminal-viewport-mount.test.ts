@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { mountStaticTerminalViewport, mountTerminalViewport } from './terminal-viewport';
+import {
+  mountStaticTerminalViewport,
+  mountTerminalViewport,
+  TERMINAL_VIEWPORT_RESUME_EVENT,
+} from './terminal-viewport';
 
 const runtime = vi.hoisted(() => ({
   mountTerminalViewportRuntime: vi.fn(),
@@ -21,6 +25,8 @@ vi.mock('kerfjs', async (original) => ({
 
 function viewport() {
   const children: unknown[] = [];
+  const events = new EventTarget();
+  const closest = vi.fn<(selector: string) => Element | null>(() => null);
   const message = {
       remove: vi.fn(() => {
         children.splice(children.indexOf(message), 1);
@@ -28,6 +34,12 @@ function viewport() {
     },
     element = {
       dataset: {} as Record<string, string>,
+      isConnected: true,
+      parentElement: null,
+      closest,
+      addEventListener: events.addEventListener.bind(events),
+      removeEventListener: events.removeEventListener.bind(events),
+      dispatchEvent: events.dispatchEvent.bind(events),
       style: { width: '1280px', height: '768px', transform: 'scale(0.3)' },
       replaceChildren: vi.fn((child) => {
         children.splice(0, children.length, child);
@@ -39,6 +51,7 @@ function viewport() {
   kerf.next = message;
   return {
     element: element as unknown as HTMLElement,
+    closest,
     message,
     children,
     replaced: element.replaceChildren,
@@ -55,6 +68,26 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('terminal lazy mount transitions (HS2-3ZBQDG)', () => {
+  it('uses the current host and preserves a focus resume while the runtime module loads', async () => {
+    const { element, closest } = viewport();
+    let inTile = true;
+    closest.mockImplementation((selector) =>
+      selector === '[data-hosting-instance="true"]' && inTile ? ({} as Element) : null,
+    );
+    const resumed = vi.fn();
+    element.addEventListener(TERMINAL_VIEWPORT_RESUME_EVENT, resumed);
+    const dispose = mountTerminalViewport(element, {
+      url: 'ws://lan/one',
+      initialTilePresentation: true,
+    });
+    inTile = false;
+    element.dispatchEvent(new CustomEvent(TERMINAL_VIEWPORT_RESUME_EVENT, { detail: { focus: true } }));
+    await vi.dynamicImportSettled();
+    expect(runtime.mountTerminalViewportRuntime.mock.calls[0][1]).toMatchObject({ initialTilePresentation: false });
+    expect(resumed).toHaveBeenCalledTimes(2);
+    dispose();
+  });
+
   it('mounts distinct LAN viewers, preserves explicit identity and disposes exactly once', async () => {
     runtime.browserRandomId.mockReturnValueOnce('lan-viewer-one').mockReturnValueOnce('lan-viewer-two');
     const first = mountTerminalViewport(viewport().element, { url: 'ws://lan/one' });

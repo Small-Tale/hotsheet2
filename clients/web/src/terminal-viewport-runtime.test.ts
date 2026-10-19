@@ -778,12 +778,17 @@ describe('parked terminal viewports (HS2-WGTQ6X)', () => {
       return frames.length;
     }) as never);
     const handlers = new Map<string, (event: Event) => void>();
-    let inTile = true;
+    let inTile = true,
+      inMagnified = false;
     const viewport = {
       dataset: { displayMode: 'interactive' } as Record<string, string>,
       style: {},
       classList: { contains: (name: string) => name === 'terminal-viewport--dedicated' },
-      closest: (selector: string) => (selector === '[data-component="terminal-tile"]' && inTile ? {} : null),
+      closest: (selector: string) =>
+        (selector === '[data-component="terminal-tile"]' && (inTile || inMagnified)) ||
+        (selector === '[data-fixed-aspect-terminal-card="magnified"]' && inMagnified)
+          ? {}
+          : null,
       addEventListener: (type: string, handler: (event: Event) => void) => handlers.set(type, handler),
       removeEventListener: vi.fn(),
       dispatchEvent: vi.fn(),
@@ -805,11 +810,23 @@ describe('parked terminal viewports (HS2-WGTQ6X)', () => {
     expect(sockets).toHaveLength(1);
 
     inTile = false;
+    inMagnified = true;
+    handlers.get(TERMINAL_VIEWPORT_PRESENTATION_EVENT)!(
+      new CustomEvent(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { detail: { tile: false } }),
+    );
+    for (const frame of frames.splice(0)) frame();
+    expect(viewport.dataset.renderer).toBe('dom');
+    expect(viewport.dataset.scrollbackLimit).toBe('1000');
+    expect(viewport.inert).toBe(false);
+    expect(sockets).toHaveLength(1);
+
+    inMagnified = false;
     handlers.get(TERMINAL_VIEWPORT_PRESENTATION_EVENT)!(
       new CustomEvent(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { detail: { tile: false } }),
     );
     for (const frame of frames.splice(0)) frame();
     expect(viewport.dataset.renderer).toBe('webgl');
+    expect(viewport.dataset.scrollbackLimit).toBe('5000');
     expect(viewport.dataset.presentation).toBeUndefined();
     expect(viewport.inert).toBe(false);
     expect(sockets).toHaveLength(1);
