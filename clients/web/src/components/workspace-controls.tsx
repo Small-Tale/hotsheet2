@@ -491,11 +491,11 @@ export function WorkspaceControls({
       <>
         <button
           type="button"
-          class="workspace-header__up-next-button"
           disabled={ticketActionsDisabled || !selectedTicketsUpNextEligible}
           {...TICKET_SELECTION_ACTIONS.toggleSelectedUpNext.attrs}
           aria-label="Toggle Up Next for Selected Tickets"
           aria-pressed={selectedTicketsUpNext === 'mixed' ? 'mixed' : String(selectedTicketsUpNext === 'all')}
+          data-selected-chrome="none"
           title="Toggle Up Next for selected tickets"
         >
           <WorkspaceUpNextIcon state={selectedTicketsUpNext} />

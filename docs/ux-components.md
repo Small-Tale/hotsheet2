@@ -1003,7 +1003,8 @@ Up Next and More actions buttons. The Up Next icon is an empty full-outline star
 when none are queued, a yellow half-filled full-outline star for a mixed selection,
 and a yellow filled star when all are queued. All three states are one glyph with a fill
 level (HS2-YVH2JT): every state draws the same outline in the toolbar's unselected control
-color (`--kui-toolbar-control-color`, so a pressed button's selected color cannot tint it), and
+color (`--kui-toolbar-control-color`, with Kerf's per-button `data-selected-chrome="none"` keeping
+the pressed button's selected color from tinting it), and
 a yellow solid fill sits beneath that outline, whole or clipped to the left half. Its `aria-pressed` value is respectively
 `false`, `mixed`, or `true`; selection does not add a persistent background behind
 the star. Hover and keyboard focus retain the canonical circular button treatment.

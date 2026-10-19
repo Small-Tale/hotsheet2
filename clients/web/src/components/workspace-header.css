@@ -28,13 +28,6 @@
   width: 1rem;
   height: 1rem;
 }
-.workspace-header__utility-group > button.workspace-header__up-next-button[aria-pressed='true'] {
-  /* The filled star already shows its pressed state; keep Kerf's keyboard focus ring. This overrides
-     Kerf-rendered button chrome until ToolbarControlGroup can opt a toggle out of selected chrome (KF-GGDABA). */
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-}
 /* App-owned layers of one star (HS2-EZ1N7Z, HS2-ZFFCHW, HS2-YVH2JT): the yellow solid fill sits
    under the outline, so the filled and half states keep the empty state's outline color. */
 .workspace-header__up-next-fill,

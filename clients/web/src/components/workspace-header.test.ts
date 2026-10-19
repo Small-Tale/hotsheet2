@@ -328,6 +328,7 @@ describe('WorkspaceHeader', () => {
       }),
     );
     expect(selected).toMatch(/data-action="toggle-selected-up-next"[^>]*aria-pressed="true"/);
+    expect(selected).toMatch(/data-action="toggle-selected-up-next"[^>]*data-selected-chrome="none"/);
     expect(selected).not.toMatch(/data-action="toggle-selected-up-next"[^>]*disabled/);
     expect(selected).not.toMatch(/data-action="open-selected-ticket-actions"[^>]*disabled/);
   });

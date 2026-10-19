@@ -26418,6 +26418,15 @@ for (const surface of ['workspace', 'rail'] as const) {
         path: `target/visual-captures/hs2-wp15af-${surface}-${theme}-all.png`,
         animations: 'disabled',
       });
+      if (surface === 'workspace' && theme === 'light') {
+        await page.setViewportSize({ width: 1280, height: 844 });
+        await expect(star).toBeVisible();
+        await page.screenshot({
+          path: 'target/visual-captures/hs2-9th4ac-workspace-star-1280.png',
+          animations: 'disabled',
+        });
+        await page.setViewportSize({ width: 1728, height: 971 });
+      }
       await select('HS2-START02', true, false);
       await expectState('mixed');
       if (surface === 'rail')
@@ -26440,6 +26449,11 @@ for (const surface of ['workspace', 'rail'] as const) {
           path: `target/visual-captures/hs2-wp15af-${surface}-${theme}-narrow.png`,
           animations: 'disabled',
         });
+        if (theme === 'light')
+          await page.screenshot({
+            path: 'target/visual-captures/hs2-9th4ac-workspace-star-390.png',
+            animations: 'disabled',
+          });
         await item.click();
       } else {
         await rail.screenshot({
