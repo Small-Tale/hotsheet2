@@ -14119,8 +14119,9 @@ async fn shell_command_runs_in_and_immediately_reports_its_requested_cwd() {
 
     let marker = cwd.path().join("command-ran.txt");
     // About 5 s: a PTY (and a login shell) can start slowly under a loaded full suite (HS2-4V3XAQ).
+    // The shell creates the file before printf completes, so existence alone can race the read.
     for _ in 0..200 {
-        if marker.exists() {
+        if std::fs::read_to_string(&marker).is_ok_and(|contents| contents == "command-ran") {
             break;
         }
         tokio::time::sleep(std::time::Duration::from_millis(25)).await;
