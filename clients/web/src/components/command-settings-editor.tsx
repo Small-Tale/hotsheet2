@@ -1,6 +1,4 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
-import '@awesome.me/webawesome/dist/components/input/input.js';
-import '@awesome.me/webawesome/dist/components/textarea/textarea.js';
 import '@kerfjs/ui/surface-scaffold.css';
 import './command-settings-editor.css';
 
@@ -16,6 +14,7 @@ import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Select } from '@kerfjs/ui/select';
 import { PopoverDialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -216,13 +215,19 @@ function CommandDetailFields({
   aiDefaults: AiToolDefaults;
 }) {
   const type = kind(command);
-  // Web Awesome fields own their labels, hints, and control chrome; Kerf Grid pairs the label and
+  // Kerf TextField owns labels, hints, and control chrome; Kerf Grid pairs the label and
   // type and collapses to one column in a narrow dialog, and List stacks the full-width fields
   // (HS2-WNXRG3). Fields keep the `input` event autosave contract through `data-command-field`.
   return (
     <List gap="m" rootAttributes={{ 'data-command-id': command.id }}>
       <Grid minColumnWidth={px(224)} gap="m">
-        <wa-input label="Button Label" name="title" data-command-field required value={command.title} />
+        <TextField
+          label="Button Label"
+          name="title"
+          rootAttributes={{ 'data-command-field': '' }}
+          required
+          value={command.title}
+        />
         <Select
           name="kind"
           label="Type"
@@ -232,60 +237,62 @@ function CommandDetailFields({
       </Grid>
       {type === 'program' && (
         <>
-          <wa-input
+          <TextField
             label="Program"
             name="program"
-            data-command-field
+            rootAttributes={{ 'data-command-field': '' }}
             required
             value={command.program ?? ''}
             placeholder="npm"
           />
-          <wa-textarea
-            label="Arguments"
-            name="args"
-            data-command-field
-            spellcheck="false"
-            rows={3}
-            resize="vertical"
-            placeholder={'run\ntest'}
-            hint="One exact argument per line."
-            value={command.args?.join('\n') ?? ''}
-          />
+          <div spellcheck="false">
+            <TextField
+              multiline
+              label="Arguments"
+              name="args"
+              rootAttributes={{ 'data-command-field': '' }}
+              rows={3}
+              placeholder={'run\ntest'}
+              hint="One exact argument per line."
+              value={command.args?.join('\n') ?? ''}
+            />
+          </div>
         </>
       )}
       {type === 'shell' && (
-        <wa-textarea
-          label="Shell Command"
-          name="command"
-          data-command-field
-          required
-          spellcheck="false"
-          rows={3}
-          resize="vertical"
-          placeholder="npm run test"
-          hint="Runs in the project root; use cd within the command if needed."
-          value={command.command ?? ''}
-        />
+        <div spellcheck="false">
+          <TextField
+            multiline
+            label="Shell Command"
+            name="command"
+            rootAttributes={{ 'data-command-field': '' }}
+            required
+            rows={3}
+            placeholder="npm run test"
+            hint="Runs in the project root; use cd within the command if needed."
+            value={command.command ?? ''}
+          />
+        </div>
       )}
       {type === 'ai' && (
         <>
-          <wa-textarea
+          <TextField
+            multiline
             label="Prompt"
             name="prompt"
-            data-command-field
+            rootAttributes={{ 'data-command-field': '' }}
             required
             rows={3}
-            resize="vertical"
             placeholder="Review the current changes"
             value={command.prompt ?? ''}
           />
           <AiCommandSelection command={command} tools={aiTools} defaults={aiDefaults} />
         </>
       )}
-      <wa-input
+      <TextField
         label="Confirmation Message"
         name="confirmation"
-        data-command-field
+        rootAttributes={{ 'data-command-field': '' }}
         value={command.confirmation ?? ''}
         placeholder="Optional confirmation before running"
       />

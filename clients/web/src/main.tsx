@@ -5,7 +5,6 @@ import '@kerfjs/ui/popup-menu/register';
 import '@kerfjs/ui/surface-scaffold/register';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
-import '@awesome.me/webawesome/dist/components/input/input.js';
 // Kerf's foundation owns the canonical --kui-space-* scale and typography tokens (HS2-0HT772).
 import '@kerfjs/ui/foundation.css';
 import '@kerfjs/ui/webawesome.css';
@@ -16,6 +15,7 @@ import { wireChoiceChips } from '@kerfjs/ui/wire-choice-chips';
 import { wireCornerStatus } from '@kerfjs/ui/wire-corner-status';
 import { wireResizableRegions } from '@kerfjs/ui/wire-resizable-regions';
 import { wireScrollDividers } from '@kerfjs/ui/wire-scroll-dividers';
+import { wireTextFields } from '@kerfjs/ui/wire-text-fields';
 
 import { startHotSheetWebClient } from './app/runtime';
 import { installDocumentScrollRestore } from './document-scroll-restore';
@@ -34,3 +34,5 @@ void wireResizableRegions(appRoot, { onCommit: () => undefined });
 // ChoiceChips' documented wiring (Kerf beta.106): a `multiple: true` group's listbox selection. The
 // app's multi-choice groups are `multiple: 'toggle'` checkboxes today, which need none (HS2-BH7NZ4).
 void wireChoiceChips(appRoot);
+// The clearable permission-rules search emits native input/change after Clear (HS2-CQ1TZN).
+void wireTextFields(appRoot);

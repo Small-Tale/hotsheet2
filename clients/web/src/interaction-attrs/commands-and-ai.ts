@@ -110,9 +110,9 @@ export const COMMANDS_AND_AI_TARGETS = {
 } as const;
 
 /**
- * The edit-command fields whose `input` events autosave: Web Awesome fields mark themselves with
- * `data-command-field`, the Kerf Type Select is addressed by its name (HS2-WNXRG3), and the Kerf
+ * The edit-command fields whose `input` events autosave: Kerf TextField roots mark their native
+ * inputs with `data-command-field`, the Kerf Type Select is addressed by its name (HS2-WNXRG3), and the Kerf
  * ChoiceChips color radios by their action (HS2-EBY4E3).
  */
 export const COMMAND_FIELD_SELECTOR =
-  '[data-command-field], [data-command-editor-dialog] kui-select[name="kind"], [data-action="select-command-color"]';
+  '[data-command-field] input, [data-command-field] textarea, [data-command-editor-dialog] kui-select[name="kind"], [data-action="select-command-color"]';

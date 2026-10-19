@@ -67,7 +67,7 @@ describe('document scroll restore (HS2-BCA512)', () => {
     expect(isTextEntryElement(element('input'))).toBe(true);
     expect(isTextEntryElement(element('input', { type: 'search' }))).toBe(true);
     expect(isTextEntryElement(element('input', { type: 'checkbox' }))).toBe(false);
-    expect(isTextEntryElement(element('wa-input'))).toBe(true);
+    expect(isTextEntryElement(element('wa-input'))).toBe(false);
     expect(isTextEntryElement(element('div', {}, true))).toBe(true);
     expect(isTextEntryElement(element('button'))).toBe(false);
     expect(isTextEntryElement(null)).toBe(false);

@@ -1157,7 +1157,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
   async function chooseProjectPath(button: Element) {
     projectDialogError.value = '';
     try {
-      const input = button.closest('.project-dialog__path')?.querySelector<Control>('wa-input');
+      const input = button.closest('.project-dialog__path')?.querySelector<Control>('input[name="project-root"]');
       if (!input) throw new Error('Could not find the project path field.');
       const result = await localBridge.chooseFolder();
       if (!result.path) return;

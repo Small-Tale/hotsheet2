@@ -2,7 +2,6 @@ import '@kerfjs/ui/foundation.css';
 import '@kerfjs/ui/webawesome.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
-import '@awesome.me/webawesome/dist/components/input/input.js';
 // Kerf's Catalog composes a Workbench of Panes, Toolbars, and Lists and owns only its stage CSS, so
 // the demo loads each composed primitive's stylesheet (Kerf 5.0.0-beta.55).
 import '@kerfjs/ui/workbench.css';
@@ -28,6 +27,7 @@ import './style.css';
 
 import { revealCatalogEntry, wireCatalog } from '@kerfjs/ui/wire-catalog';
 import { wireChoiceChips } from '@kerfjs/ui/wire-choice-chips';
+import { wireTextFields } from '@kerfjs/ui/wire-text-fields';
 import { wireToolbarVisibility } from '@kerfjs/ui/wire-toolbar-visibility';
 import { delegate, mount } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -67,6 +67,7 @@ applyDisplayPreferences();
 mount(root, withControlledOpen(root, DemoApp));
 demoListeners.add(wireToolbarVisibility(root));
 demoListeners.add(wireChoiceChips(root));
+demoListeners.add(wireTextFields(root));
 demoListeners.add(wireWorkspaceToolbarVisibility(root));
 demoListeners.add(wireTicketRailToolbarVisibility(root));
 // Every demo module installs its own interactions, in their original registration order.

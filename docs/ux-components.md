@@ -1130,11 +1130,11 @@ interactive slot (`KF-F52T5D`), so there is no longer an in-flow "external" vari
 not clamp a surface's height, so the help body keeps short-viewport `max-height` clamps.
 In a form, the sibling `TicketSearchFormField` (same module) renders Kerf's
 `SearchField presentation="form-field"`: a visible label, hint, and required marker with the
-same inset, typography, and edges as a neighboring `wa-input`, no Toolbar, and the same anchored
+same inset, typography, and edges as a neighboring Kerf `TextField`, no Toolbar, and the same anchored
 helper surfaces, anchored to an app-owned `.ticket-search-form-field` wrapper that carries the
 field id for the shared wiring. Its chips keep Kerf's default tint (see above). The saved-view dialog uses it
 (HS2-E40KC0); the TicketSearchField demo's "Form field" example exposes it. The remaining field
-radius and required-marker color differences from `wa-input` are Kerf's (`KF-6P4NAV`). The wrapper is declared to Kerf's composition rule through
+radius and required-marker details follow Kerf's form tokens (`KF-6P4NAV`). The wrapper is declared to Kerf's composition rule through
 `clients/web/kerf.components.json` (`rendersAs`
 `@kerfjs/ui:toolbar-control-group`), loaded via `.kerf-ui-profile.json` `catalogs`, so a
 Toolbar zone accepts it as the group it renders.
@@ -1441,7 +1441,7 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     and a plain Kerf `IconButton` More Actions trigger, inside an unstyled app-owned wrapper that
     carries the drag source and row identity Kerf roots protect (HS2-K9HSXZ). Each batch is
     titled by a 16px semibold wrapping Kerf `Text` heading with a plain `IconButton` Edit action
-    (double-clicking the heading is a shortcut); the label editor is a small `wa-input`, and the
+    (double-clicking the heading is a shortcut); the label editor is a compact Kerf `TextField`, and the
     purpose is a caret-free inline Kerf `Select` whose selected value renders as an info `Badge`
     (Uncategorized carries the `uncategorized` sentinel value). The transient New group target is
     an info `ContentItem`. The stylesheet keeps only app-owned rules: the row wrapper cursor,
@@ -1874,8 +1874,8 @@ capability-aware sections when their underlying features and data contracts land
   delete button removes it. Editing — or adding — a command opens a native "Edit command" popover
   dialog holding the typed detail form — Button label, Type, the Program `{program,args}` /
   Shell / AI-prompt fields, an optional confirmation message, the color-swatch picker, and
-  a searchable Lucide-icon picker — with Done in the dialog toolbar. The text fields are `wa-input` /
-  `wa-textarea` controls whose labels and hints come from their props, Type is a Kerf `Select`, and
+  a searchable Lucide-icon picker — with Done in the dialog toolbar. Kerf `TextField` owns the
+  single-line and multiline labels and hints, Type is a Kerf `Select`, and
   Kerf `Grid` (label beside type, collapsing to one column in a narrow dialog) and `List` lay them
   out, so the editor owns no field CSS (HS2-WNXRG3). The identifier (auto-generated),
   group (set by drag-and-drop), and working directory (always the project root; users `cd`
@@ -2461,8 +2461,9 @@ Beta.106 (HS2-BH7NZ4) removed Hot Sheet's remaining dependence on Web Awesome in
   `QuickTicketLauncher` and `TicketViewAction` use Kerf `Button` in TabBar's `end` zone since
   beta.109 accepted it (`KF-535H1M`, HS2-H2ASWT), removing the two exact `KUI-L301`
   exceptions. HS2-SKD293 adopted Kerf `Checkbox` for boolean settings, provider defaults, and
-  demo controls, and `ProgressRing` for the live-claim ETA. The remaining `wa-input` and
-  `wa-textarea` allowance is tracked by HS2-CQ1TZN for Kerf `TextField` adoption.
+  demo controls, and `ProgressRing` for the live-claim ETA. HS2-CQ1TZN adopted Kerf
+  `TextField` for the remaining Web Awesome single-line and multiline fields. The native
+  ticket draft editors and date/time helper retain their separate contracts.
   One `KUI-L203` exception covers Kerf's stale `MessageComposer` composition zone (KF-Z00DKT).
 
 ### Kerf beta.24 layout adoption

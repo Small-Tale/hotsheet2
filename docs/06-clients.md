@@ -1149,7 +1149,7 @@ preview/download, server directory browser) are separate design work.
   height, so wrapped paths and descriptions retain vertical padding and cannot cross the
   inset separators; shared value-table rows likewise reserve block padding when values wrap.
   The GitHub configuration screen groups sign-in in a Kerf sunken panel, uses shared buttons
-  and labeled Web Awesome fields (also used by GitLab and Jira), and places its back action
+  and labeled Kerf TextFields (also used by GitLab and Jira), and places its back action
   inside the dialog content.
   Repository search is a Kerf `Combobox` that filters every reachable repository as the person
   types, keeps a picked suggestion in the field, and still accepts a typed path (HS2-EN1E76;
@@ -1571,7 +1571,7 @@ preview/download, server directory browser) are separate design work.
   Saved-view opening uses the controlled dialog open state and native name autofocus. No delayed
   application callback may reclaim focus after the user selects the query or reopen a cancelled
   dialog. Create and Edit transitions synchronously project their initial name into the live
-  Web Awesome input property as well as rendered state, so a dirty name from an earlier opening
+  native TextField input property as well as rendered state, so a dirty name from an earlier opening
   cannot survive cancel/reopen or create/rename/create sequences (HS2-ZQNW62). Query token caret
   restoration remains independent of the opening lifecycle.
 

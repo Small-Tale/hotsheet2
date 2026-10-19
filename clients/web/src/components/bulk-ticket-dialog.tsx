@@ -1,10 +1,9 @@
-import '@awesome.me/webawesome/dist/components/input/input.js';
-
 import { Button } from '@kerfjs/ui/button';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 
@@ -97,7 +96,7 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
       >
         <form {...TICKET_SELECTION_ACTIONS.submitBulkTag.attrs} data-tag-mode={state.mode}>
           <List gap="m">
-            <wa-input name="bulk-ticket-tag" label={adding ? 'Tag to add' : 'Tag to remove'} required autofocus />
+            <TextField name="bulk-ticket-tag" label={adding ? 'Tag to add' : 'Tag to remove'} required autofocus />
             {!adding && state.choices.length > 0 && (
               <div role="group" aria-label="Tags in selection">
                 <Row gap="xs" wrap>

@@ -10,6 +10,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 import { ChevronRight, GitBranch, Power, PowerOff, Trash2 } from 'lucide';
 
 import type { ProviderAccount, ProviderConnection } from '../api';
@@ -242,7 +243,7 @@ export function TicketSourceSetupDialog({
               <Text tone="quiet" flush>
                 Paste the clone URL from your Git host. Hot Sheet will connect this repository and make its first push.
               </Text>
-              <wa-input
+              <TextField
                 name="ticket-store-remote"
                 type="text"
                 label="Remote URL"
@@ -302,16 +303,15 @@ export function TicketSourceSetupDialog({
         </List>
         <form id="git-source-relink-form" {...PROJECT_LIFECYCLE_ACTIONS.relinkGitSource.attrs}>
           <List gap="xs">
-            <wa-input
+            <TextField
               name="git-store-path"
               type="text"
               label="Location"
               value={editingGit.locator}
               required
               disabled={providerBusy}
-            >
-              <span slot="hint">If the ticket repository moved, enter its new folder path.</span>
-            </wa-input>
+              hint="If the ticket repository moved, enter its new folder path."
+            />
             {editingGit.identityMismatch ? (
               <Text tone="danger" role="alert" wrap="anywhere" flush>
                 This path contains a different Git store. Restore the original, or remove this source and add the

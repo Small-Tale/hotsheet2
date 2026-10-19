@@ -1,5 +1,3 @@
-import '@awesome.me/webawesome/dist/components/input/input.js';
-
 import { Button } from '@kerfjs/ui/button';
 import { Checkbox } from '@kerfjs/ui/checkbox';
 import { remify } from '@kerfjs/ui/css-values';
@@ -9,6 +7,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 import { ShieldCheck, ShieldX, Trash2 } from 'lucide';
 
 import {
@@ -181,8 +180,8 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
             }
           >
             <List gap="m">
-              <wa-input
-                {...NOTIFICATIONS_AND_LINKS_TARGETS.permissionRulesSearch.attrs}
+              <TextField
+                name={NOTIFICATIONS_AND_LINKS_TARGETS.permissionRulesSearch.value}
                 type="search"
                 label="Search Remembered Answers"
                 value={dialog?.query ?? ''}

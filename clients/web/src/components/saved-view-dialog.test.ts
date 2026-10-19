@@ -116,7 +116,7 @@ describe('SavedViewDialog', () => {
     ]) {
       const markup = String(SavedViewDialog(state));
       expect(markup.match(/autofocus/g)).toHaveLength(1);
-      expect(markup).toMatch(/<wa-input[^>]*name="saved-view-name"[^>]*autofocus/);
+      expect(markup).toMatch(/<input[^>]*name="saved-view-name"[^>]*autofocus/);
       // The native Kerf dialog declares its state; the controlled-open pass opens it modally, so the
       // template never sets the non-modal `open` attribute itself (HS2-BH7NZ4).
       const dialogStart = markup.indexOf('<dialog'),

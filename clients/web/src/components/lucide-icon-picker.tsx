@@ -1,4 +1,3 @@
-import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/styles/utilities/visually-hidden.css';
 import './lucide-icon-picker.css';
 
@@ -7,6 +6,7 @@ import { px, uiColor } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 import { Search } from 'lucide';
 
 import {
@@ -59,19 +59,16 @@ export function LucideIconPicker({ value, query = '', searchName, selectAction }
   return (
     <div class="lucide-icon-picker" data-component="lucide-icon-picker">
       <List gap="xs">
-        <wa-input
-          class="wa-visually-hidden-label"
-          label="Search Icons"
+        <TextField
+          ariaLabel="Search Icons"
           type="search"
-          size="small"
+          size="compact"
           name={searchName}
           value={query}
           placeholder="Search all icons…"
           autocomplete="off"
-          spellcheck="false"
-        >
-          <LucideIcon slot="start" size="s" icon={Search} name="search" color={uiColor('neutral-on-quiet')} />
-        </wa-input>
+          icon={<LucideIcon size="s" icon={Search} name="search" color={uiColor('neutral-on-quiet')} />}
+        />
         {trimmed && !loaded ? (
           <Text size="compact" tone="quiet" role="status">
             Loading icons…

@@ -162,9 +162,9 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
     await expect
       .poll(async () =>
         dialog.evaluate((node) => {
-          const input = node.querySelector<HTMLElement>('wa-input[name="saved-view-name"]')!,
-            inputLabel = input.shadowRoot!.querySelector<HTMLElement>('[part~="form-control-label"]')!,
-            inputBox = input.shadowRoot!.querySelector<HTMLElement>('[part~="base"]')!.getBoundingClientRect(),
+          const input = node.querySelector<HTMLElement>('[data-component="text-field"]')!,
+            inputLabel = input.querySelector<HTMLElement>('.kui-text-field__label')!,
+            inputBox = input.querySelector<HTMLElement>('.kui-text-field__box')!.getBoundingClientRect(),
             queryLabel = node.querySelector<HTMLElement>('[data-search-field-form-label="saved-view-query"]')!,
             queryBox = node
               .querySelector<HTMLElement>('[data-component="search-field"][data-search-field-id="saved-view-query"]')!

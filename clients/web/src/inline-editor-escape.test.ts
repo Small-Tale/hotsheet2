@@ -27,7 +27,7 @@ describe('inline editor Escape (HS2-Q2T01A)', () => {
 
   it('covers text-entry controls but not buttons, toggles, or file pickers', () => {
     expect(INLINE_EDITOR_SELECTOR).toContain('textarea');
-    expect(INLINE_EDITOR_SELECTOR).toContain('wa-input');
+    expect(INLINE_EDITOR_SELECTOR).toContain('input:not(');
     for (const type of ['checkbox', 'radio', 'button', 'submit', 'file'])
       expect(INLINE_EDITOR_SELECTOR).toContain(`[type="${type}"]`);
   });

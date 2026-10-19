@@ -148,7 +148,7 @@ test('never renders one project sidebar with another Project Statistics', async 
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.locator('wa-input[name="project-root"]').evaluate((node: HTMLElement & { value: string }, value) => {
+  await page.locator('input[name="project-root"]').evaluate((node: HTMLElement & { value: string }, value) => {
     node.value = value;
   }, '/work/hotsheet2');
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
@@ -279,7 +279,7 @@ test('an obsolete background count snapshot cannot overwrite a project after an 
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.locator('wa-input[name="project-root"]').evaluate((node: HTMLElement & { value: string }, value) => {
+  await page.locator('input[name="project-root"]').evaluate((node: HTMLElement & { value: string }, value) => {
     node.value = value;
   }, '/work/hotsheet2');
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();

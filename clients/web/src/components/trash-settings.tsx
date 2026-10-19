@@ -1,11 +1,10 @@
-import '@awesome.me/webawesome/dist/components/input/input.js';
-
 import { Button } from '@kerfjs/ui/button';
 import { flex, px } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 
@@ -67,7 +66,7 @@ export function TrashSettings({
             {/* A Kerf List flex item keeps the field short (320px basis) and lets a narrow screen wrap the
                 action below; the List stretches the input across it (HS2-J7BTAG). */}
             <List flex={flex(0, 1, px(320))}>
-              <wa-input
+              <TextField
                 name="trash-cleanup-days"
                 type="number"
                 label="Keep Deleted Tickets for (Days)"

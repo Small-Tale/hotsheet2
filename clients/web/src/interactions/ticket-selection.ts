@@ -264,7 +264,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
             '[data-component="ticket-inspector-header"], [data-component="ticket-inspector-body"], [data-component="ticket-reader"]',
           ) &&
           active.matches(
-            'input, textarea, select, wa-input, wa-textarea, kui-select, [role="textbox"], [contenteditable]:not([contenteditable="false"])',
+            'input, textarea, select, kui-select, [role="textbox"], [contenteditable]:not([contenteditable="false"])',
           ) &&
           isPlainTicketReselection(selectedTicketSlugs.value, selectedTicket.value?.slug, slug, {
             range: pointer.shiftKey,

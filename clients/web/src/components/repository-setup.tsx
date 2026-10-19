@@ -7,6 +7,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 import { CircleCheck } from 'lucide';
 
 import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
@@ -45,7 +46,7 @@ export function RepositorySetup({
               </Text>
             </List>
           </Row>
-          <wa-input
+          <TextField
             name="repository-remote"
             type="text"
             label="Remote URL"

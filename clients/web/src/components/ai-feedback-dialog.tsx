@@ -1,11 +1,10 @@
-import '@awesome.me/webawesome/dist/components/textarea/textarea.js';
-
 import { Button } from '@kerfjs/ui/button';
 import { remify } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
 import { Spacer } from '@kerfjs/ui/spacer';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
+import { TextField } from '@kerfjs/ui/text-field';
 
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 
@@ -37,14 +36,14 @@ export function AiFeedbackDialog({ state }: { state?: AiFeedbackDialogState }) {
       >
         <form {...COMMANDS_AND_AI_ACTIONS.submitAiFeedback.attrs}>
           <List gap="m">
-            <wa-textarea
+            <TextField
+              multiline
               id="ai-feedback-explanation"
               name="ai-feedback-explanation"
               label={label}
               hint="Optional"
               placeholder="Write Markdown feedback…"
               rows={6}
-              resize="vertical"
               value={state.explanation}
               autofocus
             />

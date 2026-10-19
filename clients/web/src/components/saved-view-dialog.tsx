@@ -5,6 +5,7 @@ import { Row } from '@kerfjs/ui/row';
 import type { SearchFieldModel } from '@kerfjs/ui/search-field-model';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 
 import { orderedSearchText } from '../inline-search';
 import {
@@ -65,7 +66,7 @@ export function SavedViewDialog({
                 ? 'Change the shared view name or search query.'
                 : 'Save a search as a project view. Everyone using this ticket store will see it.'}
             </Text>
-            <wa-input
+            <TextField
               name="saved-view-name"
               label="View Name"
               value={name}

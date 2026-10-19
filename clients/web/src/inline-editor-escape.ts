@@ -7,9 +7,9 @@
  * semantics (the attachment batch label restores its value) keep them and only stop the key.
  */
 
-/** Native and Web Awesome text-entry controls that count as inline editors. */
+/** Native text-entry controls that count as inline editors. */
 export const INLINE_EDITOR_SELECTOR =
-  'textarea, input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="reset"], [type="file"], [type="range"], [type="color"]), wa-input, wa-textarea, [contenteditable="true"]';
+  'textarea, input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="reset"], [type="file"], [type="range"], [type="color"]), [contenteditable="true"]';
 
 export type InlineEditorEscape = 'none' | 'stop' | 'finish';
 

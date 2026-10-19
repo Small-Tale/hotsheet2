@@ -2644,11 +2644,11 @@ test('opens a roomy project dialog with automatic source discovery and working c
   await page.getByRole('button', { name: 'Open Project' }).click();
   const dialog = page.locator('[data-project-dialog]');
   await expect(dialog).toHaveAttribute('open', '');
-  await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value', '.');
+  await expect(page.locator('input[name="project-root"]')).toHaveJSProperty('value', '.');
   // Kerf's DialogSurface scales in, so measure once its enter motion has settled.
   await expect.poll(async () => (await dialog.boundingBox())!.width).toBeGreaterThan(700);
   await page.getByRole('button', { name: 'Browse for Project Folder' }).click();
-  await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value', '/picked/project');
+  await expect(page.locator('input[name="project-root"]')).toHaveJSProperty('value', '/picked/project');
   await expect(dialog).toHaveAttribute('open', '');
   await expect(dialog.getByText('opens its existing ticket sources automatically')).toBeVisible();
   await expect(dialog.locator('[name="ticket-store"]')).toHaveCount(0);
@@ -2886,7 +2886,7 @@ test('falls back to the project dialog when the direct native chooser fails', as
   await page.getByRole('button', { name: 'Add Project' }).click();
   const dialog = page.locator('[data-project-dialog]');
   await expect(dialog).toHaveAttribute('open', '');
-  await expect(dialog.locator('wa-input[name="project-root"]')).toHaveJSProperty('value', '/work/demo');
+  await expect(dialog.locator('input[name="project-root"]')).toHaveJSProperty('value', '/work/demo');
   await expect(dialog.locator('.project-dialog__error')).toContainText('The native folder chooser failed.');
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -3498,11 +3498,11 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   const attachmentRepo = providerForm.locator('input[name="attachment-repo"]');
   await expect(providerForm).toContainText('Enter an assets repository and save to configure attachments.');
   await attachmentRepo.fill('small-tale/assets');
-  await providerForm.locator('wa-input[name="attachment-folder"] input').fill('evidence');
-  await providerForm.locator('wa-input[name="attachment-branch"] input').fill('media');
+  await providerForm.locator('input[name="attachment-folder"]').fill('evidence');
+  await providerForm.locator('input[name="attachment-branch"]').fill('media');
   await page.screenshot({ path: 'target/visual-captures/hs2-8bahrj-assets-setup-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 760 });
-  await providerForm.locator('wa-input[name="attachment-branch"]').scrollIntoViewIfNeeded();
+  await providerForm.locator('input[name="attachment-branch"]').scrollIntoViewIfNeeded();
   await expect(attachmentRepo).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-8bahrj-assets-setup-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
@@ -4078,13 +4078,13 @@ for (const width of [1280, 390])
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     const setup = page.locator('[data-ticket-source-setup-dialog]'),
       form = setup.locator('[data-action="save-provider-connection"]'),
-      field = (name: string) => form.locator(`wa-input[name="${name}"]`),
+      field = (name: string) => form.locator(`input[name="${name}"]`),
       values = () =>
         form.evaluate((node) =>
           Object.fromEntries(
             ['credential-reference', 'jira-email', 'api-base', 'connection-locator'].map((name) => [
               name,
-              node.querySelector<HTMLInputElement>(`wa-input[name="${name}"]`)?.value ?? null,
+              node.querySelector<HTMLInputElement>(`input[name="${name}"]`)?.value ?? null,
             ]),
           ),
         ),
@@ -4144,7 +4144,7 @@ for (const width of [1280, 390])
     await gitlabAccount.click();
     await expect(field('api-base')).toHaveJSProperty('value', 'https://gitlab.corp.test/api/v4');
     // The project's own path is entered by hand, and a prefilled value stays editable.
-    await field('connection-locator').locator('input').fill('team/app');
+    await field('connection-locator').fill('team/app');
     await field('connection-locator').dispatchEvent('input');
     await setup.getByRole('button', { name: 'Connect provider' }).click();
     await expect(setup).not.toHaveAttribute('open');
@@ -9332,7 +9332,7 @@ for (const width of [1280, 390])
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]'),
       dialog = page.locator('[data-terminal-rename-dialog]'),
-      field = dialog.locator('wa-input[name="terminal-name"]'),
+      field = dialog.locator('input[name="terminal-name"]'),
       openRename = async (tabName: RegExp) => {
         await drawer.getByRole('tab', { name: tabName }).click({ button: 'right' });
         await page.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
@@ -9438,7 +9438,7 @@ for (const width of [1280, 390])
     await page.getByRole('button', { name: 'Show Terminal Drawer' }).click();
     const drawer = page.locator('[data-component="terminal-drawer"]'),
       dialog = page.locator('[data-terminal-rename-dialog]'),
-      field = dialog.locator('wa-input[name="terminal-name"]'),
+      field = dialog.locator('input[name="terminal-name"]'),
       reset = dialog.getByRole('button', { name: 'Reset to Default' }),
       openRename = async (tabName: RegExp) => {
         await drawer.getByRole('tab', { name: tabName }).click({ button: 'right' });
@@ -9561,7 +9561,7 @@ test('shares a terminal rename with other devices and restores it through the re
     await laptopDrawer.getByRole('tab', { name: /Shared Shell/ }).click({ button: 'right' });
     await laptop.locator('[data-context-menu="app-tab"]').getByText('Rename…').click();
     const dialog = laptop.locator('[data-terminal-rename-dialog]');
-    await expect(dialog.locator('wa-input[name="terminal-name"]')).toHaveJSProperty('value', 'Shared Shell');
+    await expect(dialog.locator('input[name="terminal-name"]')).toHaveJSProperty('value', 'Shared Shell');
     await dialog.getByRole('textbox', { name: /Terminal Name/ }).fill('Release shell');
     await dialog.getByRole('button', { name: 'Rename' }).click();
     await expect(laptopDrawer.getByRole('tab', { name: /Release shell/ })).toBeVisible();
@@ -14293,6 +14293,7 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   await page.getByRole('button', { name: 'Add command…', exact: true }).click();
   await commandDialog.getByLabel('Button Label').fill('Lint');
   await commandDialog.getByLabel('Shell Command').fill('npm run lint');
+  await expect(commandDialog.getByLabel('Shell Command')).toHaveJSProperty('spellcheck', false);
   await commandDialog.getByRole('button', { name: 'Done' }).click();
   await page.getByRole('button', { name: 'Add command…', exact: true }).click();
   await commandDialog.getByLabel('Button Label').fill('Review changes');
@@ -14859,7 +14860,7 @@ for (const width of [1280, 390]) {
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
     await page.locator('[data-component="quick-ticket-composer-launcher"]:visible').first().click();
     const composer = page.locator('[data-component="quick-ticket-composer"]'),
-      title = composer.locator('wa-input[name="new-ticket-title"] input'),
+      title = composer.locator('input[name="new-ticket-title"]'),
       popup = page.locator('[data-component="permission-request-popup"][data-layer="top"]');
     await title.fill('Writing a ticket');
     await expect(title).toBeFocused();
@@ -15236,7 +15237,9 @@ test('previews three recent permission answers and searches the paged full list 
   await expect(all.locator('[data-permission-rule]')).toHaveCount(5);
   await search.fill('not-a-visible-label');
   await expect(dialog).toContainText('No Matching Answers');
-  await search.fill('');
+  await dialog.getByRole('button', { name: 'Clear' }).click();
+  await expect(search).toHaveValue('');
+  await expect(search).toBeFocused();
   await expect(dialog).toContainText('11 matching answers');
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(dialog).toBeVisible();
@@ -15750,7 +15753,7 @@ for (const viewport of [
     const launcher = page.locator('[data-component="quick-ticket-composer-launcher"]:visible').first();
     await launcher.dispatchEvent('click');
     const composer = page.locator('[data-component="quick-ticket-composer"]'),
-      title = composer.locator('wa-input[name="new-ticket-title"]');
+      title = composer.locator('input[name="new-ticket-title"]');
     await expect(title).toBeVisible();
     // The composer's modal would leave a popover painted on top but inert, so clicks reached the dialog
     // beneath (HS2-MAE27T); the popup is lifted as a modal dialog above it instead.
@@ -15808,7 +15811,7 @@ for (const viewport of [
     await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(true);
     await popup.getByRole('button', { name: 'Ignore', exact: true }).click();
     await expect(popup).toHaveCount(0);
-    await title.locator('input').fill('typed after the permission popup');
+    await title.fill('typed after the permission popup');
     await expect(title).toHaveJSProperty('value', 'typed after the permission popup');
     // With no lifted popup, Escape is the composer's again.
     await page.keyboard.press('Escape');
@@ -18347,7 +18350,7 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
-  await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value', '.');
+  await expect(page.locator('input[name="project-root"]')).toHaveJSProperty('value', '.');
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.getByText('Use real project tickets')).toBeVisible();
   const featureRow = page.locator('[data-component="ticket-list-row"]', { hasText: 'Use real project tickets' });
@@ -18404,7 +18407,7 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await page.screenshot({ path: 'target/visual-captures/hs2-a32eak-activity-note-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole('button', { name: 'New ticket…' }).click();
-  await page.locator('wa-input[name="new-ticket-title"]').evaluate((node: HTMLElement & { value: string }) => {
+  await page.locator('input[name="new-ticket-title"]').evaluate((node: HTMLElement & { value: string }) => {
     node.value = '[client] [Needs Review] Created from the real shell';
     node.dispatchEvent(new Event('input', { bubbles: true }));
   });
@@ -20651,7 +20654,7 @@ test('keeps the priority select open when opened right after creating a ticket (
   const launcher = page.getByRole('button', { name: 'New ticket…' });
   await launcher.click();
   const form = page.locator('[data-action="create-ticket-form"]');
-  await form.locator('wa-input[name="new-ticket-title"]').evaluate((node: HTMLElement & { value: string }) => {
+  await form.locator('input[name="new-ticket-title"]').evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'Race check';
     node.dispatchEvent(new Event('input', { bubbles: true }));
   });
@@ -20678,7 +20681,7 @@ for (const width of [390, 1280])
     const launcher = page.getByRole('button', { name: 'New ticket…' });
     await launcher.click();
     const form = page.locator('[data-action="create-ticket-form"]');
-    await form.locator('wa-input[name="new-ticket-title"]').evaluate((node: HTMLElement & { value: string }) => {
+    await form.locator('input[name="new-ticket-title"]').evaluate((node: HTMLElement & { value: string }) => {
       node.value = 'Busy create';
       node.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -20715,7 +20718,7 @@ test('focuses the ticket title every time the real composer expands', async ({ p
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const launcher = page.getByRole('button', { name: 'New ticket…' });
   await launcher.click();
-  const title = page.locator('wa-input[name="new-ticket-title"]');
+  const title = page.locator('input[name="new-ticket-title"]');
   await expect(title).toBeFocused();
   await page.getByRole('button', { name: 'Cancel' }).click();
   await launcher.click();
@@ -20787,7 +20790,7 @@ test('stages safe attachment drops from the collapsed and expanded new-ticket co
     .getByLabel('Browse attachments for new ticket', { exact: true })
     .setInputFiles({ name: 'final-proof.txt', mimeType: 'text/plain', buffer: Buffer.from('final proof') });
   await expect(form.getByText('final-proof.txt')).toBeVisible();
-  await form.locator('wa-input[name="new-ticket-title"]').evaluate((node: HTMLElement & { value: string }) => {
+  await form.locator('input[name="new-ticket-title"]').evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'Created with dropped evidence';
     node.dispatchEvent(new Event('input', { bubbles: true }));
   });
@@ -26905,7 +26908,7 @@ test('drops files on another project tab to stage a new ticket in that project (
   await form.screenshot({ path: 'target/visual-captures/hs2-z2ky20-project-tab-file-drop-wide.png' });
   await page.setViewportSize({ width: 940, height: 844 });
   await form.screenshot({ path: 'target/visual-captures/hs2-z2ky20-project-tab-file-drop-narrow.png' });
-  await form.locator('wa-input[name="new-ticket-title"]').evaluate((node: HTMLElement & { value: string }) => {
+  await form.locator('input[name="new-ticket-title"]').evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'Created from project tab drop';
     node.dispatchEvent(new Event('input', { bubbles: true }));
   });
@@ -27922,7 +27925,7 @@ test('shows and persists the shared Trash retention period in Lifecycle settings
   await page.getByLabel('Settings View').click();
   await page.getByRole('button', { name: 'Lifecycle' }).click();
   const settings = page.locator('[data-component="trash-settings"]'),
-    input = settings.locator('wa-input[name="trash-cleanup-days"]'),
+    input = settings.locator('input[name="trash-cleanup-days"]'),
     apply = settings.getByRole('button', { name: 'Apply Now' }),
     hint = settings.locator('[data-role="trash-purge-hint"]'),
     leave = page.locator('[data-dialog-component="trash-retention-leave-dialog"]');
@@ -27930,16 +27933,16 @@ test('shows and persists the shared Trash retention period in Lifecycle settings
   await expect(input).toHaveJSProperty('value', '30');
   // "Apply Now" shares the field's line and stays disabled until the value changes.
   await expect(apply).toHaveJSProperty('disabled', true);
-  const fieldBox = await input.locator('input').boundingBox(),
+  const fieldBox = await input.boundingBox(),
     applyBox = await apply.boundingBox();
   expect(fieldBox && applyBox && Math.abs(fieldBox.y + fieldBox.height - (applyBox.y + applyBox.height))).toBeLessThan(
     2,
   );
-  await input.locator('input').fill('7');
+  await input.fill('7');
   await expect(hint).toHaveText('3 tickets in Trash will be purged');
   await expect(apply).toHaveJSProperty('disabled', false);
   await page.screenshot({ path: 'target/visual-captures/hs2-kpd942-apply-now-wide.png' });
-  await input.locator('input').fill('14');
+  await input.fill('14');
   await expect(hint).toHaveCount(0);
   await apply.click();
   await expect(page.locator('wa-toast-item .app-toast')).toHaveText('Trash retention applied.');
@@ -27957,7 +27960,7 @@ test('shows and persists the shared Trash retention period in Lifecycle settings
   await expect(input).toHaveJSProperty('value', '14');
 
   // Leaving with an unapplied value asks to apply or revert it (HS2-F55956). Revert continues.
-  await input.locator('input').fill('5');
+  await input.fill('5');
   await expect(hint).toHaveText('3 tickets in Trash will be purged');
   await page.getByLabel('List View').click();
   await expect(leave).toHaveAttribute('open', '');
@@ -27973,7 +27976,7 @@ test('shows and persists the shared Trash retention period in Lifecycle settings
   await expect(input).toHaveJSProperty('value', '14');
 
   // Escape keeps the user on Lifecycle with the draft; Apply saves and then continues.
-  await input.locator('input').fill('21');
+  await input.fill('21');
   await page.getByRole('button', { name: 'Terminals' }).click();
   await expect(leave).toHaveAttribute('open', '');
   await page.keyboard.press('Escape');
@@ -27988,7 +27991,7 @@ test('shows and persists the shared Trash retention period in Lifecycle settings
   await page.getByRole('button', { name: 'Lifecycle' }).click();
   await expect(input).toHaveJSProperty('value', '21');
   await page.setViewportSize({ width: 390, height: 844 });
-  await input.locator('input').fill('6');
+  await input.fill('6');
   await expect(hint).toHaveText('3 tickets in Trash will be purged');
   await page.screenshot({ path: 'target/visual-captures/hs2-kpd942-apply-now-narrow.png' });
 });
@@ -28098,7 +28101,7 @@ test('live project visual review', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page
-    .locator('wa-input[name="project-root"]')
+    .locator('input[name="project-root"]')
     .evaluate(
       (node: HTMLElement & { value: string }, value) => (node.value = value),
       process.env.HOTSHEET_LIVE_PROJECT,

@@ -21,8 +21,8 @@
   "preferences": {
     "text-entry": {
       "preferred": "@kerfjs/ui:text-field",
-      "avoid": [],
-      "rationale": "Kerf 5.0.0-beta.106 discourages wa-input and wa-textarea; HS2-CQ1TZN adopts Kerf TextField, then restores this avoid list."
+      "avoid": ["@kerfjs/ui:wa-input", "@kerfjs/ui:wa-textarea"],
+      "rationale": "Kerf TextField owns supported single-line and multiline text entry after HS2-CQ1TZN."
     },
     "boolean-option": {
       "preferred": "@kerfjs/ui:checkbox",

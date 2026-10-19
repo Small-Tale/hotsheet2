@@ -1,6 +1,7 @@
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Grid } from '@kerfjs/ui/grid';
 import type { SearchFieldModel } from '@kerfjs/ui/search-field-model';
+import { TextField } from '@kerfjs/ui/text-field';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { batch, signal } from 'kerfjs';
@@ -141,19 +142,19 @@ export function TicketSearchFieldDemo() {
       </CatalogExample>
       <CatalogExample
         align="glyph"
-        label="Form Field Beside Web Awesome Inputs"
+        label="Form Field Beside Kerf TextFields"
         rootAttributes={{ 'data-search-demo': 'form' }}
         note={
           <>
             <code>TicketSearchFormField</code> uses Kerf's form-field presentation: a visible label, hint, and required
-            marker that line up with a <code>wa-input</code>, with the same anchored helper surfaces (HS2-E40KC0,
+            marker that line up with a Kerf <code>TextField</code>, with the same anchored helper surfaces (HS2-E40KC0,
             HS2-8TE69P).
           </>
         }
         viewport={{ width: 'full' }}
       >
         <Grid columns={1} gap="m" textInsets="rl">
-          <wa-input name="ticket-search-demo-form-name" label="View Name" required />
+          <TextField name="ticket-search-demo-form-name" label="View Name" required />
           <TicketSearchFormField
             id="ticket-search-demo-form"
             label="View query"

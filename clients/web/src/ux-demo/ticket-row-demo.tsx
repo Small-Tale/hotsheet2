@@ -2,6 +2,7 @@ import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Checkbox } from '@kerfjs/ui/checkbox';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
+import { TextField } from '@kerfjs/ui/text-field';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -190,7 +191,7 @@ export function TicketRowDemo() {
 export function TicketRowSettings() {
   return (
     <DemoSettingsForm settings="ticket-list-row">
-      <wa-input name="title" label="Title" value={ticketRowSettings.title.value} />
+      <TextField name="title" label="Title" value={ticketRowSettings.title.value} />
       <Select
         name="status"
         label="Status"
@@ -220,7 +221,7 @@ export function TicketRowSettings() {
         value={ticketRowSettings.priority.value}
         choices={(['low', 'default', 'high', 'urgent'] as const).map((value) => ({ value, label: value }))}
       />
-      <wa-input name="category" label="Category" value={ticketRowSettings.category.value} />
+      <TextField name="category" label="Category" value={ticketRowSettings.category.value} />
       <Select
         name="category-icon"
         label="Category Icon"
@@ -233,8 +234,8 @@ export function TicketRowSettings() {
         value={ticketRowSettings.categoryColor.value}
         choices={CATEGORY_COLORS.map((option): SelectChoice => ({ value: option.value, label: option.label }))}
       />
-      <wa-input name="tags" label="Tags (Comma Separated)" value={ticketRowSettings.tags.value} />
-      <wa-input name="agent" label="Active Agent" value={ticketRowSettings.agentName.value} />
+      <TextField name="tags" label="Tags (Comma Separated)" value={ticketRowSettings.tags.value} />
+      <TextField name="agent" label="Active Agent" value={ticketRowSettings.agentName.value} />
       <Checkbox name="up-next" checked={ticketRowSettings.upNext.value} label="Up Next" />
       <Checkbox name="blocked" checked={ticketRowSettings.blocked.value} label="Blocked" />
       <Checkbox name="needs-review" checked={ticketRowSettings.needsReview.value} label="Needs review" />
@@ -299,13 +300,18 @@ function wireTicketRowDemo(root: HTMLElement): () => void {
     ),
   );
   demoListeners.add(
-    delegate(root, 'input', '[data-settings="ticket-list-row"] wa-input', (_event, target) => {
-      const control = target as FormControl;
-      if (control.getAttribute('name') === 'title') ticketRowSettings.title.value = control.value;
-      if (control.getAttribute('name') === 'category') ticketRowSettings.category.value = control.value;
-      if (control.getAttribute('name') === 'tags') ticketRowSettings.tags.value = control.value;
-      if (control.getAttribute('name') === 'agent') ticketRowSettings.agentName.value = control.value;
-    }),
+    delegate(
+      root,
+      'input',
+      '[data-settings="ticket-list-row"] [data-component="text-field"] input',
+      (_event, target) => {
+        const control = target as FormControl;
+        if (control.getAttribute('name') === 'title') ticketRowSettings.title.value = control.value;
+        if (control.getAttribute('name') === 'category') ticketRowSettings.category.value = control.value;
+        if (control.getAttribute('name') === 'tags') ticketRowSettings.tags.value = control.value;
+        if (control.getAttribute('name') === 'agent') ticketRowSettings.agentName.value = control.value;
+      },
+    ),
   );
   demoListeners.add(
     delegate(root, 'change', '[data-settings="ticket-list-row"] [name]', (_event, target) => {

@@ -271,15 +271,16 @@ describe('ticket source surfaces', () => {
       /<div class="kui-grid"[^>]*data-min-column-width="true"[^>]*--_kui-grid-min-column-width:/,
     );
     expect(signedIn).not.toContain('provider-setup-form__grid');
-    expect(signedIn).toContain('<wa-input class="provider-setup-form__wide" name="connection-name"');
+    expect(signedIn).toMatch(/<div class="provider-setup-form__wide"><label[^>]*data-component="text-field"/);
+    expect(signedIn).toContain('name="connection-name"');
     expect(signedIn).toMatch(
       /<div class="provider-setup-form__wide"><div class="kui-checkbox"[^>]*data-component="checkbox"/,
     );
     expect(signedIn).toMatch(/<input[^>]*type="checkbox" name="make-default"[^>]*checked/);
     expect(signedIn).toContain('name="attachment-repo"');
     expect(signedIn).toContain('Enter an assets repository and save to configure attachments.');
-    expect(signedIn).toContain('name="attachment-folder" label="Attachment Folder" value="hotsheet-attachments"');
-    expect(signedIn).toContain('name="attachment-branch" label="Attachment Branch" value="main"');
+    expect(signedIn).toMatch(/<input[^>]*name="attachment-folder"[^>]*value="hotsheet-attachments"/);
+    expect(signedIn).toMatch(/<input[^>]*name="attachment-branch"[^>]*value="main"/);
     expect(signedIn).not.toContain('name="api-base"');
     const configured = String(
       ProviderSetupForm({
@@ -342,8 +343,8 @@ describe('ticket source surfaces', () => {
     expect(failedEdit).toContain('You can enter a repository path manually.');
     expect(failedEdit).toContain('value="acme/issues"');
     expect(failedEdit).not.toContain('provider-setup-repository');
-    expect(configured).toContain('name="attachment-folder" label="Attachment Folder" value="evidence"');
-    expect(configured).toContain('name="attachment-branch" label="Attachment Branch" value="media"');
+    expect(configured).toMatch(/<input[^>]*name="attachment-folder"[^>]*value="evidence"/);
+    expect(configured).toMatch(/<input[^>]*name="attachment-branch"[^>]*value="media"/);
     const remote = String(
       TicketSourceSetupDialog({
         project: { root: '/work/demo', name: 'Demo', stores: ['/work/demo.hs2'] },
@@ -510,7 +511,7 @@ describe('ticket source surfaces', () => {
     expect(markup).toContain('Default ticket source for this project.');
     expect(markup).toContain('<strong>Name</strong>');
     expect(markup).toContain('HS2 git tickets');
-    expect(markup).toContain('<wa-input name="git-store-path" type="text" label="Location" value="/work/demo.hs2"');
+    expect(markup).toMatch(/<input[^>]*name="git-store-path"[^>]*value="\/work\/demo.hs2"/);
     expect(markup).toContain('name="review-unverified-recovery" value="on"');
     expect(markup).toContain('cannot verify it is the same repository');
     expect(markup).toContain('data-action="relink-git-source"');
@@ -761,7 +762,7 @@ describe('ticket source surfaces', () => {
         { id: 'gitlab-dotcom', provider: 'gitlab', host: 'gitlab.com', managed: false, sources: [], projects: [] },
       ],
       inputValue = (markup: string, name: string) =>
-        new RegExp(`<wa-input[^>]*name="${name}"[^>]*>`).exec(markup)?.[0].match(/ value="([^"]*)"/)?.[1] ?? '';
+        new RegExp(`<input[^>]*name="${name}"[^>]*>`).exec(markup)?.[0].match(/ value="([^"]*)"/)?.[1] ?? '';
     // Before a choice: only this provider's accounts are offered and every field is blank.
     const jira = String(ProviderSetupForm({ kind: 'jira', accounts }));
     expect(jira.match(/data-action="use-provider-account"/g)).toHaveLength(1);

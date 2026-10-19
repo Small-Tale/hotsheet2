@@ -11,6 +11,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 import type { AttrSpec } from 'kerfjs';
 import { Check, ChevronRight, Copy, ExternalLink, LogIn, RefreshCw } from 'lucide';
 
@@ -204,16 +205,15 @@ export function ProviderSetupForm({
             </Text>
           ) : auth?.enterprise ? (
             <>
-              <wa-input
+              <TextField
                 name="github-enterprise-url"
                 type="url"
                 label="GitHub Enterprise Server URL"
                 required
                 placeholder="https://github.example.com"
                 value={auth.enterpriseUrl ?? ''}
-              >
-                <span slot="hint">The address you use to open GitHub Enterprise in a browser.</span>
-              </wa-input>
+                hint="The address you use to open GitHub Enterprise in a browser."
+              />
               <Row vAlign="middle" gap="xs" wrap>
                 <Button
                   emphasis="primary"
@@ -357,15 +357,15 @@ export function ProviderSetupForm({
           responsive Grid, HS2-7XX356); the form's max width keeps a third column from appearing. */}
       {showFields && (
         <Grid minColumnWidth={rem(15)} gap="m">
-          <wa-input
-            class="provider-setup-form__wide"
-            name="connection-name"
-            label="Display Name"
-            placeholder={labels[0]}
-            value={connection?.name ?? ''}
-          >
-            <span slot="hint">Leave blank to use “{labels[0]}”.</span>
-          </wa-input>
+          <div class="provider-setup-form__wide">
+            <TextField
+              name="connection-name"
+              label="Display Name"
+              placeholder={labels[0]}
+              value={connection?.name ?? ''}
+              hint={`Leave blank to use “${labels[0]}”.`}
+            />
+          </div>
           {choosing ? (
             // Kerf Combobox filters every reachable repository as the person types and still accepts a
             // typed one (HS2-27T5WT, HS2-EN1E76).
@@ -382,14 +382,15 @@ export function ProviderSetupForm({
               />
             </div>
           ) : (
-            <wa-input
-              class="provider-setup-form__wide"
-              name="connection-locator"
-              label={kind === 'jira' ? 'Project key' : 'Repository'}
-              required
-              placeholder={labels[1]}
-              value={connection?.locator ?? ''}
-            />
+            <div class="provider-setup-form__wide">
+              <TextField
+                name="connection-locator"
+                label={kind === 'jira' ? 'Project key' : 'Repository'}
+                required
+                placeholder={labels[1]}
+                value={connection?.locator ?? ''}
+              />
+            </div>
           )}
           {choosing && (
             <section class="provider-setup-form__wide" aria-label="GitHub Repository Access">
@@ -477,70 +478,66 @@ export function ProviderSetupForm({
                   }The Hot Sheet GitHub App needs Contents (read and write) permission and access to this repository. Its installation owner must approve new permissions before uploads work. Files are committed here and linked in issues.`}
                 />
               </div>
-              <wa-input
+              <TextField
                 name="attachment-folder"
                 label="Attachment Folder"
                 value={connectionSetting(connection, 'attachment_folder') || DEFAULT_GITHUB_ATTACHMENT_FOLDER}
-              >
-                <span slot="hint">Relative folder in the assets repository.</span>
-              </wa-input>
-              <wa-input
+                hint="Relative folder in the assets repository."
+              />
+              <TextField
                 name="attachment-branch"
                 label="Attachment Branch"
                 value={connectionSetting(connection, 'attachment_branch') || DEFAULT_GITHUB_ATTACHMENT_BRANCH}
-              >
-                <span slot="hint">Existing branch to receive attachment files.</span>
-              </wa-input>
+                hint="Existing branch to receive attachment files."
+              />
             </>
           )}
           {/* GitHub uses the credential saved by Sign in with GitHub; there is no manual reference (HS2-48GA17). */}
           {kind !== 'github' && (
-            <wa-input
-              class="provider-setup-form__wide"
-              name="credential-reference"
-              label="Credential Reference"
-              required
-              placeholder={labels[2]}
-              value={credentialValue}
-              data-key={`credential-${prefillKey}`}
-            >
-              <span slot="hint">
-                Create this reference first with <code>hotsheet key set</code>; the token is never returned to the
-                browser.
-              </span>
-            </wa-input>
+            <div class="provider-setup-form__wide">
+              <TextField
+                name="credential-reference"
+                label="Credential Reference"
+                required
+                placeholder={labels[2]}
+                value={credentialValue}
+                rootAttributes={{ 'data-key': `credential-${prefillKey}` }}
+                hint="Create this reference first with hotsheet key set; the token is never returned to the browser."
+              />
+            </div>
           )}
           {kind === 'jira' && (
             <>
-              <wa-input
+              <TextField
                 name="jira-email"
                 type="email"
                 label="Account Email"
                 required
                 value={emailValue}
-                data-key={`email-${prefillKey}`}
+                rootAttributes={{ 'data-key': `email-${prefillKey}` }}
               />
-              <wa-input
+              <TextField
                 name="api-base"
                 type="url"
                 label="Jira Site URL"
                 required
                 placeholder="https://company.atlassian.net"
                 value={apiBaseValue}
-                data-key={`api-base-${prefillKey}`}
+                rootAttributes={{ 'data-key': `api-base-${prefillKey}` }}
               />
             </>
           )}
           {kind === 'gitlab' && (
-            <wa-input
-              class="provider-setup-form__wide"
-              name="api-base"
-              type="url"
-              label="API Base URL (Optional)"
-              placeholder="https://gitlab.com/api/v4"
-              value={apiBaseValue}
-              data-key={`api-base-${prefillKey}`}
-            />
+            <div class="provider-setup-form__wide">
+              <TextField
+                name="api-base"
+                type="url"
+                label="API Base URL (Optional)"
+                placeholder="https://gitlab.com/api/v4"
+                value={apiBaseValue}
+                rootAttributes={{ 'data-key': `api-base-${prefillKey}` }}
+              />
+            </div>
           )}
           {defaultChoice !== undefined && (
             <div class="provider-setup-form__wide">

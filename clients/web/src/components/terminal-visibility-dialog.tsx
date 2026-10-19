@@ -1,5 +1,3 @@
-import '@awesome.me/webawesome/dist/components/input/input.js';
-
 import { Button } from '@kerfjs/ui/button';
 import { remify } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
@@ -13,6 +11,7 @@ import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { TabBarItem } from '@kerfjs/ui/tab-bar-item';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { Eye, EyeOff, Globe, MessageSquare, Pencil, Plus, Sparkles, Terminal, Trash2 } from 'lucide';
 
@@ -73,7 +72,7 @@ export function TerminalVisibilityNameDialog({ prompt }: { prompt?: TerminalVisi
       >
         <form {...TERMINALS_ACTIONS.submitTerminalVisibilityName.attrs}>
           <List gap="l">
-            <wa-input
+            <TextField
               name="terminal-visibility-group-name"
               label="Group Name"
               value={prompt?.value ?? ''}

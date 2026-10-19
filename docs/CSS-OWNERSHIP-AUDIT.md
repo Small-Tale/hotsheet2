@@ -193,7 +193,7 @@ the remaining wrapper markup that only existed because Badge lacked props:
   `ticket-attachment-item` identity, which Kerf root attributes protect.
 - Batch titles are large Kerf `Text` headings that still wrap long labels, with a plain
   `IconButton` Edit action; double-clicking the heading stays a shortcut. The label editor is a
-  small `wa-input` (Escape waits for it to render the restored label before blurring). The purpose
+  compact Kerf `TextField` (Escape waits for it to render the restored label before blurring). The purpose
   is a caret-free inline Kerf `Select` with an info `Badge` selection; it is no longer a native
   select, so its iOS zoom rule is gone. The New group target is an info `ContentItem`.
 - `ticket-attachments.css` keeps app-owned rules only: the wrapper cursor, batch/New group

@@ -6,9 +6,9 @@ describe('TrashSettings', () => {
   it('renders a positive whole-day shared retention control with recovery context', () => {
     const markup = String(TrashSettings({ days: 30, message: 'Enter a positive whole number of days.' }));
     expect(markup).toContain('data-action="save-trash-settings"');
-    expect(markup).toContain('name="trash-cleanup-days" type="number"');
-    expect(markup).toContain('value="30" required');
-    expect(markup).toContain('label="Keep Deleted Tickets for (Days)"');
+    expect(markup).toMatch(/<input[^>]*name="trash-cleanup-days"[^>]*type="number"[^>]*value="30"/);
+    expect(markup).toContain('required');
+    expect(markup).toContain('aria-label="Keep Deleted Tickets for (Days)"');
     expect(markup).toContain('The default is 30 days');
     expect(markup).toContain('Git history keeps every purged ticket file');
     expect(markup).toContain('Enter a positive whole number of days.');
@@ -17,7 +17,7 @@ describe('TrashSettings', () => {
     expect(markup).toContain('data-component="text"');
     // A Kerf List flex item bounds the field; there is no stylesheet (HS2-J7BTAG).
     expect(markup).toMatch(
-      /<div class="kui-list" data-component="list"[^>]*style="[^"]*0 1 (?:20rem|320px)[^"]*"[^>]*><wa-input[^>]*name="trash-cleanup-days"/u,
+      /<div class="kui-list" data-component="list"[^>]*style="[^"]*0 1 (?:20rem|320px)[^"]*"[^>]*><label[^>]*data-component="text-field"/u,
     );
     expect(markup).not.toContain('trash-settings__days');
   });

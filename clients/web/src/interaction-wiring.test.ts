@@ -180,7 +180,7 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
   });
 
   it('keeps main.tsx as a bounded side-effect bootstrap', () => {
-    expect(main.split('\n')).toHaveLength(37);
+    expect(main.split('\n')).toHaveLength(39);
     // Kerf DialogSurface's register touches the document, so only the browser entry loads it (HS2-BH7NZ4).
     expect(main).toContain("import '@kerfjs/ui/surface-scaffold/register';");
     // Page-lifetime iOS keyboard root-scroll restore (HS2-BCA512).
@@ -194,6 +194,7 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
     expect(runtime).not.toContain('wireResizableRegions(');
     // ChoiceChips' documented wiring contract (Kerf beta.106, HS2-BH7NZ4).
     expect(main).toContain('void wireChoiceChips(appRoot);');
+    expect(main).toContain('void wireTextFields(appRoot);');
     expect(main).not.toMatch(/\b(?:signal|mount|effect|wire\w+Interactions)\s*\(/);
     expect(runtime).not.toMatch(/from ['"][^'"]*\/main['"]/);
   });

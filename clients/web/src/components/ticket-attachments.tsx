@@ -13,6 +13,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 import { MoreHorizontal, Paperclip, Pencil, Plus, Upload } from 'lucide';
 
 import type { AttachmentActor, AttachmentPurpose } from '../api';
@@ -223,24 +224,24 @@ export function TicketAttachments({
                 data-attachment-actor-name={group.actor?.display_name ?? ''}
               >
                 <List gap="xs">
-                  {/* Kerf List, Row, Text, Button, wa-input, and Select own the header stack, title, label
+                  {/* Kerf List, Row, Text, Button, TextField, and Select own the header stack, title, label
                     editor, and purpose pill (HS2-K9HSXZ). The editor stays rendered (hidden) because
                     regrouping reads its label, and keeps one position so focusing it survives the
                     rerender that opens it; while it is open it replaces the title. */}
                   <List gap="2xs">
                     <ListInsetControl sides="l">
-                      <wa-input
-                        class="wa-visually-hidden-label"
-                        label={`Batch Label for ${group.label}`}
-                        size="small"
-                        value={
-                          editing && editingLabelDraft !== undefined ? editingLabelDraft : (group.explicitLabel ?? '')
-                        }
-                        placeholder={group.label}
-                        name="attachment-batch-label"
-                        disabled={!manageable}
-                        hidden={!editing}
-                      />
+                      <div hidden={!editing}>
+                        <TextField
+                          ariaLabel={`Batch Label for ${group.label}`}
+                          size="compact"
+                          value={
+                            editing && editingLabelDraft !== undefined ? editingLabelDraft : (group.explicitLabel ?? '')
+                          }
+                          placeholder={group.label}
+                          name="attachment-batch-label"
+                          disabled={!manageable}
+                        />
+                      </div>
                     </ListInsetControl>
                     {editing ? undefined : (
                       // Kerf Text titles the batch and wraps a long label; an editable batch adds a Kerf

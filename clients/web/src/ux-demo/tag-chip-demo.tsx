@@ -2,6 +2,7 @@ import { Button } from '@kerfjs/ui/button';
 import { CatalogExample } from '@kerfjs/ui/catalog';
 import { Checkbox } from '@kerfjs/ui/checkbox';
 import { Select } from '@kerfjs/ui/select';
+import { TextField } from '@kerfjs/ui/text-field';
 import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -79,7 +80,7 @@ export function TagChipDemo() {
 export function TagChipSettings() {
   return (
     <DemoSettingsForm settings="tag-chip">
-      <wa-input name="label" label="Label" value={tagChipSettings.label.value} />
+      <TextField name="label" label="Label" value={tagChipSettings.label.value} />
       <Select
         name="variant"
         label="Variant"

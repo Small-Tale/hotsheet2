@@ -21,7 +21,7 @@ const TEXT_INPUT_TYPES = new Set(['', 'text', 'search', 'email', 'url', 'tel', '
 export function isTextEntryElement(element: Element | null | undefined): boolean {
   if (!element) return false;
   const tag = element.tagName.toLowerCase();
-  if (tag === 'textarea' || tag === 'wa-input' || tag === 'wa-textarea') return true;
+  if (tag === 'textarea') return true;
   if (tag === 'input') return TEXT_INPUT_TYPES.has((element.getAttribute('type') ?? '').toLowerCase());
   return (element as HTMLElement).isContentEditable;
 }

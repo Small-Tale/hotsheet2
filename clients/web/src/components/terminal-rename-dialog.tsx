@@ -2,6 +2,7 @@ import { Button } from '@kerfjs/ui/button';
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
 import { Spacer } from '@kerfjs/ui/spacer';
+import { TextField } from '@kerfjs/ui/text-field';
 
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 
@@ -34,8 +35,8 @@ export function TerminalRenameDialog({ target }: { target?: TerminalRenameTarget
     >
       <form class="terminal-rename" {...TERMINALS_ACTIONS.renameTerminalForm.attrs}>
         <List gap="l">
-          <wa-input
-            data-key={`terminal-rename-${target?.session ?? 0}`}
+          <TextField
+            rootAttributes={{ 'data-key': `terminal-rename-${target?.session ?? 0}` }}
             name="terminal-name"
             label="Terminal Name"
             value={target?.value ?? ''}

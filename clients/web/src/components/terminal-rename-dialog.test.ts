@@ -39,7 +39,7 @@ describe('TerminalRenameDialog', () => {
     expect(unnamed).not.toContain('hint=');
     expect(renamed).toContain('data-action="reset-terminal-rename"');
     expect(renamed).toContain('Reset to Default');
-    expect(renamed).toContain('hint="Default name: Claude 1"');
+    expect(renamed).toContain('aria-description="Default name: Claude 1"');
     expect(renamed).toContain('value="Review"');
     // Reset leads; Cancel and Rename stay together on the trailing side.
     expect(renamed.indexOf('reset-terminal-rename')).toBeLessThan(renamed.indexOf('kui-spacer'));

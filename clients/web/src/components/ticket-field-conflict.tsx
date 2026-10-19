@@ -1,4 +1,3 @@
-import '@awesome.me/webawesome/dist/components/textarea/textarea.js';
 import './ticket-field-conflict.css';
 
 import { Button } from '@kerfjs/ui/button';
@@ -10,6 +9,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 import { GitMerge, RotateCcw } from 'lucide';
 
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
@@ -60,14 +60,15 @@ export function TicketFieldConflict({ conflict, resolution }: TicketFieldConflic
             <Version label="Their latest version" value={conflict.theirs} />
             <Version label="Your version" value={conflict.mine} />
           </Grid>
-          <wa-textarea
-            class="ticket-field-conflict__merge"
-            name="ticket-conflict-resolution"
-            label={`Merged ${field}`}
-            size="small"
-            resize="auto"
-            value={resolution}
-          />
+          <div class="ticket-field-conflict__merge">
+            <TextField
+              multiline
+              name="ticket-conflict-resolution"
+              label={`Merged ${field}`}
+              size="compact"
+              value={resolution}
+            />
+          </div>
           <Row hAlign="right" gap="xs" wrap>
             <Button
               size="compact"

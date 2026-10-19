@@ -40,7 +40,7 @@ export function galleryKeyTargetsTextField(event: Event): boolean {
       (target) =>
         target instanceof HTMLElement &&
         target.matches(
-          'input, textarea, select, wa-input, wa-textarea, kui-select, [role="textbox"], [contenteditable]:not([contenteditable="false"])',
+          'input, textarea, select, kui-select, [role="textbox"], [contenteditable]:not([contenteditable="false"])',
         ),
     );
 }

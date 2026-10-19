@@ -1,5 +1,4 @@
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
-import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/styles/utilities/visually-hidden.css';
 import './quick-ticket-composer.css';
 
@@ -11,6 +10,7 @@ import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 import { Paperclip, Plus, Star, Trash2, TriangleAlert, Upload } from 'lucide';
 
 import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
@@ -182,8 +182,8 @@ export function QuickTicketComposer({
               />
             </div>
           )}
-          <wa-input
-            class="quick-ticket-composer__title"
+          <TextField
+            className="quick-ticket-composer__title"
             name="new-ticket-title"
             label="Ticket Title"
             value={title}

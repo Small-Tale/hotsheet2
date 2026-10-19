@@ -60,9 +60,8 @@ const ACTION_KEYS = new Set(['Enter', 'Escape', ' ']);
 function isTextEntry(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
   return Boolean(
-    target.closest('textarea, [contenteditable=""], [contenteditable="true"], wa-textarea') ||
-    (target.closest('input, wa-input') &&
-      !['checkbox', 'radio', 'button', 'submit'].includes(target.getAttribute('type') ?? '')),
+    target.closest('textarea, [contenteditable=""], [contenteditable="true"]') ||
+    (target.closest('input') && !['checkbox', 'radio', 'button', 'submit'].includes(target.getAttribute('type') ?? '')),
   );
 }
 

@@ -1,7 +1,7 @@
 /* TicketAttachments (HS2-MGVE50): Kerf List, ListHeader, Row, and Text own the section stack,
    heading, count, and copy (HS2-QK4HES); Kerf FilePickerTrigger and FileDropZone own the Add trigger,
    the drop zone, and their hidden file inputs (HS2-VHY325). Kerf ContentItem, Row, Text, Button,
-   wa-input, and Select own the attachment rows, batch headers, and regroup target (HS2-K9HSXZ). These
+   TextField, and Select own the attachment rows, batch headers, and regroup target (HS2-K9HSXZ). These
    rules cover only app-owned markup: drag targets, the native title button, and the media grid. */
 .ticket-attachments__batch {
   border-radius: var(--wa-border-radius-m);

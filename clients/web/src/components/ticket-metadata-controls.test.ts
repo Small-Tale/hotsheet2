@@ -371,7 +371,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(markup).not.toContain('data-action="edit-attachment-batch-label"');
     expect(markup).not.toContain('data-attachment-group-drop-target');
     expect(markup).not.toContain('data-drag-attachment-id');
-    expect(markup).toMatch(/<wa-input[^>]*name="attachment-batch-label"[^>]* disabled/u);
+    expect(markup).toMatch(/<input[^>]*name="attachment-batch-label"[^>]*disabled/u);
     expect(markup).toMatch(/<kui-select[^>]*name="attachment-batch-purpose"[^>]*disabled/u);
     expect(markup).toContain('Attachments are view-only in linked ticket readers.');
     expect(markup).not.toContain('This provider does not support');
@@ -446,7 +446,9 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(markup).toContain('data-attachment-batch-title="true"');
     expect(markup).toMatch(/<h3[^>]*data-component="text"[^>]*data-size="medium"[^>]*>/u);
     expect(markup).toContain('Edit Batch Label AI · Round 1 · Correctness evidence');
-    expect(markup).toMatch(/<wa-input[^>]*name="attachment-batch-label"[^>]*hidden/u);
+    expect(markup).toMatch(
+      /<div hidden><label[^>]*data-component="text-field"[^>]*>[\s\S]*?<input[^>]*name="attachment-batch-label"/u,
+    );
     expect(markup).toMatch(/<kui-select[^>]*name="attachment-batch-purpose"/u);
     // Uncategorized carries a sentinel value; Web Awesome treats an empty option value as no choice.
     expect(markup).toContain('value="uncategorized"');
@@ -470,7 +472,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(css).toContainSource(
       ':is(.ticket-attachments__batch, .ticket-attachments__new-group)[data-drag-over="true"] { outline: var(--wa-focus-ring)',
     );
-    // Kerf ContentItem, icon-only Button, ListHeader, wa-input, and Select own the former row, menu, title,
+    // Kerf ContentItem, icon-only Button, ListHeader, TextField, and Select own the former row, menu, title,
     // editor, and purpose pill chrome.
     for (const removed of ['ticket-attachments__item-menu', 'batch-title-editor', 'header select', 'field-sizing'])
       expect(css).not.toContain(removed);

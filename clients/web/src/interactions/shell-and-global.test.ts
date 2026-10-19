@@ -12,7 +12,7 @@ class FieldElement {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('gallery keyboard ownership', () => {
-  it('leaves note editing and shadow-hosted text fields in control of their keys', () => {
+  it('leaves note editing and native text fields in control of their keys', () => {
     vi.stubGlobal('HTMLElement', FieldElement);
     const keyFrom = (...path: FieldElement[]) => ({ composedPath: () => path }) as unknown as Event;
 
@@ -22,7 +22,7 @@ describe('gallery keyboard ownership', () => {
         keyFrom(new FieldElement('span'), new FieldElement('[contenteditable]:not([contenteditable="false"])')),
       ),
     ).toBe(true);
-    expect(galleryKeyTargetsTextField(keyFrom(new FieldElement('span'), new FieldElement('wa-input')))).toBe(true);
+    expect(galleryKeyTargetsTextField(keyFrom(new FieldElement('span'), new FieldElement('input')))).toBe(true);
     expect(galleryKeyTargetsTextField(keyFrom(new FieldElement('button')))).toBe(false);
     expect(galleryKeyTargetsTextField(keyFrom(new FieldElement('div')))).toBe(false);
   });

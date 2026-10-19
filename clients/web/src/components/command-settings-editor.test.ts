@@ -240,17 +240,19 @@ describe('CommandSettingsEditor', () => {
         editingId: 'p',
       }),
     );
-    expect(program).toMatch(/<wa-input label="Button Label" name="title" data-command-field[^>]*value="Build"/);
-    expect(program).toMatch(/<wa-input label="Program" name="program"/);
-    expect(program).toMatch(/<wa-textarea label="Arguments" name="args"[^>]*hint="One exact argument per line\."/);
-    expect(program).toContain('wa-input label="Confirmation Message" name="confirmation"');
+    expect(program).toMatch(/<label[^>]*data-command-field=""[^>]*><span[^>]*>Button Label/);
+    expect(program).toMatch(/<input[^>]*name="title"[^>]*value="Build"/);
+    expect(program).toMatch(/<input[^>]*name="program"/);
+    expect(program).toMatch(/<textarea[^>]*name="args"[^>]*aria-description="One exact argument per line\."/);
+    expect(program).toMatch(/<input[^>]*name="confirmation"/);
     expect(program).toMatch(/<kui-select[^>]*name="kind"/);
     expect(program).toContain('data-component="grid"');
-    // Every command field is a Web Awesome control; only Kerf ChoiceChips' color radios are native.
+    // Kerf TextField owns native command inputs and textareas; ChoiceChips owns the color radios.
     const nativeFields = [...program.matchAll(/<(input|textarea|select)[\s>][^>]*/g)]
       .map((match) => match[0])
       .filter((field) => !field.includes('type="radio"'));
-    expect(nativeFields).toEqual([]);
+    expect(nativeFields.some((field) => field.includes('name="title"'))).toBe(true);
+    expect(nativeFields.some((field) => field.includes('name="args"'))).toBe(true);
     for (const removed of ['__control', '__field', '__hint', '__grid', '__wide'])
       expect(css).not.toContain(`.command-settings-editor${removed}`);
     expect(css).not.toContain('@media (max-width');
@@ -260,7 +262,7 @@ describe('CommandSettingsEditor', () => {
         editingId: 's',
       }),
     );
-    expect(shell).toMatch(/<wa-textarea label="Shell Command" name="command"[^>]*hint="Runs in the project root/);
+    expect(shell).toMatch(/<textarea[^>]*name="command"[^>]*aria-description="Runs in the project root/);
   });
 
   it('composes Kerf PopoverDialogSurface instead of app popover chrome (HS2-T1MVPV, HS2-D9JBXT)', () => {

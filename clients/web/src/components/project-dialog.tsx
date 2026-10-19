@@ -9,6 +9,7 @@ import { Row } from '@kerfjs/ui/row';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 import { Ellipsis } from 'lucide';
 
 import type { Checkout } from '../api';
@@ -57,7 +58,7 @@ export function ProjectDialog({
               setup for a new project.
             </Text>
             <div class="project-dialog__path">
-              <wa-input name="project-root" label="Project Folder" value={root} required />
+              <TextField name="project-root" label="Project Folder" value={root} required />
               <Button
                 emphasis="secondary"
                 type="button"

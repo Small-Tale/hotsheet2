@@ -708,7 +708,7 @@ test('represents the application states extracted from main.tsx in the UX catalo
   await renameSurface.screenshot({ path: 'target/visual-captures/hs2-737h3x-terminal-rename-wide.png' });
   // HS2-2Q7KTX: the renamed variant names its default and offers Reset to default; the
   // default-named variant does not.
-  const renameField = rename.locator('wa-input[name="terminal-name"]'),
+  const renameField = rename.locator('input[name="terminal-name"]'),
     resetRename = rename.getByRole('button', { name: 'Reset to Default' });
   await expect(renameField).toHaveJSProperty('hint', 'Default name: Terminal 1');
   await resetRename.click();
@@ -955,19 +955,19 @@ test('demos the unapplied Trash retention leave warning through the production w
   // Escape keeps the draft and closes the warning.
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
-  await expect(example.locator('wa-input[name="trash-cleanup-days"]')).toHaveJSProperty('value', '7');
+  await expect(example.locator('input[name="trash-cleanup-days"]')).toHaveJSProperty('value', '7');
 
   // Revert restores the applied window; leaving again with a clean value raises nothing.
   await leave.click();
   await dialog.getByRole('button', { name: 'Revert to 14 days' }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(example.locator('wa-input[name="trash-cleanup-days"]')).toHaveJSProperty('value', '14');
+  await expect(example.locator('input[name="trash-cleanup-days"]')).toHaveJSProperty('value', '14');
   await leave.click();
   await expect(dialog).toHaveCount(0);
 
   // A new edit previews its purge; Apply in the warning applies it.
-  const field = example.locator('wa-input[name="trash-cleanup-days"]');
-  await field.locator('input').fill('3');
+  const field = example.locator('input[name="trash-cleanup-days"]');
+  await field.fill('3');
   await expect(example.locator('[data-role="trash-purge-hint"]')).toHaveText('5 tickets in Trash will be purged');
   await leave.click();
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
@@ -980,7 +980,7 @@ test('demos the unapplied Trash retention leave warning through the production w
   // "Apply Now" in another example applies through the same helper's submit binding.
   const unapplied = page.locator('[data-demo-trash="unapplied"]');
   await unapplied.getByRole('button', { name: 'Apply Now' }).click();
-  await expect(unapplied.locator('wa-input[name="trash-cleanup-days"]')).toHaveJSProperty('value', '7');
+  await expect(unapplied.locator('input[name="trash-cleanup-days"]')).toHaveJSProperty('value', '7');
   await expect(unapplied.getByRole('button', { name: 'Apply Now' })).toHaveJSProperty('disabled', true);
   await expect(unapplied.locator('[data-role="trash-purge-hint"]')).toHaveCount(0);
 });
@@ -3444,7 +3444,7 @@ test('previews every BulkTicketDialog presentation through demo settings, then r
     await expect(tagDialog.locator('[data-action="choose-bulk-tag"]')).toHaveText(['bug', 'ui', 'backend', 'docs']);
     await shot('remove-tag');
     await tagDialog.getByRole('button', { name: 'backend' }).click();
-    await expect(tagDialog.locator('wa-input[name="bulk-ticket-tag"]')).toHaveJSProperty('value', 'backend');
+    await expect(tagDialog.locator('input[name="bulk-ticket-tag"]')).toHaveJSProperty('value', 'backend');
     await tagDialog.getByRole('button', { name: 'Remove tag' }).click();
     await expect(tagDialog).toHaveCount(0);
     await expect(event).toHaveText('Remove tag “backend” from 5 tickets requested.');
@@ -7586,8 +7586,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await expect(shellComposer.getByRole('textbox', { name: 'Ticket Title' })).toBeFocused();
   const composerControlHeights = await shellComposer.evaluate((node) => {
     const input = node
-      .querySelector('wa-input')!
-      .shadowRoot!.querySelector<HTMLElement>('[part~="base"]')!
+      .querySelector<HTMLElement>('[data-component="text-field"] .kui-text-field__box')!
       .getBoundingClientRect();
     const select = node
       .querySelector('kui-select')!
@@ -9527,9 +9526,7 @@ test('shows the source mark after the type on cards and beside the inspector num
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'github');
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(59, 130, 246)');
   await page.locator('[data-action="toggle-settings"]').first().click();
-  const multipleSources = page.locator(
-    '[data-settings="ticket-list-row"] input[type="checkbox"][name="show-source-icon"]',
-  );
+  const multipleSources = page.locator('[data-settings="ticket-list-row"][type="checkbox"][name="show-source-icon"]');
   await multipleSources.click();
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
   await expect(row.locator('.ticket-list-row__body')).toHaveAttribute('data-has-source', 'false');
@@ -9663,9 +9660,9 @@ test('aligns the TicketSearchFormField with a Web Awesome input and keeps its se
     await expect
       .poll(async () =>
         section.evaluate((node) => {
-          const input = node.querySelector<HTMLElement>('wa-input')!,
-            inputLabel = input.shadowRoot!.querySelector<HTMLElement>('[part~="form-control-label"]')!,
-            inputBox = input.shadowRoot!.querySelector<HTMLElement>('[part~="base"]')!.getBoundingClientRect(),
+          const input = node.querySelector<HTMLElement>('[data-component="text-field"]')!,
+            inputLabel = input.querySelector<HTMLElement>('.kui-text-field__label')!,
+            inputBox = input.querySelector<HTMLElement>('.kui-text-field__box')!.getBoundingClientRect(),
             queryLabel = node.querySelector<HTMLElement>('[data-search-field-form-label]')!,
             queryBox = node.querySelector<HTMLElement>('[data-component="search-field"]')!.getBoundingClientRect(),
             style = (element: HTMLElement) => {

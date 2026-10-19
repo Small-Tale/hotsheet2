@@ -114,7 +114,7 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
   await installFixture(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
-  await page.locator('wa-input[name="project-root"]').evaluate((node: HTMLElement & { value: string }, value) => {
+  await page.locator('input[name="project-root"]').evaluate((node: HTMLElement & { value: string }, value) => {
     node.value = value;
   }, '/work/hotsheet2');
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
@@ -238,7 +238,7 @@ for (const apple of [true, false]) {
     await page.routeWebSocket(/\/__hotsheet\/project-api\/[^/]+\/ws\/sync(?:\?.*)?$/, () => undefined);
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
-    await page.locator('wa-input[name="project-root"]').evaluate((node: HTMLElement & { value: string }) => {
+    await page.locator('input[name="project-root"]').evaluate((node: HTMLElement & { value: string }) => {
       node.value = '/work/hotsheet2';
     });
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();

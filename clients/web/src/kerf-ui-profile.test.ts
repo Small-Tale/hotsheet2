@@ -86,13 +86,13 @@ describe('Kerf application UI profile', () => {
     expect(profile.exceptions.at(-1)?.rationale).toContain('KF-Z00DKT');
   });
 
-  it('keeps only the pending text-entry override after Checkbox and ProgressRing adoption', () => {
+  it('avoids the discouraged raw fields after TextField, Checkbox, and ProgressRing adoption', () => {
     const profile = JSON.parse(readFileSync(new URL('../.kerf-ui-profile.json', import.meta.url), 'utf8')) as {
       preferences: Record<string, { preferred: string; avoid: string[]; rationale: string }>;
     };
     expect(Object.keys(profile.preferences).sort()).toEqual(['boolean-option', 'compact-progress', 'text-entry']);
     expect(profile.preferences['text-entry'].rationale).toContain('HS2-CQ1TZN');
-    expect(profile.preferences['text-entry'].avoid).toEqual([]);
+    expect(profile.preferences['text-entry'].avoid).toEqual(['@kerfjs/ui:wa-input', '@kerfjs/ui:wa-textarea']);
     expect(profile.preferences['boolean-option'].avoid).toEqual(['@kerfjs/ui:wa-checkbox']);
     expect(profile.preferences['compact-progress'].avoid).toEqual(['@kerfjs/ui:wa-progress-ring']);
   });

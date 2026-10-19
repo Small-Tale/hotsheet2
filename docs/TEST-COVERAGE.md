@@ -891,6 +891,13 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - End to end: `clients/web/tests/providers.spec.ts # copies and downloads AI chat messages from a scoped context menu (HS2-YR405B)` exercises the shipped chat, clipboard, context menu, keyboard access, scoped export, and selection-bar Download.
 - Manual: Inspect matching wide and phone menu captures attached to HS2-YR405B.
 
+### Kerf TextField adoption (HS2-CQ1TZN)
+
+- Behavior: Production dialogs, provider setup, attachment label editing, command settings, and UX demo single-line and multiline fields use Kerf TextField. Native input and textarea events preserve controlled values, autosave, focus on open, reset, and ticket recovery flows. The separate native ticket draft editors and date/time helper retain their existing contracts.
+- Unit: Affected `clients/web/src/components/*.test.ts` form and ticket surface tests plus `clients/web/src/kerf-ui-profile.test.ts` cover rendered names, values, validation, hints, and the discouraged-control profile.
+- End to end: `clients/web/tests/{providers,ux-demo,saved-views,project-sidebar-state,ticket-reader-stack,touch-field-font}.spec.ts` exercise source setup, command autosave, ticket creation, saved-view open/reopen, attachment label persistence, and touch font sizing through the shipped browser flows.
+- Manual: Inspect wide and phone captures attached to HS2-CQ1TZN for provider forms, command fields, and ticket text transitions.
+
 ### Kerf checkbox and claim progress controls (HS2-SKD293)
 
 - Behavior: Settings, provider defaults, permission-rule selection, and UX demo boolean options use Kerf Checkbox with native checked state and bubbling changes. Live claim ETA uses Kerf ProgressRing with an accessible progress value; the overrun state retains its activity spinner.

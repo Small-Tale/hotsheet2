@@ -702,7 +702,7 @@ test('keeps linked reader attachment batches read-only for a provider without at
   await linked.getByRole('tab', { name: /Attachments/ }).click();
   const batch = linked.locator('[data-attachment-batch="linked-batch"]');
   await expect(batch.getByRole('heading', { name: 'Linked evidence' })).toBeVisible();
-  await expect(batch.locator('wa-input[name="attachment-batch-label"]')).toHaveJSProperty('disabled', true);
+  await expect(batch.locator('input[name="attachment-batch-label"]')).toHaveJSProperty('disabled', true);
   await expect(batch.locator('kui-select[name="attachment-batch-purpose"] > .kui-select__trigger')).toBeDisabled();
   await expect(linked.locator('[data-action="edit-attachment-batch-label"]')).toHaveCount(0);
   await expect(
@@ -711,7 +711,7 @@ test('keeps linked reader attachment batches read-only for a provider without at
     ),
   ).toHaveCount(0);
   await batch.getByRole('heading', { name: 'Linked evidence' }).dblclick();
-  await expect(batch.locator('wa-input[name="attachment-batch-label"]')).not.toBeVisible();
+  await expect(batch.locator('input[name="attachment-batch-label"]')).not.toBeVisible();
   await linked.getByRole('button', { name: 'Close Ticket Reader' }).click();
   expect(attachmentWrites).toEqual([]);
   expect(

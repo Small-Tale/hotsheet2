@@ -1,4 +1,3 @@
-import '@awesome.me/webawesome/dist/components/input/input.js';
 import './ticket-close-dialog.css';
 
 import { Button } from '@kerfjs/ui/button';
@@ -12,6 +11,7 @@ import { Spacer } from '@kerfjs/ui/spacer';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 import { CheckCircle2, CopyX, Search } from 'lucide';
 
 import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
@@ -67,20 +67,13 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
             {duplicate && (
               <section aria-label="Duplicate Target">
                 <List gap="xs">
-                  <wa-input
+                  <TextField
                     name="ticket-close-target-search"
                     label="Existing Ticket"
                     placeholder="Search by ticket number or title"
                     value={state.query}
-                  >
-                    <LucideIcon
-                      slot="start"
-                      icon={Search}
-                      name="search"
-                      size={16}
-                      color={uiColor('neutral-on-quiet')}
-                    />
-                  </wa-input>
+                    icon={<LucideIcon icon={Search} name="search" size={16} color={uiColor('neutral-on-quiet')} />}
+                  />
                   {state.selected && (
                     <StateBanner
                       tone="success"

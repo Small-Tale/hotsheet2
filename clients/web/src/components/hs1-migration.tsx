@@ -8,6 +8,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Text } from '@kerfjs/ui/text';
+import { TextField } from '@kerfjs/ui/text-field';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { ArchiveRestore, Database, Trash2 } from 'lucide';
 
@@ -81,7 +82,7 @@ export function Hs1MigrationDialog({
           </ValueTable>
           <Row gap="xs" vAlign="bottom" wrap>
             <List flex>
-              <wa-input
+              <TextField
                 name="hs1-ticket-store"
                 label="Ticket Repository Folder"
                 value={defaultStore}

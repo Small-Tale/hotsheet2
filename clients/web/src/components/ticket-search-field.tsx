@@ -307,7 +307,7 @@ function ticketSearchHelpTrailing(help: boolean, open: boolean) {
 export interface TicketSearchFormFieldProps {
   /** Kerf token-search editor id; also the identity delegated handlers receive. */
   id: string;
-  /** Visible form label (Kerf renders it with the same inset and typography as `wa-input`). */
+  /** Visible form label (Kerf renders it with the same inset and typography as TextField). */
   label: string;
   /** The Kerf-managed search model, registered under `id` in `wireSearchFields({ models })`. */
   model: SearchFieldModel;

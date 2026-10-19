@@ -36,8 +36,8 @@ async function collect(page: Page) {
   await page.goto('/ux-demo?component=ticket-attachments');
   // The purpose pill is a Kerf Select (no text entry); the batch label editor is the text field (HS2-K9HSXZ).
   await page.locator('[data-action="edit-attachment-batch-label"]').first().click();
-  await expect(page.locator('wa-input[name="attachment-batch-label"]:not([hidden])').first()).toBeVisible();
-  sizes.batchLabel = await fontSizes(page, 'wa-input[name="attachment-batch-label"]');
+  await expect(page.locator('input[name="attachment-batch-label"]:not([hidden])').first()).toBeVisible();
+  sizes.batchLabel = await fontSizes(page, 'input[name="attachment-batch-label"]');
   await page.goto('/ux-demo?component=provider-setup-form');
   // The repository field is a Kerf Combobox, which keeps its own touch-safe size (HS2-EN1E76).
   await expect(page.locator('input[name="connection-locator"]')).toBeVisible();
