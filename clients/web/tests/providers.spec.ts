@@ -9842,7 +9842,7 @@ test('projects an indexed feedback-needed note into the real row and inspector r
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
+  const ticket = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await expect(ticket).toHaveAttribute('data-rail', 'pop');
   await expect(ticket.locator('.kui-summary-row__rail')).toBeVisible();
   await expect(ticket.locator('.ticket-list-row__feedback')).toContainText('Needs review');
@@ -10141,12 +10141,13 @@ test('answers a feedback prompt with new notes and never rewrites the prompt', a
 });
 
 test('opens reader at the active feedback note from its inspector action', async ({ page }) => {
-  await page.setViewportSize({ width: 1100, height: 520 });
+  await page.setViewportSize({ width: 1100, height: 640 });
   await mockProject(page, true, true);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail'),
     action = inspector.getByRole('button', { name: 'Respond to Feedback' });
   await expect(action).toHaveCount(1);
@@ -11122,8 +11123,8 @@ test('shows animated active state only for the lifetime of a ticket claim lease'
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.waitForTimeout(500);
-  const activeRow = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
-    idleRow = page.locator('[data-ticket-slug="HS2-START02"]'),
+  const activeRow = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
+    idleRow = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-START02"]'),
     indicator = activeRow.locator('.ticket-list-row__claim');
   await expect(activeRow).toHaveAttribute('data-status', 'started');
   await expect(indicator.locator('[data-component="loading-spinner"]')).toHaveAttribute(
@@ -11135,7 +11136,7 @@ test('shows animated active state only for the lifetime of a ticket claim lease'
   await expect(page.locator('[data-ticket-slug="HS2-DONE01"] .ticket-list-row__claim')).toHaveCount(0);
   expect(
     await activeRow
-      .locator('.ticket-list-row__metadata')
+      .locator('.kui-summary-row__metadata')
       .evaluate((node) => [...node.children].map((child) => child.className)),
   ).toEqual(expect.arrayContaining(['ticket-list-row__claim']));
   await page.screenshot({ path: 'target/visual-captures/hs2-s3stys-claimed-wide.png', fullPage: true });
@@ -11211,8 +11212,8 @@ test('shows the compact confidence pill on completed list rows and board cards a
   await assertVerified();
   // The pill sits on the metadata line with the other pills, at chip height.
   const doneRow = page.locator('[data-ticket-slug="HS2-DONE01"][data-component="summary-row"]').first();
-  await expect(doneRow).toHaveAttribute('data-presentation', 'list');
-  await expect(doneRow.locator('.ticket-list-row__metadata [data-confidence-badge]')).toHaveCount(1);
+  await expect(doneRow).toHaveAttribute('data-presentation', 'row');
+  await expect(doneRow.locator('.kui-summary-row__metadata [data-confidence-badge]')).toHaveCount(1);
   await page.screenshot({ path: 'target/visual-captures/claude/hs2-a0q6g6-list-wide.png' });
 
   await page.getByLabel('Columns View').click();
