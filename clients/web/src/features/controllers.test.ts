@@ -8,6 +8,7 @@ import type { MobileMagnifiedTerminal, TerminalDashboardGroup } from '../compone
 import type { ConversationExportOpenResult } from '../conversation-export';
 import type { Project } from '../interactions/types';
 import { INACTIVE_MOBILE_TERMINAL_FOCUS } from '../mobile-terminal-focus';
+import { type PermissionRule, permissionRuleKey } from '../permission-notifications';
 import type { DrawerAIChat } from '../project-drive';
 import { serverInFlightCount } from '../server-busy';
 import { initialTerminalVisibilityState } from '../terminal-visibility';
@@ -348,6 +349,50 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     await owner.applySelectedPermissionRules('a', 'delete');
     expect(owner.permissionRules('a')).toEqual([]);
     expect(owner.permissionRulesDialogFor('a', true)?.selected).toEqual([]);
+    owner.dispose();
+  });
+
+  it('changes a project answer between session and always while preserving decision and chat scope (HS2-V95VEB)', async () => {
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    const session = {
+      project: '/work/a',
+      tool: 'Bash',
+      action: 'one',
+      decision: 'deny' as const,
+      scope: 'session' as const,
+    };
+    const chat = {
+      project: '/work/a',
+      connection: 'chat',
+      tool: 'Bash',
+      action: 'two',
+      decision: 'allow' as const,
+      scope: 'chat' as const,
+    };
+    let rules: PermissionRule[] = [session, chat];
+    let fail = false;
+    const patches: { action: string; scope: string }[] = [];
+    fetchMock.mockImplementation(async (_url, options) => {
+      if (options?.method !== 'PATCH') return json(rules);
+      const body = JSON.parse(options.body as string) as { action: string; scope: 'session' | 'always' };
+      patches.push(body);
+      if (fail) return Response.json({ error: 'Unavailable' }, { status: 503 });
+      rules = rules.map((rule) => (rule.action === body.action ? { ...rule, scope: body.scope } : rule));
+      return new Response(null, { status: 204 });
+    });
+    owner.permissionRules('a');
+    for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+    const key = permissionRuleKey(session);
+    await owner.changePermissionRuleScope('a', key, 'always');
+    expect(owner.permissionRules('a')[0]).toMatchObject({ decision: 'deny', scope: 'always' });
+    await owner.changePermissionRuleScope('a', key, 'session');
+    expect(owner.permissionRules('a')[0]).toMatchObject({ decision: 'deny', scope: 'session' });
+    await owner.changePermissionRuleScope('a', permissionRuleKey(chat), 'always');
+    expect(patches).toHaveLength(2);
+    fail = true;
+    await owner.changePermissionRuleScope('a', key, 'always');
+    expect(owner.permissionRules('a')[0].scope).toBe('session');
+    expect(owner.permissionRulesMessage.value).toContain('Could not change');
     owner.dispose();
   });
 

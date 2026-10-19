@@ -1,3 +1,5 @@
+import './permission-rules-settings.css';
+
 import { Button } from '@kerfjs/ui/button';
 import { Checkbox } from '@kerfjs/ui/checkbox';
 import { remify } from '@kerfjs/ui/css-values';
@@ -74,36 +76,57 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
           rootAttributes={{
             'data-permission-rule': key,
             'data-permission-rule-scope': rule.scope,
+            'data-selectable': selectable ? '' : undefined,
           }}
         >
           {selectable && (
-            <Checkbox
-              action={NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRule.value}
-              rootAttributes={{ 'data-rule-key': key }}
-              checked={selected.has(key)}
-              disabled={dialog?.busy}
-              label={`Select ${label}`}
-            />
+            <div class="permission-rules-settings__selection">
+              <Checkbox
+                action={NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRule.value}
+                rootAttributes={{ 'data-rule-key': key }}
+                checked={selected.has(key)}
+                disabled={dialog?.busy}
+                label={`Select ${label}`}
+              />
+            </div>
           )}
           <LucideIcon
             icon={allowed ? ShieldCheck : ShieldX}
             name={allowed ? 'shield-check' : 'shield-x'}
             label={allowed ? 'Allowed' : 'Denied'}
           />
-          <List gap="none" flex>
-            <Text
-              wrap="truncate"
-              truncate="middle"
-              truncateKeep={8}
-              title={`${label} — Action details hidden to protect sensitive values`}
-              flush
+          <div class="permission-rules-settings__answer">
+            <List gap="none" flex>
+              <Text
+                wrap="truncate"
+                truncate="middle"
+                truncateKeep={8}
+                title={`${label} — Action details hidden to protect sensitive values`}
+                flush
+              >
+                {label}
+              </Text>
+              <Text tone="quiet" size="compact" flush>
+                {`${allowed ? 'Allow' : 'Deny'} · ${SCOPE_LABELS[rule.scope]}`}
+              </Text>
+            </List>
+          </div>
+          {rule.scope !== 'chat' && (
+            <Button
+              emphasis="plain"
+              size="compact"
+              action={NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleScope.value}
+              rootAttributes={{
+                'data-rule-key': key,
+                'data-scope': rule.scope === 'session' ? 'always' : 'session',
+              }}
+              disabled={revoking.includes(key) || dialog?.busy}
+              ariaLabel={`Remember ${label} ${rule.scope === 'session' ? 'always' : 'until server restart'}`}
+              title={rule.scope === 'session' ? 'Change to Always' : 'Change to Until Server Restarts'}
             >
-              {label}
-            </Text>
-            <Text tone="quiet" size="compact" flush>
-              {`${allowed ? 'Allow' : 'Deny'} · ${SCOPE_LABELS[rule.scope]}`}
-            </Text>
-          </List>
+              {rule.scope === 'session' ? 'Always' : 'Session'}
+            </Button>
+          )}
           <Button
             emphasis="plain"
             size="compact"
@@ -119,7 +142,11 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
     });
   }
   return (
-    <section data-component="permission-rules-settings" aria-label="Remembered Permission Answers">
+    <section
+      class="permission-rules-settings"
+      data-component="permission-rules-settings"
+      aria-label="Remembered Permission Answers"
+    >
       <List gap="xs">
         <Text variant="h3" size="compact">
           Remembered answers

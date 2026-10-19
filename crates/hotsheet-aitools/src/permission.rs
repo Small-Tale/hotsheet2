@@ -979,6 +979,72 @@ impl SharedPermissionBridge {
         Ok(updated)
     }
 
+    /// Change a project-wide rule between server-session and durable lifetimes. Write the
+    /// durable file first; a failed write leaves the live answer and its lifetime intact.
+    /// The primary store has an empty-project mirror for legacy requests (HS2-V95VEB).
+    pub fn update_scope(
+        &self,
+        project: &str,
+        connection: Option<&str>,
+        tool: &str,
+        action: &str,
+        persist: bool,
+        durable: Option<(&Path, bool)>,
+    ) -> io::Result<Option<Rule>> {
+        let mut bridge = self.inner.lock_or_recover();
+        let Some(index) = bridge.rules.iter().position(|rule| {
+            rule.project == project
+                && rule.connection.as_deref() == connection
+                && rule.tool == tool
+                && rule.action == action
+        }) else {
+            return Ok(None);
+        };
+        let current = bridge.rules[index].clone();
+        if current.connection.is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "chat-scoped permission rules cannot change lifetime",
+            ));
+        }
+        if current.persist == persist {
+            return Ok(Some(current));
+        }
+        let (path, mirror_legacy) =
+            durable.ok_or_else(|| io::Error::other("permission rule store unavailable"))?;
+        if persist {
+            append_rule(
+                path,
+                &Rule {
+                    persist: true,
+                    ..current.clone()
+                },
+            )?;
+        } else if !remove_rule(path, project, tool, action)? {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "durable permission rule missing",
+            ));
+        }
+        bridge.rules[index].persist = persist;
+        let updated = bridge.rules[index].clone();
+        if mirror_legacy {
+            bridge.rules.retain(|rule| {
+                !(rule.project.is_empty()
+                    && rule.connection.is_none()
+                    && rule.tool == tool
+                    && rule.action == action)
+            });
+            if persist {
+                bridge.rules.push(Rule {
+                    project: String::new(),
+                    ..updated.clone()
+                });
+            }
+        }
+        Ok(Some(updated))
+    }
+
     /// Drop a closed chat's rules; see [`PermissionBridge::forget_connection`].
     pub fn forget_connection(&self, connection: &str) -> usize {
         self.inner.lock_or_recover().forget_connection(connection)
@@ -1191,6 +1257,93 @@ pub fn append_rule(path: &Path, rule: &Rule) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn session_and_always_edits_preserve_answer_and_mirror_only_after_durable_success() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rules.json");
+        let key = action_key_for(&path).unwrap();
+        let action = action_fingerprint(&key, "private command");
+        let rule = Rule {
+            project: "p".into(),
+            tool: "Bash".into(),
+            action: action.clone(),
+            decision: Decision::Deny,
+            persist: false,
+            connection: None,
+        };
+        let bridge = SharedPermissionBridge::new(PermissionBridge::new());
+        bridge.reseed_rules_with_key(key, vec![rule.clone()]);
+        assert!(
+            bridge
+                .update_scope("p", None, "Bash", &action, true, None)
+                .is_err()
+        );
+        assert_eq!(bridge.rules()[0].scope, Scope::Session);
+        assert!(
+            bridge
+                .update_scope("p", None, "Bash", "other", true, Some((&path, true)))
+                .unwrap()
+                .is_none()
+        );
+
+        let promoted = bridge
+            .update_scope("p", None, "Bash", &action, true, Some((&path, true)))
+            .unwrap()
+            .unwrap();
+        assert_eq!(promoted.decision, Decision::Deny);
+        assert!(promoted.persist);
+        assert_eq!(load_rules(&path), vec![promoted.clone()]);
+        assert_eq!(
+            bridge
+                .rules()
+                .iter()
+                .filter(|rule| rule.scope == Scope::Always)
+                .count(),
+            2
+        );
+        assert_eq!(
+            bridge.inner.lock_or_recover().request_for_project(
+                "",
+                "legacy",
+                "Bash",
+                "private command"
+            ),
+            Outcome::Auto(Decision::Deny)
+        );
+        let restarted = SharedPermissionBridge::new(PermissionBridge::new());
+        restarted.reseed_rules_with_key(key, load_rules(&path));
+        assert_eq!(restarted.rules()[0].scope, Scope::Always);
+
+        bridge
+            .update_scope("p", None, "Bash", &action, false, Some((&path, true)))
+            .unwrap();
+        assert!(load_rules(&path).is_empty());
+        assert_eq!(bridge.rules().len(), 1);
+        assert_eq!(bridge.rules()[0].scope, Scope::Session);
+        restarted.reseed_rules_with_key(key, load_rules(&path));
+        assert!(restarted.rules().is_empty());
+
+        bridge.add_rules([Rule {
+            connection: Some("chat".into()),
+            ..rule
+        }]);
+        assert_eq!(
+            bridge
+                .update_scope(
+                    "p",
+                    Some("chat"),
+                    "Bash",
+                    &action,
+                    true,
+                    Some((&path, true)),
+                )
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
+        assert!(load_rules(&path).is_empty());
+    }
 
     #[test]
     fn editing_durable_rule_keeps_storage_order_and_rejects_missing_slots() {

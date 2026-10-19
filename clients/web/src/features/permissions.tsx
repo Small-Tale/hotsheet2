@@ -527,6 +527,39 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       };
   }
 
+  /** Change a project-wide answer's duration from either remembered-answer list (HS2-V95VEB). */
+  async function changePermissionRuleScope(projectId: string, key: string, scope: 'session' | 'always') {
+    const project = projects.value.find((value) => value.id === projectId),
+      rule = permissionRules(projectId).find((value) => permissionRuleKey(value) === key);
+    if (
+      !project ||
+      !rule ||
+      rule.scope === 'chat' ||
+      rule.scope === scope ||
+      revokingPermissionRules.value.includes(key) ||
+      permissionRulesDialog.value?.busy
+    )
+      return;
+    revokingPermissionRules.value = [...revokingPermissionRules.value, key];
+    permissionRulesMessage.value = '';
+    try {
+      await new Api(project.apiPath).updatePermissionRuleScope(rule, scope);
+      permissionRulesByProject.value = {
+        ...permissionRulesByProject.value,
+        [projectId]: permissionRules(projectId).map((value) =>
+          permissionRuleKey(value) === key ? { ...value, scope } : value,
+        ),
+      };
+      if (selectedProjectId.value === projectId)
+        permissionRulesMessage.value = `Answer remembered ${scope === 'always' ? 'always' : 'until the server restarts'}.`;
+    } catch (reason) {
+      if (selectedProjectId.value === projectId)
+        permissionRulesMessage.value = `Could not change how long the answer is remembered. ${reason instanceof Error ? reason.message : String(reason)}`;
+    } finally {
+      revokingPermissionRules.value = revokingPermissionRules.value.filter((value) => value !== key);
+    }
+  }
+
   /** Forget one remembered answer from Settings → Permissions (HS2-JNHAYB). */
   async function revokePermissionRule(projectId: string, key: string) {
     const project = projects.value.find((value) => value.id === projectId),
@@ -571,6 +604,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionRulesMessage,
     revokingPermissionRules,
     revokePermissionRule,
+    changePermissionRuleScope,
     permissionRulesDialogFor,
     openPermissionRules,
     closePermissionRules,

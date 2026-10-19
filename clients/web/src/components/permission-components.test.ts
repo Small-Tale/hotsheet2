@@ -257,6 +257,9 @@ describe('recent remembered answers (HS2-16XPHH)', () => {
   it('shows the newest three and a route to all answers', () => {
     const markup = String(PermissionRulesSettings({ rules }));
     expect(markup.match(/data-permission-rule-scope=/g)).toHaveLength(3);
+    expect(markup.match(/data-action="change-permission-rule-scope"/g)).toHaveLength(3);
+    expect(markup).toContain('data-scope="session"');
+    expect(markup).toContain('data-scope="always"');
     expect(markup).toContain('WebFetch request · 00000011');
     expect(markup).toContain('Show all 12 answers');
     expect(markup).not.toContain('00000008');
@@ -361,6 +364,8 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     expect(markup).not.toContain('npm test');
     expect(markup).not.toContain('rm -rf build');
     expect(markup.match(/data-action="revoke-permission-rule"/g)).toHaveLength(2);
+    expect(markup.match(/data-action="change-permission-rule-scope"/g)).toHaveLength(1);
+    expect(markup).toContain('aria-label="Remember Bash request · 87654321 until server restart"');
     expect(markup).toMatch(
       /aria-label="Revoke Bash request · 87654321"[^>]*disabled|disabled[^>]*aria-label="Revoke Bash request · 87654321"/,
     );

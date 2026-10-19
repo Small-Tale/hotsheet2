@@ -1,0 +1,17 @@
+.permission-rules-settings__answer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .permission-rules-settings [data-permission-rule][data-selectable] {
+    display: grid;
+    grid-template-columns: 1.25rem minmax(0, 1fr) auto auto;
+    align-items: center;
+  }
+
+  .permission-rules-settings [data-permission-rule][data-selectable] > .permission-rules-settings__selection {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+}

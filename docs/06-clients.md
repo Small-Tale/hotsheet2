@@ -2670,6 +2670,10 @@ path. Search changes start at page one, and add/revoke updates clamp the current
 the dialog or switching projects resets its search, page, and selection (HS2-16XPHH,
 HS2-C057G5). A selection may span pages and mix decisions and lifetimes. Allow selected
 and Deny selected change only the answer, while Delete selected asks for confirmation.
+Each project-wide answer in the preview and full dialog also offers an individual
+Session/Always duration action; chat-scoped answers keep their connection lifetime.
+The effective duration updates in both lists after a successful server write, and a
+failed edit leaves the displayed duration intact (HS2-V95VEB).
 After a batch the dialog refreshes from the server, summarizes successes and failures,
 and keeps failed rows selected for retry.
 A `permission_asked` event also refreshes terminal connection state; the client derives

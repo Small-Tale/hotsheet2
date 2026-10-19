@@ -226,7 +226,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/project-tab-refresh.ts # Select-safe, per-project-coalesced authoritative tab-cache refresh routing with activation supersession and active-project promotion
     src/project-warm-cache.ts # Bounded LRU (default 8) of warm project ids whose resident projection + AI config make tab switches instant; eviction drops the projection (HS2-AZZ9TF)
     src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers; identical-request grouping and remembered-rule helpers (HS2-JNHAYB)
-    src/components/permission-rules-settings.tsx # Settings → Permissions list of opaque remembered-answer IDs with revoke; hides command/path details (HS2-JNHAYB, HS2-204HPY)
+    src/components/permission-rules-settings.tsx, .css # Settings → Permissions list of opaque remembered-answer IDs with revoke and session/always duration edits; responsive rows hide command/path details (HS2-JNHAYB, HS2-204HPY, HS2-V95VEB)
     src/halted-sessions.ts    # Pure terminal/failed-chat episode projection, pause/permission queue policy, active dedupe and bounded historical seen keys
     src/terminal-question-answer.ts # Extract all Claude AskUserQuestion answers from the notice's form, including multi-select and free text
     src/terminal-snapshot-refresh.ts # Per-project response generations and authoritative snapshot merge; retains failed fetches and independent project results

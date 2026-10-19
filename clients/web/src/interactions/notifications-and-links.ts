@@ -40,6 +40,7 @@ export interface NotificationAndLinkInteractionsDependencies {
   ) => Promise<void>;
   /** Forget one remembered permission answer from Settings (HS2-JNHAYB). */
   readonly revokePermissionRule: (projectId: string, key: string) => Promise<void>;
+  readonly changePermissionRuleScope: (projectId: string, key: string, scope: 'session' | 'always') => Promise<void>;
   readonly openPermissionRules: (projectId: string) => void;
   readonly closePermissionRules: () => void;
   readonly searchPermissionRules: (projectId: string, query: string) => void;
@@ -75,6 +76,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     pendingPermissions,
     resolvePermission,
     revokePermissionRule,
+    changePermissionRuleScope,
     openPermissionRules,
     closePermissionRules,
     searchPermissionRules,
@@ -178,6 +180,18 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       (_event, target) => {
         const key = data(target).ruleKey;
         if (key) void revokePermissionRule(selectedProjectId.value, key);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.changePermissionRuleScope.selector,
+      (_event, target) => {
+        const { ruleKey, scope } = data(target);
+        if (ruleKey && (scope === 'session' || scope === 'always'))
+          void changePermissionRuleScope(selectedProjectId.value, ruleKey, scope);
       },
     ),
   );

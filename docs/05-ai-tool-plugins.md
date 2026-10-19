@@ -927,12 +927,16 @@ connection, tool, and action) into one popup that names the count; a one-time an
 sent for each. `GET /permissions/rules` lists every remembered rule with its scope and
 `DELETE /permissions/rules` `{project, connection?, tool, action}` revokes one by its
 opaque keyed action identifier (removing a durable rule from the store's rule file too);
-`PATCH /permissions/rules` accepts the same exact slot plus `decision: "allow" | "deny"`;
-it changes the answer without changing its chat, session, or durable lifetime. A durable
-change is written to the rule file before the in-memory answer changes. Settings →
+`PATCH /permissions/rules` accepts the same exact slot plus either
+`decision: "allow" | "deny"` or `scope: "session" | "always"`. A decision edit keeps
+the lifetime; a duration edit keeps the answer and changes only a project-wide rule.
+Chat rules cannot change duration. Durable changes are written to the rule file before
+the in-memory answer or lifetime changes, and a failed write leaves the live rule intact. Settings →
 Permissions lists only the selected project's remembered answers by tool, scope,
 decision, and a short fingerprint identifier, with command/path details hidden and each rule
-revocable. The full list supports selecting individual answers or a visible page, then
+revocable. Each project-wide row in the recent and full lists can switch between
+Until the server restarts and Always; the new duration appears immediately and survives
+a reload according to its lifetime. The full list supports selecting individual answers or a visible page, then
 applying Allow or Deny to mixed selections or deleting them after confirmation. A batch
 reports successes and failures separately, keeps failed answers selected for retry, and
 refreshes the list. Remembering an answer, editing or revoking one, and closing a

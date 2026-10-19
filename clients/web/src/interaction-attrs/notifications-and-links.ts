@@ -14,6 +14,7 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   resumeNotifications: action('resume-notifications'),
   resolvePermission: action('resolve-permission'),
   revokePermissionRule: action('revoke-permission-rule'),
+  changePermissionRuleScope: action('change-permission-rule-scope'),
   openPermissionRules: action('open-permission-rules'),
   previousPermissionRulesPage: action('previous-permission-rules-page'),
   nextPermissionRulesPage: action('next-permission-rules-page'),

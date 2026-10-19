@@ -1621,6 +1621,20 @@ export class Api {
         decision,
       }),
     });
+  updatePermissionRuleScope = (
+    rule: { project: string; connection?: string; tool: string; action: string },
+    scope: 'session' | 'always',
+  ) =>
+    this.parsed(ignoreBody, '/permissions/rules', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        project: rule.project,
+        ...(rule.connection ? { connection: rule.connection } : {}),
+        tool: rule.tool,
+        action: rule.action,
+        scope,
+      }),
+    });
   revokePermissionRule = (rule: { project: string; connection?: string; tool: string; action: string }) =>
     this.parsed(ignoreBody, '/permissions/rules', {
       method: 'DELETE',

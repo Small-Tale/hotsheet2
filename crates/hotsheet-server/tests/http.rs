@@ -15331,6 +15331,96 @@ async fn secret_bearing_remembered_action_is_opaque_in_storage_and_http_list() {
         hotsheet_aitools::load_permission_rules(&rules_path)[0].decision,
         hotsheet_aitools::PermissionDecision::Deny
     );
+    let mut duration_edit = serde_json::json!({
+        "project": project,
+        "tool": "Bash",
+        "action": action_key,
+        "scope": "session",
+    });
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            "/permissions/rules",
+            Some(&duration_edit.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert!(hotsheet_aitools::load_permission_rules(&rules_path).is_empty());
+    let session_rules = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(session_rules[0]["scope"], "session");
+    assert_eq!(session_rules[0]["decision"], "deny");
+    assert_eq!(session_rules.as_array().unwrap().len(), 1);
+    let after_session_restart = hotsheet_server::app(
+        AppState::new(FsStore::open(dir.path()).unwrap(), SECRET.into())
+            .unwrap()
+            .with_permission_rules(&rules_path),
+    );
+    let reloaded = body_json(
+        after_session_restart
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(reloaded.as_array().unwrap().is_empty());
+    duration_edit["scope"] = serde_json::json!("always");
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            "/permissions/rules",
+            Some(&duration_edit.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        hotsheet_aitools::load_permission_rules(&rules_path).len(),
+        1
+    );
+    let restored = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(restored[0]["scope"], "always");
+    assert_eq!(restored[0]["decision"], "deny");
+    let after_always_restart = hotsheet_server::app(
+        AppState::new(FsStore::open(dir.path()).unwrap(), SECRET.into())
+            .unwrap()
+            .with_permission_rules(&rules_path),
+    );
+    let reloaded = body_json(
+        after_always_restart
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(reloaded[0]["scope"], "always");
+    assert_eq!(reloaded[0]["decision"], "deny");
+    let mut invalid = duration_edit.clone();
+    invalid["scope"] = serde_json::json!("chat");
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            "/permissions/rules",
+            Some(&invalid.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let worker_bridge = bridge.clone();
     let worker_project = project.clone();
     assert_eq!(

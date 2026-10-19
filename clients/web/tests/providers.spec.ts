@@ -15326,6 +15326,58 @@ test('bulk edits and deletes mixed remembered answers with partial failure recov
   ).toHaveCount(1);
 });
 
+test('changes remembered answer duration in compact and expanded lists and keeps it after reload (HS2-V95VEB)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  let rules = Array.from({ length: 4 }, (_, index) => ({
+    project: '/work/demo.hs2',
+    ...(index === 0 ? { connection: 'chat-a' } : {}),
+    tool: 'Bash',
+    action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+    decision: index === 2 ? 'deny' : 'allow',
+    scope: index === 0 ? 'chat' : index === 2 ? 'session' : 'always',
+  }));
+  const edits: Array<{ action: string; scope: string }> = [];
+  await page.route('**/permissions/rules', (route) => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: rules });
+    const body = route.request().postDataJSON() as { action: string; scope: 'session' | 'always' };
+    edits.push(body);
+    rules = rules.map((rule) => (rule.action === body.action ? { ...rule, scope: body.scope } : rule));
+    return route.fulfill({ status: 204, body: '' });
+  });
+  await page.setViewportSize({ width: 2048, height: 1128 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  const preview = page.getByRole('list', { name: 'Recent Remembered Answers' });
+  await preview.getByRole('button', { name: 'Remember Bash request · 00000002 always' }).click();
+  await expect(preview.locator('[data-permission-rule-scope="always"]')).toHaveCount(3);
+  await page.screenshot({ path: 'target/visual-captures/hs2-v95veb-after-wide.png', fullPage: true });
+
+  await page.getByRole('button', { name: 'Show all 4 answers' }).click();
+  const dialog = page.locator('[data-dialog-component="permission-rules-dialog"]');
+  await dialog.getByRole('button', { name: 'Remember Bash request · 00000002 until server restart' }).click();
+  await expect(dialog.locator('[data-permission-rule-scope="session"]')).toHaveCount(1);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-v95veb-after-phone.png' });
+  await page.reload();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Show Settings Sidebar' }).click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  await page.getByRole('button', { name: 'Hide Settings Sidebar' }).click();
+  await expect(page.getByRole('list', { name: 'Recent Remembered Answers' })).toContainText(
+    'Until the server restarts',
+  );
+  await preview.getByRole('button', { name: 'Remember Bash request · 00000002 always' }).click();
+  await expect(preview.locator('[data-permission-rule-scope="always"]')).toHaveCount(3);
+  expect(edits.map((edit) => edit.scope)).toEqual(['always', 'session', 'always']);
+  expect(edits.every((edit) => edit.action === rules[2].action)).toBe(true);
+  expect(rules[2].decision).toBe('deny');
+});
+
 test('refreshes another client’s remembered answers when a rule is revoked or remembered elsewhere (HS2-KYK1S7)', async ({
   browser,
 }) => {

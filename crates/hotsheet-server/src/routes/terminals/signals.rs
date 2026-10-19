@@ -1053,8 +1053,8 @@ pub(crate) struct RevokePermissionRule {
     action: String,
 }
 
-/// Body for `PATCH /permissions/rules`: only the decision changes; the exact slot and
-/// its chat/session/always lifetime stay the same.
+/// Body for `PATCH /permissions/rules`: change one exact slot's decision or its
+/// project-wide session/always lifetime.
 #[derive(Deserialize)]
 pub(crate) struct UpdatePermissionRule {
     project: String,
@@ -1062,30 +1062,65 @@ pub(crate) struct UpdatePermissionRule {
     connection: Option<String>,
     tool: String,
     action: String,
-    decision: hotsheet_aitools::PermissionDecision,
+    #[serde(default)]
+    decision: Option<hotsheet_aitools::PermissionDecision>,
+    #[serde(default)]
+    scope: Option<hotsheet_aitools::PermissionScope>,
 }
 
 pub(crate) async fn update_permission_rule(
     State(state): State<AppState>,
     Json(body): Json<UpdatePermissionRule>,
 ) -> Result<StatusCode, ApiError> {
-    let path = state
-        .permission_rule_paths
-        .lock_or_recover()
-        .get(&body.project)
-        .cloned();
-    state
-        .permissions
-        .update_decision(
+    let (path, mirror_legacy) = {
+        let paths = state.permission_rule_paths.lock_or_recover();
+        let path = paths.get(&body.project).cloned();
+        let mirror_legacy = path
+            .as_ref()
+            .is_some_and(|path| paths.get("") == Some(path));
+        (path, mirror_legacy)
+    };
+    let updated = match (body.decision, body.scope) {
+        (Some(decision), None) => state.permissions.update_decision(
             &body.project,
             body.connection.as_deref(),
             &body.tool,
             &body.action,
-            body.decision,
+            decision,
             path.as_deref(),
-        )
-        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "no such remembered rule"))?;
+        ),
+        (None, Some(hotsheet_aitools::PermissionScope::Session)) => state.permissions.update_scope(
+            &body.project,
+            body.connection.as_deref(),
+            &body.tool,
+            &body.action,
+            false,
+            path.as_deref().map(|path| (path, mirror_legacy)),
+        ),
+        (None, Some(hotsheet_aitools::PermissionScope::Always)) => state.permissions.update_scope(
+            &body.project,
+            body.connection.as_deref(),
+            &body.tool,
+            &body.action,
+            true,
+            path.as_deref().map(|path| (path, mirror_legacy)),
+        ),
+        _ => {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "change one decision or lifetime",
+            ));
+        }
+    }
+    .map_err(|error| {
+        let status = if error.kind() == std::io::ErrorKind::InvalidInput {
+            StatusCode::BAD_REQUEST
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        };
+        ApiError::new(status, error.to_string())
+    })?;
+    updated.ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "no such remembered rule"))?;
     emit_permission_rules_changed(&state, &body.project);
     Ok(StatusCode::NO_CONTENT)
 }
