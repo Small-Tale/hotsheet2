@@ -417,7 +417,7 @@ test('keeps the authoritative completion trend after a local delete drops the co
     chart = summary.getByRole('img');
   await expect(summary).toHaveAccessibleName('Open project statistics: 2 completed today, 4 in progress');
   await expect(chart).toHaveAttribute('aria-label', 'Tickets completed over the last 7 days: 0, 1, 0, 2, 0, 1, 2');
-  const del = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEL"]');
+  const del = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEL"]');
   await del.click();
   await del.click({ button: 'right' });
   await page.locator('[data-context-menu="ticket"]').locator('[data-context-action="Delete ticket"]').click();

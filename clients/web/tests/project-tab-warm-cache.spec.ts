@@ -219,7 +219,7 @@ async function installWorkspace(page: Page) {
 
   const tab = (index: number) =>
     page.locator(`[data-tab-kind="project"][data-project-id="${projectId(index)}"]`).getByRole('tab');
-  const ticketRow = (slug: string) => page.locator(`[data-component="ticket-list-row"][data-ticket-slug="${slug}"]`);
+  const ticketRow = (slug: string) => page.locator(`[data-component="summary-row"][data-ticket-slug="${slug}"]`);
 
   return {
     rows,

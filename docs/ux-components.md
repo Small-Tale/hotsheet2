@@ -868,21 +868,20 @@ always retain native clipboard behavior.
   - `TicketListSection` where grouping is active
   - `TicketRowDivider`
 - `TicketRow` — **demo built**: a shared, horizontally responsive ticket-summary
-  boundary for list and narrow column use. The comfortable list presentation is a
-  square-cornered, flat, separator-led row that reads as one continuous list; the same component becomes a rounded, borderless card at
-  narrow column widths. A quiet inset outline previews pointer hover without changing
-  the row background, while selection supplies the persistent blue outline. Its primary
-  line treats the ticket number and title as one normal
-  inline formatting flow, with an explicit two-line limit in lists, three lines for
-  inset list rows at 260 px or narrower so a long title remains scannable, and four lines
-  in board columns. The comfortable list keeps the category in its dedicated
+  boundary for list and narrow column use. Kerf `SummaryRow` owns the flat, separator-led
+  list surface and the rounded board card, including hover, focus, selection, the state rail,
+  and responsive insets. Its primary line treats the ticket number and title as one normal
+  inline formatting flow, with a two-line limit in lists and four lines in board columns.
+  The earlier three-line inset-list clamp is deferred pending a responsive Kerf prop
+  (HS2-W5GA81).
+  The comfortable list keeps the category in its dedicated
   leading slot; compact board rows remove that empty left gutter and place a reduced
   category icon inline immediately before and vertically centered against the slug's
   first line. A compact identifier wrapper groups the category icon, optional source mark,
   and ticket number in that order. The remaining flow is ordered
   slug → priority → title so bounded priority remains visible before an arbitrarily
-  long title (the slug is a stable-width inline block). Updated time is the first item in that identity flow and
-  floats right, allowing later lines of a long title to use the space beneath it.
+  long title (the slug is a stable-width inline block). Kerf's trailing metadata places
+  updated time at the end of the title line, allowing later lines to use the space beneath it.
   GitHub Issues show only `#number` in this local context; their source mark supplies the
   provider context, while row identity and accessibility retain the canonical `owner/repo#number` slug.
   A non-GitHub source keeps its full ticket number.
@@ -903,7 +902,7 @@ always retain native clipboard behavior.
   selection prepends `Verified` and `Not Working…`; completed and verified selections
   never expose Up Next.
   The left rail is reserved for special-state attention in HS1 precedence order:
-  needs review (purple), blocked (dark gray), then Up Next (yellow). Up Next also uses
+  needs review (Kerf pop purple), blocked (neutral gray), then Up Next (warning yellow). Up Next also uses
   the familiar yellow Lucide star with an accessible add/remove name. Blocked tickets
   additionally show a compact `Blocked` pill immediately after their status. A live,
   non-expired worker claim adds an activity indicator immediately after the status badge;

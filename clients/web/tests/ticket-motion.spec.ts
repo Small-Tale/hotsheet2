@@ -38,7 +38,7 @@ test('naturally phases an exact-height arrival without changing internal contain
       container.dataset.component = 'ticket-list-row-container';
       container.dataset.key = `ticket:${slug}`;
       container.style.height = `${height}px`;
-      container.innerHTML = `<article class="ticket-list-row" data-component="ticket-list-row" data-ticket-slug="${slug}" role="option"><div class="ticket-list-row__body"><strong>${slug} stable content</strong></div></article>`;
+      container.innerHTML = `<article class="ticket-list-row" data-component="summary-row" data-ticket-slug="${slug}" role="option"><div class="ticket-list-row__body"><strong>${slug} stable content</strong></div></article>`;
       return container;
     };
     const retained = makeRow('HS2-RETAINED', 46);
@@ -109,7 +109,7 @@ test('naturally fades a departure before collapsing its exact outer-wrapper spac
       container.className = 'ticket-list-row-container';
       container.dataset.component = 'ticket-list-row-container';
       container.style.height = `${height}px`;
-      container.innerHTML = `<article class="ticket-list-row" data-component="ticket-list-row" data-ticket-slug="${slug}"><div class="ticket-list-row__body">${slug}</div></article>`;
+      container.innerHTML = `<article class="ticket-list-row" data-component="summary-row" data-ticket-slug="${slug}"><div class="ticket-list-row__body">${slug}</div></article>`;
       return container;
     };
     const outgoing = makeRow('HS2-OUTGOING', 67),
@@ -170,7 +170,7 @@ test('naturally moves a container overlay while both columns reflow together', a
       container.className = 'ticket-list-row-container';
       container.dataset.component = 'ticket-list-row-container';
       container.style.height = `${height}px`;
-      container.innerHTML = `<article class="ticket-list-row" data-component="ticket-list-row" data-ticket-slug="${slug}"><div class="ticket-list-row__body">${slug}</div></article>`;
+      container.innerHTML = `<article class="ticket-list-row" data-component="summary-row" data-ticket-slug="${slug}"><div class="ticket-list-row__body">${slug}</div></article>`;
       return container;
     };
     const moving = makeRow('HS2-MOVING', 64),
@@ -236,7 +236,7 @@ test('captures the container-stable cross-column overlay in flight', async ({ pa
       container.className = 'ticket-list-row-container';
       container.dataset.component = 'ticket-list-row-container';
       container.style.height = '120px';
-      container.innerHTML = `<article class="ticket-list-row" data-component="ticket-list-row" data-ticket-slug="${slug}"><div class="ticket-list-row__body"><strong>${slug}</strong><br>container-query content</div></article>`;
+      container.innerHTML = `<article class="ticket-list-row" data-component="summary-row" data-ticket-slug="${slug}"><div class="ticket-list-row__body"><strong>${slug}</strong><br>container-query content</div></article>`;
       return container;
     };
     const moving = makeRow('HS2-MOVING'),
@@ -252,11 +252,11 @@ test('captures the container-stable cross-column overlay in flight', async ({ pa
   const ghost = page.locator('[data-ticket-motion-ghost="move"]');
   await expect(ghost).toBeAttached();
   await expect(ghost).not.toContainText('HS2-MOVING');
-  await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-MOVING"]')).toHaveCount(1);
+  await expect(page.locator('[data-component="summary-row"][data-ticket-slug="HS2-MOVING"]')).toHaveCount(1);
   await page.screenshot({
     path: 'target/visual-captures/hs2-jgwtjj-ticket-motion-midflight-after.png',
     fullPage: true,
   });
   await expect(page.locator('[data-ticket-motion-ghost="move"]')).toHaveCount(0);
-  await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-MOVING"]')).toBeVisible();
+  await expect(page.locator('[data-component="summary-row"][data-ticket-slug="HS2-MOVING"]')).toBeVisible();
 });

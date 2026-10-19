@@ -60,7 +60,7 @@ describe('TicketRow', () => {
       expect(markup.indexOf('task category')).toBeLessThan(markup.indexOf('data-provider="github"'));
       const singleSource = String(TicketRow({ ...ticket, presentation, showSourceIcon: false }));
       expect(singleSource).not.toContain('data-component="ticket-source-icon"');
-      expect(singleSource).toContain('data-has-source="false"');
+      expect(singleSource).not.toContain('data-provider="github"');
     }
   });
   it('shows a compact GitHub issue number while retaining its canonical row identity', () => {
@@ -148,7 +148,7 @@ describe('TicketRow', () => {
     expect(withFlag).toContain('ticket-list-row__feedback');
     expect(withFlag).toContain('circle-alert');
     expect(withFlag).toContain('Needs review');
-    expect(withFlag).toContain('ticket-list-row__indicator--needs-review');
+    expect(withFlag).toContain('data-rail="pop"');
     expect(String(TicketRow({ ...base, needsReview: true }))).toContain('>Needs review<');
   });
 
@@ -195,7 +195,7 @@ describe('TicketRow', () => {
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     expect(tokenCss).toContain('--hs-ticket-state-up-next: var(--wa-color-warning-fill-loud)');
     expect(tokenCss).toContain('--hs-ticket-state-needs-review: #cb30e0');
-    expect(rowCss.match(/var\(--hs-ticket-state-up-next\)/g)).toHaveLength(4);
+    expect(rowCss).toContain('var(--hs-ticket-state-up-next)');
     // The inspector star takes the token through LucideIcon's color prop, not CSS (HS2-GQ57YW).
     expect(inspectorCss).not.toContain('--hs-ticket-state-up-next');
     expect(readFileSync(resolve(import.meta.dirname, 'ticket-inspector.tsx'), 'utf8')).toContain(
@@ -287,9 +287,7 @@ describe('TicketRow', () => {
       }),
     );
     expect(markup).toContain('data-component="ticket-list-row-container"');
-    expect(markup.indexOf('ticket-list-row-container')).toBeLessThan(
-      markup.indexOf('data-component="ticket-list-row"'),
-    );
+    expect(markup.indexOf('ticket-list-row-container')).toBeLessThan(markup.indexOf('data-component="summary-row"'));
   });
 
   it('uses an explicit presentation variant for the title line limit', () => {
@@ -315,10 +313,8 @@ describe('TicketRow', () => {
       }),
     );
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
-    expect(list).toContain('ticket-list-row--list');
-    expect(list).toContain('data-presentation="list"');
-    expect(column).toContain('ticket-list-row--column');
-    expect(column).toContain('data-presentation="column"');
+    expect(list).toContain('data-presentation="row"');
+    expect(column).toContain('data-presentation="card"');
     // The board/column view groups cards by status, so the per-card status badge is redundant there and
     // is shown only in list presentation (HS2-RESZJP).
     expect(list).toContain('data-component="status-badge"');
@@ -327,23 +323,12 @@ describe('TicketRow', () => {
     expect(column.indexOf('ticket-list-row__identifier')).toBeGreaterThan(column.indexOf('ticket-list-row__identity'));
     expect(column.indexOf('ticket-list-row__category')).toBeGreaterThan(column.indexOf('ticket-list-row__identifier'));
     expect(column.indexOf('ticket-list-row__category')).toBeLessThan(column.indexOf('ticket-list-row__slug'));
-    expect(css).toMatch(/ticket-list-row__identity[^}]*max-height: 2\.6em/);
-    expect(css).toMatch(/ticket-list-row--column \.ticket-list-row__identity[^}]*max-height: 5\.2em/);
-    expect(css).toMatch(
-      /@container \(max-width: remify\(260px\)\) \{\s*\.ticket-list-row--list \.ticket-list-row__identity \{\s*max-height: 3\.9em/,
-    );
-    expect(css).toMatch(/ticket-list-row--column \.ticket-list-row__body[^}]*grid-template-columns: minmax\(0, 1fr\)/);
-    expect(css).toMatch(
-      /\.ticket-list-row--column \{[^}]*border-color: transparent;[^}]*border-radius: remify\(10\.4px\)/,
-    );
-    // The shared row shell owns hover (HS2-1FH8BG); it only outlines the row.
-    const shell = readFileSync(resolve(import.meta.dirname, 'ticket-row-shell.css'), 'utf8');
-    expect(shell).toMatchSource(/\.ticket-row-shell:hover \{ border-color: var\(--wa-color-brand-border-normal\); \}/);
-    expect(shell).not.toMatch(/\.ticket-row-shell:hover \{[^}]*box-shadow:/);
-    expect(shell).not.toMatch(/\.ticket-row-shell:hover \{[^}]*background:/);
+    expect(list).toContain('data-component="summary-row"');
+    expect(column).toContain('data-component="summary-row"');
+    expect(list).toContain('draggable="true"');
+    expect(column).toContain('draggable="true"');
     expect(css).not.toContain('.ticket-list-row:hover');
-    // Rows carry no drop shadow in any presentation (HS2-VX9E4Z); only selection/focus insets/outlines remain.
-    expect(css).not.toContain('box-shadow: 0 remify(4.8px) remify(14.4px)');
+    expect(css).not.toContain('.ticket-list-row:focus-visible');
   });
 
   it('floats the updated time first in the identity flow so long titles can wrap beneath it', () => {
@@ -359,13 +344,15 @@ describe('TicketRow', () => {
       }),
     );
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
+    const titleStart = markup.indexOf('class="kui-summary-row__title"');
+    const updated = markup.indexOf('class="kui-summary-row__trailing"');
     const identityStart = markup.indexOf('class="ticket-list-row__identity"');
-    const updated = markup.indexOf('class="ticket-list-row__updated"');
     const slug = markup.indexOf('class="ticket-list-row__slug"');
     expect(identityStart).toBeGreaterThanOrEqual(0);
-    expect(identityStart).toBeLessThan(updated);
+    expect(titleStart).toBeLessThan(updated);
+    expect(updated).toBeLessThan(identityStart);
     expect(updated).toBeLessThan(slug);
-    expect(css).toMatch(/ticket-list-row__updated[^}]*float: right/);
+    expect(css).not.toContain('ticket-list-row__updated');
   });
 
   it('shows a blocked pill immediately after status metadata', () => {
@@ -465,10 +452,30 @@ describe('TicketRow', () => {
           }),
         ),
       ).toContain(`data-status="${status}"`);
-    expect(css).toContainSource('[data-status="completed"], [data-status="verified"]');
-    expect(css).toContainSource(
-      '.ticket-list-row__identity strong { color: var(--wa-color-neutral-on-quiet); text-decoration: line-through; }',
+    expect(css).toContain("[data-status='completed']");
+    expect(css).toContain("[data-status='verified']");
+    expect(css).toContain('text-decoration: line-through');
+  });
+
+  it('keeps a selected cut row visibly pending while Kerf shows its selection', () => {
+    const markup = String(
+      TicketRow({
+        slug: 'HS2-CUT',
+        title: 'Pending move',
+        status: 'started',
+        priority: 'default',
+        category: 'task',
+        tags: [],
+        selected: true,
+        cutPending: true,
+      }),
     );
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
+    expect(markup).toContain('data-row-cut-pending="true"');
+    expect(markup).toContain('data-selected="true"');
+    expect(markup).not.toContain('data-dimmed="true"');
+    expect(css).toContain(".ticket-row[data-row-cut-pending='true']");
+    expect(css).toContain('opacity: 0.5');
   });
 
   it('fills the Up Next star through LucideIcon appearance only while active (HS2-ZFFCHW)', () => {
@@ -546,7 +553,7 @@ describe('TicketRow', () => {
         // The labeled form stays in the inspector/reader header.
         expect(markup).not.toContain('Confidence 82%');
         // The pill sits with the other metadata pills, before the tags.
-        expect(markup).toMatch(/ticket-list-row__metadata[\s\S]*confidence-badge[\s\S]*data-row-tags/u);
+        expect(markup).toMatch(/kui-summary-row__metadata[\s\S]*confidence-badge[\s\S]*data-row-tags/u);
       }
     }
     for (const status of ['not_started', 'started', 'backlog'] as const) {

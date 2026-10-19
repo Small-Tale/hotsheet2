@@ -247,7 +247,7 @@ test('uses native modality for focus, nested Escape, backdrop policy, and respon
   await mockLayeredProjects(page);
   await page.setViewportSize({ width: 1200, height: 900 });
   await openProjects(page);
-  const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]');
+  const row = page.locator('[data-component="summary-row"][data-ticket-slug="KF-ROOT01"]');
   await row.dblclick();
   const reader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' }),
     close = reader.getByRole('button', { name: 'Close Ticket Reader' });
@@ -305,7 +305,7 @@ test('uses native modality for focus, nested Escape, backdrop policy, and respon
 test('vetoes reader dismissal when an asynchronous draft flush fails', async ({ page }) => {
   await mockLayeredProjects(page, [], true);
   await openProjects(page);
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
   const reader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' });
   await reader.locator('[data-action="edit-markdown"]').click({ position: { x: 4, y: 4 } });
   await reader.getByRole('textbox', { name: 'Ticket details' }).fill('Unsaved reader draft');
@@ -370,7 +370,7 @@ test('layers exact cross-project ticket readers and unwinds focus without changi
 test('layers links above an existing reader and closes one level at a time', async ({ page }) => {
   await mockLayeredProjects(page);
   await openProjects(page);
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
   const baseReader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' });
   await baseReader.getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
   const linked = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
@@ -601,7 +601,7 @@ test('manages attachments in a link-opened reader through its owning project (HS
   ]);
   await page.setViewportSize({ width: 1280, height: 900 });
   await openProjects(page);
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
   const workspaceReader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' });
   await workspaceReader.getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
   const linked = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
@@ -695,7 +695,7 @@ test('keeps linked reader attachment batches read-only for a provider without at
   );
   await page.setViewportSize({ width: 1200, height: 900 });
   await openProjects(page);
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
   const workspaceReader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' });
   await workspaceReader.getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
   const linked = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
@@ -726,7 +726,7 @@ test('opens media from a stacked linked reader in the gallery for that reader ti
     target: [{ id: 'LINKED-IMG', filename: 'linked-proof.png', created_at: '2026-09-11T00:02:00Z' }],
   });
   await openProjects(page);
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
   const baseReader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' });
   await baseReader.getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
   const linked = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
@@ -776,7 +776,7 @@ test('saves gallery markup and runs gallery-menu actions from a linked reader ag
   const writes = await statefulTargetAttachments(page, media);
   await page.setViewportSize({ width: 1280, height: 900 });
   await openProjects(page);
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
   const workspaceReader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' });
   await workspaceReader.getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
   const linked = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
@@ -1085,7 +1085,7 @@ test('records the started phase from the workspace reader through the selected t
     });
   });
   await openProjects(page);
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
   const reader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' }),
     status = reader.locator('.ticket-status-menu');
   await status.locator('[data-inspector-status-menu] > button').click();
@@ -1115,7 +1115,7 @@ test('keeps inline feedback replies and choices per linked reader frame (HS2-ANR
   const requests = await statefulTargetTicket(page, [prompt, choices]);
   await page.setViewportSize({ width: 1280, height: 900 });
   await openProjects(page);
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
   const workspaceReader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' });
   const clickAfter = async (scope: typeof workspaceReader, text: string) => {
     const block = scope.locator('article[data-note-id="FB1"] .note-card__feedback-block').filter({ hasText: text });

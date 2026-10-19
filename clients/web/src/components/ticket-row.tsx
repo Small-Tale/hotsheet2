@@ -1,10 +1,11 @@
-// The shared row shell loads before the TicketRow block so its column presentation can override it.
+// CorruptTicketRow still uses the diagnostic shell; TicketRow uses Kerf SummaryRow.
 import './ticket-row-shell.css';
 import './ticket-row.css';
 
 import { Badge } from '@kerfjs/ui/badge';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
+import { SummaryRow } from '@kerfjs/ui/summary-row';
 import { CircleAlert, Star } from 'lucide';
 
 import type { ClaimEtaPresentation, PhaseEstimatePresentation } from '../active-ticket-work';
@@ -35,9 +36,7 @@ export type TicketRowPresentation = 'list' | 'column';
 export type TicketRowListEdge = 'start' | 'end' | 'only';
 
 /**
- * The shared selectable row shell (HS2-1FH8BG): surface, divider, list-edge rounding, hover, and
- * selection. TicketRow renders it; the diagnostic CorruptTicketRow composes it with the `danger`
- * tone (a danger rail and a selection wiggle) instead of rebuilding the shell.
+ * The legacy diagnostic row shell remains for CorruptTicketRow until HS2-MK98R7.
  */
 export const TICKET_ROW_SHELL_CLASS = 'ticket-row-shell';
 export type TicketRowShellTone = 'danger';
@@ -156,6 +155,14 @@ export function TicketRow(raw: TicketRowProps) {
   const categoryIcon = resolveCategoryIcon(props.categoryIcon);
   const priority = getPriorityPresentation(props.priority);
   const confidence = ticketRowConfidence(props);
+  const rail =
+    indicator === 'needs-review'
+      ? 'pop'
+      : indicator === 'blocked'
+        ? 'neutral'
+        : indicator === 'up-next'
+          ? 'warning'
+          : undefined;
   const category = categoryIcon ? (
     <span
       class="ticket-list-row__category"
@@ -181,130 +188,134 @@ export function TicketRow(raw: TicketRowProps) {
     </span>
   );
   return (
-    <div class="ticket-list-row-container" data-key={`ticket:${props.slug}`} data-component="ticket-list-row-container">
-      <article
-        class={`${TICKET_ROW_SHELL_CLASS} ticket-list-row ticket-list-row--${props.presentation}${props.selected ? ' ticket-list-row--selected' : ''}`}
-        data-component="ticket-list-row"
-        data-presentation={props.presentation}
-        data-list-edge={props.listEdge}
-        data-status={props.status}
-        data-ticket-slug={props.slug}
-        data-attachment-drop-target="true"
-        data-selected={String(props.selected)}
-        data-busy={String(props.busy)}
-        data-cut-pending={String(Boolean(props.cutPending))}
-        {...TICKET_SELECTION_ACTIONS.selectTicketRow.attrs}
-        aria-label={`${props.slug}: ${props.title}`}
-        aria-selected={String(props.selected)}
-        role="option"
-        tabindex="0"
-        draggable="true"
-      >
-        {indicator && (
-          <span
-            class={`ticket-list-row__indicator ticket-list-row__indicator--${indicator}`}
-            aria-label={indicator.replace('-', ' ')}
-          />
-        )}
-        <div class="ticket-list-row__body" data-has-source={String(Boolean(cardSource))}>
-          {props.presentation === 'list' && category}
-          {props.presentation === 'list' && cardSource && <TicketSourceIcon source={cardSource} />}
-          <div class="ticket-list-row__content">
-            <div class="ticket-list-row__first-line">
-              <div class="ticket-list-row__identity">
-                <span class="ticket-list-row__updated">{props.updatedLabel}</span>
-                {props.presentation === 'column' ? (
-                  <span class="ticket-list-row__identifier">
-                    {category}
-                    {cardSource && (
-                      <span class="ticket-list-row__source">
-                        <TicketSourceIcon source={cardSource} size="compact" />
-                      </span>
-                    )}
-                    <span class="ticket-list-row__slug">{ticketDisplayNumber(props.slug, props.source?.provider)}</span>
+    <div
+      class="ticket-row ticket-list-row-container"
+      data-key={`ticket:${props.slug}`}
+      data-component="ticket-list-row-container"
+      data-row-presentation={props.presentation}
+      data-row-selected={String(props.selected)}
+      data-row-cut-pending={String(Boolean(props.cutPending))}
+    >
+      <SummaryRow
+        className="ticket-list-row"
+        presentation={props.presentation === 'column' ? 'card' : 'row'}
+        listEdge={props.listEdge}
+        selected={props.selected}
+        dimmed={props.presentation === 'list' && (props.status === 'completed' || props.status === 'verified')}
+        rail={rail}
+        draggable
+        ariaLabel={`${props.slug}: ${props.title}`}
+        rootAttributes={{
+          'data-status': props.status,
+          'data-ticket-slug': props.slug,
+          'data-attachment-drop-target': 'true',
+          'data-busy': String(props.busy),
+          'data-cut-pending': String(Boolean(props.cutPending)),
+          ...TICKET_SELECTION_ACTIONS.selectTicketRow.attrs,
+        }}
+        leading={
+          props.presentation === 'list' ? (
+            <span class="ticket-list-row__leading">
+              {category}
+              {cardSource && <TicketSourceIcon source={cardSource} />}
+            </span>
+          ) : undefined
+        }
+        trailingMeta={props.updatedLabel}
+        title={
+          <span class="ticket-list-row__identity">
+            {props.presentation === 'column' ? (
+              <span class="ticket-list-row__identifier">
+                {category}
+                {cardSource && (
+                  <span class="ticket-list-row__source">
+                    <TicketSourceIcon source={cardSource} size="compact" />
                   </span>
-                ) : (
-                  <span class="ticket-list-row__slug">{ticketDisplayNumber(props.slug, props.source?.provider)}</span>
                 )}
-                <span
-                  class="ticket-list-row__priority"
-                  style={`color: ${priority.color}`}
-                  aria-label={`${props.priority} priority`}
-                  title={`${props.priority} priority`}
-                >
-                  <span class="ticket-list-row__priority-icon">
-                    <LucideIcon icon={priority.icon} name={priority.name} size="s" />
-                  </span>
-                </span>
-                <strong title={props.title}>{props.title}</strong>
-              </div>
-            </div>
-            <div class="ticket-list-row__metadata">
-              {props.upNextEligible && (
-                <button
-                  type="button"
-                  class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`}
-                  {...SEARCH_AND_COMPOSER_ACTIONS.toggleRowUpNext.attrs}
-                  aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}
-                  title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}
-                >
-                  <LucideIcon icon={Star} name="star" size="s" appearance={props.upNext ? 'solid' : 'outline'} />
-                </button>
-              )}
-              {(props.presentation === 'list' ||
-                (props.presentation === 'column' && props.status === 'started' && props.startedPhase)) && (
-                <StatusBadge status={props.status} startedPhase={props.startedPhase} compact />
-              )}
-              {props.status === 'started' && props.startedPhase && props.phaseEstimate && (
-                <PhaseEstimate estimate={props.phaseEstimate} compact />
-              )}
-              {props.busy && <RowClaimIndicator agentName={props.agentName} claimEta={props.claimEta} />}
-              {needsReview && (
-                <span class="ticket-list-row__feedback" role="img" aria-label="Needs review" title="Needs review">
-                  <Badge tone="warning" appearance="outline" size="compact" ariaHidden>
-                    <Row gap="2xs" vAlign="middle">
-                      <LucideIcon icon={CircleAlert} name="circle-alert" size={12.8} />
-                      <span>Needs review</span>
-                    </Row>
-                  </Badge>
-                </span>
-              )}
-              {props.blocked && <BlockedBadge compact />}
-              {Boolean(props.pendingOperationCount) && (
-                <span
-                  class="ticket-list-row__pending-sync"
-                  data-state={props.pendingSyncState ?? 'queued'}
-                  title={`${props.pendingOperationCount} local edit${props.pendingOperationCount === 1 ? '' : 's'} awaiting Jira confirmation`}
-                >
-                  <Badge tone={props.pendingSyncState === 'needs_attention' ? 'danger' : 'warning'} size="compact">
-                    {`${
-                      props.pendingSyncState === 'needs_attention'
-                        ? 'Sync needs attention'
-                        : props.pendingSyncState === 'sending'
-                          ? 'Sending…'
-                          : props.pendingSyncState === 'rate_limited'
-                            ? 'Waiting for Jira'
-                            : 'Pending sync'
-                    }${props.pendingOperationCount! > 1 ? ` (${props.pendingOperationCount})` : ''}`}
-                  </Badge>
-                </span>
-              )}
-              {props.busy && (
-                <span class="ticket-list-row__owner" aria-label={props.agentName} title={props.agentName}>
-                  {props.agentName}
-                </span>
-              )}
-              {props.busy && props.claimEta && <ClaimEta eta={props.claimEta} />}
-              {confidence !== undefined && <ConfidenceBadge value={confidence} />}
-              {props.tags.length > 0 && (
-                <Row wrap gap="xs" vAlign="middle" rootAttributes={{ 'data-row-tags': 'true' }}>
-                  {props.tags.map((tag, index) => TagChip({ id: `row-tag-${index}`, label: tag }))}
-                </Row>
-              )}
-            </div>
-          </div>
-        </div>
-      </article>
+                <span class="ticket-list-row__slug">{ticketDisplayNumber(props.slug, props.source?.provider)}</span>
+              </span>
+            ) : (
+              <span class="ticket-list-row__slug">{ticketDisplayNumber(props.slug, props.source?.provider)}</span>
+            )}
+            <span
+              class="ticket-list-row__priority"
+              style={`color: ${priority.color}`}
+              aria-label={`${props.priority} priority`}
+              title={`${props.priority} priority`}
+            >
+              <span class="ticket-list-row__priority-icon">
+                <LucideIcon icon={priority.icon} name={priority.name} size="s" />
+              </span>
+            </span>
+            <strong title={props.title}>{props.title}</strong>
+          </span>
+        }
+        metadata={
+          <>
+            {props.upNextEligible && (
+              <button
+                type="button"
+                class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`}
+                {...SEARCH_AND_COMPOSER_ACTIONS.toggleRowUpNext.attrs}
+                aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}
+                title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}
+              >
+                <LucideIcon icon={Star} name="star" size="s" appearance={props.upNext ? 'solid' : 'outline'} />
+              </button>
+            )}
+            {(props.presentation === 'list' ||
+              (props.presentation === 'column' && props.status === 'started' && props.startedPhase)) && (
+              <StatusBadge status={props.status} startedPhase={props.startedPhase} compact />
+            )}
+            {props.status === 'started' && props.startedPhase && props.phaseEstimate && (
+              <PhaseEstimate estimate={props.phaseEstimate} compact />
+            )}
+            {props.busy && <RowClaimIndicator agentName={props.agentName} claimEta={props.claimEta} />}
+            {needsReview && (
+              <span class="ticket-list-row__feedback" role="img" aria-label="Needs review" title="Needs review">
+                <Badge tone="warning" appearance="outline" size="compact" ariaHidden>
+                  <Row gap="2xs" vAlign="middle">
+                    <LucideIcon icon={CircleAlert} name="circle-alert" size={12.8} />
+                    <span>Needs review</span>
+                  </Row>
+                </Badge>
+              </span>
+            )}
+            {props.blocked && <BlockedBadge compact />}
+            {Boolean(props.pendingOperationCount) && (
+              <span
+                class="ticket-list-row__pending-sync"
+                data-state={props.pendingSyncState ?? 'queued'}
+                title={`${props.pendingOperationCount} local edit${props.pendingOperationCount === 1 ? '' : 's'} awaiting Jira confirmation`}
+              >
+                <Badge tone={props.pendingSyncState === 'needs_attention' ? 'danger' : 'warning'} size="compact">
+                  {`${
+                    props.pendingSyncState === 'needs_attention'
+                      ? 'Sync needs attention'
+                      : props.pendingSyncState === 'sending'
+                        ? 'Sending…'
+                        : props.pendingSyncState === 'rate_limited'
+                          ? 'Waiting for Jira'
+                          : 'Pending sync'
+                  }${props.pendingOperationCount! > 1 ? ` (${props.pendingOperationCount})` : ''}`}
+                </Badge>
+              </span>
+            )}
+            {props.busy && (
+              <span class="ticket-list-row__owner" aria-label={props.agentName} title={props.agentName}>
+                {props.agentName}
+              </span>
+            )}
+            {props.busy && props.claimEta && <ClaimEta eta={props.claimEta} />}
+            {confidence !== undefined && <ConfidenceBadge value={confidence} />}
+            {props.tags.length > 0 && (
+              <Row wrap gap="xs" vAlign="middle" rootAttributes={{ 'data-row-tags': 'true' }}>
+                {props.tags.map((tag, index) => TagChip({ id: `row-tag-${index}`, label: tag }))}
+              </Row>
+            )}
+          </>
+        }
+      />
     </div>
   );
 }

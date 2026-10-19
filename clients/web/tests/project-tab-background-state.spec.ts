@@ -215,10 +215,10 @@ async function openBothProjects(page: Page) {
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add Project' }).click();
   await expect(page.getByRole('tab', { name: 'Beta' })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-BETA01"]')).toBeVisible();
+  await expect(page.locator('[data-component="summary-row"][data-ticket-slug="HS2-BETA01"]')).toBeVisible();
   await page.getByRole('tab', { name: 'Alpha' }).click();
   await expect(page.getByRole('tab', { name: 'Alpha' })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-ALPHA1"]')).toBeVisible();
+  await expect(page.locator('[data-component="summary-row"][data-ticket-slug="HS2-ALPHA1"]')).toBeVisible();
   await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
 }
 
@@ -248,7 +248,7 @@ test('refreshes non-active project tab counts and live-work state while preservi
   );
   await expect(betaTab.locator('.project-tab__activity-ring')).toBeVisible();
   await expect(alphaTab.getByRole('tab')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-ALPHA1"]')).toBeVisible();
+  await expect(page.locator('[data-component="summary-row"][data-ticket-slug="HS2-ALPHA1"]')).toBeVisible();
   await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-mv7s1y-background-project-tab-wide.png', fullPage: true });
 

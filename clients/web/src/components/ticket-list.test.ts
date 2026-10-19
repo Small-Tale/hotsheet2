@@ -27,7 +27,7 @@ describe('TicketList', () => {
     expect(markup).toContain('data-component="list"');
     expect(markup).toContain('data-gap="true"');
     expect(markup).toContain('kui-space-none');
-    expect(markup.match(/data-component="ticket-list-row"/g)).toHaveLength(2);
+    expect(markup.match(/data-component="summary-row"/g)).toHaveLength(2);
     expect(markup).not.toContain('ticket-card');
   });
 
@@ -46,7 +46,7 @@ describe('TicketList', () => {
         corruptTickets: [{ store: 'local', store_path: '/tickets', path: '/tickets/bad.md', error: 'could not parse' }],
       }),
     );
-    expect(markup.match(/data-component="ticket-list-row"/g)).toHaveLength(1);
+    expect(markup.match(/data-component="summary-row"/g)).toHaveLength(1);
     expect(markup.match(/data-component="corrupt-ticket-row"/g)).toHaveLength(1);
     expect(markup).toContain('role="group"');
     expect(markup).toContain('aria-label="Unreadable tickets"');
@@ -64,7 +64,7 @@ describe('TicketList', () => {
   it('overlaps only adjacent selected list-row borders into one seam', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
     expect(css).toContainSource(
-      '.ticket-list-row-container:has(> .ticket-list-row--list.ticket-list-row--selected) + .ticket-list-row-container:has(> .ticket-list-row--list.ticket-list-row--selected)',
+      ".ticket-list-row-container[data-row-presentation='list'][data-row-selected='true'] + .ticket-list-row-container[data-row-presentation='list'][data-row-selected='true']",
     );
     expect(css).toContain('margin-top: var(--hs-selected-row-overlap)');
   });
@@ -73,12 +73,11 @@ describe('TicketList', () => {
     const listCss = readFileSync(resolve(import.meta.dirname, 'ticket-list.css'), 'utf8');
     const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8'),
       shellCss = readFileSync(resolve(import.meta.dirname, 'ticket-row-shell.css'), 'utf8');
-    const narrowListRule = rowCss.match(/\.ticket-list-row--list \{([^}]*)\}/)?.[1] ?? '';
-    expect(narrowListRule).not.toContain('border-radius');
+    expect(rowCss).toContain('--kui-layout-rounded-radius: remify(10.4px)');
     // The list styles none of its rows; each row owns its edge corners.
     expect(listCss).not.toContain('ticket-list-row');
     expect(listCss).not.toContain('corrupt-ticket-row');
-    // The shared row shell owns the edge corners for TicketRow and CorruptTicketRow (HS2-1FH8BG).
+    // CorruptTicketRow retains its diagnostic shell; TicketRow passes listEdge to Kerf SummaryRow.
     expect(shellCss).toContainSource(
       ".ticket-row-shell[data-list-edge='start'] { border-radius: remify(10.4px) remify(10.4px) 0 0; }",
     );

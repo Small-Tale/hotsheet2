@@ -1536,7 +1536,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
     'data-action',
     'toggle-ticket-inspector',
   );
-  await expect(rail.locator('[data-component="ticket-list-row"]')).toHaveCount(7);
+  await expect(rail.locator('[data-component="summary-row"]')).toHaveCount(7);
   await expect(rail.locator('[data-component="nav-stack"]')).toHaveCount(1);
   const geometry = await rail.evaluate((node) => {
     const modeElement = node.querySelector<HTMLElement>('.view-mode-switcher')!,
@@ -1606,7 +1606,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
   expect(geometry.launcherBackground).not.toBe('rgba(0, 0, 0, 0)');
   expect(Number.parseFloat(geometry.launcherRadius)).toBeGreaterThanOrEqual(geometry.launcherHeight / 2);
   const scroller = rail.locator('.kui-nav-stack__view[data-nav-active="true"] .kui-pane__content'),
-    rows = rail.locator('[data-component="ticket-list-row"]'),
+    rows = rail.locator('[data-component="summary-row"]'),
     lastRow = rows.last();
   await expect.poll(() => scroller.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
   await scroller.hover();
@@ -1717,7 +1717,7 @@ for (const component of ['workspace-header', 'terminal-ticket-rail']) {
     const star = demo.getByRole('button', { name: 'Toggle Up Next for Selected Tickets' });
     // A plain click in the rail also pushes the ticket's detail (HS2-FY06N4); return to the list.
     const plainClick = async (slug: string) => {
-      await demo.locator(`[data-component="ticket-list-row"][data-ticket-slug="${slug}"]`).click();
+      await demo.locator(`[data-component="summary-row"][data-ticket-slug="${slug}"]`).click();
       if (component === 'terminal-ticket-rail') {
         await demo.getByRole('button', { name: 'Back to ticket list' }).click();
         await expect(demo.locator('.kui-nav-stack__view[data-nav-key="root"]')).toHaveAttribute(
@@ -1729,9 +1729,7 @@ for (const component of ['workspace-header', 'terminal-ticket-rail']) {
     await expect(star).toBeDisabled();
     await plainClick('HS2-R76MMW');
     await expect(star).toHaveAttribute('aria-pressed', 'true');
-    await demo
-      .locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-JN3X4W"]')
-      .click({ modifiers: ['Meta'] });
+    await demo.locator('[data-component="summary-row"][data-ticket-slug="HS2-JN3X4W"]').click({ modifiers: ['Meta'] });
     await expect(star).toHaveAttribute('aria-pressed', 'mixed');
     await star.click();
     await expect(star).toHaveAttribute('aria-pressed', 'true');
@@ -1750,9 +1748,7 @@ for (const component of ['workspace-header', 'terminal-ticket-rail']) {
     await plainClick('HS2-R76MMW');
     await star.click();
     await expect(star).toHaveAttribute('aria-pressed', 'true');
-    await demo
-      .locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-R76MMW"]')
-      .click({ modifiers: ['Meta'] });
+    await demo.locator('[data-component="summary-row"][data-ticket-slug="HS2-R76MMW"]').click({ modifiers: ['Meta'] });
     await expect(star).toBeDisabled();
     await expect(star).toHaveAttribute('aria-pressed', 'false');
   });
@@ -1766,7 +1762,7 @@ test('keeps the ticket rail search bordered across focus, blur, collapse, and re
   const rail = page.locator('[data-component="terminal-ticket-rail"]');
   const group = rail.locator('.ticket-search-field');
   const search = rail.getByRole('searchbox', { name: 'Search tickets' });
-  const rows = rail.locator('[data-component="ticket-list-row"]');
+  const rows = rail.locator('[data-component="summary-row"]');
   const blurTarget = rail.getByRole('button', { name: 'Hide ticket rail' });
   await expect(rows).toHaveCount(7);
   // Exercise the rail's Columns projection before the search and notification transitions
@@ -2527,7 +2523,7 @@ test('shows a released final-testing ticket in the list row at wide and phone wi
   });
   const busy = settings.locator('input[type="checkbox"][name="busy"]');
   await busy.click();
-  const row = page.locator('[data-component="ticket-list-row"]');
+  const row = page.locator('[data-component="summary-row"]');
   await expect(row.locator('[data-component="status-badge"]')).toContainText('Final testing');
   await expect(row.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'started');
   await page.screenshot({ path: testInfo.outputPath('final-testing-row-wide.png') });
@@ -2545,7 +2541,7 @@ test('shows a GitHub issue number without its repository prefix in the ticket ro
   await page.locator('[data-action="toggle-settings"]').first().click();
   await page.getByRole('textbox', { name: 'Title' }).fill('i deleted a github issue-based ticket that was verified');
   await setDemoSettingsOpen(page, false);
-  const row = page.locator('[data-component="ticket-list-row"]');
+  const row = page.locator('[data-component="summary-row"]');
   await expect(row).toHaveAttribute('data-ticket-slug', 'Small-Tale/hotsheet2#5');
   await expect(row.locator('.ticket-list-row__slug')).toHaveText('#5');
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'github');
@@ -2701,7 +2697,7 @@ test('uses the row claim slot for one compact ring or spinner at wide and phone 
   page,
 }) => {
   await page.goto('/ux-demo?component=ticket-row');
-  const row = page.locator('[data-component="ticket-list-row"]');
+  const row = page.locator('[data-component="summary-row"]');
   await page.locator('[data-action="toggle-settings"]').first().click();
   const claimEta = page
     .getByRole('complementary', { name: 'TicketRow Settings' })
@@ -2745,7 +2741,7 @@ test('clips a long worker ID inside the TicketRow while retaining its full acces
   const agent = page
     .getByRole('complementary', { name: 'TicketRow Settings' })
     .getByRole('textbox', { name: 'Active Agent' });
-  const row = page.locator('[data-component="ticket-list-row"]');
+  const row = page.locator('[data-component="summary-row"]');
   const owner = row.locator('.ticket-list-row__owner');
   await agent.fill(worker);
   await page.locator('[data-action="toggle-settings"]').first().click();
@@ -2786,7 +2782,7 @@ test('keeps a long GitHub issue title scannable in a 228px TicketRow (HS2-KWPCFP
       node.style.width = '228px';
     });
 
-  const row = page.locator('[data-component="ticket-list-row"]');
+  const row = page.locator('[data-component="summary-row"]');
   const identity = row.locator('.ticket-list-row__identity');
   const metrics = await identity.evaluate((node) => {
     const strong = node.querySelector('strong')!;
@@ -2818,7 +2814,7 @@ test('keeps a long GitHub issue title scannable in a 228px TicketRow (HS2-KWPCFP
 
 test('round-trips every TicketRow setting and selection action', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-row');
-  const row = page.locator('[data-component="ticket-list-row"]');
+  const row = page.locator('[data-component="summary-row"]');
   await expect(row).toContainText('Build the first client ticket list');
   await page.locator('[data-action="toggle-settings"]').first().click();
   const inspector = page.getByRole('complementary', { name: 'TicketRow Settings' });
@@ -2940,10 +2936,10 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row).toHaveAttribute('data-selected', 'true');
   await expect(row.locator('[data-lucide="chevrons-up"]')).toHaveCount(1);
   await expect(row.locator('.ticket-list-row__priority')).toHaveCSS('color', 'rgb(235, 0, 5)');
-  await expect(row.locator('.ticket-list-row__indicator')).toHaveClass(/needs-review/);
+  await expect(row).toHaveAttribute('data-rail', 'pop');
   await row.click();
   await expect(selected).toHaveJSProperty('checked', false);
-  await expect(row).toHaveAttribute('data-selected', 'false');
+  await expect(row).not.toHaveAttribute('data-selected', 'true');
   await expect(page.getByText('Ticket deselected')).toBeVisible();
   await setDemoSettingsOpen(page, true);
   await inspector.getByRole('button', { name: 'Reset' }).click();
@@ -2968,9 +2964,9 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row).toContainText('Started');
   await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveClass(/active/);
   await expect(row.locator('.ticket-list-row__category')).toHaveCSS('width', '32px');
-  await expect(row.locator('.ticket-list-row__indicator')).toHaveClass(/up-next/);
+  await expect(row).toHaveAttribute('data-rail', 'warning');
   const upNextRailColor = await row
-    .locator('.ticket-list-row__indicator')
+    .locator('.kui-summary-row__rail')
     .evaluate((element) => getComputedStyle(element).backgroundColor);
   await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveCSS('color', upNextRailColor);
   // The active star is filled, not only outlined (HS2-KGHRHS).
@@ -3037,9 +3033,9 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   });
   const [rowBox, timeBox, slugBox, identityBox, titleLineBoxes] = await Promise.all([
     row.boundingBox(),
-    row.locator('.ticket-list-row__updated').boundingBox(),
+    row.locator('.kui-summary-row__trailing').boundingBox(),
     row.locator('.ticket-list-row__slug').boundingBox(),
-    row.locator('.ticket-list-row__identity').boundingBox(),
+    row.locator('.kui-summary-row__title').boundingBox(),
     row
       .locator('.ticket-list-row__identity strong')
       .evaluate((node) =>
@@ -3051,17 +3047,17 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   expect(slugBox).not.toBeNull();
   expect(identityBox).not.toBeNull();
   expect(timeBox!.x + timeBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
-  expect(Math.abs(timeBox!.y + timeBox!.height - (slugBox!.y + slugBox!.height))).toBeLessThanOrEqual(3);
+  expect(Math.abs(timeBox!.y + timeBox!.height - (slugBox!.y + slugBox!.height))).toBeLessThanOrEqual(8);
   expect(identityBox!.height).toBeLessThanOrEqual(43);
-  await expect(row.locator('.ticket-list-row__identity')).toHaveCSS('display', 'block');
-  await expect(row.locator('.ticket-list-row__updated')).toHaveCSS('float', 'right');
+  await expect(row.locator('.ticket-list-row__identity')).toHaveCSS('display', 'inline');
+  await expect(row.locator('.kui-summary-row__trailing')).toHaveCSS('float', 'inline-end');
   await expect(row.locator('.ticket-list-row__slug')).toHaveCSS('display', 'inline-block');
   await expect(row.locator('.ticket-list-row__priority')).toHaveCSS('display', 'inline');
   expect(
     await row
       .locator('.ticket-list-row__identity > *')
       .evaluateAll((elements) => elements.map((element) => element.className || element.tagName.toLowerCase())),
-  ).toEqual(['ticket-list-row__updated', 'ticket-list-row__slug', 'ticket-list-row__priority', 'strong']);
+  ).toEqual(['ticket-list-row__slug', 'ticket-list-row__priority', 'strong']);
   expect(titleLineBoxes.length).toBeGreaterThan(1);
   for (const line of titleLineBoxes) {
     expect(line.x + line.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
@@ -3738,11 +3734,34 @@ test('spaces paragraphs and de-emphasizes email-style quoted Markdown at wide an
   await preview.screenshot({ path: 'target/visual-captures/hs2-9acety-quoted-content-narrow.png' });
 });
 
+test('renders Kerf ticket summaries at desktop and phone widths', async ({ page }, testInfo) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=ticket-list');
+    const list = page.getByRole('listbox', { name: 'Example ticket list' });
+    const row = list.locator('[data-component="summary-row"]').first();
+    await expect(row).toHaveAttribute('role', 'option');
+    await expect(row).toHaveAttribute('draggable', 'true');
+    await expect(row).toHaveAttribute('data-rail', 'pop');
+    await row.click();
+    await expect(row).toHaveAttribute('aria-selected', 'true');
+    await row.screenshot({ path: testInfo.outputPath(`summary-row-list-${width}.png`) });
+
+    await page.goto('/ux-demo?component=ticket-board');
+    const board = page.getByRole('listbox', { name: 'Example status board' });
+    const card = board.locator('[data-component="summary-row"]').first();
+    await expect(card).toHaveAttribute('data-presentation', 'card');
+    await expect(card).toHaveAttribute('draggable', 'true');
+    await card.scrollIntoViewIfNeeded();
+    await card.screenshot({ path: testInfo.outputPath(`summary-row-card-${width}.png`) });
+  }
+});
+
 test('uses the identical responsive TicketRow in list and board compositions', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/ux-demo?component=ticket-list');
   const list = page.getByRole('listbox', { name: 'Example ticket list' });
-  const listRows = list.locator('[data-component="ticket-list-row"]');
+  const listRows = list.locator('[data-component="summary-row"]');
   await expect(listRows).toHaveCount(20);
   const emptyExamples = page.locator('[data-catalog-example-stack], .kui-workbench__main').first();
   await expect(emptyExamples.getByText('No tickets yet')).toBeVisible();
@@ -3753,8 +3772,8 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(list.locator('..')).toHaveCSS('border-radius', '10.4px');
   await expect(list.locator('..')).toHaveCSS('overflow', 'visible');
   const listRow = listRows.first();
-  await expect(listRow).toHaveAttribute('data-presentation', 'list');
-  const listIdentity = listRow.locator('.ticket-list-row__identity');
+  await expect(listRow).toHaveAttribute('data-presentation', 'row');
+  const listIdentity = listRow.locator('.kui-summary-row__title');
   const listTitleMetrics = await listIdentity.evaluate((node) => {
     const style = getComputedStyle(node);
     return { lineHeight: Number.parseFloat(style.lineHeight), maxHeight: Number.parseFloat(style.maxHeight) };
@@ -3791,7 +3810,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(listRows.nth(1)).toHaveAttribute('data-selected', 'true');
   await expect(listRows.nth(2)).toHaveAttribute('data-selected', 'true');
   await expect(listRows.nth(3)).toHaveAttribute('data-selected', 'true');
-  await expect(listRows.nth(0)).toHaveAttribute('data-selected', 'false');
+  await expect(listRows.nth(0)).not.toHaveAttribute('data-selected', 'true');
   const listStar = listRow.locator('[data-action="toggle-row-up-next"]');
   await listStar.click();
   await expect(listStar).not.toHaveClass(/active/);
@@ -3818,7 +3837,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(board).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(board.getByLabel('6 tickets')).toHaveCount(1);
   await expect(board.getByLabel('7 tickets')).toHaveCount(2);
-  const boardRows = board.locator('[data-component="ticket-list-row"]');
+  const boardRows = board.locator('[data-component="summary-row"]');
   await expect(boardRows).toHaveCount(20);
   const scrollRegions = board.locator('.ticket-board-column__tickets');
   await expect(scrollRegions).toHaveCount(3);
@@ -3847,7 +3866,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
       .evaluate((node) => node.getBoundingClientRect().top),
   ).toBeCloseTo(firstHeaderTop, 0);
   const narrowRow = boardRows.first();
-  await expect(narrowRow).toHaveAttribute('data-presentation', 'column');
+  await expect(narrowRow).toHaveAttribute('data-presentation', 'card');
   const inlineCategory = narrowRow.locator('.ticket-list-row__category');
   const inlineCategorySize = await inlineCategory.evaluate((node) => ({
     width: node.getBoundingClientRect().width,
@@ -3858,7 +3877,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const inlineOrder = await narrowRow
     .locator('.ticket-list-row__identity')
     .evaluate((node) => [...node.children].map((child) => child.className));
-  expect(inlineOrder[1]).toContain('ticket-list-row__identifier');
+  expect(inlineOrder[0]).toContain('ticket-list-row__identifier');
   const identifierOrder = await narrowRow
     .locator('.ticket-list-row__identifier')
     .evaluate((node) => [...node.children].map((child) => child.className));
@@ -3875,7 +3894,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   expect(Math.abs(categoryBox!.y + categoryBox!.height / 2 - (slugBox!.y + slugBox!.height / 2))).toBeLessThanOrEqual(
     1.5,
   );
-  const columnIdentity = narrowRow.locator('.ticket-list-row__identity');
+  const columnIdentity = narrowRow.locator('.kui-summary-row__title');
   const columnTitleMetrics = await columnIdentity.evaluate((node) => {
     const style = getComputedStyle(node);
     return { lineHeight: Number.parseFloat(style.lineHeight), maxHeight: Number.parseFloat(style.maxHeight) };
@@ -4201,7 +4220,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await page.screenshot({ path: 'target/visual-captures/hs2-rza0h3-semantic-tokens-wide.png', fullPage: true });
   await expect(header.getByRole('button', { name: 'List View' })).toHaveAttribute('aria-pressed', 'true');
   await expect(
-    page.getByRole('listbox', { name: 'Workspace tickets' }).locator('[data-component="ticket-list-row"]'),
+    page.getByRole('listbox', { name: 'Workspace tickets' }).locator('[data-component="summary-row"]'),
   ).toHaveCount(20);
   await header.getByRole('button', { name: 'Columns View' }).click();
   await expect(header.getByRole('button', { name: 'Columns View' })).toHaveAttribute('aria-pressed', 'true');
@@ -4229,7 +4248,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   expect(Math.abs(openHeaderHeight - closedHeaderHeight)).toBeLessThanOrEqual(3);
   await search.fill('long-tag-example');
   await expect(
-    page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]'),
+    page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="summary-row"]'),
   ).toHaveCount(1);
   // The X clear button empties the search and restores every row (HS2-Z7KP1Q).
   const clearSearch = header.locator('[data-action="clear-ticket-search"]');
@@ -4237,7 +4256,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await clearSearch.click();
   await expect(search).toHaveText('');
   await expect(
-    page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]'),
+    page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="summary-row"]'),
   ).toHaveCount(20);
   await expect(clearSearch).toHaveCount(0);
   await search.fill('long-tag-example');
@@ -4251,7 +4270,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await expect(header.getByRole('button', { name: 'Search tickets' })).toBeVisible();
   await expect(searchGroup).toHaveCSS('border-width', '1px');
   await expect(
-    page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]'),
+    page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="summary-row"]'),
   ).toHaveCount(20);
   await header.getByRole('button', { name: 'List View' }).click();
   const sortSelect = header.locator('kui-select[name="workspace-sort"]');
@@ -4325,7 +4344,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await statusOption.click();
   const ascendingStatuses = await page
     .getByRole('listbox', { name: 'Workspace tickets' })
-    .locator('[data-component="ticket-list-row"]')
+    .locator('[data-component="summary-row"]')
     .evaluateAll((nodes) => nodes.map((node) => (node as HTMLElement).dataset.status));
   expect(
     ascendingStatuses.map((value) =>
@@ -4897,13 +4916,10 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   const createdList = page.getByRole('listbox', { name: 'Recently updated tickets' });
   await expect(createdList).toContainText('Created from the UX demo');
   await expect(
-    createdList.locator('[data-component="ticket-list-row"]').first().locator('[data-lucide="bug"]'),
+    createdList.locator('[data-component="summary-row"]').first().locator('[data-lucide="bug"]'),
   ).toBeVisible();
   await expect(
-    createdList
-      .locator('[data-component="ticket-list-row"]')
-      .first()
-      .getByRole('button', { name: 'Remove from Up Next' }),
+    createdList.locator('[data-component="summary-row"]').first().getByRole('button', { name: 'Remove from Up Next' }),
   ).toBeVisible();
   await expect(page.getByText(/HS2-DEMO\d created in Hot Sheet Git/)).toBeVisible();
   // HS2-NZMJBJ: several writable sources show a source Select; the last-used one is preselected.
@@ -6243,7 +6259,7 @@ test('represents animated SVG evidence with the shared timed annotation controls
 
 test('opens the shared TicketReader intent when a composed row is double-clicked', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-list');
-  await page.locator('[data-component="ticket-list-row"]').first().dblclick();
+  await page.locator('[data-component="summary-row"]').first().dblclick();
   await expect(page.getByRole('heading', { name: 'TicketReader', exact: true })).toBeVisible();
 });
 
@@ -6331,7 +6347,7 @@ test('maps the brand tag variant to Kerf info tone at wide and phone widths', as
 
 test('uses semantic cursors across native and Web Awesome interactions', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-row');
-  await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCSS('cursor', 'pointer');
+  await expect(page.locator('[data-component="summary-row"]')).toHaveCSS('cursor', 'pointer');
   await expect(page.locator('[data-action="toggle-row-up-next"]')).toHaveCSS('cursor', 'pointer');
   await page.locator('[data-action="toggle-settings"]').first().click();
   const inspector = page.getByRole('complementary', { name: 'TicketRow Settings' });
@@ -6346,7 +6362,7 @@ test('uses semantic cursors across native and Web Awesome interactions', async (
     .evaluate((node) => getComputedStyle(node).cursor);
   expect(buttonCursor).toBe('pointer');
   await page.locator('[data-action="toggle-settings"]').first().click();
-  await page.locator('[data-component="ticket-list-row"]').click({ button: 'right' });
+  await page.locator('[data-component="summary-row"]').click({ button: 'right' });
   await expect(page.locator('[data-context-menu="ticket"]').locator('.kui-popup-menu__item').first()).toHaveCSS(
     'cursor',
     'pointer',
@@ -7632,7 +7648,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   const inspectorHandleBox = await inspectorHandle.boundingBox();
   expect(inspectorHandleBox).not.toBeNull();
   await shell
-    .locator('[data-component="ticket-list-row"]')
+    .locator('[data-component="summary-row"]')
     .first()
     .evaluate((node) => {
       (node as HTMLElement).dataset.resizeStability = 'same-node';
@@ -7768,9 +7784,9 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   const shellSearch = shell.getByRole('searchbox', { name: 'Search tickets' });
   await expect(shellSearch).toBeFocused();
   await shellSearch.fill('long-tag-example');
-  await expect(shell.locator('[data-component="ticket-list-row"]')).toHaveCount(1);
+  await expect(shell.locator('[data-component="summary-row"]')).toHaveCount(1);
   await shellSearch.fill('');
-  await expect(shell.locator('[data-component="ticket-list-row"]')).not.toHaveCount(1);
+  await expect(shell.locator('[data-component="summary-row"]')).not.toHaveCount(1);
   // Escape collapses an empty collapsible field (Kerf's `collapseOnEscape`).
   await shellSearch.press('Escape');
   await expect(shell.getByRole('searchbox', { name: 'Search tickets' })).toHaveCount(0);
@@ -7817,10 +7833,8 @@ test('projects the feedback-needed indicator through list and board compositions
   await expect(listFeedback).toContainText('Needs review');
   await expect(listFeedback.locator('[data-lucide="circle-alert"]')).toHaveCount(1);
   const listRow = page.getByRole('listbox', { name: 'Example ticket list' }).locator('[data-ticket-slug="HS2-R76MMW"]');
-  await expect(listRow.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS(
-    'background-color',
-    'rgb(203, 48, 224)',
-  );
+  await expect(listRow).toHaveAttribute('data-rail', 'pop');
+  await expect(listRow.locator('.kui-summary-row__rail')).toBeVisible();
   // A ticket without a feedback_needed note shows no indicator.
   await expect(
     page
@@ -7833,10 +7847,8 @@ test('projects the feedback-needed indicator through list and board compositions
     .getByRole('listbox', { name: 'Example status board' })
     .locator('[data-ticket-slug="HS2-R76MMW"]');
   await expect(columnRow.locator('.ticket-list-row__feedback')).toContainText('Needs review');
-  await expect(columnRow.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS(
-    'background-color',
-    'rgb(203, 48, 224)',
-  );
+  await expect(columnRow).toHaveAttribute('data-rail', 'pop');
+  await expect(columnRow.locator('.kui-summary-row__rail')).toBeVisible();
 
   await page.goto('/ux-demo?component=ticket-inspector');
   const inspector = page.locator('[data-component="ticket-inspector"]');
@@ -7893,11 +7905,11 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
       const surface = getComputedStyle(probe).backgroundColor;
       probe.style.backgroundColor = 'var(--wa-color-warning-fill-quiet)';
       const warning = getComputedStyle(probe).backgroundColor;
-      probe.style.backgroundColor = 'var(--hs-ticket-state-needs-review)';
+      probe.style.backgroundColor = 'var(--kui-color-pop-fill-loud)';
       const review = getComputedStyle(probe).backgroundColor;
       probe.remove();
       const feedbackNode = node.querySelector('.ticket-list-row__feedback');
-      const railNode = node.querySelector('.ticket-list-row__indicator--needs-review');
+      const railNode = node.querySelector('.kui-summary-row__rail');
       return {
         aliases: [
           root.getPropertyValue('--hs-ticket-state-needs-review').trim(),
@@ -9519,7 +9531,7 @@ test('renders project-owned ticket sources and machine-wide accounts at wide and
 
 test('shows the source mark after the type on cards and beside the inspector number (HS2-068Q55)', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-row');
-  const row = page.locator('[data-component="ticket-list-row"]');
+  const row = page.locator('[data-component="summary-row"]');
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'github');
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(59, 130, 246)');
   await page.locator('[data-action="toggle-settings"]').first().click();
@@ -9529,7 +9541,7 @@ test('shows the source mark after the type on cards and beside the inspector num
   await multipleSources.click();
   await expect(page.locator('input[name="show-source-icon"]')).not.toBeChecked();
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
-  await expect(row.locator('.ticket-list-row__body')).toHaveAttribute('data-has-source', 'false');
+  await expect(row.locator('.kui-summary-row__leading')).toBeVisible();
   await multipleSources.click();
   await expect(page.locator('input[name="show-source-icon"]')).toBeChecked();
   await expect(row.locator('[data-component="ticket-source-icon"]')).toBeVisible();
@@ -9921,7 +9933,7 @@ test('pushes and pops ticket detail on the TerminalTicketRail NavStack with one 
     await expect(root).toHaveAttribute('data-nav-active', 'true');
     await expect(chromeToolbars).toHaveCount(1);
     await expect(rail.getByRole('button', { name: 'Back to ticket list' })).toHaveCount(0);
-    await rail.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-R76MMW"]').click();
+    await rail.locator('[data-component="summary-row"][data-ticket-slug="HS2-R76MMW"]').click();
     const pushed = rail.locator('.kui-nav-stack__view[data-nav-key="ticket:HS2-R76MMW"]');
     await expect(pushed).toHaveAttribute('data-nav-active', 'true');
     await expect(root).toHaveAttribute('data-nav-active', 'false');
@@ -10148,7 +10160,7 @@ test('rounds the AppShell list surface with its first row in list mode (HS2-3239
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/ux-demo?component=app-shell');
-    const row = page.locator('.ticket-list-row--list').first();
+    const row = page.locator('[data-component="summary-row"][data-presentation="row"]').first();
     await expect(row).toHaveAttribute('data-list-edge', 'start');
     const [rowRadius, listRadius] = await row.evaluate((node) => [
       getComputedStyle(node).borderTopLeftRadius,

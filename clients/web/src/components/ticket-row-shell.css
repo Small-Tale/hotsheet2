@@ -1,7 +1,5 @@
-/* The shared ticket row shell (HS2-1FH8BG): the selectable list-row surface that TicketRow and the
-   diagnostic CorruptTicketRow both render through `ticketRowShellAttributes`. Kerf has no selectable
-   summary-row component in a released version yet (KF-XCFMX8), so the shell is app-owned. It must
-   load before `ticket-row.css`, whose column presentation overrides the surface border and radius. */
+/* Legacy diagnostic shell for CorruptTicketRow, pending HS2-MK98R7.
+   TicketRow uses Kerf SummaryRow for its list and board surfaces. */
 .ticket-row-shell {
   position: relative;
   width: 100%;

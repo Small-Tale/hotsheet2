@@ -136,7 +136,7 @@ describe('connected workspace demo state', () => {
     expect(expanded).toContain('data-search-field-editor="workspace-search"');
     expect(expanded).toContain('long-tag-example');
     expect(expanded).toContain('data-help-open="true"');
-    expect(expanded.match(/data-component="ticket-list-row"/g)).toHaveLength(1);
+    expect(expanded.match(/data-component="summary-row"/g)).toHaveLength(1);
     workspaceSearchOpen.value = false;
     workspaceSearchQuery.value = '';
     workspaceSearchHelpOpen.value = false;
@@ -144,7 +144,7 @@ describe('connected workspace demo state', () => {
     expect(reset).toContain('data-expanded="false"');
     expect(reset).not.toContain('data-search-field-editor="workspace-search"');
     expect(reset).not.toContain('data-help-open="true"');
-    expect(reset.match(/data-component="ticket-list-row"/g)).toHaveLength(7);
+    expect(reset.match(/data-component="summary-row"/g)).toHaveLength(7);
   });
 
   it('projects rail notifications, the list, and a paged Columns board (HS2-656Q43)', () => {
@@ -154,13 +154,13 @@ describe('connected workspace demo state', () => {
       'data-segment-value="notifications" data-selected="true" aria-label="Notifications View" aria-pressed="true"',
     );
     expect(notifications).toContain('data-component="notification-center"');
-    expect(notifications).not.toContain('data-component="ticket-list-row"');
+    expect(notifications).not.toContain('data-component="summary-row"');
     expect(notifications).toContain('data-workspace-overflow');
     expect(notifications).not.toContain('data-view-mode="settings"');
     workspaceMode.value = 'list';
     const list = String(TerminalTicketRailDemo());
     expect(list).toContain('data-segment-value="list" data-selected="true" aria-label="List View" aria-pressed="true"');
-    expect(list.match(/data-component="ticket-list-row"/g)).toHaveLength(7);
+    expect(list.match(/data-component="summary-row"/g)).toHaveLength(7);
     expect(list).not.toContain('data-component="notification-center"');
     workspaceMode.value = 'board';
     const board = String(TerminalTicketRailDemo());

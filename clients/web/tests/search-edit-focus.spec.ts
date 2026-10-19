@@ -184,8 +184,8 @@ test('keeps a search-selected ticket selected through a background refresh (HS2-
     'HS2-MATCH',
   );
   await expect(editor).toBeFocused();
-  const matchRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-MATCH"]');
+  const matchRow = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-MATCH"]');
   await expect(matchRow).toBeVisible();
   await expect(matchRow).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-BASE1"]')).toHaveCount(0);
+  await expect(page.locator('[data-component="summary-row"][data-ticket-slug="HS2-BASE1"]')).toHaveCount(0);
 });

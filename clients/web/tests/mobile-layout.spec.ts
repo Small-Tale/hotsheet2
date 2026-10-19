@@ -46,7 +46,7 @@ test('keeps a long title readable at the real phone list width (HS2-KWPCFP)', as
   await page.setViewportSize({ width: 390, height: 844 });
   const title = 'Improve search results when several filters change together';
   await openDemoProject(page, false, 1, DEFAULT_TERMINALS, title);
-  const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-M1"]');
+  const row = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-M1"]');
   await expect(row).toBeVisible();
   const metrics = await row.locator('.ticket-list-row__identity').evaluate((node) => {
     const strong = node.querySelector('strong')!;
@@ -227,7 +227,7 @@ test('exposes the phone text-size control in drawer focus mode, cycling with a t
 test('shows the application toast through Web Awesome at a wide viewport (HS2-KEHG7H)', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1100, height: 760 });
   await openDemoProject(page);
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-M1"]').click();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-M1"]').click();
   await observeToastEntrance(page);
   await page.getByRole('button', { name: 'Copy ticket number HS2-M1' }).click();
   const toast = page.locator('wa-toast-item:has(.app-toast)');

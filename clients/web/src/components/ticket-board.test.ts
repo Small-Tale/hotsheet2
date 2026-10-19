@@ -38,8 +38,8 @@ describe('TicketBoard', () => {
     expect(markup.match(/data-component="ticket-board-column"/g)).toHaveLength(2);
     expect(markup).toContain('aria-label="1 tickets"');
     expect(markup).toContain('aria-label="0 tickets"');
-    expect(markup.match(/data-component="ticket-list-row"/g)).toHaveLength(1);
-    expect(markup).toContain('data-presentation="column"');
+    expect(markup.match(/data-component="summary-row"/g)).toHaveLength(1);
+    expect(markup).toContain('data-presentation="card"');
     expect(markup).not.toContain('No tickets in Done');
     expect(markup).not.toContain('ticket-card');
   });

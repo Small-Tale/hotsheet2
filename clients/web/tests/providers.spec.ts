@@ -3116,7 +3116,7 @@ test('changes a sole project source color in settings and inspector while cards 
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const ticketRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+  const ticketRow = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
   await ticketRow.screenshot({ path: 'target/visual-captures/hs2-myw20v-single-list-wide.png' });
   await page.getByLabel('Settings View').click();
@@ -3252,11 +3252,11 @@ test('centers the compact source mark with the type icon and ticket number in co
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const listRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+  const listRow = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await expect(listRow.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'git');
   await listRow.screenshot({ path: 'target/visual-captures/hs2-myw20v-multiple-list-wide.png' });
   await page.getByLabel('Columns View').click();
-  const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+  const row = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   const type = await row.locator('.ticket-list-row__category-icon').boundingBox();
   const source = await row.locator('.ticket-list-row__source .ticket-source-icon').boundingBox();
   const number = await row.locator('.ticket-list-row__slug').evaluate((element) => {
@@ -3300,7 +3300,7 @@ test('keeps the inspector source mark unclipped and close to the ticket number (
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
   const toolbar = page.locator('#app-right-rail [data-component="toolbar"][aria-label="Ticket Inspector Toolbar"]');
   const icon = await toolbar.locator('[data-source-identity] .ticket-source-icon').boundingBox();
   const number = await toolbar.locator('.ticket-inspector__slug').boundingBox();
@@ -3329,7 +3329,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
   await expect(page.locator('.app-error')).toHaveCount(0);
-  await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(0);
+  await expect(page.locator('[data-component="summary-row"]')).toHaveCount(0);
   const setup = page.locator('[data-ticket-source-setup-dialog]'),
     sourceOptions = setup.locator('.ticket-source-setup__options .kui-list-item');
   await expect(setup).toHaveAttribute('open', '');
@@ -4946,8 +4946,8 @@ test('pages the workspace-grid rail through one snapped column at a time in its 
   await expect(rail.getByRole('button', { name: 'Ticket…' })).toBeVisible();
   // Ticket motion hides a real card only while its ghost flies from the list; every column's cards
   // are revealed once that settles.
-  await expect(columns.first().locator('[data-component="ticket-list-row"]').first()).toBeVisible();
-  await expect(columns.nth(1).locator('[data-component="ticket-list-row"]').first()).toBeVisible();
+  await expect(columns.first().locator('[data-component="summary-row"]').first()).toBeVisible();
+  await expect(columns.nth(1).locator('[data-component="summary-row"]').first()).toBeVisible();
   const geometry = await track.evaluate((element) => {
     const bounds = element.getBoundingClientRect(),
       cells = [...element.querySelectorAll('[data-component="ticket-board-column"]')].map((cell) =>
@@ -9843,10 +9843,8 @@ test('projects an indexed feedback-needed note into the real row and inspector r
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
-  await expect(ticket.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS(
-    'background-color',
-    'rgb(203, 48, 224)',
-  );
+  await expect(ticket).toHaveAttribute('data-rail', 'pop');
+  await expect(ticket.locator('.kui-summary-row__rail')).toBeVisible();
   await expect(ticket.locator('.ticket-list-row__feedback')).toContainText('Needs review');
   await ticket.click();
   const inspector = page.locator('#app-right-rail');
@@ -9867,10 +9865,8 @@ test('projects an indexed feedback-needed note into the real row and inspector r
   await page.screenshot({ path: 'target/visual-captures/hs2-n6wa7y-reader-no-rail.png' });
   await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await page.setViewportSize({ width: 760, height: 900 });
-  await expect(ticket.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS(
-    'background-color',
-    'rgb(203, 48, 224)',
-  );
+  await expect(ticket).toHaveAttribute('data-rail', 'pop');
+  await expect(ticket.locator('.kui-summary-row__rail')).toBeVisible();
   await expect(inspector.locator('[data-component="ticket-inspector-header"]')).toHaveAttribute(
     'data-needs-review',
     'true',
@@ -10063,7 +10059,7 @@ test('records No response needed as a subtle regular response and clears review 
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const ticket = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+  const ticket = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await ticket.click();
   await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
   const reader = page.getByRole('dialog'),
@@ -10633,7 +10629,7 @@ test('clears needs review when a regular response follows the feedback-needed no
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
-  await expect(ticket.locator('.ticket-list-row__indicator--needs-review')).toHaveCount(0);
+  await expect(ticket.locator('.kui-summary-row__rail')).toHaveCount(0);
   await expect(ticket.locator('.ticket-list-row__feedback')).toHaveCount(0);
   await ticket.click();
   const inspector = page.locator('#app-right-rail');
@@ -11214,13 +11210,13 @@ test('shows the compact confidence pill on completed list rows and board cards a
   await assertPills('92%', 'verified');
   await assertVerified();
   // The pill sits on the metadata line with the other pills, at chip height.
-  const doneRow = page.locator('[data-ticket-slug="HS2-DONE01"][data-component="ticket-list-row"]').first();
+  const doneRow = page.locator('[data-ticket-slug="HS2-DONE01"][data-component="summary-row"]').first();
   await expect(doneRow).toHaveAttribute('data-presentation', 'list');
   await expect(doneRow.locator('.ticket-list-row__metadata [data-confidence-badge]')).toHaveCount(1);
   await page.screenshot({ path: 'target/visual-captures/claude/hs2-a0q6g6-list-wide.png' });
 
   await page.getByLabel('Columns View').click();
-  await expect(page.locator('[data-component="ticket-list-row"][data-presentation="column"]').first()).toBeVisible();
+  await expect(page.locator('[data-component="summary-row"][data-presentation="card"]').first()).toBeVisible();
   await assertPills('92%', 'verified');
   await assertVerified();
   await page.screenshot({ path: 'target/visual-captures/claude/hs2-a0q6g6-columns-wide.png' });
@@ -11335,11 +11331,11 @@ test('shows the live claim and its ETA in the inspector and reader headers and c
   await expect(inspectorNotice.locator('[data-claim-eta]')).toHaveText(/~4[45]m left/);
   // The same row also shows the estimate, so opening the ticket keeps both cues (HS2-XQMDQB).
   await expect(
-    page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"] [data-claim-eta]'),
+    page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"] [data-claim-eta]'),
   ).toHaveAttribute('data-claim-eta', 'estimate');
   await inspector.screenshot({ path: test.info().outputPath('live-claim-inspector-wide.png') });
 
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').dblclick();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').dblclick();
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ }),
     readerNotice = reader.locator('[data-component="live-claim-notice"]');
   await expect(readerNotice).toContainText('Codex is working on this.');
@@ -11449,7 +11445,7 @@ test('shows ETA progress on actively claimed tickets in list and column views an
   await assertEtas();
   await page.screenshot({ path: test.info().outputPath('claim-eta-list-wide.png') });
   await page.getByLabel('Columns View').click();
-  await expect(page.locator('[data-component="ticket-list-row"][data-presentation="column"]').first()).toBeVisible();
+  await expect(page.locator('[data-component="summary-row"][data-presentation="card"]').first()).toBeVisible();
   await assertEtas();
   await page.screenshot({ path: test.info().outputPath('claim-eta-column-wide.png') });
 
@@ -11471,7 +11467,7 @@ test('shows ETA progress on actively claimed tickets in list and column views an
   const [etaBox, rowBox] = await Promise.all([
     estimateEta.boundingBox(),
     page
-      .locator('[data-ticket-slug="HS2-DEMO01"] [data-component="ticket-list-row"], [data-ticket-slug="HS2-DEMO01"]')
+      .locator('[data-ticket-slug="HS2-DEMO01"] [data-component="summary-row"], [data-ticket-slug="HS2-DEMO01"]')
       .first()
       .boundingBox(),
   ]);
@@ -11697,7 +11693,7 @@ test('keeps an active editor stable when its already-selected ticket is clicked 
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+  const row = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await row.click();
   const inspector = page.locator('#app-right-rail');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
@@ -11802,14 +11798,14 @@ test('routes mixed git and external ticket reads and edits by qualified id', asy
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="JIRA-7"]').click();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="JIRA-7"]').click();
   const inspector = page.locator('#app-right-rail');
   await expect(inspector).toContainText('Jira routed ticket');
   await expect(inspector).toContainText('Before edit');
   await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   await inspector.getByRole('textbox', { name: 'Ticket details' }).fill('After edit');
   // Selecting another ticket takes focus from the editor, which sends the edit to the routed provider.
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
   await expect
     .poll(() =>
       requests.some((request) => request.method === 'PATCH' && request.path.endsWith('/tickets/jira-1:PROJ-7')),
@@ -11908,7 +11904,7 @@ test('shows Jira outbox attention, retry, discard, and a fresh v2 queued edit (H
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="JIRA-7"]').click();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="JIRA-7"]').click();
   const sync = page.getByRole('region', { name: 'Jira Sync Status' });
   await expect(sync).toContainText('Needs attention');
   await expect(sync).toContainText('Jira rejected the write');
@@ -11945,7 +11941,7 @@ test('omits separators below every right-sidebar toolbar state', async ({ page }
   await expect(toolbar).not.toHaveAttribute('divider-sides');
   await expect(toolbar).toHaveCSS('box-shadow', /^(rgba\(0, 0, 0, 0\) [^,]+)(, rgba\(0, 0, 0, 0\) [^,]+){3}$/);
   await page.screenshot({ path: 'target/visual-captures/hs2-gvk7zy-empty-inspector-wide.png', fullPage: true });
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
   await expect(
     page.locator('#app-right-rail [data-component="toolbar"][aria-label="Ticket Inspector Toolbar"]'),
   ).not.toHaveAttribute('divider-sides');
@@ -12114,7 +12110,7 @@ test('orders equal status priority and title groups by most recently updated', a
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const order = () =>
     page
-      .locator('[data-component="ticket-list-row"]')
+      .locator('[data-component="summary-row"]')
       .evaluateAll((rows) => rows.map((item) => (item as HTMLElement).dataset.ticketSlug));
   const sort = page.locator('kui-select[name="workspace-sort"]');
   for (const field of ['title', 'priority', 'status']) {
@@ -12666,7 +12662,7 @@ test('switches to Queue so a ticket created in Backlog with Up Next stays visibl
     'aria-current',
     'page',
   );
-  const created = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]');
+  const created = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-NEW001"]');
   await expect(created).toBeVisible();
   await expect(created).toHaveAttribute('data-selected', 'true');
 });
@@ -12683,7 +12679,7 @@ test('drags a newly created selected ticket without requiring reselection (HS2-6
   await composer.getByLabel('Ticket Title').fill('Drag immediately after creation');
   await composer.locator('[data-action="toggle-new-ticket-up-next"]').click();
   await composer.getByRole('button', { name: 'Create ticket' }).click();
-  const created = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]'),
+  const created = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-NEW001"]'),
     backlog = sidebar.locator('[data-ticket-drop-status="backlog"]');
   await expect(created).toHaveAttribute('data-selected', 'true');
   await created.evaluate((node) => {
@@ -13235,7 +13231,7 @@ async function uploadsToAppendOnlySource(page: Page, testInfo: TestInfo, source:
   await form.screenshot({ path: `target/visual-captures/${source.capture}-composer-${source.provider}-wide.png` });
   await create.click();
   await expect(dialog).toBeHidden();
-  const githubRow = page.locator(`[data-component="ticket-list-row"][data-ticket-slug="${source.slug}"]`);
+  const githubRow = page.locator(`[data-component="summary-row"][data-ticket-slug="${source.slug}"]`);
   await expect(githubRow.locator('.ticket-list-row__slug')).toHaveText(source.short_slug);
   const githubNumber = page.getByRole('button', { name: `Copy ticket number ${source.slug}` });
   await expect(githubNumber.locator('[data-component="toolbar-text"]')).toHaveText(source.short_slug);
@@ -13406,7 +13402,7 @@ test('clears prior ticket text after cancel and successful creation', async ({ p
   await title.fill('Created title');
   await details.fill('Created details');
   await dialog.getByRole('button', { name: 'Create ticket' }).click();
-  await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]')).toBeVisible();
+  await expect(page.locator('[data-component="summary-row"][data-ticket-slug="HS2-NEW001"]')).toBeVisible();
   await launcher.click();
   await expect(title).toHaveValue('');
   await expect(details).toHaveValue('');
@@ -13445,7 +13441,7 @@ test('creating a ticket on a phone opens the inspector overlay on it (HS2-QFW2A7
   // Tap-away returns to the list with the new ticket still selected.
   await page.locator('.app-shell__scrim').click({ position: { x: 10, y: 400 } });
   await expect(inspector).toHaveAttribute('data-collapsed', 'true');
-  await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]')).toBeVisible();
+  await expect(page.locator('[data-component="summary-row"][data-ticket-slug="HS2-NEW001"]')).toBeVisible();
 });
 
 test('creating a ticket on a desktop leaves the inspector as the user set it (HS2-QFW2A7)', async ({ page }) => {
@@ -15030,7 +15026,7 @@ test('switches settings categories from the project sidebar', async ({ page }) =
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const selected = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+  const selected = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await selected.click();
   await expect(selected).toHaveAttribute('data-selected', 'true');
   await page.getByLabel('Settings View').click();
@@ -16046,7 +16042,7 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
 
-  const stale = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-QQRY00"]');
+  const stale = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-QQRY00"]');
   await expect(stale).toBeVisible();
   corruptTickets = [diagnostic];
   await expect.poll(() => polls.length).toBeGreaterThan(0);
@@ -16268,7 +16264,7 @@ test('lays the corrupt row icon beside its text for a real server diagnostic (HS
     await page.getByRole('button', { name: /Ticket errors/ }).click();
     const corrupt = page.locator('[data-component="corrupt-ticket-row"]');
     await expect(corrupt).toContainText(created.slug);
-    await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(0);
+    await expect(page.locator('[data-component="summary-row"]')).toHaveCount(0);
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
       if (width < 1024) await expect(page.getByRole('button', { name: 'Show Project Sidebar' })).toBeVisible();
@@ -16359,7 +16355,7 @@ test('updates the open project after external ticket additions edits and deletio
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const original = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+  const original = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await original.click();
   await expect(page.locator('#app-right-rail')).toContainText('Use real project tickets');
 
@@ -16735,7 +16731,7 @@ test('moves tickets to Backlog and Archive from every shipped status menu', asyn
   await status.locator('[data-ticket-status="backlog"]').click();
   await expect.poll(() => patches.some((patch) => patch.status === 'backlog')).toBe(true);
   await page.locator('[data-action="select-view"][data-item-id="backlog"]').click();
-  const backlogged = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-ARCH01"]');
+  const backlogged = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-ARCH01"]');
   await expect(backlogged).toBeVisible();
   await backlogged.click({ button: 'right' });
   const menu = page.locator('[data-context-menu="ticket"]');
@@ -16747,7 +16743,7 @@ test('moves tickets to Backlog and Archive from every shipped status menu', asyn
   await choices.filter({ hasText: 'Archive' }).click();
   await expect.poll(() => patches.some((patch) => patch.status === 'archive')).toBe(true);
   await page.getByRole('button', { name: /Archive/ }).click();
-  await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-ARCH01"]')).toBeVisible();
+  await expect(page.locator('[data-component="summary-row"][data-ticket-slug="HS2-ARCH01"]')).toBeVisible();
 });
 
 test('projects Up Next immediately and reconciles without a full project refresh', async ({ page }) => {
@@ -16755,7 +16751,7 @@ test('projects Up Next immediately and reconciles without a full project refresh
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const row = page.locator('[data-component="ticket-list-row"]', { hasText: 'Not started ticket' }),
+  const row = page.locator('[data-component="summary-row"]', { hasText: 'Not started ticket' }),
     projectTab = page.locator('[data-tab-kind="project"]', { hasText: 'demo' });
   await expect(projectTab.locator('.project-tab__work-count')).not.toContainText('≥');
   const requests: string[] = [];
@@ -16781,7 +16777,7 @@ test('projects Up Next immediately and reconciles without a full project refresh
       'click',
       () => {
         requestAnimationFrame(() => {
-          const row = document.querySelector('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEXT01"]');
+          const row = document.querySelector('[data-component="summary-row"][data-ticket-slug="HS2-NEXT01"]');
           const count = document.querySelector('[data-tab-kind="project"] .project-tab__work-count');
           (window as typeof window & { upNextVisibleOnFirstFrame?: boolean }).upNextVisibleOnFirstFrame =
             Boolean(row?.querySelector('[aria-label="Remove from Up Next"]')) && count?.textContent.trim() === '2';
@@ -16953,7 +16949,7 @@ test('keeps primary 138-ticket interactions within the painted UI budget @quaran
   samples.push(await timing('ticket-view-change', () => page.getByRole('button', { name: /Queue/ }).click()));
   samples.push(await timing('workspace-mode-change', () => page.getByRole('button', { name: 'Columns View' }).click()));
   samples.push(await timing('workspace-mode-change', () => page.getByRole('button', { name: 'List View' }).click()));
-  const first = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+  const first = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   samples.push(await timing('ticket-selection', () => first.click()));
   samples.push(
     await timing('ticket-up-next-change', () => first.getByRole('button', { name: 'Remove from Up Next' }).click()),
@@ -17495,7 +17491,7 @@ test('projects a newly created ticket within one frame without a collection refr
       return response;
     };
     const observer = new MutationObserver(() => {
-      if (document.querySelector('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]')) {
+      if (document.querySelector('[data-component="summary-row"][data-ticket-slug="HS2-NEW001"]')) {
         state.newTicketProjectionMs = performance.now() - state.newTicketResponseAt!;
         state.newTicketProjectionFrames = frames;
         cancelAnimationFrame(animationFrame);
@@ -17505,7 +17501,7 @@ test('projects a newly created ticket within one frame without a collection refr
     observer.observe(document.body, { attributes: true, childList: true, subtree: true });
   });
   await page.getByRole('button', { name: 'Create ticket' }).click();
-  const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]');
+  const row = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-NEW001"]');
   await expect(row).toBeVisible();
   const timings = await page.evaluate(() => {
     const state = window as typeof window & {
@@ -17870,7 +17866,7 @@ for (const width of [1280, 390]) {
     await expect(parent.getByText('Keep the short status summary.')).toBeVisible();
     await page.reload();
     if (width === 390)
-      await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').first().click();
+      await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').first().click();
     const reloaded = page.locator('#app-right-rail [data-component="note-card"][data-note-id="N1"]');
     await expect(reloaded.getByText('Show AI Feedback')).toBeVisible();
     await expect(reloaded.getByText('Keep the short status summary.')).toBeHidden();
@@ -18430,7 +18426,7 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await expect(page.locator('input[name="project-root"]')).toHaveJSProperty('value', '.');
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.getByText('Use real project tickets')).toBeVisible();
-  const featureRow = page.locator('[data-component="ticket-list-row"]', { hasText: 'Use real project tickets' });
+  const featureRow = page.locator('[data-component="summary-row"]', { hasText: 'Use real project tickets' });
   await expect(featureRow.locator('[data-lucide="sparkles"]')).toBeVisible();
   await expect(featureRow.locator('.ticket-list-row__category--label')).toHaveCount(0);
   await page.getByText('Use real project tickets').click();
@@ -18498,7 +18494,7 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
     .locator('[data-action="create-ticket-form"]')
     .screenshot({ path: 'target/visual-captures/hs2-new-ticket-composer-production.png' });
   await page.getByRole('button', { name: 'Create ticket' }).click();
-  const createdRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]');
+  const createdRow = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-NEW001"]');
   await expect(createdRow).toContainText('Created from the real shell');
   await expect(createdRow).not.toContainText('[client]');
   expect(submitted).toMatchObject({
@@ -18516,7 +18512,7 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   );
   await expect(page.getByRole('textbox', { name: 'Details' })).toHaveValue('Created with **Markdown** details.');
   await expect(page.getByRole('textbox', { name: 'Details' })).toBeFocused();
-  await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(1);
+  await expect(page.locator('[data-component="summary-row"][data-selected="true"]')).toHaveCount(1);
   await expect(page.locator('#app-right-rail')).toContainText('client');
   await expect(page.locator('#app-right-rail')).toContainText('Needs-Review');
   await page.screenshot({ path: 'target/visual-captures/hs2-chzkr5-create-wide.png', fullPage: true });
@@ -21438,7 +21434,7 @@ test('renders canonical attachment references for filenames containing backticks
   await expect(reference).toHaveAttribute('href', /\/attachments\/A-BACKTICK$/);
   await inspector.screenshot({ path: 'target/visual-captures/hs2-h2ptvz-backtick-reference-wide.png' });
   await page.setViewportSize({ width: 760, height: 700 });
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
   await expect(reference).toBeVisible();
   await inspector.screenshot({ path: 'target/visual-captures/hs2-h2ptvz-backtick-reference-narrow.png' });
 });
@@ -22628,7 +22624,7 @@ test('links ticket references in details and notes and layers the referenced tic
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   const backlogLink = inspector.getByRole('link', { name: 'HS2-BACK01' }),
     archiveLink = inspector.getByRole('link', { name: 'HS2-ARCH01' });
@@ -22976,7 +22972,7 @@ test('keeps reader details, blocked reason, and note edit state independent from
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+  const row = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await row.dblclick();
   let reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' }),
     preview = reader.getByRole('button', { name: 'Edit Ticket details' });
@@ -23123,7 +23119,7 @@ test('keeps backlog and archived tickets out of the active Queue', async ({ page
   await page.getByRole('button', { name: 'New ticket…' }).click();
   await page.getByRole('textbox', { name: 'Ticket Title' }).fill('Created directly in backlog');
   await page.getByRole('button', { name: 'Create ticket' }).click();
-  const created = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]');
+  const created = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-NEW001"]');
   await expect(created).toBeVisible();
   await expect(created).toHaveAttribute('data-status', 'backlog');
   await page.getByRole('button', { name: /Archive/ }).click();
@@ -23192,7 +23188,7 @@ test('loads all 138 Queue tickets before mixed-status pagination is applied', as
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(138);
+  await expect(page.locator('[data-component="summary-row"]')).toHaveCount(138);
   expect(collectionRequests).toContain('queue');
   await page.screenshot({ path: 'target/visual-captures/hs2-cs8agd-queue-138.png', fullPage: true });
 });
@@ -23252,7 +23248,7 @@ test('loads ticket rows beyond the first 200 from the visible queue continuation
   await page.screenshot({ path: 'target/visual-captures/hs2-q9yq2b-load-more-before.png', fullPage: true });
   await more.click();
   await expect(page.locator('[data-ticket-slug="HS2-P00204"]')).toBeVisible();
-  await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(205);
+  await expect(page.locator('[data-component="summary-row"]')).toHaveCount(205);
   await expect(more).toHaveCount(0);
   expect(
     requests.some(
@@ -23303,7 +23299,7 @@ test('pages the Archive newest-first in the active sort and appends older rows a
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: /Archive/ }).click();
-  const rows = page.locator('[data-component="ticket-list-row"]'),
+  const rows = page.locator('[data-component="summary-row"]'),
     slugs = () => rows.evaluateAll((items) => items.map((item) => item.getAttribute('data-ticket-slug')));
   await expect(rows).toHaveCount(200);
   // The first page is the head of the visible order, not an arbitrary slice of the archive.
@@ -23372,7 +23368,7 @@ test('recovers from a stale Archive cursor by reloading page one instead of erro
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: /Archive/ }).click();
-  const rows = page.locator('[data-component="ticket-list-row"]');
+  const rows = page.locator('[data-component="summary-row"]');
   await expect(rows).toHaveCount(200);
   const more = page.getByRole('button', { name: 'Load more tickets' });
   await more.scrollIntoViewIfNeeded();
@@ -24355,7 +24351,7 @@ test('searches only the current view before updating scoped sidebar counts', asy
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('stability');
   const navigation = page.getByRole('navigation', { name: 'Ticket Views' });
   await expect(navigation.getByLabel('Searching this view')).toHaveCount(3);
-  await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(2);
+  await expect(page.locator('[data-component="summary-row"]')).toHaveCount(2);
   await expect(page.locator('[data-ticket-slug^="HS2-STABB"]')).toHaveCount(0);
   await expect(page.locator('[data-ticket-slug^="HS2-STABA"]')).toHaveCount(0);
   await expect(navigation.getByLabel('2 search results')).toBeVisible();
@@ -24477,7 +24473,7 @@ test('filters duplicate tickets on the server before bounded search pagination',
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('is:duplicate ');
   await expect(page.locator('[data-component="search-field-token"][data-token-value="is:duplicate"]')).toBeVisible();
-  await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(duplicateRows.length);
+  await expect(page.locator('[data-component="summary-row"]')).toHaveCount(duplicateRows.length);
   expect(queries.at(-1)?.searchParams.get('close_reason')).toBe('duplicate');
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.screenshot({ path: 'target/visual-captures/hs2-v59atp-duplicate-results.png', fullPage: true });
@@ -24530,7 +24526,7 @@ test('evaluates boolean search matches beyond the first ticket page', async ({ p
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('late AND (matching OR missing)');
   await expect(page.locator('[data-ticket-slug="HS2-BOOL-LATE"]')).toBeVisible();
-  await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(1);
+  await expect(page.locator('[data-component="summary-row"]')).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Load more tickets' })).toHaveCount(0);
   expect(
     queries.some(
@@ -24559,7 +24555,7 @@ test('tokenizes inline tag search with autocomplete and no separate advanced-sea
   await suggestions.getByRole('button', { name: 'tag:client' }).click();
   const chip = page.locator('[data-component="search-field-token"]');
   await expect(chip).toContainText('tag:client');
-  await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(8);
+  await expect(page.locator('[data-component="summary-row"]')).toHaveCount(8);
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-BACK01"]')).toHaveCount(0);
   await page.waitForTimeout(400);
@@ -24900,7 +24896,7 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
   await expect.poll(() => structured.some((url) => url.searchParams.has('created_after'))).toBe(true);
   // The filtered page renders its row instead of failing on a malformed page (HS2-S47AXH).
   await expect(page.getByText('Searching tickets')).toHaveCount(0);
-  await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
+  await expect(page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await expect(page.locator('.app-toast')).toHaveCount(0);
   const inputBox = (await query.boundingBox())!,
     tokenBox = (await chip.first().boundingBox())!;
@@ -25485,14 +25481,14 @@ test('derives board columns from the selected view and merges Verified by projec
   await page.getByRole('button', { name: /Backlog/ }).click();
   await expect(board.locator('.ticket-board-column__title')).toHaveText(['Backlog']);
   await expect(board.locator('[data-column-id="backlog"]')).toContainText('Deferred backlog ticket');
-  const backlogCard = board.locator('[data-column-id="backlog"] [data-component="ticket-list-row"]');
+  const backlogCard = board.locator('[data-column-id="backlog"] [data-component="summary-row"]');
   expect(await backlogCard.evaluate((node) => parseFloat(getComputedStyle(node).borderRadius))).toBeGreaterThan(0);
   await expect(backlogCard).toHaveCSS('border-style', 'solid');
   await page.screenshot({ path: 'target/visual-captures/hs2-rzd9d4-backlog-column.png', fullPage: true });
   await page.getByRole('button', { name: /Archive/ }).click();
   await expect(board.locator('.ticket-board-column__title')).toHaveText(['Archive']);
   await expect(board.locator('[data-column-id="archive"]')).toContainText('Archived ticket');
-  const archiveCards = board.locator('[data-column-id="archive"] [data-component="ticket-list-row"]');
+  const archiveCards = board.locator('[data-column-id="archive"] [data-component="summary-row"]');
   await expect(archiveCards).toHaveCount(2);
   await expect(board.locator('[data-ticket-slug="HS2-MOVED1"]')).toBeVisible();
   await expect(board.locator('[data-ticket-slug="HS2-VERIFY01"]')).toHaveCount(0);
@@ -25532,7 +25528,7 @@ test('switches and searches large ticket views without cloning every row into mo
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(60);
+  await expect(page.locator('[data-component="summary-row"]')).toHaveCount(60);
   for (const [view, count] of [
     ['Backlog', 18],
     ['Archive', 2_075],
@@ -25563,7 +25559,7 @@ test('switches and searches large ticket views without cloning every row into mo
       expect(initial).toMatchObject({ rendered: '40', total: '2075', loading: true });
       await page.screenshot({ path: 'target/visual-captures/hs2-w52rer-progressive-archive.png' });
     }
-    await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(count, { timeout: 20_000 });
+    await expect(page.locator('[data-component="summary-row"]')).toHaveCount(count, { timeout: 20_000 });
     await expect(page.locator('[data-ticket-progressive-loading="true"]')).toHaveCount(0);
     if (view === 'Archive') {
       await page.getByRole('button', { name: 'Search tickets', exact: true }).click();
@@ -25575,7 +25571,7 @@ test('switches and searches large ticket views without cloning every row into mo
       await expect(page.locator('[data-ticket-slug="HS2-LARGE2074"]')).toBeVisible();
       await page.screenshot({ path: 'target/visual-captures/hs2-e76c4k-large-search.png', fullPage: true });
       await page.getByRole('button', { name: 'Clear search', exact: true }).click();
-      await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(count, { timeout: 20_000 });
+      await expect(page.locator('[data-component="summary-row"]')).toHaveCount(count, { timeout: 20_000 });
       await expect(page.locator('[data-ticket-progressive-loading="true"]')).toHaveCount(0);
     }
   }
@@ -25588,8 +25584,8 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const inspector = page.locator('#app-right-rail'),
-    first = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START03"]'),
-    second = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]');
+    first = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-START03"]'),
+    second = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-START02"]');
   await expect(inspector).toContainText('Select a ticket to see and edit its details');
   await inspector.getByRole('button', { name: 'Hide Ticket Inspector' }).click();
   await page.getByRole('button', { name: 'Show Ticket Inspector' }).click();
@@ -25613,7 +25609,7 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
   await firstStarted.click();
   await rangeEnd.click({ modifiers: ['Shift'] });
   await expect(started.locator('[data-selected="true"]')).toHaveCount(2);
-  const startedCount = await started.locator('[data-component="ticket-list-row"]').count();
+  const startedCount = await started.locator('[data-component="summary-row"]').count();
   await started.getByRole('button', { name: 'Select all Started tickets' }).click();
   await expect(started.locator('[data-selected="true"]')).toHaveCount(startedCount);
   await expect(inspector).toContainText(`${startedCount} items selected`);
@@ -25645,24 +25641,24 @@ test('drops ticket selection across ticket views but preserves it across view mo
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const inspector = page.locator('#app-right-rail'),
-    active = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+    active = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await active.click();
   await expect(active).toHaveAttribute('data-selected', 'true');
   await expect(inspector).toContainText('HS2-DEMO01');
   await page.getByLabel('Columns View').click();
-  await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]')).toHaveAttribute(
+  await expect(page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]')).toHaveAttribute(
     'data-selected',
     'true',
   );
   await expect(inspector).toContainText('HS2-DEMO01');
   await page.locator('[data-action="select-view"][data-item-id="backlog"]').click();
-  await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(0);
+  await expect(page.locator('[data-component="summary-row"][data-selected="true"]')).toHaveCount(0);
   await expect(page.locator('#app-right-rail')).toContainText('Select a ticket to see and edit its details');
-  const backlog = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-BACK01"]');
+  const backlog = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-BACK01"]');
   await backlog.click();
   await expect(backlog).toHaveAttribute('data-selected', 'true');
   await page.locator('[data-action="select-view"][data-item-id="archive"]').click();
-  await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(0);
+  await expect(page.locator('[data-component="summary-row"][data-selected="true"]')).toHaveCount(0);
   await expect(page.locator('#app-right-rail')).toContainText('Select a ticket to see and edit its details');
 });
 
@@ -25671,7 +25667,7 @@ test('styles completed and verified titles consistently in list and column rows'
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const completed = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DONE01"] strong');
+  const completed = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DONE01"] strong');
   await expect(completed).toHaveCSS('text-decoration-line', 'line-through');
   const quietColor = await completed.evaluate((node) => {
     const probe = document.createElement('span');
@@ -25683,7 +25679,7 @@ test('styles completed and verified titles consistently in list and column rows'
   });
   await expect(completed).toHaveCSS('color', quietColor);
   await page.getByLabel('Columns View').click();
-  const verified = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-VERIFY01"] strong');
+  const verified = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-VERIFY01"] strong');
   await expect(verified).toHaveCSS('text-decoration-line', 'line-through');
   await expect(verified).toHaveCSS('color', quietColor);
 });
@@ -25695,17 +25691,13 @@ test('offers Up Next only on active tickets across rows and inspector', async ({
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"] [data-action="toggle-row-up-next"]')).toBeVisible();
   await expect(
-    page.locator(
-      '[data-component="ticket-list-row"][data-ticket-slug="HS2-DONE01"] [data-action="toggle-row-up-next"]',
-    ),
+    page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DONE01"] [data-action="toggle-row-up-next"]'),
   ).toHaveCount(0);
   await page.getByText('Completed ticket', { exact: true }).click();
   await expect(page.locator('#app-right-rail [data-action="toggle-inspector-up-next"]')).toHaveCount(0);
   await page.locator('[data-action="select-view"][data-item-id="archive"]').click();
   await expect(
-    page.locator(
-      '[data-component="ticket-list-row"][data-ticket-slug="HS2-ARCH01"] [data-action="toggle-row-up-next"]',
-    ),
+    page.locator('[data-component="summary-row"][data-ticket-slug="HS2-ARCH01"] [data-action="toggle-row-up-next"]'),
   ).toHaveCount(0);
 });
 
@@ -25714,8 +25706,8 @@ test('offers completed verification actions only for one completed ticket', asyn
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const completed = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DONE01"]'),
-    verified = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-VERIFY01"]'),
+  const completed = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DONE01"]'),
+    verified = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-VERIFY01"]'),
     menu = page.locator('[data-context-menu="ticket"]');
   await completed.click({ button: 'right' });
   await expect(menu.getByRole('menu').first()).toBeVisible();
@@ -25729,7 +25721,7 @@ test('offers completed verification actions only for one completed ticket', asyn
   await verified.click();
   await expect(verified).toHaveAttribute('data-selected', 'true');
   await completed.click({ modifiers: ['Meta'] });
-  await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(2);
+  await expect(page.locator('[data-component="summary-row"][data-selected="true"]')).toHaveCount(2);
   await expect(completed).toHaveAttribute('data-selected', 'true');
   await verified.click({ button: 'right' });
   await expect(menu.getByRole('menu').first()).toBeVisible();
@@ -25745,7 +25737,7 @@ test('reopens Verified and Archive tickets into Not Started plus Up Next', async
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const menu = page.locator('[data-context-menu="ticket"]'),
-    verified = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-VERIFY01"]');
+    verified = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-VERIFY01"]');
   await verified.click({ button: 'right' });
   const verifiedReopen = menu.getByRole('menuitem', { name: 'Reopen Ticket', exact: true });
   await expect(verifiedReopen).toBeVisible();
@@ -25770,7 +25762,7 @@ test('reopens Verified and Archive tickets into Not Started plus Up Next', async
   );
   await page.getByRole('button', { name: /Archive/ }).click();
   await page.setViewportSize({ width: 390, height: 844 });
-  const archived = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-ARCH01"]');
+  const archived = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-ARCH01"]');
   await expect(archived).toBeVisible();
   await archived.click({ button: 'right' });
   const archiveReopen = menu.getByRole('menuitem', { name: 'Reopen Ticket', exact: true });
@@ -25790,7 +25782,7 @@ test('reopens Verified and Archive tickets into Not Started plus Up Next', async
     node.value = 'all';
     node.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  const reopenedArchive = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-ARCH01"]');
+  const reopenedArchive = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-ARCH01"]');
   await expect(reopenedArchive).toHaveAttribute('data-status', 'not_started');
   await expect(reopenedArchive.locator('[data-action="toggle-row-up-next"]')).toHaveAttribute(
     'aria-label',
@@ -25901,7 +25893,7 @@ test('opens the matching ticket reader on row double-click in list and columns',
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').dblclick();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').dblclick();
   await expect(page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' })).toBeVisible();
   await page.getByRole('button', { name: 'Close Ticket Reader' }).click();
   await page.getByLabel('Columns View').click();
@@ -25914,7 +25906,7 @@ test('opens shared Markdown links safely in new tabs across the real inspector a
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail'),
     projectGuide = inspector.getByRole('link', { name: 'Project guide' });
   await expect(projectGuide).toHaveAttribute('target', '_blank');
@@ -25922,7 +25914,7 @@ test('opens shared Markdown links safely in new tabs across the real inspector a
   const runbook = inspector.getByRole('link', { name: 'runbook' });
   await expect(runbook).toHaveAttribute('target', '_blank');
   await expect(runbook).toHaveAttribute('rel', 'noopener noreferrer');
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').dblclick();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').dblclick();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   await expect(reader.getByRole('link', { name: 'Project guide' })).toHaveAttribute('target', '_blank');
   await expect(reader.getByRole('link', { name: 'runbook' })).toHaveAttribute('rel', 'noopener noreferrer');
@@ -25943,7 +25935,7 @@ test('opens ticket references without leaving column view (HS2-230NY7)', async (
   await page.locator('#app-right-rail').getByRole('link', { name: 'HS2-START02' }).click();
   await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
   await expect(page.getByLabel('Columns View')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]')).toHaveAttribute(
+  await expect(page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]')).toHaveAttribute(
     'data-selected',
     'true',
   );
@@ -26029,14 +26021,14 @@ test('resolves exact ticket links across projects and shows only a compact ambig
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add Project' }).click();
   const otherTab = page.getByRole('tab', { name: 'other' }),
-    otherUniqueRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-OTHER1"]');
+    otherUniqueRow = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-OTHER1"]');
   await expect(otherTab).toHaveAttribute('aria-selected', 'true');
   await expect(otherUniqueRow).toBeVisible();
   const openSource = async () => {
     const demoTab = page.getByRole('tab', { name: 'demo' });
     await demoTab.click();
     await expect(demoTab).toHaveAttribute('aria-selected', 'true');
-    const sourceRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+    const sourceRow = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
     await expect(sourceRow).toBeVisible();
     await sourceRow.click();
     const inspector = page.locator('#app-right-rail');
@@ -26148,7 +26140,7 @@ test('auto-links a single-digit legacy HS-N reference to the imported ticket (HS
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
   const legacyLink = inspector.getByRole('link', { name: 'HS-7', exact: true });
   await expect(legacyLink).toBeVisible();
@@ -26170,14 +26162,14 @@ test('ships TicketRow context-menu behavior through real list and board composit
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const first = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),
-    second = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]'),
+  const first = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
+    second = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-START02"]'),
     menu = page.locator('[data-context-menu="ticket"]');
   await first.click();
   await second.click({ modifiers: ['Meta'] });
   await first.click({ button: 'right' });
   await expect(menu.getByRole('menu').first()).toBeVisible();
-  await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(2);
+  await expect(page.locator('[data-component="summary-row"][data-selected="true"]')).toHaveCount(2);
   await menu.getByText('Toggle Up Next').click();
   await expect.poll(() => patches.filter((patch) => patch.up_next === true).length).toBe(2);
   expect(mutations.filter((path) => path.endsWith('/batch'))).toHaveLength(1);
@@ -26192,7 +26184,7 @@ test('ships TicketRow context-menu behavior through real list and board composit
       await page.screenshot({ path: 'target/visual-captures/hotsheet-real-context-submenu.png' });
     }
     await option.click();
-    await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(2);
+    await expect(page.locator('[data-component="summary-row"][data-selected="true"]')).toHaveCount(2);
     await expect.poll(() => patches.filter((patch) => patch[field] === value).length).toBe(2);
   };
   // "Open ticket" is hidden while multiple tickets are selected (HS2-XRENF2), so collapse to a
@@ -26435,7 +26427,7 @@ test('applies selected-ticket toolbar actions and clears tickets moved outside t
   await menu.getByText('Archive ticket').click();
   await expect.poll(() => patches.filter((patch) => patch.status === 'archive').length).toBe(1);
   await expect(first).toHaveCount(0);
-  await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(0);
+  await expect(page.locator('[data-component="summary-row"][data-selected="true"]')).toHaveCount(0);
   await expect(page.getByText('Select a ticket to see and edit its details')).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-czmm6x-hidden-selection-cleared.png', fullPage: true });
 });
@@ -26459,7 +26451,7 @@ for (const surface of ['workspace', 'rail'] as const) {
       const icon = star.locator('.workspace-header__up-next-icon');
       const select = async (slug: string, toggle = false, single = true) => {
         await page
-          .locator(`[data-component="ticket-list-row"][data-ticket-slug="${slug}"]`)
+          .locator(`[data-component="summary-row"][data-ticket-slug="${slug}"]`)
           .click({ modifiers: toggle ? ['Meta'] : [] });
         if (surface === 'rail' && single) {
           await expect(rail.locator('.kui-nav-stack__view[data-nav-key="root"]')).toHaveAttribute(
@@ -26621,7 +26613,7 @@ for (const surface of ['workspace', 'rail'] as const) {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-    await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
+    await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
     if (surface === 'rail') await page.getByRole('button', { name: 'Workspace Grid' }).click();
     const controls =
       surface === 'rail'
@@ -26722,8 +26714,8 @@ test('dismisses ticket context menus on every true outside pointerdown', async (
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const first = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),
-    second = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]'),
+  const first = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
+    second = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-START02"]'),
     menu = page.locator('[data-context-menu="ticket"]');
   await first.click({ button: 'right' });
   await expect(menu.getByRole('menu').first()).toBeVisible();
@@ -26753,7 +26745,7 @@ test('undoes, redoes, copies, pastes, and drags ticket mutations through the rea
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const ticket = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+  const ticket = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await ticket.click();
   const nextPatch = () =>
     page.waitForResponse(
@@ -26788,7 +26780,7 @@ test('undoes, redoes, copies, pastes, and drags ticket mutations through the rea
   await page.locator('.app-shell__work-area').focus();
   await page.keyboard.press(`${shortcut}+v`);
   // Paste selects the pasted ticket, so its title also appears in the inspector; scope to the row.
-  const copied = page.locator('[data-component="ticket-list-row"]', { hasText: 'Use real project tickets (Copy)' });
+  const copied = page.locator('[data-component="summary-row"]', { hasText: 'Use real project tickets (Copy)' });
   await expect(copied).toBeVisible();
   await expect.poll(() => creates.at(-1)?.status).toBe('not_started');
   await expect(copied).toHaveAttribute('data-status', 'not_started');
@@ -26803,9 +26795,7 @@ test('undoes, redoes, copies, pastes, and drags ticket mutations through the rea
   await expect(page.locator('[data-ticket-drop-status="backlog"]')).toHaveAttribute('data-dragging-ticket', 'true');
   await page.locator('[data-ticket-drop-status="backlog"]').dispatchEvent('drop');
   await page.locator('[data-ticket-drop-status="backlog"]').click();
-  await expect(
-    page.locator('[data-component="ticket-list-row"]', { hasText: 'Use real project tickets' }),
-  ).toBeVisible();
+  await expect(page.locator('[data-component="summary-row"]', { hasText: 'Use real project tickets' })).toBeVisible();
 });
 
 test('drags single and selected tickets across columns, views, and the duplicate target', async ({ page }) => {
@@ -26854,8 +26844,8 @@ test('drags single and selected tickets across columns, views, and the duplicate
   await expect.poll(() => patches.filter((patch) => patch.status === 'completed').length).toBe(1);
   await expect(page.locator('[data-column-id="completed"] [data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await page.getByLabel('List View').click();
-  const duplicateFirst = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),
-    duplicateSecond = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEXT01"]');
+  const duplicateFirst = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
+    duplicateSecond = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-NEXT01"]');
   await duplicateFirst.click();
   await duplicateSecond.click({ modifiers: ['Meta'] });
   const createsBefore = mutations.filter((value) => value.endsWith('/tickets')).length;
@@ -26870,7 +26860,7 @@ test('previews rows with a border-only outline and keeps column cards borderless
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),
+  const row = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
     background = await row.evaluate((node) => getComputedStyle(node).backgroundColor),
     shadow = await row.evaluate((node) => getComputedStyle(node).boxShadow);
   await row.hover();
@@ -26924,8 +26914,8 @@ test('drops selected tickets on another project tab to copy them there', async (
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add Project' }).click();
   await page.getByRole('tab', { name: 'demo' }).click();
-  const first = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),
-    second = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]');
+  const first = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
+    second = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-START02"]');
   await expect(first).toBeVisible();
   await first.click();
   await second.click({ modifiers: ['Meta'] });
@@ -26960,7 +26950,7 @@ test('drops selected tickets on another project tab to copy them there', async (
   await page.getByRole('tab', { name: 'other' }).click();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill('Use real project tickets (Copy)');
-  const copied = page.locator('[data-component="ticket-list-row"]', { hasText: 'Use real project tickets (Copy)' });
+  const copied = page.locator('[data-component="summary-row"]', { hasText: 'Use real project tickets (Copy)' });
   await expect(copied).toHaveAttribute('data-status', 'not_started');
   await expect(copied).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-skp8cw-dropped-started-tickets.png', fullPage: true });
@@ -27389,7 +27379,7 @@ test('copies selected ticket ids to the local pasteboard without the async Clipb
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
+  await page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]').click();
   await page.keyboard.press(`${shortcut}+c`);
   await expect
     .poll(() => page.evaluate(() => (window as typeof window & { copied: string[] }).copied.at(-1) ?? ''))
@@ -27421,7 +27411,7 @@ test('scopes ticket clipboard shortcuts to the focused work area and preserves n
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const workArea = page.locator('.app-shell__work-area'),
-    ticket = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),
+    ticket = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]'),
     focusColor = await resolvedColor(workArea, 'var(--wa-color-focus)');
   await ticket.click();
   await expect(workArea).toHaveCSS('outline-width', '2px');
@@ -27467,7 +27457,7 @@ test('scopes ticket clipboard shortcuts to the focused work area and preserves n
   await expect(workArea).toHaveCSS('outline-width', '2px');
   await page.keyboard.press(`${shortcut}+v`);
   await expect(
-    page.locator('[data-component="ticket-list-row"]', { hasText: 'Use real project tickets (Copy)' }),
+    page.locator('[data-component="summary-row"]', { hasText: 'Use real project tickets (Copy)' }),
   ).toBeVisible();
   expect(creates).toHaveLength(1);
   await page.screenshot({ path: 'target/visual-captures/hs2-rg612c-work-area-focus-wide.png', fullPage: true });
@@ -27488,7 +27478,7 @@ test('preserves attachments and atomically undoes and redoes cut-paste', async (
   await page.goto('/');
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  const source = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+  const source = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await source.click();
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await expect(page.locator('[data-attachment-id="A1"]')).toBeVisible();
@@ -27498,9 +27488,7 @@ test('preserves attachments and atomically undoes and redoes cut-paste', async (
   await page.keyboard.press(`${shortcut}+v`);
   // Paste selects the pasted ticket, so the title also appears in the inspector heading;
   // assert on the list row only.
-  const pasted = page
-    .locator('[data-component="ticket-list-row"]')
-    .filter({ hasText: 'Use real project tickets (Copy)' });
+  const pasted = page.locator('[data-component="summary-row"]').filter({ hasText: 'Use real project tickets (Copy)' });
   await expect(pasted).toBeVisible();
   await expect.poll(() => copyRequests.length).toBe(1);
   expect(copyRequests[0]).toEqual({
@@ -28217,11 +28205,11 @@ test('live project visual review', async ({ page }) => {
       process.env.HOTSHEET_LIVE_PROJECT,
     );
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-  await expect(page.locator('[data-component="ticket-list-row"]').first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('[data-component="summary-row"]').first()).toBeVisible({ timeout: 15_000 });
   const loaded = page.waitForResponse(
     (response) => response.url().includes('/tickets/') && response.request().method() === 'GET',
   );
-  await page.locator('[data-component="ticket-list-row"]').first().click();
+  await page.locator('[data-component="summary-row"]').first().click();
   expect((await loaded).status()).toBe(200);
   expect(pageErrors).toEqual([]);
   await expect(page.locator('#app-right-rail')).toBeVisible();
@@ -28239,7 +28227,7 @@ test('live project visual review', async ({ page }) => {
   }
   await page.screenshot({ path: 'target/visual-captures/hotsheet-real-app.png', fullPage: true });
   await page.setViewportSize({ width: 900, height: 760 });
-  await expect(page.locator('[data-component="ticket-list-row"]').first()).toBeVisible();
+  await expect(page.locator('[data-component="summary-row"]').first()).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hotsheet-real-app-narrow.png', fullPage: true });
 });
 
@@ -28581,7 +28569,7 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const workspace = page.locator('.app-shell__workspace'),
-    tickets = workspace.locator('[data-component="ticket-list-row"]'),
+    tickets = workspace.locator('[data-component="summary-row"]'),
     scroll = () => workspace.evaluate((node) => node.scrollTop),
     setScroll = (top: number) =>
       workspace.evaluate((node, value) => {
@@ -28825,7 +28813,7 @@ test('preserves list and every board-column scroll position across ticket mutati
   await page.getByRole('button', { name: 'Open Project' }).click();
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   const workspace = page.locator('.app-shell__workspace');
-  const listTarget = page.locator('[data-component="ticket-list-row"][data-status="completed"]').nth(8),
+  const listTarget = page.locator('[data-component="summary-row"][data-status="completed"]').nth(8),
     listSlug = await listTarget.getAttribute('data-ticket-slug');
   await workspace.evaluate((node) => {
     node.scrollTop = 2000;
@@ -28866,7 +28854,7 @@ test('preserves list and every board-column scroll position across ticket mutati
   });
   await expect.poll(() => workspace.evaluate((node) => node.scrollTop)).toBe(listBefore);
   await page.locator('[data-context-menu="ticket"]').locator('[data-context-action="Verify ticket"]').click();
-  await expect(page.locator(`[data-component="ticket-list-row"][data-ticket-slug="${listSlug}"]`)).toHaveAttribute(
+  await expect(page.locator(`[data-component="summary-row"][data-ticket-slug="${listSlug}"]`)).toHaveAttribute(
     'data-status',
     'verified',
   );
@@ -28900,7 +28888,7 @@ test('preserves list and every board-column scroll position across ticket mutati
         (node as HTMLElement).scrollTop = 260 + index * 20;
       });
     });
-    const boardTarget = page.locator('[data-column-id="completed"] [data-component="ticket-list-row"]').nth(5),
+    const boardTarget = page.locator('[data-column-id="completed"] [data-component="summary-row"]').nth(5),
       boardSlug = await boardTarget.getAttribute('data-ticket-slug'),
       scrolled = await positions();
     expect(Object.values(scrolled).every((top) => top > 0)).toBe(true);
@@ -28923,7 +28911,7 @@ test('preserves list and every board-column scroll position across ticket mutati
   });
   await page.setViewportSize({ width: 900, height: 760 });
   await expect(page.locator('.app-shell')).toHaveAttribute('data-mobile', 'true');
-  await expect(page.locator('[data-component="ticket-list-row"]')).not.toHaveCount(0);
+  await expect(page.locator('[data-component="summary-row"]')).not.toHaveCount(0);
   await page.screenshot({
     path: 'target/visual-captures/hs2-q9z4km-scroll-narrow.png',
     fullPage: true,
@@ -28931,7 +28919,7 @@ test('preserves list and every board-column scroll position across ticket mutati
   });
   await page.setViewportSize({ width: 390, height: 760 });
   await page.getByRole('button', { name: 'List View' }).click();
-  const phoneTarget = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-SC0106"]'),
+  const phoneTarget = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-SC0106"]'),
     phoneSlug = await phoneTarget.getAttribute('data-ticket-slug');
   await expect(phoneTarget).toHaveAttribute('data-status', 'completed');
   await workspace.evaluate((node) => {
@@ -28947,7 +28935,7 @@ test('preserves list and every board-column scroll position across ticket mutati
   await phoneTarget.click({ button: 'right' });
   await expect.poll(() => workspace.evaluate((node) => node.scrollTop)).toBe(phoneBefore);
   await page.locator('[data-context-menu="ticket"]').locator('[data-context-action="Verify ticket"]').click();
-  await expect(page.locator(`[data-component="ticket-list-row"][data-ticket-slug="${phoneSlug}"]`)).toHaveAttribute(
+  await expect(page.locator(`[data-component="summary-row"][data-ticket-slug="${phoneSlug}"]`)).toHaveAttribute(
     'data-status',
     'verified',
   );
@@ -28985,8 +28973,8 @@ test('dismisses every remaining dialog through its native close event (HS2-3RQ7V
   await expect(dialog).not.toHaveAttribute('open');
   await page.keyboard.press('Escape');
   await page.getByRole('tab', { name: /demo/ }).click();
-  const first = page.locator('[data-component="ticket-list-row"]').first(),
-    second = page.locator('[data-component="ticket-list-row"]').nth(1);
+  const first = page.locator('[data-component="summary-row"]').first(),
+    second = page.locator('[data-component="summary-row"]').nth(1);
   await first.click();
   await second.click({ modifiers: ['Meta'] });
   await first.click({ button: 'right' });
@@ -29490,7 +29478,7 @@ test('shows the decorative server-busy bars while a server request is in flight 
   });
   await expect(bars.locator('.server-busy-bars__bar').first()).toHaveCSS('background-color', starYellow);
   await expect(bars).toHaveAttribute('data-visible', 'false');
-  const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+  const row = page.locator('[data-component="summary-row"][data-ticket-slug="HS2-DEMO01"]');
   await row.click();
   const statusSelect = page.locator('.ticket-status-menu');
   await statusSelect.locator('[data-inspector-status-menu] > button').click();
@@ -29977,7 +29965,7 @@ test('reflects a corrected or cleared note confidence from the real server (HS2-
       card = inspector.locator(`[data-component="note-card"][data-note-id="${scored.id}"]`),
       badge = card.locator('[data-confidence-badge]'),
       rowPill = page.locator(
-        `[data-component="ticket-list-row"][data-ticket-slug="${created.slug}"] [data-confidence-badge]`,
+        `[data-component="summary-row"][data-ticket-slug="${created.slug}"] [data-confidence-badge]`,
       );
     const openTicket = async () => {
       await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
@@ -30625,7 +30613,7 @@ test('a quoting feedback reply clears Needs review through the real server (HS2-
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Project' }).click();
     await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
-    const row = page.locator(`[data-component="ticket-list-row"][data-ticket-slug="${created.slug}"]`);
+    const row = page.locator(`[data-component="summary-row"][data-ticket-slug="${created.slug}"]`);
     await expect(row.locator('.ticket-list-row__feedback')).toContainText('Needs review');
     await row.click();
     await page.getByRole('button', { name: 'Open Ticket Reader' }).click();
@@ -31550,7 +31538,7 @@ test('shows the testing-phase time-left estimate on list rows, column cards, and
   await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const estimateOf = (slug: string) =>
-    page.locator(`[data-component="ticket-list-row"][data-ticket-slug="${slug}"] [data-phase-estimate]`);
+    page.locator(`[data-component="summary-row"][data-ticket-slug="${slug}"] [data-phase-estimate]`);
   const assertEstimates = async () => {
     await expect(estimateOf('HS2-DEMO01')).toHaveAttribute('data-phase-estimate', 'estimate');
     await expect(estimateOf('HS2-DEMO01')).toHaveText(/~[78]m left/);
@@ -31568,7 +31556,7 @@ test('shows the testing-phase time-left estimate on list rows, column cards, and
   await expect(statusLine).toHaveText(/~[78]m left/);
   await page.screenshot({ path: test.info().outputPath('phase-estimate-detail-wide.png') });
   await page.getByLabel('Columns View').click();
-  await expect(page.locator('[data-component="ticket-list-row"][data-presentation="column"]').first()).toBeVisible();
+  await expect(page.locator('[data-component="summary-row"][data-presentation="card"]').first()).toBeVisible();
   await assertEstimates();
   await page.screenshot({ path: test.info().outputPath('phase-estimate-column-wide.png') });
   await page.setViewportSize({ width: 390, height: 844 });

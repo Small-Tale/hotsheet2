@@ -68,7 +68,7 @@ function motionLayer() {
 
 function ghost(slug = 'HS2-A', document = mockDocument()) {
   const visual = {
-    dataset: { ticketSlug: slug, component: 'ticket-list-row' },
+    dataset: { ticketSlug: slug, component: 'summary-row' },
     style: {},
     removeAttribute: vi.fn(),
     childElementCount: 0,
@@ -110,7 +110,7 @@ function row(
 ): MockRow {
   const animate = vi.fn(() => pendingAnimation());
   const visual = {
-    dataset: { ticketSlug: slug, component: 'ticket-list-row' },
+    dataset: { ticketSlug: slug, component: 'summary-row' },
     style: { visibility: '' },
     ownerDocument: document,
     getBoundingClientRect: () => visualBox,

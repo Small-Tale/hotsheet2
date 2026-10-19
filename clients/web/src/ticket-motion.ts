@@ -55,7 +55,7 @@ function motionContainers(root: ParentNode) {
   );
 }
 function ticketVisual(container: HTMLElement) {
-  return container.querySelector<HTMLElement>(':scope > [data-component="ticket-list-row"][data-ticket-slug]');
+  return container.querySelector<HTMLElement>(':scope > [data-component="summary-row"][data-ticket-slug]');
 }
 function parentKey(container: HTMLElement) {
   return (
@@ -265,7 +265,7 @@ function hideRealTicket(container: HTMLElement, slug: string) {
     hideRule = container.ownerDocument.createElement('style'),
     escaped = container.ownerDocument.defaultView?.CSS.escape(slug) ?? slug;
   hideRule.dataset.ticketMotionHide = slug;
-  hideRule.textContent = `[data-component="ticket-list-row-container"]:has(> [data-component="ticket-list-row"][data-ticket-slug="${escaped}"]){visibility:hidden!important}`;
+  hideRule.textContent = `[data-component="ticket-list-row-container"]:has(> [data-component="summary-row"][data-ticket-slug="${escaped}"]){visibility:hidden!important}`;
   container.ownerDocument.head.append(hideRule);
   container.style.visibility = 'hidden';
   return { visibility, hideRule };
@@ -341,9 +341,9 @@ function trackTicketPosition(document: Document, ghost: HTMLElement, slug: strin
   if (!view?.requestAnimationFrame) return () => undefined;
   let frame = 0;
   const update = () => {
-    const visual = [
-        ...document.querySelectorAll<HTMLElement>('[data-component="ticket-list-row"][data-ticket-slug]'),
-      ].find((candidate) => candidate.dataset.ticketSlug === slug),
+    const visual = [...document.querySelectorAll<HTMLElement>('[data-component="summary-row"][data-ticket-slug]')].find(
+        (candidate) => candidate.dataset.ticketSlug === slug,
+      ),
       container = visual?.closest<HTMLElement>('[data-component="ticket-list-row-container"]');
     if (container) {
       placeGhost(ghost, container.getBoundingClientRect());
