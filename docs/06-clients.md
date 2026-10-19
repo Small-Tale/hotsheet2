@@ -1654,11 +1654,10 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   instead of behind a fixed reservation (HS2-W0KJVQ). A short drawer chat (the default drawer
   gives it about 262 px at 390x844 and at 1280x800) compacts that floating form so the transcript
   keeps room (HS2-SZZGC6): below a 480 px chat height the stuck banner shows its one-line short form
-  (same warning tone, icon, and Stop), the "Click to select" hint row steps aside while a turn's
-  progress shows (it returns when the turn ends, and the selection bar still appears once messages
-  are selected), and the draft grows to 3 rows; below
+  (same warning tone, icon, and Stop), and the draft grows to 3 rows; below
   320 px it grows to 2 rows. A longer draft scrolls inside the MessageComposer. A taller or maximized
-  drawer and the dialog keep the full banner, the hint, and six rows. The drawer passes its measured
+  drawer and the dialog keep the full banner and six rows. The selection bar appears only while
+  messages are selected (HS2-0T1TM5). The drawer passes its measured
   content height as `AIConversationProps.availableHeight` (`embeddedComposerLayout`). A turn
   another client started is
   timed from the connection snapshot and its own events. Native activity and permission
@@ -1846,10 +1845,10 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   - Modified clicks never extend the page's text selection, while a plain click that ends a text
     drag is treated as reading and leaves the selection alone.
   - Ranges, gaps, and copies follow the transcript's displayed (sequence) order.
-  - With nothing selected, the selection bar shows the platform's hint ("Click to select. Cmd-click to
-    add or remove, Shift-click for a range."). Otherwise it shows the count with Copy and Clear.
-    The bar is its own non-scrolling row above the transcript scroller in both the drawer and the
-    dialog, so it reserves its height and never covers a message, whether the transcript is pinned
+  - With nothing selected, the selection bar is absent so the transcript gets the space. Selecting a
+    message shows the count with Copy and Clear; clearing the selection removes the bar again
+    (HS2-0T1TM5). The bar is its own non-scrolling row above the transcript scroller in both the
+    drawer and dialog, so it never covers a message while shown, whether the transcript is pinned
     to its latest message or scrolled to the top (HS2-C4RTVS).
   - While messages are selectable, the timeline is one Kerf `List selectionMode="multiple"`
     grid labeled "Conversation Messages" (`aria-multiselectable="true"`). Each message is a

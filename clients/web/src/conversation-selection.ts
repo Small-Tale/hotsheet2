@@ -25,11 +25,6 @@ export function conversationSelectionModifiers(
   return { toggle: apple ? event.metaKey : event.ctrlKey, extend: event.shiftKey };
 }
 
-/** The selection hint shown before anything is selected, naming the host platform's toggle key. */
-export function conversationSelectionHint(apple = isAppleShortcutPlatform()): string {
-  return `Click to select. ${apple ? 'Cmd' : 'Ctrl'}-click to add or remove, Shift-click for a range.`;
-}
-
 /**
  * Messages in the order the transcript shows them (by sequence, like the rendered timeline), which
  * can differ from arrival order; ranges, gaps, and copies all follow what the person sees.

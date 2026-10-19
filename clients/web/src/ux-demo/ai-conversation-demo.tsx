@@ -275,8 +275,8 @@ export function AIConversationDemo() {
     savedSource: aiConversationScenario.value === 'saved' ? 'client-review.hotsheet-chat' : undefined,
     hostActionsAvailable: aiConversationDevice.value === 'host',
   };
-  // Embedded, the Kerf app-height viewport is the definite height the conversation fills; the List
-  // stack owns the status row and the flexing conversation (HS2-H1DRJB), so no demo stage CSS remains.
+  // Embedded, the Kerf app-height viewport is the definite height the conversation fills. The
+  // List stack owns the selected-message status row and flexing conversation (HS2-H1DRJB, HS2-0T1TM5).
   return (
     <CatalogExample label="Interactive" viewport={embedded ? { width: 'full', height: 'app' } : { width: 'full' }}>
       <List

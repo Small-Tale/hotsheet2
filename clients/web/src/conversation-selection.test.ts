@@ -6,7 +6,6 @@ import {
   type ConversationMessageSelection,
   conversationSelectionAfterPick,
   conversationSelectionGaps,
-  conversationSelectionHint,
   type ConversationSelectionModifiers,
   conversationSelectionModifiers,
   EMPTY_CONVERSATION_SELECTION,
@@ -46,10 +45,6 @@ describe('conversation message selection (HS2-WV88W3)', () => {
     expect(conversationSelectionModifiers(event({ ctrlKey: true }), false)).toEqual(TOGGLE);
     expect(conversationSelectionModifiers(event({ metaKey: true }), false)).toEqual(PLAIN);
     expect(conversationSelectionModifiers(event({ shiftKey: true, metaKey: true }), true)).toEqual(TOGGLE_EXTEND);
-    expect(conversationSelectionHint(true)).toBe(
-      'Click to select. Cmd-click to add or remove, Shift-click for a range.',
-    );
-    expect(conversationSelectionHint(false)).toContain('Ctrl-click to add or remove');
   });
 
   it('plain click selects one message, replaces it, and clears when the sole selection is clicked again', () => {

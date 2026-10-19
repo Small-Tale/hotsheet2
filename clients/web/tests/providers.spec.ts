@@ -6875,9 +6875,6 @@ test('remeasures a reopened search after a closed resize without restyling the a
   });
 });
 
-/** The empty-selection hint names Cmd on macOS and Ctrl elsewhere (HS2-WV88W3). */
-const SELECTION_HINT = /Click to select\. (Cmd|Ctrl)-click to add or remove, Shift-click for a range\./;
-
 test('keeps a scrolled-back transcript in place while selecting a message range', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
@@ -6949,7 +6946,7 @@ test('keeps a scrolled-back transcript in place while selecting a message range'
   await expectReadingPosition();
   await conversation.screenshot({ path: 'target/visual-captures/hs2-eqhary-scroll-selection-after.png' });
   await conversation.getByRole('button', { name: 'Clear Message Selection' }).click();
-  await expect(conversation).toContainText(SELECTION_HINT);
+  await expect(conversation.locator('.ai-conversation__selection')).toHaveCount(0);
   await settle();
   await expectReadingPosition();
   // Sending is an explicit request to continue the conversation, so it returns to and follows the latest edge.
@@ -7222,7 +7219,7 @@ test('shows selection in the main chat and skips export scope after it is cleare
   await conversation.screenshot({ path: 'target/visual-captures/hs2-eqhary-main-chat-selection-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 900 });
   await conversation.getByRole('button', { name: 'Clear Message Selection' }).click();
-  await expect(conversation).toContainText(SELECTION_HINT);
+  await expect(conversation.locator('.ai-conversation__selection')).toHaveCount(0);
   await conversation.getByRole('button', { name: 'Save Conversation' }).click();
   const dialog = page.locator('[data-dialog-component="conversation-export-dialog"]'),
     activeScreen = dialog.locator('[data-transition-region="content"] > [data-active="true"]');
@@ -7347,7 +7344,7 @@ async function exerciseConversationSelection(
   const messages = conversation.locator('[data-action="pick-conversation-message"]'),
     selectedFlags = () => messages.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-selected'))),
     status = conversation.locator('.ai-conversation__selection');
-  await expect(status).toContainText(SELECTION_HINT);
+  await expect(status).toHaveCount(0);
   await messages.nth(0).click();
   await expect(status).toContainText('1 message selected');
   await messages.nth(3).click({ modifiers: ['ControlOrMeta'] });
@@ -7409,10 +7406,10 @@ async function exerciseConversationSelection(
   await messages.nth(3).focus();
   await page.keyboard.press('Enter');
   await expect.poll(selectedFlags).toEqual(['false', 'false', 'false', 'true']);
-  // Clicking the sole selected message again clears the selection and restores the hint.
+  // Clicking the sole selected message again clears the selection and restores transcript space.
   await messages.nth(3).click();
   await expect.poll(selectedFlags).toEqual(['false', 'false', 'false', 'false']);
-  await expect(status).toContainText(SELECTION_HINT);
+  await expect(status).toHaveCount(0);
 }
 
 test('selects single and non-contiguous messages with modifier keys in the drawer chat (HS2-WV88W3)', async ({
@@ -7469,8 +7466,8 @@ test('selects non-contiguous messages in a phone-width drawer chat (HS2-WV88W3)'
   await conversation.locator('.ai-conversation__transcript').evaluate((node) => {
     node.scrollTop = 0;
   });
-  await expect(conversation.locator('.ai-conversation__selection')).toContainText(SELECTION_HINT);
-  await page.screenshot({ path: 'target/visual-captures/hs2-wv88w3-drawer-hint-390.png' });
+  await expect(conversation.locator('.ai-conversation__selection')).toHaveCount(0);
+  await page.screenshot({ path: 'target/visual-captures/hs2-0t1tm5-drawer-idle-390.png' });
   await messages.nth(0).click();
   await messages.nth(3).click({ modifiers: ['ControlOrMeta'] });
   await expect(conversation.locator('.ai-conversation__selection')).toContainText('2 messages selected');
@@ -7481,10 +7478,7 @@ test('selects non-contiguous messages in a phone-width drawer chat (HS2-WV88W3)'
   await page.screenshot({ path: 'target/visual-captures/hs2-wv88w3-drawer-gap-390.png' });
 });
 
-/**
- * The selection bar reserves its own row above the transcript scroller instead of floating over it,
- * so it never covers a message — pinned to the latest message or at the top (HS2-C4RTVS).
- */
+/** Once selected, the status bar reserves a row without covering messages (HS2-C4RTVS). */
 async function expectSelectionBarClearOfMessages(conversation: Locator) {
   const transcript = conversation.locator('.ai-conversation__transcript'),
     geometry = () =>
@@ -7513,9 +7507,7 @@ async function expectSelectionBarClearOfMessages(conversation: Locator) {
 }
 
 for (const width of [1280, 390]) {
-  test(`keeps the selection hint clear of the first message in the drawer chat at ${width}px (HS2-C4RTVS)`, async ({
-    page,
-  }) => {
+  test(`reclaims the idle selection row in the drawer chat at ${width}px (HS2-0T1TM5)`, async ({ page }) => {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 800 });
     await mockProject(page);
     await page.goto('/');
@@ -7535,18 +7527,27 @@ for (const width of [1280, 390]) {
         turn,
       );
     }
-    await expect(conversation.locator('.ai-conversation__selection')).toContainText(SELECTION_HINT);
-    await expectSelectionBarClearOfMessages(conversation);
-    await page.screenshot({ path: `target/visual-captures/hs2-c4rtvs-drawer-hint-${width}.png` });
+    await expect(conversation.locator('.ai-conversation__selection')).toHaveCount(0);
+    const idleTranscriptTop = (await conversation.locator('.ai-conversation__transcript').boundingBox())!.y;
+    await page.screenshot({ path: `target/visual-captures/hs2-0t1tm5-drawer-idle-${width}.png` });
     await messages.nth(0).click();
     await expect(conversation.locator('.ai-conversation__selection')).toContainText('1 message selected');
+    expect((await conversation.locator('.ai-conversation__transcript').boundingBox())!.y).toBeGreaterThan(
+      idleTranscriptTop + 16,
+    );
     await expectSelectionBarClearOfMessages(conversation);
-    await page.screenshot({ path: `target/visual-captures/hs2-c4rtvs-drawer-selected-${width}.png` });
+    await page.screenshot({ path: `target/visual-captures/hs2-0t1tm5-drawer-selected-${width}.png` });
+    await conversation.getByRole('button', { name: 'Clear Message Selection' }).click();
+    await expect(conversation.locator('.ai-conversation__selection')).toHaveCount(0);
+    expect((await conversation.locator('.ai-conversation__transcript').boundingBox())!.y).toBeCloseTo(
+      idleTranscriptTop,
+      0,
+    );
+    await messages.nth(1).click();
+    await expect(conversation.locator('.ai-conversation__selection')).toContainText('1 message selected');
   });
 
-  test(`keeps the selection hint clear of the first message in the main chat dialog at ${width}px (HS2-C4RTVS)`, async ({
-    page,
-  }) => {
+  test(`reclaims the idle selection row in the main chat dialog at ${width}px (HS2-0T1TM5)`, async ({ page }) => {
     // The ticket's chat entry point is in the wide inspector; the open dialog then follows the viewport.
     await page.setViewportSize({ width: 1280, height: 900 });
     await mockProject(page);
@@ -7566,13 +7567,24 @@ for (const width of [1280, 390]) {
         turn,
       );
     }
-    await expect(conversation.locator('.ai-conversation__selection')).toContainText(SELECTION_HINT);
-    await expectSelectionBarClearOfMessages(conversation);
-    await conversation.screenshot({ path: `target/visual-captures/hs2-c4rtvs-dialog-hint-${width}.png` });
+    await expect(conversation.locator('.ai-conversation__selection')).toHaveCount(0);
+    const idleTranscriptTop = (await conversation.locator('.ai-conversation__transcript').boundingBox())!.y;
+    await conversation.screenshot({ path: `target/visual-captures/hs2-0t1tm5-dialog-idle-${width}.png` });
     await messages.nth(0).click();
     await expect(conversation.locator('.ai-conversation__selection')).toContainText('1 message selected');
+    expect((await conversation.locator('.ai-conversation__transcript').boundingBox())!.y).toBeGreaterThan(
+      idleTranscriptTop + 16,
+    );
     await expectSelectionBarClearOfMessages(conversation);
-    await conversation.screenshot({ path: `target/visual-captures/hs2-c4rtvs-dialog-selected-${width}.png` });
+    await conversation.screenshot({ path: `target/visual-captures/hs2-0t1tm5-dialog-selected-${width}.png` });
+    await conversation.getByRole('button', { name: 'Clear Message Selection' }).click();
+    await expect(conversation.locator('.ai-conversation__selection')).toHaveCount(0);
+    expect((await conversation.locator('.ai-conversation__transcript').boundingBox())!.y).toBeCloseTo(
+      idleTranscriptTop,
+      0,
+    );
+    await messages.nth(1).click();
+    await expect(conversation.locator('.ai-conversation__selection')).toContainText('1 message selected');
   });
 }
 
@@ -19217,11 +19229,11 @@ for (const width of [390, 1280] as const)
     await page.waitForTimeout(300);
     await page.screenshot({ path: `target/visual-captures/hs2-szzgc6-default-drawer-stuck-draft-${width}.png` });
     const compactForm = (await geometry()).form;
-    // Maximized, the chat is tall again: the full banner, the selection hint, and a six-row draft return.
+    // Maximized, the chat is tall again: the full banner and a six-row draft return.
     await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dispatchEvent('dblclick');
     await expect(drawer).toHaveAttribute('data-maximized', 'true');
     await expect(banner).toContainText('Running Bash');
-    await expect(host.locator('.ai-conversation__selection')).toHaveCount(1);
+    await expect(host.locator('.ai-conversation__selection')).toHaveCount(0);
     await expect.poll(visibleRows).toBe(6);
     await expect.poll(async () => (await geometry()).form).toBeGreaterThan(compactForm);
     await transcript.evaluate((node) => {

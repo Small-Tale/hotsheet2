@@ -49,7 +49,6 @@ import {
   formatConversationTokens,
 } from '../ai-conversation';
 import { activityGroupExpanded } from '../conversation-activity-disclosure';
-import { conversationSelectionHint } from '../conversation-selection';
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import type { PermissionItem } from '../permission-notifications';
@@ -488,7 +487,7 @@ export function AIConversationToolbar({
 
 /**
  * Below this chat height the chat is compact: the stuck banner takes its one-line form, the
- * selection hint row steps aside while a turn's progress shows, and the draft grows to 3 rows.
+ * selection status appears only when messages are selected, and the draft grows to 3 rows.
  */
 export const SHORT_CHAT_HEIGHT = 480;
 /** Below this chat height (a default phone or desktop drawer) the draft grows to 2 rows. */
@@ -498,9 +497,8 @@ export const VERY_SHORT_CHAT_HEIGHT = 320;
  * How large the embedded conversation's floating form may grow (HS2-SZZGC6). The form floats over
  * the transcript, so in a short drawer a full may-be-stuck banner plus a six-row draft would cover
  * every message. A short chat is therefore compact: the banner shows its one-line form, the
- * "Click to select" hint row above the transcript steps aside while a turn's progress line shows
- * (it returns when the turn ends, and the selection bar still appears once messages are selected),
- * and the draft's growth is capped (it scrolls inside the MessageComposer beyond that). A tall chat or the
+ * selection status appears only while messages are selected, and the draft's growth is capped
+ * (it scrolls inside the MessageComposer beyond that). A tall chat or the
  * dialog keeps the full layout.
  */
 export function embeddedComposerLayout(availableHeight: number | undefined): {
@@ -621,40 +619,31 @@ export function AIConversation(props: AIConversationProps) {
     selectedIds = new Set(selectedMessageIds),
     selectionEnabled = Boolean(selectionId) && messages.length > 0,
     selectedCount = selectedIds.size;
-  // The selection bar is its own row above the transcript scroller, never floating over messages
-  // (HS2-C4RTVS); the dialog's fill-last body and the drawer's flex column give it its height.
+  // A selected-message bar has its own row above the transcript scroller, never floating over
+  // messages (HS2-C4RTVS). With no selection the transcript uses that space (HS2-0T1TM5).
   const formLayout = embeddedComposerLayout(presentation === 'embedded' ? availableHeight : undefined);
-  // While a turn's progress shows in a compact (short) drawer chat, the hint row steps aside so the
-  // transcript keeps its room; it returns when the turn ends (HS2-SZZGC6).
-  const hintStepsAside = formLayout.compact && selectedCount === 0 && busy && Boolean(turnProgress) && !readOnly;
   const selectionStatus =
-    selectionEnabled && !hintStepsAside ? (
-      <div class="ai-conversation__selection" data-active={String(selectedCount > 0)}>
-        <span>
-          {selectedCount
-            ? `${selectedCount} message${selectedCount === 1 ? '' : 's'} selected`
-            : conversationSelectionHint()}
+    selectionEnabled && selectedCount > 0 ? (
+      <div class="ai-conversation__selection">
+        <span>{`${selectedCount} message${selectedCount === 1 ? '' : 's'} selected`}</span>
+        <span class="ai-conversation__selection-actions">
+          <Button
+            emphasis="plain"
+            size="compact"
+            action={COMMANDS_AND_AI_ACTIONS.copyConversationSelection.value}
+            ariaLabel={'Copy Selected Messages'}
+            title="Copy selected messages"
+            icon={<LucideIcon size={14.4} icon={Copy} name="copy" />}
+          />
+          <Button
+            emphasis="plain"
+            size="compact"
+            action={COMMANDS_AND_AI_ACTIONS.clearConversationSelection.value}
+            ariaLabel={'Clear Message Selection'}
+            title="Clear message selection"
+            icon={<LucideIcon size={14.4} icon={X} name="x" />}
+          />
         </span>
-        {selectedCount > 0 && (
-          <span class="ai-conversation__selection-actions">
-            <Button
-              emphasis="plain"
-              size="compact"
-              action={COMMANDS_AND_AI_ACTIONS.copyConversationSelection.value}
-              ariaLabel={'Copy Selected Messages'}
-              title="Copy selected messages"
-              icon={<LucideIcon size={14.4} icon={Copy} name="copy" />}
-            />
-            <Button
-              emphasis="plain"
-              size="compact"
-              action={COMMANDS_AND_AI_ACTIONS.clearConversationSelection.value}
-              ariaLabel={'Clear Message Selection'}
-              title="Clear message selection"
-              icon={<LucideIcon size={14.4} icon={X} name="x" />}
-            />
-          </span>
-        )}
       </div>
     ) : null;
   const timeline = conversationTimeline(messages, activity),

@@ -3657,7 +3657,9 @@
         },
         "responsive": {
           "owner": "not-applicable",
-          "behaviors": []
+          "behaviors": [
+            "The selection status bar appears only while messages are selected, reclaiming transcript space when selection is empty in dialog and embedded layouts."
+          ]
         },
         "layout": {
           "roles": ["controls"],

@@ -420,9 +420,9 @@ covers anything past the button's end. The demo's Unread chat messages setting s
     close action. The demo exposes both presentations and exercises save/interruption
     through its deterministic state (HS2-WXVAF3).
   - short drawer chat: `availableHeight` (the drawer's measured content height) compacts the
-    embedded floating form below 480 px: a one-line stuck banner, the selection hint row stepping
-    aside while a turn's progress shows, and a
-    3-row draft (2 rows below 320 px) (HS2-SZZGC6). The demo's Chat height setting shows the Short
+    embedded floating form below 480 px: a one-line stuck banner and a 3-row draft (2 rows below
+    320 px) (HS2-SZZGC6). The selection bar appears only while messages are selected
+    (HS2-0T1TM5). The demo's Chat height setting shows the Short
     Drawer Chat variant beside the tall one.
   - session controls: a toolbar control (current model label and effort badge beside a
     `ToolbarControlGroup single nestedDropdown` PopupMenu trigger; the label hides at 640px and

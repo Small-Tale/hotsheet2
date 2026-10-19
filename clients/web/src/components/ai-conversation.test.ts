@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { expandedActivityGroups, toggleActivityGroup } from '../conversation-activity-disclosure';
-import { conversationSelectionHint } from '../conversation-selection';
 import type { PermissionItem } from '../permission-notifications';
 import {
   AIConversation,
@@ -484,7 +483,7 @@ describe('AIConversation', () => {
     expect(markup).toContain('2 messages selected');
     expect(markup).toContain('data-action="copy-conversation-selection"');
     expect(markup).toContain('data-action="clear-conversation-selection"');
-    // With nothing selected the bar names the click, toggle, and range gestures instead (HS2-WV88W3).
+    // An idle conversation keeps selection available without reserving a status row (HS2-0T1TM5).
     const idle = withToolbar({
       open: true,
       presentation: 'embedded',
@@ -495,9 +494,9 @@ describe('AIConversation', () => {
       busy: false,
       interruptible: false,
     });
-    expect(idle).toContain(conversationSelectionHint());
+    expect(idle).not.toContain('ai-conversation__selection');
     expect(idle).not.toContain('data-action="copy-conversation-selection"');
-    // The bar is its own row before the transcript scroller, never inside it (HS2-C4RTVS).
+    // Once selected, the bar is its own row before the transcript scroller (HS2-C4RTVS).
     for (const presentation of ['embedded', 'dialog'] as const) {
       const rendered = String(
           AIConversation({
@@ -505,6 +504,7 @@ describe('AIConversation', () => {
             presentation,
             tool: 'Codex',
             selectionId: 'connection-1',
+            selectedMessageIds: ['request'],
             messages,
             draft: '',
             busy: false,
@@ -1029,7 +1029,7 @@ describe('running turn progress beside the composer (HS2-XV1VCR)', () => {
     expect(embeddedComposerLayout(319)).toEqual({ maxRows: 2, compact: true });
     expect(embeddedComposerLayout(262)).toEqual({ maxRows: 2, compact: true });
   });
-  it('compacts the stuck banner, draft rows, and running-turn selection hint only in a short embedded chat', () => {
+  it('compacts the stuck banner and draft rows in a short embedded chat', () => {
     const stuck = {
         state: 'stuck' as const,
         label: 'No activity for 5m — may be stuck',
@@ -1045,14 +1045,14 @@ describe('running turn progress beside the composer (HS2-XV1VCR)', () => {
     expect(short).not.toContain('Running Bash · 5m 5s');
     expect(short).toMatch(/kui-state-banner[\s\S]*data-action="stop-conversation"/);
     expect(short).not.toContain('ai-conversation__selection');
-    // A selection still shows its bar and actions in a short chat, and the hint returns once idle.
+    // A selection still shows its bar and actions in a short chat; idle layouts have no row.
     expect(render({ presentation: 'embedded', availableHeight: 262, selectedMessageIds: ['q'] })).toContain(
       'ai-conversation__selection',
     );
-    expect(render({ presentation: 'embedded', availableHeight: 262, busy: false })).toContain(
+    expect(render({ presentation: 'embedded', availableHeight: 262, busy: false })).not.toContain(
       'ai-conversation__selection',
     );
-    // A tall drawer chat and the dialog keep the full layout whatever height is passed.
+    // A tall drawer chat and the dialog keep the full progress layout without an idle selection row.
     for (const full of [
       render({ presentation: 'embedded', availableHeight: 640 }),
       render({ presentation: 'dialog', availableHeight: 262 }),
@@ -1060,7 +1060,7 @@ describe('running turn progress beside the composer (HS2-XV1VCR)', () => {
       expect(full).toMatch(/ai-conversation__turn-progress" data-state="stuck">/);
       expect(full).toContain('No activity for 5m — may be stuck');
       expect(full).toContain('Running Bash · 5m 5s');
-      expect(full).toContain('ai-conversation__selection');
+      expect(full).not.toContain('ai-conversation__selection');
     }
   });
   it('renders no progress line while idle or read-only', () => {

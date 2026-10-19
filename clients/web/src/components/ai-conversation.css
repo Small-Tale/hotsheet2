@@ -66,25 +66,22 @@
   flex-direction: column;
   gap: remify(12.8px);
 }
-/* The selection hint/count bar is a non-scrolling row above the transcript, inset like the
-   transcript column, so it reserves its own height instead of covering messages (HS2-C4RTVS). */
+/* The selected-message bar is a non-scrolling row above the transcript, inset like the
+   transcript column. It is absent until selection, then reserves height without covering
+   messages (HS2-C4RTVS, HS2-0T1TM5). */
 .ai-conversation__selection {
   display: flex;
   min-height: remify(32px);
   margin: remify(16px) remify(16px) remify(8px);
   padding: remify(4px) remify(5.6px);
-  border: 1px solid transparent;
+  border: 1px solid var(--wa-color-brand-border-quiet);
   border-radius: var(--wa-border-radius-m);
-  color: var(--wa-color-neutral-on-quiet);
+  color: var(--wa-color-brand-on-quiet);
+  background: var(--wa-color-brand-fill-quiet);
   align-items: center;
   justify-content: space-between;
   gap: var(--wa-space-xs);
   font-size: var(--wa-font-size-xs);
-}
-.ai-conversation__selection[data-active='true'] {
-  border-color: var(--wa-color-brand-border-quiet);
-  color: var(--wa-color-brand-on-quiet);
-  background: var(--wa-color-brand-fill-quiet);
 }
 .ai-conversation__selection-actions {
   display: flex;
