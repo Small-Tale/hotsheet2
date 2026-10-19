@@ -30,6 +30,20 @@ export function restoreTicketScrollState(state: TicketScrollState, root: ParentN
   }
 }
 
+/** Recover a browser-induced zero offset after an overlay closes without undoing a newer user scroll. */
+export function restoreTicketScrollResetToZero(before: TicketScrollState, root: ParentNode = document): void {
+  for (const element of scrollOwners(root)) {
+    const previous = before.get(element.dataset.ticketScrollOwner ?? '');
+    if (!previous) continue;
+    const top = element.scrollTop === 0 && previous.top > 0 ? previous.top : element.scrollTop,
+      left = element.scrollLeft === 0 && previous.left > 0 ? previous.left : element.scrollLeft;
+    if (top !== element.scrollTop || left !== element.scrollLeft) {
+      const position = clampPosition({ top, left }, element);
+      element.scrollTo(position.left, position.top);
+    }
+  }
+}
+
 function clampPosition(position: TicketScrollPosition, element: HTMLElement): TicketScrollPosition {
   return {
     left: Math.max(0, Math.min(position.left, element.scrollWidth - element.clientWidth)),

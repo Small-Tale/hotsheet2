@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { captureTicketScrollState, restoreTicketScrollState, TicketScrollMemory } from './ticket-scroll-state';
+import {
+  captureTicketScrollState,
+  restoreTicketScrollResetToZero,
+  restoreTicketScrollState,
+  TicketScrollMemory,
+} from './ticket-scroll-state';
 
 function scroller(key = 'workspace', top = 0, left = 0) {
   return {
@@ -22,6 +27,22 @@ const rootFor = (...owners: ReturnType<typeof scroller>[]) =>
   ({ querySelectorAll: () => owners }) as unknown as ParentNode;
 
 describe('ticket scroll state', () => {
+  it('recovers an overlay-induced zero while preserving subsequent user scroll and other columns', () => {
+    const first = scroller('column:not-started', 260),
+      second = scroller('column:started', 340, 40),
+      root = rootFor(first, second),
+      before = captureTicketScrollState(root);
+    first.scrollTop = 0;
+    second.scrollTop = 365;
+    second.scrollLeft = 0;
+    restoreTicketScrollResetToZero(before, root);
+    expect([first.scrollTop, second.scrollTop, second.scrollLeft]).toEqual([260, 365, 40]);
+    first.scrollTop = 280;
+    second.scrollLeft = 55;
+    restoreTicketScrollResetToZero(before, root);
+    expect([first.scrollTop, second.scrollTop, second.scrollLeft]).toEqual([280, 365, 55]);
+  });
+
   it('restores every named ticket scroll owner after its contents move', () => {
     const owners = [scroller('list', 420), scroller('column:started', 180, 12)];
     const root = rootFor(...owners);

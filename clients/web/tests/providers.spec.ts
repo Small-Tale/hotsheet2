@@ -15180,6 +15180,130 @@ test('refreshes another client’s remembered answers when a rule is revoked or 
   for (const context of contexts) await context.close();
 });
 
+for (const width of [1280, 390]) {
+  test(`keeps board-column scroll after answering a permission at ${width}px (HS2-0M3DS2)`, async ({
+    page,
+    browserName,
+  }) => {
+    await mockProject(page);
+    const rows: TicketRow[] = Array.from({ length: 240 }, (_, index) => {
+      const id = String(1000 + index);
+      return {
+        ...row,
+        id,
+        native_id: id,
+        qualified_id: `git-local:${id}`,
+        slug: `HS2-SCROLL${id}`,
+        title: `Board scroll ticket ${index}`,
+        status: index < 80 ? 'not_started' : index < 160 ? 'started' : 'completed',
+      };
+    });
+    await page.route(/\/checkouts\/demo-checkout\/tickets(?:\?|$)/, (route) => {
+      const request = route.request(),
+        url = new URL(request.url());
+      if (request.method() !== 'GET' || !url.pathname.endsWith('/tickets')) return route.fallback();
+      const status = url.searchParams.get('status'),
+        filtered = status ? rows.filter((item) => item.status === status) : rows,
+        offset = Number(url.searchParams.get('cursor') ?? 0),
+        size = Number(url.searchParams.get('page_size') ?? 200),
+        items = filtered.slice(offset, offset + size);
+      return route.fulfill({
+        json: {
+          items,
+          counts: {
+            total: rows.length,
+            queued: rows.length,
+            backlog: 0,
+            archive: 0,
+            trash: 0,
+            open: 160,
+            up_next: 0,
+            active: 0,
+            started: 80,
+            completed_today: 0,
+          },
+          ...(offset + size < filtered.length ? { next_cursor: String(offset + size) } : {}),
+        },
+      });
+    });
+    let pending: Array<{
+      id: number;
+      connection: string;
+      tool: string;
+      action: string;
+      agent: string;
+      always_allow_supported: boolean;
+    }> = [];
+    await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
+    await page.route('**/permissions/61', (route) => {
+      const answer = route.request().postDataJSON() as { scope: string };
+      pending = [];
+      return route.fulfill({
+        json: { connection: 'codex-session', decision: 'allow', persisted: answer.scope === 'always' },
+      });
+    });
+    const polls: Route[] = [];
+    let cursor = 0;
+    await page.route('**/ws/poll*', (route) => {
+      if (new URL(route.request().url()).searchParams.get('since') === null)
+        return route.fulfill({ json: { cursor, events: [], overflow: false } });
+      polls.push(route);
+    });
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Project' }).click();
+    await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Columns View' }).click();
+    const popup = page.locator('[data-component="permission-request-popup"]'),
+      columns = page.locator('.ticket-board-column__tickets');
+    await expect(columns).toHaveCount(4);
+    const before = await columns.evaluateAll((nodes) =>
+      nodes.map((node, index) => {
+        if (index > 1) return 0;
+        node.scrollTop = 260 + index * 80;
+        return node.scrollTop;
+      }),
+    );
+    expect(before[0]).toBeGreaterThan(0);
+    expect(before[1]).toBeGreaterThan(0);
+    await expect.poll(() => polls.length).toBeGreaterThan(0);
+    pending = [
+      {
+        id: 61,
+        connection: 'codex-session',
+        tool: 'Bash',
+        action: 'cargo test',
+        agent: 'codex',
+        always_allow_supported: true,
+      },
+    ];
+    cursor += 1;
+    await polls.shift()!.fulfill({
+      json: { cursor, events: [{ store: '', kind: 'permission_asked', id: '61', slug: 'Bash' }], overflow: false },
+    });
+    await expect(popup).toBeVisible();
+    await expect.poll(() => columns.evaluateAll((nodes) => nodes.map((node) => node.scrollTop))).toEqual(before);
+    await page.screenshot({
+      path: `target/visual-captures/hs2-0m3ds2-board-prompt-${browserName}-${width}.png`,
+      fullPage: true,
+    });
+    await popup.getByRole('button', { name: width === 1280 ? 'Always Allow' : 'Allow Once' }).click();
+    await expect(popup).toHaveCount(0);
+    await expect.poll(() => columns.evaluateAll((nodes) => nodes.map((node) => node.scrollTop))).toEqual(before);
+    await expect.poll(() => polls.length).toBeGreaterThan(0);
+    cursor += 1;
+    await polls.shift()!.fulfill({
+      json: { cursor, events: [{ store: '', kind: 'permission_resolved', id: '61', slug: 'Bash' }], overflow: false },
+    });
+    await page.waitForTimeout(1_200);
+    await expect.poll(() => columns.evaluateAll((nodes) => nodes.map((node) => node.scrollTop))).toEqual(before);
+    await page.screenshot({
+      path: `target/visual-captures/hs2-0m3ds2-board-after-${browserName}-${width}.png`,
+      fullPage: true,
+    });
+  });
+}
+
 test('renders exactly once when the long poll announces a permission request', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await mockProject(page);

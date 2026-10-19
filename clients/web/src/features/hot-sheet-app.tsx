@@ -66,7 +66,11 @@ import {
 } from '../terminal-visibility';
 import type { TicketLinkMatch, TicketLinkReference } from '../ticket-link-resolution';
 import { animateTicketMotion, captureTicketMotion } from '../ticket-motion';
-import type { TicketScrollMemory } from '../ticket-scroll-state';
+import {
+  captureTicketScrollState,
+  restoreTicketScrollResetToZero,
+  type TicketScrollMemory,
+} from '../ticket-scroll-state';
 import { type TicketView } from '../ticket-views';
 import type { TrackedSizeObserver } from '../tracked-size-observer';
 import { syncVideoPosters } from '../video-posters';
@@ -335,6 +339,14 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
   let renderedTicketCollectionKey = initialRenderedTicketCollectionKey;
   function HotSheetApp() {
     void permissionRevision.value;
+    // WebKit can zero independently scrolling board columns after a top-layer permission dialog is
+    // removed, one frame after the render's normal scroll restore. Capture the live position while
+    // the dialog still exists so the browser's delayed layout step can be corrected (HS2-0M3DS2).
+    const boardScope = ticketScrollScope(),
+      permissionBoardScroll =
+        boardScope.mode === 'project:board' && appRoot.querySelector('.permission-request-popup[data-layer="top"]')
+          ? captureTicketScrollState(ticketScrollRoot())
+          : undefined;
     if (conversationOpen.value || terminalDrawerVisible.value || shellMode.value === 'terminals')
       void conversationRenderRevision.value;
     const ticketScrollGeneration = ticketScrollMemory.beforeRender(ticketScrollScope(), ticketScrollRoot()),
@@ -361,6 +373,12 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
           (shellMode.value !== 'terminals' || !terminalDashboardLoading.value),
         deferContainedListScrollRestore && shellMode.value === 'project' && viewMode.value === 'list',
       );
+      if (permissionBoardScroll && !appRoot.querySelector('.permission-request-popup[data-layer="top"]')) {
+        requestAnimationFrame(() => {
+          if (JSON.stringify(ticketScrollScope()) !== JSON.stringify(boardScope)) return;
+          restoreTicketScrollResetToZero(permissionBoardScroll, ticketScrollRoot());
+        });
+      }
       animateTicketMotion(ticketMotion, appRoot, undefined, activeTicketCollectionKey());
       syncTerminalViewportMounts();
       syncTerminalRailNavStack();

@@ -997,6 +997,10 @@ preview/download, server directory browser) are separate design work.
   retain their desired destinations through temporary layout clamping and empty/refill
   transitions. Leaving a scope before loading settles still remembers those user edits;
   later mutation renders or stale restoration callbacks must not reset them.
+  Answering a shell permission popup also keeps each board column's position. WebKit can
+  reset contained scrollers when it removes the top-layer popup, so the client restores
+  only offsets that became zero after that dismissal; a subsequent user scroll wins
+  (HS2-0M3DS2).
 
 - **Real local web entry point (initial implementation, HS2-0P1MDG).** `/` renders the
   production AppShell over checkout-scoped server APIs; `/ux-demo` remains the isolated
