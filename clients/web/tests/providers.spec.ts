@@ -24609,7 +24609,8 @@ for (const width of [1280, 390])
     const help = page.getByRole('dialog', { name: 'Search syntax' });
     await expect(help).toBeVisible();
     // Every example is an activatable chip, including the combined-filter example.
-    await expect(help.getByRole('button', { name: /^Add .+ to the search$/ })).toHaveCount(22);
+    await expect(help.getByRole('button', { name: /^Add .+ to the search$/ })).toHaveCount(23);
+    await expect(help.getByRole('button', { name: 'Add is:needs-review to the search' })).toBeVisible();
     await page.screenshot({ path: `target/visual-captures/hs2-fr1y70-syntax-help-${width}.png` });
     expect(
       await help.evaluate((node) => {
