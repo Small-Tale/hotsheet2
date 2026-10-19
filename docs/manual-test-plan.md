@@ -5,6 +5,14 @@ When automation lands, remove the manual-only step and record it below.
 
 ## Current manual checks
 
+### WebKit list scroll after ticket mutation (HS2-KTXBK2)
+
+At wide and phone widths, scroll a long ticket list deep into its rows, change a
+visible ticket's status, and confirm the same nearby rows remain readable without
+a flash to the top. Review the before/after captures attached to HS2-KTXBK2 for
+clipping, row alignment, and any unexpected jump. The browser regression asserts
+the scroll offsets; this visual review checks the rendered transition.
+
 ### Native Codex terminal usage (HS2-J14225)
 
 1. Launch a Codex terminal in Hot Sheet with the shared Codex daemon enabled. Claim one ticket from that terminal's session, run a turn with nonzero token use, and open that ticket's Timeline. Confirm the Codex model (when reported), tokens, and per-model total appear at wide and phone widths.
