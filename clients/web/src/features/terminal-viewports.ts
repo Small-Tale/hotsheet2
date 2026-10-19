@@ -1,5 +1,6 @@
 import type { Signal } from 'kerfjs';
 
+import { createDedicatedTerminalTileViewport } from '../components/terminal-dashboard';
 import type { Project } from '../interactions/types';
 import type { TerminalModifiers } from '../terminal-keys';
 import { currentTerminalLimits } from '../terminal-limits';
@@ -35,6 +36,8 @@ export interface TerminalViewportsDependencies {
   /** How many kept-alive viewports stay warm out of the page; defaults to the configured, memory-aware
    * warm-terminal limit (HS2-Y5DYC0). */
   warmTerminalLimit?: () => number;
+  /** Build a dedicated viewport for a never-opened tile; injectable for ownership tests. */
+  createTileViewport?: (host: HTMLElement) => HTMLElement;
 }
 
 /** DOM moves for kept-alive viewports, injectable so the ownership logic is testable. */
@@ -124,6 +127,7 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
     disposalsPerTurn: 2,
     schedule: (work) => requestAnimationFrame(() => window.setTimeout(work, 0)),
     mount: (element) => {
+      if (terminalTilePreview(element) && mountFreshTileInstance(element)) return;
       mountTerminalViewportElement(element);
     },
     dispose: (work) => {
@@ -131,7 +135,10 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
     },
   });
 
-  function mountTerminalViewportElement(element: HTMLElement) {
+  function mountTerminalViewportElement(
+    element: HTMLElement,
+    initialTilePresentation = false,
+  ): (() => void) | undefined {
     if (!element.isConnected || terminalViewportMounts.has(element)) return;
     stopObservingTerminalViewport(element);
     const projectId = element.dataset.projectId,
@@ -141,25 +148,26 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
     const interactive = element.dataset.displayMode === 'interactive',
       autoFocus =
         interactive &&
+        !initialTilePresentation &&
         (element.closest('.terminal-dashboard__magnified') !== null ||
           terminalViewportShouldAutoFocus(dependencies.pendingTerminalFocus, current.id, terminalId));
-    terminalViewportMounts.set(
-      element,
-      mountTerminalViewport(element, {
-        url: terminalBrowserWebSocketUrl(current.apiPath, terminalId),
-        autoFocus,
-        mobileColumns: dependencies.mobileTerminalColumns,
-        modifiers: dependencies.terminalModifiers,
-        onTicketReference: interactive
-          ? (reference) => {
-              const parsed = parseTicketLinkReference(reference);
-              if (!parsed) return;
-              dependencies.openTicketReference(element, parsed.slug, parsed.projectId, current.id);
-            }
-          : undefined,
-      }),
-    );
+    const dispose = mountTerminalViewport(element, {
+      url: terminalBrowserWebSocketUrl(current.apiPath, terminalId),
+      autoFocus,
+      initialTilePresentation,
+      mobileColumns: dependencies.mobileTerminalColumns,
+      modifiers: dependencies.terminalModifiers,
+      onTicketReference: interactive
+        ? (reference) => {
+            const parsed = parseTicketLinkReference(reference);
+            if (!parsed) return;
+            dependencies.openTicketReference(element, parsed.slug, parsed.projectId, current.id);
+          }
+        : undefined,
+    });
+    terminalViewportMounts.set(element, dispose);
     if (autoFocus) dependencies.pendingTerminalFocus = undefined;
+    return dispose;
   }
 
   // A project switch (or hiding the drawer) takes a dedicated terminal out of the page. Keep its
@@ -178,13 +186,13 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
     element.dispatchEvent(new CustomEvent(TERMINAL_VIEWPORT_PARK_EVENT));
     element.addEventListener(TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT, evict);
     parkedViewports.set(identity, { element, dispose, evict });
-    enforceWarmTerminalLimit();
+    trimWarmTerminalLimit();
   }
 
   // Evict the oldest parked viewports beyond the warm-terminal limit; a lowered limit applies at once.
   // Instances shown in grid tiles count too: parked and tile-hosted instances share the limit, the oldest
   // parked going first, then the oldest tile falling back to its lightweight preview (HS2-EYD24K).
-  function enforceWarmTerminalLimit() {
+  function trimWarmTerminalLimit() {
     const limit = Math.max(0, warmTerminalLimit());
     for (const [, oldest] of parkedViewports) {
       if (parkedViewports.size + hostedViewports.size <= limit) break;
@@ -200,6 +208,49 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
     }
   }
 
+  function hasDedicatedInstance(identity: string): boolean {
+    if (parkedViewports.has(identity) || [...hostedViewports.values()].some((entry) => entry.identity === identity))
+      return true;
+    return [...terminalViewportMounts.keys()].some(
+      (element) => element.dataset.mountPolicy === 'keep-alive' && terminalViewportIdentity(element) === identity,
+    );
+  }
+
+  function hasWarmRoom(): boolean {
+    return parkedViewports.size + hostedViewports.size < Math.max(0, warmTerminalLimit());
+  }
+
+  function prepareTileHost(host: HTMLElement) {
+    host.removeAttribute('style');
+    host.style.width = '100%';
+    host.style.height = '100%';
+    host.style.display = 'block';
+    host.dataset.hostingInstance = 'true';
+    host.dataset.geometryReady = 'true';
+  }
+
+  // A never-opened terminal starts with the same dedicated viewport the drawer will later adopt.
+  // Only the visible-progressive mount reaches here; overflow tiles retain the lightweight preview.
+  function mountFreshTileInstance(host: HTMLElement): boolean {
+    const identity = terminalViewportIdentity(host);
+    if (!identity || !host.isConnected || !hasWarmRoom() || hasDedicatedInstance(identity)) return false;
+    stopObservingTerminalViewport(host);
+    const element = dependencies.createTileViewport
+      ? dependencies.createTileViewport(host)
+      : createDedicatedTerminalTileViewport(host.dataset.projectId ?? '', host.dataset.terminalId ?? '');
+    prepareTileHost(host);
+    host.append(element);
+    const dispose = mountTerminalViewportElement(element, true);
+    if (!dispose) {
+      element.remove();
+      releaseTileHost(host);
+      return false;
+    }
+    hostedViewports.set(host, { identity, element, dispose });
+    tiledInstances.add(element);
+    return true;
+  }
+
   // Show a parked instance inside a grid tile: the same emulator and socket, scaled and non-driving.
   function hostInTile(host: HTMLElement, identity: string): boolean {
     const entry = parkedViewports.get(identity);
@@ -207,14 +258,8 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
     parkedViewports.delete(identity);
     entry.element.removeEventListener(TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT, entry.evict);
     delete entry.element.dataset.parked;
-    // The placeholder becomes a plain frame for the instance: fill the tile frame, show, no preview transform.
-    host.removeAttribute('style');
-    host.style.width = '100%';
-    host.style.height = '100%';
-    host.style.display = 'block';
-    host.dataset.hostingInstance = 'true';
     // The tile's own fixed grid is never mounted, so its paint guard must not hide the hosted emulator.
-    host.dataset.geometryReady = 'true';
+    prepareTileHost(host);
     host.append(entry.element);
     hostedViewports.set(host, { identity, element: entry.element, dispose: entry.dispose });
     terminalViewportMounts.set(entry.element, entry.dispose);
@@ -228,6 +273,23 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
     delete host.dataset.hostingInstance;
     host.dataset.geometryReady = 'false';
     host.removeAttribute('style');
+  }
+
+  function promoteTilePreviews() {
+    for (const [host, dispose] of terminalViewportMounts) {
+      if (!hasWarmRoom()) break;
+      if (!terminalTilePreview(host) || !host.isConnected) continue;
+      const identity = terminalViewportIdentity(host);
+      if (!identity || hasDedicatedInstance(identity)) continue;
+      terminalViewportMounts.delete(host);
+      dispose();
+      if (!mountFreshTileInstance(host)) considerTerminalViewportMount(host);
+    }
+  }
+
+  function enforceWarmTerminalLimit() {
+    trimWarmTerminalLimit();
+    promoteTilePreviews();
   }
 
   // The drawer takes the instance back from a tile; the tile falls back to its lightweight preview.
@@ -408,6 +470,7 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
     }
     // A tile still on screen after the drawer took its instance back shows the lightweight preview.
     for (const host of releasedHosts) considerTerminalViewportMount(host);
+    promoteTilePreviews();
   }
 
   function considerTerminalViewportMount(element: HTMLElement) {

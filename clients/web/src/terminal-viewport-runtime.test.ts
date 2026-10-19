@@ -707,6 +707,54 @@ describe('newly created terminal focus versus its creating menu (HS2-FB4DKM)', (
 });
 
 describe('parked terminal viewports (HS2-WGTQ6X)', () => {
+  it('starts a cold tile as an inert DOM-rendered full instance and restores WebGL in the drawer', () => {
+    webglAddons.length = 0;
+    windowMock.innerWidth = 1440;
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 Gecko/20100101 Firefox/150.0' });
+    const frames: Array<() => void> = [];
+    windowMock.requestAnimationFrame.mockImplementation(((callback: () => void) => {
+      frames.push(callback);
+      return frames.length;
+    }) as never);
+    const handlers = new Map<string, (event: Event) => void>();
+    let inTile = true;
+    const viewport = {
+      dataset: { displayMode: 'interactive' } as Record<string, string>,
+      style: {},
+      classList: { contains: (name: string) => name === 'terminal-viewport--dedicated' },
+      closest: (selector: string) => (selector === '[data-component="terminal-tile"]' && inTile ? {} : null),
+      addEventListener: (type: string, handler: (event: Event) => void) => handlers.set(type, handler),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+      setAttribute: vi.fn(),
+      removeAttribute: vi.fn(),
+    } as unknown as HTMLElement;
+    const dispose = mountTerminalViewportRuntime(viewport, {
+      url: 'ws://lan/terminal',
+      viewerId: 'cold-tile',
+      initialTilePresentation: true,
+      autoFocus: true,
+    });
+    expect(viewport.dataset.renderer).toBe('dom');
+    expect(viewport.dataset.presentation).toBe('tile');
+    expect(viewport.inert).toBe(true);
+    expect(allocated.terminals[0].options.disableStdin).toBe(true);
+    expect(allocated.terminals[0].focus).not.toHaveBeenCalled();
+    expect(webglAddons).toHaveLength(0);
+    expect(sockets).toHaveLength(1);
+
+    inTile = false;
+    handlers.get(TERMINAL_VIEWPORT_PRESENTATION_EVENT)!(
+      new CustomEvent(TERMINAL_VIEWPORT_PRESENTATION_EVENT, { detail: { tile: false } }),
+    );
+    for (const frame of frames.splice(0)) frame();
+    expect(viewport.dataset.renderer).toBe('webgl');
+    expect(viewport.dataset.presentation).toBeUndefined();
+    expect(viewport.inert).toBe(false);
+    expect(sockets).toHaveLength(1);
+    dispose();
+  });
+
   it('releases WebGL while parked, restores it after the first resumed frame, and stops at a closed socket', () => {
     webglAddons.length = 0;
     windowMock.innerWidth = 1440;

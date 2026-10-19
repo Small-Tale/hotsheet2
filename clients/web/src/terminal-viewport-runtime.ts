@@ -318,6 +318,7 @@ type TerminalRuntimeOptions = {
   url: string;
   viewerId: string;
   autoFocus?: boolean;
+  initialTilePresentation?: boolean;
   onTicketReference?: (reference: string) => void;
   mobileColumns?: () => number;
   /** Sticky key-bar modifiers (HS2-CKS78M): read on each key, consumed after a one-shot applies. */
@@ -336,13 +337,14 @@ function initializeTerminalViewport(
     url,
     viewerId,
     autoFocus: requestedAutoFocus = false,
+    initialTilePresentation = false,
     onTicketReference,
     mobileColumns,
     modifiers,
   }: TerminalRuntimeOptions,
   own: OwnTerminalResource,
 ): void {
-  const autoFocus = requestedAutoFocus && automaticInputFocusAllowed(window.innerWidth);
+  const autoFocus = requestedAutoFocus && !initialTilePresentation && automaticInputFocusAllowed(window.innerWidth);
   const scaledPreview = element.dataset.displayMode === 'scaled-preview',
     fixedDashboardGrid = element.dataset.gridPolicy === 'dashboard-80x24',
     magnified = Boolean(element.closest('[data-fixed-aspect-terminal-card="magnified"]')),
@@ -406,6 +408,7 @@ function initializeTerminalViewport(
     );
   const loadWebgl = () => {
     if (
+      element.closest('[data-component="terminal-tile"]') !== null ||
       !element.classList.contains('terminal-viewport--dedicated') ||
       mobile80xM() ||
       !terminalShouldUseWebgl(navigator.userAgent)
@@ -1060,7 +1063,7 @@ function initializeTerminalViewport(
         delete element.dataset.tileScale;
         terminal.options.disableStdin = false;
         terminal.options.cursorBlink = true;
-        if (tileWebglReleased) {
+        if (tileWebglReleased || initialTilePresentation) {
           tileWebglReleased = false;
           resumeFrame = window.requestAnimationFrame(() => {
             resumeFrame = undefined;
@@ -1076,6 +1079,12 @@ function initializeTerminalViewport(
   own(() => {
     element.removeEventListener(TERMINAL_VIEWPORT_PRESENTATION_EVENT, present);
   });
+  if (initialTilePresentation)
+    present(
+      new CustomEvent<TerminalViewportPresentationDetail>(TERMINAL_VIEWPORT_PRESENTATION_EVENT, {
+        detail: { tile: true },
+      }),
+    );
   const focus = () => {
       if (fixedDashboardGrid && element.dataset.geometryReady !== 'true') return;
       focusRequested = false;

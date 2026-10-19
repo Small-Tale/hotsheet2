@@ -630,6 +630,16 @@ describe('one live instance moves between the drawer and grid tiles (HS2-EYD24K)
         },
       },
       warmTerminalLimit: () => warmLimit.value,
+      createTileViewport: (host) =>
+        asElement(
+          new FakeNode({
+            component: 'terminal-viewport',
+            projectId: host.dataset.projectId ?? '',
+            terminalId: host.dataset.terminalId ?? '',
+            displayMode: 'interactive',
+            mountPolicy: 'keep-alive',
+          }),
+        ),
     });
     /** The drawer's dedicated, kept-alive viewport for `id`, inside a fresh terminal session. */
     const drawer = (id: string) => {
@@ -672,6 +682,71 @@ describe('one live instance moves between the drawer and grid tiles (HS2-EYD24K)
     };
     return { root, holder, disposals, owner, drawer, tile, sync, clear };
   }
+
+  it('mounts a never-opened visible tile as a full instance and moves it to and from the drawer', async () => {
+    const view = setup({ value: 1 }),
+      grid = view.tile('x');
+    view.sync();
+    await paint();
+    const instance = grid.preview.children[0];
+    expect(instance.dataset).toMatchObject({ displayMode: 'interactive', mountPolicy: 'keep-alive' });
+    expect(grid.preview.dataset.hostingInstance).toBe('true');
+    expect(mount).toHaveBeenCalledTimes(1);
+    expect(mount.mock.calls[0][1]).toMatchObject({ initialTilePresentation: true, autoFocus: false });
+
+    const back = view.drawer('x');
+    view.sync();
+    expect(instance.parentElement).toBe(back.session);
+    expect(instance.events.slice(-2)).toEqual([
+      'hs-terminal-viewport-presentation:false',
+      'hs-terminal-viewport-resume',
+    ]);
+    await paint();
+    expect(mount.mock.calls.at(-1)?.[0]).toBe(asElement(grid.preview));
+    expect(view.disposals.get(asElement(instance))).not.toHaveBeenCalled();
+
+    back.session.remove();
+    view.sync();
+    expect(instance.parentElement).toBe(grid.preview);
+    expect(view.disposals.get(asElement(grid.preview))).toHaveBeenCalledTimes(1);
+    expect(view.disposals.get(asElement(instance))).not.toHaveBeenCalled();
+  });
+
+  it('falls back beyond the cap, then promotes an overflow preview when a slot opens', async () => {
+    const warm = { value: 2 },
+      view = setup(warm),
+      x = view.tile('x'),
+      y = view.tile('y'),
+      z = view.tile('z');
+    view.sync();
+    await paint();
+    await paint();
+    expect(x.preview.children).toHaveLength(1);
+    expect(y.preview.children).toHaveLength(1);
+    expect(z.preview.children).toHaveLength(0);
+    const firstInstance = x.preview.children[0];
+    expect(mount.mock.calls.map(([element]) => element)).toEqual([
+      asElement(x.preview.children[0]),
+      asElement(y.preview.children[0]),
+      asElement(z.preview),
+    ]);
+
+    // Lowering the cap evicts the oldest live tile, leaving its preview in place.
+    warm.value = 1;
+    view.owner.enforceWarmTerminalLimit();
+    expect(view.disposals.get(asElement(firstInstance))).toHaveBeenCalledTimes(1);
+    expect(x.preview.children).toHaveLength(0);
+    await paint();
+    expect(x.preview.dataset.hostingInstance).toBeUndefined();
+
+    // Raising it again promotes the first overflow preview without a drawer visit.
+    warm.value = 2;
+    view.owner.enforceWarmTerminalLimit();
+    expect(z.preview.children).toHaveLength(1);
+    expect(z.preview.dataset.hostingInstance).toBe('true');
+    expect(x.preview.children).toHaveLength(0);
+    expect(view.disposals.get(asElement(z.preview))).toHaveBeenCalledTimes(1);
+  });
 
   it('walks drawer → grid → drawer → grid on one emulator and socket, never remounting', async () => {
     const view = setup(),
