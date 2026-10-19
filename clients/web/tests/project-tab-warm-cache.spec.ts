@@ -337,6 +337,55 @@ test('A→B→A switching between warm projects paints from cache without loadin
   }
 });
 
+for (const width of [1280, 390]) {
+  test(`switching projects keeps each search editor and its layout at ${width}px (HS2-RDFY4A)`, async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 844 });
+    const workspace = await installWorkspace(page);
+    await bootWorkspace(page, workspace);
+    await page.setViewportSize({ width, height: 844 });
+    const selectProject = async (index: number) => {
+      if (width > 700) return switchTo(workspace, index);
+      const picker = page.locator('kui-select[name="mobile-project"]');
+      await picker.click();
+      await picker.locator(`.kui-select__option[data-value="${projectId(index)}"]`).click();
+      await expect(picker).toHaveJSProperty('value', projectId(index));
+    };
+    const search = page.getByRole('searchbox', { name: 'Search tickets' });
+    await page.getByRole('button', { name: 'Search tickets' }).click();
+    await search.fill('hello');
+    await expect(search).toContainText('hello');
+
+    workspace.hold(1);
+    workspace.gate(1, '/commands');
+    await selectProject(1);
+    await expect(page.locator('[data-search-field-id="workspace-search"]')).toHaveAttribute('data-expanded', 'false');
+    await workspace.release(1);
+    await expect(workspace.ticketRow('HS2-P1A')).toBeVisible();
+    await page.locator('[data-component="toolbar"][aria-label="Workspace Toolbar"]').screenshot({
+      path: `target/visual-captures/hs2-rdfy4a-after-switch-toolbar-${width}.png`,
+      animations: 'disabled',
+    });
+    await page.getByRole('button', { name: 'Search tickets' }).click();
+    await search.fill('second');
+    await expect(search).toContainText('second');
+    await workspace.openGate(1, '/commands');
+    await expect(search).toContainText('second');
+
+    await selectProject(0);
+    await expect(search).toContainText('hello', { timeout: 250 });
+    await selectProject(1);
+    await expect(search).toContainText('second', { timeout: 250 });
+    const editor = page.locator('[data-search-field-id="workspace-search"]');
+    await expect.poll(() => editor.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(180);
+    await expect.poll(() => editor.evaluate((node) => node.getBoundingClientRect().height)).toBeLessThan(65);
+    await expect(page.locator('[data-component="server-busy-bars"]')).toHaveAttribute('data-visible', 'false');
+    await page.screenshot({
+      path: `target/visual-captures/hs2-rdfy4a-restored-search-${width}.png`,
+      animations: 'disabled',
+    });
+  });
+}
+
 test('a project evicted beyond the warm LRU bound reloads with a loading state; warm ones stay instant', async ({
   page,
 }) => {

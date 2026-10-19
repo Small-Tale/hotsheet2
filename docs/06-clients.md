@@ -657,7 +657,10 @@ preview/download, server directory browser) are separate design work.
   The workspace search field works the same way: plain typing reaches the app's search
   projection at a typing pause and then searches at once, while committing or removing a chip
   and the search becoming empty or non-empty publish immediately; opening the saved-view
-  dialog and restoring a saved view flush pending text first. The field's render reads only
+  dialog, restoring a saved view, and switching projects flush pending text first. A project
+  switch restores that project's visible search editor with its search state before its
+  asynchronous refresh, so neither an old query nor a delayed restore can overwrite an edit
+  in the newly selected project (HS2-RDFY4A). The field's render reads only
   Kerf's structural `SearchFieldModel.structure`, and the typed date-filter prefix reaches the
   date helper through a bound attribute, so keystrokes do not re-render the workspace
   (HS2-X72PD6). The helper uses native labeled date and time inputs, with Enter applying

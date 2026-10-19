@@ -1762,6 +1762,8 @@ export async function startHotSheetWebClient() {
     if (next !== selectedProjectId.value) parkProjectViewports(selectedProjectId.value);
     projectTabRefresh.activate(next);
     const finishTiming = beginInteractionTiming('project-change', { project: next });
+    // Publish any typing still held by the old project's search projection before saving its session.
+    flushWorkspaceSearch();
     persistProjectSessionNow();
     cacheActiveProjectProjection();
     resetTicketComposer(false);
@@ -1808,6 +1810,9 @@ export async function startHotSheetWebClient() {
           : (stored?.selectedView ?? 'all');
       searchOpen.value = stored?.searchOpen ?? false;
       searchQuery.value = stored?.searchQuery ?? '';
+      // The editor is shared across projects; restore it in the same frame as the project state.
+      // Waiting for refreshActivatedProject leaves the previous project's text visible in the new one.
+      replaceTicketSearch(workspaceSearchModel, stored?.searchQuery ?? '');
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
       searchMatchKeys.value = projection?.searchMatchKeys;
       selectedCorruptKey.value = undefined;
@@ -1930,8 +1935,7 @@ export async function startHotSheetWebClient() {
       const composerOpenedByUser = composerExpanded.value;
       selectedView.value =
         stored.selectedView === 'errors' && !corruptTickets.value.length ? 'all' : stored.selectedView;
-      searchOpen.value = stored.searchOpen;
-      replaceTicketSearch(workspaceSearchModel, stored.searchQuery);
+      // Search was restored during activation; a delayed network refresh must not undo a new edit.
       searchMatchKeys.value = undefined;
       inspectorTab.value = stored.inspectorTab;
       readerTab.value = stored.readerTab;
