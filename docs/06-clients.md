@@ -1002,11 +1002,15 @@ preview/download, server directory browser) are separate design work.
   production AppShell over checkout-scoped server APIs; `/ux-demo` remains the isolated
   development catalog. The project-tab `+` action invokes the host-native code-checkout
   folder chooser immediately and sends a selected folder directly to project open. The
-  initial empty-state Open project action retains the roomy 48rem dialog so an explicit
-  git-store path can be supplied when convention-based discovery does not apply; both
-  dialog paths have host-native chooser buttons, and Cancel/Escape are controlled by
+  initial empty-state Open project action retains the roomy 48rem dialog for choosing
+  the code checkout. It never asks for a ticket source: existing registered sources,
+  a valid `.hotsheet2/store` link, or a conventional sibling store are discovered
+  automatically, while a new project enters
+  the existing source setup flow. The folder field has a host-native chooser button,
+  and Cancel/Escape are controlled by
   durable state so unrelated renders cannot reopen or strand the surface. On open, the
-  server conservatively discovers a valid sibling `<checkout>.hs2` git ticket store,
+  server conservatively discovers a valid `.hotsheet2/store` link or sibling
+  `<checkout>.hs2` git ticket store (the link takes precedence),
   hosts it, and records the many-to-many checkout/store link.
   Retrying a failed project open clears the prior failure immediately. During startup,
   remembered roots are deduplicated and their project-open/metadata requests run concurrently.

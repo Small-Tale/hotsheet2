@@ -16,6 +16,9 @@ describe('project dialogs', () => {
       ProjectDialog({ open: true, root: '/work/demo', error: 'Unavailable', recovery: { expected: { pid: 42 } } }),
     );
     expect(markup).toContain('value="/work/demo"');
+    expect(markup).toContain('opens its existing ticket sources automatically');
+    expect(markup).toContain('name="project-root"');
+    expect(markup).not.toContain('name="ticket-store"');
     expect(markup).toContain('Unavailable');
     expect(markup).toContain('process 42');
     expect(markup).toContain('data-action="recover-unhealthy-server"');

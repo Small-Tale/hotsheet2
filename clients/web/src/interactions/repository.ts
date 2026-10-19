@@ -255,9 +255,8 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
   lifetime.add(
     delegate(document.body, 'submit', REPOSITORY_ACTIONS.openProjectForm.selector, (event, target) => {
       event.preventDefault();
-      const root = (target.querySelector('[name="project-root"]') as Control).value,
-        store = (target.querySelector('[name="ticket-store"]') as Control).value;
-      void openProject(root, store || undefined);
+      const root = (target.querySelector('[name="project-root"]') as Control).value;
+      void openProject(root);
     }),
   );
   return () => {

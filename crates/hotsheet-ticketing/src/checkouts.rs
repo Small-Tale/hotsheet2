@@ -223,14 +223,19 @@ fn validate_linked_store_identities(checkout: &Checkout) -> Result<(), CheckoutE
     Ok(())
 }
 
-/// Discover conventional git-backed ticket stores for a checkout. The first convention
-/// is a sibling whose path is the checkout path plus `.hs2` (for example `app` and
-/// `app.hs2`). Discovery is deliberately conservative: it never creates a store and never
-/// guesses that one checkout maps to only one provider.
+/// Discover a linked or conventional git-backed ticket store for a checkout. A valid
+/// `.hotsheet2/store` link takes precedence over the sibling `<checkout>.hs2` convention.
+/// Discovery never creates a store or guesses that one checkout has only one provider.
 pub fn discover_ticket_stores(root: &Path) -> Result<Vec<PathBuf>, CheckoutError> {
     let canonical = root
         .canonicalize()
         .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
+    if let Some(linked) = legacy_link_source(&canonical) {
+        let path = PathBuf::from(linked.locator);
+        if path.join("hotsheet-store.json").is_file() {
+            return Ok(vec![path.canonicalize().unwrap_or(path)]);
+        }
+    }
     let sibling = PathBuf::from(format!("{}.hs2", canonical.display()));
     if sibling.join("hotsheet-store.json").is_file() {
         Ok(vec![sibling.canonicalize().unwrap_or(sibling)])
@@ -3024,6 +3029,34 @@ mod tests {
         std::fs::create_dir(&sibling).unwrap();
         assert!(discover_ticket_stores(&checkout).unwrap().is_empty());
         std::fs::write(sibling.join("hotsheet-store.json"), "{}").unwrap();
+        assert_eq!(
+            discover_ticket_stores(&checkout).unwrap(),
+            vec![sibling.canonicalize().unwrap()]
+        );
+    }
+
+    #[test]
+    fn linked_store_takes_precedence_over_sibling_and_invalid_link_falls_back() {
+        let temp = tempfile::tempdir().unwrap();
+        let checkout = temp.path().join("app");
+        let sibling = temp.path().join("app.hs2");
+        let linked = temp.path().join("tickets");
+        std::fs::create_dir_all(checkout.join(".hotsheet2")).unwrap();
+        std::fs::create_dir(&sibling).unwrap();
+        std::fs::create_dir(&linked).unwrap();
+        std::fs::write(sibling.join("hotsheet-store.json"), "{}").unwrap();
+        std::fs::write(linked.join("hotsheet-store.json"), "{}").unwrap();
+        std::fs::write(
+            checkout.join(".hotsheet2/store"),
+            linked.to_string_lossy().as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(
+            discover_ticket_stores(&checkout).unwrap(),
+            vec![linked.canonicalize().unwrap()]
+        );
+
+        std::fs::write(checkout.join(".hotsheet2/store"), "missing").unwrap();
         assert_eq!(
             discover_ticket_stores(&checkout).unwrap(),
             vec![sibling.canonicalize().unwrap()]

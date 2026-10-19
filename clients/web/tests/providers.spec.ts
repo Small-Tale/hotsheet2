@@ -2632,7 +2632,7 @@ async function installFakeTerminalSockets(page: import('@playwright/test').Page,
   );
 }
 
-test('opens a roomy project dialog with native browse controls and working cancel', async ({ page }) => {
+test('opens a roomy project dialog with automatic source discovery and working cancel', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 760 });
   await mockProject(page);
   await page.goto('/');
@@ -2645,12 +2645,15 @@ test('opens a roomy project dialog with native browse controls and working cance
   await page.getByRole('button', { name: 'Browse for Project Folder' }).click();
   await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value', '/picked/project');
   await expect(dialog).toHaveAttribute('open', '');
-  await page.getByRole('button', { name: 'Browse for Ticket Store' }).click();
-  await expect(page.locator('wa-input[name="ticket-store"]')).toHaveJSProperty('value', '/picked/tickets.hs2');
+  await expect(dialog.getByText('opens its existing ticket sources automatically')).toBeVisible();
+  await expect(dialog.locator('[name="ticket-store"]')).toHaveCount(0);
   await expect(dialog).toHaveAttribute('open', '');
   await expect(dialog.locator('.project-dialog__error')).toBeEmpty();
   await expect(page.locator('.app-error')).toHaveCount(0);
-  await page.screenshot({ path: 'target/visual-captures/hs2-nvd50p-open-project-dialog.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-x13562-open-project-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(async () => (await dialog.boundingBox())!.width).toBeLessThanOrEqual(390);
+  await page.screenshot({ path: 'target/visual-captures/hs2-x13562-open-project-phone.png', fullPage: true });
   await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).not.toHaveAttribute('open');
   await expect(dialog).toBeHidden();

@@ -5657,6 +5657,49 @@ async fn opening_project_without_ticket_sources_keeps_the_checkout_usable() {
 }
 
 #[tokio::test]
+async fn opening_project_discovers_a_linked_ticket_store_without_a_source_choice() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let linked = workspace.path().join("ticket-repository");
+    std::fs::create_dir_all(checkout.join(".hotsheet2")).unwrap();
+    FsStore::init(&linked, &StoreMetadata::new("APP")).unwrap();
+    std::fs::write(
+        checkout.join(".hotsheet2/store"),
+        linked.to_string_lossy().as_bytes(),
+    )
+    .unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+
+    let opened = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root": checkout}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    let opened = body_json(opened).await;
+    assert_eq!(
+        opened["checkout"]["stores"],
+        serde_json::json!([linked.canonicalize().unwrap()])
+    );
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap();
+    let tickets = app
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/{checkout_id}/tickets"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(tickets.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn source_free_checkout_settings_round_trip_under_the_project_root() {
     let (primary, st) = state();
     let mut events = st.subscribe();

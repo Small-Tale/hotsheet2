@@ -53,8 +53,8 @@ export function ProjectDialog({
         <form {...REPOSITORY_ACTIONS.openProjectForm.attrs}>
           <List gap="m">
             <Text tone="quiet">
-              Select a code checkout. Hot Sheet automatically uses a valid sibling <code>&lt;project&gt;.hs2</code>{' '}
-              ticket store. Override it when the project uses another store.
+              Select a code checkout. Hot Sheet opens its existing ticket sources automatically, or guides you through
+              setup for a new project.
             </Text>
             <div class="project-dialog__path">
               <wa-input name="project-root" label="Project Folder" value={root} required />
@@ -64,22 +64,6 @@ export function ProjectDialog({
                 action={PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.value}
                 ariaLabel={'Browse for Project Folder'}
                 title={hostOnlyDisabledReason('choose-folder', hostActionsAvailable) ?? 'Browse for project folder'}
-                disabled={!hostActionsAvailable}
-                icon={<LucideIcon size="s" icon={Ellipsis} name="ellipsis" />}
-              />
-            </div>
-            <div class="project-dialog__path">
-              <wa-input
-                name="ticket-store"
-                label="Ticket Store (Optional)"
-                placeholder="Automatically discover &lt;project&gt;.hs2"
-              />
-              <Button
-                emphasis="secondary"
-                type="button"
-                action={PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.value}
-                ariaLabel={'Browse for Ticket Store'}
-                title={hostOnlyDisabledReason('choose-folder', hostActionsAvailable) ?? 'Browse for ticket store'}
                 disabled={!hostActionsAvailable}
                 icon={<LucideIcon size="s" icon={Ellipsis} name="ellipsis" />}
               />

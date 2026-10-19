@@ -165,7 +165,8 @@ reuse the `/health` scan, which covers only the primary store and may answer fro
 listing.
 
 `POST /projects/open` is the client onboarding transaction: it validates a code checkout,
-accepts explicit git-store paths or discovers an exact sibling `<checkout>.hs2` store,
+accepts explicit git-store paths or discovers a valid `.hotsheet2/store` checkout link,
+falling back to an exact sibling `<checkout>.hs2` store,
 hosts those stores, and registers the checkout links. Discovery only accepts a directory
 containing `hotsheet-store.json`; it never creates a store or assumes a checkout has only
 one source. An empty discovered source set remains valid at the core layer so a richer

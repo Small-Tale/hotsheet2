@@ -65,6 +65,7 @@ function gate() {
 async function startupFixture(page: Page, roots: string[], active: string | undefined, composerOpen = true) {
   const attempts = new Map<string, number>(),
     calls: string[] = [],
+    openBodies: Record<string, unknown>[] = [],
     pending = new Map<string, ReturnType<typeof gate>>();
   const unavailable = new Map<string, { pid?: number; attempts?: number }>();
   const projects = new Map(['alpha', 'beta', 'gamma'].map((name) => [name, projectFor(name)]));
@@ -97,7 +98,9 @@ async function startupFixture(page: Page, roots: string[], active: string | unde
       path = url.pathname;
     calls.push(`${path}${url.search}`);
     if (path === '/__hotsheet/projects/open') {
-      const name = (request.postDataJSON().root as string).split('/').at(-1)!;
+      const body = request.postDataJSON() as Record<string, unknown>;
+      openBodies.push(body);
+      const name = (body.root as string).split('/').at(-1)!;
       const attempt = (attempts.get(name) ?? 0) + 1;
       attempts.set(name, attempt);
       await pending.get(name)?.promise;
@@ -230,7 +233,7 @@ async function startupFixture(page: Page, roots: string[], active: string | unde
       return route.fulfill({ json: [] });
     return route.fulfill({ status: 404, json: { error: `No fixture for ${path}` } });
   });
-  return { attempts, calls, pending, unavailable, projects, ticketGates, fullTicketGates };
+  return { attempts, calls, openBodies, pending, unavailable, projects, ticketGates, fullTicketGates };
 }
 const heavyCalls = (calls: string[]) =>
   calls.filter((path) => /\/(tickets|commands|command-runs|views)(\?|$)/.test(path));
@@ -569,6 +572,7 @@ test('activates a passive tab after closing the active project, then opens again
   await expect(page.getByRole('tab', { name: /^alpha/ })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByText('alpha restored work', { exact: true })).toBeVisible();
   expect(fixture.attempts.get('alpha')).toBe(2);
+  expect(fixture.openBodies.at(-1)).toEqual({ root: '/work/alpha' });
 });
 
 test('restores inactive AI chats without activating their project and loads aggregate counts only on demand', async ({

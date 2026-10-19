@@ -360,9 +360,8 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     try {
       const result = await localBridge.recoverUnhealthyServer(recovery);
       if (!result.recovered) throw new Error(result.error ?? 'Could not recover the unresponsive server.');
-      const root = (form.querySelector('[name="project-root"]') as Control).value,
-        store = (form.querySelector('[name="ticket-store"]') as Control).value;
-      await openProject(root, store || undefined);
+      const root = (form.querySelector('[name="project-root"]') as Control).value;
+      await openProject(root);
     } catch (reason) {
       projectDialogError.value = reason instanceof Error ? reason.message : String(reason);
     } finally {
