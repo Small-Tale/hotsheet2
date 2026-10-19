@@ -155,10 +155,11 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
 
 ### 12.6.1 Optional local Rust compiler cache
 
-Rust contributors can use [`sccache`](https://github.com/mozilla/sccache) to reuse
-compiler outputs across repeated lint, nextest, and coverage builds. Install it with
-`brew install sccache` on macOS or `cargo install sccache --locked`, then enable it in
-the shell that runs Cargo:
+Rust contributors can use [`sccache`](https://github.com/mozilla/sccache) as an
+optional local compiler cache. Its benefit depends on the command and checkout paths;
+the worktree measurement in §12.7.9 did not show Rust cache reuse across checkouts.
+Install it with `brew install sccache` on macOS or
+`cargo install sccache --locked`, then enable it in the shell that runs Cargo:
 
 ```sh
 export RUSTC_WRAPPER=sccache
@@ -170,15 +171,18 @@ repository deliberately does not set `build.rustc-wrapper` in `.cargo/config.tom
 that would make Cargo fail for contributors and automation without `sccache`
 installed. `RUSTC_WRAPPER` applies unchanged to the `cargo lint` alias,
 `cargo nextest run`, and `cargo llvm-cov`; inspect effectiveness with
-`sccache --show-stats`. CI continues to use its existing Cargo cache and does not
-enable sccache.
+`sccache --show-stats`. Some sandboxed agent sessions cannot start or contact the
+local sccache server (`Operation not permitted`); leave `RUSTC_WRAPPER` unset in those
+sessions instead of making the wrapper a repository requirement. CI continues to use
+its existing Cargo cache and does not enable sccache.
 
 Never point several concurrently edited git worktrees at one shared `CARGO_TARGET_DIR`.
 A build in one worktree can then link another worktree's `hotsheet-server` (or other
 workspace path crate) build: new routes 404 and the source-revision tests see whichever
 worktree's `HOT_SHEET_LOCAL_SOURCE_ROOT` was built last (HS2-2PVW3W). Give each worktree
-its own target directory (the default `target/` inside the worktree already does); a
-configured `sccache` still lets them share compiled third-party dependencies.
+its own target directory (the default `target/` inside the worktree already does).
+`sccache` can reuse compiler outputs where its cache keys match; it does not make
+separate worktrees share Cargo artifacts.
 
 Two other local environment effects look like regressions but are not:
 
@@ -882,10 +886,20 @@ which uses real captured runner output and spawns real processes; CI runs it in 
   ticket and is tracked in [test-quarantine.md](test-quarantine.md). CI's
   `scripts/check-test-quarantine.mjs` keeps markers and rows one-to-one. Nobody silently
   reruns a known flake, and every quarantined test has an owner.
-- **Shared compilation cache.** Not adopted yet. Locally, rustc is not wrapped by
-  `sccache`, and each worktree has its own `target/`, so a fresh worktree compiles the
-  workspace once. Sharing one target directory across worktrees would race the binaries
-  that HS2-A0M8CM protects. `HS2-HRE9G7` tracks evaluating `RUSTC_WRAPPER=sccache`.
+- **Shared compilation cache (HS2-HRE9G7).** Keep `sccache` optional at the machine
+  level; do not enable it in the repository or share `CARGO_TARGET_DIR` between
+  worktrees. On 2026-10-19, two isolated checkouts at the same commit ran
+  `cargo check -p hotsheet-server --lib --quiet -j 4` with separate cold target
+  directories. The unwrapped build took 142.43 s (warm rerun 1.01 s); the first
+  `RUSTC_WRAPPER=sccache` build took 101.02 s (warm rerun 0.66 s), and the second
+  checkout's wrapped build took 156.98 s. The shared sccache daemon recorded 616
+  Rust cache misses and **zero Rust hits** after both wrapped builds, though it did
+  reuse C and assembler outputs. Host load varied sharply, so these wall times do not
+  establish a speedup. The default wrapper is therefore unproven for the intended
+  cross-worktree Rust reuse. Sandboxed builds previously failed when a native build
+  invoked sccache with `Operation not permitted`; the measured builds required an
+  outside-sandbox run. Keep the separate target directories that protect test binaries
+  (HS2-A0M8CM).
 
 ## 12.8 Cross-references
 
