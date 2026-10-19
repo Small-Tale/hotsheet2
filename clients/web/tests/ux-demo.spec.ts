@@ -6340,10 +6340,7 @@ test('uses semantic cursors across native and Web Awesome interactions', async (
     .locator('kui-select[name="status"]')
     .evaluate((node) => getComputedStyle(node.querySelector('.kui-select__trigger')!).cursor);
   expect(selectCursor).toBe('pointer');
-  const checkboxCursor = await inspector
-    .locator('input[type="checkbox"][name="up-next"]')
-    .evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="checkbox"]')!).cursor);
-  expect(checkboxCursor).toBe('pointer');
+  await expect(inspector.locator('.kui-checkbox__row:has(input[name="up-next"])')).toHaveCSS('cursor', 'pointer');
   const buttonCursor = await inspector
     .locator('button[data-action="reset-settings"]')
     .evaluate((node) => getComputedStyle(node).cursor);
@@ -9526,11 +9523,15 @@ test('shows the source mark after the type on cards and beside the inspector num
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'github');
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(59, 130, 246)');
   await page.locator('[data-action="toggle-settings"]').first().click();
-  const multipleSources = page.locator('[data-settings="ticket-list-row"][type="checkbox"][name="show-source-icon"]');
+  const multipleSources = page
+    .locator('[data-settings="ticket-list-row"] .kui-checkbox__row')
+    .filter({ has: page.locator('input[name="show-source-icon"]') });
   await multipleSources.click();
+  await expect(page.locator('input[name="show-source-icon"]')).not.toBeChecked();
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
   await expect(row.locator('.ticket-list-row__body')).toHaveAttribute('data-has-source', 'false');
   await multipleSources.click();
+  await expect(page.locator('input[name="show-source-icon"]')).toBeChecked();
   await expect(row.locator('[data-component="ticket-source-icon"]')).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await setDemoSettingsOpen(page, false);
