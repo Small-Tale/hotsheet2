@@ -1,9 +1,14 @@
-/* The small label-to-control gap is a parent layout rule; Kerf owns each header and surface. */
+/* Public Kerf header tokens preserve the Category label rhythm around Status and Details. */
 
 .ticket-info-panel__status-field,
 .ticket-info-panel__details-section {
   display: grid;
   min-width: 0;
+  --kui-list-header-min-height: 0;
+  --kui-list-header-title-min-height: 0;
+  --kui-list-header-title-padding-block: 0;
+  --kui-list-header-border-width: 0;
+  --kui-list-header-title-padding-inline: 1px;
   gap: calc(var(--kui-font-xs) * 0.5);
 }
 /* The placeholder lines have their own internal rhythm inside ContentItem's inset. */

@@ -103,7 +103,7 @@ function TicketInfoPanelPlaceholder({ readerPresentation = false }: { readerPres
             <TicketPrioritySelect name="inspector-priority" value="default" placeholder />
           </Grid>
           <div class="ticket-info-panel__status-field">
-            <ListHeader label="Status" inline density="compact" />
+            <ListHeader label="Status" />
             <ListInsetControl>
               <Row wrap gap="xs" vAlign="middle" rootAttributes={{ 'data-status-line': 'true' }}>
                 <Skeleton width={rem(5)} height={rem(1.5)} />
@@ -121,7 +121,7 @@ function TicketInfoPanelPlaceholder({ readerPresentation = false }: { readerPres
         />
       </List>
       <section class="ticket-info-panel__section ticket-info-panel__details-section">
-        <ListHeader label="Details" inline density="compact" />
+        <ListHeader label="Details" />
         <ContentItem frame="framed" appearance="surface" className="ticket-info-panel__details-surface">
           <div class="ticket-info-panel__details-placeholder">
             <Skeleton lines={3} />
@@ -197,7 +197,7 @@ function LoadedTicketInfoPanel({
             <TicketPrioritySelect name="inspector-priority" value={priority} disabled={!canUpdate} />
           </Grid>
           <div class="ticket-info-panel__status-field">
-            <ListHeader label="Status" inline density="compact" />
+            <ListHeader label="Status" />
             <ListInsetControl>
               <Row wrap gap="xs" vAlign="middle" rootAttributes={{ 'data-status-line': 'true' }}>
                 <>
@@ -252,7 +252,7 @@ function LoadedTicketInfoPanel({
         ) : undefined}
       </List>
       <section class="ticket-info-panel__section ticket-info-panel__details-section">
-        <ListHeader label="Details" inline density="compact" />
+        <ListHeader label="Details" />
         <ContentItem
           frame="framed"
           appearance={detailsFeedback ? 'warning' : 'surface'}

@@ -1338,8 +1338,8 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   gray reason box; tags; notes with collection-derived counts; and provider/update
   provenance. Kerf `ContentItem` owns the framed Details surface (including its warning
   appearance), the blocked-reason editor frame, and their inset; `SunkenPanel` owns the
-  lowered read-only blocked reason. Status and Details use `ListHeader`'s compact inline
-  variant with a small parent-owned gap above the field. Preview,
+  lowered read-only blocked reason. Status and Details keep their public `ListHeader`
+  sizing tokens and a small parent-owned gap to align with Category. Preview,
   editing, read-only, reader, and loading states share that spacing (HS2-S6S709).
   Status places its existing status
   picker and optional Blocked badge in `ListInsetControl`. The metadata section owns
