@@ -6347,7 +6347,7 @@ test('maps the brand tag variant to Kerf info tone at wide and phone widths', as
 
 test('uses semantic cursors across native and Web Awesome interactions', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-row');
-  await expect(page.locator('[data-component="summary-row"]')).toHaveCSS('cursor', 'pointer');
+  await expect(page.locator('[data-component="summary-row"][role="option"]')).toHaveCSS('cursor', 'pointer');
   await expect(page.locator('[data-action="toggle-row-up-next"]')).toHaveCSS('cursor', 'pointer');
   await page.locator('[data-action="toggle-settings"]').first().click();
   const inspector = page.getByRole('complementary', { name: 'TicketRow Settings' });
@@ -6362,7 +6362,7 @@ test('uses semantic cursors across native and Web Awesome interactions', async (
     .evaluate((node) => getComputedStyle(node).cursor);
   expect(buttonCursor).toBe('pointer');
   await page.locator('[data-action="toggle-settings"]').first().click();
-  await page.locator('[data-component="summary-row"]').click({ button: 'right' });
+  await page.locator('[data-component="summary-row"][role="option"]').click({ button: 'right' });
   await expect(page.locator('[data-context-menu="ticket"]').locator('.kui-popup-menu__item').first()).toHaveCSS(
     'cursor',
     'pointer',
