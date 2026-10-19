@@ -8414,6 +8414,7 @@ test('exposes the TicketInfoPanel placeholder variant beside the loaded panel (H
     await expect(panel).not.toContainText('Hot Sheet Git');
     const box = await panel.boundingBox();
     expect(box!.width).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: `target/visual-captures/hs2-26e5p7-info-panel-${width}.png` });
   }
 });
 

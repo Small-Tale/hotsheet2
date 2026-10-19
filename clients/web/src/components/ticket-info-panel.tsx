@@ -1,6 +1,7 @@
 import '@kerfjs/ui/list-inset-control.css';
 import './ticket-info-panel.css';
 
+import { ContentItem } from '@kerfjs/ui/content-item';
 import { foregroundColorVar, rem } from '@kerfjs/ui/css-values';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
@@ -10,6 +11,7 @@ import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { Skeleton } from '@kerfjs/ui/skeleton';
+import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import { Text } from '@kerfjs/ui/text';
 import { CircleAlert, Plus } from 'lucide';
 
@@ -101,7 +103,7 @@ function TicketInfoPanelPlaceholder({ readerPresentation = false }: { readerPres
             <TicketPrioritySelect name="inspector-priority" value="default" placeholder />
           </Grid>
           <div class="ticket-info-panel__status-field">
-            <ListHeader label="Status" />
+            <ListHeader label="Status" inline density="compact" />
             <ListInsetControl>
               <Row wrap gap="xs" vAlign="middle" rootAttributes={{ 'data-status-line': 'true' }}>
                 <Skeleton width={rem(5)} height={rem(1.5)} />
@@ -119,12 +121,12 @@ function TicketInfoPanelPlaceholder({ readerPresentation = false }: { readerPres
         />
       </List>
       <section class="ticket-info-panel__section ticket-info-panel__details-section">
-        <ListHeader label="Details" />
-        <div class="ticket-info-panel__details-surface">
+        <ListHeader label="Details" inline density="compact" />
+        <ContentItem frame="framed" appearance="surface" className="ticket-info-panel__details-surface">
           <div class="ticket-info-panel__details-placeholder">
             <Skeleton lines={3} />
           </div>
-        </div>
+        </ContentItem>
       </section>
       <List gap="xs" className="ticket-info-panel__section">
         <ListHeader
@@ -195,7 +197,7 @@ function LoadedTicketInfoPanel({
             <TicketPrioritySelect name="inspector-priority" value={priority} disabled={!canUpdate} />
           </Grid>
           <div class="ticket-info-panel__status-field">
-            <ListHeader label="Status" />
+            <ListHeader label="Status" inline density="compact" />
             <ListInsetControl>
               <Row wrap gap="xs" vAlign="middle" rootAttributes={{ 'data-status-line': 'true' }}>
                 <>
@@ -221,11 +223,11 @@ function LoadedTicketInfoPanel({
         {blockedReasonEditing ? (
           <>
             <ListHeader label="Blocked Reason" />
-            <div class="ticket-info-panel__blocked-editor">
+            <ContentItem frame="framed" appearance="surface" className="ticket-info-panel__blocked-editor">
               <textarea name="blocked-reason" aria-label="Blocked Reason">
                 {blockedReasonDraft}
               </textarea>
-            </div>
+            </ContentItem>
           </>
         ) : blockedReason ? (
           <>
@@ -238,9 +240,11 @@ function LoadedTicketInfoPanel({
               aria-label={canEditText ? 'Edit blocked reason' : undefined}
               title={canEditText ? 'Double-click to edit' : undefined}
             >
-              <Text variant="p" wrap="anywhere" flush>
-                {blockedReason}
-              </Text>
+              <SunkenPanel>
+                <Text variant="p" wrap="anywhere" flush>
+                  {blockedReason}
+                </Text>
+              </SunkenPanel>
             </div>
           </>
         ) : canEditText ? (
@@ -248,8 +252,13 @@ function LoadedTicketInfoPanel({
         ) : undefined}
       </List>
       <section class="ticket-info-panel__section ticket-info-panel__details-section">
-        <ListHeader label="Details" />
-        <div class="ticket-info-panel__details-surface" data-feedback-needed={detailsFeedback ? 'true' : undefined}>
+        <ListHeader label="Details" inline density="compact" />
+        <ContentItem
+          frame="framed"
+          appearance={detailsFeedback ? 'warning' : 'surface'}
+          className="ticket-info-panel__details-surface"
+          rootAttributes={{ 'data-feedback-needed': detailsFeedback ? 'true' : undefined }}
+        >
           {contentLoading ? (
             <div class="ticket-info-panel__details-placeholder" data-details-loading="true">
               <Skeleton lines={3} />
@@ -293,7 +302,7 @@ function LoadedTicketInfoPanel({
               {detailsFeedback && canAddNotes && <RespondToFeedbackButton id={DETAILS_FEEDBACK_ID} />}
             </>
           )}
-        </div>
+        </ContentItem>
       </section>
       <List gap="xs" className="ticket-info-panel__section">
         {canUpdate ? (

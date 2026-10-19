@@ -1824,7 +1824,7 @@
       "id": "ticket-info-panel",
       "name": "TicketInfoPanel",
       "kind": "composition",
-      "purpose": "Ticket metadata and details with compact headings, inset status controls and empty notes, tags, and provenance.",
+      "purpose": "Ticket metadata and details with compact headings, inset status controls, Kerf-owned details and blocked-reason surfaces, notes, tags, and provenance.",
       "source": "src/components/ticket-info-panel.tsx",
       "publicExports": [
         {
@@ -1882,7 +1882,7 @@
       },
       "selection": {
         "useWhen": [
-          "Hot Sheet needs ticket metadata and details with compact headings, inset status controls and empty notes, tags, and provenance."
+          "Hot Sheet needs ticket metadata and details with compact headings, inset status controls, Kerf-owned surfaces, notes, tags, and provenance."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TicketInfoPanel behavior."],
         "documentation": "../../docs/ux-components.md"

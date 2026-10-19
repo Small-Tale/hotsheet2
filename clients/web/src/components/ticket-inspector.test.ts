@@ -485,11 +485,9 @@ describe('TicketInspector', () => {
     expect(panelSource).not.toContain('note-card__');
     expect(panelSource).toMatch(/<NoteEditor\b/);
     expect(panelSource).toMatch(/<RespondToFeedbackButton\b/);
-    const css = readFileSync(resolve(import.meta.dirname, 'ticket-info-panel.css'), 'utf8');
-    // The feedback state keeps the surface's own 8px padding and only recolors it.
-    expect(css).toMatch(/\.ticket-info-panel__details-surface \{[^}]*padding: var\(--kui-space-xs\);/);
-    expect(css).toMatchSource(
-      /details-surface\[data-feedback-needed="true"\] \{[^}]*warning-border-normal[^}]*warning-fill-quiet/,
+    // Kerf owns the frame and its inset, including the feedback palette.
+    expect(reader).toMatch(
+      /<div(?=[^>]*data-feedback-needed="true")(?=[^>]*data-component="content-item")(?=[^>]*data-appearance="warning")[^>]*>/,
     );
   });
 

@@ -1336,10 +1336,12 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
 - `TicketInfoPanel` — **demo built**: metadata; safe Markdown details on a white
   basic-note-like surface; blocked reason before Details with its header outside the
   gray reason box; tags; notes with collection-derived counts; and provider/update
-  provenance. The passive Details heading keeps ListHeader's inline inset while using
-  Category's compact label geometry and `0.5em` gap above the field. Preview,
+  provenance. Kerf `ContentItem` owns the framed Details surface (including its warning
+  appearance), the blocked-reason editor frame, and their inset; `SunkenPanel` owns the
+  lowered read-only blocked reason. Status and Details use `ListHeader`'s compact inline
+  variant with a small parent-owned gap above the field. Preview,
   editing, read-only, reader, and loading states share that spacing (HS2-S6S709).
-  Status uses the same compact `ListHeader` treatment and places its existing status
+  Status places its existing status
   picker and optional Blocked badge in `ListInsetControl`. The metadata section owns
   the outer inset, so the control row adds no border or padding around the badges;
   their edges align with the Category field, while their own styling and read-only
@@ -1559,7 +1561,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   the inspector while the draft remains mounted, remote-only changes to an untouched
   draft are adopted, and only a divergent edit to the same field opens the shared
   side-by-side `TicketFieldConflict` editor for choosing the remote text or applying an
-  edited merge.
+  edited merge. The conflict versions use Kerf `SunkenPanel` for their lowered surfaces;
+  their native multiline outputs retain bounded scrolling while Kerf gap KF-CMCV6N is open.
+  The standalone editor's fixed toolbar/scrolling textarea frame remains app-owned pending
+  KF-Y94JQG; its embedded and flush modes retain the host's surface geometry.
 - `NotWorkingDialog` — **demo built**: an explicit completed-ticket failure report
   accepting a note and/or pending evidence. It retains input after failures, prevents
   accidental light dismissal, and invokes one capability-gated atomic provider operation

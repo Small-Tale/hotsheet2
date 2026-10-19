@@ -138,8 +138,7 @@ describe('content components', () => {
     expect(String(MarkdownEditor({ value: 'x', mode: 'preview', appearance: 'embedded', inset: 'flush' }))).toContain(
       'markdown-editor--embedded markdown-editor--flush',
     );
-    const infoCss = readFileSync(resolve(import.meta.dirname, 'ticket-info-panel.css'), 'utf8');
-    expect(infoCss).toMatch(/ticket-info-panel__details-surface \{[^}]*padding: var\(--kui-space-xs\);/);
+    // TicketInfoPanel uses Kerf ContentItem for the Details surface and its inset.
     expect(embedded).not.toContain('Saving changes');
     const preview = String(MarkdownEditor({ value: '## Goal', mode: 'preview', expanded: true }));
     expect(preview).toContain('data-component="markdown-preview"');

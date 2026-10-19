@@ -6142,7 +6142,7 @@
       "id": "ticket-info-panel",
       "name": "TicketInfoPanel",
       "kind": "composition",
-      "purpose": "Ticket metadata and details with compact headings, inset status controls and empty notes, tags, and provenance.",
+      "purpose": "Ticket metadata and details with compact headings, inset status controls, Kerf-owned details and blocked-reason surfaces, notes, tags, and provenance.",
       "publicExports": [
         {
           "name": "TicketInfoPanel"

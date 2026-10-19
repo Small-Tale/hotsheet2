@@ -8,6 +8,7 @@ import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
+import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import { Text } from '@kerfjs/ui/text';
 import { GitMerge, RotateCcw } from 'lucide';
 
@@ -21,12 +22,14 @@ export interface TicketFieldConflictProps {
 
 function Version({ label, value }: { label: string; value: string }) {
   return (
-    <label class="ticket-field-conflict__version">
+    <div class="ticket-field-conflict__version">
       <Text variant="span" size="compact" tone="quiet">
         <strong>{label}</strong>
       </Text>
-      <output>{value || 'Empty'}</output>
-    </label>
+      <SunkenPanel>
+        <output>{value || 'Empty'}</output>
+      </SunkenPanel>
+    </div>
   );
 }
 

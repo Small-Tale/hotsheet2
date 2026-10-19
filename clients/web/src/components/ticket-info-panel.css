@@ -1,56 +1,22 @@
-/* TicketInfoPanel (HS2-MGVE50): Kerf List, Grid, Row, and Text own its stacks, metadata columns,
-   status line, provenance, and copy (HS2-TG97NJ). These rules cover only what Kerf cannot express. */
+/* The small label-to-control gap is a parent layout rule; Kerf owns each header and surface. */
 
-/* Details and Status label fields use the compact label-to-control gap of Category. Kerf beta.60
-   ListHeader tokens drop the navigation-row height and borders; the 1px title padding keeps the label
-   aligned where its removed inline border used to inset it. */
 .ticket-info-panel__status-field,
 .ticket-info-panel__details-section {
   display: grid;
   min-width: 0;
-  --kui-list-header-min-height: 0;
-  --kui-list-header-title-min-height: 0;
-  --kui-list-header-title-padding-block: 0;
-  --kui-list-header-border-width: 0;
-  --kui-list-header-title-padding-inline: 1px;
   gap: calc(var(--kui-font-xs) * 0.5);
 }
-/* The bordered Details surface around the embedded MarkdownEditor. */
-.ticket-info-panel__details-surface {
-  min-width: 0;
-  max-width: 100%;
-  padding: var(--kui-space-xs);
-  border: 1px solid var(--wa-color-neutral-border-quiet);
-  border-radius: remify(10.4px);
-  background: var(--wa-color-surface-default);
-}
-/* A Details surface that asks for feedback takes the warning tint (HS2-XBHADT). */
-.ticket-info-panel__details-surface[data-feedback-needed='true'] {
-  border-color: var(--wa-color-warning-border-normal);
-  background: var(--wa-color-warning-fill-quiet);
-}
-/* Placeholder variant (HS2-XBHADT): skeleton detail lines inset like the rendered Markdown. */
+/* The placeholder lines have their own internal rhythm inside ContentItem's inset. */
 .ticket-info-panel__details-placeholder {
   display: grid;
-  padding: remify(13.6px) remify(16px);
   gap: remify(9.6px);
 }
-/* The read-only blocked reason sits on a quiet filled surface that is also its edit target. */
+/* The edit target carries interaction semantics while SunkenPanel paints its lowered surface. */
 .ticket-info-panel__blocked-surface {
   min-width: 0;
-  padding: var(--kui-space-xs);
-  border-radius: remify(8.8px);
-  background: var(--wa-color-neutral-fill-normal);
 }
-/* The blocked reason editor: a bordered surface around a bare, auto-growing native textarea. */
-.ticket-info-panel__blocked-editor {
-  display: grid;
-  padding: var(--kui-space-xs);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: remify(8.8px);
-  background: var(--wa-color-surface-default);
-}
-.ticket-info-panel__blocked-editor textarea {
+/* The app owns the bare, auto-growing textarea inside the Kerf editor frame. */
+.ticket-info-panel textarea[name='blocked-reason'] {
   width: 100%;
   /* The inspector maps the persisted blocked-reason height onto this public token (HS2-DYAR0S). */
   height: var(--ticket-info-panel-blocked-reason-height, auto);

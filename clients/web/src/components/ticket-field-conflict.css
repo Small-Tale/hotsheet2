@@ -8,17 +8,13 @@
   min-width: 0;
   gap: var(--kui-space-2xs);
 }
-/* A read-only, scrollable multiline value: no Kerf or Web Awesome read-only text surface exists. */
+/* SunkenPanel owns the lowered version surface; native output retains multiline scrolling. */
 .ticket-field-conflict__version output {
   display: block;
   min-height: remify(48px);
-  max-height: remify(112px);
-  padding: var(--kui-space-xs);
+  max-height: remify(96px);
   overflow: auto;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-s);
   color: var(--wa-color-neutral-on-normal);
-  background: var(--wa-color-surface-default);
   font-size: var(--wa-font-size-xs);
   line-height: 1.4;
   white-space: pre-wrap;

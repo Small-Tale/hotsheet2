@@ -13,6 +13,9 @@ describe('TicketFieldConflict', () => {
     expect(html).toContain('data-component="ticket-field-conflict"');
     expect(html).toContain('Their latest version');
     expect(html).toContain('Your version');
+    expect(html.match(/data-component="sunken-panel"/g)).toHaveLength(2);
+    expect(html).toContain('<output>Theirs</output>');
+    expect(html).toContain('<output>Mine</output>');
     expect(html).toContain('name="ticket-conflict-resolution"');
     expect(html).toContain('Mine plus theirs');
     expect(html).toContain('data-action="accept-remote-ticket-field"');
