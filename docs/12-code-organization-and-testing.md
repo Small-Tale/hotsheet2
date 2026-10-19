@@ -184,6 +184,14 @@ its own target directory (the default `target/` inside the worktree already does
 `sccache` can reuse compiler outputs where its cache keys match; it does not make
 separate worktrees share Cargo artifacts.
 
+`SCCACHE_BASEDIRS` is not a Rust worktree fix with the measured sccache 0.17.0:
+[upstream issue #2652](https://github.com/mozilla/sccache/issues/2652) says its path
+normalization covers C compilation but not the Rust hash key. Do not normalize Rust
+keys alone or copy a whole target tree between worktrees without checking embedded
+paths. Hot Sheet's server and CLI build scripts deliberately embed the worktree's
+`HOT_SHEET_LOCAL_SOURCE_ROOT`; a reused artifact carrying another checkout's root
+would defeat the source-revision safeguards. See the HS2-ZJXAXY findings in §12.7.9.
+
 Two other local environment effects look like regressions but are not:
 
 - A shell that inherits the local host's `HOT_SHEET_BUILD_REVISION` pin builds an
@@ -900,6 +908,24 @@ which uses real captured runner output and spawns real processes; CI runs it in 
   invoked sccache with `Operation not permitted`; the measured builds required an
   outside-sandbox run. Keep the separate target directories that protect test binaries
   (HS2-A0M8CM).
+- **Cross-worktree Rust cache investigation (HS2-ZJXAXY).** In the two measured
+  sccache target trees, Cargo's registry-crate fingerprints for `serde_core` and
+  `serde_json` are identical, while the `hotsheet-server` fingerprint differs through
+  dependency hashes. The server build-script outputs contain different absolute
+  `HOT_SHEET_LOCAL_SOURCE_ROOT` values, as intended. These artifacts alone do not
+  isolate every Rust cache-key input or prove that copying a target tree would make
+  Cargo rebuild all path-sensitive outputs. Upstream confirms that sccache 0.17.0
+  hashes Rust working directories and path-bearing arguments without applying
+  `SCCACHE_BASEDIRS` ([issue #2652](https://github.com/mozilla/sccache/issues/2652));
+  its proposed [Rust key normalization](https://github.com/mozilla/sccache/pull/2813)
+  was still open on 2026-10-19 and explicitly warns that key-only normalization may
+  return an artifact with another checkout's embedded path. Cargo's separate
+  [`build.build-dir`](https://doc.rust-lang.org/stable/cargo/reference/build-cache.html)
+  holds intermediate artifacts, including build-script output, so sharing it would
+  reintroduce the same correctness question even with private final target dirs.
+  No new wrapper, shared directory, or snapshot restore is recommended from this
+  evidence. HS2-26PHYJ tracks a controlled, path-checked snapshot experiment once
+  machine load permits; HS2-29RAR3 tracks an artifact-safe upstream Rust cache release.
 
 ## 12.8 Cross-references
 
