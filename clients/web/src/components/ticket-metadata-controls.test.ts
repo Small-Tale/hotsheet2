@@ -229,6 +229,13 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(timeline).toContain('One event');
     expect(timeline).toContain('Optional detail');
     expect(timeline).toContain('1 event total');
+    const timedTimeline = String(
+      TicketTimeline({ entries: [{ id: 'timed', time: 'Now', title: 'Timed event', usageToNext: '38K tokens' }] }),
+    );
+    expect(timedTimeline).toMatch(
+      /class="ticket-timeline__duration"[^>]*><span[^>]*data-component="text"[^>]*data-size="compact"/,
+    );
+    expect(timedTimeline).toContain('38K tokens');
     const attachments = String(
       TicketAttachments({ attachments: [{ id: 'one', name: 'one.png', url: '/attachment/one', annotationCount: 2 }] }),
     );

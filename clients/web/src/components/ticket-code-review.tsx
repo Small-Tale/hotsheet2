@@ -3,7 +3,9 @@ import './ticket-code-review.css';
 import { Chip } from '@kerfjs/ui/chip';
 import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -74,7 +76,7 @@ export function TicketCodeReview({
   const heading = <ToolbarText text={title} size="xlarge" headingLevel={2} />,
     difftoolLabel = review?.difftool ? <ToolbarText text={`Opens in ${review.difftool}`} size="small" /> : undefined;
   const body = (
-    <section class="ticket-code-review__section">
+    <List gap={embedded ? 'none' : 'xs'} className="ticket-code-review__section">
       <div class="ticket-code-review__header">
         <Toolbar dividerSides="" leading={heading} trailing={difftoolLabel} />
       </div>
@@ -98,7 +100,11 @@ export function TicketCodeReview({
               {...REPOSITORY_ACTIONS.openChangeEvidence.attrs}
               aria-label="Open Change Evidence"
             >
-              <h3>Change Evidence</h3>
+              <div class="ticket-code-review__evidence-heading">
+                <Text variant="h3" size="compact" flush>
+                  Change Evidence
+                </Text>
+              </div>
               <div class="ticket-code-review__evidence-grid">
                 <span>
                   <LucideIcon size="s" icon={FileText} name="file-text" />
@@ -130,17 +136,19 @@ export function TicketCodeReview({
           {comparison?.active && (
             <div class="ticket-code-review__compare-banner" role="status">
               <div class="ticket-code-review__compare-prompt">
-                <span class="ticket-code-review__compare-icon">
-                  <LucideIcon
-                    icon={GitCompare}
-                    name="git-compare"
-                    size={16}
-                    color={foregroundColorVar('--hs-ticket-state-needs-review')}
-                  />
-                </span>
-                <span>
-                  Select the <strong>{comparison.side.toUpperCase()}</strong> side of the comparison.
-                </span>
+                <Row gap="2xs" vAlign="middle">
+                  <span class="ticket-code-review__compare-icon">
+                    <LucideIcon
+                      icon={GitCompare}
+                      name="git-compare"
+                      size={16}
+                      color={foregroundColorVar('--hs-ticket-state-needs-review')}
+                    />
+                  </span>
+                  <Text variant="span" size="compact">
+                    Select the <strong>{comparison.side.toUpperCase()}</strong> side of the comparison.
+                  </Text>
+                </Row>
               </div>
               <div class="ticket-code-review__compare-toolbar">
                 <Toolbar
@@ -242,7 +250,9 @@ export function TicketCodeReview({
                     tabIndex={0}
                     aria-expanded={body ? String(expanded) : undefined}
                   >
-                    <strong>{commit.subject}</strong>
+                    <Text variant="span" size="compact" lineHeight="tight" wrap="anywhere">
+                      <strong>{commit.subject}</strong>
+                    </Text>
                     {unmergedChip(commit.unmerged)}
                     {commitRefs(commit.refs)}
                     {body && (
@@ -255,13 +265,15 @@ export function TicketCodeReview({
                         />
                       </div>
                     )}
-                    <span>
-                      <code>{commit.short_sha}</code>
-                      <time dateTime={commit.committed_at}>{formatCommitDate(commit.committed_at)}</time>
-                      {labels.map((label) => (
-                        <b class="ticket-code-review__compare-label">{label}</b>
-                      ))}
-                    </span>
+                    <div class="ticket-code-review__commit-metadata">
+                      <Row wrap gap="xs" vAlign="middle">
+                        <code class="ticket-code-review__commit-sha">{commit.short_sha}</code>
+                        <time dateTime={commit.committed_at}>{formatCommitDate(commit.committed_at)}</time>
+                        {labels.map((label) => (
+                          <b class="ticket-code-review__compare-label">{label}</b>
+                        ))}
+                      </Row>
+                    </div>
                   </div>
                   <button
                     type="button"
@@ -278,15 +290,21 @@ export function TicketCodeReview({
               ];
             })}
           </ol>
-          {review.truncated && <p class="ticket-code-review__notice">Showing matches from the newest 2,000 commits.</p>}
+          {review.truncated && (
+            <div class="ticket-code-review__notice">
+              <Text variant="p" size="compact" tone="quiet" flush>
+                Showing matches from the newest 2,000 commits.
+              </Text>
+            </div>
+          )}
         </>
       )}
-      {message && (
+      {message ? (
         <Text variant="p" tone="quiet" size="compact" role="status" className="ticket-code-review__message">
           {message}
         </Text>
-      )}
-    </section>
+      ) : undefined}
+    </List>
   );
   return embedded ? (
     <div
@@ -313,9 +331,11 @@ export function TicketCodeReview({
  */
 export function DiffToolMissingNotice() {
   return (
-    <p class="ticket-code-review__notice" role="status">
-      No Git diff tool is configured for this checkout. Set <code>diff.tool</code> to enable review actions.
-    </p>
+    <div class="ticket-code-review__notice" role="status">
+      <Text variant="p" size="compact" tone="quiet" flush>
+        No Git diff tool is configured for this checkout. Set <code>diff.tool</code> to enable review actions.
+      </Text>
+    </div>
   );
 }
 
@@ -383,9 +403,11 @@ function unmergedNotice(review: CodeReview) {
   const places = [...new Set(unmerged.map((commit) => unmergedLabel(commit.unmerged!)))];
   const count = unmerged.length === 1 ? '1 commit is' : `${unmerged.length} commits are`;
   return (
-    <p class="ticket-code-review__notice" data-unmerged-notice="true" role="status">
-      {count} not merged into this checkout yet ({places.join(', ')}).
-    </p>
+    <div class="ticket-code-review__notice" data-unmerged-notice="true" role="status">
+      <Text variant="p" size="compact" tone="quiet" flush>
+        {count} not merged into this checkout yet ({places.join(', ')}).
+      </Text>
+    </div>
   );
 }
 

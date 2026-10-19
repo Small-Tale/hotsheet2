@@ -52,10 +52,6 @@
   position: absolute;
   top: calc(50% + remify(5.6px));
   left: var(--kui-space-m);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  line-height: 1;
-  white-space: nowrap;
   transform: translateY(-50%);
   /* A gap's AI usage shares the label; keep long model lists inside the row (HS2-ZA7W6E). */
   max-width: calc(100% - var(--kui-space-m));

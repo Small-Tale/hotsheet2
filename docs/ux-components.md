@@ -1374,7 +1374,11 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   **Style ownership (HS2-MGVE50):** each panel styles only its own markup in its own stylesheet —
   `TicketInfoPanel` (`ticket-info-panel__*`), `TicketTimeline` (`ticket-timeline__*`),
   `TicketAttachments` (`ticket-attachments__*`), `TicketCodeReview` (`ticket-code-review--panel`),
-  and the loading skeleton. The skeleton renders no other component's classes (HS2-XBHADT): it lives
+  and the loading skeleton. Timeline elapsed labels use Kerf `Text`; its stylesheet draws the
+  chronological rail and positions those labels. Code Review uses Kerf `List`, `Row`, and `Text`
+  for the section stack, comparison prompt, commit metadata, and generic copy; its stylesheet
+  keeps evidence, comparison, and commit-graph geometry (HS2-K3Y609). The skeleton renders no
+  other component's classes (HS2-XBHADT): it lives
   in `ticket-inspector.tsx` beside the chrome it reuses, and its body composes the
   `TicketInfoPanel placeholder` variant, which in turn composes `TicketNotes placeholder`. Both
   variants keep the real chrome and draw the unknown values as Kerf `Skeleton` blocks, inert and

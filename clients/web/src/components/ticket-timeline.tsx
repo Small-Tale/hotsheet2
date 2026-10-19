@@ -98,9 +98,11 @@ export function TicketTimeline({
                     .filter(Boolean)
                     .join('. ')}
                 >
-                  {index < entries.length - 1 && entry.durationToNext}
-                  {index < entries.length - 1 && entry.durationToNext && entry.usageToNext && ' · '}
-                  {entry.usageToNext && <span class="ticket-timeline__usage">{entry.usageToNext}</span>}
+                  <Text variant="span" size="compact" tone="quiet" lineHeight="tight" wrap="nowrap">
+                    {index < entries.length - 1 && entry.durationToNext}
+                    {index < entries.length - 1 && entry.durationToNext && entry.usageToNext && ' · '}
+                    {entry.usageToNext && <span class="ticket-timeline__usage">{entry.usageToNext}</span>}
+                  </Text>
                 </span>
               )}
             </li>

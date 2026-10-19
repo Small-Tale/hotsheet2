@@ -5509,6 +5509,27 @@ test('shows the unmerged worktree commit state in the TicketCodeReview demo (HS2
   }
 });
 
+test('keeps Kerf timeline duration labels on the rail at wide and phone widths (HS2-K3Y609)', async ({ page }) => {
+  for (const [width, name] of [
+    [1280, 'wide'],
+    [390, 'narrow'],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=ticket-timeline');
+    const timeline = page.locator('[data-component="ticket-timeline"]').last(),
+      duration = timeline.locator('.ticket-timeline__duration').first();
+    await expect(duration.locator('[data-component="text"]')).toHaveAttribute('data-size', 'compact');
+    await expect(duration).toContainText('48m');
+    const fits = await duration.evaluate((node) => {
+      const label = node.getBoundingClientRect(),
+        rail = node.closest('li')!.getBoundingClientRect();
+      return label.left >= rail.left && label.right <= rail.right + 1;
+    });
+    expect(fits).toBe(true);
+    await timeline.screenshot({ path: `target/visual-captures/hs2-k3y609-timeline-${name}.png` });
+  }
+});
+
 test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9, HS2-737H3X)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-code-review');

@@ -22,7 +22,7 @@ describe('extracted shared presentations', () => {
 
   it('shows the code review diff-tool notice inside the change evidence dialog only without a diff tool', () => {
     const notice = String(DiffToolMissingNotice());
-    expect(notice).toContain('class="ticket-code-review__notice"');
+    expect(notice).toContain('ticket-code-review__notice');
     expect(notice).toContain('role="status"');
     const review = { truncated: false, ranges: [], commits: [], files: [] };
     const without = String(
