@@ -2699,7 +2699,8 @@ reflects only the selected project's pending count, while every project tab keep
 popup can still surface an urgent request even when another project is selected. When a
 phone-width project sidebar is open, the permission popup stays above the sidebar, fits
 inside the viewport, and keeps its identity, command, and decision controls reachable;
-the popup scrolls within the viewport if vertical space is short (HS2-Y1HN0D). When a
+the top-layer popup scrolls within the viewport if vertical space is short and keeps enough inner
+space to show its card shadow at both lower corners (HS2-Y1HN0D, HS2-Q3R273). When a
 desktop workspace narrows to phone width, the Notifications navigation becomes an overlay;
 after its slide completes, both the pending card and any live popup keep their decision
 controls inside the viewport, and the navigation remains reachable through the sidebar

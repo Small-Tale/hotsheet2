@@ -8014,13 +8014,13 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   const topLayerPopup = page.locator('[data-component="permission-request-popup"][data-layer="top"]');
   await expect(topLayerPopup).toBeVisible();
   expect(await topLayerPopup.evaluate((element) => element.matches(':popover-open'))).toBe(true);
-  const [stageBox, topLayerBox] = await Promise.all([
+  const [stageBox, topLayerCardBox] = await Promise.all([
     // Kerf's CatalogExample frame carries the `--app-shell-main` anchor (KF-D532S2, HS2-NE9R8S).
     page.locator('[data-permission-request-demo] [data-catalog-example-viewport]').boundingBox(),
-    topLayerPopup.boundingBox(),
+    card.boundingBox(),
   ]);
-  expect(Math.round(topLayerBox!.y - stageBox!.y)).toBe(56);
-  expect(Math.round(stageBox!.x + stageBox!.width - (topLayerBox!.x + topLayerBox!.width))).toBe(16);
+  expect(Math.round(topLayerCardBox!.y - stageBox!.y)).toBe(56);
+  expect(Math.round(stageBox!.x + stageBox!.width - (topLayerCardBox!.x + topLayerCardBox!.width))).toBe(16);
   await page.screenshot({ path: 'target/visual-captures/hs2-zescm2-permission-demo-top-layer.png', fullPage: true });
   // The in-flow variant is laid out by its host (the AI conversation's foreground), not anchored to a
   // corner, and stays interactive inside a pointer-transparent host (HS2-M2W2DP).
@@ -8134,6 +8134,41 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   const [cardBox, settingsBox] = await Promise.all([card.boundingBox(), settings.boundingBox()]);
   expect(cardBox!.x + cardBox!.width).toBeLessThanOrEqual(settingsBox!.x);
   await page.screenshot({ path: 'target/visual-captures/hotsheet-permission-settings-narrow.png', fullPage: true });
+});
+
+test('top-layer permission popup keeps shadow room inside its short-viewport scroller', async ({ page }) => {
+  await page.setViewportSize({ width: 1568, height: 832 });
+  await page.goto('/ux-demo?component=permission-request');
+  await page.getByRole('button', { name: 'Show Settings' }).first().click();
+  const presentation = page
+    .getByRole('complementary', { name: 'PermissionRequestCard Settings' })
+    .locator('[name="presentation"]');
+  await presentation.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'top-layer';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const popup = page.locator('[data-component="permission-request-popup"][data-layer="top"]');
+  const card = popup.locator('[data-component="permission-request-card"]');
+  await expect(popup).toBeVisible();
+  await expect(popup).toHaveCSS('overflow-y', 'auto');
+  await expect(popup).toHaveCSS('padding-bottom', '16px');
+  const [popupBox, cardBox] = await Promise.all([popup.boundingBox(), card.boundingBox()]);
+  expect(Math.round(popupBox!.width - cardBox!.width)).toBe(24);
+  await page.screenshot({ path: 'target/visual-captures/hs2-q3r273-permission-shadow-wide.png', fullPage: true });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(card).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-q3r273-permission-shadow-phone.png', fullPage: true });
+
+  await page.setViewportSize({ width: 390, height: 420 });
+  await expect(popup).toHaveCSS('overflow-y', 'auto');
+  expect(await popup.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+  await card.getByRole('button', { name: 'Allow Once' }).scrollIntoViewIfNeeded();
+  await expect(card.getByRole('button', { name: 'Allow Once' })).toBeInViewport();
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-q3r273-permission-shadow-short-phone.png',
+    fullPage: true,
+  });
 });
 
 test('previews AIConversation public states at wide and narrow sizes', async ({ page }) => {

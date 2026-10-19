@@ -81,12 +81,15 @@
   inset: auto;
   max-width: none;
   top: remify(56px);
-  right: remify(16px);
-  width: min(remify(704px), calc(100vw - remify(32px)));
+  right: remify(4px);
+  width: min(remify(728px), calc(100vw - remify(8px)));
   height: auto;
   max-height: calc(100dvh - remify(72px));
   margin: 0;
-  padding: 0;
+  /* The 12px side inset and 16px end inset leave room for NotificationCard's large shadow inside
+     this scrolling dialog. Its wider box and 4px anchor offset keep the card at its old 704px
+     width and 16px right inset (HS2-Q3R273). */
+  padding: 0 remify(12px) remify(16px);
   overflow-y: auto;
   border: 0;
   border-radius: 0;
@@ -109,8 +112,8 @@
   .permission-request-popup[data-layer='top'] {
     position-anchor: --app-shell-main;
     top: calc(anchor(top, 0px) + remify(56px));
-    right: calc(anchor(right, 0px) + remify(16px));
-    width: min(remify(704px), calc(anchor-size(width, 100vw) - remify(32px)));
+    right: calc(anchor(right, 0px) + remify(4px));
+    width: min(remify(728px), calc(anchor-size(width, 100vw) - remify(8px)));
   }
 }
 @container (max-width: remify(544px)) {
@@ -146,5 +149,11 @@
     width: auto;
     max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - remify(64px));
     overflow-y: auto;
+  }
+  .permission-request-popup[data-layer='top'] {
+    right: 0;
+    left: 0;
+    padding-right: remify(8px);
+    padding-left: remify(8px);
   }
 }

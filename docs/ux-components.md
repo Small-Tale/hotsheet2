@@ -1807,6 +1807,8 @@ capability-aware sections when their underlying features and data contracts land
   animation (`animation-timeline: scroll(self)`) sets this, because a scroll timeline is active only
   while its scroller overflows; browsers without scroll timelines keep wheel, touch and keyboard
   scrolling (HS2-Q5TRYD).
+  For the shell's `top` layer, the transparent dialog owns short-viewport scrolling and reserves
+  inner space around the card, so its elevation shadow is not cut at the dialog edge (HS2-Q3R273).
 - `PermissionSummary`
 - `PermissionDetailDisclosure`
 - allow/deny/session-scope actions
