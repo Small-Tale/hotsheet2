@@ -888,13 +888,18 @@ retains the disappeared request in notification history, including generic tools
 `ToolSearch` whose action/details string is empty.
 
 `Always Allow` rules match the same project, tool, and exact action (for example,
-the same Bash command); a different command asks again. Remembered rules hold an opaque
-fingerprint of the action, not the command or path text. The original action is shown
-only in the pending request so the person can decide. Existing rule files with raw
-actions are scrubbed to fingerprints before those rules become active; a file that
-cannot be scrubbed contributes no active rules. Fingerprints prevent direct secret
-disclosure in rule files and list responses, but a person should still revoke any rule
-whose action they cannot recognize. Rules are personal machine state, stored per linked ticket store under
+the same Bash command); a different command asks again. Remembered rules hold a keyed
+HMAC-SHA-256 identifier of the action, not the command or path text. The original
+action is shown only in the pending request so the person can decide. A separate
+256-bit per-install key in `${HOTSHEET_HOME}/permissions/.action-key` (owner-only on
+Unix) is required to match rules after restart. Exporting or syncing the rule JSON
+alone does not allow offline testing of guessed command or path text; keep the key
+private and do not export or sync it with rules. Existing raw-action files are scrubbed
+to keyed identifiers before activation. Earlier unkeyed `sha256:v1` rules cannot be
+rekeyed without their original actions and are removed; their next request needs a new
+human answer. Losing or corrupting the key also disables the old approvals rather than
+guessing a replacement. A file that cannot be scrubbed contributes no active rules.
+Rules are personal machine state, stored per linked ticket store under
 `${HOTSHEET_HOME}/permissions/<store-id>.json`; they are never written to the code or
 ticket repository. `GET /permissions` advertises `always_allow_supported` on each
 pending request so clients only render that action when durable rule storage is active.
@@ -921,7 +926,7 @@ waiting — the resolve response lists them in `also_resolved` and each gets its
 connection, tool, and action) into one popup that names the count; a one-time answer is
 sent for each. `GET /permissions/rules` lists every remembered rule with its scope and
 `DELETE /permissions/rules` `{project, connection?, tool, action}` revokes one by its
-opaque action fingerprint (removing a durable rule from the store's rule file too);
+opaque keyed action identifier (removing a durable rule from the store's rule file too);
 Settings → Permissions lists the project's remembered answers by tool, scope, decision,
 and a short fingerprint identifier, with command/path details hidden and each rule
 revocable. Remembering an answer, revoking one, and closing a

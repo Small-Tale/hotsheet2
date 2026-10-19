@@ -15244,7 +15244,7 @@ async fn secret_bearing_remembered_action_is_opaque_in_storage_and_http_list() {
     let listed_text = listed.to_string();
     assert!(!listed_text.contains("private-value"));
     let action_key = listed[0]["action"].as_str().unwrap();
-    assert!(action_key.starts_with("sha256:v1:"));
+    assert!(action_key.starts_with("hmac-sha256:v2:"));
     let revoke = serde_json::json!({
         "project": project,
         "tool": "Bash",
@@ -15260,6 +15260,52 @@ async fn secret_bearing_remembered_action_is_opaque_in_storage_and_http_list() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
     assert!(hotsheet_aitools::load_permission_rules(&rules_path).is_empty());
+}
+
+#[tokio::test]
+async fn startup_discards_v1_permission_rules_before_they_reach_the_http_list() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let project = dir.path().display().to_string();
+    let rules_path = dir.path().join("permissions.json");
+    // SHA-256 of the exact action below: a pre-v2 approval would have auto-allowed it.
+    let old_key = "sha256:v1:5976c9fb66ba24f2a87ccae6fc2d4923f0102e82469198db84d7fe4f1dd8f3f9";
+    std::fs::write(
+        &rules_path,
+        serde_json::json!([{
+            "project": project,
+            "tool": "Bash",
+            "action": old_key,
+            "decision": "allow",
+        }])
+        .to_string(),
+    )
+    .unwrap();
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_permission_rules(&rules_path);
+    let bridge = state.permission_bridge();
+    let response = app(state)
+        .oneshot(authed("GET", "/permissions/rules", None))
+        .await
+        .unwrap();
+    assert!(body_json(response).await.as_array().unwrap().is_empty());
+    assert!(
+        !std::fs::read_to_string(&rules_path)
+            .unwrap()
+            .contains(&old_key)
+    );
+    assert_eq!(
+        bridge.request_blocking_timeout_for_project(
+            &project,
+            "chat",
+            "Bash",
+            "SECRET=1234 npm test",
+            std::time::Duration::from_millis(10),
+            hotsheet_aitools::PermissionDecision::Deny,
+        ),
+        hotsheet_aitools::PermissionDecision::Deny,
+    );
 }
 
 /// HS2-JNHAYB: "Allow for this chat" answers only its connection, cascades to identical

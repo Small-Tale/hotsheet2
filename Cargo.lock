@@ -1043,6 +1043,7 @@ dependencies = [
  "anyhow",
  "base64",
  "futures-util",
+ "getrandom 0.3.4",
  "hotsheet-plugins",
  "hotsheet-sync",
  "hotsheet-ticketing",

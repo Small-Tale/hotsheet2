@@ -24,7 +24,7 @@ const SCOPE_LABELS: Record<PermissionRule['scope'], string> = {
 
 /** Opaque ID distinguishes otherwise similar rules without exposing command/path text. */
 function ruleLabel(tool: string, action: string) {
-  const fingerprint = /^sha256:v1:[a-f0-9]{64}$/.test(action) ? action.slice(-8) : undefined;
+  const fingerprint = /^hmac-sha256:v2:[a-f0-9]{16}:[a-f0-9]{64}$/.test(action) ? action.slice(-8) : undefined;
   return fingerprint ? `${tool} request · ${fingerprint}` : `${tool} request`;
 }
 

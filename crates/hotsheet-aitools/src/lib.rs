@@ -57,8 +57,8 @@ pub use permission::{
     PermissionAsk, PermissionBridge, Request as PermissionRequest, Resolved as PermissionResolved,
     Rule as PermissionRule, RuleInfo as PermissionRuleInfo, Scope as PermissionScope,
     SharedPermissionBridge, StoredRule as StoredPermissionRule,
-    append_rule as append_permission_rule, load_rules as load_permission_rules,
-    remove_rule as remove_permission_rule,
+    action_key_for as permission_action_key_for, append_rule as append_permission_rule,
+    load_rules as load_permission_rules, remove_rule as remove_permission_rule,
 };
 pub use ports::{
     AcpClient, AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, ProcessSignals,

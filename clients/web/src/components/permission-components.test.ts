@@ -297,8 +297,8 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
   it('lists remembered rules with their scope and a revoke action, or an empty state', () => {
     const empty = String(PermissionRulesSettings({ rules: [] }));
     expect(empty).toContain('No Remembered Answers');
-    const first = `sha256:v1:${'a'.repeat(56)}12345678`,
-      second = `sha256:v1:${'b'.repeat(56)}87654321`;
+    const first = `hmac-sha256:v2:${'a'.repeat(16)}:${'a'.repeat(56)}12345678`,
+      second = `hmac-sha256:v2:${'b'.repeat(16)}:${'b'.repeat(56)}87654321`;
     const markup = String(
       PermissionRulesSettings({
         rules: [

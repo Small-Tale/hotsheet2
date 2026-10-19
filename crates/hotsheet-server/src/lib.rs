@@ -860,6 +860,13 @@ impl AppState {
     /// tests so they never touch disk). Builder-style.
     pub fn with_permission_rules(self, path: impl Into<std::path::PathBuf>) -> Self {
         let path = path.into();
+        let key = match hotsheet_aitools::permission_action_key_for(&path) {
+            Ok(key) => key,
+            Err(error) => {
+                tracing::warn!(%error, "permission action key unavailable; durable rules disabled");
+                return self;
+            }
+        };
         let project = self.store.root().display().to_string();
         let stored_rules = hotsheet_aitools::load_permission_rules(&path);
         let mut rules = stored_rules
@@ -875,7 +882,7 @@ impl AppState {
             rule
         }));
         // Re-seed the bridge with the loaded rules (keeping the on_pending observer).
-        self.permissions.reseed_rules(rules);
+        self.permissions.reseed_rules_with_key(key, rules);
         let mut paths = self.permission_rule_paths.lock_or_recover();
         paths.insert(String::new(), path.clone());
         paths.insert(project, path);

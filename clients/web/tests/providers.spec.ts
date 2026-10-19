@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -21,7 +21,9 @@ import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
 test.use({ video: process.env.HOTSHEET_MEDIA_RECORD_VIDEO === '1' ? 'on' : 'off' });
 
-const rememberedActionKey = (action: string) => `sha256:v1:${createHash('sha256').update(action).digest('hex')}`;
+const fixturePermissionKey = 'private-test-fixture-key-for-remembered-rules';
+const rememberedActionKey = (action: string) =>
+  `hmac-sha256:v2:${createHash('sha256').update(fixturePermissionKey).digest('hex').slice(0, 16)}:${createHmac('sha256', fixturePermissionKey).update(action).digest('hex')}`;
 
 /** A Kerf PopupMenu root's opener, whose `aria-expanded` is the menu's open state (Kerf beta.106). */
 const menuOpener = (menu: Locator) =>
@@ -15059,7 +15061,7 @@ test('answers identical permission requests for this chat and revokes the rememb
   await expect(row).not.toContainText('example-private-value');
   await remembered.screenshot({ path: 'target/visual-captures/hs2-jnhayb-remembered-rules-1280.png' });
   await page.setViewportSize({ width: 2048, height: 1128 });
-  await page.screenshot({ path: 'target/visual-captures/hs2-204hpy-remembered-rules-2048.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-4mf2m1-remembered-rules-2048.png' });
   // Phone width, loaded fresh so the mobile layout applies.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
@@ -15073,7 +15075,7 @@ test('answers identical permission requests for this chat and revokes the rememb
   expect(await remembered.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await row.scrollIntoViewIfNeeded();
   await page.screenshot({ path: 'target/visual-captures/hs2-jnhayb-remembered-rules-390.png' });
-  await page.screenshot({ path: 'target/visual-captures/hs2-204hpy-remembered-rules-390.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-4mf2m1-remembered-rules-390.png' });
   const revoke = row.locator('[data-action="revoke-permission-rule"]');
   await expect(revoke).toHaveAttribute(
     'aria-label',
