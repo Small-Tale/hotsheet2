@@ -1,5 +1,11 @@
 # Feature Coverage Matrix
 
+HS2-W857P0 covers exact ticket-number ranking in the duplicate-close target
+picker. `clients/web/src/ticket-close.test.ts` checks stable ordering across exact,
+case-insensitive, and title matches; `clients/web/tests/ticket-close.spec.ts`
+exercises the shipped dialog with more than 20 preceding title matches and
+verifies both cross-project exact matches appear first before choosing a target.
+
 HS2-5B9SWQ covers `is:needs-review` in the shared inline search. Parser,
 Boolean evaluator, and saved-view unit tests check chip recognition, composition,
 explicit review requests, and resolved feedback. Index tests check marker and review

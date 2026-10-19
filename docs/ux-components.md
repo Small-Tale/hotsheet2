@@ -1293,6 +1293,8 @@ owning provider advertises both close and close-reason support. `TicketCloseDial
 offers Completed, Not planned, Duplicate, and Obsolete; Duplicate requires searching for
 and selecting a distinct canonical ticket before submission. Search results reuse
 `ListItem`, the reason control reuses `Select`, and validation prevents self-reference.
+An exact ticket number match appears before other search results, even when its provider
+returns it later; matches from multiple projects keep their relative provider order.
 The form separates peer regions by 16px and uses 8px within result/selection groups,
 with a 4px inset around the result list.
 Closed tickets retain a visible outcome in the inspector, and duplicate outcomes link to

@@ -5,6 +5,7 @@ import {
   duplicateReference,
   duplicateTargetKey,
   parseDuplicateReference,
+  prioritizeExactDuplicateTargets,
   resolveDuplicateReferenceTarget,
   ticketCloseReasonLabel,
   validateTicketClose,
@@ -63,6 +64,19 @@ describe('structured ticket close outcomes', () => {
     expect(sameSlug.slug).toBe(target.slug);
     expect(duplicateTargetKey(sameSlug)).not.toBe(duplicateTargetKey(target));
     expect(validateTicketClose('duplicate', source, { ...source, projectId: 'other', projectName: 'Other' })).toBe('');
+  });
+
+  it('puts every exact ticket number first while preserving provider order within both groups', () => {
+    const first = { ...target, slug: 'HS2-TAR', id: 'first' },
+      second = { ...target, slug: 'hs2-target', id: 'second' },
+      third = { ...target, slug: 'HS2-TARGET', id: 'third' },
+      last = { ...target, slug: 'HS2-TARGET-OLD', id: 'last' };
+    expect(prioritizeExactDuplicateTargets([first, second, last, third], ' hs2-target ')).toEqual([
+      second,
+      third,
+      first,
+      last,
+    ]);
   });
 
   it('presents every persisted close reason in human language', () => {

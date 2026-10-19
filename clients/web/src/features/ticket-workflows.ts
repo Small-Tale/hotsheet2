@@ -65,6 +65,7 @@ import {
   type DuplicateTarget,
   duplicateTargetKey,
   parseDuplicateReference,
+  prioritizeExactDuplicateTargets,
   resolveDuplicateReferenceTarget,
   ticketCloseReasonLabel,
   validateTicketClose,
@@ -2020,7 +2021,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         }
         ticketCloseDialog.value = {
           ...active,
-          candidates: [...candidates.values()].slice(0, 20),
+          candidates: prioritizeExactDuplicateTargets([...candidates.values()], query).slice(0, 20),
           searching: false,
           error: errors.join(' · '),
         };

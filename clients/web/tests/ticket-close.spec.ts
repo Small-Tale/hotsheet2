@@ -58,6 +58,14 @@ const collision = {
   slug: 'HS2-1S6DS9',
   title: 'Different local ticket with the same slug',
 };
+const titleMatches = Array.from({ length: 21 }, (_, index) => ({
+  ...collision,
+  id: `title-${index}`,
+  native_id: `title-${index}`,
+  qualified_id: `git-source:title-${index}`,
+  slug: `HS2-TITLE-${index}`,
+  title: `Mentions HS2-1S6DS9 in title ${index}`,
+}));
 const full = (ticket: typeof source, extra: Record<string, unknown> = {}) => ({
   ...ticket,
   details: 'Diagnostic report.',
@@ -196,7 +204,7 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
     }
     if (path.endsWith('/tickets') && request.method() === 'GET') {
       const query = url.searchParams.get('text');
-      const results = query ? (target ? [canonical] : [collision]) : rows;
+      const results = query ? (target ? [canonical] : [...titleMatches, collision]) : rows;
       return route.fulfill({
         headers: target && query && !url.searchParams.has('page_size') ? { 'x-hotsheet-partial': 'true' } : undefined,
         json: url.searchParams.has('page_size')
@@ -231,6 +239,10 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
   await expect(dialog.locator('form > [data-component="list"]')).toHaveCSS('row-gap', '16px');
   // Kerf's framed result picker: a 4px inset, 1px frame, and the 68px/224px bounds (KF-SHW2J9, HS2-Z46VA7).
   const results = dialog.locator('[aria-label="Matching tickets"]');
+  await expect(results.getByRole('button').first()).toContainText('HS2-1S6DS9');
+  await expect(results.getByRole('button').nth(1)).toContainText('HS2-1S6DS9');
+  await expect(results.getByRole('button')).toHaveCount(20);
+  await expect(results.getByRole('button').nth(2)).toContainText('HS2-TITLE-0');
   await expect(results).toHaveCSS('padding', '4px');
   await expect(results).toHaveCSS('border-top-width', '1px');
   await expect(results).toHaveCSS('min-height', '68px');

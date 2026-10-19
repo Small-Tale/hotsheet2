@@ -43,6 +43,17 @@ export function duplicateTargetKey(target: Pick<DuplicateTarget, 'projectId' | '
   return `${encodeURIComponent(target.projectId)}::${encodeURIComponent(target.qualifiedId)}`;
 }
 
+export function prioritizeExactDuplicateTargets<T extends Pick<DuplicateTarget, 'slug'>>(
+  candidates: readonly T[],
+  query: string,
+): T[] {
+  const exact: T[] = [],
+    other: T[] = [],
+    slug = query.trim().toLocaleUpperCase();
+  for (const candidate of candidates) (candidate.slug.toLocaleUpperCase() === slug ? exact : other).push(candidate);
+  return [...exact, ...other];
+}
+
 export function duplicateReference(target: DuplicateTarget): DuplicateReference {
   return { project_id: target.projectId, connection_id: target.connectionId, native_id: target.nativeId };
 }
