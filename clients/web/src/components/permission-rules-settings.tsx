@@ -91,11 +91,17 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
             label={allowed ? 'Allowed' : 'Denied'}
           />
           <List gap="none" flex>
-            <Text wrap="truncate" title="Action details hidden to protect sensitive values" flush>
+            <Text
+              wrap="truncate"
+              truncate="middle"
+              truncateKeep={8}
+              title={`${label} — Action details hidden to protect sensitive values`}
+              flush
+            >
               {label}
             </Text>
             <Text tone="quiet" size="compact" flush>
-              {`${allowed ? 'Allow' : 'Deny'} · ${SCOPE_LABELS[rule.scope]} · Details hidden`}
+              {`${allowed ? 'Allow' : 'Deny'} · ${SCOPE_LABELS[rule.scope]}`}
             </Text>
           </List>
           <Button

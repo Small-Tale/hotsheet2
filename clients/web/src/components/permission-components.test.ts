@@ -352,8 +352,11 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
       }),
     );
     expect(markup).toContain('Bash request · 12345678');
+    expect(markup).toContain('data-truncate="middle"');
+    expect(markup).toContain('kui-text__truncate-tail">12345678');
     expect(markup).toContain('This chat only, until it closes');
-    expect(markup).toContain('Deny · Always · Details hidden');
+    expect(markup).toContain('Deny · Always');
+    expect(markup).not.toContain('Details hidden');
     expect(markup).not.toContain('This project, always');
     expect(markup).not.toContain('npm test');
     expect(markup).not.toContain('rm -rf build');

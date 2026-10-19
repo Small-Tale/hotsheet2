@@ -15133,7 +15133,8 @@ test('answers identical permission requests for this chat and revokes the rememb
   const remembered = page.locator('[data-component="permission-rules-settings"]');
   const row = remembered.locator('[data-permission-rule-scope="chat"]');
   await expect(row).toContainText(`Bash request · ${rememberedActionKey(secretAction).slice(-8)}`);
-  await expect(row).toContainText('Allow · This chat only, until it closes · Details hidden');
+  await expect(row).toContainText('Allow · This chat only, until it closes');
+  await expect(row).not.toContainText('Details hidden');
   await expect(row).not.toContainText('example-private-value');
   await remembered.screenshot({ path: 'target/visual-captures/hs2-jnhayb-remembered-rules-1280.png' });
   await page.setViewportSize({ width: 2048, height: 1128 });
@@ -15205,11 +15206,13 @@ test('previews three recent permission answers and searches the paged full list 
   await expect(recent.locator('[data-permission-rule]').first()).toContainText('00000011');
   await expect(recent).toContainText('Until the server restarts');
   await expect(preview).not.toContainText('This project,');
+  await expect(preview).not.toContainText('Details hidden');
   await expect(preview).not.toContainText('OtherProjectTool');
   await expect(preview.getByRole('button', { name: 'Show all 12 answers' })).toBeVisible();
   await preview.screenshot({ path: 'target/visual-captures/hs2-16xphh-preview-wide.png' });
   await page.setViewportSize({ width: 2048, height: 1128 });
   await page.screenshot({ path: 'target/visual-captures/hs2-16xphh-settings-2048.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-q40bbv-settings-2048.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 800 });
   await preview.getByRole('button', { name: 'Show all 12 answers' }).click();
   const dialog = page.locator('[data-dialog-component="permission-rules-dialog"]'),
@@ -15236,10 +15239,15 @@ test('previews three recent permission answers and searches the paged full list 
   await expect(dialog).toContainText('11 matching answers');
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(dialog).toBeVisible();
+  const firstFingerprint = all.locator('[data-permission-rule]').first().locator('.kui-text__truncate-tail');
+  await expect(firstFingerprint).toHaveText('00000011');
+  await expect(firstFingerprint).toBeInViewport();
   await dialog.screenshot({ path: 'target/visual-captures/hs2-16xphh-dialog-phone.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-q40bbv-dialog-phone.png' });
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toHaveCount(0);
   await preview.screenshot({ path: 'target/visual-captures/hs2-16xphh-preview-phone.png' });
+  await preview.screenshot({ path: 'target/visual-captures/hs2-q40bbv-preview-phone.png' });
   await preview.getByRole('button', { name: 'Show all 11 answers' }).click();
   await expect(search).toHaveValue('');
   await page.keyboard.press('Escape');

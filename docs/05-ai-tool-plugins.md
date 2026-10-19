@@ -941,6 +941,11 @@ change event for the project, so another client's open Settings → Permissions 
 once instead of showing a revoked rule until its next resolution (HS2-KYK1S7).
 Rows label chat, until server restart, and always lifetimes without repeating the
 project scope that the page already establishes (HS2-BH6GCG).
+Each row retains its tool and short action fingerprint so distinct private commands
+remain distinguishable, including at phone width where the center of a long label
+truncates first; the repeated privacy reminder appears only in the label's tooltip.
+When loading an older rule file with repeated exact project/tool/action
+slots, Hot Sheet keeps the newest answer and rewrites the file (HS2-Q40BBV).
 
 Remembered answers match the **exact project, tool, and action**. For Claude and Codex
 permission hooks, the action is the command, path, or serialized tool input; Codex

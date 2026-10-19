@@ -19,7 +19,7 @@
 //! are the server/plugin wiring on top (HS2-113 / HS2-0QGW07).
 
 use hotsheet_sync::LockExt;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -1090,6 +1090,13 @@ pub fn load_rules(path: &Path) -> Vec<Rule> {
             Some(rule)
         })
         .collect();
+    // An older or imported file can contain repeated exact slots. Matching already uses
+    // the newest rule; keep that one and retain its position in the newest-first UI.
+    let mut seen = HashSet::new();
+    stored.reverse();
+    stored
+        .retain(|rule| seen.insert((rule.project.clone(), rule.tool.clone(), rule.action.clone())));
+    stored.reverse();
     let migrated = stored != old;
     if migrated {
         let Ok(json) = serde_json::to_string_pretty(&stored) else {
@@ -1539,6 +1546,86 @@ mod tests {
         assert_eq!(ls.decision, Decision::Deny, "the later answer won");
         assert!(loaded.iter().all(|r| r.persist), "loaded rules are durable");
         assert!(!std::fs::read_to_string(path).unwrap().contains("\"ls\""));
+    }
+
+    #[test]
+    fn loading_reconciles_repeated_exact_slots_without_merging_distinct_rules() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rules.json");
+        let first = Rule {
+            project: "/one".into(),
+            tool: "Bash".into(),
+            action: "ls".into(),
+            decision: Decision::Allow,
+            persist: true,
+            connection: None,
+        };
+        append_rule(&path, &first).unwrap();
+        append_rule(
+            &path,
+            &Rule {
+                action: "pwd".into(),
+                ..first.clone()
+            },
+        )
+        .unwrap();
+        append_rule(
+            &path,
+            &Rule {
+                project: "/two".into(),
+                ..first.clone()
+            },
+        )
+        .unwrap();
+        append_rule(
+            &path,
+            &Rule {
+                tool: "WebFetch".into(),
+                ..first.clone()
+            },
+        )
+        .unwrap();
+
+        // A legacy/imported file may repeat a slot in raw form. Its last decision must
+        // remain effective, while other actions and projects keep their own rows.
+        let mut stored: Vec<StoredRule> =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        stored.push(StoredRule {
+            project: "/one".into(),
+            tool: "Bash".into(),
+            action: "ls".into(),
+            decision: Decision::Deny,
+        });
+        std::fs::write(&path, serde_json::to_vec(&stored).unwrap()).unwrap();
+
+        let loaded = load_rules(&path);
+        assert_eq!(loaded.len(), 4);
+        assert_eq!(
+            loaded
+                .iter()
+                .map(|r| r.project.as_str())
+                .collect::<Vec<_>>(),
+            vec!["/one", "/two", "/one", "/one"]
+        );
+        assert_eq!(
+            loaded.iter().map(|r| r.tool.as_str()).collect::<Vec<_>>(),
+            vec!["Bash", "Bash", "WebFetch", "Bash"]
+        );
+        assert_eq!(loaded.last().unwrap().decision, Decision::Deny);
+        assert_eq!(
+            load_rules(&path),
+            loaded,
+            "a second load does not add or reorder rows"
+        );
+        let persisted: Vec<StoredRule> =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(persisted.len(), 4);
+        assert!(persisted.iter().all(|r| r.action != "ls"));
+
+        append_rule(&path, &first).unwrap();
+        let replaced = load_rules(&path);
+        assert_eq!(replaced.len(), 4, "repeat-add replaces the exact slot");
+        assert_eq!(replaced.last().unwrap().decision, Decision::Allow);
     }
 
     #[test]
