@@ -211,7 +211,7 @@ describe('TerminalDrawer', () => {
       content = chat.slice(chat.indexOf('class="terminal-drawer__content"'));
     // The model selector, Save, and Stop sit in the tab toolbar's end zone, before Hide Terminal Drawer.
     expect(end).toMatch(
-      /data-component="conversation-model-control"[\s\S]*data-conversation-model-menu[\s\S]*data-action="save-conversation"[\s\S]*data-action="stop-conversation"[\s\S]*Hide Terminal Drawer/,
+      /data-conversation-model-menu[\s\S]*data-component="conversation-model-control"[\s\S]*data-action="save-conversation"[\s\S]*data-action="stop-conversation"[\s\S]*Hide Terminal Drawer/,
     );
     expect(end).toContain('placement="top-end"');
     // The chat body carries no title bar or settings row.

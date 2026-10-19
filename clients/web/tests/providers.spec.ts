@@ -19574,6 +19574,7 @@ test('moves the chat model selector and export into the drawer and dialog toolba
   const railModel = rail.locator('[data-component="conversation-model-control"]'),
     railSave = rail.getByRole('button', { name: 'Save Conversation' });
   await expect(railModel).toBeVisible();
+  await expect(rail.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger')).toContainText('GPT-6 Astra');
   await expect(railSave).toBeDisabled();
   // The selector stays keyboard operable from the tab toolbar.
   const trigger = rail.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger');
@@ -19594,6 +19595,7 @@ test('moves the chat model selector and export into the drawer and dialog toolba
     .locator('[data-action="select-conversation-model"][data-value="gpt-5.6-sol"]')
     .click();
   await expect(railModel.locator('[data-component="text"]')).toHaveAttribute('title', 'gpt-5.6-sol');
+  await expect(trigger).toContainText('GPT-5.6 Sol');
   // The drawer stays maximized: a dropdown press is not a rail double-click.
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
   await embedded.getByRole('textbox', { name: 'Message Codex' }).fill('What time is it in California?');
@@ -19601,6 +19603,7 @@ test('moves the chat model selector and export into the drawer and dialog toolba
   await expect(embedded).toContainText('The event stream remains authoritative.');
   await expect(railSave).toBeEnabled();
   await page.screenshot({ path: 'target/visual-captures/hs2-59f7wk-drawer-toolbar-1280.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xwsxwd-drawer-1280.png' });
   await railSave.click();
   const exportDialog = page.locator('[data-dialog-component="conversation-export-dialog"]');
   await expect(exportDialog).toHaveAttribute('open', '');
@@ -19618,7 +19621,17 @@ test('moves the chat model selector and export into the drawer and dialog toolba
   await expect(header.locator('[data-component="conversation-model-control"]')).toBeVisible();
   await expect(header.getByRole('button', { name: 'Save Conversation' })).toBeVisible();
   await expect(host.locator('[data-component="conversation-model-control"]')).toHaveCount(1);
+  const dialogComposer = host.getByRole('textbox', { name: 'Message Codex' });
+  for (let turn = 1; turn <= 2; turn += 1) {
+    await dialogComposer.fill('What time is it in California?');
+    await dialogComposer.press('Enter');
+    await expect(host.locator('[data-action="pick-conversation-message"]')).toHaveCount(turn * 2);
+  }
+  await expect(header.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger')).toContainText(
+    'GPT-6 Astra',
+  );
   await dialog.screenshot({ path: 'target/visual-captures/hs2-59f7wk-dialog-header-1280.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-xwsxwd-dialog-1280.png' });
   await header.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger').click();
   await expect(
     header
@@ -19628,13 +19641,24 @@ test('moves the chat model selector and export into the drawer and dialog toolba
       .first(),
   ).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-59f7wk-dialog-menu-open-1280.png' });
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: 'target/visual-captures/hs2-xwsxwd-dialog-menu-open-1280.png' });
   await page.keyboard.press('Escape');
   await expect(dialog).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(header.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger')).toBeVisible();
-  // At phone widths only the trigger remains; its menu shows the current choices.
-  await expect(header.locator('[data-component="conversation-model-control"]')).toBeHidden();
+  // The trigger keeps its model and effort summary at phone widths (HS2-XWSXWD).
+  await expect(header.locator('[data-component="conversation-model-control"]')).toBeVisible();
+  await expect(header.locator('#ai-conversation-title')).toHaveText('Codex');
+  await expect(header.getByText('4 messages', { exact: true })).toBeVisible();
+  expect(await header.locator('#ai-conversation-title').evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(
+    true,
+  );
+  await expect(header.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger')).toContainText(
+    'GPT-6 Astra',
+  );
   await dialog.screenshot({ path: 'target/visual-captures/hs2-59f7wk-dialog-header-390.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-xwsxwd-dialog-390.png' });
 });
 
 test('keeps the drawer chat toolbar controls inside a phone-width tab toolbar (HS2-59F7WK)', async ({ page }) => {
@@ -19669,6 +19693,7 @@ test('keeps the drawer chat toolbar controls inside a phone-width tab toolbar (H
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-59f7wk-drawer-toolbar-390.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xwsxwd-drawer-390.png' });
   await controls[0].click();
   await expect(
     rail
@@ -19678,6 +19703,8 @@ test('keeps the drawer chat toolbar controls inside a phone-width tab toolbar (H
       .first(),
   ).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-59f7wk-drawer-menu-open-390.png' });
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: 'target/visual-captures/hs2-xwsxwd-drawer-menu-open-390.png' });
 });
 
 test('reflows the shell and drawer chat across the phone breakpoint without a reload (HS2-ZFXYYX)', async ({

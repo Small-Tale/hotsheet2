@@ -26,7 +26,6 @@ import {
   ArrowUp,
   Bot,
   Brain,
-  ChevronDown,
   CircleAlert,
   Copy,
   Download,
@@ -420,32 +419,31 @@ export function AIConversationToolbar({
       (canChangeEffort && efforts.length) ||
       permissionChangeable) ? (
       <>
-        {/* The current-model label and its popup trigger group are siblings in the host toolbar zone,
-            so the Kerf group keeps its cataloged Toolbar parent. */}
-        <div class="ai-conversation__model" data-component="conversation-model-control">
-          <Row vAlign="middle" gap="2xs">
-            <LucideIcon icon={Brain} name="brain" color={uiColor('neutral-on-quiet')} />
-            {canChangeModel && currentModelLabel ? (
-              <Text variant="span" size="compact" wrap="truncate" title={model}>
-                {currentModelLabel}
-              </Text>
-            ) : null}
-            {canChangeEffort && currentEffort ? (
-              <Badge tone="neutral" size="compact" label={`Effort ${currentEffort}`}>
-                {currentEffort}
-              </Badge>
-            ) : null}
-          </Row>
-        </div>
-        <ToolbarControlGroup single nestedDropdown {...groupStyle}>
+        <ToolbarControlGroup single nestedDropdown content="mixed" {...groupStyle}>
           <PopupMenu
             label={
               permissionChangeable
                 ? 'Change Provider, Model, Effort, and Permissions'
                 : 'Change Provider, Model, and Effort'
             }
-            icon={<LucideIcon icon={ChevronDown} name="chevron-down" />}
-            caret={false}
+            triggerContent={
+              <span class="ai-conversation__model" data-component="conversation-model-control">
+                <LucideIcon icon={Brain} name="brain" color={uiColor('neutral-on-quiet')} />
+                {canChangeModel && currentModelLabel ? (
+                  <span class="ai-conversation__model-name">
+                    <Text variant="span" size="compact" wrap="truncate" title={model}>
+                      {currentModelLabel}
+                    </Text>
+                  </span>
+                ) : null}
+                {canChangeEffort && currentEffort ? (
+                  <Badge tone="neutral" size="compact" label={`Effort ${currentEffort}`}>
+                    {currentEffort}
+                  </Badge>
+                ) : null}
+              </span>
+            }
+            caret
             placement={embedded ? 'top-end' : 'bottom-end'}
             rootAttributes={{ 'data-conversation-model-menu': 'true' }}
             items={providerModelEffortEntries({
@@ -841,10 +839,17 @@ export function AIConversation(props: AIConversationProps) {
         dividerSides=""
         leading={
           <>
-            <ToolbarControlGroup single tileTone="brand">
-              <LucideIcon color={uiColor('brand-on-quiet')} icon={Bot} name="bot" />
-            </ToolbarControlGroup>
-            <ToolbarText text={`${tool} Conversation`} id="ai-conversation-title" size="xlarge" description={summary} />
+            {!handsetDevice().value && (
+              <ToolbarControlGroup single tileTone="brand">
+                <LucideIcon color={uiColor('brand-on-quiet')} icon={Bot} name="bot" />
+              </ToolbarControlGroup>
+            )}
+            <ToolbarText
+              text={handsetDevice().value ? tool : `${tool} Conversation`}
+              id="ai-conversation-title"
+              size={handsetDevice().value ? 'default' : 'xlarge'}
+              description={summary}
+            />
           </>
         }
         trailing={<AIConversationToolbar {...props} presentation="dialog" />}

@@ -3623,7 +3623,7 @@
       "id": "ai-conversation",
       "name": "AIConversation",
       "kind": "component",
-      "purpose": "Dialog and embedded AI conversation with inline permissions, interruption, and a single-Tab-stop selectable transcript; Kerf ListHeader, Row, Text, and Badge own its model, activity, metadata, and progress chrome, while AIConversationToolbar places native Save/Stop controls in the host toolbar.",
+      "purpose": "Dialog and embedded AI conversation with inline permissions, interruption, and a single-Tab-stop selectable transcript; Kerf ListHeader, Row, Text, and Badge own its activity, metadata, and progress chrome, while AIConversationToolbar places a combined brain/model/effort PopupMenu trigger and native Save/Stop controls in the host toolbar.",
       "source": "src/components/ai-conversation.tsx",
       "publicExports": [
         {
@@ -3658,7 +3658,8 @@
         "responsive": {
           "owner": "not-applicable",
           "behaviors": [
-            "The selection status bar appears only while messages are selected, reclaiming transcript space when selection is empty in dialog and embedded layouts."
+            "The selection status bar appears only while messages are selected, reclaiming transcript space when selection is empty in dialog and embedded layouts.",
+            "The AI settings trigger keeps its model and effort summary within the popup control in dialog and drawer toolbars, including phone widths."
           ]
         },
         "layout": {

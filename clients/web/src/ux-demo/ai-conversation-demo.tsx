@@ -301,7 +301,7 @@ export function AIConversationDemo() {
         </DemoEvent>
         <List flex={embedded}>
           {/* The drawer renders these controls in its tab toolbar; this compact Kerf Toolbar stands in
-              for that row so the embedded demo exposes every control (HS2-59F7WK). */}
+              for that row and exposes the combined model/effort trigger (HS2-59F7WK, HS2-XWSXWD). */}
           {embedded && (
             <Toolbar
               density="compact"

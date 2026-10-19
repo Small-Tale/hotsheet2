@@ -728,8 +728,16 @@ describe('AIConversation', () => {
       dialog = String(AIConversation(props)),
       trailing = dialog.slice(dialog.indexOf('kui-toolbar__trailing'), dialog.indexOf('ai-conversation__transcript'));
     expect(trailing).toMatch(
-      /data-component="conversation-model-control"[\s\S]*data-conversation-model-menu[\s\S]*data-action="save-conversation"/,
+      /data-conversation-model-menu[\s\S]*data-component="conversation-model-control"[\s\S]*data-action="save-conversation"/,
     );
+    const trigger = trailing.slice(
+      trailing.indexOf('kui-popup-menu__trigger'),
+      trailing.indexOf('kui-popup-menu__menu'),
+    );
+    expect(trigger).toContain('data-component="conversation-model-control"');
+    expect(trigger).toContain('Opus');
+    expect(trigger).toContain('medium');
+    expect(trigger).toContain('kui-popup-menu__caret');
     // The dialog's menu opens downward from its header; the dropdown trigger sits in a nested-dropdown group.
     expect(trailing).toContain('placement="bottom-end"');
     expect(dialog.match(/data-component="conversation-model-control"/g)).toHaveLength(1);

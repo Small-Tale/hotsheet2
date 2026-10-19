@@ -410,7 +410,8 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   - header: tool identity, ready/working/message-count context with the conversation's totals
     inline (`2 messages • 39K tokens • $0.23`; absent, zero, or unpriced totals are omitted, and
     no separate usage pill remains; HS2-P415F0), and native Save/Stop buttons inside Kerf
-    `ToolbarControlGroup`. The exported `AIConversationToolbar` renders the model selector and
+    `ToolbarControlGroup`. The exported `AIConversationToolbar` renders a combined brain-icon,
+    model, and effort menu trigger (HS2-XWSXWD) and
     Save/Stop in the dialog header's trailing zone and, for a drawer chat, in the
     `TerminalDrawer` tab toolbar's end zone (`TerminalDrawerChatTab.toolbar`) before Hide
     Terminal Drawer; the embedded presentation renders no title bar or settings row

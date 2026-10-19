@@ -8502,14 +8502,19 @@ test('collapses AI chat activity to its latest item and toggles it at wide and n
   await expect(rows).toHaveCount(2);
 });
 
-test('shows the chat model/effort as a label with a popup to change them', async ({ page }) => {
+test('shows the chat model and effort inside the settings menu trigger (HS2-XWSXWD)', async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 800 });
   await page.goto('/ux-demo?component=ai-conversation');
   const control = page.locator('[data-component="conversation-model-control"]').first();
   await expect(control).toBeVisible();
   await expect(control.locator('[data-component="text"][data-wrap="truncate"]')).toContainText('GPT-5.6');
   await expect(control.locator('[data-component="badge"]')).toContainText('high');
-  await page.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger').first().click();
+  const trigger = page.locator('[data-conversation-model-menu] > .kui-popup-menu__trigger').first();
+  await expect(trigger.locator('[data-component="conversation-model-control"]')).toBeVisible();
+  await expect(trigger).toContainText('GPT-5.6');
+  await expect(trigger).toContainText('high');
+  expect((await trigger.locator('[data-component="text"]').boundingBox())!.height).toBeGreaterThan(10);
+  await trigger.click();
   await expect(page.getByRole('menuitem', { name: /Provider/ })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: /Model/ })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: /Effort/ })).toBeVisible();

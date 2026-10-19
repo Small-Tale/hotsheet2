@@ -21,11 +21,18 @@
 .ai-conversation__saved-notice {
   padding-top: var(--kui-space-xs);
 }
-/* The current-model label before its popup trigger group in the dialog header or the drawer tab
-   toolbar (HS2-R5F7A5, HS2-59F7WK). */
+/* The current model and effort are content inside the settings trigger in either host toolbar
+   (HS2-R5F7A5, HS2-59F7WK, HS2-XWSXWD). */
 .ai-conversation__model {
+  display: inline-flex;
   min-width: 0;
   max-width: remify(240px);
+  align-items: center;
+  gap: var(--wa-space-2xs);
+}
+.ai-conversation__model-name {
+  min-width: 0;
+  overflow: hidden;
 }
 /* The foreground covers the dialog panel (its positioned `dialog` part), not the viewport, so its
    padding alone insets a foreground popup symmetrically inside the dialog, below the heading
@@ -169,10 +176,8 @@
   bottom: remify(16px);
 }
 @media (max-width: remify(640px)) {
-  /* At phone widths the toolbar keeps only the selector's trigger, whose menu shows the current
-     provider, model, and effort, so the drawer tabs and the dialog title keep their room (HS2-59F7WK). */
   .ai-conversation__model {
-    display: none;
+    max-width: remify(160px);
   }
   .ai-conversation--embedded > .ai-conversation__composer {
     inset-inline: remify(8px);
