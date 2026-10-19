@@ -5,6 +5,12 @@ When automation lands, remove the manual-only step and record it below.
 
 ## Current manual checks
 
+### Native Codex terminal usage (HS2-J14225)
+
+1. Launch a Codex terminal in Hot Sheet with the shared Codex daemon enabled. Claim one ticket from that terminal's session, run a turn with nonzero token use, and open that ticket's Timeline. Confirm the Codex model (when reported), tokens, and per-model total appear at wide and phone widths.
+2. Release the claim, run another turn, and confirm that turn stays in project metrics without increasing the ticket total. Repeat with two simultaneous claims; neither ticket should receive the ambiguous turn.
+3. Repeat with `--no-daemon` to confirm the timeline makes no unsupported usage claim. The protocol cassette covers the watcher, but CI cannot reliably exercise an installed interactive Codex TUI and its daemon together.
+
 ### Development latency monitor (HS2-ZGBQ5Q)
 
 Automation runs with `navigator.webdriver`, where the monitor is off unless opted in, so

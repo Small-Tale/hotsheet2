@@ -147,6 +147,20 @@ Metrics can be shared across a team **through git** — no server sync needed:
   the same store price table before both recording and live projection. Their stable
   connection id is the metrics session key, so transcript totals and historical raw/rollup
   reads share one attribution boundary; no browser-side pricing table or counter exists.
+  When that connection's session worker holds exactly one live ticket claim at turn start,
+  the event also names that ticket (HS2-J14225). Ambiguous or expired claims leave usage
+  project-only rather than assigning it to the wrong ticket. If a plugin omits the model
+  from its telemetry, an explicitly selected turn/connection model labels that event.
+- **Interactive Codex terminals (HS2-J14225):** the existing read-only daemon thread watch
+  takes the last `thread/tokenUsage/updated` count for each completed turn and records one
+  usage event. It snapshots the terminal session's unique live ticket claim at turn start.
+  The resumed thread supplies the model when available; an unknown model remains unknown.
+  Codex sessions without the shared daemon, and telemetry from before this capture path,
+  cannot be attributed by this path. Raw events already recorded without a ticket are not
+  retroactively assigned because their work cannot be identified reliably.
+  Interactive Claude terminals do not yet report per-turn usage (`HS2-W2GNTT`), and
+  Codex Work sessions outside Hot Sheet drives/terminals need a separate capture path
+  (`HS2-2K2D7E`).
 - **Live-verified + hardened (HS2-CQ6B96):** Codex 0.148 emits per-turn camelCase counts
   under `thread/tokenUsage/updated.params.tokenUsage.last`; `inputTokens` already includes
   its `cachedInputTokens` subset (`totalTokens == inputTokens + outputTokens`), so cached

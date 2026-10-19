@@ -862,12 +862,23 @@ pub(crate) async fn send_drive_turn(
     let manager = state.client_drives.clone();
     let thread_state = state.clone();
     let thread_store = FsStore::open(job.store_path()).map_err(ApiError::from)?;
+    let worker = job.worker_id().to_owned();
     let tool = info.tool.clone();
+    let selected_model = job.selected_model().map(str::to_owned);
     let activity_project = info.project.clone();
     let prompt = request.content;
     let thread_id = id.clone();
     let turn_id = job.turn_id().to_owned();
     std::thread::spawn(move || {
+        let ticket = hotsheet_ticketing::metrics::active_ticket_for_workers(
+            &thread_store,
+            &[&worker],
+            &now(),
+        )
+        .unwrap_or_else(|error| {
+            tracing::warn!(%error, "looking up client turn ticket failed");
+            None
+        });
         let mut guard = turn_stream::TurnStreamGuard::default();
         let result = job.run(&prompt, &mut |event| {
             let projected = match event {
@@ -877,11 +888,11 @@ pub(crate) async fn send_drive_turn(
                         hotsheet_ticketing::metrics::UsageEvent {
                             ts: now().as_str().to_string(),
                             tool: tool.clone(),
-                            model: usage.model.clone(),
+                            model: usage.model.clone().or_else(|| selected_model.clone()),
                             tokens_in: usage.tokens_in,
                             tokens_out: usage.tokens_out,
                             cost_usd: usage.cost_usd,
-                            ticket: None,
+                            ticket: ticket.clone(),
                             session: Some(thread_id.clone()),
                         },
                     );

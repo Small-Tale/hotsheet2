@@ -3995,6 +3995,9 @@ backlog`, `Re-enqueued`) while retaining the full durable note text and using th
   rollup keeps no per-model split. The client reads
   `GET /checkouts/{checkout}/tickets/{ticket}/usage` when a ticket is selected and keeps the
   last known usage if that read fails (HS2-ZA7W6E, HS2-J14225).
+  Usage appears after a driven or supported terminal turn reports token telemetry while
+  its session holds exactly one live claim on this ticket. Unclaimed work remains in
+  project metrics; earlier unattributed events cannot safely be assigned afterward.
   Started-phase changes appear as concise Timeline entries (`Analyzing`,
   `Planning`, and so on). Their generated activity notes are omitted from the
   Notes list, while other activity notes remain visible there.

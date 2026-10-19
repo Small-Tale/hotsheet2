@@ -684,7 +684,7 @@ pub(crate) fn release_session_claims_blocking(
 /// The worker id of a shell or command terminal's session. A user may start an AI tool in it
 /// by hand; the tool claims with this id and the server releases it when the terminal ends
 /// (HS2-RXWXQ8).
-fn terminal_session_worker_id(terminal_id: &str) -> String {
+pub(crate) fn terminal_session_worker_id(terminal_id: &str) -> String {
     hotsheet_aitools::session_worker_id("terminal", terminal_id)
 }
 

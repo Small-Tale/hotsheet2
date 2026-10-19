@@ -19,9 +19,33 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::{self, Write};
 
+use hotsheet_model::{Status, Timestamp};
 use serde::{Deserialize, Serialize};
 
-use crate::store::FsStore;
+use crate::store::{FsStore, StoreError};
+
+/// Attribute a turn only when these session identities hold exactly one unexpired claim.
+/// Incomplete listings are ambiguous too: a corrupt ticket could hide another claim.
+pub fn active_ticket_for_workers(
+    store: &FsStore,
+    workers: &[&str],
+    now: &Timestamp,
+) -> Result<Option<String>, StoreError> {
+    let listing = store.list_tickets_resilient()?;
+    if !listing.corrupt.is_empty() {
+        return Ok(None);
+    }
+    let mut held = listing.tickets.into_iter().filter(|ticket| {
+        ticket.status == Status::Started
+            && ticket
+                .claimed_by
+                .as_deref()
+                .is_some_and(|holder| workers.contains(&holder))
+            && !crate::ops::claim_available(ticket, now)
+    });
+    let first = held.next().map(|ticket| ticket.id.to_string());
+    Ok(first.filter(|_| held.next().is_none()))
+}
 
 /// One usage event — the common shape every tool's telemetry maps into (`docs/14` §14.2).
 /// Unknown/unreported fields are omitted; cost is preferred tool-reported (else computed by
@@ -376,12 +400,79 @@ fn ensure_gitignored(store: &FsStore, name: &str) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ops::{self, NewTicket};
     use crate::store::StoreMetadata;
+    use hotsheet_model::Ulid;
 
     fn store() -> (tempfile::TempDir, FsStore) {
         let dir = tempfile::tempdir().unwrap();
         let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
         (dir, store)
+    }
+
+    #[test]
+    fn usage_attribution_requires_one_live_claim_and_tracks_release_and_expiry() {
+        let (_dir, store) = store();
+        let first = ops::create(
+            &store,
+            Ulid::new(),
+            "HS",
+            Timestamp::new("2026-08-19T00:00:00Z"),
+            NewTicket {
+                title: "first".into(),
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let second = ops::create(
+            &store,
+            Ulid::new(),
+            "HS",
+            Timestamp::new("2026-08-19T00:00:00Z"),
+            NewTicket {
+                title: "second".into(),
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let at = Timestamp::new("2026-08-19T01:00:00Z");
+        let lease = Timestamp::new("2026-08-19T01:30:00Z");
+        assert_eq!(
+            active_ticket_for_workers(&store, &["codex-a"], &at).unwrap(),
+            None
+        );
+        ops::claim(&store, &first.id, &at, lease.clone(), "codex-a", None).unwrap();
+        assert_eq!(
+            active_ticket_for_workers(&store, &["codex-a"], &at).unwrap(),
+            Some(first.id.to_string())
+        );
+        assert_eq!(
+            active_ticket_for_workers(&store, &["other"], &at).unwrap(),
+            None
+        );
+        ops::claim(&store, &second.id, &at, lease.clone(), "codex-a", None).unwrap();
+        assert_eq!(
+            active_ticket_for_workers(&store, &["codex-a"], &at).unwrap(),
+            None,
+            "two claims are ambiguous"
+        );
+        ops::release(&store, &second.id, at.clone(), "codex-a", false).unwrap();
+        assert_eq!(
+            active_ticket_for_workers(&store, &["codex-a"], &at).unwrap(),
+            Some(first.id.to_string())
+        );
+        assert_eq!(
+            active_ticket_for_workers(&store, &["codex-a"], &lease).unwrap(),
+            None,
+            "expired lease is not active"
+        );
+        ops::release(&store, &first.id, at.clone(), "codex-a", false).unwrap();
+        assert_eq!(
+            active_ticket_for_workers(&store, &["codex-a"], &at).unwrap(),
+            None
+        );
     }
 
     fn ev(

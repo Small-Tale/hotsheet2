@@ -927,6 +927,14 @@ impl ClientTurnJob {
         &self.connection.store_path
     }
 
+    pub fn worker_id(&self) -> &str {
+        &self.connection.worker_id
+    }
+
+    pub fn selected_model(&self) -> Option<&str> {
+        self.model.as_deref().or(self.connection.model.as_deref())
+    }
+
     /// The correlation id every stream event of this turn carries (HS2-14X4AF).
     pub fn turn_id(&self) -> &str {
         &self.turn_id

@@ -295,7 +295,7 @@ impl PreparedClientDrive for FakePreparedClientDrive {
         }
         on_event(&hotsheet_aitools::TurnEvent::Usage(
             hotsheet_aitools::Usage {
-                model: Some("claude-opus-4-8".into()),
+                model: (request.prompt != "no-model").then(|| "claude-opus-4-8".into()),
                 tokens_in: 1_000,
                 tokens_out: 100,
                 cost_usd: None,
@@ -3099,6 +3099,8 @@ async fn health_needs_no_secret() {
 
 #[tokio::test]
 async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, ops};
     let (dir, base) = state();
     let backend = Arc::new(FakeClientDriveBackend {
         supports_interrupt: true,
@@ -3126,6 +3128,28 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
     assert!(!created["busy"].as_bool().unwrap());
     assert_eq!(created["model"], "m1");
     assert_eq!(created["effort"], "high");
+    let ticket_store = FsStore::open(dir.path()).unwrap();
+    let ticket = ops::create(
+        &ticket_store,
+        Ulid::new(),
+        "HS",
+        Timestamp::new("2026-10-19T00:00:00Z"),
+        NewTicket {
+            title: "Attributed client turn".into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    ops::claim(
+        &ticket_store,
+        &ticket.id,
+        &Timestamp::new("2026-10-19T00:00:00Z"),
+        Timestamp::new("2099-01-01T00:00:00Z"),
+        &hotsheet_aitools::session_worker_id("fake", "client-1"),
+        None,
+    )
+    .unwrap();
     let replay_cursor = body_json(
         router
             .clone()
@@ -3212,6 +3236,10 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
         usage["turn"]["event"]["cost_usd"].as_f64().unwrap() > 0.0,
         "client usage is price-table enriched before projection"
     );
+    let attributed =
+        hotsheet_ticketing::metrics::ticket_usage(&ticket_store, &ticket.id.to_string()).unwrap();
+    assert_eq!(attributed.events.len(), 1);
+    assert_eq!(attributed.events[0].tokens_in, 1000);
     let activity = body_json(
         router
             .clone()
@@ -3294,6 +3322,34 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
             )
         ]
     );
+    let fallback = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections/client-1/turns",
+            Some(r#"{"content":"no-model"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(fallback.status(), StatusCode::ACCEPTED);
+    loop {
+        let listed = body_json(
+            router
+                .clone()
+                .oneshot(authed("GET", "/connections", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if !listed[0]["busy"].as_bool().unwrap() {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    let events = hotsheet_ticketing::metrics::ticket_usage(&ticket_store, &ticket.id.to_string())
+        .unwrap()
+        .events;
+    assert_eq!(events.last().unwrap().model.as_deref(), Some("m1"));
 }
 
 #[tokio::test]

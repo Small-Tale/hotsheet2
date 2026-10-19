@@ -1,7 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 // HS2-ZA7W6E / HS2-J14225: the Timeline tab shows the AI tokens and models recorded in each
-// phase gap next to the elapsed time, and the ticket's total above the rail.
+// phase gap next to the elapsed time, and the ticket's per-model total below the rail.
 const capabilities = {
   create: true,
   update: true,
@@ -81,6 +81,14 @@ const usage = {
       cost_usd: 0.6,
     },
     { ts: '2026-10-01T11:40:00Z', tool: 'claude', model: 'opus', tokens_in: 10_000, tokens_out: 4_000, cost_usd: 0.34 },
+    {
+      ts: '2026-10-01T11:50:00Z',
+      tool: 'codex',
+      model: 'gpt-5-codex',
+      tokens_in: 20_000,
+      tokens_out: 5_000,
+      cost_usd: 0.1,
+    },
   ],
   settled_cost_usd: 0,
   settled_through: '',
@@ -165,8 +173,9 @@ for (const width of [1280, 390]) {
     const breakdown = timeline.locator('[data-component="value-table"]');
     await expect(breakdown).toContainText('sonnet');
     await expect(breakdown).toContainText('opus');
+    await expect(breakdown).toContainText('gpt-5-codex');
     await expect(breakdown).toContainText('Total');
-    await expect(breakdown).toContainText('214K tokens · ≈$1.84');
+    await expect(breakdown).toContainText('239K tokens · ≈$1.94');
     // The breakdown sits below the rail, not above it.
     const order = await timeline.evaluate(
       (node) =>
@@ -192,17 +201,17 @@ for (const width of [1280, 390]) {
     expect(weights.time).toBe(weights.title);
     expect(weights.duration).toBeLessThan(weights.time);
     // The creation gap (10:00 to 10:30) had no usage; Analyzing (10:30 to 11:00) used opus; the
-    // open Working phase (since 11:00) used both models.
+    // open Working phase (since 11:00) used both Claude models and Codex.
     await expect(timeline.locator('[data-entry-id="01-created"] .ticket-timeline__duration')).toHaveText('30m');
     await expect(timeline.locator('[data-entry-id="N2"] .ticket-timeline__duration')).toHaveText(
       '30m · 38K tokens · opus',
     );
     await expect(timeline.locator('[data-entry-id="N3"] .ticket-timeline__duration')).toHaveText(
-      '176K tokens · sonnet, opus',
+      '201K tokens · sonnet, gpt-5-codex +1',
     );
     await expect(timeline.locator('[data-entry-id="N3"] .ticket-timeline__duration')).toHaveAttribute(
       'aria-label',
-      'AI usage since this event: 176K tokens · sonnet, opus',
+      'AI usage since this event: 201K tokens · sonnet, gpt-5-codex +1',
     );
     // The label stays inside its row rather than overflowing the panel.
     const overflow = await timeline.evaluate((node) => {
@@ -214,7 +223,7 @@ for (const width of [1280, 390]) {
     });
     expect(overflow).toBe(false);
     await page.screenshot({
-      path: `target/visual-captures/hs2-za7w6e-timeline-usage-${width}.png`,
+      path: `target/visual-captures/hs2-j14225-codex-timeline-usage-${width}.png`,
       fullPage: width === 390,
     });
   });

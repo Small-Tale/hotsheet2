@@ -24,12 +24,14 @@ use serde_json::{Value, json};
 use std::path::Path;
 
 /// What a rejoined thread's notification means for the terminal running it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ThreadSignal {
     /// The turn ended on an error Codex will not retry; the session waits for the user.
     Halted { error_type: String, message: String },
     /// A new turn started, so an earlier halt is over.
     Resumed,
+    /// The last token update for a completed turn, emitted once per turn.
+    Usage(crate::drive::Usage),
 }
 
 /// Classify one JSON-RPC message from the daemon for `thread_id`. Responses, server requests,
@@ -170,6 +172,9 @@ pub fn watch_thread_over(
     )?;
     let thread_id = thread_id.to_owned();
     std::thread::spawn(move || {
+        let mut model: Option<String> = None;
+        let mut pending: Option<(String, crate::drive::Usage)> = None;
+        let mut current_turn: Option<String> = None;
         while let Ok(Some(line)) = reader.recv() {
             let Ok(message) = serde_json::from_str::<Value>(&line) else {
                 continue;
@@ -177,6 +182,63 @@ pub fn watch_thread_over(
             // A failed resume (an unknown or unloaded thread) leaves nothing to watch.
             if message.get("id") == Some(&json!(2)) && message.get("error").is_some() {
                 break;
+            }
+            if message.get("id") == Some(&json!(2)) {
+                model = message
+                    .pointer("/result/thread/model")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned);
+            }
+            let params = message.get("params");
+            let same_thread = params
+                .and_then(|p| p.get("threadId"))
+                .and_then(Value::as_str)
+                == Some(thread_id.as_str());
+            if same_thread && message.get("method").and_then(Value::as_str) == Some("turn/started")
+            {
+                pending = None;
+                current_turn = params
+                    .and_then(|p| p.get("turn"))
+                    .and_then(|turn| turn.get("id"))
+                    .and_then(Value::as_str)
+                    .map(str::to_owned);
+            }
+            if same_thread
+                && message.get("method").and_then(Value::as_str)
+                    == Some("thread/tokenUsage/updated")
+                && let (Some(turn_id), Some(mut usage)) = (
+                    params.and_then(|p| p.get("turnId")).and_then(Value::as_str),
+                    crate::codex::notification_usage(&message),
+                )
+                && current_turn.as_deref() == Some(turn_id)
+            {
+                usage.model.clone_from(&model);
+                pending = Some((turn_id.to_owned(), usage));
+            }
+            if same_thread
+                && message.get("method").and_then(Value::as_str) == Some("turn/completed")
+            {
+                let turn = params.and_then(|p| p.get("turn"));
+                let turn_id = turn.and_then(|t| t.get("id")).and_then(Value::as_str);
+                if turn_id.is_some() && current_turn.as_deref() == turn_id {
+                    let reported = pending.take().and_then(|(pending_id, usage)| {
+                        (turn_id == Some(pending_id.as_str())).then_some(usage)
+                    });
+                    if let Some(mut usage) =
+                        reported.or_else(|| turn.and_then(crate::codex::turn_usage))
+                    {
+                        usage.model = turn
+                            .and_then(|t| t.get("model"))
+                            .and_then(Value::as_str)
+                            .map(str::to_owned)
+                            .or(usage.model)
+                            .or_else(|| model.clone());
+                        on_signal(ThreadSignal::Usage(usage));
+                    }
+                }
+                if turn_id.is_some() && current_turn.as_deref() == turn_id {
+                    current_turn = None;
+                }
             }
             if let Some(signal) = classify_notification(&thread_id, &message) {
                 on_signal(signal);
@@ -401,6 +463,114 @@ mod tests {
         assert!(*closed.lock().unwrap());
         drop(daemon);
         ended.recv_timeout(Duration::from_secs(5)).unwrap();
+    }
+
+    #[test]
+    fn completed_turn_records_last_usage_once_with_model_and_ignores_other_turns() {
+        let (transport, daemon, _sent, _closed) = loopback();
+        let (tx, signals) = channel();
+        let _watch = watch_thread_over(
+            transport,
+            THREAD,
+            move |signal| tx.send(signal).unwrap(),
+            || {},
+        )
+        .unwrap();
+        daemon
+            .send(json!({"id":2,"result":{"thread":{"model":"gpt-test"}}}).to_string())
+            .unwrap();
+        let turn = "turn-1";
+        daemon
+            .send(
+                note(
+                    "turn/started",
+                    json!({"threadId":THREAD,"turn":{"id":turn}}),
+                )
+                .to_string(),
+            )
+            .unwrap();
+        for (id, input) in [("other", 900), (turn, 10), (turn, 25)] {
+            daemon
+                .send(
+                    note(
+                        "thread/tokenUsage/updated",
+                        json!({
+                            "threadId": THREAD, "turnId": id,
+                            "tokenUsage":{"last":{"inputTokens":input,"outputTokens":4}}
+                        }),
+                    )
+                    .to_string(),
+                )
+                .unwrap();
+        }
+        daemon
+            .send(
+                note(
+                    "turn/completed",
+                    json!({"threadId":THREAD,"turn":{"id":turn,"status":"completed"}}),
+                )
+                .to_string(),
+            )
+            .unwrap();
+        daemon
+            .send(
+                note(
+                    "turn/completed",
+                    json!({"threadId":THREAD,"turn":{"id":turn,"status":"completed"}}),
+                )
+                .to_string(),
+            )
+            .unwrap();
+        assert_eq!(
+            signals.recv_timeout(Duration::from_secs(5)).unwrap(),
+            ThreadSignal::Resumed
+        );
+        assert_eq!(
+            signals.recv_timeout(Duration::from_secs(5)).unwrap(),
+            ThreadSignal::Usage(crate::drive::Usage {
+                model: Some("gpt-test".into()),
+                tokens_in: 25,
+                tokens_out: 4,
+                cost_usd: None,
+            })
+        );
+        daemon
+            .send(
+                note(
+                    "turn/started",
+                    json!({"threadId":THREAD,"turn":{"id":"turn-2"}}),
+                )
+                .to_string(),
+            )
+            .unwrap();
+        daemon.send(note("turn/completed", json!({"threadId":THREAD,"turn":{
+            "id":"turn-2","status":"completed","usage":{"input_tokens":7,"output_tokens":2}
+        }})).to_string()).unwrap();
+        assert_eq!(
+            signals.recv_timeout(Duration::from_secs(5)).unwrap(),
+            ThreadSignal::Resumed
+        );
+        assert_eq!(
+            signals.recv_timeout(Duration::from_secs(5)).unwrap(),
+            ThreadSignal::Usage(crate::drive::Usage {
+                model: Some("gpt-test".into()),
+                tokens_in: 7,
+                tokens_out: 2,
+                cost_usd: None,
+            })
+        );
+        daemon
+            .send(
+                note(
+                    "turn/completed",
+                    json!({"threadId":THREAD,"turn":{
+                        "status":"completed","usage":{"input_tokens":99}
+                    }}),
+                )
+                .to_string(),
+            )
+            .unwrap();
+        assert!(signals.recv_timeout(Duration::from_millis(100)).is_err());
     }
 
     #[test]

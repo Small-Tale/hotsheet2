@@ -7,11 +7,13 @@
 //! `SessionEnd`, terminal kill, or shell exit; dropping it closes the daemon connection.
 
 use super::signals::{clear_terminal_halt_on_resume, record_terminal_halt};
-use crate::AppState;
+use crate::{AppState, now};
 use hotsheet_aitools::codex_thread_watch::{ThreadSignal, ThreadWatch, watch_thread};
 use hotsheet_sync::LockExt;
+use hotsheet_ticketing::metrics;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 /// The live watch for one terminal's Codex thread.
 pub struct CodexThreadWatch {
@@ -54,6 +56,8 @@ pub(crate) fn sync_codex_thread_watch(
     std::thread::spawn(move || {
         let signal_state = state.clone();
         let (signal_id, signal_session) = (id.clone(), session_id.clone());
+        let turn_ticket = Arc::new(Mutex::new(None::<String>));
+        let signal_ticket = turn_ticket.clone();
         let end_state = state.clone();
         let end_id = id.clone();
         let watch = watch_thread(
@@ -76,7 +80,34 @@ pub(crate) fn sync_codex_thread_watch(
                         Some("codex".to_owned()),
                     ),
                     ThreadSignal::Resumed => {
-                        clear_terminal_halt_on_resume(&signal_state, &signal_id)
+                        clear_terminal_halt_on_resume(&signal_state, &signal_id);
+                        let ai_worker = hotsheet_aitools::session_worker_id("codex", &signal_id);
+                        let shell_worker = super::launch::terminal_session_worker_id(&signal_id);
+                        let ticket = metrics::active_ticket_for_workers(
+                            &signal_state.store,
+                            &[&ai_worker, &shell_worker],
+                            &now(),
+                        )
+                        .unwrap_or_else(|error| {
+                            tracing::warn!(%error, "looking up Codex terminal ticket failed");
+                            None
+                        });
+                        *signal_ticket.lock_or_recover() = ticket;
+                    }
+                    ThreadSignal::Usage(usage) => {
+                        let event = metrics::UsageEvent {
+                            ts: now().as_str().to_owned(),
+                            tool: "codex".to_owned(),
+                            model: usage.model,
+                            tokens_in: usage.tokens_in,
+                            tokens_out: usage.tokens_out,
+                            cost_usd: usage.cost_usd,
+                            ticket: signal_ticket.lock_or_recover().take(),
+                            session: Some(signal_session.clone()),
+                        };
+                        if let Err(error) = metrics::record_priced(&signal_state.store, event) {
+                            tracing::warn!(%error, "recording Codex terminal usage failed");
+                        }
                     }
                 }
             },
