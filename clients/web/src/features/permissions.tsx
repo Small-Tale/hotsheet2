@@ -70,7 +70,17 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionRulesMessage = signal(''),
     revokingPermissionRules = signal<readonly string[]>([]),
     freshPermissionRules = signal<ReadonlySet<string>>(new Set()),
-    permissionRulesDialog = signal<{ projectId: string; query: string; page: number } | undefined>(undefined);
+    permissionRulesDialog = signal<
+      | {
+          projectId: string;
+          query: string;
+          page: number;
+          selected?: readonly string[];
+          busy?: boolean;
+          confirmingDelete?: boolean;
+        }
+      | undefined
+    >(undefined);
   const loadingPermissionRules = new Set<string>();
   const markPermissionRulesStale = (projectId?: string) => {
     const fresh = freshPermissionRules.peek();
@@ -361,7 +371,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
   }
 
   function openPermissionRules(projectId: string) {
-    permissionRulesDialog.value = { projectId, query: '', page: 1 };
+    permissionRulesDialog.value = { projectId, query: '', page: 1, selected: [] };
   }
 
   function closePermissionRules() {
@@ -370,7 +380,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
 
   function searchPermissionRules(projectId: string, query: string) {
     if (permissionRulesDialog.value?.projectId === projectId)
-      permissionRulesDialog.value = { projectId, query, page: 1 };
+      permissionRulesDialog.value = { ...permissionRulesDialog.value, query, page: 1, confirmingDelete: false };
   }
 
   function movePermissionRulesPage(projectId: string, offset: number) {
@@ -379,6 +389,109 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     const rules = permissionRulesByProject.value[projectId] ?? [],
       page = permissionRulesPage(rules, current.query, current.page + offset).page;
     permissionRulesDialog.value = { ...current, page };
+  }
+
+  function selectPermissionRule(projectId: string, key: string, checked: boolean) {
+    const dialog = permissionRulesDialog.value;
+    if (dialog?.projectId !== projectId || dialog.busy) return;
+    const valid = (permissionRulesByProject.value[projectId] ?? []).some((rule) => permissionRuleKey(rule) === key);
+    if (!valid) return;
+    const selected = new Set(dialog.selected ?? []);
+    if (checked) selected.add(key);
+    else selected.delete(key);
+    permissionRulesMessage.value = '';
+    permissionRulesDialog.value = { ...dialog, selected: [...selected], confirmingDelete: false };
+  }
+
+  function selectPermissionRulesPage(projectId: string) {
+    const dialog = permissionRulesDialog.value;
+    if (dialog?.projectId !== projectId || dialog.busy) return;
+    const rows = permissionRulesPage(permissionRulesByProject.value[projectId] ?? [], dialog.query, dialog.page).rows;
+    const selected = new Set(dialog.selected ?? []);
+    const allSelected = rows.length > 0 && rows.every((rule) => selected.has(permissionRuleKey(rule)));
+    for (const rule of rows) {
+      const key = permissionRuleKey(rule);
+      if (allSelected) selected.delete(key);
+      else selected.add(key);
+    }
+    permissionRulesMessage.value = '';
+    permissionRulesDialog.value = { ...dialog, selected: [...selected], confirmingDelete: false };
+  }
+
+  function clearPermissionRuleSelection(projectId: string) {
+    const dialog = permissionRulesDialog.value;
+    if (dialog?.projectId === projectId && !dialog.busy) {
+      permissionRulesMessage.value = '';
+      permissionRulesDialog.value = { ...dialog, selected: [], confirmingDelete: false };
+    }
+  }
+
+  function requestDeleteSelectedPermissionRules(projectId: string, confirmingDelete: boolean) {
+    const dialog = permissionRulesDialog.value;
+    if (dialog?.projectId === projectId && !dialog.busy && (dialog.selected?.length ?? 0) > 0) {
+      permissionRulesMessage.value = '';
+      permissionRulesDialog.value = { ...dialog, confirmingDelete };
+    }
+  }
+
+  async function applySelectedPermissionRules(projectId: string, operation: 'delete' | 'allow' | 'deny') {
+    const dialog = permissionRulesDialog.value,
+      project = projects.value.find((value) => value.id === projectId);
+    if (!project || dialog?.projectId !== projectId || dialog.busy || !dialog.selected?.length) return;
+    if (operation === 'delete' && !dialog.confirmingDelete) return;
+    const rules = permissionRulesByProject.value[projectId] ?? [],
+      selected = new Set(dialog.selected),
+      targets = rules.filter((rule) => selected.has(permissionRuleKey(rule))),
+      api = new Api(project.apiPath, '', { trackBusy: false });
+    if (!targets.length) return;
+    permissionRulesDialog.value = { ...dialog, busy: true, confirmingDelete: false };
+    permissionRulesMessage.value = '';
+    const succeeded = new Set<string>(),
+      failed = new Set<string>();
+    for (const rule of targets) {
+      const key = permissionRuleKey(rule);
+      try {
+        if (operation === 'delete') await api.revokePermissionRule(rule);
+        else await api.updatePermissionRule(rule, operation);
+        succeeded.add(key);
+      } catch (reason) {
+        if (operation === 'delete' && reason instanceof ApiHttpError && reason.status === 404) succeeded.add(key);
+        else failed.add(key);
+      }
+    }
+    permissionRulesByProject.value = {
+      ...permissionRulesByProject.value,
+      [projectId]: rules.flatMap((rule) => {
+        if (!succeeded.has(permissionRuleKey(rule))) return [rule];
+        return operation === 'delete' ? [] : [{ ...rule, decision: operation }];
+      }),
+    };
+    let refreshFailed = false;
+    try {
+      const refreshed = await api.permissionRules();
+      permissionRulesByProject.value = {
+        ...permissionRulesByProject.value,
+        [projectId]: projectPermissionRules(refreshed, project),
+      };
+      freshPermissionRules.value = new Set([...freshPermissionRules.value, projectId]);
+    } catch {
+      refreshFailed = true;
+      markPermissionRulesStale(projectId);
+    }
+    function finishDialog() {
+      const current = permissionRulesDialog.value;
+      if (current?.projectId !== projectId) return false;
+      const remaining = new Set((permissionRulesByProject.value[projectId] ?? []).map(permissionRuleKey));
+      permissionRulesDialog.value = {
+        ...current,
+        busy: false,
+        selected: [...failed].filter((key) => remaining.has(key)),
+        page: permissionRulesPage(permissionRulesByProject.value[projectId] ?? [], current.query, current.page).page,
+      };
+      return true;
+    }
+    if (finishDialog())
+      permissionRulesMessage.value = `${operation === 'delete' ? 'Deleted' : 'Updated'} ${succeeded.size} of ${targets.length} answers.${failed.size ? ` ${failed.size} failed and remain selected for retry.` : ''}${refreshFailed ? ' Could not refresh the list; retry loading to confirm the latest state.' : ''}`;
   }
 
   /** Another client remembered or revoked one of `projectId`'s answers (HS2-KYK1S7). */
@@ -463,6 +576,11 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     closePermissionRules,
     searchPermissionRules,
     movePermissionRulesPage,
+    selectPermissionRule,
+    selectPermissionRulesPage,
+    clearPermissionRuleSelection,
+    requestDeleteSelectedPermissionRules,
+    applySelectedPermissionRules,
     loadPermissionAutomation,
     permissionRevision,
     permissionInbox,

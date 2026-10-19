@@ -15235,6 +15235,69 @@ test('previews three recent permission answers and searches the paged full list 
   await expect(dialog).toHaveCount(0);
 });
 
+test('bulk edits and deletes mixed remembered answers with partial failure recovery (HS2-C057G5)', async ({ page }) => {
+  await mockProject(page);
+  let rules = Array.from({ length: 6 }, (_, index) => ({
+    project: '/work/demo.hs2',
+    ...(index === 0 ? { connection: 'chat-a' } : {}),
+    tool: index % 2 ? 'WebFetch' : 'Bash',
+    action: `hmac-sha256:v2:${'a'.repeat(16)}:${'0'.repeat(56)}${index.toString().padStart(8, '0')}`,
+    decision: index % 2 ? 'deny' : 'allow',
+    scope: index === 0 ? 'chat' : index % 2 ? 'session' : 'always',
+  }));
+  let failAction = rules[4].action;
+  await page.route('**/permissions/rules', (route) => {
+    const method = route.request().method();
+    if (method === 'GET') return route.fulfill({ json: rules });
+    const body = route.request().postDataJSON() as { action: string; decision?: 'allow' | 'deny' };
+    if (body.action === failAction) return route.fulfill({ status: 503, json: { error: 'Unavailable' } });
+    if (method === 'PATCH')
+      rules = rules.map((rule) => (rule.action === body.action ? { ...rule, decision: body.decision! } : rule));
+    if (method === 'DELETE') rules = rules.filter((rule) => rule.action !== body.action);
+    return route.fulfill({ status: 204, body: '' });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.getByLabel('Settings View').click();
+  await page.getByRole('button', { name: 'Permissions' }).click();
+  await page.setViewportSize({ width: 2048, height: 1128 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-c057g5-settings-2048.png', fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByRole('button', { name: 'Show all 6 answers' }).click();
+  const dialog = page.locator('[data-dialog-component="permission-rules-dialog"]');
+  await dialog.getByRole('button', { name: 'Select Page' }).click();
+  await expect(dialog).toContainText('5 selected');
+  await dialog.getByRole('button', { name: 'Next' }).click();
+  await dialog.getByRole('button', { name: 'Select Page' }).click();
+  await expect(dialog).toContainText('6 selected');
+  await dialog.getByRole('button', { name: 'Deselect Page' }).click();
+  await dialog.getByRole('button', { name: 'Previous' }).click();
+  await expect(dialog).toContainText('5 selected');
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-c057g5-selected-wide.png' });
+  await dialog.getByRole('button', { name: 'Deny Selected' }).click();
+  await expect(dialog).toContainText('1 failed and remain selected for retry');
+  await expect(dialog).toContainText('1 selected');
+  failAction = '';
+  await dialog.getByRole('button', { name: 'Allow Selected' }).click();
+  await expect(dialog).toContainText('0 selected');
+  await dialog.getByRole('button', { name: 'Select Page' }).click();
+  await dialog.getByRole('button', { name: 'Delete Selected' }).click();
+  await expect(dialog).toContainText('Delete 5 remembered answers?');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-c057g5-confirm-phone.png' });
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog.getByRole('button', { name: 'Confirm Delete' })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Delete Selected' }).click();
+  await dialog.getByRole('button', { name: 'Confirm Delete' }).click();
+  await expect(dialog).toContainText('1 matching answers');
+  await expect(dialog).toContainText('0 selected');
+  await expect(
+    dialog.getByRole('list', { name: 'All Remembered Answers' }).locator('[data-permission-rule]'),
+  ).toHaveCount(1);
+});
+
 test('refreshes another client’s remembered answers when a rule is revoked or remembered elsewhere (HS2-KYK1S7)', async ({
   browser,
 }) => {

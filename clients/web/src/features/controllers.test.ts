@@ -291,13 +291,88 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
       owner = createPermissionsController({ projects, selectedProjectId: signal('a') });
     owner.openPermissionRules('a');
     owner.searchPermissionRules('a', 'Bash');
-    expect(owner.permissionRulesDialogFor('a', true)).toEqual({ projectId: 'a', query: 'Bash', page: 1 });
+    expect(owner.permissionRulesDialogFor('a', true)).toEqual({
+      projectId: 'a',
+      query: 'Bash',
+      page: 1,
+      selected: [],
+      confirmingDelete: false,
+    });
     expect(owner.permissionRulesDialogFor('b', true)).toBeUndefined();
     expect(owner.permissionRulesDialogFor('a', true)).toBeUndefined();
     owner.openPermissionRules('b');
-    expect(owner.permissionRulesDialogFor('b', true)).toEqual({ projectId: 'b', query: '', page: 1 });
+    expect(owner.permissionRulesDialogFor('b', true)).toEqual({ projectId: 'b', query: '', page: 1, selected: [] });
     expect(owner.permissionRulesDialogFor('b', false)).toBeUndefined();
     expect(owner.permissionRulesDialogFor('b', true)).toBeUndefined();
+    owner.dispose();
+  });
+
+  it('bulk edits mixed remembered answers, retains failures for retry, and confirms deletion (HS2-C057G5)', async () => {
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    let rules = [
+      { project: '/work/a', connection: 'chat', tool: 'Bash', action: 'one', decision: 'allow', scope: 'chat' },
+      { project: '/work/a', tool: 'Bash', action: 'two', decision: 'deny', scope: 'session' },
+      { project: '/work/a', tool: 'Bash', action: 'three', decision: 'allow', scope: 'always' },
+    ];
+    let failTwo = true;
+    fetchMock.mockImplementation(async (_url, options) => {
+      const method = options?.method ?? 'GET';
+      if (method === 'GET') return json(rules);
+      const body = JSON.parse(options?.body as string) as { action: string; decision?: 'allow' | 'deny' };
+      if (body.action === 'two' && failTwo) return Response.json({ error: 'Unavailable' }, { status: 503 });
+      if (method === 'DELETE') rules = rules.filter((rule) => rule.action !== body.action);
+      if (method === 'PATCH')
+        rules = rules.map((rule) => (rule.action === body.action ? { ...rule, decision: body.decision! } : rule));
+      return new Response(null, { status: 204 });
+    });
+    owner.permissionRules('a');
+    for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+    owner.openPermissionRules('a');
+    owner.selectPermissionRulesPage('a');
+    expect(owner.permissionRulesDialogFor('a', true)?.selected).toHaveLength(3);
+    await owner.applySelectedPermissionRules('a', 'deny');
+    expect(owner.permissionRules('a').map((rule) => [rule.decision, rule.scope])).toEqual([
+      ['deny', 'chat'],
+      ['deny', 'session'],
+      ['deny', 'always'],
+    ]);
+    expect(owner.permissionRulesDialogFor('a', true)?.selected).toHaveLength(1);
+    expect(owner.permissionRulesMessage.value).toContain('1 failed');
+    failTwo = false;
+    await owner.applySelectedPermissionRules('a', 'allow');
+    expect(owner.permissionRulesDialogFor('a', true)?.selected).toEqual([]);
+    owner.selectPermissionRulesPage('a');
+    await owner.applySelectedPermissionRules('a', 'delete');
+    expect(owner.permissionRules('a')).toHaveLength(3);
+    owner.requestDeleteSelectedPermissionRules('a', true);
+    await owner.applySelectedPermissionRules('a', 'delete');
+    expect(owner.permissionRules('a')).toEqual([]);
+    expect(owner.permissionRulesDialogFor('a', true)?.selected).toEqual([]);
+    owner.dispose();
+  });
+
+  it('does not restore an old project selection when a bulk edit finishes after switching projects (HS2-C057G5)', async () => {
+    const projects = signal([project('a'), project('b')]),
+      selectedProjectId = signal('a'),
+      owner = createPermissionsController({ projects, selectedProjectId }),
+      rule = { project: '/work/a', tool: 'Bash', action: 'one', decision: 'allow', scope: 'session' },
+      pending = deferred<Response>();
+    fetchMock.mockImplementation(async (_url, options) => {
+      if (options?.method === 'PATCH') return pending.promise;
+      return json([rule]);
+    });
+    owner.permissionRules('a');
+    for (let turn = 0; turn < 20; turn += 1) await vi.advanceTimersByTimeAsync(1);
+    owner.openPermissionRules('a');
+    owner.selectPermissionRulesPage('a');
+    const editing = owner.applySelectedPermissionRules('a', 'deny');
+    owner.closePermissionRules();
+    selectedProjectId.value = 'b';
+    owner.openPermissionRules('b');
+    pending.resolve(new Response(null, { status: 204 }));
+    await editing;
+    expect(owner.permissionRulesDialogFor('b', true)).toEqual({ projectId: 'b', query: '', page: 1, selected: [] });
+    expect(owner.permissionRulesMessage.value).toBe('');
     owner.dispose();
   });
 

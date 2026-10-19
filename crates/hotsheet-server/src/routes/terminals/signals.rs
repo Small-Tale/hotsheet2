@@ -1053,6 +1053,43 @@ pub(crate) struct RevokePermissionRule {
     action: String,
 }
 
+/// Body for `PATCH /permissions/rules`: only the decision changes; the exact slot and
+/// its chat/session/always lifetime stay the same.
+#[derive(Deserialize)]
+pub(crate) struct UpdatePermissionRule {
+    project: String,
+    #[serde(default)]
+    connection: Option<String>,
+    tool: String,
+    action: String,
+    decision: hotsheet_aitools::PermissionDecision,
+}
+
+pub(crate) async fn update_permission_rule(
+    State(state): State<AppState>,
+    Json(body): Json<UpdatePermissionRule>,
+) -> Result<StatusCode, ApiError> {
+    let path = state
+        .permission_rule_paths
+        .lock_or_recover()
+        .get(&body.project)
+        .cloned();
+    state
+        .permissions
+        .update_decision(
+            &body.project,
+            body.connection.as_deref(),
+            &body.tool,
+            &body.action,
+            body.decision,
+            path.as_deref(),
+        )
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "no such remembered rule"))?;
+    emit_permission_rules_changed(&state, &body.project);
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// `DELETE /permissions/rules` — forget one remembered answer (HS2-JNHAYB). A durable rule
 /// is also removed from the store's rule file so it does not return after a restart. 404
 /// when no such rule is remembered.

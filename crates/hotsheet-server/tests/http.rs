@@ -15302,6 +15302,51 @@ async fn secret_bearing_remembered_action_is_opaque_in_storage_and_http_list() {
     assert!(!listed_text.contains("private-value"));
     let action_key = listed[0]["action"].as_str().unwrap();
     assert!(action_key.starts_with("hmac-sha256:v2:"));
+    let edit = serde_json::json!({
+        "project": project,
+        "tool": "Bash",
+        "action": action_key,
+        "decision": "deny",
+    });
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            "/permissions/rules",
+            Some(&edit.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    let changed = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/permissions/rules", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(changed[0]["decision"], "deny");
+    assert_eq!(changed[0]["scope"], "always");
+    assert_eq!(
+        hotsheet_aitools::load_permission_rules(&rules_path)[0].decision,
+        hotsheet_aitools::PermissionDecision::Deny
+    );
+    let worker_bridge = bridge.clone();
+    let worker_project = project.clone();
+    assert_eq!(
+        format!(
+            "{:?}",
+            std::thread::spawn(move || worker_bridge.request_blocking_for_project(
+                worker_project,
+                "chat",
+                "Bash",
+                ACTION
+            ))
+            .join()
+            .unwrap()
+        ),
+        "Deny"
+    );
     let revoke = serde_json::json!({
         "project": project,
         "tool": "Bash",

@@ -2664,7 +2664,11 @@ The settings view previews the three most recently remembered answers, newest fi
 opens a searchable dialog with five answers per page, still newest first; search covers only
 the safe visible tool, decision, scope, and opaque fingerprint, never the hidden command or
 path. Search changes start at page one, and add/revoke updates clamp the current page. Closing
-the dialog or switching projects resets its search and page (HS2-16XPHH).
+the dialog or switching projects resets its search, page, and selection (HS2-16XPHH,
+HS2-C057G5). A selection may span pages and mix decisions and lifetimes. Allow selected
+and Deny selected change only the answer, while Delete selected asks for confirmation.
+After a batch the dialog refreshes from the server, summarizes successes and failures,
+and keeps failed rows selected for retry.
 A `permission_asked` event also refreshes terminal connection state; the client derives
 the refreshed snapshot before publishing it and skips an unchanged snapshot, so a prompt
 does not cause extra whole-app render passes (HS2-2RN05B).

@@ -1063,9 +1063,9 @@
       "id": "permission-rules-settings",
       "name": "PermissionRulesSettings",
       "kind": "component",
-      "purpose": "Three newest remembered permission answers for a project, with a searchable, paged full-list dialog and individual revoke actions (HS2-JNHAYB, HS2-16XPHH).",
+      "purpose": "Three newest remembered permission answers for a project, with a searchable, paged full-list dialog, individual revoke actions, and confirmed bulk edit/delete (HS2-JNHAYB, HS2-16XPHH, HS2-C057G5).",
       "useWhen": [
-        "Hot Sheet needs to list a project's remembered permission answers and let the user revoke them."
+        "Hot Sheet needs to list a project's remembered permission answers and let the user edit or revoke them individually or in bulk."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific PermissionRulesSettings behavior."

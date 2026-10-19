@@ -16,7 +16,7 @@ import { AccountsSettings, TicketSourcesSettings } from '../components/ticket-so
 import { trashDraftIsDirty, type TrashRetentionDraft, TrashSettings } from '../components/trash-settings';
 import { wireTrashSettings } from '../components/trash-settings-interactions';
 import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
-import { type PermissionAutomationAction } from '../permission-notifications';
+import { type PermissionAutomationAction, type PermissionRule, permissionRuleKey } from '../permission-notifications';
 import { type DemoDevice, DeviceSetting } from './components/device-setting';
 import type { DemoModule, FormControl } from './demo-module';
 import { DemoSettingsForm } from './demo-settings-form';
@@ -282,7 +282,16 @@ const PERMISSION_RULES_DEMO = [
   },
 ] as const;
 
-const permissionRulesDemoDialog = signal<{ query: string; page: number } | undefined>(undefined);
+const permissionRulesDemoDialog = signal<
+  | {
+      query: string;
+      page: number;
+      selected?: readonly string[];
+      confirmingDelete?: boolean;
+    }
+  | undefined
+>(undefined);
+const permissionRulesDemoRules = signal<PermissionRule[]>([...PERMISSION_RULES_DEMO]);
 
 /** Remembered permission answers (HS2-JNHAYB): empty, listed, and a revoke in flight with an error. */
 export function PermissionRulesSettingsDemo() {
@@ -293,7 +302,7 @@ export function PermissionRulesSettingsDemo() {
       </CatalogExample>
       <CatalogExample label="Chat, Session, and Always Rules">
         <div data-demo-permission-rules>
-          <PermissionRulesSettings rules={PERMISSION_RULES_DEMO} dialog={permissionRulesDemoDialog.value} />
+          <PermissionRulesSettings rules={permissionRulesDemoRules.value} dialog={permissionRulesDemoDialog.value} />
         </div>
       </CatalogExample>
       <CatalogExample label="Revoking, with a Failure Message">
@@ -443,13 +452,18 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
       'click',
       `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.openPermissionRules.selector}`,
       () => {
-        permissionRulesDemoDialog.value = { query: '', page: 1 };
+        permissionRulesDemoDialog.value = { query: '', page: 1, selected: [] };
       },
     ),
   );
   demoListeners.add(
     delegate(root, 'input', '[data-demo-permission-rules] [name="permission-rule-search"]', (_event, target) => {
-      permissionRulesDemoDialog.value = { query: (target as FormControl).value, page: 1 };
+      permissionRulesDemoDialog.value = {
+        ...permissionRulesDemoDialog.value,
+        query: (target as FormControl).value,
+        page: 1,
+        confirmingDelete: false,
+      };
     }),
   );
   for (const [selector, offset] of [
@@ -462,10 +476,118 @@ function wireSetupSettingsDemo(root: HTMLElement): () => void {
         if (state)
           permissionRulesDemoDialog.value = {
             ...state,
-            page: permissionRulesPage(PERMISSION_RULES_DEMO, state.query, state.page + offset).page,
+            page: permissionRulesPage(permissionRulesDemoRules.value, state.query, state.page + offset).page,
           };
       }),
     );
+  demoListeners.add(
+    delegate(
+      root,
+      'change',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRule.selector}`,
+      (_event, target) => {
+        const state = permissionRulesDemoDialog.value;
+        if (!state) return;
+        const selected = new Set(state.selected ?? []),
+          key = (target as HTMLElement).getAttribute('data-rule-key');
+        if (!key) return;
+        if ((target as FormControl & { checked: boolean }).checked) selected.add(key);
+        else selected.delete(key);
+        permissionRulesDemoDialog.value = { ...state, selected: [...selected], confirmingDelete: false };
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRulesPage.selector}`,
+      () => {
+        const state = permissionRulesDemoDialog.value;
+        if (!state) return;
+        const selected = new Set(state.selected ?? []),
+          rows = permissionRulesPage(permissionRulesDemoRules.value, state.query, state.page).rows,
+          all = rows.every((rule) => selected.has(permissionRuleKey(rule)));
+        for (const rule of rows) {
+          const key = permissionRuleKey(rule);
+          if (all) selected.delete(key);
+          else selected.add(key);
+        }
+        permissionRulesDemoDialog.value = { ...state, selected: [...selected], confirmingDelete: false };
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.clearPermissionRuleSelection.selector}`,
+      () => {
+        const state = permissionRulesDemoDialog.value;
+        if (state) permissionRulesDemoDialog.value = { ...state, selected: [], confirmingDelete: false };
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.selector}`,
+      (_event, target) => {
+        const state = permissionRulesDemoDialog.value,
+          decision = (target as HTMLElement).getAttribute('data-decision');
+        if (!state || (decision !== 'allow' && decision !== 'deny')) return;
+        const selected = new Set(state.selected ?? []);
+        permissionRulesDemoRules.value = permissionRulesDemoRules.value.map((rule) =>
+          selected.has(permissionRuleKey(rule)) ? { ...rule, decision } : rule,
+        );
+        permissionRulesDemoDialog.value = { ...state, selected: [] };
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.requestDeleteSelectedPermissionRules.selector}`,
+      () => {
+        const state = permissionRulesDemoDialog.value;
+        if (state) permissionRulesDemoDialog.value = { ...state, confirmingDelete: true };
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.cancelDeleteSelectedPermissionRules.selector}`,
+      () => {
+        const state = permissionRulesDemoDialog.value;
+        if (state) permissionRulesDemoDialog.value = { ...state, confirmingDelete: false };
+      },
+    ),
+  );
+  demoListeners.add(
+    delegate(
+      root,
+      'click',
+      `[data-demo-permission-rules] ${NOTIFICATIONS_AND_LINKS_ACTIONS.confirmDeleteSelectedPermissionRules.selector}`,
+      () => {
+        const state = permissionRulesDemoDialog.value;
+        if (!state?.confirmingDelete) return;
+        const selected = new Set(state.selected ?? []);
+        permissionRulesDemoRules.value = permissionRulesDemoRules.value.filter(
+          (rule) => !selected.has(permissionRuleKey(rule)),
+        );
+        permissionRulesDemoDialog.value = {
+          ...state,
+          selected: [],
+          confirmingDelete: false,
+          page: permissionRulesPage(permissionRulesDemoRules.value, state.query, state.page).page,
+        };
+      },
+    ),
+  );
   demoListeners.add(
     delegateCapture(
       root,

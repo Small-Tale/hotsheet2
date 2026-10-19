@@ -2246,8 +2246,10 @@ so every setup dialog has one back affordance (HS2-WJ4JDW).
   returns to Ticket sources with automation off (HS2-PS9BQV).
 - `PermissionRulesSettings` — **production + demo built**: shows the latest three project
   answers in reverse arrival order. A Kerf dialog searches safe displayed labels and pages
-  the complete list five at a time, while each row keeps its individual revoke action
-  (HS2-JNHAYB, HS2-16XPHH).
+  the complete list five at a time, while each row keeps its individual revoke action.
+  Users can select answers across pages, set their decisions to Allow or Deny, or confirm
+  a bulk deletion; failed rows remain selected for retry (HS2-JNHAYB, HS2-16XPHH,
+  HS2-C057G5).
 - `SettingsSection`
 - `EffectiveSettingField`
 - `SettingScopePicker`

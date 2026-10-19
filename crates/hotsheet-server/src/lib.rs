@@ -144,7 +144,7 @@ pub(crate) use routes::terminals::{
     poll_terminal_question_answer, put_checkout_terminal_settings, put_checkout_trash_settings,
     put_terminal_limits, put_terminal_settings, read_terminal, reconcile_terminal_limits,
     rename_terminal, resolve_permission, resolve_terminal_question, revoke_permission_rule,
-    write_terminal,
+    update_permission_rule, write_terminal,
 };
 use routes::ticket_writes::{
     add_store, add_ticket_attachment, assign_ticket, batch_update, close_ticket, create_ticket,
@@ -1483,10 +1483,12 @@ pub fn app(state: AppState) -> Router {
         // hook), HS2-YMR9HE. Blocks until answered over the route-back, or times out.
         .route("/permissions/ask", post(ask_permission))
         .route("/permissions/bridge-probe", get(probe_permission_bridge))
-        // Remembered answers: list and revoke (HS2-JNHAYB).
+        // Remembered answers: list, edit decisions, and revoke (HS2-JNHAYB, HS2-C057G5).
         .route(
             "/permissions/rules",
-            get(list_permission_rules).delete(revoke_permission_rule),
+            get(list_permission_rules)
+                .patch(update_permission_rule)
+                .delete(revoke_permission_rule),
         )
         // What the server is currently driving (HS2-TCV3BF).
         .route("/connections", get(list_connections))

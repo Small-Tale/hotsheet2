@@ -18,7 +18,7 @@ import { type PermissionRule, permissionRuleKey } from '../permission-notificati
 
 export interface PermissionRulesSettingsProps {
   rules: readonly PermissionRule[];
-  dialog?: { query: string; page: number };
+  dialog?: { query: string; page: number; selected?: readonly string[]; busy?: boolean; confirmingDelete?: boolean };
   /** Rule keys whose revoke request is in flight. */
   revoking?: readonly string[];
   message?: string;
@@ -58,8 +58,11 @@ function ruleLabel(tool: string, action: string) {
  */
 export function PermissionRulesSettings({ rules, dialog, revoking = [], message = '' }: PermissionRulesSettingsProps) {
   const ordered = permissionRulesPage(rules, '', 1).matches,
-    page = dialog ? permissionRulesPage(rules, dialog.query, dialog.page) : undefined;
-  function ruleRows(items: readonly PermissionRule[]) {
+    page = dialog ? permissionRulesPage(rules, dialog.query, dialog.page) : undefined,
+    selected = new Set(dialog?.selected ?? []),
+    selectedCount = rules.filter((rule) => selected.has(permissionRuleKey(rule))).length,
+    pageSelected = page?.rows.length ? page.rows.every((rule) => selected.has(permissionRuleKey(rule))) : false;
+  function ruleRows(items: readonly PermissionRule[], selectable = false) {
     return items.map((rule) => {
       const key = permissionRuleKey(rule),
         allowed = rule.decision === 'allow',
@@ -73,6 +76,15 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
             'data-permission-rule-scope': rule.scope,
           }}
         >
+          {selectable && (
+            <wa-checkbox
+              {...NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRule.attrs}
+              data-rule-key={key}
+              checked={selected.has(key)}
+              disabled={dialog?.busy}
+              aria-label={`Select ${label}`}
+            />
+          )}
           <LucideIcon
             icon={allowed ? ShieldCheck : ShieldX}
             name={allowed ? 'shield-check' : 'shield-x'}
@@ -90,7 +102,7 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
             emphasis="plain"
             size="compact"
             action={NOTIFICATIONS_AND_LINKS_ACTIONS.revokePermissionRule.value}
-            disabled={revoking.includes(key)}
+            disabled={revoking.includes(key) || dialog?.busy}
             ariaLabel={`Revoke ${label}`}
             title="Forget this answer; the next identical request asks again"
             rootAttributes={{ 'data-rule-key': key }}
@@ -171,9 +183,82 @@ export function PermissionRulesSettings({ rules, dialog, revoking = [], message 
                 autofocus
               />
               <Text tone="quiet" size="compact">{`${page.matches.length} matching answers · newest first`}</Text>
+              <Row gap="xs" vAlign="middle" wrap>
+                <Button
+                  emphasis="secondary"
+                  action={NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRulesPage.value}
+                  disabled={page.rows.length === 0 || dialog?.busy}
+                >
+                  {pageSelected ? 'Deselect Page' : 'Select Page'}
+                </Button>
+                <Text tone="quiet" size="compact">{`${selectedCount} selected`}</Text>
+                {selectedCount > 0 && (
+                  <Button
+                    emphasis="plain"
+                    action={NOTIFICATIONS_AND_LINKS_ACTIONS.clearPermissionRuleSelection.value}
+                    disabled={dialog?.busy}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </Row>
+              {selectedCount > 0 && (
+                <Row gap="xs" vAlign="middle" wrap>
+                  <Button
+                    emphasis="secondary"
+                    action={NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.value}
+                    rootAttributes={{ 'data-decision': 'allow' }}
+                    disabled={dialog?.busy}
+                  >
+                    Allow Selected
+                  </Button>
+                  <Button
+                    emphasis="secondary"
+                    action={NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.value}
+                    rootAttributes={{ 'data-decision': 'deny' }}
+                    disabled={dialog?.busy}
+                  >
+                    Deny Selected
+                  </Button>
+                  <Button
+                    emphasis="plain"
+                    action={NOTIFICATIONS_AND_LINKS_ACTIONS.requestDeleteSelectedPermissionRules.value}
+                    disabled={dialog?.busy}
+                  >
+                    Delete Selected
+                  </Button>
+                </Row>
+              )}
+              {dialog?.confirmingDelete && selectedCount > 0 && (
+                <Row
+                  gap="xs"
+                  vAlign="middle"
+                  wrap
+                  rootAttributes={{ role: 'group', 'aria-label': 'Confirm bulk deletion' }}
+                >
+                  <Text size="compact">{`Delete ${selectedCount} remembered answers? Future matching requests will ask again.`}</Text>
+                  <Button
+                    emphasis="primary"
+                    action={NOTIFICATIONS_AND_LINKS_ACTIONS.confirmDeleteSelectedPermissionRules.value}
+                    disabled={dialog.busy}
+                  >
+                    Confirm Delete
+                  </Button>
+                  <Button
+                    emphasis="plain"
+                    action={NOTIFICATIONS_AND_LINKS_ACTIONS.cancelDeleteSelectedPermissionRules.value}
+                    disabled={dialog.busy}
+                  >
+                    Cancel
+                  </Button>
+                </Row>
+              )}
+              <Text tone="quiet" size="compact" role="status">
+                {dialog?.busy ? 'Updating selected answers…' : message}
+              </Text>
               {page.rows.length ? (
                 <List gap="xs" rootAttributes={{ role: 'list', 'aria-label': 'All Remembered Answers' }}>
-                  {ruleRows(page.rows)}
+                  {ruleRows(page.rows, true)}
                 </List>
               ) : (
                 <EmptyState title="No Matching Answers" detail="Try a tool, decision, scope, or visible fingerprint." />

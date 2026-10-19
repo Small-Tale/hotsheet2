@@ -798,6 +798,25 @@ test('lets the remembered-answer demo search, page, and dismiss its dialog (HS2-
   await expect(dialog).toHaveCount(0);
 });
 
+test('lets the remembered-answer demo edit and confirm deletion of a selected page (HS2-C057G5)', async ({ page }) => {
+  await page.goto('/ux-demo?component=permission-rules-settings');
+  const example = page.locator('[data-demo-permission-rules]');
+  await example.getByRole('button', { name: 'Show all 6 answers' }).click();
+  const dialog = example.locator('[data-dialog-component="permission-rules-dialog"]');
+  await dialog.getByRole('button', { name: 'Select Page' }).click();
+  await expect(dialog).toContainText('5 selected');
+  await dialog.getByRole('button', { name: 'Deny Selected' }).click();
+  await expect(dialog).toContainText('0 selected');
+  await expect(
+    dialog.getByRole('list', { name: 'All Remembered Answers' }).getByText('Deny', { exact: false }),
+  ).toHaveCount(5);
+  await dialog.getByRole('button', { name: 'Select Page' }).click();
+  await dialog.getByRole('button', { name: 'Delete Selected' }).click();
+  await expect(dialog.getByRole('button', { name: 'Confirm Delete' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Confirm Delete' }).click();
+  await expect(dialog).toContainText('1 matching answers');
+});
+
 test('uses Kerf layout primitives across migrated settings and dialog surfaces (HS2-S3BXC0)', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 900 });
 

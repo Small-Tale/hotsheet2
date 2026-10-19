@@ -44,6 +44,11 @@ export interface NotificationAndLinkInteractionsDependencies {
   readonly closePermissionRules: () => void;
   readonly searchPermissionRules: (projectId: string, query: string) => void;
   readonly movePermissionRulesPage: (projectId: string, offset: number) => void;
+  readonly selectPermissionRule: (projectId: string, key: string, checked: boolean) => void;
+  readonly selectPermissionRulesPage: (projectId: string) => void;
+  readonly clearPermissionRuleSelection: (projectId: string) => void;
+  readonly requestDeleteSelectedPermissionRules: (projectId: string, confirming: boolean) => void;
+  readonly applySelectedPermissionRules: (projectId: string, operation: 'delete' | 'allow' | 'deny') => Promise<void>;
   readonly error: Signal<string>;
   readonly selectedProjectId: Signal<string>;
   readonly hideVerifiedByProject: Signal<Record<string, boolean>>;
@@ -74,6 +79,11 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     closePermissionRules,
     searchPermissionRules,
     movePermissionRulesPage,
+    selectPermissionRule,
+    selectPermissionRulesPage,
+    clearPermissionRuleSelection,
+    requestDeleteSelectedPermissionRules,
+    applySelectedPermissionRules,
     error,
     selectedProjectId,
     hideVerifiedByProject,
@@ -195,6 +205,69 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.nextPermissionRulesPage.selector, () => {
       movePermissionRulesPage(selectedProjectId.value, 1);
     }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'change',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRule.selector,
+      (_event, target) => {
+        const key = data(target).ruleKey;
+        if (key) selectPermissionRule(selectedProjectId.value, key, (target as Control & { checked: boolean }).checked);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.selectPermissionRulesPage.selector, () => {
+      selectPermissionRulesPage(selectedProjectId.value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.clearPermissionRuleSelection.selector, () => {
+      clearPermissionRuleSelection(selectedProjectId.value);
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.editSelectedPermissionRules.selector,
+      (_event, target) => {
+        const decision = data(target).decision;
+        if (decision === 'allow' || decision === 'deny')
+          void applySelectedPermissionRules(selectedProjectId.value, decision);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.requestDeleteSelectedPermissionRules.selector,
+      () => {
+        requestDeleteSelectedPermissionRules(selectedProjectId.value, true);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.cancelDeleteSelectedPermissionRules.selector,
+      () => {
+        requestDeleteSelectedPermissionRules(selectedProjectId.value, false);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.confirmDeleteSelectedPermissionRules.selector,
+      () => {
+        void applySelectedPermissionRules(selectedProjectId.value, 'delete');
+      },
+    ),
   );
   lifetime.add(
     delegateCapture(

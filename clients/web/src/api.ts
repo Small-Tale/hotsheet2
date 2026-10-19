@@ -1607,6 +1607,20 @@ export class Api {
     });
   /** Remembered permission answers: chat, session, and durable rules (HS2-JNHAYB). */
   permissionRules = () => this.parsed(parsePermissionRule.list, '/permissions/rules');
+  updatePermissionRule = (
+    rule: { project: string; connection?: string; tool: string; action: string },
+    decision: 'allow' | 'deny',
+  ) =>
+    this.parsed(ignoreBody, '/permissions/rules', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        project: rule.project,
+        ...(rule.connection ? { connection: rule.connection } : {}),
+        tool: rule.tool,
+        action: rule.action,
+        decision,
+      }),
+    });
   revokePermissionRule = (rule: { project: string; connection?: string; tool: string; action: string }) =>
     this.parsed(ignoreBody, '/permissions/rules', {
       method: 'DELETE',

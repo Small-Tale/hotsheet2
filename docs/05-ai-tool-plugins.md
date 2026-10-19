@@ -927,9 +927,14 @@ connection, tool, and action) into one popup that names the count; a one-time an
 sent for each. `GET /permissions/rules` lists every remembered rule with its scope and
 `DELETE /permissions/rules` `{project, connection?, tool, action}` revokes one by its
 opaque keyed action identifier (removing a durable rule from the store's rule file too);
-Settings → Permissions lists the project's remembered answers by tool, scope, decision,
+`PATCH /permissions/rules` accepts the same exact slot plus `decision: "allow" | "deny"`;
+it changes the answer without changing its chat, session, or durable lifetime. A durable
+change is written to the rule file before the in-memory answer changes. Settings → Permissions lists the project's remembered answers by tool, scope, decision,
 and a short fingerprint identifier, with command/path details hidden and each rule
-revocable. Remembering an answer, revoking one, and closing a
+revocable. The full list supports selecting individual answers or a visible page, then
+applying Allow or Deny to mixed selections or deleting them after confirmation. A batch
+reports successes and failures separately, keeps failed answers selected for retry, and
+refreshes the list. Remembering an answer, editing or revoking one, and closing a
 drive connection that held chat rules each publish a replayable `permission_rules_changed`
 change event for the project, so another client's open Settings → Permissions list refetches
 once instead of showing a revoked rule until its next resolution (HS2-KYK1S7).

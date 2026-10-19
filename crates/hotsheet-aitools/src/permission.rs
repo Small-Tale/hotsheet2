@@ -498,6 +498,25 @@ impl PermissionBridge {
         Some(self.rules.remove(position))
     }
 
+    /// Change the answer in an existing exact slot without changing its lifetime or order.
+    pub fn update_decision(
+        &mut self,
+        project: &str,
+        connection: Option<&str>,
+        tool: &str,
+        action: &str,
+        decision: Decision,
+    ) -> Option<Rule> {
+        let rule = self.rules.iter_mut().find(|rule| {
+            rule.project == project
+                && rule.tool == tool
+                && rule.action == action
+                && rule.connection.as_deref() == connection
+        })?;
+        rule.decision = decision;
+        Some(rule.clone())
+    }
+
     /// Drop every chat rule of a connection when its chat closes (HS2-JNHAYB).
     pub fn forget_connection(&mut self, connection: &str) -> usize {
         let before = self.rules.len();
@@ -927,6 +946,39 @@ impl SharedPermissionBridge {
             .revoke(project, connection, tool, action)
     }
 
+    /// Change an exact remembered answer while holding the bridge lock across durable
+    /// persistence. A file error leaves the live rule unchanged.
+    pub fn update_decision(
+        &self,
+        project: &str,
+        connection: Option<&str>,
+        tool: &str,
+        action: &str,
+        decision: Decision,
+        durable_path: Option<&Path>,
+    ) -> io::Result<Option<Rule>> {
+        let mut bridge = self.inner.lock_or_recover();
+        let Some(current) = bridge.rules().iter().find(|rule| {
+            rule.project == project
+                && rule.connection.as_deref() == connection
+                && rule.tool == tool
+                && rule.action == action
+        }) else {
+            return Ok(None);
+        };
+        let persist = current.persist;
+        if persist {
+            let path = durable_path
+                .ok_or_else(|| io::Error::other("permission rule store unavailable"))?;
+            update_stored_rule_decision(path, project, tool, action, decision)?;
+        }
+        let updated = bridge.update_decision(project, connection, tool, action, decision);
+        if persist {
+            bridge.update_decision("", None, tool, action, decision);
+        }
+        Ok(updated)
+    }
+
     /// Drop a closed chat's rules; see [`PermissionBridge::forget_connection`].
     pub fn forget_connection(&self, connection: &str) -> usize {
         self.inner.lock_or_recover().forget_connection(connection)
@@ -1070,6 +1122,43 @@ pub fn remove_rule(path: &Path, project: &str, tool: &str, action: &str) -> std:
     Ok(true)
 }
 
+/// Edit a durable answer in place. Preserve its file order so an edit does not change
+/// the newest-first Settings list after a restart.
+fn update_stored_rule_decision(
+    path: &Path,
+    project: &str,
+    tool: &str,
+    action: &str,
+    decision: Decision,
+) -> io::Result<()> {
+    let key = action_key_for(path)?;
+    let action_key = stored_action_key(action, &key).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "permission rule has an obsolete key",
+        )
+    })?;
+    let mut rules: Vec<StoredRule> = load_rules(path).iter().map(StoredRule::from).collect();
+    let mut found = false;
+    for rule in &mut rules {
+        if (rule.project == project || rule.project.is_empty())
+            && rule.tool == tool
+            && rule.action == action_key
+        {
+            rule.decision = decision;
+            found = true;
+        }
+    }
+    if !found {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "durable permission rule missing",
+        ));
+    }
+    let json = serde_json::to_string_pretty(&rules).map_err(io::Error::other)?;
+    std::fs::write(path, json)
+}
+
 /// Persist an `Always` allow-rule to `path`, replacing any existing rule for the same
 /// `(project, tool, action)` (a later answer wins) — so remembered answers survive a restart.
 pub fn append_rule(path: &Path, rule: &Rule) -> std::io::Result<()> {
@@ -1095,6 +1184,41 @@ pub fn append_rule(path: &Path, rule: &Rule) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn editing_durable_rule_keeps_storage_order_and_rejects_missing_slots() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rules.json");
+        for action in ["first", "second"] {
+            append_rule(
+                &path,
+                &Rule {
+                    project: "p".into(),
+                    tool: "Bash".into(),
+                    action: action.into(),
+                    decision: Decision::Allow,
+                    persist: true,
+                    connection: None,
+                },
+            )
+            .unwrap();
+        }
+        let before = load_rules(&path);
+        update_stored_rule_decision(&path, "p", "Bash", &before[0].action, Decision::Deny).unwrap();
+        let after = load_rules(&path);
+        assert_eq!(
+            after.iter().map(|rule| &rule.action).collect::<Vec<_>>(),
+            before.iter().map(|rule| &rule.action).collect::<Vec<_>>()
+        );
+        assert_eq!(after[0].decision, Decision::Deny);
+        assert_eq!(after[1].decision, Decision::Allow);
+        assert_eq!(
+            update_stored_rule_decision(&path, "q", "Bash", &before[0].action, Decision::Allow)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::NotFound
+        );
+    }
 
     #[test]
     fn keyed_fingerprint_matches_an_independent_hmac_sha256_vector() {
@@ -1793,6 +1917,33 @@ mod tests {
             infos.iter().map(|rule| rule.scope).collect::<Vec<_>>(),
             [Scope::Chat, Scope::Always]
         );
+        // An exact chat edit changes only that chat; the project answer stays intact.
+        let chat_action = infos[0].action.clone();
+        let project_action = infos[1].action.clone();
+        assert!(
+            b.update_decision("p", Some("chat-a"), "Bash", &chat_action, Decision::Deny)
+                .is_some()
+        );
+        assert_eq!(
+            b.request_for_project("p", "chat-a", "Bash", "ls"),
+            Outcome::Auto(Decision::Deny)
+        );
+        assert_eq!(b.rules()[1].decision, Decision::Deny);
+        assert!(
+            b.update_decision("p", None, "Bash", &project_action, Decision::Allow)
+                .is_some()
+        );
+        assert_eq!(
+            b.request_for_project("p", "chat-c", "Bash", "ls"),
+            Outcome::Auto(Decision::Allow)
+        );
+        assert!(
+            b.update_decision("q", None, "Bash", &project_action, Decision::Deny)
+                .is_none()
+        );
+        // Restore the original decisions for the rest of this transition matrix.
+        b.update_decision("p", Some("chat-a"), "Bash", &chat_action, Decision::Allow);
+        b.update_decision("p", None, "Bash", &project_action, Decision::Deny);
         // Revoking the chat rule falls back to the project rule; revoking that asks again.
         assert!(b.revoke("p", Some("chat-a"), "Bash", "ls").is_some());
         assert_eq!(
