@@ -2247,7 +2247,8 @@ so every setup dialog has one back affordance (HS2-WJ4JDW).
   setting (Off, Auto-allow, Auto-deny) shows the delay select disabled and enabled, and Reset
   returns to Ticket sources with automation off (HS2-PS9BQV).
 - `PermissionRulesSettings` — **production + demo built**: shows the latest three project
-  answers in reverse arrival order. A Kerf dialog searches safe displayed labels and pages
+  answers in reverse arrival order, with concise duration labels because every row is scoped
+  to the selected project (HS2-BH6GCG). A Kerf dialog searches safe displayed labels and pages
   the complete list five at a time, while each row keeps its individual revoke action.
   Users can select answers across pages, set their decisions to Allow or Deny, or confirm
   a bulk deletion; failed rows remain selected for retry (HS2-JNHAYB, HS2-16XPHH,

@@ -40,8 +40,8 @@ export function permissionRulesPage(rules: readonly PermissionRule[], query: str
 
 const SCOPE_LABELS: Record<PermissionRule['scope'], string> = {
   chat: 'This chat only, until it closes',
-  session: 'This project, until the server restarts',
-  always: 'This project, always',
+  session: 'Until the server restarts',
+  always: 'Always',
 };
 
 /** Opaque ID distinguishes otherwise similar rules without exposing command/path text. */

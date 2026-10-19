@@ -353,7 +353,8 @@ describe('chat-scoped permission answers (HS2-JNHAYB)', () => {
     );
     expect(markup).toContain('Bash request · 12345678');
     expect(markup).toContain('This chat only, until it closes');
-    expect(markup).toContain('Deny · This project, always · Details hidden');
+    expect(markup).toContain('Deny · Always · Details hidden');
+    expect(markup).not.toContain('This project, always');
     expect(markup).not.toContain('npm test');
     expect(markup).not.toContain('rm -rf build');
     expect(markup.match(/data-action="revoke-permission-rule"/g)).toHaveLength(2);

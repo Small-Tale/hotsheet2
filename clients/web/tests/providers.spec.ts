@@ -15178,6 +15178,13 @@ test('previews three recent permission answers and searches the paged full list 
     decision: index % 2 ? 'deny' : 'allow',
     scope: index % 2 ? 'session' : 'always',
   }));
+  rules.push({
+    project: '/work/other.hs2',
+    tool: 'OtherProjectTool',
+    action: `hmac-sha256:v2:${'a'.repeat(16)}:${'f'.repeat(64)}`,
+    decision: 'allow',
+    scope: 'always',
+  });
   await page.route('**/permissions/rules', (route) => {
     if (route.request().method() === 'DELETE') {
       const body = route.request().postDataJSON() as { action: string };
@@ -15196,6 +15203,9 @@ test('previews three recent permission answers and searches the paged full list 
     recent = preview.getByRole('list', { name: 'Recent Remembered Answers' });
   await expect(recent.locator('[data-permission-rule]')).toHaveCount(3);
   await expect(recent.locator('[data-permission-rule]').first()).toContainText('00000011');
+  await expect(recent).toContainText('Until the server restarts');
+  await expect(preview).not.toContainText('This project,');
+  await expect(preview).not.toContainText('OtherProjectTool');
   await expect(preview.getByRole('button', { name: 'Show all 12 answers' })).toBeVisible();
   await preview.screenshot({ path: 'target/visual-captures/hs2-16xphh-preview-wide.png' });
   await page.setViewportSize({ width: 2048, height: 1128 });
@@ -15207,6 +15217,7 @@ test('previews three recent permission answers and searches the paged full list 
     search = dialog.getByRole('searchbox', { name: 'Search Remembered Answers' });
   await expect(dialog).toBeVisible();
   await expect(all.locator('[data-permission-rule]')).toHaveCount(5);
+  await expect(dialog).not.toContainText('OtherProjectTool');
   await expect(dialog).toContainText('Page 1 of 3');
   await dialog.screenshot({ path: 'target/visual-captures/hs2-16xphh-dialog-wide.png' });
   await dialog.getByRole('button', { name: 'Next' }).click();

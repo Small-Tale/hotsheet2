@@ -929,8 +929,9 @@ sent for each. `GET /permissions/rules` lists every remembered rule with its sco
 opaque keyed action identifier (removing a durable rule from the store's rule file too);
 `PATCH /permissions/rules` accepts the same exact slot plus `decision: "allow" | "deny"`;
 it changes the answer without changing its chat, session, or durable lifetime. A durable
-change is written to the rule file before the in-memory answer changes. Settings → Permissions lists the project's remembered answers by tool, scope, decision,
-and a short fingerprint identifier, with command/path details hidden and each rule
+change is written to the rule file before the in-memory answer changes. Settings →
+Permissions lists only the selected project's remembered answers by tool, scope,
+decision, and a short fingerprint identifier, with command/path details hidden and each rule
 revocable. The full list supports selecting individual answers or a visible page, then
 applying Allow or Deny to mixed selections or deleting them after confirmation. A batch
 reports successes and failures separately, keeps failed answers selected for retry, and
@@ -938,6 +939,8 @@ refreshes the list. Remembering an answer, editing or revoking one, and closing 
 drive connection that held chat rules each publish a replayable `permission_rules_changed`
 change event for the project, so another client's open Settings → Permissions list refetches
 once instead of showing a revoked rule until its next resolution (HS2-KYK1S7).
+Rows label chat, until server restart, and always lifetimes without repeating the
+project scope that the page already establishes (HS2-BH6GCG).
 
 Remembered answers match the **exact project, tool, and action**. For Claude and Codex
 permission hooks, the action is the command, path, or serialized tool input; Codex

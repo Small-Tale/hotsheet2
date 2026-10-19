@@ -216,7 +216,10 @@ describe('chat-scoped answers and identical-request groups (HS2-JNHAYB)', () => 
       { project: '/p/.hs2', connection: 'c', tool: 'Bash', action: 'ls', decision: 'deny', scope: 'chat' },
       { project: '/elsewhere', tool: 'Bash', action: 'ls', decision: 'allow', scope: 'session' },
     ] as const;
-    expect(projectPermissionRules(rules, { ...project, stores: ['/p/.hs2'] })).toHaveLength(2);
+    const current = { ...project, stores: ['/p/.hs2'] };
+    expect(projectPermissionRules(rules, current)).toEqual(rules.slice(0, 2));
+    expect(projectPermissionRules(rules, { id: 'other', root: '/elsewhere', stores: [] })).toEqual([rules[2]]);
+    expect(projectPermissionRules(rules, current)).toEqual(rules.slice(0, 2));
     expect(permissionRuleKey(rules[0])).not.toBe(permissionRuleKey(rules[1]));
   });
 });
