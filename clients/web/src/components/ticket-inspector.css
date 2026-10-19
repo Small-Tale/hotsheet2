@@ -58,15 +58,11 @@
   --ticket-info-panel-blocked-reason-height: var(--hs-blocked-reason-reader-height, auto);
   --note-card-editor-height: var(--hs-note-reader-height, auto);
 }
-/* Pending provider sync (Jira outbox): a warning-tinted surface of operations and their actions. */
+/* Pending provider sync (Jira outbox): Kerf ContentItem owns the warning surface and List owns
+   the operation stack. The app keeps the existing 12px outer and inner spacing. */
 .ticket-inspector__outbox {
-  display: grid;
-  gap: var(--kui-space-xs);
-  margin: var(--kui-space-s);
-  border: 1px solid var(--wa-color-warning-border-normal);
-  border-radius: var(--wa-border-radius-m);
-  padding: var(--kui-space-s);
-  background: var(--wa-color-warning-fill-quiet);
+  --kui-layout-inline-margin: var(--kui-space-s);
+  --kui-layout-item-padding: var(--kui-space-s);
 }
 /* One operation: state, actions, and its error/conflict note on its own line. */
 .ticket-inspector__outbox-operation {

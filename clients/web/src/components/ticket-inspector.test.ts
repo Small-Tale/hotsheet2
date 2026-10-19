@@ -568,9 +568,8 @@ describe('TicketInspector', () => {
     // Each direct child sits 8px from the edge through the column's own inline padding (HS2-KZ646H); headers
     // get a 1px transparent border + 8px padding (17px text) and bordered surfaces own their border+padding
     // at the 8px column — no negative margins and no child-margin rule (HS2-R64ETQ).
-    expect(panelCss).toMatch(
-      /\.ticket-inspector-panel \{[^}]*padding: 0 var\(--kui-space-xs\) var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-l\);/,
-    );
+    expect(panelCss).toMatch(/\.ticket-inspector-panel \{[^}]*padding: 0 var\(--kui-space-xs\) var\(--kui-space-xs\)/);
+    expect(markup).toMatch(/class="ticket-inspector-panel[^>]*>[\s\S]*?data-component="list"[^>]*data-gap="true"/);
     expect(panelCss).not.toContain('> *');
     // Each tab panel owns its own header inset (HS2-MGVE50); Kerf ListHeader owns the Timeline and
     // Attachments headers (HS2-52D1JZ, HS2-QK4HES).

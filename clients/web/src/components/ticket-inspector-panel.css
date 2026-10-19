@@ -1,18 +1,15 @@
 /* TicketInspectorPanel (HS2-MGVE50): the scrolling content column every inspector tab panel composes.
    Kerf 8px-grid inset model (HS2-EQEGGG): each child sits 8px from the inspector edge and owns its
-   own border and padding (HS2-R64ETQ). A Kerf List would express this stack, but its rootAttributes
-   cannot carry the panels' ARIA and drop-target attributes (KF-DNZJCG).
+   own border and padding (HS2-R64ETQ). Kerf List owns the inner section stack; this wrapper keeps
+   each panel's public data-component identity and its ARIA/drop-target attributes (HS2-EXTPGJ).
    The panel only clips sideways overflow; the inspector's Pane content scrolls (HS2-RWGQWN). */
 .ticket-inspector-panel {
   --kui-layout-inline-margin: 0;
-  display: grid;
   width: 100%;
   min-width: 0;
   min-height: 0;
   padding: 0 var(--kui-space-xs) var(--kui-space-xs);
   overflow-x: hidden;
-  align-content: start;
-  gap: var(--kui-space-l);
 }
 /* The reader modal's generous inset replaces the sidebar's 8px column inset. */
 .ticket-inspector-panel--reader {

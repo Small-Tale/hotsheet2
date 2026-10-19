@@ -1,6 +1,6 @@
-/* Layered reader shell. Kerf DialogSurface cannot express the stacked-layer inset, offset transform, and
-   pointer pass-through, and it would name the inner panel beside the host's explicit per-layer dialog
-   role; the rules below configure the raw Web Awesome dialog through its documented --width and parts. */
+/* Layered reader shell. Kerf DialogSurface cannot yet express the controlled open/active state,
+   stacked offset, and pointer pass-through (KF-XGX98A, HS2-F25C3V). The raw Web Awesome dialog
+   uses its documented --width and parts until that API is available. */
 .ticket-reader-dialog {
   position: fixed;
   inset: remify(24px) max(remify(24px), calc((100vw - remify(1024px)) / 2));

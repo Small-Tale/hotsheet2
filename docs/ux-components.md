@@ -1352,8 +1352,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   unbroken details, and long note bodies inside the inspector at narrow widths;
   wide Markdown tables and code blocks scroll within their own content surface.
   The sidebar follows the kerf 8px-grid inset (HS2-EQEGGG, refined in HS2-R64ETQ):
-  the shared `TicketInspectorPanel` column (`ticket-inspector-panel.tsx`) that every tab panel
-  composes owns no inline padding, and each direct child (section, notes, provenance) sits 8px from the edge and owns no border/padding of its own. Bordered
+  the shared `TicketInspectorPanel` wrapper (`ticket-inspector-panel.tsx`) keeps each panel's
+  `data-component`, ARIA, and drop-target identity, while an inner Kerf `List` owns the section
+  stack and its 24px spacing (HS2-EXTPGJ). The wrapper gives each child (section, notes,
+  provenance) an 8px edge inset; these children own no extra border/padding of their own. Bordered
   surfaces/cards/fields therefore sit their own 1px border on the 8px column and own their 8px
   padding, so their text lands at 17px; headers and other non-bordered content get a 1px
   transparent inline border + 8px padding to align their text to the same 17px column. There
@@ -1365,6 +1367,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   follow the same rule (heading at 17px, evidence/commit/attachment surfaces at the 8px column).
   The wider reader modal keeps its own generous inline padding through the column's
   `presentation="reader"` variant, so its sections do not add the 8px margin on top.
+  Pending Jira operations sit in a warning `ContentItem` with an inner Kerf `List`; their
+  retry and discard controls remain app actions.
+  The reader still uses a raw Web Awesome dialog for controlled stacked layers; Kerf's
+  missing layer API is tracked by KF-XGX98A and HS2-F25C3V.
   **Style ownership (HS2-MGVE50):** each panel styles only its own markup in its own stylesheet —
   `TicketInfoPanel` (`ticket-info-panel__*`), `TicketTimeline` (`ticket-timeline__*`),
   `TicketAttachments` (`ticket-attachments__*`), `TicketCodeReview` (`ticket-code-review--panel`),

@@ -4,7 +4,9 @@ import './ticket-inspector.css';
 
 import { Badge } from '@kerfjs/ui/badge';
 import { Button } from '@kerfjs/ui/button';
+import { ContentItem } from '@kerfjs/ui/content-item';
 import { foregroundColorVar, pct, rem } from '@kerfjs/ui/css-values';
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { Skeleton } from '@kerfjs/ui/skeleton';
@@ -460,60 +462,62 @@ export function ticketInspectorPanel({
   const content = (
     <div class="ticket-inspector__body" data-component="ticket-inspector-body" {...identity} {...loadingAttributes}>
       {activeTab === 'info' && pendingOperations.length > 0 && (
-        <section class="ticket-inspector__outbox" aria-label="Jira Sync Status">
-          <strong>Jira sync</strong>
-          {pendingOperations.map((operation) => (
-            <div class="ticket-inspector__outbox-operation" data-state={operation.state}>
-              <span>
-                {operation.state === 'needs_attention'
-                  ? 'Needs attention'
-                  : operation.state === 'rate_limited'
-                    ? 'Waiting for Jira rate limit'
-                    : operation.state === 'sending'
-                      ? 'Sending…'
-                      : operation.state === 'queued'
-                        ? 'Queued locally'
-                        : operation.state === 'confirmed'
-                          ? 'Confirmed by Jira'
-                          : 'Local edit discarded'}
-              </span>
-              {operation.last_error && <small>{operation.last_error}</small>}
-              {operation.conflict && (
-                <small>Remote values changed while this edit was pending; local fields take precedence.</small>
-              )}
-              {operation.state === 'needs_attention' && (
-                <Button
-                  type="button"
-                  size="default"
-                  emphasis="secondary"
-                  action={INSPECTOR_AND_EDITOR_ACTIONS.retryProviderOutbox.value}
-                  rootAttributes={{
-                    'data-connection-id': operation.connection_id,
-                    'data-operation-id': operation.operation_id,
-                  }}
-                >
-                  Retry
-                </Button>
-              )}
-              {(operation.state === 'queued' ||
-                operation.state === 'rate_limited' ||
-                operation.state === 'needs_attention') && (
-                <Button
-                  type="button"
-                  size="default"
-                  emphasis="secondary"
-                  action={INSPECTOR_AND_EDITOR_ACTIONS.discardProviderOutbox.value}
-                  rootAttributes={{
-                    'data-connection-id': operation.connection_id,
-                    'data-operation-id': operation.operation_id,
-                  }}
-                >
-                  Discard Local Edit
-                </Button>
-              )}
-            </div>
-          ))}
-        </section>
+        <ContentItem appearance="warning" ariaLabel="Jira Sync Status" className="ticket-inspector__outbox">
+          <List gap="xs">
+            <strong>Jira sync</strong>
+            {pendingOperations.map((operation) => (
+              <div class="ticket-inspector__outbox-operation" data-state={operation.state}>
+                <span>
+                  {operation.state === 'needs_attention'
+                    ? 'Needs attention'
+                    : operation.state === 'rate_limited'
+                      ? 'Waiting for Jira rate limit'
+                      : operation.state === 'sending'
+                        ? 'Sending…'
+                        : operation.state === 'queued'
+                          ? 'Queued locally'
+                          : operation.state === 'confirmed'
+                            ? 'Confirmed by Jira'
+                            : 'Local edit discarded'}
+                </span>
+                {operation.last_error && <small>{operation.last_error}</small>}
+                {operation.conflict && (
+                  <small>Remote values changed while this edit was pending; local fields take precedence.</small>
+                )}
+                {operation.state === 'needs_attention' && (
+                  <Button
+                    type="button"
+                    size="default"
+                    emphasis="secondary"
+                    action={INSPECTOR_AND_EDITOR_ACTIONS.retryProviderOutbox.value}
+                    rootAttributes={{
+                      'data-connection-id': operation.connection_id,
+                      'data-operation-id': operation.operation_id,
+                    }}
+                  >
+                    Retry
+                  </Button>
+                )}
+                {(operation.state === 'queued' ||
+                  operation.state === 'rate_limited' ||
+                  operation.state === 'needs_attention') && (
+                  <Button
+                    type="button"
+                    size="default"
+                    emphasis="secondary"
+                    action={INSPECTOR_AND_EDITOR_ACTIONS.discardProviderOutbox.value}
+                    rootAttributes={{
+                      'data-connection-id': operation.connection_id,
+                      'data-operation-id': operation.operation_id,
+                    }}
+                  >
+                    Discard Local Edit
+                  </Button>
+                )}
+              </div>
+            ))}
+          </List>
+        </ContentItem>
       )}
       {activeTab === 'info' && (
         <TicketInfoPanel

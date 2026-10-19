@@ -1,5 +1,7 @@
 import './ticket-inspector-panel.css';
 
+import { List, type ListProps } from '@kerfjs/ui/list';
+
 export type TicketInspectorPanelPresentation = 'sidebar' | 'reader';
 
 export interface TicketInspectorPanelProps {
@@ -11,7 +13,7 @@ export interface TicketInspectorPanelProps {
   className?: string;
   /** Extra root attributes the composing panel owns (drop-target flags, ARIA). */
   attributes?: Record<string, string | undefined>;
-  children?: unknown;
+  children?: ListProps['children'];
 }
 
 /**
@@ -32,7 +34,7 @@ export function TicketInspectorPanel({
   if (className) classes.push(className);
   return (
     <div class={classes.join(' ')} data-component={component} {...attributes}>
-      {children}
+      <List gap="l">{children}</List>
     </div>
   );
 }

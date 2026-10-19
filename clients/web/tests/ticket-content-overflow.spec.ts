@@ -1,5 +1,24 @@
 import { expect, test } from '@playwright/test';
 
+test('renders the Kerf inspector stack at wide and phone sizes (HS2-EXTPGJ)', async ({ page }) => {
+  for (const [width, label] of [
+    [1280, 'wide'],
+    [390, 'phone'],
+  ] as const) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/ux-demo?component=ticket-inspector');
+    const inspector = page.locator('[data-component="ticket-inspector"]');
+    await expect(inspector.locator('.ticket-inspector-panel > [data-component="list"]')).toBeVisible();
+    await inspector.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `target/visual-captures/hs2-extpgj-inspector-${label}.png` });
+    await page.goto('/ux-demo?component=ticket-reader');
+    const reader = page.locator('[data-component="ticket-reader"]');
+    await expect(reader.locator('.ticket-inspector-panel > [data-component="list"]')).toBeVisible();
+    await reader.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `target/visual-captures/hs2-extpgj-reader-${label}.png` });
+  }
+});
+
 test('keeps details, metadata, and notes inside the ticket inspector at narrow and wide viewports', async ({
   page,
 }) => {
