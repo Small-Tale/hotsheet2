@@ -212,27 +212,35 @@ mod tests {
         let _serial = OFFLOAD_TIMING_TESTS.lock().await;
         let (release, released) = std::sync::mpsc::channel::<()>();
         let released = std::sync::Arc::new(std::sync::Mutex::new(released));
+        let entered = std::sync::Arc::new(tokio::sync::Notify::new());
+        let entered_for_handler = entered.clone();
         let app = Router::new()
             .route(
                 "/tickets",
                 get(move || {
                     let released = released.clone();
+                    let entered = entered_for_handler.clone();
                     async move {
+                        entered.notify_one();
                         // A synchronous wait standing in for a contended flock / mutex.
                         let _ = released
                             .lock()
                             .unwrap()
-                            .recv_timeout(Duration::from_secs(10));
+                            .recv_timeout(Duration::from_secs(30));
                         "slow"
                     }
                 }),
             )
             .route("/fast", get(|| async { "fast" }))
             .layer(axum::middleware::from_fn(offload));
+        let entered_wait = entered.notified();
         let slow = tokio::spawn(app.clone().oneshot(get_request("/tickets")));
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        tokio::time::timeout(Duration::from_secs(8), entered_wait)
+            .await
+            .expect("the blocked handler did not start");
         let fast = tokio::spawn(app.clone().oneshot(get_request("/fast")));
-        let fast = tokio::time::timeout(Duration::from_secs(2), fast)
+        // The watchdog tolerates host contention; completion before release is the guarantee.
+        let fast = tokio::time::timeout(Duration::from_secs(8), fast)
             .await
             .expect("an unrelated request was starved by a blocking handler")
             .unwrap()

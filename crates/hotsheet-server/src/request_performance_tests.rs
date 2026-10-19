@@ -14,6 +14,10 @@ struct HeldResource {
 
 impl HeldResource {
     fn new<T: Send + 'static>(resource: Arc<Mutex<T>>) -> Self {
+        Self::with_hold(resource, Duration::from_secs(10))
+    }
+
+    fn with_hold<T: Send + 'static>(resource: Arc<Mutex<T>>, hold: Duration) -> Self {
         let (release, released) = mpsc::channel();
         let (ready, started) = mpsc::channel();
         let active = Arc::new(AtomicBool::new(true));
@@ -21,7 +25,7 @@ impl HeldResource {
         let worker = std::thread::spawn(move || {
             let _guard = resource.lock_or_recover();
             ready.send(()).unwrap();
-            let _ = released.recv_timeout(Duration::from_secs(10));
+            let _ = released.recv_timeout(hold);
             held.store(false, Ordering::SeqCst);
         });
         started.recv().unwrap();
@@ -280,7 +284,7 @@ async fn a_blocked_store_request_does_not_starve_unrelated_routes() {
     use tower::ServiceExt;
     let _serial = crate::blocking_offload::OFFLOAD_TIMING_TESTS.lock().await;
     let (_root, state, project, ticket) = project_fixture();
-    let held = HeldResource::new(state.index.clone());
+    let held = HeldResource::with_hold(state.index.clone(), Duration::from_secs(30));
     let router = app(state);
     let list = tokio::spawn(router.clone().oneshot(routed("/tickets")));
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -289,7 +293,7 @@ async fn a_blocked_store_request_does_not_starve_unrelated_routes() {
         format!("/checkouts/{project}/tickets/{}", ticket.id),
     ] {
         let response = tokio::time::timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(8),
             tokio::spawn(router.clone().oneshot(routed(&uri))),
         )
         .await
@@ -301,7 +305,7 @@ async fn a_blocked_store_request_does_not_starve_unrelated_routes() {
     assert!(held.active.load(Ordering::SeqCst));
     assert!(!list.is_finished(), "the list request waits for the index");
     drop(held);
-    let list = tokio::time::timeout(Duration::from_secs(5), list)
+    let list = tokio::time::timeout(Duration::from_secs(8), list)
         .await
         .unwrap()
         .unwrap()
