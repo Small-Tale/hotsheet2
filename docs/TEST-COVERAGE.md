@@ -881,3 +881,10 @@ The hook-only upgrade case is covered by `crates/hotsheet-plugins/src/setup.rs #
 - Unit: `clients/web/src/components/ai-conversation.test.ts # sizes the resizable bottom sheet through Kerf with an 8px viewport gutter and 320px minimum`; `clients/web/src/controlled-open.test.ts # rewires a morph-stripped bottom-sheet resize handle while preserving focus`.
 - End to end: `clients/web/tests/ux-demo.spec.ts # resizes the AI conversation bottom sheet and restores its opening size` runs at 1280 and 390 px. `clients/web/tests/providers.spec.ts # moves the chat model selector and export into the drawer and dialog toolbars` verifies the sheet and live handle after sending turns through the shipped project-chat composition; existing settings and selection flows remain covered there and in the UX demo.
 - Manual: Inspect opening, minimum, and maximum captures at wide and phone widths attached to HS2-3P2DE9.
+
+### AI conversation message context menu (HS2-YR405B)
+
+- Behavior: A message context menu copies or downloads the current selection when the target is selected, and only the target when it is not; keyboard access and a touch selection-bar Download action reach the same export flow.
+- Unit: `clients/web/src/conversation-context-menu.test.ts`, `clients/web/src/components/ai-conversation-interactions.test.ts`, `clients/web/src/components/ai-conversation.test.ts`, and `clients/web/src/features/controllers.test.ts` cover scope, input routing, markup, clipboard contents, and export-dialog scope.
+- End to end: `clients/web/tests/providers.spec.ts # copies and downloads AI chat messages from a scoped context menu (HS2-YR405B)` exercises the shipped chat, clipboard, context menu, keyboard access, scoped export, and selection-bar Download.
+- Manual: Inspect matching wide and phone menu captures attached to HS2-YR405B.

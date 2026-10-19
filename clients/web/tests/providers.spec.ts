@@ -7636,6 +7636,76 @@ test('selects single and non-contiguous messages with modifier keys in the main 
   await expect(exportDialog).toContainText('2 messages selected in the chat.');
 });
 
+test('copies and downloads AI chat messages from a scoped context menu (HS2-YR405B)', async ({
+  page,
+  context,
+}, testInfo) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Project' }).click();
+  await page.getByRole('button', { name: 'Open Project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('button', { name: 'Open Codex Conversation' }).click();
+  const conversation = page.locator('[data-dialog-component="ai-conversation"]'),
+    composer = conversation.getByRole('textbox', { name: 'Message Codex' }),
+    messages = conversation.locator('[data-action="pick-conversation-message"]'),
+    menu = page.locator('[data-context-menu="conversation"]');
+  for (let turn = 1; turn <= 2; turn += 1) {
+    await composer.fill('What time is it in California?');
+    await composer.press('Enter');
+    await expect(messages).toHaveCount(turn * 2);
+    await expect(composer).toBeEnabled();
+  }
+  await expect(messages).toHaveCount(4);
+  await messages.nth(0).click();
+  await messages.nth(1).click({ modifiers: ['ControlOrMeta'] });
+  await expect(conversation.locator('.ai-conversation__selection')).toContainText('2 messages selected');
+  await messages.nth(0).click({ button: 'right' });
+  await expect(menu.getByRole('menuitem', { name: 'Copy 2 Messages' })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Download 2 Messages…' })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('hs2-yr405b-selection-menu-wide.png') });
+  await menu.getByRole('menuitem', { name: 'Copy 2 Messages' }).click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toContain('What time is it in California?');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(
+    'The event stream remains authoritative.',
+  );
+
+  await messages.nth(2).click({ button: 'right' });
+  await expect(menu.getByRole('menuitem', { name: 'Copy Message', exact: true })).toBeVisible();
+  await menu.getByRole('menuitem', { name: 'Copy Message', exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toContain('What time is it in California?');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).not.toContain(
+    'The event stream remains authoritative.',
+  );
+  await expect(conversation.locator('.ai-conversation__selection')).toContainText('2 messages selected');
+  await messages.nth(2).click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: 'Download Message…' }).click();
+  const exportDialog = page.locator('[data-dialog-component="conversation-export-dialog"]');
+  await expect(exportDialog).toBeVisible();
+  await expect(exportDialog.locator('input[name="conversation-export-scope"][value="selected"]')).toBeChecked();
+  await expect(exportDialog).toContainText('1 message selected in the chat.');
+  await page.keyboard.press('Escape');
+  await expect(exportDialog).not.toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.app-toast')).toHaveCount(0);
+  await messages.nth(0).focus();
+  await page.keyboard.press('Shift+F10');
+  await expect(menu.getByRole('menuitem', { name: 'Copy 2 Messages' })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('hs2-yr405b-selection-menu-phone.png') });
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await conversation.getByRole('button', { name: 'Download Selected Messages' }).click();
+  await expect(exportDialog).toBeVisible();
+  await expect(exportDialog).toContainText('2 messages selected in the chat.');
+});
+
 test('shows AI chats in the project and workspace grids and reopens them from the global grid', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);

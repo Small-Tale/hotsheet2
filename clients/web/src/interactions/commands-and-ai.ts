@@ -79,12 +79,16 @@ export interface CommandAndAiInteractionsDependencies {
   readonly effectiveDriveSelection: (projectId?: string) => AiToolDefaults;
   readonly openSidebarConversation: () => Promise<void>;
   readonly conversationOpen: Signal<boolean>;
-  readonly openConversationExport: () => void;
+  readonly openConversationExport: (options?: { connectionId?: string; messageIds?: readonly string[] }) => void;
   readonly pickConversationMessage: (
     connectionId: string,
     messageId: string,
     modifiers?: ConversationSelectionModifiers,
   ) => void;
+  readonly contextMessageIds: (connectionId: string, messageId: string) => readonly string[];
+  readonly copyConversationMessages: (connectionId: string, messageIds: readonly string[]) => Promise<void>;
+  readonly downloadConversationMessages: (connectionId: string, messageIds: readonly string[]) => void;
+  readonly downloadConversationSelection: (connectionId: string) => void;
   readonly copyConversationSelection: (connectionId: string) => Promise<void>;
   readonly clearConversationSelection: (connectionId: string) => void;
   readonly conversationExportDialog: Signal<ConversationExportDialogState | undefined>;
@@ -217,6 +221,10 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     conversationOpen,
     openConversationExport,
     pickConversationMessage,
+    contextMessageIds,
+    copyConversationMessages,
+    downloadConversationMessages,
+    downloadConversationSelection,
     copyConversationSelection,
     clearConversationSelection,
     conversationExportDialog,
@@ -416,6 +424,11 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       },
       save: openConversationExport,
       pickMessage: pickConversationMessage,
+      contextMessageIds,
+      copyMessages: (connectionId, messageIds) => {
+        void copyConversationMessages(connectionId, messageIds);
+      },
+      downloadMessages: downloadConversationMessages,
       setDraft: setConversationDraft,
       recallHistory: recallConversationHistory,
       send: () => {
@@ -445,6 +458,17 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       const connectionId = target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId;
       if (connectionId) void copyConversationSelection(connectionId);
     }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      COMMANDS_AND_AI_ACTIONS.downloadConversationSelection.selector,
+      (_event, target) => {
+        const connectionId = target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId;
+        if (connectionId) downloadConversationSelection(connectionId);
+      },
+    ),
   );
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.clearConversationSelection.selector, (_event, target) => {

@@ -1856,7 +1856,7 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
     drag is treated as reading and leaves the selection alone.
   - Ranges, gaps, and copies follow the transcript's displayed (sequence) order.
   - With nothing selected, the selection bar is absent so the transcript gets the space. Selecting a
-    message shows the count with Copy and Clear; clearing the selection removes the bar again
+    message shows the count with Copy, Download, and Clear; clearing the selection removes the bar again
     (HS2-0T1TM5). The bar is its own non-scrolling row above the transcript scroller in both the
     drawer and dialog, so it never covers a message while shown, whether the transcript is pinned
     to its latest message or scrolled to the top (HS2-C4RTVS).
@@ -1872,7 +1872,13 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
 
   Copy writes the selected messages as Markdown and inserts an italic `N messages skipped` line
   wherever a run of unselected messages lies between two selected ones. Leading and trailing
-  exclusions get no marker. Save reuses that selection instead of asking for it again. With a selection, the compact wizard
+  exclusions get no marker. Right-clicking a selected message offers Copy and Download for
+  the selection; right-clicking an unselected message offers those actions for only that
+  message, leaving any selection intact. Shift+F10 and the Context Menu key open the same
+  menu on a focused message row; links, file controls, and selected text retain the native
+  browser menu. Download opens the existing export wizard scoped to those message ids, and
+  the selection bar provides Download on touch devices (HS2-YR405B). Save reuses the current
+  selection instead of asking for it again. With a selection, the compact wizard
   first offers only Entire conversation or Selected messages (any set, contiguous or not); with no selection it skips that scope
   step because the full transcript is the only possible result. The bundle-contents step presents
   optional contents as one vertical list and opens the host folder picker from Save, without a

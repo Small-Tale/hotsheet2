@@ -47,7 +47,9 @@ import {
   formatConversationCost,
   formatConversationTokens,
 } from '../ai-conversation';
+import { contextMenuAnchor } from '../context-menu-position';
 import { activityGroupExpanded } from '../conversation-activity-disclosure';
+import { conversationContextMenu } from '../conversation-context-menu';
 import { hostActionsAvailableHere, hostOnlyDisabledReason } from '../host-only-actions';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import type { PermissionItem } from '../permission-notifications';
@@ -636,6 +638,14 @@ export function AIConversation(props: AIConversationProps) {
           <Button
             emphasis="plain"
             size="compact"
+            action={COMMANDS_AND_AI_ACTIONS.downloadConversationSelection.value}
+            ariaLabel={'Download Selected Messages'}
+            title="Download selected messages"
+            icon={<LucideIcon size={14.4} icon={Download} name="download" />}
+          />
+          <Button
+            emphasis="plain"
+            size="compact"
             action={COMMANDS_AND_AI_ACTIONS.clearConversationSelection.value}
             ariaLabel={'Clear Message Selection'}
             title="Clear message selection"
@@ -644,6 +654,36 @@ export function AIConversation(props: AIConversationProps) {
         </span>
       </div>
     ) : null;
+  const contextState = conversationContextMenu.value,
+    contextMenu =
+      contextState && contextState.connectionId === selectionId ? (
+        <PopupMenu
+          context
+          anchor={contextMenuAnchor(contextState.x, contextState.y)}
+          label="Conversation Message Actions"
+          rootAttributes={{ 'data-context-menu': 'conversation' }}
+          items={[
+            {
+              label:
+                contextState.messageIds.length === 1
+                  ? 'Copy Message'
+                  : `Copy ${contextState.messageIds.length} Messages`,
+              action: 'conversation-context-action',
+              icon: <LucideIcon icon={Copy} name="copy" />,
+              attributes: { 'data-conversation-context-action': 'copy' },
+            },
+            {
+              label:
+                contextState.messageIds.length === 1
+                  ? 'Download Message…'
+                  : `Download ${contextState.messageIds.length} Messages…`,
+              action: 'conversation-context-action',
+              icon: <LucideIcon icon={Download} name="download" />,
+              attributes: { 'data-conversation-context-action': 'download' },
+            },
+          ]}
+        />
+      ) : null;
   const timeline = conversationTimeline(messages, activity),
     selectedActivity = selectedActivityGroups(timeline, selectedIds),
     timelineRows = (
@@ -808,6 +848,7 @@ export function AIConversation(props: AIConversationProps) {
         {selectionStatus}
         {transcript}
         {composer}
+        {contextMenu}
       </section>
     );
   // Kerf owns the bottom sheet's viewport, keyboard, and resize bounds. Its 320px minimum
@@ -861,6 +902,7 @@ export function AIConversation(props: AIConversationProps) {
       {savedNotice}
       {selectionStatus}
       {transcript}
+      {contextMenu}
     </DialogSurface>
   );
 }

@@ -485,7 +485,12 @@ covers anything past the button's end. The demo's Unread chat messages setting s
     Kerf `List selectionMode="multiple"` grid of `ContentItem selectionMode="multiple"` message rows.
     Interleaved activity and skipped dividers use non-selectable Kerf `ContentItem gridRow`
     rows. Kerf's roving tabindex gives message rows one Tab stop, and arrows skip the
-    interleaved content (HS2-S9W63Q, KF-RAEXQ7).
+    interleaved content (HS2-S9W63Q, KF-RAEXQ7). Right-clicking a message opens a Kerf
+    context menu for Copy and Download. If the message is selected, both actions use the full
+    current selection; otherwise they use only that message without changing the selection.
+    Shift+F10 and the Context Menu key open the same menu for the focused row. Links, file
+    controls, and selected text retain their native context menu. The selection bar also
+    offers Download for touch use (HS2-YR405B).
   - save/reopen: the header Save action reuses the live transcript selection. If messages are selected,
     a compact `ConversationExportDialog` offers Entire conversation or the already-selected messages
     without presenting another picker; if nothing is selected it skips directly to the vertically

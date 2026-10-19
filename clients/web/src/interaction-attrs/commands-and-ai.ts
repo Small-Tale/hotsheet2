@@ -20,6 +20,7 @@ export const COMMANDS_AND_AI_ACTIONS = {
   saveConversation: action('save-conversation'),
   pickConversationMessage: action('pick-conversation-message'),
   copyConversationSelection: action('copy-conversation-selection'),
+  downloadConversationSelection: action('download-conversation-selection'),
   clearConversationSelection: action('clear-conversation-selection'),
   toggleConversationActivity: action('toggle-conversation-activity'),
   submitConversationExport: action('submit-conversation-export'),

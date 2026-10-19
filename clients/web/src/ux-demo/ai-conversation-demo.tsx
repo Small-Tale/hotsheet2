@@ -17,6 +17,7 @@ import {
 import { AIConversation, type AIConversationProps, AIConversationToolbar } from '../components/ai-conversation';
 import { wireAiConversation } from '../components/ai-conversation-interactions';
 import { syncControlledOpen } from '../controlled-open';
+import { conversationContextMessageIds } from '../conversation-context-menu';
 import {
   type ConversationHistoryCursor,
   conversationSentHistory,
@@ -441,6 +442,11 @@ function wireAiConversationDemo(root: HTMLElement): () => void {
       sidebarEvent.value = `Copied ${demoSelectedMessageIds(scenarioState().messages).length} selected messages.`;
     }),
   );
+  demoListeners.add(
+    delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.downloadConversationSelection.selector, () => {
+      sidebarEvent.value = `Prepared download of ${demoSelectedMessageIds(scenarioState().messages).length} selected messages.`;
+    }),
+  );
   // The production AIConversation handlers, driving the fixture scenario (HS2-RWY78R).
   demoListeners.add(
     wireAiConversation(root, {
@@ -458,6 +464,14 @@ function wireAiConversationDemo(root: HTMLElement): () => void {
           modifiers,
         );
         sidebarEvent.value = `Picked conversation message ${messageId}.`;
+      },
+      contextMessageIds: (_connectionId, messageId) =>
+        conversationContextMessageIds(messageId, demoSelectedMessageIds(scenarioState().messages)),
+      copyMessages: (_connectionId, messageIds) => {
+        sidebarEvent.value = `Copied ${messageIds.length} context messages.`;
+      },
+      downloadMessages: (_connectionId, messageIds) => {
+        sidebarEvent.value = `Prepared download of ${messageIds.length} context messages.`;
       },
       setDraft: (value) => {
         demoHistoryCursor = undefined;

@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { expandedActivityGroups, toggleActivityGroup } from '../conversation-activity-disclosure';
+import { conversationContextMenu } from '../conversation-context-menu';
 import type { PermissionItem } from '../permission-notifications';
 import {
   AIConversation,
@@ -33,6 +34,10 @@ const previewCss = readFileSync(new URL('./markdown-preview.css', import.meta.ur
 /** The drawer composes an embedded conversation with its toolbar controls in the tab toolbar (HS2-59F7WK). */
 const withToolbar = (props: AIConversationProps) =>
   String(AIConversation(props)) + (props.presentation === 'embedded' ? String(AIConversationToolbar(props)) : '');
+
+afterEach(() => {
+  conversationContextMenu.value = undefined;
+});
 
 describe('AIConversation', () => {
   it.each(['dialog', 'embedded'] as const)(
@@ -160,6 +165,32 @@ describe('AIConversation', () => {
     expect(markup).toContain('data-lucide="arrow-up"');
     expect(markup).toContain('Codex is working');
     expect(markup).not.toContain('Session session-1');
+  });
+  it('renders scoped copy and download message actions inside the matching conversation (HS2-YR405B)', () => {
+    conversationContextMenu.value = {
+      connectionId: 'chat-a',
+      messageIds: ['first', 'third'],
+      x: 120,
+      y: 180,
+    };
+    const props: AIConversationProps = {
+      open: true,
+      tool: 'Codex',
+      selectionId: 'chat-a',
+      messages: [{ id: 'first', role: 'user', content: 'One', status: 'completed' }],
+      draft: '',
+      busy: false,
+      interruptible: false,
+    };
+    const markup = String(AIConversation(props));
+    expect(markup).toContain('data-context-menu="conversation"');
+    expect(markup).toContain('Copy 2 Messages');
+    expect(markup).toContain('Download 2 Messages…');
+    expect(markup).toContain('data-conversation-context-action="copy"');
+    expect(markup).toContain('data-conversation-context-action="download"');
+    expect(String(AIConversation({ ...props, selectionId: 'chat-b' }))).not.toContain(
+      'data-context-menu="conversation"',
+    );
   });
 
   it('renders permission-paused activity before its later assistant result', () => {
@@ -490,6 +521,7 @@ describe('AIConversation', () => {
     expect(markup.match(/data-selected="true"/g)).toHaveLength(2);
     expect(markup).toContain('2 messages selected');
     expect(markup).toContain('data-action="copy-conversation-selection"');
+    expect(markup).toContain('data-action="download-conversation-selection"');
     expect(markup).toContain('data-action="clear-conversation-selection"');
     // An idle conversation keeps selection available without reserving a status row (HS2-0T1TM5).
     const idle = withToolbar({
@@ -504,6 +536,7 @@ describe('AIConversation', () => {
     });
     expect(idle).not.toContain('ai-conversation__selection');
     expect(idle).not.toContain('data-action="copy-conversation-selection"');
+    expect(idle).not.toContain('data-action="download-conversation-selection"');
     // Once selected, the bar is its own row before the transcript scroller (HS2-C4RTVS).
     for (const presentation of ['embedded', 'dialog'] as const) {
       const rendered = String(

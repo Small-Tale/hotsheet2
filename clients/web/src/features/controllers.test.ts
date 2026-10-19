@@ -1263,6 +1263,37 @@ describe('conversation feature transitions (HS2-DHYGXJ)', () => {
 describe('conversation message selection (HS2-WV88W3)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('copies and scopes downloads to a right-clicked message without replacing another selection (HS2-YR405B)', async () => {
+    const state = chatOwners(),
+      { archive } = state,
+      writeText = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('navigator', { userAgent: navigator.userAgent, clipboard: { writeText } });
+    state.conversationStates.value = {
+      'chat-a': {
+        messages: ['one', 'two', 'three'].map((id) => ({ id, role: 'user' as const, content: `Message ${id}` })),
+      },
+    };
+    archive.pickConversationMessage('chat-a', 'one');
+    archive.pickConversationMessage('chat-a', 'three', { toggle: true, extend: false });
+    expect(archive.contextMessageIds('chat-a', 'one')).toEqual(['one', 'three']);
+    expect(archive.contextMessageIds('chat-a', 'two')).toEqual(['two']);
+    await archive.copyConversationMessages('chat-a', ['two']);
+    const copied = (writeText.mock.calls[0] as unknown as [string])[0];
+    expect(copied).toContain('Message two');
+    expect(copied).not.toContain('Message one');
+    expect(copied).not.toContain('Message three');
+    archive.downloadConversationMessages('chat-a', ['two']);
+    expect(archive.conversationExportDialog.value).toMatchObject({
+      selectedScope: { kind: 'messages', messageIds: ['two'] },
+      draft: { scope: { kind: 'messages', messageIds: ['two'] } },
+    });
+    archive.downloadConversationSelection('chat-a');
+    expect(archive.conversationExportDialog.value).toMatchObject({
+      selectedScope: { kind: 'messages', messageIds: ['one', 'three'] },
+    });
+    expect(archive.contextMessageIds('chat-a', 'one')).toEqual(['one', 'three']);
+  });
+
   it('copies a non-contiguous selection with skipped-message markers and offers it as the export scope', async () => {
     const state = chatOwners(),
       { archive } = state,

@@ -5,6 +5,7 @@ import { type ConversationMessage, type ConversationState, EMPTY_CONVERSATION } 
 import { Api, type ToolConnection } from '../api';
 import { browserRandomId } from '../browser-id';
 import { type ConversationExportDialogState } from '../components/conversation-export-dialog';
+import { conversationContextMessageIds } from '../conversation-context-menu';
 import {
   buildConversationExportRequest,
   conversationExportAssets,
@@ -88,10 +89,14 @@ export function createConversationArchiveController(dependencies: ConversationAr
     );
   }
 
-  async function copyConversationSelection(connectionId: string) {
+  function contextMessageIds(connectionId: string, messageId: string): readonly string[] {
+    return conversationContextMessageIds(messageId, conversationSelections.value[connectionId]?.messageIds ?? []);
+  }
+
+  async function copyConversationMessages(connectionId: string, messageIds: readonly string[], fromSelection = false) {
     const conversation = conversationStates.peek()[connectionId] ?? EMPTY_CONVERSATION,
       transcript = conversation.messages,
-      messages = conversationSelectedMessages(connectionId, transcript);
+      messages = selectedConversationMessagesFor(transcript, { messageIds });
     if (!messages.length) return;
     const tool = aiToolLabel(conversationAiSelection(connectionId).tool);
     try {
@@ -104,10 +109,16 @@ export function createConversationArchiveController(dependencies: ConversationAr
           conversationSelectionGaps(transcript, messages, conversation.skippedBefore),
         ),
       );
-      showToast(`${messages.length} selected message${messages.length === 1 ? '' : 's'} copied to clipboard.`);
+      showToast(
+        `${messages.length} ${fromSelection ? 'selected ' : ''}message${messages.length === 1 ? '' : 's'} copied to clipboard.`,
+      );
     } catch (reason) {
       error.value = `Copy failed: ${reason instanceof Error ? reason.message : String(reason)}`;
     }
+  }
+
+  async function copyConversationSelection(connectionId: string) {
+    await copyConversationMessages(connectionId, conversationSelections.value[connectionId]?.messageIds ?? [], true);
   }
 
   function updateConversationExportDraft(update: (draft: ConversationExportDraft) => ConversationExportDraft) {
@@ -115,9 +126,9 @@ export function createConversationArchiveController(dependencies: ConversationAr
     if (state) conversationExportDialog.value = { ...state, draft: update(state.draft), error: '' };
   }
 
-  function openConversationExport() {
+  function openConversationExport(options?: { connectionId?: string; messageIds?: readonly string[] }) {
     const current = project(),
-      connectionId = conversationConnectionId.value;
+      connectionId = options?.connectionId ?? conversationConnectionId.value;
     if (!current || !connectionId) return;
     const state = conversationStates.peek()[connectionId] ?? EMPTY_CONVERSATION;
     if (!state.messages.length) return;
@@ -125,7 +136,9 @@ export function createConversationArchiveController(dependencies: ConversationAr
       chat = (terminalDrawerChatsByProject.value[current.id] ?? []).find((item) => item.connectionId === connectionId),
       selection = conversationAiSelection(connectionId),
       tool = chat?.tool ?? connection?.tool ?? selection.tool,
-      picked = conversationSelectedMessages(connectionId, state.messages),
+      picked = options?.messageIds
+        ? selectedConversationMessagesFor(state.messages, { messageIds: options.messageIds })
+        : conversationSelectedMessages(connectionId, state.messages),
       selectedScope: Extract<ConversationExportScope, { kind: 'messages' }> | undefined = picked.length
         ? { kind: 'messages', messageIds: picked.map((message) => message.id) }
         : undefined,
@@ -149,6 +162,15 @@ export function createConversationArchiveController(dependencies: ConversationAr
       navigation: 'none',
       selectedScope,
     };
+  }
+
+  function downloadConversationMessages(connectionId: string, messageIds: readonly string[]) {
+    if (!messageIds.length) return;
+    openConversationExport({ connectionId, messageIds });
+  }
+
+  function downloadConversationSelection(connectionId: string) {
+    downloadConversationMessages(connectionId, conversationSelections.value[connectionId]?.messageIds ?? []);
   }
 
   async function pickConversationExportDestination() {
@@ -309,8 +331,12 @@ export function createConversationArchiveController(dependencies: ConversationAr
     conversationExportDialog,
     conversationSelectedMessages,
     pickConversationMessage,
+    contextMessageIds,
     clearConversationSelection,
+    copyConversationMessages,
     copyConversationSelection,
+    downloadConversationMessages,
+    downloadConversationSelection,
     updateConversationExportDraft,
     openConversationExport,
     finishConversationExport,

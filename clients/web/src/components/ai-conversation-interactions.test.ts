@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { activityGroupExpanded, expandedActivityGroups } from '../conversation-activity-disclosure';
+import { conversationContextMenu } from '../conversation-context-menu';
 import { wireAiConversation } from './ai-conversation-interactions';
 
 interface Registration {
@@ -18,12 +19,20 @@ vi.mock('kerfjs', async (original) => {
 });
 const wireMessageComposers = vi.hoisted(() => vi.fn(() => () => undefined));
 vi.mock('@kerfjs/ui/wire-message-composers', () => ({ wireMessageComposers }));
+vi.mock('./context-menu-dismissal', () => ({ wireContextMenuDismissal: () => () => undefined }));
+vi.mock('../context-menu-position', async (original) => ({
+  ...(await original<typeof import('../context-menu-position')>()),
+  revealContextPopupMenu: vi.fn(),
+}));
 const handler = (event: string, selector: string) =>
   registrations.find((item) => item.event === event && item.selector === selector)!.handle;
 const bindings = () => ({
   onHidden: vi.fn(),
   save: vi.fn(),
   pickMessage: vi.fn(),
+  contextMessageIds: vi.fn((_connectionId: string, messageId: string) => [messageId]),
+  copyMessages: vi.fn(),
+  downloadMessages: vi.fn(),
   setDraft: vi.fn(),
   recallHistory: vi.fn<(direction: string, value: string) => string | undefined>(),
   send: vi.fn(),
@@ -36,17 +45,84 @@ const bindings = () => ({
 
 beforeEach(() => {
   registrations.length = 0;
-  vi.stubGlobal('window', { getSelection: () => ({ toString: () => '' }) });
+  conversationContextMenu.value = undefined;
+  vi.stubGlobal('window', { getSelection: () => ({ toString: () => '' }), innerWidth: 800, innerHeight: 600 });
 });
 afterEach(() => vi.unstubAllGlobals());
 
 describe('wireAiConversation (HS2-RWY78R)', () => {
+  it('opens scoped message actions from right-click and routes Copy/Download without changing selection (HS2-YR405B)', () => {
+    const state = bindings();
+    state.contextMessageIds.mockReturnValue(['first', 'third']);
+    wireAiConversation({} as HTMLElement, state);
+    const message = {
+        dataset: { messageId: 'first' },
+        closest: () => ({ dataset: { selectionId: 'chat-a' } }),
+      } as unknown as Element,
+      preventDefault = vi.fn(),
+      event = {
+        target: { closest: () => null },
+        clientX: 120,
+        clientY: 180,
+        preventDefault,
+      } as unknown as Event;
+    handler('contextmenu', '[data-action="pick-conversation-message"]')(event, message);
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(state.contextMessageIds).toHaveBeenCalledWith('chat-a', 'first');
+    expect(conversationContextMenu.value).toMatchObject({
+      connectionId: 'chat-a',
+      messageIds: ['first', 'third'],
+      x: 120,
+      y: 180,
+    });
+    handler('click', '[data-conversation-context-action]')(
+      {} as Event,
+      {
+        dataset: { conversationContextAction: 'copy' },
+      } as unknown as Element,
+    );
+    expect(state.copyMessages).toHaveBeenCalledWith('chat-a', ['first', 'third']);
+    expect(conversationContextMenu.value).toBeUndefined();
+    handler('contextmenu', '[data-action="pick-conversation-message"]')(event, message);
+    handler('click', '[data-conversation-context-action]')(
+      {} as Event,
+      {
+        dataset: { conversationContextAction: 'download' },
+      } as unknown as Element,
+    );
+    expect(state.downloadMessages).toHaveBeenCalledWith('chat-a', ['first', 'third']);
+  });
+
+  it('preserves native context menus for nested controls and selected text (HS2-YR405B)', () => {
+    const state = bindings(),
+      message = {
+        dataset: { messageId: 'first' },
+        closest: () => ({ dataset: { selectionId: 'chat-a' } }),
+      } as unknown as Element,
+      preventDefault = vi.fn();
+    wireAiConversation({} as HTMLElement, state);
+    handler('contextmenu', '[data-action="pick-conversation-message"]')(
+      { target: { closest: () => ({}) }, preventDefault } as unknown as Event,
+      message,
+    );
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(conversationContextMenu.value).toBeUndefined();
+    vi.stubGlobal('window', { getSelection: () => ({ toString: () => 'selected text' }) });
+    handler('contextmenu', '[data-action="pick-conversation-message"]')(
+      { target: { closest: () => null }, preventDefault } as unknown as Event,
+      message,
+    );
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(state.contextMessageIds).not.toHaveBeenCalled();
+  });
+
   it('delegates Enter-to-send to Kerf wireMessageComposers instead of an app keydown handler (HS2-94T958)', () => {
     const root = {} as HTMLElement;
     wireAiConversation(root, bindings());
     expect(wireMessageComposers).toHaveBeenCalledWith(root);
     // Keydown handlers: the message-selection chords and composer history recall, never Enter-to-send.
     expect(registrations.filter((item) => item.event === 'keydown').map((item) => item.selector)).toEqual([
+      '[data-action="pick-conversation-message"]',
       '[data-action="pick-conversation-message"]',
       '[name="conversation-draft"]',
     ]);

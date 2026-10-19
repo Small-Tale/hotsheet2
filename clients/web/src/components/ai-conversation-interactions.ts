@@ -2,11 +2,14 @@ import { wireMessageComposers } from '@kerfjs/ui/wire-message-composers';
 import { delegate, delegateCapture } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
+import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../context-menu-position';
 import { toggleActivityGroup } from '../conversation-activity-disclosure';
+import { conversationContextMenu } from '../conversation-context-menu';
 import { type ConversationHistoryDirection, conversationHistoryDirection } from '../conversation-history';
 import { type ConversationSelectionModifiers, conversationSelectionModifiers } from '../conversation-selection';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import { isConversationSurfaceLifecycleEvent } from './ai-conversation';
+import { wireContextMenuDismissal } from './context-menu-dismissal';
 import { wireEmbeddedComposerClearance } from './embedded-composer-clearance';
 
 /**
@@ -19,6 +22,9 @@ export interface AiConversationBindings {
   readonly save: () => void;
   /** Plain, toggle (Cmd on Apple platforms, Ctrl elsewhere), or Shift-extend pick (HS2-WV88W3). */
   readonly pickMessage: (connectionId: string, messageId: string, modifiers: ConversationSelectionModifiers) => void;
+  readonly contextMessageIds: (connectionId: string, messageId: string) => readonly string[];
+  readonly copyMessages: (connectionId: string, messageIds: readonly string[]) => void;
+  readonly downloadMessages: (connectionId: string, messageIds: readonly string[]) => void;
   readonly setDraft: (value: string) => void;
   /**
    * Step the composer through this conversation's sent messages (HS2-AJQKK0). Returns the text
@@ -49,19 +55,65 @@ function pickedMessage(target: Element) {
 /** Wire the AIConversation surface, composer, and AI menus under `root`. */
 export function wireAiConversation(root: HTMLElement, bindings: AiConversationBindings): () => void {
   const lifetime = createScope();
+  const openMessageMenu = (target: Element, x: number, y: number) => {
+    const { connectionId, messageId } = pickedMessage(target);
+    if (!connectionId || !messageId) return;
+    const messageIds = bindings.contextMessageIds(connectionId, messageId);
+    if (!messageIds.length) return;
+    const anchor = viewportSafeContextMenuPosition(x, y, window.innerWidth, window.innerHeight, {
+      width: 240,
+      height: 112,
+    });
+    conversationContextMenu.value = { connectionId, messageIds: [...messageIds], ...anchor };
+    revealContextPopupMenu('conversation', root);
+  };
+  lifetime.add(
+    wireContextMenuDismissal(root, [
+      {
+        surface: 'conversation',
+        isOpen: () => Boolean(conversationContextMenu.value),
+        stateToken: () => conversationContextMenu.value,
+        close: () => {
+          conversationContextMenu.value = undefined;
+        },
+        hide: true,
+      },
+    ]),
+  );
   lifetime.add(
     delegateCapture(
       root,
       'kui-request-close',
       COMMANDS_AND_AI_TARGETS.aiConversationDialog.selector,
       (event, target) => {
-        if (isConversationSurfaceLifecycleEvent(event, target)) bindings.onHidden();
+        if (isConversationSurfaceLifecycleEvent(event, target)) {
+          conversationContextMenu.value = undefined;
+          bindings.onHidden();
+        }
       },
     ),
   );
   lifetime.add(
     delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.saveConversation.selector, () => {
       bindings.save();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'contextmenu', COMMANDS_AND_AI_ACTIONS.pickConversationMessage.selector, (event, target) => {
+      if ((event.target as Element).closest(NESTED_MESSAGE_CONTROL) || window.getSelection()?.toString()) return;
+      event.preventDefault();
+      const pointer = event as MouseEvent;
+      openMessageMenu(target, pointer.clientX, pointer.clientY);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', '[data-conversation-context-action]', (_event, target) => {
+      const request = conversationContextMenu.value;
+      if (!request) return;
+      conversationContextMenu.value = undefined;
+      if ((target as HTMLElement).dataset.conversationContextAction === 'copy')
+        bindings.copyMessages(request.connectionId, request.messageIds);
+      else bindings.downloadMessages(request.connectionId, request.messageIds);
     }),
   );
   // Shift- and Cmd/Ctrl-clicks pick messages instead of extending the page's text selection.
@@ -94,6 +146,17 @@ export function wireAiConversation(root: HTMLElement, bindings: AiConversationBi
       if (keyboard.repeat) return;
       const { connectionId, messageId } = pickedMessage(target);
       if (connectionId && messageId) bindings.pickMessage(connectionId, messageId, modifiers);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'keydown', COMMANDS_AND_AI_ACTIONS.pickConversationMessage.selector, (event, target) => {
+      const keyboard = event as KeyboardEvent;
+      if (event.target !== target || !(keyboard.key === 'ContextMenu' || (keyboard.shiftKey && keyboard.key === 'F10')))
+        return;
+      event.preventDefault();
+      if (keyboard.repeat) return;
+      const rect = target.getBoundingClientRect();
+      openMessageMenu(target, rect.left + 20, rect.top + 20);
     }),
   );
   // A click anywhere in an activity group toggles it collapsed/expanded, except on its nested
