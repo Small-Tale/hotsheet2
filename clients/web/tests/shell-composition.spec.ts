@@ -170,7 +170,8 @@ test('composes the desktop shell, project strip, grid zoom, and magnified focus 
   await expect(page.locator('.terminal-dashboard__magnified')).toBeVisible();
   await expect(workArea).toHaveAttribute('data-focus-ring', 'false');
   await expect(workArea).toHaveCSS('outline-color', 'rgba(0, 0, 0, 0)');
-  await page.keyboard.press('Escape');
+  // A focused terminal owns Escape for its TUI; the backdrop always dismisses the magnified view.
+  await page.locator('.terminal-dashboard__magnified').click({ position: { x: 8, y: 8 } });
   await expect(page.locator('.terminal-dashboard__magnified')).toHaveCount(0);
   await expect(workArea).toHaveAttribute('data-focus-ring', 'true');
 
