@@ -136,11 +136,16 @@ export class TicketScrollMemory {
   private pending:
     { key: string; state: TicketScrollState; applied?: TicketScrollState; reached?: boolean } | undefined;
   private generation = 0;
+  private awaitingAfterRender = false;
   private readonly watch = new ScrollOwnerWatch();
 
   beforeRender(scope: TicketScrollScope, root: ParentNode): number {
     const key = JSON.stringify([scope.project, scope.mode, scope.view]);
-    if (this.renderedKey !== undefined) {
+    // Two renders can coalesce before the first restore callback. A morph between them may
+    // transiently reset a WebKit scroller without changing its observed DOM structure; that
+    // zero is not user input and must not replace the saved destination (HS2-KTXBK2).
+    if (this.awaitingAfterRender && this.pending) this.pending.reached = false;
+    if (this.renderedKey !== undefined && !this.awaitingAfterRender) {
       if (this.pending?.reached && !this.watch.note(scrollOwners(root), root)) {
         // The destination is reached and nothing structural changed since, so live offsets are
         // user input and need no scroll-size measurement to interpret.
@@ -176,11 +181,13 @@ export class TicketScrollMemory {
       this.pending = { key, state, reached: true };
     } else if (this.pending?.key !== key) this.pending = { key, state: new Map(this.snapshots.get(key)) };
     this.renderedKey = key;
+    this.awaitingAfterRender = true;
     return ++this.generation;
   }
 
   afterRender(generation: number, root: ParentNode, settled: boolean, deferUntilSettled = false): void {
     if (generation !== this.generation || !this.pending) return;
+    this.awaitingAfterRender = false;
     const owners = scrollOwners(root);
     if (this.pending.reached && !this.watch.note(owners, root)) {
       // Nothing could have moved a reached destination, so this pass reads no layout. The live

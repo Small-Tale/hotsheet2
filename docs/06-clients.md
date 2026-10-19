@@ -1001,6 +1001,9 @@ preview/download, server directory browser) are separate design work.
   reset contained scrollers when it removes the top-layer popup, so the client restores
   only offsets that became zero after that dismissal; a subsequent user scroll wins
   (HS2-0M3DS2).
+  If consecutive renders coalesce before the first restore callback, an intervening
+  WebKit list reset remains a temporary layout effect rather than a user scroll; the
+  latest callback restores the saved destination (HS2-KTXBK2).
 
 - **Real local web entry point (initial implementation, HS2-0P1MDG).** `/` renders the
   production AppShell over checkout-scoped server APIs; `/ux-demo` remains the isolated

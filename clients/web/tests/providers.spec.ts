@@ -28330,7 +28330,10 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   await expect.poll(scroll).toBe(clamped);
 });
 
-test('preserves list and every board-column scroll position across ticket mutations (HS2-CEBNAJ)', async ({ page }) => {
+test('preserves list and every board-column scroll position across ticket mutations (HS2-CEBNAJ)', async ({
+  page,
+  browserName,
+}) => {
   // Keep the real progressive-render callback pending while the user scrolls and mutates.
   // A busy browser can defer idle work even after every board column is already visible.
   await page.addInitScript(() => {
@@ -28474,6 +28477,10 @@ test('preserves list and every board-column scroll position across ticket mutati
     listBefore = await workspace.evaluate((node) => node.scrollTop);
   expect(listBefore).toBeGreaterThan(0);
   expect(contextPoint.visible).toBe(true);
+  await page.screenshot({
+    path: `target/visual-captures/hs2-ktxbk2-list-before-${browserName}-wide.png`,
+    fullPage: true,
+  });
   await listTarget.dispatchEvent('contextmenu', {
     button: 2,
     buttons: 2,
@@ -28487,6 +28494,10 @@ test('preserves list and every board-column scroll position across ticket mutati
     'verified',
   );
   await expect.poll(() => workspace.evaluate((node) => node.scrollTop)).toBe(listBefore);
+  await page.screenshot({
+    path: `target/visual-captures/hs2-ktxbk2-list-after-${browserName}-wide.png`,
+    fullPage: true,
+  });
   await page.getByRole('button', { name: 'Columns View' }).click();
   const columns = page.locator('.ticket-board-column__tickets');
   await expect(columns).toHaveCount(4);
@@ -28540,6 +28551,33 @@ test('preserves list and every board-column scroll position across ticket mutati
     path: 'target/visual-captures/hs2-q9z4km-scroll-narrow.png',
     fullPage: true,
     animations: 'disabled',
+  });
+  await page.setViewportSize({ width: 390, height: 760 });
+  await page.getByRole('button', { name: 'List View' }).click();
+  const phoneTarget = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-SC0106"]'),
+    phoneSlug = await phoneTarget.getAttribute('data-ticket-slug');
+  await expect(phoneTarget).toHaveAttribute('data-status', 'completed');
+  await workspace.evaluate((node) => {
+    node.scrollTop = 900;
+  });
+  await phoneTarget.scrollIntoViewIfNeeded();
+  const phoneBefore = await workspace.evaluate((node) => node.scrollTop);
+  expect(phoneBefore).toBeGreaterThan(0);
+  await page.screenshot({
+    path: `target/visual-captures/hs2-ktxbk2-list-before-${browserName}-phone.png`,
+    fullPage: true,
+  });
+  await phoneTarget.click({ button: 'right' });
+  await expect.poll(() => workspace.evaluate((node) => node.scrollTop)).toBe(phoneBefore);
+  await page.locator('[data-context-menu="ticket"]').locator('[data-context-action="Verify ticket"]').click();
+  await expect(page.locator(`[data-component="ticket-list-row"][data-ticket-slug="${phoneSlug}"]`)).toHaveAttribute(
+    'data-status',
+    'verified',
+  );
+  await expect.poll(() => workspace.evaluate((node) => node.scrollTop)).toBe(phoneBefore);
+  await page.screenshot({
+    path: `target/visual-captures/hs2-ktxbk2-list-after-${browserName}-phone.png`,
+    fullPage: true,
   });
 });
 

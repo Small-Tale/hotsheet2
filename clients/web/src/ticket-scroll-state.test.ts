@@ -446,6 +446,25 @@ describe('ticket scroll state layout reads (HS2-4B8Q5D)', () => {
     expect(owner.scrollTop).toBe(430);
   });
 
+  it('restores a coalesced WebKit reset without a DOM mutation record, then accepts user scrolling', () => {
+    const memory = new TicketScrollMemory(),
+      owner = measuredScroller('workspace'),
+      root = rootFor(owner),
+      scope = { project: 'one', mode: 'list', view: 'queue' };
+    memory.afterRender(memory.beforeRender(scope, root), root, true);
+    owner.scrollTop = 430;
+    memory.afterRender(memory.beforeRender(scope, root), root, true);
+    const first = memory.beforeRender(scope, root);
+    owner.scrollTop = 0; // WebKit resets the native scroller during the first morph.
+    const second = memory.beforeRender(scope, root);
+    memory.afterRender(first, root, true);
+    memory.afterRender(second, root, true);
+    expect(owner.scrollTop).toBe(430);
+    owner.scrollTop = 455;
+    memory.afterRender(memory.beforeRender(scope, root), root, true);
+    expect(owner.scrollTop).toBe(455);
+  });
+
   it('treats a replaced scroll owner as changed even without mutation records', () => {
     const memory = new TicketScrollMemory(),
       first = measuredScroller(),
