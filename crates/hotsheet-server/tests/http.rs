@@ -8849,6 +8849,29 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         Some(r#"{"annotations":[{"id":"invalid","x":1,"y":2,"width":3,"height":4,"intents":["bug","bug"]}]}"#),
     )).await.unwrap();
     assert_eq!(invalid_intents.status(), StatusCode::BAD_REQUEST);
+    let styled_arrow = body_json(app.clone().oneshot(authed(
+        "PUT",
+        &format!("/checkouts/combo/tickets/{slug}/attachments/{video_attachment_id}"),
+        Some(r#"{"annotations":[{"id":"styled-arrow","x":1000,"y":2000,"width":5000,"height":1,"shape":{"type":"arrow","points":[{"x":1000,"y":2000},{"x":6000,"y":2000}],"startHead":"flat","endHead":"openCircle"}}]}"#),
+    )).await.unwrap()).await;
+    assert_eq!(
+        styled_arrow["schema"],
+        hotsheet_model::ARROW_HEAD_SCHEMA_VERSION
+    );
+    assert_eq!(
+        styled_arrow["attachments"][0]["annotations"][0]["shape"]["startHead"],
+        "flat"
+    );
+    assert_eq!(
+        styled_arrow["attachments"][0]["annotations"][0]["shape"]["endHead"],
+        "openCircle"
+    );
+    assert!(
+        styled_arrow["notes"].as_array().unwrap().last().unwrap()["text"]
+            .as_str()
+            .unwrap()
+            .contains("start flat, end open circle")
+    );
     let video_removed = body_json(
         app.clone()
             .oneshot(authed(
@@ -8861,6 +8884,10 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     )
     .await;
     assert_eq!(video_removed["attachments"].as_array().unwrap().len(), 0);
+    assert_eq!(
+        video_removed["schema"],
+        hotsheet_model::ARROW_HEAD_SCHEMA_VERSION
+    );
     let attachment_request = Request::builder()
         .method("POST")
         .uri(format!("/checkouts/combo/tickets/{slug}/attachments"))

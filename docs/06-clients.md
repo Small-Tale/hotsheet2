@@ -2142,7 +2142,9 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   Markup mode keeps an annotation-notes panel beside the media on wider screens and in a
   fixed-height row below it on narrow screens. The panel lists every annotation and holds
   the selected Markdown note field, effective-intent chips (Kerf multi-select `ChoiceChips`,
-  one checkbox and Tab stop per intent, HS2-HTRFDS), and rendered note preview.
+  one checkbox and Tab stop per intent, HS2-HTRFDS), arrow start/end style selectors,
+  and rendered note preview. Each arrow end can be none, open, closed, flat, open circle,
+  or closed circle; the default is none at the start and closed at the end (HS2-4PHSMG).
   Selecting or editing a note only scrolls panel content; it does not change the media
   stage or its fit scale. An implicit shape-default intent is labelled in the chips.
   While the annotation note has focus, its text-editing keys, including arrows and Escape,
@@ -2176,7 +2178,7 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   selected annotation exposes adjustable range brackets, and clicking empty image or video
   canvas space clears the selection and its resize/range handles.
   Saved shapes remain visible when markup mode is off. The gallery draws rectangles,
-  strikes with an X, open or filled freehand paths, arrows with filled heads, and
+  strikes with an X, open or filled freehand paths, arrows with independently styled ends, and
   insertion cursors with proofreading carets. Every stroke has a dark halo and uses
   the primary intent colour; unknown intents use a neutral stroke. Fixed-size
   number badges sit by each shape anchor, stay inside the media edge at every

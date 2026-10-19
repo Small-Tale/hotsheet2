@@ -22158,6 +22158,37 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
   await drag('arrow', [0.4, 0.65], [0.7, 0.3]);
   const drawnArrow = gallery.locator('.attachment-gallery__annotation[data-shape="arrow"]');
   await expect(drawnArrow.locator('[data-annotation-handle^="point-"]')).toHaveCount(2);
+  const startHead = gallery.getByRole('combobox', { name: 'Start arrow head' }),
+    endHead = gallery.getByRole('combobox', { name: 'End arrow head' });
+  await expect(startHead).toHaveValue('none');
+  await expect(endHead).toHaveValue('closed');
+  await startHead.selectOption('flat');
+  await endHead.selectOption('openCircle');
+  await expect(drawnArrow.locator('[data-head="flat"]')).toHaveCount(1);
+  await expect(drawnArrow.locator('[data-head="openCircle"]')).toHaveCount(1);
+  await stage.focus();
+  await page.keyboard.press('Meta+z');
+  await expect(endHead).toHaveValue('closed');
+  await page.keyboard.press('Meta+z');
+  await expect(startHead).toHaveValue('none');
+  await page.keyboard.press('Meta+Shift+z');
+  await page.keyboard.press('Meta+Shift+z');
+  await expect(startHead).toHaveValue('flat');
+  await expect(endHead).toHaveValue('openCircle');
+  await gallery.screenshot({ path: 'target/visual-captures/hs2-4phsmg-arrow-heads-wide.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(startHead).toHaveValue('flat');
+  await expect(endHead).toHaveValue('openCircle');
+  const phoneEditor = (await gallery.locator('.attachment-gallery__notes').boundingBox())!,
+    phoneStartHead = (await startHead.boundingBox())!,
+    phoneEndHead = (await endHead.boundingBox())!;
+  expect(phoneStartHead.y).toBeGreaterThanOrEqual(phoneEditor.y);
+  expect(phoneEndHead.y + phoneEndHead.height).toBeLessThanOrEqual(phoneEditor.y + phoneEditor.height);
+  await gallery.screenshot({
+    path: 'target/visual-captures/hs2-4phsmg-arrow-heads-phone.png',
+    animations: 'disabled',
+  });
+  await page.setViewportSize({ width: 1280, height: 720 });
   const arrowBoundsBefore = (await drawnArrow.boundingBox())!,
     arrowHead = (await drawnArrow.locator('[data-annotation-handle="point-1"]').boundingBox())!,
     arrowSurface = (await surface.boundingBox())!;
@@ -22214,6 +22245,8 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
     'insertion',
     'rect',
   ]);
+  const savedArrow = writes[0].annotations.find((annotation) => annotation.shape?.type === 'arrow');
+  expect(savedArrow?.shape).toMatchObject({ startHead: 'flat', endHead: 'openCircle' });
   for (const annotation of writes[0].annotations) {
     const points =
       annotation.shape?.type === 'freehand' || annotation.shape?.type === 'arrow'

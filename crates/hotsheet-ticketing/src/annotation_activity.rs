@@ -33,10 +33,29 @@ fn location(annotation: &MediaAnnotation) -> String {
             if *closed { "closed" } else { "open" },
             points.len()
         ),
-        Some(AnnotationShape::Arrow { points }) => match (points.first(), points.last()) {
-            (Some(start), Some(end)) => format!("arrow from {} to {}", point(start), point(end)),
-            _ => format!("arrow {rectangle}"),
-        },
+        Some(AnnotationShape::Arrow {
+            points,
+            start_head,
+            end_head,
+        }) => {
+            let route = match (points.first(), points.last()) {
+                (Some(start), Some(end)) => {
+                    format!("arrow from {} to {}", point(start), point(end))
+                }
+                _ => format!("arrow {rectangle}"),
+            };
+            if *start_head == hotsheet_model::AnnotationArrowHead::None
+                && *end_head == hotsheet_model::AnnotationArrowHead::Closed
+            {
+                route
+            } else {
+                format!(
+                    "{route} (start {}, end {})",
+                    start_head.label(),
+                    end_head.label()
+                )
+            }
+        }
         Some(AnnotationShape::Insertion { point: location }) => {
             format!("insertion at {}", point(location))
         }
@@ -202,6 +221,8 @@ mod tests {
                 AnnotationPoint { x: 1_200, y: 4_000 },
                 AnnotationPoint { x: 6_000, y: 4_000 },
             ],
+            start_head: hotsheet_model::AnnotationArrowHead::None,
+            end_head: hotsheet_model::AnnotationArrowHead::Closed,
         });
         let (_, body) = annotation_change_activity("proof.png", &[], &[arrow]).unwrap();
         assert!(body.contains("arrow from 12.0%,40.0% to 60.0%,40.0%"));

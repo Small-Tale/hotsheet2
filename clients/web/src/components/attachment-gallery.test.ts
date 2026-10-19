@@ -8,7 +8,7 @@ import {
   AttachmentGallery,
   attachmentGalleryAnnotationTolerance,
   attachmentGalleryAnnotationVisible,
-  attachmentGalleryArrowHead,
+  attachmentGalleryArrowEnds,
   attachmentGalleryBadgeStyle,
   attachmentGalleryDefaultRange,
   attachmentGalleryImageIndex,
@@ -387,10 +387,35 @@ describe('AttachmentGallery', () => {
     expect(markup).toContain('aria-label="Annotation 7 Note"');
     expect(markup).toContain('<strong>detail</strong>');
     expect(markup).toContain('class="attachment-gallery__annotation-arrow-head"');
-    expect(attachmentGalleryArrowHead(arrow, 800, 600)).toContain('M 1000,1000 L ');
-    expect(attachmentGalleryArrowHead(arrow, 800, 600)).not.toBe(attachmentGalleryArrowHead(arrow, 1600, 1200));
+    expect(attachmentGalleryArrowEnds(arrow, 800, 600)).toMatchObject([
+      { style: 'closed', path: expect.stringContaining('L 1000,1000') },
+    ]);
+    expect(attachmentGalleryArrowEnds(arrow, 800, 600)).not.toEqual(attachmentGalleryArrowEnds(arrow, 1600, 1200));
+    const styledArrow: MediaAnnotation = {
+      ...arrow,
+      shape: { ...arrow.shape, startHead: 'flat', endHead: 'openCircle' },
+    };
+    expect(attachmentGalleryArrowEnds(styledArrow, 800, 600)).toMatchObject([
+      { style: 'flat', path: expect.stringContaining('L') },
+      { style: 'openCircle', ellipse: { rx: expect.any(Number), ry: expect.any(Number) } },
+    ]);
+    const styledMarkup = String(
+      AttachmentGallery({
+        images,
+        activeUrl: '/a.png',
+        markup: true,
+        selectedAnnotation: 'arrow',
+        annotations: [styledArrow],
+      }),
+    );
+    expect(styledMarkup).toContain('data-head="flat"');
+    expect(styledMarkup).toContain('data-head="openCircle"');
+    expect(styledMarkup).toContain('aria-label="Start arrow head"');
+    expect(styledMarkup).toContain('aria-label="End arrow head"');
     const wingDistance = (width: number, height: number) => {
-      const wing = attachmentGalleryArrowHead(arrow, width, height).match(/ L ([\d.-]+),([\d.-]+)/)!;
+      const wing = attachmentGalleryArrowEnds(arrow, width, height)[0].path!.match(
+        /^M ([\d.-]+),([\d.-]+) L 1000,1000/,
+      )!;
       return Math.hypot(
         ((1000 - Number(wing[1])) * arrow.width * width) / 10_000 / 1000,
         ((1000 - Number(wing[2])) * arrow.height * height) / 10_000 / 1000,

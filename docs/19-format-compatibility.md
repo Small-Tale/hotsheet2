@@ -74,3 +74,9 @@ Tickets with explicit media annotation intents use the sticky
 `hotsheet/v4-annotation-intents` marker. An older v3 shape-aware binary rejects
 the ticket before it can discard the intent list. Empty intents remain the
 shape default and do not trigger this guard on a previously v2/v3 ticket.
+
+Attachment crop metadata uses the sticky `hotsheet/v5-attachment-crop` marker.
+An arrow with a nonstandard start or end head uses the sticky
+`hotsheet/v6-annotation-arrow-heads` marker (HS2-4PHSMG). Older readers reject
+these tickets before rewriting them; the default none/closed arrow remains
+compatible with the v3 shape marker.

@@ -22,6 +22,11 @@ describe('media annotation intents', () => {
     expect(annotationDefaultIntent(annotation({ type: 'strike' }))).toBe('remove');
     expect(annotationDefaultIntent(annotation({ type: 'insertion', point: { x: 1, y: 2 } }))).toBe('insert');
     expect(annotationDefaultIntent(annotation({ type: 'arrow', points: [] }))).toBe('move');
+    expect(annotationDefaultIntent(annotation({ type: 'arrow', points: [], startHead: 'open', endHead: 'none' }))).toBe(
+      'move',
+    );
+    expect(annotationDefaultIntent(annotation({ type: 'arrow', points: [], startHead: 'flat' }))).toBe('comment');
+    expect(annotationDefaultIntent(annotation({ type: 'arrow', points: [], endHead: 'openCircle' }))).toBe('comment');
     expect(annotationPrimaryIntent(annotation(undefined, ['comment', 'bug', 'question']))).toBe('bug');
     expect(annotationPrimaryIntent(annotation({ type: 'strike' }, []))).toBe('remove');
   });

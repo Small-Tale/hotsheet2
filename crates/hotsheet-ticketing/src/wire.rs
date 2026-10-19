@@ -723,6 +723,8 @@ mod tests {
                     hotsheet_model::AnnotationPoint { x: 100, y: 200 },
                     hotsheet_model::AnnotationPoint { x: 400, y: 200 },
                 ],
+                start_head: hotsheet_model::AnnotationArrowHead::None,
+                end_head: hotsheet_model::AnnotationArrowHead::Closed,
             }),
             intents: Vec::new(),
         });

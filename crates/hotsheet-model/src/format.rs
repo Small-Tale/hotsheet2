@@ -21,6 +21,7 @@ const GUARDED_SCHEMA_V2: &str = "hotsheet/v2-bounded-notes";
 const GUARDED_SCHEMA_V3: &str = "hotsheet/v3-annotation-shapes";
 const GUARDED_SCHEMA_V4: &str = "hotsheet/v4-annotation-intents";
 const GUARDED_SCHEMA_V5: &str = "hotsheet/v5-attachment-crop";
+const GUARDED_SCHEMA_V6: &str = "hotsheet/v6-annotation-arrow-heads";
 
 /// Frontmatter keys the current schema defines. Anything else parsed from a file's
 /// frontmatter is retained in [`Ticket::extra`]. Kept in sync with `Ticket`'s fields
@@ -233,7 +234,19 @@ fn frontmatter_to_string(t: &Ticket) -> String {
         .attachments
         .iter()
         .any(|attachment| attachment.crop.is_some());
-    let schema = if crops {
+    let arrow_heads = t.attachments.iter().any(|attachment| {
+        attachment.annotations.iter().any(|annotation| {
+            matches!(
+                annotation.shape.as_ref(),
+                Some(crate::AnnotationShape::Arrow { start_head, end_head, .. })
+                    if *start_head != crate::AnnotationArrowHead::None
+                        || *end_head != crate::AnnotationArrowHead::Closed
+            )
+        })
+    });
+    let schema = if arrow_heads {
+        t.schema.max(crate::ARROW_HEAD_SCHEMA_VERSION)
+    } else if crops {
         t.schema.max(crate::CROP_SCHEMA_VERSION)
     } else if intents {
         t.schema.max(crate::INTENT_SCHEMA_VERSION)
@@ -262,6 +275,11 @@ fn frontmatter_to_string(t: &Ticket) -> String {
             Value::String("schema".into()),
             Value::String(GUARDED_SCHEMA_V5.into()),
         );
+    } else if schema == crate::ARROW_HEAD_SCHEMA_VERSION {
+        mapping.insert(
+            Value::String("schema".into()),
+            Value::String(GUARDED_SCHEMA_V6.into()),
+        );
     }
     serde_yaml::to_string(&Value::Mapping(mapping)).expect("a YAML mapping always serializes")
 }
@@ -277,6 +295,7 @@ fn normalize_schema_marker(mapping: &mut Mapping) -> Result<(), ParseError> {
             GUARDED_SCHEMA_V3 => crate::SHAPE_SCHEMA_VERSION,
             GUARDED_SCHEMA_V4 => crate::INTENT_SCHEMA_VERSION,
             GUARDED_SCHEMA_V5 => crate::CROP_SCHEMA_VERSION,
+            GUARDED_SCHEMA_V6 => crate::ARROW_HEAD_SCHEMA_VERSION,
             _ => return Err(ParseError::UnsupportedSchema(marker.clone())),
         };
         mapping.insert(key, Value::Number(schema.into()));
@@ -947,6 +966,8 @@ mod tests {
             (
                 AnnotationShape::Arrow {
                     points: vec![point(1_000, 2_000), point(6_000, 2_000)],
+                    start_head: crate::AnnotationArrowHead::None,
+                    end_head: crate::AnnotationArrowHead::Closed,
                 },
                 (1_000, 2_000, 5_000, 1),
             ),
@@ -1057,6 +1078,65 @@ mod tests {
         ticket.attachments[0].crop = None;
         ticket.schema = crate::CROP_SCHEMA_VERSION;
         assert!(to_file_string(&ticket).contains("schema: hotsheet/v5-attachment-crop"));
+    }
+
+    #[test]
+    fn nonstandard_arrow_heads_round_trip_under_v6_guard() {
+        use crate::ticket::{
+            AnnotationArrowHead, AnnotationPoint, AnnotationShape, Attachment, MediaAnnotation,
+        };
+        let mut ticket = sample();
+        ticket.attachments.push(Attachment {
+            id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FC4"),
+            filename: "proof.png".into(),
+            created_at: "2026-08-20T06:00:00Z".into(),
+            batch_id: None,
+            batch_label: None,
+            actor: None,
+            purpose: None,
+            crop: None,
+            annotations: vec![MediaAnnotation {
+                id: "span".into(),
+                x: 100,
+                y: 200,
+                width: 300,
+                height: 1,
+                start_ms: None,
+                end_ms: None,
+                text: String::new(),
+                intents: Vec::new(),
+                shape: Some(AnnotationShape::Arrow {
+                    points: vec![
+                        AnnotationPoint { x: 100, y: 200 },
+                        AnnotationPoint { x: 400, y: 200 },
+                    ],
+                    start_head: AnnotationArrowHead::Flat,
+                    end_head: AnnotationArrowHead::OpenCircle,
+                }),
+            }],
+        });
+        let encoded = to_file_string(&ticket);
+        assert!(encoded.contains("schema: hotsheet/v6-annotation-arrow-heads"));
+        assert!(encoded.contains("startHead: flat"));
+        assert!(encoded.contains("endHead: openCircle"));
+        let decoded = parse_file(&encoded).unwrap();
+        assert_eq!(
+            decoded.attachments[0].annotations,
+            ticket.attachments[0].annotations
+        );
+        assert_eq!(to_file_string(&decoded), encoded);
+        ticket.attachments[0].annotations[0].shape = Some(AnnotationShape::Arrow {
+            points: vec![
+                AnnotationPoint { x: 100, y: 200 },
+                AnnotationPoint { x: 400, y: 200 },
+            ],
+            start_head: AnnotationArrowHead::None,
+            end_head: AnnotationArrowHead::Closed,
+        });
+        let legacy = to_file_string(&ticket);
+        assert!(legacy.contains("schema: hotsheet/v3-annotation-shapes"));
+        assert!(!legacy.contains("startHead:"));
+        assert!(!legacy.contains("endHead:"));
     }
 
     #[test]

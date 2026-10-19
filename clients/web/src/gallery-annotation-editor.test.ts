@@ -84,6 +84,26 @@ describe('gallery annotation geometry', () => {
     expect(scaled).toMatchObject(annotationBounds((scaled.shape as { points: { x: number; y: number }[] }).points));
   });
 
+  it('keeps both arrow-end styles when an endpoint moves', () => {
+    const drawn = drawGalleryAnnotation(base, 'arrow', point(1000, 2000), point(6000, 7000));
+    const styled: MediaAnnotation = {
+      ...drawn,
+      shape: {
+        type: 'arrow',
+        points: [point(1000, 2000), point(6000, 7000)],
+        startHead: 'flat',
+        endHead: 'openCircle',
+      },
+    };
+    const moved = moveGalleryArrowVertex(styled, 1, point(7000, 6000));
+    expect(moved.shape).toEqual({
+      type: 'arrow',
+      points: [point(1000, 2000), point(7000, 6000)],
+      startHead: 'flat',
+      endHead: 'openCircle',
+    });
+  });
+
   it('picks a smaller overlapping shape and rejects empty arrow bounds', () => {
     const outer = drawGalleryAnnotation(base, 'rect', point(1000, 1000), point(9000, 9000)),
       inner = drawGalleryAnnotation({ ...base, id: 'inner' }, 'rect', point(4000, 4000), point(6000, 6000)),

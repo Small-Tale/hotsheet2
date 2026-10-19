@@ -463,6 +463,8 @@ mod tests {
                             AnnotationPoint { x: 100, y: 200 },
                             AnnotationPoint { x: 400, y: 200 },
                         ],
+                        start_head: hotsheet_model::AnnotationArrowHead::None,
+                        end_head: hotsheet_model::AnnotationArrowHead::Closed,
                     }),
                     intents: vec!["move".into(), "bug".into(), "future_focus".into()],
                 },

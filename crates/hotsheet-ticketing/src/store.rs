@@ -42,7 +42,20 @@ struct AttachmentWriteOptions {
 }
 
 fn ticket_write_schema(ticket: &Ticket) -> u32 {
-    if ticket.schema >= hotsheet_model::CROP_SCHEMA_VERSION
+    if ticket.schema >= hotsheet_model::ARROW_HEAD_SCHEMA_VERSION
+        || ticket.attachments.iter().any(|attachment| {
+            attachment.annotations.iter().any(|annotation| {
+                matches!(
+                    annotation.shape.as_ref(),
+                    Some(hotsheet_model::AnnotationShape::Arrow { start_head, end_head, .. })
+                        if *start_head != hotsheet_model::AnnotationArrowHead::None
+                            || *end_head != hotsheet_model::AnnotationArrowHead::Closed
+                )
+            })
+        })
+    {
+        hotsheet_model::ARROW_HEAD_SCHEMA_VERSION
+    } else if ticket.schema >= hotsheet_model::CROP_SCHEMA_VERSION
         || ticket
             .attachments
             .iter()

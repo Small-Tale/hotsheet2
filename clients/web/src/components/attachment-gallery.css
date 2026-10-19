@@ -242,6 +242,14 @@
   fill: currentColor;
   stroke: var(--hs-annotation-halo);
   stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+.attachment-gallery__annotation-arrow-head[data-head='open'],
+.attachment-gallery__annotation-arrow-head[data-head='flat'],
+.attachment-gallery__annotation-arrow-head[data-head='openCircle'] {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5px;
 }
 .attachment-gallery__annotation[hidden] {
   display: none;
@@ -415,6 +423,28 @@
   display: flex;
   align-items: center;
   gap: var(--kui-space-xs);
+}
+.attachment-gallery__arrow-head-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  order: -1;
+  gap: var(--kui-space-xs);
+}
+.attachment-gallery__arrow-head-controls label {
+  display: grid;
+  min-width: 0;
+  gap: var(--kui-space-2xs);
+  color: white;
+}
+.attachment-gallery__arrow-head-controls select {
+  min-width: 0;
+  width: 100%;
+  min-height: remify(32px);
+  color: white;
+  background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 78%, black);
+  border: 1px solid color-mix(in srgb, white 45%, transparent);
+  border-radius: var(--wa-border-radius-s);
+  font: inherit;
 }
 /* App-owned width cap around the Kerf playback Toolbar: playback and volume are native buttons in
    dark ToolbarControlGroups, the track fills the stretched center zone (HS2-1FRWAJ). */

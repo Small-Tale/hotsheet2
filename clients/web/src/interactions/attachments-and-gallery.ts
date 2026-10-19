@@ -2,7 +2,14 @@ import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { ANNOTATION_INTENT_ORDER, annotationDefaultIntent } from '../annotation-intents';
-import { Api, type AttachmentMetadata, type FullTicket, type MediaAnnotation, type TicketRow } from '../api';
+import {
+  type AnnotationArrowHead,
+  Api,
+  type AttachmentMetadata,
+  type FullTicket,
+  type MediaAnnotation,
+  type TicketRow,
+} from '../api';
 import { type AttachmentLabelEditing, createAttachmentLabelEditor } from '../attachment-label-editing';
 import { attachmentOwnerTarget } from '../attachment-owner';
 import { browserRandomId } from '../browser-id';
@@ -832,6 +839,30 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
           ? { ...item, shape: { ...item.shape, closed: checked } }
           : item,
       );
+      recordAnnotationChange(before);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', ATTACHMENTS_AND_GALLERY_ACTIONS.changeGalleryArrowHead.selector, (event) => {
+      const id = attachmentGallerySelectedAnnotation.value,
+        target = event.target as HTMLSelectElement,
+        end = target.dataset.arrowEnd,
+        head = target.value as AnnotationArrowHead;
+      if (
+        !id ||
+        (end !== 'start' && end !== 'end') ||
+        !['none', 'open', 'closed', 'flat', 'openCircle', 'closedCircle'].includes(head)
+      )
+        return;
+      const before = snapshotAnnotations();
+      attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) => {
+        if (item.id !== id || item.shape?.type !== 'arrow') return item;
+        const shape = {
+          ...item.shape,
+          ...(end === 'start' ? { startHead: head } : { endHead: head }),
+        };
+        return { ...item, shape };
+      });
       recordAnnotationChange(before);
     }),
   );

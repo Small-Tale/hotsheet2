@@ -285,10 +285,16 @@ export interface MediaAnnotation {
   shape?:
     | { type: 'rect' | 'strike' }
     | { type: 'freehand'; points: { x: number; y: number }[]; closed?: boolean }
-    | { type: 'arrow'; points: { x: number; y: number }[] }
+    | {
+        type: 'arrow';
+        points: { x: number; y: number }[];
+        startHead?: AnnotationArrowHead;
+        endHead?: AnnotationArrowHead;
+      }
     | { type: 'insertion'; point: { x: number; y: number } };
   intents?: string[];
 }
+export type AnnotationArrowHead = 'none' | 'open' | 'closed' | 'flat' | 'openCircle' | 'closedCircle';
 export type AttachmentActorRole = 'human' | 'ai' | 'system' | 'unknown';
 export type AttachmentPurpose = 'problem_evidence' | 'correctness_evidence' | 'reference' | 'other';
 export interface AttachmentActor {

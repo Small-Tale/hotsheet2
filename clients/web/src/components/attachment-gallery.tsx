@@ -39,7 +39,7 @@ import {
 } from 'lucide';
 
 import { ANNOTATION_INTENT_ORDER, annotationDefaultIntent, annotationIntentColor } from '../annotation-intents';
-import type { Attachment, MediaAnnotation } from '../api';
+import type { AnnotationArrowHead, Attachment, MediaAnnotation } from '../api';
 import { isVideoAttachment } from '../attachment-references';
 import type { GalleryAnnotationTool } from '../gallery-annotation-editor';
 import {
@@ -334,28 +334,62 @@ export function attachmentGalleryBadgeStyle(annotation: MediaAnnotation): string
   return `left:clamp(0px,calc(${x}% - 20px),calc(100% - 22px));top:clamp(0px,calc(${y}% - 20px),calc(100% - 22px))`;
 }
 
-/** Arrowhead dimensions are converted from screen points back into local media geometry. */
-export function attachmentGalleryArrowHead(
+interface ArrowEndGeometry {
+  style: AnnotationArrowHead;
+  path?: string;
+  ellipse?: { x: number; y: number; rx: number; ry: number };
+}
+
+/** Both endpoints use physical-pixel dimensions before mapping into the stretched local SVG. */
+export function attachmentGalleryArrowEnds(
   annotation: MediaAnnotation,
   mediaWidth: number,
   mediaHeight: number,
-): string {
-  if (annotation.shape?.type !== 'arrow' || annotation.shape.points.length < 2) return '';
+): ArrowEndGeometry[] {
+  if (annotation.shape?.type !== 'arrow' || annotation.shape.points.length < 2) return [];
   const points = annotation.shape.points,
-    tail = points[points.length - 2],
-    tip = points[points.length - 1],
-    dx = ((tip.x - tail.x) * mediaWidth) / 10000,
-    dy = ((tip.y - tail.y) * mediaHeight) / 10000,
-    length = Math.hypot(dx, dy);
-  if (!length) return '';
-  const ux = dx / length,
-    uy = dy / length,
-    tipX = ((tip.x - annotation.x) * 1000) / annotation.width,
-    tipY = ((tip.y - annotation.y) * 1000) / annotation.height,
-    localX = (pixels: number) => (pixels * 10000 * 1000) / (mediaWidth * annotation.width),
-    localY = (pixels: number) => (pixels * 10000 * 1000) / (mediaHeight * annotation.height),
-    wing = (side: number) => `${tipX + localX(-12 * ux + side * 5 * uy)},${tipY + localY(-12 * uy - side * 5 * ux)}`;
-  return `M ${tipX},${tipY} L ${wing(1)} L ${wing(-1)} Z`;
+    ends: [AnnotationArrowHead, (typeof points)[number], (typeof points)[number]][] = [
+      [annotation.shape.startHead ?? 'none', points[0], points[1]],
+      [annotation.shape.endHead ?? 'closed', points[points.length - 1], points[points.length - 2]],
+    ],
+    localX = (pixels: number) => (pixels * 10_000 * 1000) / (mediaWidth * annotation.width),
+    localY = (pixels: number) => (pixels * 10_000 * 1000) / (mediaHeight * annotation.height);
+  return ends.flatMap<ArrowEndGeometry>(([style, tip, from]) => {
+    if (style === 'none') return [];
+    const dx = ((tip.x - from.x) * mediaWidth) / 10_000,
+      dy = ((tip.y - from.y) * mediaHeight) / 10_000,
+      length = Math.hypot(dx, dy);
+    if (!length) return [];
+    const ux = dx / length,
+      uy = dy / length,
+      x = ((tip.x - annotation.x) * 1000) / annotation.width,
+      y = ((tip.y - annotation.y) * 1000) / annotation.height,
+      point = (back: number, side: number) =>
+        `${x + localX(-back * ux + side * uy)},${y + localY(-back * uy - side * ux)}`;
+    if (style === 'openCircle' || style === 'closedCircle')
+      return [{ style, ellipse: { x, y, rx: localX(6), ry: localY(6) } }];
+    if (style === 'flat') return [{ style, path: `M ${point(0, 7)} L ${point(0, -7)}` }];
+    return [{ style, path: `M ${point(12, 5)} L ${x},${y} L ${point(12, -5)}${style === 'closed' ? ' Z' : ''}` }];
+  });
+}
+
+function attachmentGalleryArrowLine(annotation: MediaAnnotation, mediaWidth: number, mediaHeight: number): string {
+  if (annotation.shape?.type !== 'arrow') return attachmentGalleryShapePath(annotation);
+  const points = annotation.shape.points.map((point) => ({ ...point }));
+  if (points.length < 2) return attachmentGalleryShapePath(annotation);
+  const inset = (index: number, neighbor: number) => {
+    const tip = points[index],
+      from = points[neighbor],
+      dx = ((from.x - tip.x) * mediaWidth) / 10_000,
+      dy = ((from.y - tip.y) * mediaHeight) / 10_000,
+      length = Math.hypot(dx, dy);
+    if (!length) return;
+    tip.x += ((dx / length) * Math.min(6, length) * 10_000) / mediaWidth;
+    tip.y += ((dy / length) * Math.min(6, length) * 10_000) / mediaHeight;
+  };
+  if (annotation.shape.startHead === 'openCircle') inset(0, 1);
+  if (annotation.shape.endHead === 'openCircle') inset(points.length - 1, points.length - 2);
+  return points.map((point, index) => `${index ? 'L' : 'M'} ${annotationPoint(annotation, point)}`).join(' ');
 }
 
 function AnnotationShape({
@@ -368,7 +402,11 @@ function AnnotationShape({
   mediaHeight: number;
 }) {
   const type = annotationShapeType(annotation),
-    arrowHead = attachmentGalleryArrowHead(annotation, mediaWidth, mediaHeight);
+    arrowEnds = attachmentGalleryArrowEnds(annotation, mediaWidth, mediaHeight),
+    shapePath =
+      type === 'arrow'
+        ? attachmentGalleryArrowLine(annotation, mediaWidth, mediaHeight)
+        : attachmentGalleryShapePath(annotation);
   return (
     <svg
       class="attachment-gallery__annotation-shape"
@@ -376,16 +414,29 @@ function AnnotationShape({
       preserveAspectRatio="none"
       aria-hidden="true"
     >
-      <path class="attachment-gallery__annotation-halo" d={attachmentGalleryShapePath(annotation)} />
+      <path class="attachment-gallery__annotation-halo" d={shapePath} />
       <path
         class="attachment-gallery__annotation-ink"
-        d={attachmentGalleryShapePath(annotation)}
+        d={shapePath}
         data-filled={String(
           type === 'rect' ||
             (type === 'freehand' && annotation.shape?.type === 'freehand' && annotation.shape.closed !== false),
         )}
       />
-      {arrowHead && <path class="attachment-gallery__annotation-arrow-head" d={arrowHead} />}
+      {arrowEnds.map((end) =>
+        end.ellipse ? (
+          <ellipse
+            class="attachment-gallery__annotation-arrow-head"
+            data-head={end.style}
+            cx={end.ellipse.x}
+            cy={end.ellipse.y}
+            rx={end.ellipse.rx}
+            ry={end.ellipse.ry}
+          />
+        ) : (
+          <path class="attachment-gallery__annotation-arrow-head" data-head={end.style} d={end.path} />
+        ),
+      )}
       {type === 'strike' && (
         <>
           <path class="attachment-gallery__annotation-halo" d="M 0,0 L 1000,1000 M 1000,0 L 0,1000" />
@@ -761,6 +812,44 @@ export function AttachmentGallery({
                     />
                     Closed outline
                   </label>
+                )}
+                {selectedEditableAnnotation.shape?.type === 'arrow' && (
+                  <div class="attachment-gallery__arrow-head-controls" aria-label="Arrow ends">
+                    {(['start', 'end'] as const).map((end) => (
+                      <label>
+                        {end === 'start' ? 'Start head' : 'End head'}
+                        <select
+                          {...ATTACHMENTS_AND_GALLERY_ACTIONS.changeGalleryArrowHead.attrs}
+                          data-arrow-end={end}
+                          aria-label={`${end === 'start' ? 'Start' : 'End'} arrow head`}
+                        >
+                          {(
+                            [
+                              ['none', 'None'],
+                              ['open', 'Open'],
+                              ['closed', 'Closed'],
+                              ['flat', 'Flat'],
+                              ['openCircle', 'Open circle'],
+                              ['closedCircle', 'Closed circle'],
+                            ] as const
+                          ).map(([value, label]) => (
+                            <option
+                              value={value}
+                              selected={
+                                selectedEditableAnnotation.shape?.type === 'arrow' &&
+                                value ===
+                                  (end === 'start'
+                                    ? (selectedEditableAnnotation.shape.startHead ?? 'none')
+                                    : (selectedEditableAnnotation.shape.endHead ?? 'closed'))
+                              }
+                            >
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
                 )}
               </section>
             )}

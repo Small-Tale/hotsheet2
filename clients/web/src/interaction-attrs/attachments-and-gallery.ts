@@ -28,6 +28,7 @@ export const ATTACHMENTS_AND_GALLERY_ACTIONS = {
   editGalleryNote: action('edit-gallery-note'),
   toggleGalleryIntent: action('toggle-gallery-intent'),
   toggleGalleryClosed: action('toggle-gallery-closed'),
+  changeGalleryArrowHead: action('change-gallery-arrow-head'),
   selectGalleryAnnotation: action('select-gallery-annotation'),
   editGalleryAnnotation: action('edit-gallery-annotation'),
   deleteGalleryAnnotation: action('delete-gallery-annotation'),

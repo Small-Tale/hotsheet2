@@ -220,7 +220,7 @@ export function moveGalleryArrowVertex(
 ): MediaAnnotation {
   if (annotation.shape?.type !== 'arrow' || index < 0 || index >= annotation.shape.points.length) return annotation;
   const points = annotation.shape.points.map((source, position) => (position === index ? target : source));
-  return { ...annotation, ...annotationBounds(points), shape: { type: 'arrow', points } };
+  return { ...annotation, ...annotationBounds(points), shape: { ...annotation.shape, points } };
 }
 
 const pointSegmentDistance = (point: AnnotationPoint, start: AnnotationPoint, end: AnnotationPoint) => {

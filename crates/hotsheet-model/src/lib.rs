@@ -18,10 +18,10 @@ pub use enums::{CloseReason, NoteKind, Priority, ReviewKind, StartedPhase, Statu
 pub use format::{ParseError, parse_file, to_file_string};
 pub use ids::{Ulid, derive_slug};
 pub use ticket::{
-    AiFeedback, AiFeedbackRating, AnnotationPoint, AnnotationShape, Attachment, AttachmentActor,
-    AttachmentActorRole, AttachmentMetadata, AttachmentPurpose, ClaimEvent, ClaimEventKind,
-    Confidence, ConfidenceError, ExternalLink, ImageCrop, MediaAnnotation, Note, NoteActor,
-    ReviewRequest, Ticket, validate_media_annotations,
+    AiFeedback, AiFeedbackRating, AnnotationArrowHead, AnnotationPoint, AnnotationShape,
+    Attachment, AttachmentActor, AttachmentActorRole, AttachmentMetadata, AttachmentPurpose,
+    ClaimEvent, ClaimEventKind, Confidence, ConfidenceError, ExternalLink, ImageCrop,
+    MediaAnnotation, Note, NoteActor, ReviewRequest, Ticket, validate_media_annotations,
 };
 pub use timestamp::Timestamp;
 
@@ -33,3 +33,5 @@ pub const SHAPE_SCHEMA_VERSION: u32 = 3;
 pub const INTENT_SCHEMA_VERSION: u32 = 4;
 /// Attachment crop metadata requires a stale-writer guard.
 pub const CROP_SCHEMA_VERSION: u32 = 5;
+/// Nonstandard arrow end styles require a stale-writer guard.
+pub const ARROW_HEAD_SCHEMA_VERSION: u32 = 6;

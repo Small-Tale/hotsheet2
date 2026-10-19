@@ -63,7 +63,7 @@ fields) + a **Markdown body** (`details`) + an optional `## Notes` section. See
 | `transferred_from`                                                                       | qualified ticket ref                                                                                                                         | no             | shared | Source connection + native id (`connection:native-id`) for that transfer                                                                                                                                   |
 | `legacy_number`                                                                          | string (e.g. `HS-1234`)                                                                                                                      | no             | shared | The HS1 ticket number this ticket was imported from, retained so legacy references resolve/search against the new ticket (HS2-4H2ZR1). Provenance metadata, not an HS2 identity; only the importer sets it |
 | **Schema**                                                                               |                                                                                                                                              |                |        |                                                                                                                                                                                                            |
-| `schema`                                                                                 | guarded string (`hotsheet/v2-bounded-notes` through `hotsheet/v5-attachment-crop`)                                                           | yes            | shared | On-disk writer/version guard; normalized to model/API schema integer 2–5 after parse. Legacy numeric `1` remains read-compatible.                                                                          |
+| `schema`                                                                                 | guarded string (`hotsheet/v2-bounded-notes` through `hotsheet/v6-annotation-arrow-heads`)                                                    | yes            | shared | On-disk writer/version guard; normalized to model/API schema integer 2–6 after parse. Legacy numeric `1` remains read-compatible.                                                                          |
 
 **Not in the file (Local / Derived):**
 
@@ -219,8 +219,9 @@ string `id`, a rectangle (`x`, `y`, `width`, `height`) normalized to the integer
 The optional `shape` object has a `type` of `rect`, `strike`, `freehand`, `arrow`, or
 `insertion`. Omitted shape means `rect`. `strike` uses the top-level rectangle;
 `freehand` has at least three `{x, y}` points and an optional `closed` boolean (true
-by default); `arrow` has at least two points, with its head at the last point; and
-`insertion` has one `point`. Points use the same 0–10,000 coordinates. For point-based
+by default); `arrow` has at least two points and optional `startHead` and `endHead`
+styles (`none`, `open`, `closed`, `flat`, `openCircle`, `closedCircle`). Their defaults
+are `none` and `closed` respectively. `insertion` has one `point`. Points use the same 0–10,000 coordinates. For point-based
 shapes the top-level rectangle is the exact point bounding box, with a one-unit
 minimum width and height; a point at 10,000 uses origin 9,999 on that axis. This
 keeps the legacy rectangle fields useful for simple readers. Shape-bearing tickets
@@ -232,7 +233,9 @@ that have never held a shape retain the v2 marker and unchanged file format.
 The optional ordered `intents` list accepts `comment` (blue), `bug` (red),
 `change` (orange), `insert` (green), `remove` (purple), `move` (teal), and
 `question` (yellow). Empty or omitted means the shape default: rectangle and
-freehand → `comment`, strike → `remove`, insertion → `insert`, arrow → `move`.
+freehand → `comment`, strike → `remove`, insertion → `insert`. An arrow defaults to
+`move` when exactly one end is an open or closed arrowhead and the other has no head;
+other end combinations default to `comment`.
 The primary intent is the first listed intent different from the default, or
 the default when none exists. Unknown nonempty strings are preserved unchanged
 and have no assigned colour. Duplicate or blank entries are rejected. The
@@ -261,6 +264,10 @@ stored payload. A crop and annotation edit made together form one store commit a
 activity note. Tickets that have ever held crop metadata use the sticky
 `schema: hotsheet/v5-attachment-crop` guard so older binaries cannot erase it. See
 [the crop design](attachment-crop-design.md) for reader and provider behavior.
+
+Tickets with nonstandard arrow heads use the sticky
+`schema: hotsheet/v6-annotation-arrow-heads` guard. Standard arrows omit both head
+fields and continue using the v3 shape guard unless another feature raises the version.
 
 ## 17.4 Rules the parser/serializer enforce
 

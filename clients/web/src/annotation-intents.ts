@@ -11,7 +11,12 @@ export function annotationDefaultIntent(annotation: MediaAnnotation): string {
     case 'insertion':
       return 'insert';
     case 'arrow':
-      return 'move';
+      return ((annotation.shape.startHead === 'open' || annotation.shape.startHead === 'closed') &&
+        (annotation.shape.endHead ?? 'closed') === 'none') ||
+        ((annotation.shape.startHead ?? 'none') === 'none' &&
+          ((annotation.shape.endHead ?? 'closed') === 'open' || (annotation.shape.endHead ?? 'closed') === 'closed'))
+        ? 'move'
+        : 'comment';
     case 'rect':
     case 'freehand':
     case undefined:

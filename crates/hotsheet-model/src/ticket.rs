@@ -259,7 +259,25 @@ impl MediaAnnotation {
         match &self.shape {
             Some(AnnotationShape::Strike) => "remove",
             Some(AnnotationShape::Insertion { .. }) => "insert",
-            Some(AnnotationShape::Arrow { .. }) => "move",
+            Some(AnnotationShape::Arrow {
+                start_head,
+                end_head,
+                ..
+            }) => {
+                let points = |head: &AnnotationArrowHead| {
+                    matches!(
+                        head,
+                        AnnotationArrowHead::Open | AnnotationArrowHead::Closed
+                    )
+                };
+                if (points(start_head) && *end_head == AnnotationArrowHead::None)
+                    || (*start_head == AnnotationArrowHead::None && points(end_head))
+                {
+                    "move"
+                } else {
+                    "comment"
+                }
+            }
             _ => "comment",
         }
     }
@@ -295,6 +313,44 @@ pub struct AnnotationPoint {
     pub y: u32,
 }
 
+/// Style at either end of an annotation arrow; matches UX Review's wire names.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AnnotationArrowHead {
+    #[default]
+    None,
+    Open,
+    Closed,
+    Flat,
+    OpenCircle,
+    ClosedCircle,
+}
+
+impl AnnotationArrowHead {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Open => "open",
+            Self::Closed => "closed",
+            Self::Flat => "flat",
+            Self::OpenCircle => "open circle",
+            Self::ClosedCircle => "closed circle",
+        }
+    }
+}
+
+fn default_end_head() -> AnnotationArrowHead {
+    AnnotationArrowHead::Closed
+}
+
+fn is_default_start_head(head: &AnnotationArrowHead) -> bool {
+    *head == AnnotationArrowHead::None
+}
+
+fn is_default_end_head(head: &AnnotationArrowHead) -> bool {
+    *head == AnnotationArrowHead::Closed
+}
+
 fn default_closed() -> bool {
     true
 }
@@ -315,6 +371,18 @@ pub enum AnnotationShape {
     },
     Arrow {
         points: Vec<AnnotationPoint>,
+        #[serde(
+            default,
+            rename = "startHead",
+            skip_serializing_if = "is_default_start_head"
+        )]
+        start_head: AnnotationArrowHead,
+        #[serde(
+            default = "default_end_head",
+            rename = "endHead",
+            skip_serializing_if = "is_default_end_head"
+        )]
+        end_head: AnnotationArrowHead,
     },
     Insertion {
         point: AnnotationPoint,
@@ -361,7 +429,7 @@ pub fn validate_media_annotations(annotations: &[MediaAnnotation]) -> Result<(),
                         )
                 })
             }
-            Some(AnnotationShape::Arrow { points }) if points.len() >= 2 => point_box(points)
+            Some(AnnotationShape::Arrow { points, .. }) if points.len() >= 2 => point_box(points)
                 .is_some_and(|bounds| {
                     bounds
                         == (
@@ -1056,6 +1124,8 @@ mod tests {
             MediaAnnotation {
                 shape: Some(AnnotationShape::Arrow {
                     points: vec![point(1_000, 2_000), point(6_000, 2_000)],
+                    start_head: AnnotationArrowHead::None,
+                    end_head: AnnotationArrowHead::Closed,
                 }),
                 ..base.clone()
             },
@@ -1087,12 +1157,16 @@ mod tests {
             MediaAnnotation {
                 shape: Some(AnnotationShape::Arrow {
                     points: vec![point(1_000, 2_000)],
+                    start_head: AnnotationArrowHead::None,
+                    end_head: AnnotationArrowHead::Closed,
                 }),
                 ..base.clone()
             },
             MediaAnnotation {
                 shape: Some(AnnotationShape::Arrow {
                     points: vec![point(1_000, 2_000), point(10_001, 2_000)],
+                    start_head: AnnotationArrowHead::None,
+                    end_head: AnnotationArrowHead::Closed,
                 }),
                 ..base.clone()
             },
@@ -1100,6 +1174,8 @@ mod tests {
                 width: 4_999,
                 shape: Some(AnnotationShape::Arrow {
                     points: vec![point(1_000, 2_000), point(6_000, 2_000)],
+                    start_head: AnnotationArrowHead::None,
+                    end_head: AnnotationArrowHead::Closed,
                 }),
                 ..base.clone()
             },
@@ -1139,7 +1215,38 @@ mod tests {
         assert_eq!(base.primary_intent_color(), Some("blue"));
         for (shape, expected) in [
             (AnnotationShape::Strike, "remove"),
-            (AnnotationShape::Arrow { points: Vec::new() }, "move"),
+            (
+                AnnotationShape::Arrow {
+                    points: Vec::new(),
+                    start_head: AnnotationArrowHead::None,
+                    end_head: AnnotationArrowHead::Closed,
+                },
+                "move",
+            ),
+            (
+                AnnotationShape::Arrow {
+                    points: Vec::new(),
+                    start_head: AnnotationArrowHead::Open,
+                    end_head: AnnotationArrowHead::None,
+                },
+                "move",
+            ),
+            (
+                AnnotationShape::Arrow {
+                    points: Vec::new(),
+                    start_head: AnnotationArrowHead::Flat,
+                    end_head: AnnotationArrowHead::Closed,
+                },
+                "comment",
+            ),
+            (
+                AnnotationShape::Arrow {
+                    points: Vec::new(),
+                    start_head: AnnotationArrowHead::None,
+                    end_head: AnnotationArrowHead::OpenCircle,
+                },
+                "comment",
+            ),
             (
                 AnnotationShape::Insertion {
                     point: AnnotationPoint { x: 100, y: 200 },
