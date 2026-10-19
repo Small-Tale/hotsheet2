@@ -163,6 +163,7 @@ commands-and-ai	document.addEventListener	'pointerdown'
 commands-and-ai	delegate	document.body	'click'	'[data-action="open-conversation"]'
 commands-and-ai	wireAiConversation	document.body
 commands-and-ai	delegate	document.body	'click'	'[data-action="copy-conversation-selection"]'
+commands-and-ai	delegate	document.body	'click'	'[data-action="download-conversation-selection"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="clear-conversation-selection"]'
 commands-and-ai	delegateCapture	document.body	'click'	'[data-dialog-component="conversation-export-dialog"]'
 commands-and-ai	delegate	document.body	'change'	'input[name="conversation-export-scope"]'
