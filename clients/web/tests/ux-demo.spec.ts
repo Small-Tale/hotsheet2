@@ -2523,7 +2523,7 @@ test('shows a released final-testing ticket in the list row at wide and phone wi
   });
   const busy = settings.locator('input[type="checkbox"][name="busy"]');
   await busy.click();
-  const row = page.locator('[data-component="summary-row"]');
+  const row = page.locator('[data-component="summary-row"][role="option"]');
   await expect(row.locator('[data-component="status-badge"]')).toContainText('Final testing');
   await expect(row.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'started');
   await page.screenshot({ path: testInfo.outputPath('final-testing-row-wide.png') });
@@ -2541,7 +2541,7 @@ test('shows a GitHub issue number without its repository prefix in the ticket ro
   await page.locator('[data-action="toggle-settings"]').first().click();
   await page.getByRole('textbox', { name: 'Title' }).fill('i deleted a github issue-based ticket that was verified');
   await setDemoSettingsOpen(page, false);
-  const row = page.locator('[data-component="summary-row"]');
+  const row = page.locator('[data-component="summary-row"][role="option"]');
   await expect(row).toHaveAttribute('data-ticket-slug', 'Small-Tale/hotsheet2#5');
   await expect(row.locator('.ticket-list-row__slug')).toHaveText('#5');
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'github');
@@ -2697,7 +2697,7 @@ test('uses the row claim slot for one compact ring or spinner at wide and phone 
   page,
 }) => {
   await page.goto('/ux-demo?component=ticket-row');
-  const row = page.locator('[data-component="summary-row"]');
+  const row = page.locator('[data-component="summary-row"][role="option"]');
   await page.locator('[data-action="toggle-settings"]').first().click();
   const claimEta = page
     .getByRole('complementary', { name: 'TicketRow Settings' })
@@ -2741,7 +2741,7 @@ test('clips a long worker ID inside the TicketRow while retaining its full acces
   const agent = page
     .getByRole('complementary', { name: 'TicketRow Settings' })
     .getByRole('textbox', { name: 'Active Agent' });
-  const row = page.locator('[data-component="summary-row"]');
+  const row = page.locator('[data-component="summary-row"][role="option"]');
   const owner = row.locator('.ticket-list-row__owner');
   await agent.fill(worker);
   await page.locator('[data-action="toggle-settings"]').first().click();
@@ -2782,7 +2782,7 @@ test('keeps a long GitHub issue title scannable in a 228px TicketRow (HS2-KWPCFP
       node.style.width = '228px';
     });
 
-  const row = page.locator('[data-component="summary-row"]');
+  const row = page.locator('[data-component="summary-row"][role="option"]');
   const identity = row.locator('.ticket-list-row__identity');
   const metrics = await identity.evaluate((node) => {
     const strong = node.querySelector('strong')!;
@@ -2797,16 +2797,16 @@ test('keeps a long GitHub issue title scannable in a 228px TicketRow (HS2-KWPCFP
         visibleTitleCharacters += 1;
       }
     }
-    const style = getComputedStyle(node);
+    const titleStyle = getComputedStyle(node.closest('.kui-summary-row__title')!);
     return {
       rowWidth: node.closest('.ticket-list-row')!.getBoundingClientRect().width,
       visibleTitleCharacters,
-      lines: Number.parseFloat(style.maxHeight) / Number.parseFloat(style.lineHeight),
+      lines: Number.parseFloat(titleStyle.maxHeight) / Number.parseFloat(titleStyle.lineHeight),
     };
   });
   expect(metrics.rowWidth).toBeGreaterThanOrEqual(220);
   expect(metrics.rowWidth).toBeLessThanOrEqual(235);
-  expect(metrics.lines).toBeCloseTo(3, 1);
+  expect(metrics.lines).toBeCloseTo(2, 1);
   expect(metrics.visibleTitleCharacters).toBeGreaterThanOrEqual(12);
   await expect(row).toHaveAttribute('aria-label', `Small-Tale/hotsheet2#5: ${title}`);
   await row.screenshot({ path: test.info().outputPath('github-issue-title-390.png') });
@@ -2814,7 +2814,7 @@ test('keeps a long GitHub issue title scannable in a 228px TicketRow (HS2-KWPCFP
 
 test('round-trips every TicketRow setting and selection action', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-row');
-  const row = page.locator('[data-component="summary-row"]');
+  const row = page.locator('[data-component="summary-row"][role="option"]');
   await expect(row).toContainText('Build the first client ticket list');
   await page.locator('[data-action="toggle-settings"]').first().click();
   const inspector = page.getByRole('complementary', { name: 'TicketRow Settings' });
@@ -9531,7 +9531,7 @@ test('renders project-owned ticket sources and machine-wide accounts at wide and
 
 test('shows the source mark after the type on cards and beside the inspector number (HS2-068Q55)', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-row');
-  const row = page.locator('[data-component="summary-row"]');
+  const row = page.locator('[data-component="summary-row"][role="option"]');
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'github');
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(59, 130, 246)');
   await page.locator('[data-action="toggle-settings"]').first().click();
