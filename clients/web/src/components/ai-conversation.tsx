@@ -119,14 +119,14 @@ function UsageLine({ usage }: { usage: ConversationUsage }) {
         'data-conversation-usage': 'true',
       }}
     >
-      <Text variant="span" size="compact">
+      <Text variant="span" size="compact" tone="quiet">
         {formatConversationTokens(total)} tokens
       </Text>
-      <Text variant="span" size="compact">
+      <Text variant="span" size="compact" tone="quiet">
         · {formatConversationCost(usage.costUsd)}
       </Text>
       {usage.model ? (
-        <Text variant="span" size="compact" wrap="truncate" title={usage.model}>
+        <Text variant="span" size="compact" tone="quiet" wrap="truncate" title={usage.model}>
           · {usage.model}
         </Text>
       ) : null}

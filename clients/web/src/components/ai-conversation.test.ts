@@ -133,6 +133,10 @@ describe('AIConversation', () => {
     expect(markup).toContain('Waiting for permission');
     expect(markup).toContain('12.8K tokens');
     expect(markup).toContain('≈$0.04');
+    const usageMarkup = markup.slice(markup.indexOf('data-conversation-usage="true"'));
+    expect(usageMarkup).toMatch(/data-tone="quiet"[^>]*>12\.8K tokens/);
+    expect(usageMarkup).toMatch(/data-tone="quiet"[^>]*>· ≈\$0\.04/);
+    expect(usageMarkup).toMatch(/data-tone="quiet"[^>]*>· codex-5\.6/);
     expect(markup).toContain('Edited main.tsx');
     expect(markup).toContain('AI-generated');
     expect(markup).toContain('may contain errors');

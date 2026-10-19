@@ -1835,6 +1835,8 @@ messages`); the badge itself is hidden from assistive technology (HS2-59CXAC). A
   `<$0.01` for a nonzero sub-cent total, and absent, zero, or unpriced totals omitted) instead
   of a separate header usage pill, so it fits at every width; per-message usage remains
   available (HS2-WXVAF3, HS2-P415F0).
+  Per-message token, cost, and model text uses Kerf's quiet tone so answer content remains
+  primary in ordinary and selected message bubbles (HS2-ZKVW4P).
 
   Completed transcripts can be saved from either conversation presentation. Messages remain
   directly selectable in the live transcript, in the drawer and the dialog alike, with

@@ -18548,6 +18548,26 @@ test('opens a Codex chat without implicitly starting Drive through the productio
     .getByRole('button', { name: 'Allow Once' })
     .click();
   await expect(conversationHost.locator('[data-component="permission-request-card"]')).toHaveCount(0);
+  const assistantMessage = conversationHost.locator('.ai-conversation__message--assistant').last(),
+    usageValues = assistantMessage.locator('[data-conversation-usage] [data-component="text"]');
+  await expect(usageValues).toHaveCount(3);
+  for (const value of await usageValues.all()) await expect(value).toHaveAttribute('data-tone', 'quiet');
+  await expect(usageValues.first()).not.toHaveCSS(
+    'color',
+    await assistantMessage
+      .locator('p')
+      .first()
+      .evaluate((paragraph) => getComputedStyle(paragraph).color),
+  );
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-zkvw4p-usage-unselected-wide.png' });
+  await assistantMessage.click();
+  await expect(assistantMessage).toHaveAttribute('data-selected', 'true');
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-zkvw4p-usage-selected-wide.png' });
+  await page.setViewportSize({ width: 390, height: 800 });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-zkvw4p-usage-selected-phone.png' });
+  await assistantMessage.click();
+  await expect(assistantMessage).toHaveAttribute('data-selected', 'false');
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-zkvw4p-usage-unselected-phone.png' });
   await page.setViewportSize({ width: 760, height: 640 });
   await dialog.screenshot({ path: 'target/visual-captures/hs2-bxspmn-conversation-usage-narrow.png' });
   page.once('dialog', (nativeDialog) => nativeDialog.accept());

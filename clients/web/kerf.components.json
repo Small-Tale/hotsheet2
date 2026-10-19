@@ -3623,7 +3623,7 @@
       "id": "ai-conversation",
       "name": "AIConversation",
       "kind": "component",
-      "purpose": "Dialog and embedded AI conversation with inline permissions, interruption, and a single-Tab-stop selectable transcript; Kerf ListHeader, Row, Text, and Badge own its activity, metadata, and progress chrome, while AIConversationToolbar places a combined brain/model/effort PopupMenu trigger and native Save/Stop controls in the host toolbar.",
+      "purpose": "Dialog and embedded AI conversation with inline permissions, interruption, and a single-Tab-stop selectable transcript; Kerf ListHeader, Row, Text, and Badge own its activity, quiet-tone per-message usage metadata, and progress chrome, while AIConversationToolbar places a combined brain/model/effort PopupMenu trigger and native Save/Stop controls in the host toolbar.",
       "source": "src/components/ai-conversation.tsx",
       "publicExports": [
         {

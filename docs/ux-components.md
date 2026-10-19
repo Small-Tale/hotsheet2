@@ -520,7 +520,9 @@ covers anything past the button's end. The demo's Unread chat messages setting s
   - each assistant turn ends with a compact usage line when the metrics projection reports
     tokens: input and output remain separately accessible, while the visible total stays
     glanceable. Cost is shown as an approximate USD value only when `cost_usd` exists; an
-    unpriced event says “cost unavailable” rather than displaying `$0.00` or inventing precision
+    unpriced event says “cost unavailable” rather than displaying `$0.00` or inventing precision.
+    The visible token, cost, and model values use Kerf's quiet text tone in ordinary and
+    selected bubbles, leaving the answer as the visual focus (HS2-ZKVW4P)
   - embedded drawer conversations shrink within the center column across wide-to-narrow viewport
     transitions; viewport roots use non-scrolling clipping so retained composer focus cannot pan
     the application and clip the header or transcript (HS2-KTW27J)
